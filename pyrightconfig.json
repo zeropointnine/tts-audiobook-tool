@@ -1,0 +1,7 @@
+{
+    "typeCheckingMode": "standard",
+    // "reportUnusedImport": true,
+    "diagnosticSeverityOverrides": {
+        "reportUnusedImport": "information"
+    }
+}
