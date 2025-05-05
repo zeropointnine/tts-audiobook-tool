@@ -1,4 +1,5 @@
 # Suppress console output from oute lib
+import time
 from loguru import logger
 logger.remove()
 
@@ -19,6 +20,7 @@ from tts_audiobook_tool.app import App
 app = App()
 
 if MENU_CLEAR_SCREEN:
-    ask("\nReady. Press enter to start: ")
+    printt("\nReady...")
+    time.sleep(1.5)
 
 app.loop()

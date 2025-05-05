@@ -37,11 +37,13 @@ Run by entering:
 
 # Oute TTS model configuration
 
-This project relies on the [oute-tts](https://github.com/edwko/OuteTTS) reference project, which allows for utilizing different quantizations of the Oute-1B model, different backends, etc.
+This project relies on the oute-tts reference project, which allows for utilizing different quantizations of the Oute-1B model, different backends, etc.
 
 To change these settings, hand-edit the Python file `model_config.py`. Please refer to the [OuteTTS project](https://github.com/edwko/OuteTTS)'s README and related documentation to find out what the possible values are.
 
-For optimal hardware acceleration, consider installing flash attention as well.
+For *Mac with Apple silicon*: Definitely start by replacing the default value, `backend=outetts.Backend.HF` with `backend=outetts.Backend.LLAMACPP`.
+
+For CUDA systems, consider installing flash attention for an additional boost in inference speed.
 
 # Usage notes
 
@@ -49,7 +51,7 @@ The app is designed to save its state between sessions, so you can interrupt the
 
 Inference can take some time, depending on the length of the source text. Audio rendering speed is about 30% of realtime on my development system with a Ryzen 7700x and 3080Ti, so be forewarned.
 
-If you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and press [A] to re-render.
+If you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and press [A] to make it re-render.
 
 # Todos
 

@@ -19,7 +19,6 @@ executing==2.2.0
 ffmpy==0.5.0
 filelock==3.18.0
 fire==0.7.0
-flash_attn @ file:///C:/users/lee/downloads/flash_attn-2.7.4.post1%2Bcu124torch2.6.0cxx11abiFALSE-cp312-cp312-win_amd64.whl#sha256=1f90dfe27708abc73ea347d1dd3c5196161c69a9035f2623b501627af7ae01b2
 flatten-dict==0.4.2
 fonttools==4.57.0
 fsspec==2025.3.2
@@ -96,10 +95,10 @@ termcolor==3.0.1
 threadpoolctl==3.6.0
 tiktoken==0.9.0
 tokenizers==0.21.1
-torch==2.7.0+cu126
+torch==2.7.0
 torch-stoi==0.2.3
-torchaudio==2.7.0+cu126
-torchvision==0.22.0+cu126
+torchaudio==2.7.0
+torchvision==0.22.0
 tqdm==4.67.1
 traitlets==5.14.3
 transformers==4.48.3
