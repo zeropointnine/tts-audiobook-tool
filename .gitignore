@@ -1,3 +1,4 @@
 __pycache__/
 venv/
 pyrightconfig.json
+model_config_dev.py

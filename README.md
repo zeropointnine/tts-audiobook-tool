@@ -37,23 +37,38 @@ Run by entering:
 
 # Oute TTS model configuration
 
-This project relies on the oute-tts reference project, which allows for utilizing different quantizations of the Oute-1B model, different backends, etc.
+This project relies on the oute-tts reference project, which allows for the use of different backends, different quantizations, with or without flash attention, etc. These settings can greatly affect inference speed, and to a lesser extent, output quality.
 
-To change these settings, hand-edit the Python file `model_config.py`. Please refer to the [OuteTTS project](https://github.com/edwko/OuteTTS)'s README and related documentation to find out what the possible values are.
+To change these settings, hand-edit the Python file **`model_config.py`**, and refer to the  example configs therein.
 
-For *Mac with Apple silicon*: Definitely start by replacing the default value, `backend=outetts.Backend.HF` with `backend=outetts.Backend.LLAMACPP`.
+Refer to the [OuteTTS inferface usage page](https://github.com/edwko/OuteTTS/blob/main/docs/interface_usage.md) for more.
 
-For CUDA systems, consider installing flash attention for an additional boost in inference speed.
+That being said, here are some setup notes, based on my own tests up to this point...
 
-# Usage notes
+### Nvidia (CUDA) cards:
+
+Install Pytorch with CUDA in the normal fashion: Uninstall the vanilla version (`pytorch uninstall torch torchvision torchaudio`) and then [install](https://pytorch.org/get-started/locally/) the CUDA-enabled version based on your system configuration.
+
+Prefer the ExLllama2 backend if at all possible: (`backend=outetts.Backend.EXL2`). See the example config in `model_config.py`.
+
+Requires manually installing the exllama2 library: `pip install exllamav2`, and also requires installing flash attention.
+
+Alternatively, `Backend.HF`, will also be hardware accelerated, just slower.
+
+I couldn't get acceleration going using `Backend.LLAMACPP` but that may just be me.
+
+### For Mac with Apple silicon:
+
+Use `Backend.LLAMACPP`.
+
+# Usage and performance notes
 
 The app is designed to save its state between sessions, so you can interrupt the program at any time and resume later.
 
-Inference can take some time, depending on the length of the source text. Audio rendering speed is about 30% of realtime on my development system with a Ryzen 7700x and 3080Ti, so be forewarned.
+Inference can take some time, depending on the length of the source text. I'm getting inference speeds of about 30% of realtime using `Backend.HF` and 80+% using `Backend.EXL2` with an undervolted GeForce 3080Ti. And about 20% with an M1 MacBook Pro.
 
 If you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and press [A] to make it re-render.
 
 # Todos
 
 Command line?
-

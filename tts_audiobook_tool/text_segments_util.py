@@ -15,8 +15,8 @@ class TextSegmentsUtil:
     def ask_text_segments_and_set(state: State, max_words_per_segment: int=MAX_WORDS_PER_SEGMENT) -> None:
         """ Gets text from user and saves to disk and sets State. Or prints error message. """
 
-        printt("Enter/paste text of any length")
-        printt(f"Finish with {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT} or {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT}, depending on platform")
+        printt("Enter/paste text of any length.")
+        printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT}, depending on platform")
         text = sys.stdin.read().strip()
         printt()
         if not text:

@@ -19,12 +19,15 @@ def printt(s: str="", type: str="") -> None:
     print(s)
 
     if type == "error":
-        input("\nPress enter: ")
+        ask("\nPress enter: ")
         printt()
 
 def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     message = f"{message}{COL_INPUT}"
-    inp = input(message).strip()
+    try:
+        inp = input(message).strip()
+    except (ValueError, EOFError) as e:
+        return ""
     if lower:
         inp = inp.lower()
     print(Ansi.RESET, end="")

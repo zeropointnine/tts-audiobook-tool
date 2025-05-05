@@ -9,7 +9,12 @@ from outetts.version.interface import InterfaceHF
 from tts_audiobook_tool.l import L
 from .util import *
 from .constants import *
+
 from .model_config import MODEL_CONFIG
+try:
+    from .model_config_dev import MODEL_CONFIG # type: ignore
+except ImportError:
+    pass
 
 class State:
     """
@@ -65,7 +70,7 @@ class State:
             printt(err, "error")
 
 
-    def set_voice_from_project_dir(self) -> str:
+    def load_voice_from_project_dir_and_set(self) -> str:
         """ Returns user-facing error message on fail """
         path = os.path.join(self.project_dir, PROJECT_VOICE_FILE_NAME)
         if not os.path.exists(path):
@@ -76,7 +81,7 @@ class State:
         except Exception as e:
             return f"Error loading project voice file: {e}"
 
-    def set_text_from_project_dir(self) -> str:
+    def load_text_from_project_dir_and_set(self) -> str:
         """ Returns user-facing error message on fail """
 
         file_path = os.path.join(self.project_dir, PROJECT_TEXT_FILE_NAME)
@@ -113,12 +118,12 @@ class State:
 
         self.project_dir = s
 
-        err = self.set_voice_from_project_dir()
+        err = self.load_voice_from_project_dir_and_set()
         if err:
             self.reset()
             return err
 
-        err = self.set_text_from_project_dir()
+        err = self.load_text_from_project_dir_and_set()
         if err:
             self.reset()
             return err

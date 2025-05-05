@@ -1,5 +1,4 @@
 # Suppress console output from oute lib
-import time
 from loguru import logger
 logger.remove()
 
@@ -19,8 +18,14 @@ if not is_ffmpeg_available():
 from tts_audiobook_tool.app import App
 app = App()
 
-if MENU_CLEAR_SCREEN:
-    printt("\nReady...")
-    time.sleep(1.5)
+from tts_audiobook_tool.prefs_util import PrefsUtil
+is_first_run = not os.path.exists(PrefsUtil.get_file_path())
+if is_first_run:
+    printt("\nThis appears to be your first time running tts-audiobook-tool.")
+    printt("As a reminder, you may want to adjust the settings in the file 'model_config.py'")
+    printt("to enable hardware acceleration, depending on your system setup.\n")
+    ask("Press enter to start:")
+elif MENU_CLEAR_SCREEN:
+    ask("\nReady. Press enter to start: ")
 
 app.loop()

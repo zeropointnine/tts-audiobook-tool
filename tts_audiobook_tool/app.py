@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.bad_gen_util import BadGenUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
@@ -35,39 +37,51 @@ class App:
         # Title
         printt(f"{COL_ACCENT}Menu - {APP_NAME}\n")
 
+        # Dir check
+        if self.state.project_dir and not os.path.exists(self.state.project_dir):
+            printt(f"{COL_ERROR}Directory {self.state.project_dir} not found.\nClearing project settings.")
+            self.state.reset()
+            self.state.save_project_dir_setting()
+
         # Project
         if not self.state.project_dir:
-            s = f"{make_hotkey_string("P")} Set project"
+            s = f"{make_hotkey_string("P")} Set project directory"
         else:
             s = f"{make_hotkey_string("P")} Change project dir {COL_DIM}(current: {COL_DEFAULT}{self.state.project_dir}{COL_DIM}){Ansi.RESET}"
         printt(s)
 
         # Voice
-        word = "Set" if not self.state.voice else "Replace"
-        s = f"{make_hotkey_string("V")} {word} voice"
-        if self.state.voice:
+        s = f"{make_hotkey_string("V")} "
+        if not self.state.voice:
+            s += "Set voice "
+            if not self.state.project_dir:
+                s += f"{COL_DIM}(must first set project dir)"
+        else :
+            s += "Change voice "
             identifier = self.state.voice.get("identifier", "voice") if self.state.voice else "None"
             s += f" {COL_DIM}(current: {COL_DEFAULT}{identifier}{COL_DIM}){Ansi.RESET}"
         printt(s)
 
         # Text
-        word = "Set" if not self.state.text_segments else "Replace"
-        s = f"{make_hotkey_string("T")} {word} text"
-        if self.state.text_segments:
-            s += f" {COL_DIM}(current: {COL_DEFAULT}{len(self.state.text_segments)}{COL_DIM} lines)"
+        s = f"{make_hotkey_string("T")} "
+        if not self.state.text_segments:
+            s += "Set text "
+            if not self.state.project_dir:
+                s += f"{COL_DIM}(must first set project dir)"
+        else:
+            s += "Change text "
+            s += f"{COL_DIM}(current: {COL_DEFAULT}{len(self.state.text_segments)}{COL_DIM} lines)"
         printt(s)
 
         # View text
-        s = f"{make_hotkey_string("U")} View text"
+        s = f"{make_hotkey_string("U")} View text "
+        if not self.state.text_segments:
+            s += f"{COL_DIM}(must first set text)"
         printt(s)
 
         # Generate audio
         num_complete = ProjectDirUtil.num_audio_segment_files(self.state)
-        s = f"{make_hotkey_string("A")} "
-        if num_complete == 0:
-            s += "Generate audio"
-        else:
-            s += "Continue generating audio"
+        s = f"{make_hotkey_string("A")} Generate audio"
         if not self.state.voice and not self.state.text_segments:
             s2 = f"{COL_DIM} (must first set voice and text)"
         elif not self.state.voice:
@@ -76,11 +90,10 @@ class App:
             s2 = f"{COL_DIM} (must first set text)"
         else:
             s2 = f" {COL_DIM}({COL_DEFAULT}{num_complete}{COL_DIM}/{COL_DEFAULT}{len(self.state.text_segments)}{COL_DIM} complete)"
-        # typ = "disabled" if not self.can_generate_audio else ""
         printt(s + s2)
 
         # Options
-        s = f"{make_hotkey_string("Z")} Options"
+        s = f"{make_hotkey_string("Z")} Options, Utils"
         printt(s)
 
         printt()
@@ -90,7 +103,7 @@ class App:
             case "p":
                 project_type = self.ask_project_type()
                 if project_type == "new":
-                    self.ask_and_set_new_project()
+                    self.ask_and_set_new_project(self.state.voice)
                 elif project_type == "existing":
                     self.ask_and_set_existing_project()
             case "v":
@@ -118,10 +131,10 @@ class App:
                     printt()
             case "a":
                 if self.can_generate_audio:
-                    abort = GenerateUtil.generate_all(self.state)
+                    abort = GenerateUtil.ask_generate_all(self.state)
                     if abort:
                         return
-                    ConcatUtil.concatenate_flacs(self.state)
+                    ConcatUtil.concatenate_project_flacs(self.state)
             case "z":
                 self.print_ask_options()
 
@@ -157,7 +170,7 @@ class App:
         else:
             return ""
 
-    def ask_and_set_new_project(self) -> None:
+    def ask_and_set_new_project(self, previous_voice: dict | None) -> None:
         """ Asks user for directory and creates new project if directory is ok, else prints error feedback """
 
         printt("Enter directory path for new project:")
@@ -187,11 +200,16 @@ class App:
         dir = str( Path(dir).resolve() )
         self.state.set_new_project_dir(dir)
 
+        if isinstance(previous_voice, dict):
+            b = ask_confirm(f"Carry over voice data ({previous_voice.get("identifier", "voice")}) ?")
+            if b:
+                VoiceUtil.save_to_project_dir_and_set_state(previous_voice, self.state)
+
     def ask_and_set_existing_project(self) -> None:
         """ Asks user for directory and if valid, sets state to existing project, else prints error feedback """
 
         printt("Enter directory path of existing project:")
-        dir = input().strip()
+        dir = ask()
         if not dir:
             return
         err = ProjectDirUtil.check_project_dir_valid(dir)
@@ -207,30 +225,38 @@ class App:
 
     def print_ask_options(self):
 
-        printt(f"{COL_ACCENT}Options:\n")
+        printt(f"{COL_ACCENT}Options, utilities:\n")
         printt(f"{make_hotkey_string("1")} Temperature (currently: {self.state.temperature})")
         printt(f"{make_hotkey_string("2")} Play audio after each segment is generated (currently: {self.state.play_on_generate})")
+        printt(f"{make_hotkey_string("3")} Util: Concatenate FLAC files in a directory")
+        printt(f"{make_hotkey_string("4")} Util: Find bad gens")
         printt(f"{make_hotkey_string("Q")} Quit")
         printt()
-        hotkey = ask_hotkey()
 
-        if hotkey == "q":
-            exit(0)
-        elif hotkey == "1":
-            value = ask("Enter temperature (0.0 < value <= 2.0): ")
-            try:
-                value = float(value)
-                if not (0.0 < value <= 2.0):
-                    printt("Out of range", "error")
-                else:
-                    self.state.temperature = value
-                    self.state.save_pref_settings()
-            except:
-                printt("Bad value", "error")
-        elif hotkey == "2":
-            self.state.play_on_generate = not self.state.play_on_generate
-            self.state.save_pref_settings()
-            printt(f"Play audio after each segment is generated set to: {self.state.play_on_generate}")
-            if MENU_CLEAR_SCREEN:
-                ask_hotkey("Press enter: ")
-            printt()
+        hotkey = ask_hotkey()
+        match hotkey:
+            case "q":
+                exit(0)
+            case "1":
+                value = ask("Enter temperature (0.0 < value <= 2.0): ")
+                try:
+                    value = float(value)
+                    if not (0.0 < value <= 2.0):
+                        printt("Out of range", "error")
+                    else:
+                        self.state.temperature = value
+                        self.state.save_pref_settings()
+                except:
+                    printt("Bad value", "error")
+            case "2":
+                self.state.play_on_generate = not self.state.play_on_generate
+                self.state.save_pref_settings()
+                printt(f"Play audio after each segment is generated set to: {self.state.play_on_generate}")
+                if MENU_CLEAR_SCREEN:
+                    ask_hotkey("Press enter: ")
+                printt()
+            case "3":
+                ConcatUtil.ask_do_dir_concat()
+            case "4":
+                BadGenUtil.ask_delete(self.state)
+

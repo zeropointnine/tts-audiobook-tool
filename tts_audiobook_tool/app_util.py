@@ -2,6 +2,9 @@ import json
 import os
 import glob
 from typing import Any
+import glob
+from datetime import datetime
+from mutagen.flac import FLAC # Added import
 
 from tts_audiobook_tool.l import L
 
@@ -16,11 +19,16 @@ class AppUtil:
         replaces consecutive underscores with a single underscore,
         and removes leading/trailing underscores.
         """
-        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', filename)    
+        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', filename)
         collapsed = re.sub(r'_+', '_', sanitized)
-        stripped = collapsed.strip('_')    
+        stripped = collapsed.strip('_')
         return stripped
 
+
+    @staticmethod
+    def make_timestamp_string() -> str:
+        current_time = datetime.now()
+        return current_time.strftime("%y%m%d_%H%M%S")
 
     @staticmethod
     def delete_project_audio_files(dir: str) -> str:
@@ -54,4 +62,19 @@ class AppUtil:
                 json.dump(json_object, f, ensure_ascii=False, indent=4)
                 return ""
         except Exception as e:
-            return f"Error saving json: {e}"            
+            return f"Error saving json: {e}"
+
+    @staticmethod
+    def get_flac_file_duration(path: str) -> float | None:
+        """
+        Returns the duration in seconds of a FLAC file, or None
+        """
+        try:
+            audio = FLAC(path)
+            if audio.info:
+                return audio.info.length
+            else:
+                return None
+        except Exception:
+            return None
+

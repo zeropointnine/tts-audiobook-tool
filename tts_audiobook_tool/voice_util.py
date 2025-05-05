@@ -7,28 +7,26 @@ from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.state import State
 from .util import *
 from .constants import *
-import json
-import xxhash
 
 class VoiceUtil:
 
     @staticmethod
     def ask_voice_and_set(state: State) -> None:
         """
-        Gets/creates voice json, re-saves it to the project dir, and sets State.
+        Gets/creates voice json, re-saves it to the project dir, and updates State.
         Or prints error message.
 
         Deletes any extant audio files in project dir.
         """
         voice = None
-        
+
         word = "Set" if not state.voice else "Replace"
         printt(f"{COL_ACCENT}{word} voice:\n")
         printt(f"[{COL_ACCENT}1{Ansi.RESET}] Create voice file using reference WAV file (15s or less)")
         printt(f"[{COL_ACCENT}2{Ansi.RESET}] Use pre-existing voice json file")
         printt(f"[{COL_ACCENT}3{Ansi.RESET}] Use oute-tts default voice")
         printt()
-        inp = input().lower().strip()
+        inp = ask()
         printt()
 
         # Get voice
@@ -45,7 +43,7 @@ class VoiceUtil:
                 return
 
         if isinstance(result, str):
-            if result == "": 
+            if result == "":
                 return # signifies cancel
             else:
                 printt(f"Error: {result}", "error")
@@ -54,18 +52,23 @@ class VoiceUtil:
         voice = result
 
         # Save voice to project dir and set state
+        VoiceUtil.save_to_project_dir_and_set_state(voice, state)
+
+        # Delete any existing audio files in project dir, which are now 'invalid'
+        err = AppUtil.delete_project_audio_files(state.project_dir)
+        if err:
+            printt(err, "error")
+
+    @staticmethod
+    def save_to_project_dir_and_set_state(voice: dict, state: State):  # TODO: should probably live in State, as as "setter"
+        """Prints error on fail"""
         dest_path = os.path.join(state.project_dir, PROJECT_VOICE_FILE_NAME)
         assert isinstance(voice, dict)
         err = AppUtil.save_json(voice, dest_path)
         if err:
             printt(err, "error")
             return
-        state.voice = voice        
-
-        # Delete any existing audio files in project dir, which are now 'invalid'
-        err = AppUtil.delete_project_audio_files(state.project_dir)
-        if err:
-            printt(err, "error")
+        state.voice = voice
 
     @staticmethod
     def ask_load_voice(interface: InterfaceHF) -> dict | str:
@@ -90,7 +93,7 @@ class VoiceUtil:
         printt()
 
         return result
-    
+
     @staticmethod
     def generate_voice(interface: InterfaceHF, path: str) -> dict | str:
         """ Returns voice dict or error string """
@@ -99,8 +102,8 @@ class VoiceUtil:
             VoiceUtil._add_special_properties(voice, path)
             return voice
         except Exception as e:
-            return f"Error creating voice: {e}"        
-    
+            return f"Error creating voice: {e}"
+
     @staticmethod
     def load_voice(interface: InterfaceHF, path: str) -> dict | str:
         """ Returns voice dict or error string """
@@ -111,14 +114,14 @@ class VoiceUtil:
             VoiceUtil._add_special_properties(voice, path)
             return voice
         except Exception as e:
-            return f"Error loading voice file: {e}"        
-        
+            return f"Error loading voice file: {e}"
+
     @staticmethod
     def _add_special_properties(voice: dict, path: str) -> None:
         # Hash value is cached in the dict itself (perversely; easier this way)
         if not "hash" in voice:
             voice["hash"] = HashFileUtil.get_voice_hash(voice)
-        # Identifier 
+        # Identifier
         if not "identifier" in voice:
             s = AppUtil.sanitize_for_filename(Path(path).stem[:20])
             voice["identifier"] = s

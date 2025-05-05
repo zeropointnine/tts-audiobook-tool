@@ -17,7 +17,7 @@ from .project_dir_util import *
 class GenerateUtil:
 
     @staticmethod
-    def generate_all(state: State) -> bool:    
+    def ask_generate_all(state: State) -> bool:
         """
         First asks for confirmation.  Returns True if aborted.
         Generates audio files for all text segments.
@@ -30,13 +30,13 @@ class GenerateUtil:
         interface = state.interface
 
         config = GenerationConfig(
-            text="",
+            text="", # type: ignore
             generation_type= GenerationType.CHUNKED, # type: ignore
-            speaker=voice,
+            speaker=voice, # type: ignore
             sampler_config=SamplerConfig(temperature=state.temperature)  # type: ignore
-        ) 
+        )
 
-        dic = ProjectDirUtil.get_audio_segment_files(state)
+        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         indices_completed = list(dic.keys())
         indices_completed.sort()
 
@@ -45,14 +45,11 @@ class GenerateUtil:
             ask("Press enter: ")
             return False
 
-        # Will generate 5 audio segments 
-        # (Already completed 3 audio segments)
-
         num_left = len(text_segments) - len(indices_completed)
         printt(f"Will generate {num_left} audio segments")
         if len(indices_completed) > 0:
             printt(f"(Already completed {len(indices_completed)} audio segments)")
-        
+
         if not ask_confirm():
             return True
 
@@ -60,9 +57,9 @@ class GenerateUtil:
             if i in indices_completed:
                 continue
             _ = GenerateUtil.generate_and_convert_flac(i, state, config)
-        
+
         return False
-    
+
     @staticmethod
     def generate_and_convert_flac(index: int, state: State, config: GenerationConfig) -> bool:
         """
@@ -75,20 +72,20 @@ class GenerateUtil:
         s = f"{COL_ACCENT}Generating audio for index {COL_DEFAULT}{index}{COL_ACCENT}:{COL_DEFAULT}\n"
         s += f"{COL_DIM}{Ansi.ITALICS}{text_segment}\n"
         printt(s)
-        
+
         start_time = time.time()
         is_success = GenerateUtil.generate_wav_file(temp_wav_path, text_segment, state.interface, config)
         if not is_success:
             delete_temp_file(temp_wav_path)
             return False
-        
+
         elapsed = time.time() - start_time
         audio_seconds = estimated_wav_seconds(temp_wav_path)
         multi_string = f"{(audio_seconds / elapsed):.2f}" if elapsed > 0.01 else "---"
         s = f"Duration {COL_ACCENT}{audio_seconds:.1f}{COL_DEFAULT}s, elapsed {COL_ACCENT}{elapsed:.1f}{COL_DEFAULT}s"
         s += f" = {COL_ACCENT}{multi_string}x{COL_DEFAULT}"
         printt(s)
-        
+
         is_success = encode_to_flac(temp_wav_path, flac_path)
         if not is_success:
             delete_temp_file(temp_wav_path)
@@ -105,7 +102,7 @@ class GenerateUtil:
     @staticmethod
     def generate_wav_file(
             dest_file_path: str,
-            prompt: str, 
+            prompt: str,
             interface: InterfaceHF,
             config: GenerationConfig
     ) -> bool:
@@ -115,5 +112,5 @@ class GenerateUtil:
             output.save(dest_file_path)
         except Exception as e:
             printt(str(e), "error")
-            return False    
+            return False
         return True

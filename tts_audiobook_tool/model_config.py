@@ -4,23 +4,26 @@ import torch
 """
 Refer to the Oute TTS project page for more on configuration options, etc.
 https://github.com/edwko/OuteTTS
-
-For Mac hardware acceleration, try using:
-    "backend=outetts.Backend.LLAMACPP"
 """
 
 MODEL_CONFIG = outetts.ModelConfig.auto_config(
     model=outetts.Models.VERSION_1_0_SIZE_1B,
-    backend=outetts.Backend.HF,
-    quantization=outetts.LlamaCppQuantization.FP16
+    backend=outetts.Backend.HF
 )
 
 
-# ----------------------------------------------------------
-# Example of setting all the model config values explicitly,
-# which in this case includes using flash attention.
+_EXAMPLE_AUTO_HF = outetts.ModelConfig.auto_config(
+    model=outetts.Models.VERSION_1_0_SIZE_1B,
+    backend=outetts.Backend.HF
+)
 
-EXAMPLE_MANUAL_MODEL_CONFIG = outetts.ModelConfig(
+_EXAMPLE_AUTO_LLAMA = outetts.ModelConfig.auto_config(
+    model=outetts.Models.VERSION_1_0_SIZE_1B,
+    backend=outetts.Backend.LLAMACPP,
+    quantization=outetts.LlamaCppQuantization.FP16
+)
+
+_EXAMPLE_MANUAL_HF_WITH_FLASH_ATTN = outetts.ModelConfig(
     model_path="OuteAI/Llama-OuteTTS-1.0-1B",
     tokenizer_path="OuteAI/Llama-OuteTTS-1.0-1B",
     interface_version=outetts.InterfaceVersion.V3,
@@ -28,6 +31,14 @@ EXAMPLE_MANUAL_MODEL_CONFIG = outetts.ModelConfig(
     additional_model_config={
         "attn_implementation": "flash_attention_2"
     },
+    device="cuda",
+    dtype=torch.bfloat16
+)
+
+_EXAMPLE_MANUAL_EXL2 = outetts.ModelConfig(
+    model_path="local/path/to/oute_tts_model",
+    interface_version=outetts.InterfaceVersion.V3,
+    backend=outetts.Backend.EXL2,
     device="cuda",
     dtype=torch.bfloat16
 )

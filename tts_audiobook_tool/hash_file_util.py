@@ -25,7 +25,7 @@ class HashFileUtil:
         voice_id = cast(dict, state.voice).get("identifier", "")
         s1 = "[" + voice_id + "] "
         s2 = "[" + str(index).zfill(5) + "] "
-        s3 = "[" + hash + "] " 
+        s3 = "[" + hash + "] "
         s4 = AppUtil.sanitize_for_filename(text_segment)
         s = s1 + s2 + s3 + s4
         s = s[:100]
@@ -60,8 +60,8 @@ class HashFileUtil:
     @staticmethod
     def make_concat_file_name(text_segments: list[str], voice: dict) -> str:
         hash = HashFileUtil.calc_full_hash(text_segments, voice)
-        return  f"combined [{voice.get("identifier", "")}] [{hash}].flac"
-    
+        return  f"combined [{voice.get("identifier", "")}] [{hash}] {AppUtil.make_timestamp_string()}.flac"
+
     @staticmethod
     def does_concat_file_exist(state: State) -> bool:
         fn = HashFileUtil.make_concat_file_name(state.text_segments, cast(dict, state.voice))

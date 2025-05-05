@@ -19,50 +19,49 @@ class ProjectDirUtil:
             return f"Doesn't exist: {project_dir}"
 
         items = os.listdir(project_dir)
-        
+
         # Empty directory is considered valid
         if not items:
-            return "" 
+            return ""
 
         # Directory with a voice and/or text json file considered valid
         if PROJECT_VOICE_FILE_NAME in items or PROJECT_TEXT_FILE_NAME in items:
             return ""
-        
+
         return f"{project_dir} does not appear to be a project directory"
 
     @staticmethod
     def has_audio_segment_files(state: State) -> bool:
-        dic = ProjectDirUtil.get_audio_segment_files(state)
+        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         return bool(dic)
 
     @staticmethod
     def num_audio_segment_files(state: State) -> int:
-        dic = ProjectDirUtil.get_audio_segment_files(state)
+        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         return len( list( dic.keys() ) )
 
     @staticmethod
-    def get_audio_segment_files(state: State) -> dict[int, str]:
+    def get_project_audio_segment_file_paths(state: State) -> dict[int, str]:
         """
         Returns dict info for the valid "audio fragment" files in the project dir,
         where "valid" means filename has matching hash to the corresponding text segment.
         """
-
-        paths = ProjectDirUtil._get_all_audio_segment_files(state.project_dir)
+        paths = ProjectDirUtil._get_all_audio_segment_file_paths(state.project_dir)
         # print("paths", paths)
 
         result = dict[int, str]()
         text_segments = state.text_segments
 
-        for path in paths:    
-            
+        for path in paths:
+
             file_name = Path(path).name
             # print("fn", file_name)
 
-            # Note we do not simply compare against the full file name, 
-            # because the full file name includes the text segment in massaged form, 
+            # Note we do not simply compare against the full file name,
+            # because the full file name includes the text segment in massaged form,
             # which we don't rly want to treat as 'idempotent'
             index_from_file_name, hash_from_file_name = HashFileUtil.extract_index_and_hash_from_segment_file_name(file_name)
-            
+
             if index_from_file_name >= len(text_segments):
                 continue
 
@@ -79,7 +78,7 @@ class ProjectDirUtil:
         return result
 
     @staticmethod
-    def _get_all_audio_segment_files(project_dir: str) -> list[str]:
+    def _get_all_audio_segment_file_paths(project_dir: str) -> list[str]:
         """
         Returns the file paths of all audio segment files in project dir.
         Filters out audio files that don't have the "audio segment" filename format.
@@ -98,7 +97,7 @@ class ProjectDirUtil:
             if not match:
                 continue
 
-            result.append( os.path.join(project_dir, file.name))
+            result.append( os.path.join(project_dir, file.name) )
 
         result.sort()
         return result
