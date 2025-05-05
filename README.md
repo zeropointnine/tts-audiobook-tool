@@ -1,8 +1,10 @@
 # Description
 
-Audiobook-maker using Oute TTS 1.0 text-to-speech model. Employs a minimal interactive console interface.
+This is an "audiobook maker", using the [Oute TTS 1.0 1B](https://github.com/edwko/OuteTTS) text-to-speech model. It employs as minimal an interface and feature set as I felt like I could get away with while still keeping it useful and functional. The upside is that it should be very simple to pick up and use.
 
-TLDR usage instructions: Assign a working project directory, specify a 15-second reference audio file for the voice cloning, add text, start, and be prepared to wait. That's it.
+What's interesting about Oute TTS is that it does zero-shot voice cloning and that it outputs at 44khz, which is CD-quality audio, and quite unusual for a TTS model at the moment.
+
+TLDR usage instructions: (1) Assign a working project directory, (2) select a 15-second reference audio file for the voice cloning, (3) paste in some text, (4) start inferencing, and (5) ... be prepared to wait (that's the catch, lol). And that's it.
 
 # Install
 
@@ -43,8 +45,13 @@ For optimal hardware acceleration, consider installing flash attention as well.
 
 # Usage notes
 
-The app is designed to save its state between sessions, so you can interrupt the program at any time.
+The app is designed to save its state between sessions, so you can interrupt the program at any time and resume later.
 
-Inference can take a while, depending on the source text. I get a rendering speed of about 30% on a system with a 7700x and 3080Ti.
+Inference can take some time, depending on the length of the source text. Audio rendering speed is about 30% of realtime on my development system with a Ryzen 7700x and 3080Ti, so be forewarned.
 
 If you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and press [A] to re-render.
+
+# Todos
+
+Command line?
+
