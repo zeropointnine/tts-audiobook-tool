@@ -11,7 +11,7 @@ class SoundUtil:
 
     @staticmethod
     def play_wav(file_path: str):
-        with wave.open(file_path, 'rb') as wf: 
+        with wave.open(file_path, 'rb') as wf:
             sample_rate = wf.getframerate()
             num_channels = wf.getnchannels()
             dtype = 'int16' if wf.getsampwidth() == 2 else 'int32'
@@ -30,16 +30,52 @@ class SoundUtil:
     @staticmethod
     def play_flac_async(file_path: str):
         """
-        Eats exceptions
+        Plays a FLAC file asynchronously using a streaming approach.
+        Eats exceptions and prints them.
         """
-        def _play():
+        def _play_stream():
             try:
-                data, samplerate = sf.read(file_path, dtype='float32')
-                sd.play(data, samplerate)
-                sd.wait()
+                with sf.SoundFile(file_path, 'r') as flac_file:
+                    samplerate = flac_file.samplerate
+                    channels = flac_file.channels
+
+                    stream_finished_event = threading.Event()
+
+                    def callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags):
+                        if status:
+                            print(f"Audio callback status (FLAC): {status}")
+
+                        # Read 'frames' number of frames from the FLAC file
+                        # always_2d=True ensures data is (n_frames, n_channels)
+                        data_read = flac_file.read(frames, dtype='float32', always_2d=True)
+
+                        if data_read.shape[0] == 0: # No more data
+                            raise sd.CallbackStop()
+
+                        # Fill outdata
+                        if data_read.shape[0] < frames:
+                            outdata[:data_read.shape[0]] = data_read
+                            # Zero out the rest of the buffer
+                            outdata[data_read.shape[0]:] = 0
+                        else:
+                            outdata[:] = data_read
+
+                    def set_event_on_finish():
+                        stream_finished_event.set()
+
+                    with sd.OutputStream(
+                        samplerate=samplerate,
+                        channels=channels,
+                        callback=callback,
+                        dtype='float32', # Ensure this matches data_read dtype
+                        finished_callback=set_event_on_finish
+                    ):
+                        stream_finished_event.wait() # Wait for playback to complete
+
             except Exception as e:
-                printt(f"Couldn't play audio file: {e}")
-        thread = threading.Thread(target=_play, daemon=True)
+                printt(f"Couldn't play FLAC audio file via stream: {file_path} - {e}")
+
+        thread = threading.Thread(target=_play_stream, daemon=True)
         thread.start()
 
     @staticmethod
@@ -60,9 +96,9 @@ class SoundUtil:
                  audio_mono = audio
 
             # Measure loudness
-            meter = pyln.Meter(sample_rate)  
+            meter = pyln.Meter(sample_rate)
 
-            if len(audio_mono) < sample_rate * 0.4: 
+            if len(audio_mono) < sample_rate * 0.4:
                  # Skip, needs at least 400ms for reliable measurement
                  return ""
 
