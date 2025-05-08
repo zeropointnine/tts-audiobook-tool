@@ -20,12 +20,11 @@ class L:
     MAX_CHARS: int = 100000
 
     @staticmethod
-    def init(name: str, path: str="", level=logging.DEBUG, ansi_colors: bool=False) -> None:
-        """ Must be called first """
-        if not path:
-            path = os.path.join(tempfile.gettempdir(), f"log.log")
+    def init(name: str, level=logging.DEBUG, ansi_colors: bool=False) -> None:
+        """ Required """
+        file_path = os.path.join(tempfile.gettempdir(), name + ".log")
         L.logger = logging.getLogger(name)
-        logging.basicConfig(filename=path, encoding='utf-8', level=level)
+        logging.basicConfig(filename=file_path, encoding='utf-8', level=level)
 
     @staticmethod
     def d(message: str = "") -> None:

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import glob
 from typing import Any
@@ -11,6 +12,12 @@ from tts_audiobook_tool.l import L
 from .util import *
 
 class AppUtil:
+
+    @staticmethod
+    def init_app_logging() -> None:
+        L.init(APP_NAME)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("filelock").setLevel(logging.WARNING)
 
     @staticmethod
     def sanitize_for_filename(filename) -> str:
@@ -77,4 +84,18 @@ class AppUtil:
                 return None
         except Exception:
             return None
+
+    @staticmethod
+    def time_string(seconds: float) -> str:
+        """ 5h0m0s """
+        seconds = round(seconds)
+        if seconds < 60:
+            return f"{seconds}s"
+        minutes = seconds // 60
+        seconds = seconds % 60
+        if minutes < 60:
+            return f"{minutes}m{seconds}s"
+        hours = minutes // 60
+        minutes = minutes % 60
+        return f"{hours}h{minutes}m{seconds}s"
 

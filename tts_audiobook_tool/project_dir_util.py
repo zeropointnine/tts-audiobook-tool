@@ -43,9 +43,12 @@ class ProjectDirUtil:
     @staticmethod
     def get_project_audio_segment_file_paths(state: State) -> dict[int, str]:
         """
-        Returns dict info for the valid "audio fragment" files in the project dir,
-        where "valid" means filename has matching hash to the corresponding text segment.
+        Returns dict (key = text segment index, value = file path)
+        of valid audio files in the project directory.
         """
+        if not state.project_dir:
+            return {}
+
         paths = ProjectDirUtil._get_all_audio_segment_file_paths(state.project_dir)
         # print("paths", paths)
 

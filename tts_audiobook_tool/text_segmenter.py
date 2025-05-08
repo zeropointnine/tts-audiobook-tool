@@ -107,7 +107,7 @@ class TextSegmenter:
 
     @staticmethod
     def segment_full_message(full_message: str, max_words: int) -> list[str]:
-        """ 
+        """
         Segments a "full message" for synchronous use case.
         Preserves white space before/after each segmented item.
         """
@@ -116,4 +116,5 @@ class TextSegmenter:
         remainder = text_segmenter.get_remaining_text()
         if remainder:
             result.append(remainder)
+
         return result

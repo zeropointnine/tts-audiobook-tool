@@ -123,12 +123,12 @@ class ConcatUtil:
         delete_temp_file(temp_text_path)
         s = f"Finished: {COL_ACCENT}{dest_flac_path}"
         if emphasize_finished:
-            printt("-" * len(s))
+            text_len = len(strip_ansi_codes(s))
+            printt("-" * text_len)
             printt(s)
-            printt("-" * len(s) + "\n")
+            printt("-" * text_len + "\n")
         else:
             printt(s + "\n")
-        ask("Press enter: ")
 
     @staticmethod
     def ask_do_dir_concat():

@@ -126,3 +126,17 @@ def print_text_segments(texts: list[str]) -> None:
 
 def make_hotkey_string(hotkey: str, color: str=COL_ACCENT) -> str:
     return f"[{color}{hotkey}{Ansi.RESET}]"
+
+def lerp_clamped(
+    value: float,
+    min_value: float,
+    max_value: float,
+    mapped_min_value: float,
+    mapped_max_value: float,
+) -> float:
+    """
+    Map a value from [min_value, max_value] to [mapped_min_value, mapped_max_value] with clamping.
+    """
+    normalized = (value - min_value) / (max_value - min_value)
+    clamped_normalized = max(0.0, min(1.0, normalized))
+    return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized

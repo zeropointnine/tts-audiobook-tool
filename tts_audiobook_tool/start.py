@@ -26,6 +26,6 @@ if is_first_run:
     printt("to enable hardware acceleration, depending on your system setup.\n")
     ask("Press enter to start:")
 elif MENU_CLEAR_SCREEN:
-    ask("\nReady. Press enter to start: ")
+    ask(f"\n{COL_ACCENT}Ready. Press enter to start: ")
 
 app.loop()

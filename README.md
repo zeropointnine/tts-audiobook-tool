@@ -61,13 +61,15 @@ I couldn't get acceleration going using `Backend.LLAMACPP` but that may just be 
 
 Use `Backend.LLAMACPP`.
 
-# Usage and performance notes
+# Usage notes
 
 The app is designed to save its state between sessions, so you can interrupt the program at any time and resume later.
 
-Inference can take some time, depending on the length of the source text. I'm getting inference speeds of about 30% of realtime using `Backend.HF` and 80+% using `Backend.EXL2` with an undervolted GeForce 3080Ti. And about 20% with an M1 MacBook Pro.
+Inference can take some time, depending on the length of the source text. I'm getting inference speeds of 80+% using `Backend.EXL2` with an undervolted GeForce 3080Ti. And about 20% with an M1 MacBook Pro.
 
-If you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and press [A] to make it re-render.
+The program can attempt to detect and fix erroneous audio genenerations by selecting `Options > Detect audio generation errors`.
+
+Additionally, if you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and press [A] to make it re-render.
 
 # Todos
 
