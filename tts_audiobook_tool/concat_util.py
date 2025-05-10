@@ -1,11 +1,15 @@
 import glob
 import os
 import subprocess
+from typing import cast
 
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.hash_file_util import HashFileUtil
-from .constants import *
-from .generate_util import *
+from tts_audiobook_tool.l import L
+from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.state import State
+from tts_audiobook_tool.util import *
 
 class ConcatUtil:
 
@@ -145,3 +149,65 @@ class ConcatUtil:
 
         dest_fn = f"combined {AppUtil.make_timestamp_string()}.flac"
         ConcatUtil.concatenate_flacs(path, flac_file_names, dest_fn, emphasize_finished=False)
+
+
+    @staticmethod
+    def trim_flac_file(
+            source_flac_path: str,
+            dest_file_path: str,
+            start_time_seconds: float,
+            end_time_seconds: float,
+            ffmpeg_path: str="ffmpeg"
+        ):
+            """
+            Trims a source FLAC file from start_time_seconds to end_time_seconds
+            and saves it to dest_file_path using ffmpeg.
+            """
+            source_flac_path = os.path.abspath(source_flac_path)
+            dest_file_path = os.path.abspath(dest_file_path)
+
+            if not os.path.exists(source_flac_path):
+                L.w(f"Doesn't exist: {source_flac_path}")
+                return False
+
+            duration = end_time_seconds - start_time_seconds
+            if duration <= 0:
+                L.w(f"Bad start/end times {start_time_seconds} {end_time_seconds}")
+                return False
+
+            # Construct the ffmpeg command
+            # -y: Overwrite output file without asking
+            # -i: Input file
+            # -ss: Start time
+            # -to: End time (alternatively, -t for duration)
+            # -c:a flac: Specify the audio codec for the output as FLAC
+            command = [
+                ffmpeg_path,
+                "-hide_banner",
+                "-loglevel", "error",
+                "-y",
+                "-i", source_flac_path,
+                "-ss", str(start_time_seconds),
+                "-to", str(end_time_seconds),
+                "-c:a", "flac",
+                dest_file_path
+            ]
+
+            try:
+                completed_process = subprocess.run(
+                    command,
+                    check=True,  # Raise CalledProcessError if ffmpeg returns non-zero exit code
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8'
+                )
+                if completed_process.returncode != 0:
+                    L.w(f"ffmpeg fail, returncode - {completed_process.returncode}")
+                    return False
+                return True
+            except subprocess.CalledProcessError as e:
+                L.w(f"ffmpeg fail, returncode - {e.returncode} - {e.stderr}")
+                return False
+            except Exception as e:
+                L.w(f"subprocess fail, ffmpeg - {e}")
+                return False

@@ -7,10 +7,10 @@ import outetts
 from outetts.version.interface import InterfaceHF
 
 from tts_audiobook_tool.l import L
-from .util import *
-from .constants import *
+from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import *
 
-from .model_config import MODEL_CONFIG
+from tts_audiobook_tool.model_config import MODEL_CONFIG
 try:
     from .model_config_dev import MODEL_CONFIG # type: ignore
 except ImportError:

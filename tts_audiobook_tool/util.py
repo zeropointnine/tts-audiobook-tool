@@ -4,7 +4,7 @@ from pathlib import Path
 import random
 import subprocess
 import re
-from .constants import *
+from tts_audiobook_tool.constants import *
 
 from tts_audiobook_tool.ansi import Ansi
 
@@ -118,12 +118,6 @@ def delete_temp_file(path: str):
     except:
         pass # eat
 
-def print_text_segments(texts: list[str]) -> None:
-    printt(f"{COL_ACCENT}Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}){COL_DEFAULT}\n")
-    for i, segment in enumerate(texts):
-        printt(f"{make_hotkey_string(str(i))} {segment}")
-    printt()
-
 def make_hotkey_string(hotkey: str, color: str=COL_ACCENT) -> str:
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
@@ -140,3 +134,21 @@ def lerp_clamped(
     normalized = (value - min_value) / (max_value - min_value)
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
+
+def insert_bracket_tag_file_path(file_path: str, tag: str) -> str:
+    """
+    Eg, "[one] [two] hello.flac" -> "[one] [two] [newtag] hello.flac"
+    """
+    path = Path(file_path)
+    stem = path.stem
+    i = stem.rfind("]") + 1
+    substring = f"[{tag}]"
+    if i > 0:
+        substring = " " + substring
+    else:
+        substring = substring + " "
+    new_stem = stem[:i] + substring + stem[i:]
+    new_path = path.with_stem(new_stem)
+    return str(new_path)
+
+

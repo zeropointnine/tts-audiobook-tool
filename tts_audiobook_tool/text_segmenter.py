@@ -1,5 +1,5 @@
 import pysbd
-from .sentence_segmenter import SentenceSegmenter
+from tts_audiobook_tool.sentence_segmenter import SentenceSegmenter
 
 class TextSegmenter:
     """

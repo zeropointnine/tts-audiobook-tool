@@ -8,8 +8,8 @@ import xxhash
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.state import State
-from .util import *
-from .constants import *
+from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import *
 
 class HashFileUtil:
 

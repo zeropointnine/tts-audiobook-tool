@@ -8,71 +8,72 @@ from outetts.models.info import GenerationType
 from outetts.version.interface import InterfaceHF
 
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
-from .util import *
-from .constants import *
-from .project_dir_util import *
+from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project_dir_util import *
 
 class GenerateUtil:
 
     @staticmethod
-    def ask_generate_all(state: State, skip_ask: bool=False) -> bool:
+    def go(state: State, indices: list[int], should_ask: bool) -> None:
         """
-        First asks for confirmation.  Returns True if aborted.
-        Generates audio files for all text segments.
-        Skips those that are already completed.
+        Generates the audio files
+        Considers all items if `indices` is empty
+        Skips items that are already completed
+        Terminates with prompt
         """
-
-        voice = cast(dict, state.voice)
-        text_segments = state.text_segments
+        if not indices:
+            indices = list(range(len(state.text_segments)))
+        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        already_complete = list(dic.keys())
+        original_len = len(indices)
+        indices = [item for item in indices if item not in already_complete]
+        indices.sort()
+        if not indices:
+            printt(f"Already generated ({original_len})")
+            ask("Press enter: ")
+            return
 
         config = GenerationConfig(
             text="", # type: ignore
             generation_type= GenerationType.CHUNKED, # type: ignore
-            speaker=voice, # type: ignore
+            speaker=cast(dict, state.voice), # type: ignore
             sampler_config=SamplerConfig(temperature=state.temperature)  # type: ignore
         )
 
-        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
-        indices_completed = list(dic.keys())
-        indices_completed.sort()
+        s = f"Will generate {len(indices)} audio segments"
+        num_completed = original_len - len(indices)
+        if num_completed > 0:
+            s += (f"(Already completed {num_completed} items)")
+        printt(s + "\n")
 
-        if len(indices_completed) == len(text_segments):
-            printt(f"All audio files already generated ({len(text_segments)})")
-            ask("Press enter: ")
-            return False
-
-        num_left = len(text_segments) - len(indices_completed)
-        printt(f"Will generate {num_left} audio segments")
-        if len(indices_completed) > 0:
-            printt(f"(Already completed {len(indices_completed)} audio segments)")
-
-        if skip_ask:
-            printt()
-        else:
-            if not ask_confirm():
-                return True
+        if should_ask and not ask_confirm():
+            return
 
         start_time = time.time()
-        count = 0
-        for i in range(len(text_segments)):
-            if i in indices_completed:
-                continue
-            count += 1
+
+        count = 1
+        for i in indices:
             _ = GenerateUtil.generate_and_convert_flac(
                 index=i,
                 state=state,
                 config=config,
                 batch_count=count,
-                batch_total=num_left,
+                batch_total=len(indices),
                 batch_start_time=start_time
             )
+            count += 1
+
         elapsed = time.time() - start_time
         printt(f"Elapsed: {AppUtil.time_string(elapsed)}\a\n")
 
-        return False
+        ConcatUtil.concatenate_project_flacs(state)
+
+        ask("Press enter to continue: ")
 
     @staticmethod
     def generate_and_convert_flac(

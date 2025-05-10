@@ -5,11 +5,11 @@ import glob
 from typing import Any
 import glob
 from datetime import datetime
-from mutagen.flac import FLAC # Added import
+from mutagen.flac import FLAC
 
 from tts_audiobook_tool.l import L
 
-from .util import *
+from tts_audiobook_tool.util import *
 
 class AppUtil:
 
@@ -98,4 +98,11 @@ class AppUtil:
         hours = minutes // 60
         minutes = minutes % 60
         return f"{hours}h{minutes}m{seconds}s"
+
+    @staticmethod
+    def print_text_segments(texts: list[str]) -> None:
+        printt(f"{COL_ACCENT}Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):\n")
+        for i, segment in enumerate(texts):
+            printt(f"{make_hotkey_string(str(i))} {segment}")
+        printt()
 

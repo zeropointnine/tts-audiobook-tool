@@ -11,53 +11,53 @@ import torch
 from typing import Tuple, Optional, cast
 from rapidfuzz import fuzz
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.concat_util import ConcatUtil
+from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
-from .util import *
+from tts_audiobook_tool.util import *
 
 class BadGenUtil:
 
     @staticmethod
-    def ask_detect(state: State) -> bool:
-        """
-        Returns True if user requests for deleted files to be regenerated
-        """
+    def detect_and_quick_fix(state: State, and_regen: bool) -> None:
+
         items = BadGenUtil.make_items(state)
 
-        # with open("temp_items.pickle", 'rb') as f:
-        #     items: list[Item] = pickle.load(f)
+        all_passed = True
+        for item in items:
+            if not "[pass]" in item.path:
+                all_passed = False
+        if all_passed:
+            ask("All files already analysed, with no issues detected. Press enter to continue: ")
+            return
 
-        ask("Will do quick duration test first. Press enter: ")
-        BadGenUtil.do_duration_test(items)
-
-        ask("Will do speech-to-text test next. This may take some time. Press enter: ")
         BadGenUtil.do_stt_test(items)
 
-        bad_items = []
+        if BadGenUtil.can_do_duration_test(items):
+            printt("Also performing quick duration-based test... \n")
+            BadGenUtil.do_duration_test(items)
+
+        bad_items: list[Item] = []
         for item in items:
             if isinstance(item.result, FailResult):
                 bad_items.append(item)
 
         if len(bad_items) == 0:
             ask("No bad gens found. Press enter: ")
-            return False
+            return
 
-        b = ask_confirm(f"Press {make_hotkey_string("Y")} to delete {len(bad_items)} suspected bad generations (They will need to be regenerated): ")
-        if not b:
-            return False
-
-        for item in bad_items:
-            try:
-                Path(item.path).unlink()
-            except:
-                L.w(f"Couldn't delete {item.path}")
-
-        # with open("temp_items.pickle", 'wb') as f:
-        #     pickle.dump(items, f)
-
-        b = ask_confirm(f"Enter {make_hotkey_string("Y")} to regenerate the deleted files now (as well as any remaining text lines): ")
-        return b
+        if and_regen:
+            # Delete files
+            for item in bad_items:
+                try:
+                    Path(item.path).unlink()
+                except:
+                    L.w(f"Couldn't delete {item.path}")
+            # Regenerate
+            indices = [item.index for item in bad_items]
+            GenerateUtil.go(state, indices, should_ask=False)
 
     @staticmethod
     def can_do_duration_test(items: list[Item]) -> bool:
@@ -87,6 +87,8 @@ class BadGenUtil:
         MULT_A = 2.5
         MULT_B = 1.75
 
+        num_detected = 0
+
         for item in items:
 
             if item.result is not None:
@@ -107,19 +109,35 @@ class BadGenUtil:
                 item.result = FailResult(f"Duration too short (multiplier: {multiplier:.2f} vs {MULT_THRESH_MIN:.2f})")
             if isinstance(item.result, FailResult):
                 BadGenUtil.print_item_fail(item)
+                num_detected += 1
+
+        printt(f"{num_detected} additional error/s detected.\n")
 
     @staticmethod
     def do_stt_test(all_items: list[Item]) -> None:
+        """
+        Uses whisper to do some kind of a content comparison between source text and transcribed text
+        Sets "result" on items.
+        When there is an opportunity to fix a detected error by simply trimming audio sample, does so.
+        """
 
         whisper_model = None
-
-        # Include only items do not yet have a result
         items = all_items
+        num_detected = 0 # including ones that get corrected
+        num_corrected = 0
+
+        # Only include items do not yet have a result
         items = [item for item in items if item.result is None]
-        # Include items whose filenames are not tagged with "[pass]"
+        # Only include items whose filenames are not tagged with "[pass]"
         items = [item for item in items if not "[pass]" in item.path]
 
+        word = "remaining " if len(items) < len(all_items) else ""
+        s = f"Will analyse {len(items)} {word}items. This may take some time.\n"
+        printt(s)
+
         for item in items:
+
+            whisper_result = None
 
             # Get transcription if necessary
             if isinstance(item.transcribed_text, Untranscribed):
@@ -130,7 +148,8 @@ class BadGenUtil:
                     whisper_model = whisper.load_model("turbo", device=device)
                     printt()
 
-                BadGenUtil.populate_transcribed_text(item, whisper_model)
+                whisper_result = whisper_model.transcribe(item.path, word_timestamps=True, language=None)
+                BadGenUtil.populate_transcribed_text(item, whisper_result)
 
             if isinstance(item.transcribed_text, TranscribeFail):
                 continue
@@ -166,7 +185,7 @@ class BadGenUtil:
                 # It's much more important to under-detect false positives rather than the opposite, since being forced to regenerate
                 # false positives is relatively harmess, versus letting a bad generation go through, which is much worse.
                 if False:
-                    # Work in progress
+                    # Work in progress, meh
                     tup = BadGenUtil.detect_whisper_hallucination(massaged_text, massaged_transcribed_text)
                     if tup[0] == True:
                         fail_reason = ""
@@ -174,10 +193,39 @@ class BadGenUtil:
 
             if fail_reason:
                 item.result = FailResult(fail_reason)
+                num_detected += 1
                 BadGenUtil.print_item_fail(item)
+
+                if whisper_result:
+
+                    timestamps = get_timestamps_for_phrase_in_transcription(whisper_result, massaged_text)
+                    if timestamps:
+                        # Audio has hallucinated excess, which can be trimmed out
+                        # Make trimmed copy of audio file, update Item, and delete old version
+                        start_time = timestamps[0]
+                        end_time = timestamps[1]
+                        END_OFFSET = 0.25 # Whisper consistently reports end timestamp as being too early
+                        end_time += END_OFFSET
+                        new_path = insert_bracket_tag_file_path(item.path, "trimmed")
+                        new_path = insert_bracket_tag_file_path(new_path, "pass")
+                        result = ConcatUtil.trim_flac_file(item.path, new_path, start_time, end_time)
+                        if not result:
+                            printt(f"{COL_ACCENT}Couldn't trim FLAC file: {new_path}")
+                        else:
+                            # "Undo" the fail result
+                            item.result = PassResult()
+                            num_corrected += 1
+                            printt(f"        * {COL_ACCENT}Fixed error{COL_DEFAULT} by trimming audio file ({start_time:.2f}-{end_time:.2f})\n")
+                            try:
+                                Path(item.path).unlink()
+                            except:
+                                printt("{COL_ACCENT}Couldn't delete original file")
+
             else:
                 item.result = PassResult()
                 rename_as_passed(item.path)
+
+        printt(f"{num_detected} error/s detected, {num_corrected} of which were corrected.\n")
 
         if whisper_model:
             # Cleanup
@@ -185,8 +233,6 @@ class BadGenUtil:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
-
-        print("\a", end="")
 
     @staticmethod
     def detect_whisper_hallucination(
@@ -374,36 +420,20 @@ class BadGenUtil:
         return items
 
     @staticmethod
-    def populate_transcribed_text(item: Item, whisper_model) -> None:
-        result = whisper_model.transcribe(item.path, language=None)
-        if not result or not "text" in result:
+    def populate_transcribed_text(item: Item, whisper_result: dict) -> None:
+        if not whisper_result or not "text" in whisper_result:
             item.transcribed_text = TranscribeFail()
         else:
-            text = result["text"]
+            text = whisper_result["text"]
             if not isinstance(text, str):
                 L.w(f"unexpected whisper result: {text}")
                 item.transcribed_text = TranscribeFail()
             else:
                 item.transcribed_text = text.strip()
 
-    @staticmethod
-    def populate_transcribed_text_all(items: list[Item]) -> None:
-
-        printt("Initializing whisper model...")
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        whisper_model = whisper.load_model("turbo", device=device)
-        printt()
-
-        for i, item in enumerate(items):
-            BadGenUtil.populate_transcribed_text(item, whisper_model)
-            if i % 25 == 25:
-                print(i)
-
-        # Cleanup
-        del whisper_model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
+            # print()
+            # print(whisper_result)
+            # print()
 
     @staticmethod
     def print_item_fail(item: Item) -> None:
@@ -455,11 +485,9 @@ def rename_as_passed(file_path_string: str) -> None:
 
         new_name = new_stem + suffix
         new_path = directory / new_name
-
         if path == new_path:
             L.i(f"File {file_path_string} name is already in the desired format or no change needed.")
             return
-
         path.rename(new_path)
 
     except Exception as e:
@@ -495,6 +523,75 @@ def rename_dev(filepath, replacement_pattern="bad"):
     else:
         return filepath  # return original if fewer than 3 bracketed segments
 
+
+
+
+def get_timestamps_for_phrase_in_transcription(
+    whisper_json: dict,
+    ground_truth_text: str
+) -> Optional[Tuple[float, float]]:
+    """
+    Finds if a ground truth text phrase exists in a Whisper transcription and returns its start/end timestamps.
+
+    The matching is done by normalizing both the ground truth text and segments of the
+    transcribed text using the massage_for_comparison function. It looks for an exact
+    match of a sequence of transcribed words to the ground truth phrase.
+
+    Args:
+        whisper_json: The JSON output from Whisper, expected to have 'segments'
+                      each containing 'words' with 'word', 'start', and 'end' keys.
+        ground_truth_text: The text phrase to search for.
+
+    Returns:
+        A tuple (start_timestamp, end_timestamp) if the phrase is found,
+        otherwise None.
+    """
+    norm_ground_truth = massage_for_comparison(ground_truth_text)
+    if not norm_ground_truth:
+        return None
+
+    all_whisper_words = []
+    if whisper_json and 'segments' in whisper_json and isinstance(whisper_json['segments'], list):
+        for segment in whisper_json['segments']:
+            if segment and 'words' in segment and isinstance(segment['words'], list):
+                for word_info in segment['words']:
+                    if (isinstance(word_info, dict) and
+                            all(k in word_info for k in ('word', 'start', 'end')) and
+                            isinstance(word_info['word'], str)):
+                        try:
+                            start_time = float(word_info['start'])
+                            end_time = float(word_info['end'])
+                            all_whisper_words.append({
+                                'text': word_info['word'],
+                                'start': start_time,
+                                'end': end_time
+                            })
+                        except (ValueError, TypeError):
+                            # Skip word if timestamps are not valid numbers
+                            continue
+
+    if not all_whisper_words:
+        return None
+
+    n_whisper_words = len(all_whisper_words)
+    for i in range(n_whisper_words):
+        current_concatenated_raw_text = ""
+        current_start_time = all_whisper_words[i]['start']
+
+        for j in range(i, n_whisper_words):
+            current_concatenated_raw_text += all_whisper_words[j]['text']
+
+            norm_segment_text = massage_for_comparison(current_concatenated_raw_text)
+
+            if norm_segment_text == norm_ground_truth:
+                return (current_start_time, all_whisper_words[j]['end'])
+
+            if len(norm_segment_text) > len(norm_ground_truth) and \
+               not norm_segment_text.startswith(norm_ground_truth):
+                break
+
+    return None
+
 # ---
 
 class Item:
@@ -507,14 +604,20 @@ class Item:
         self.result: PassResult | FailResult | None = None
 
 class TranscribeFail:
+    """ Transcription of item's audio file has failed """
     pass
 
 class Untranscribed:
+    """ Item has not yet been transcribed """
     pass
 
 class PassResult:
+    """ Represents a passing result """
     pass
 
 class FailResult:
     def __init__(self, message: str):
         self.message = message
+
+# with open("temp_items.pickle", 'rb') as f:
+#     items: list[Item] = pickle.load(f)

@@ -6,9 +6,9 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
-from .text_segmenter import TextSegmenter
-from .util import *
-from .constants import *
+from tts_audiobook_tool.text_segmenter import TextSegmenter
+from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import *
 
 class TextSegmentsUtil:
 
@@ -28,7 +28,7 @@ class TextSegmentsUtil:
         if not texts:
             return
 
-        print_text_segments(texts)
+        AppUtil.print_text_segments(texts)
         printt("... is how the text will be segmented for inference.\n")
         hotkey = ask_hotkey(f"Enter {make_hotkey_string("Y")} to confirm: ")
         if hotkey != "y":

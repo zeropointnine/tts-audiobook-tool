@@ -50,12 +50,14 @@ class App:
         if did_reset:
             printt(f"{COL_ERROR}Directory {self.state.project_dir} not found.\nCleared project settings.\n")
 
+        num_audio_files = ProjectDirUtil.num_audio_segment_files(self.state)
+
         # Project
         s = f"{make_hotkey_string("P")} Project directory "
         if not self.state.project_dir:
             s += f"{COL_DIM}(Must set this first)"
         else:
-            s += f"{COL_DIM}(current: {COL_DEFAULT}{self.state.project_dir}{COL_DIM})"
+            s += f"{COL_DIM}(current: {COL_ACCENT}{self.state.project_dir}{COL_DIM})"
         printt(s)
 
         # Voice
@@ -63,21 +65,14 @@ class App:
             s = f"{make_hotkey_string("V")} Voice "
             if self.state.voice:
                 identifier = self.state.voice.get("identifier", "voice") if self.state.voice else "None"
-                s += f"{COL_DIM}(current: {COL_DEFAULT}{identifier}{COL_DIM}){Ansi.RESET}"
+                s += f"{COL_DIM}(current: {COL_ACCENT}{identifier}{COL_DIM}){Ansi.RESET}"
             printt(s)
 
         # Text
         if self.state.project_dir:
             s = f"{make_hotkey_string("T")} Text "
             if self.state.text_segments:
-                s += f"{COL_DIM}(current: {COL_DEFAULT}{len(self.state.text_segments)}{COL_DIM} lines)"
-            printt(s)
-
-        # View text
-        if self.state.project_dir:
-            s = f"{make_hotkey_string("U")} View text "
-            if not self.state.text_segments:
-                s += f"{COL_DIM}(must first set text)"
+                s += f"{COL_DIM}(current: {COL_ACCENT}{len(self.state.text_segments)}{COL_DIM} lines)"
             printt(s)
 
         # Generate audio
@@ -91,8 +86,13 @@ class App:
                 s2 = f"{COL_DIM} (must first set text)"
             else:
                 num_complete = ProjectDirUtil.num_audio_segment_files(self.state)
-                s2 = f" {COL_DIM}({COL_DEFAULT}{num_complete}{COL_DIM} of {COL_DEFAULT}{len(self.state.text_segments)}{COL_DIM} complete)"
+                s2 = f" {COL_DIM}({COL_ACCENT}{num_complete}{COL_DIM} of {COL_ACCENT}{len(self.state.text_segments)}{COL_DIM} complete)"
             printt(s + s2)
+
+        # Detect errors
+        if self.state.project_dir and num_audio_files > 0:
+            s = s = f"{make_hotkey_string("D")} Detect and fix audio generation errors"
+            printt(s)
 
         # Options
         s = f"{make_hotkey_string("Z")} Options, Utils"
@@ -101,6 +101,9 @@ class App:
         printt()
 
     def handle_hotkey(self, hotkey: str) -> None:
+
+        num_audio_files = ProjectDirUtil.num_audio_segment_files(self.state)
+
         match hotkey:
             case "p":
                 project_type = self.ask_project_type()
@@ -110,50 +113,34 @@ class App:
                     self.ask_and_set_existing_project()
             case "v":
                 if self.can_set_voice:
-                    count = ProjectDirUtil.num_audio_segment_files(self.state)
-                    if count:
-                        s = f"Replacing voice will invalidate {count} previously generated audio file fragments for this project.\nAre you sure? "
+                    if num_audio_files:
+                        s = f"Replacing voice will invalidate {num_audio_files} previously generated audio file fragments for this project.\nAre you sure? "
                         if ask_hotkey(s):
                             VoiceUtil.ask_voice_and_set(self.state)
                     else:
                         VoiceUtil.ask_voice_and_set(self.state)
             case "t":
-                if self.can_set_text:
-                    count = ProjectDirUtil.num_audio_segment_files(self.state)
-                    if count:
-                        s = f"Replacing text will invalidate {count} previously generated audio file fragments for this project.\nAre you sure? "
-                        if ask_hotkey(s):
-                            TextSegmentsUtil.ask_text_segments_and_set(self.state)
-                    else:
-                        TextSegmentsUtil.ask_text_segments_and_set(self.state)
-            case "u":
-                if self.can_view_text:
-                    print_text_segments(self.state.text_segments)
-                    ask("Press enter: ")
-                    printt()
+                if not self.state.project_dir:
+                    return
+                if not self.state.text_segments:
+                    TextSegmentsUtil.ask_text_segments_and_set(self.state)
+                else:
+                    self.text_submenu()
             case "a":
                 if self.can_generate_audio:
-                    abort = GenerateUtil.ask_generate_all(self.state)
-                    if abort:
-                        return
-                    ConcatUtil.concatenate_project_flacs(self.state)
-                    ask("Press enter: ")
+                    GenerateUtil.go(self.state, [], should_ask=True)
+            case "d":
+                if not self.state.project_dir or num_audio_files == 0:
+                    return
+                self.detect_submenu()
             case "z":
-                self.print_ask_options()
+                self.options_submenu()
 
     # ---
 
     @property
     def can_set_voice(self) -> bool:
         return bool(self.state.project_dir)
-
-    @property
-    def can_set_text(self) -> bool:
-        return bool(self.state.project_dir)
-
-    @property
-    def can_view_text(self) -> bool:
-        return bool(self.state.text_segments)
 
     @property
     def can_generate_audio(self) -> bool:
@@ -227,17 +214,38 @@ class App:
             printt(err, "error")
             return
 
-    def print_ask_options(self):
+    def text_submenu(self) -> None:
+        printt(f"{make_hotkey_string("1")} View text")
+        printt(f"{make_hotkey_string("2")} Replace text")
+        hotkey = ask()
+        if hotkey == "1":
+            AppUtil.print_text_segments(self.state.text_segments)
+            ask("Press enter: ")
+        elif hotkey == "2":
+            num_files = ProjectDirUtil.num_audio_segment_files(self.state)
+            if num_files == 0:
+                TextSegmentsUtil.ask_text_segments_and_set(self.state)
+            else:
+                s = f"Replacing text will invalidate {num_files} previously generated audio file fragments for this project.\nAre you sure? "
+                if ask_hotkey(s):
+                    TextSegmentsUtil.ask_text_segments_and_set(self.state)
+
+    def detect_submenu(self) -> None:
+        printt(f"{make_hotkey_string("1")} Detect and quick-fix")
+        printt(f"{make_hotkey_string("2")} Detect and quick-fix, and regenerate (corrects more errors)")
+        hotkey = ask_hotkey()
+        if hotkey == "1":
+            BadGenUtil.detect_and_quick_fix(self.state, and_regen=False)
+        elif hotkey == "2":
+            BadGenUtil.detect_and_quick_fix(self.state, and_regen=True)
+
+
+    def options_submenu(self) -> None:
 
         printt(f"{COL_ACCENT}Options, utilities:\n")
         printt(f"{make_hotkey_string("1")} Temperature (currently: {self.state.temperature})")
         printt(f"{make_hotkey_string("2")} Play audio after each segment is generated (currently: {self.state.play_on_generate})")
-        s = f"{make_hotkey_string("3")} Util: Detect audio generation errors "
-        num_audio_segments = ProjectDirUtil.num_audio_segment_files(self.state)
-        if num_audio_segments == 0:
-            s += f"{COL_DIM}(Must first generate audio)"
-        printt(s)
-        printt(f"{make_hotkey_string("4")} Util: Concatenate FLAC files in a directory")
+        printt(f"{make_hotkey_string("3")} Util: Concatenate FLAC files")
 
         printt(f"{make_hotkey_string("Q")} Quit")
         printt()
@@ -267,10 +275,4 @@ class App:
                     ask_hotkey("Press enter: ")
                 printt()
             case "3":
-                if num_audio_segments > 0:
-                    should_regen = BadGenUtil.ask_detect(self.state)
-                    if should_regen:
-                        GenerateUtil.ask_generate_all(self.state, skip_ask=True)
-                        ask("Press enter: ")
-            case "4":
                 ConcatUtil.ask_do_dir_concat()

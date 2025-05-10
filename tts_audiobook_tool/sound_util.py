@@ -5,7 +5,7 @@ import threading
 import pyloudnorm as pyln
 import soundfile as sf
 
-from .util import printt
+from tts_audiobook_tool.util import printt
 
 class SoundUtil:
 

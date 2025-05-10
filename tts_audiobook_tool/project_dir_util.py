@@ -5,8 +5,8 @@ from typing import cast
 
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.state import State
-from .util import *
-from .constants import *
+from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import *
 
 class ProjectDirUtil:
     """ Methods that get or infer state from the contents of the project directory """
