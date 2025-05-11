@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.bad_gen_util import BadGenUtil
+from tts_audiobook_tool.verify_util import VerifyUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
@@ -77,7 +77,7 @@ class App:
 
         # Generate audio
         if self.state.project_dir:
-            s = f"{make_hotkey_string("A")} Generate audio"
+            s = f"{make_hotkey_string("G")} Generate audio"
             if not self.state.voice and not self.state.text_segments:
                 s2 = f"{COL_DIM} (must first set voice and text)"
             elif not self.state.voice:
@@ -86,12 +86,12 @@ class App:
                 s2 = f"{COL_DIM} (must first set text)"
             else:
                 num_complete = ProjectDirUtil.num_audio_segment_files(self.state)
-                s2 = f" {COL_DIM}({COL_ACCENT}{num_complete}{COL_DIM} of {COL_ACCENT}{len(self.state.text_segments)}{COL_DIM} complete)"
+                s2 = f" {COL_DIM}({COL_ACCENT}{num_complete}{COL_DIM} of {COL_ACCENT}{len(self.state.text_segments)}{COL_DIM} lines complete)"
             printt(s + s2)
 
         # Detect errors
         if self.state.project_dir and num_audio_files > 0:
-            s = s = f"{make_hotkey_string("D")} Detect and fix audio generation errors"
+            s = s = f"{make_hotkey_string("Y")} Verify generated audio"
             printt(s)
 
         # Options
@@ -126,13 +126,13 @@ class App:
                     TextSegmentsUtil.ask_text_segments_and_set(self.state)
                 else:
                     self.text_submenu()
-            case "a":
+            case "g":
                 if self.can_generate_audio:
                     GenerateUtil.go(self.state, [], should_ask=True)
-            case "d":
+            case "y":
                 if not self.state.project_dir or num_audio_files == 0:
                     return
-                self.detect_submenu()
+                VerifyUtil.verify(self.state)
             case "z":
                 self.options_submenu()
 
@@ -215,8 +215,9 @@ class App:
             return
 
     def text_submenu(self) -> None:
+        printt(f"{COL_ACCENT}Text:\n")
         printt(f"{make_hotkey_string("1")} View text")
-        printt(f"{make_hotkey_string("2")} Replace text")
+        printt(f"{make_hotkey_string("2")} Replace text\n")
         hotkey = ask()
         if hotkey == "1":
             AppUtil.print_text_segments(self.state.text_segments)
@@ -229,15 +230,6 @@ class App:
                 s = f"Replacing text will invalidate {num_files} previously generated audio file fragments for this project.\nAre you sure? "
                 if ask_hotkey(s):
                     TextSegmentsUtil.ask_text_segments_and_set(self.state)
-
-    def detect_submenu(self) -> None:
-        printt(f"{make_hotkey_string("1")} Detect and quick-fix")
-        printt(f"{make_hotkey_string("2")} Detect and quick-fix, and regenerate (corrects more errors)")
-        hotkey = ask_hotkey()
-        if hotkey == "1":
-            BadGenUtil.detect_and_quick_fix(self.state, and_regen=False)
-        elif hotkey == "2":
-            BadGenUtil.detect_and_quick_fix(self.state, and_regen=True)
 
 
     def options_submenu(self) -> None:

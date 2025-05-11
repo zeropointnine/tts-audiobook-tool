@@ -48,7 +48,7 @@ class GenerateUtil:
         s = f"Will generate {len(indices)} audio segments"
         num_completed = original_len - len(indices)
         if num_completed > 0:
-            s += (f"(Already completed {num_completed} items)")
+            s += f" (already completed {num_completed} items)"
         printt(s + "\n")
 
         if should_ask and not ask_confirm():

@@ -158,7 +158,7 @@ class ConcatUtil:
             start_time_seconds: float,
             end_time_seconds: float,
             ffmpeg_path: str="ffmpeg"
-        ):
+        ) -> bool:
             """
             Trims a source FLAC file from start_time_seconds to end_time_seconds
             and saves it to dest_file_path using ffmpeg.

@@ -151,4 +151,14 @@ def insert_bracket_tag_file_path(file_path: str, tag: str) -> str:
     new_path = path.with_stem(new_stem)
     return str(new_path)
 
+def massage_for_text_comparison(s: str) -> str:
+    # Massages text so that source text can be reliably compared to transcribed text
+    s = s.lower().strip()
+    # First replace fancy apost with normal apost
+    s = s.replace("’", "'") #
+    # Replace all non-alpha-numerics with space, except for apost that is inside a word
+    s = re.sub(r"[^a-zA-Z0-9'’]|(?<![a-zA-Z])['’]|['’](?![a-zA-Z])", ' ', s)
+    s = re.sub(r' +', ' ', s)
+    s = s.strip(' ')
+    return s
 
