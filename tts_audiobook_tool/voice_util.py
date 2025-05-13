@@ -1,6 +1,8 @@
+import gc
 import os
 from pathlib import Path
 from outetts.version.interface import InterfaceHF
+import torch
 
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.hash_file_util import HashFileUtil
@@ -11,7 +13,7 @@ from tts_audiobook_tool.constants import *
 class VoiceUtil:
 
     @staticmethod
-    def ask_voice_and_set(state: State) -> None:
+    def voice_submenu(state: State) -> None:
         """
         Gets/creates voice json, re-saves it to the project dir, and updates State.
         Or prints error message.
@@ -20,19 +22,18 @@ class VoiceUtil:
         """
         voice = None
 
-        word = "Set" if not state.voice else "Replace"
-        printt(f"{COL_ACCENT}{word} voice:\n")
+        word = "Set" if not state.project.voice else "Replace"
+        print_heading(f"{word} voice:")
         printt(f"[{COL_ACCENT}1{Ansi.RESET}] Create voice file using reference WAV file (15s or less)")
         printt(f"[{COL_ACCENT}2{Ansi.RESET}] Use pre-existing voice json file")
         printt(f"[{COL_ACCENT}3{Ansi.RESET}] Use oute-tts default voice")
         printt()
         inp = ask()
-        printt()
 
         # Get voice
         match inp:
             case "1":
-                result = VoiceUtil.ask_generate_voice(state.interface)
+                result = VoiceUtil.ask_create_voice(state.interface)
             case "2":
                 result = VoiceUtil.ask_load_voice(state.interface)
             case "3":
@@ -55,20 +56,20 @@ class VoiceUtil:
         VoiceUtil.save_to_project_dir_and_set_state(voice, state)
 
         # Delete any existing audio files in project dir, which are now 'invalid'
-        err = AppUtil.delete_project_audio_files(state.project_dir)
+        err = AppUtil.delete_project_audio_files(state.prefs.project_dir)
         if err:
             printt(err, "error")
 
     @staticmethod
     def save_to_project_dir_and_set_state(voice: dict, state: State):  # TODO: should probably live in State, as as "setter"
         """Prints error on fail"""
-        dest_path = os.path.join(state.project_dir, PROJECT_VOICE_FILE_NAME)
+        dest_path = os.path.join(state.prefs.project_dir, PROJECT_VOICE_FILE_NAME)
         assert isinstance(voice, dict)
         err = AppUtil.save_json(voice, dest_path)
         if err:
             printt(err, "error")
             return
-        state.voice = voice
+        state.project.voice = voice
 
     @staticmethod
     def ask_load_voice(interface: InterfaceHF) -> dict | str:
@@ -79,7 +80,7 @@ class VoiceUtil:
         return VoiceUtil.load_voice(interface, path)
 
     @staticmethod
-    def ask_generate_voice(interface: InterfaceHF) -> dict | str:
+    def ask_create_voice(interface: InterfaceHF) -> dict | str:
         """ Returns voice dict or error string or empty string for cancel """
         source_path = ask("Enter file path of source audio (up to 15s) for voice clone:\n")
         if not source_path:
@@ -87,22 +88,29 @@ class VoiceUtil:
         if not os.path.exists(source_path):
             return f"File not found: {source_path}"
 
-        printt("Please wait...\n")
+        printt("Initializing...\n")
 
-        result = VoiceUtil.generate_voice(interface, source_path)
+        result = VoiceUtil.create_voice(interface, source_path)
         printt()
 
         return result
 
     @staticmethod
-    def generate_voice(interface: InterfaceHF, path: str) -> dict | str:
+    def create_voice(interface: InterfaceHF, path: str) -> dict | str:
         """ Returns voice dict or error string """
         try:
             voice = interface.create_speaker(path)
             VoiceUtil._add_special_properties(voice, path)
-            return voice
         except Exception as e:
             return f"Error creating voice: {e}"
+
+        #
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+
+        return voice
 
     @staticmethod
     def load_voice(interface: InterfaceHF, path: str) -> dict | str:
@@ -123,5 +131,5 @@ class VoiceUtil:
             voice["hash"] = HashFileUtil.get_voice_hash(voice)
         # Identifier
         if not "identifier" in voice:
-            s = AppUtil.sanitize_for_filename(Path(path).stem[:20])
+            s = sanitize_for_filename(Path(path).stem[:20])
             voice["identifier"] = s

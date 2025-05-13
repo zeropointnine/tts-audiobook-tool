@@ -1,3 +1,4 @@
+from datetime import datetime
 import re
 import os
 from pathlib import Path
@@ -22,7 +23,17 @@ def printt(s: str="", type: str="") -> None:
         ask("\nPress enter: ")
         printt()
 
+def print_heading(s: str) -> None:
+    """ """
+    length = len(s)
+    printt(f"{COL_ACCENT}{s}")
+    printt("-" * length)
+
 def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
+    """
+    App-standard way of getting user input.
+    Prints extra line after the input by default.
+    """
     message = f"{message}{COL_INPUT}"
     try:
         inp = input(message).strip()
@@ -99,6 +110,10 @@ def encode_to_flac(wav_path: str, flac_path: str) -> bool:
         printt(str(e), "error")
         return False
 
+def timestamp_string() -> str:
+    current_time = datetime.now()
+    return current_time.strftime("%y%m%d_%H%M%S")
+
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
     num_bytes = 0
@@ -162,3 +177,39 @@ def massage_for_text_comparison(s: str) -> str:
     s = s.strip(' ')
     return s
 
+def sanitize_for_filename(filename) -> str:
+    """
+    Replaces all non-alpha-numeric characters with underscores,
+    replaces consecutive underscores with a single underscore,
+    and removes leading/trailing underscores.
+    """
+    sanitized = re.sub(r'[^a-zA-Z0-9]', '_', filename)
+    collapsed = re.sub(r'_+', '_', sanitized)
+    stripped = collapsed.strip('_')
+    return stripped
+
+
+def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tuple[int, int]]:
+    """ Assumes `section_dividers` is sorted """
+
+    if not section_dividers:
+        return [ (0, num_items - 1) ]
+
+    indices = list(section_dividers)
+    if indices[0] == 0:
+        del indices[0]
+
+    ranges = []
+
+    start = 0
+    for index in indices:
+        if index < 0 or index >= num_items:
+            raise ValueError(f"Out of range: {index}")
+        end = index - 1
+        range = (start, end)
+        ranges.append(range)
+        start = index
+    range = (start, num_items-1)
+    ranges.append(range)
+
+    return ranges

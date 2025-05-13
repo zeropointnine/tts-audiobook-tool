@@ -13,14 +13,14 @@ from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
-class VerifyUtil:
+class ValidateUtil:
 
     @staticmethod
-    def verify(state: State) -> None:
+    def validate(state: State) -> None:
 
-        printt(f"{COL_ACCENT}Verify generated audio:\n")
+        print_heading("Validate/fix generated audio:")
 
-        all_items = VerifyUtil.make_items(state)
+        all_items = ValidateUtil.make_items(state)
         if not all_items:
             ask("No generated items. Press enter: ")
             return
@@ -29,31 +29,31 @@ class VerifyUtil:
 
         items = [item for item in all_items if not item.already_verified]
         if not items:
-            ask("All generated audio files already verified. Press enter:" )
+            ask("All generated audio files already validated. Press enter:" )
             return
 
         num_already_verified = len(all_items) - len(items)
 
         if not num_already_verified:
-            printt("We will analyse the generated audio lines and make a 'best guess' as to if they have any significant errors.")
+            printt("We will analyse the generated audio lines and make a 'best guess' as to whether they contain significant errors.")
             printt("")
             printt("Lines with errors that can be resolved by simply trimming the audio will be automatically fixed.")
             printt("")
-            printt(f"Other lines with suspected errors {COL_ACCENT}will be deleted{COL_DEFAULT}, and will need to be regenerated from the main menu. Regenerating these lines offers a fair possibility of resolving these errors.")
+            printt(f"Lines that cannot be fixed in this manner {COL_ACCENT}will be deleted{COL_DEFAULT}, and will need to be regenerated from the main menu, which offers a fair possibility of resolving them.")
             printt("")
 
-        printt(f"Total lines generated: {len(all_items)}")
+        printt(f"Total lines: {len(all_items)}")
         if num_already_verified:
             printt(f"Lines already marked as verified: {num_already_verified}")
         printt(f"Lines left to be analysed: {len(items)}")
         printt()
 
-        num_missing = len(state.text_segments) - len(all_items)
+        num_missing = len(state.project.text_segments) - len(all_items)
         if num_missing > 0:
             printt(f"Note that {num_missing} lines from the project still need to be generated.")
             printt()
         printt(f"{make_hotkey_string("1")} Start (trim or delete files as needed)")
-        printt(f"{make_hotkey_string("2")} Verify only (don't trim or delete)")
+        printt(f"{make_hotkey_string("2")} Validate only (don't trim or delete)")
         printt()
         hotkey = ask_hotkey()
         if hotkey == "1":
@@ -63,7 +63,7 @@ class VerifyUtil:
         else:
             return
 
-        VerifyUtil.do_tests(items, avg_sec_per_char, fix_and_delete=fix_and_delete)
+        ValidateUtil.do_tests(items, avg_sec_per_char, fix_and_delete=fix_and_delete)
 
         ask("Finished. Press enter: ")
 
@@ -107,7 +107,7 @@ class VerifyUtil:
 
             # [1] Do "substring" test
             if fix_and_delete:
-                substring_test_result = VerifyUtil.detect_is_substring_and_fix(item, cast(dict, whisper_data))
+                substring_test_result = ValidateUtil.detect_is_substring_and_fix(item, cast(dict, whisper_data))
                 if substring_test_result:
                     num_detected += 1
                     did_save, message = substring_test_result
@@ -119,7 +119,7 @@ class VerifyUtil:
                     print_item_info(item, message, action_taken)
                     continue
             else:
-                timestamps = VerifyUtil.detect_is_substring(item, cast(dict, whisper_data))
+                timestamps = ValidateUtil.detect_is_substring(item, cast(dict, whisper_data))
                 if timestamps:
                     num_detected += 1
                     message = f"Excess audio detected, substring exists at {timestamps[0]:.2f}-{timestamps[1]:.2f}"
@@ -127,7 +127,7 @@ class VerifyUtil:
                     continue
 
             # [2] Do word count test
-            fail_reason = VerifyUtil.is_word_count_fail(item)
+            fail_reason = ValidateUtil.is_word_count_fail(item)
             if fail_reason:
                 num_detected += 1
                 if fix_and_delete:
@@ -144,7 +144,7 @@ class VerifyUtil:
 
             # [3] Do duration test, as a bonus (may or may not fill in some cracks)
             if avg_sec_per_char > 0:
-                fail_reason = VerifyUtil.is_duration_fail(item, avg_sec_per_char)
+                fail_reason = ValidateUtil.is_duration_fail(item, avg_sec_per_char)
                 if fail_reason:
                     num_detected += 1
                     if fix_and_delete:
@@ -173,13 +173,12 @@ class VerifyUtil:
         # Done
         print(f"Elapsed: {AppUtil.time_string(time.time() - start_time)}")
         printt()
-        printt(f"{len(items)} files analysed")
-        printt(f"{num_verified} files marked as 'verified'")
+        printt(f"{len(items)} file/s analysed")
+        printt(f"{num_verified} file/s marked as 'verified'")
         printt(f"{num_detected} error/s detected")
         if fix_and_delete:
-            printt(f"{num_corrected} files corrected")
-            printt()
-            printt(f"{num_deleted} files were deleted, and will need to be regenerated.")
+            printt(f"{num_corrected} file/s corrected")
+            printt(f"{num_deleted} file/s were {COL_ACCENT}deleted{COL_DEFAULT}, and will need to be regenerated")
         printt()
 
         if whisper_model:
@@ -198,7 +197,7 @@ class VerifyUtil:
             [0] True if trim was successful
             [1] Messaging
         """
-        timestamps = VerifyUtil.detect_is_substring(item, whisper_data)
+        timestamps = ValidateUtil.detect_is_substring(item, whisper_data)
         if not timestamps:
             return None
 
@@ -289,7 +288,7 @@ class VerifyUtil:
         items = []
         index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         for index, file_path in index_to_path.items():
-            text_segment = state.text_segments[index]
+            text_segment = state.project.text_segments[index]
             seconds = AppUtil.get_flac_file_duration(file_path)
             if not isinstance(seconds, float):
                 L.w(f"Ignoring - couldn't get duration for {file_path}")

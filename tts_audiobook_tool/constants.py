@@ -17,9 +17,13 @@ MENU_CLEAR_SCREEN = False
 SETTINGS_FILE_NAME = "tts-audiobook-tool-settings.json"
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 PROJECT_VOICE_FILE_NAME = "voice.json"
-PROJECT_TEXT_FILE_NAME = "text.json"
+PROJECT_SETTINGS_FILE_NAME = "project.json"
 PROJECT_RAW_TEXT_FILE_NAME = "text raw.txt"
 PROJECT_FFMPEG_TEMP_FILE_NAME = "ffmpeg_temp.txt"
+
+AUDIO_SEGMENTS_SUBDIR = "audio_segments"
+CONCAT_SUBDIR = "concatenated"
+
 ASSETS_DIR_NAME = "assets"
 DEFAULT_VOICE_FILE_NAME = "en-female-1-neutral.json"
 package_dir = os.path.dirname(os.path.abspath(__file__))

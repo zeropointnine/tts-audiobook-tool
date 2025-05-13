@@ -16,17 +16,17 @@ class HashFileUtil:
     @staticmethod
     def make_segment_file_path(index, state: State) -> str:
         fn = HashFileUtil.make_segment_file_name(index, state)
-        return os.path.join(state.project_dir, fn)
+        return os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR, fn)
 
     @staticmethod
     def make_segment_file_name(index: int, state: State, suffix=".flac") -> str:
-        text_segment = state.text_segments[index]
-        hash = HashFileUtil.calc_segment_hash(index, text_segment, cast(dict, state.voice))
-        voice_id = cast(dict, state.voice).get("identifier", "")
+        text_segment = state.project.text_segments[index]
+        hash = HashFileUtil.calc_segment_hash(index, text_segment, cast(dict, state.project.voice))
+        voice_id = cast(dict, state.project.voice).get("identifier", "")
         s1 = "[" + voice_id + "] "
         s2 = "[" + str(index).zfill(5) + "] "
         s3 = "[" + hash + "] "
-        s4 = AppUtil.sanitize_for_filename(text_segment)
+        s4 = sanitize_for_filename(text_segment)
         s = s1 + s2 + s3 + s4
         s = s[:100]
         s = s.rstrip("_")
@@ -51,26 +51,6 @@ class HashFileUtil:
         return index, hash
 
     # ---
-
-    @staticmethod
-    def make_concat_file_path(state: State) -> str:
-        fn = HashFileUtil.make_concat_file_name(state.text_segments, cast(dict, state.voice))
-        return os.path.join(state.project_dir, fn)
-
-    @staticmethod
-    def make_concat_file_name(text_segments: list[str], voice: dict) -> str:
-        hash = HashFileUtil.calc_full_hash(text_segments, voice)
-        return  f"combined [{voice.get("identifier", "")}] [{hash}] {AppUtil.make_timestamp_string()}.flac"
-
-    @staticmethod
-    def does_concat_file_exist(state: State) -> bool:
-        fn = HashFileUtil.make_concat_file_name(state.text_segments, cast(dict, state.voice))
-        file_path = os.path.join(state.project_dir, fn)
-        path = Path(file_path)
-        if path.exists:
-            if path.stat().st_size > 0:
-                return True
-        return False
 
     @staticmethod
     def calc_full_hash(text_segments: list[str], voice: dict) -> str:

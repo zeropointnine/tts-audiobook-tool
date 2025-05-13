@@ -19,40 +19,56 @@ from tts_audiobook_tool.project_dir_util import *
 class GenerateUtil:
 
     @staticmethod
-    def go(state: State, indices: list[int], should_ask: bool) -> None:
+    def submenu_and_generate(state: State, indices: list[int]=[]) -> None:
         """
         Generates the audio files
         Considers all items if `indices` is empty
         Skips items that are already completed
         Terminates with prompt
         """
+
         if not indices:
-            indices = list(range(len(state.text_segments)))
+            indices = list(range(len(state.project.text_segments)))
         dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         already_complete = list(dic.keys())
         original_len = len(indices)
         indices = [item for item in indices if item not in already_complete]
         indices.sort()
+
         if not indices:
             printt(f"Already generated ({original_len})")
             ask("Press enter: ")
             return
 
-        config = GenerationConfig(
-            text="", # type: ignore
-            generation_type= GenerationType.CHUNKED, # type: ignore
-            speaker=cast(dict, state.voice), # type: ignore
-            sampler_config=SamplerConfig(temperature=state.temperature)  # type: ignore
-        )
+        print_heading("Generate audio:")
 
         s = f"Will generate {len(indices)} audio segments"
         num_completed = original_len - len(indices)
         if num_completed > 0:
             s += f" (already completed {num_completed} items)"
-        printt(s + "\n")
+        printt(s)
+        printt()
 
-        if should_ask and not ask_confirm():
+        printt(f"{make_hotkey_string("1")} Generate, and concatenate when finished")
+        printt(f"{make_hotkey_string("2")} Generate only")
+        printt()
+
+        hotkey = ask_hotkey()
+        if hotkey == "1":
+            and_concat = True
+        elif hotkey == "2":
+            and_concat = False
+        else:
             return
+
+        # ---
+
+        config = GenerationConfig(
+            text="", # type: ignore
+            generation_type= GenerationType.CHUNKED, # type: ignore
+            speaker=cast(dict, state.project.voice), # type: ignore
+            sampler_config=SamplerConfig(temperature=state.prefs.temperature)  # type: ignore
+        )
 
         start_time = time.time()
 
@@ -71,9 +87,10 @@ class GenerateUtil:
         elapsed = time.time() - start_time
         printt(f"Elapsed: {AppUtil.time_string(elapsed)}\a\n")
 
-        ConcatUtil.concatenate_project_flacs(state)
-
-        ask("Press enter to continue: ")
+        if and_concat:
+            ConcatUtil.concatenate_project_flacs(state)
+        else:
+            ask("Finished. Press enter: ")
 
     @staticmethod
     def generate_and_convert_flac(
@@ -87,9 +104,9 @@ class GenerateUtil:
         """
         Generates temp wav file, converts to flac, deletes temp wav
         """
-        temp_wav_path = os.path.join(state.project_dir, make_random_hex_string() + ".wav")
+        temp_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
         flac_path = HashFileUtil.make_segment_file_path(index, state)
-        text_segment = state.text_segments[index]
+        text_segment = state.project.text_segments[index]
 
         s = ""
         if batch_count > 0 and batch_total > 0:
@@ -124,7 +141,7 @@ class GenerateUtil:
         printt(f"Saved: {flac_path}\n")
         delete_temp_file(temp_wav_path)
 
-        if state.play_on_generate:
+        if state.prefs.play_on_generate:
             SoundUtil.play_flac_async(flac_path)
 
         return True

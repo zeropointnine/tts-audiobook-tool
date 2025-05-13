@@ -1,10 +1,8 @@
-import glob
 import os
 import subprocess
 from typing import cast
+from pathlib import Path
 
-from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
@@ -15,45 +13,93 @@ class ConcatUtil:
 
     @staticmethod
     def concatenate_project_flacs(state: State):
+        """
+        Concats project audio segments into final flac file/s in the `concat` subdir
+        If files missing for whatever reason, prompts to continue
+        Prompts at end.
+        """
 
-        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
-        sorted_indices = list(dic.keys())
-        sorted_indices.sort()
-        file_paths = [dic[index] for index in sorted_indices] # TODO need filenames probably
-        file_names = [os.path.basename(file_path) for file_path in file_paths]
+        print_heading(f"Concatenate audio segments:")
 
-        num_missing = len(state.text_segments) - len(file_paths)
-        if num_missing > 0:
-            printt(f"Warning: Missing {num_missing} files.")
-            # TODO enumerate missing indices and text fragments
-            if not ask_confirm(f"Press {make_hotkey_string("Y")} to continue anyway: "):
+        segment_index_to_file_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        segment_index_ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
+
+        # Parallel liss
+        sections = []
+        section_filenames = []
+        warning = ""
+
+        for i, rang in enumerate(segment_index_ranges):
+
+            start_index = rang[0]
+            end_index = rang[1]
+
+            segment_file_paths = []
+            num_missing = 0
+            for segment_index in range(start_index, end_index + 1):
+                segment_file_path = segment_index_to_file_path.get(segment_index, "")
+                if segment_file_path:
+                    segment_file_paths.append(segment_file_path)
+                else:
+                    num_missing += 1
+
+            if num_missing > 0:
+                if len(segment_index_ranges) > 1:
+                    warning += f"Chapter file {i+1} is missing {num_missing} audio segments\n"
+                else:
+                    warning += f"Missing {num_missing} audio segments\n"
+
+            if len(segment_file_paths) == 0:
+                continue
+
+            sections.append(segment_file_paths)
+
+            # Make Filename
+            # project dir base name
+            filename = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
+            # file number
+            filename += f"[{ i+1 } of {len(segment_index_ranges)}]" + " "
+            # text segment range
+            filename += f"[{start_index}-{end_index}]" + " "
+            # num missing
+            if num_missing > 0:
+                filename += f"[{num_missing} missing]" + " "
+            # voice
+            voice = cast(dict, state.project.voice)
+            filename += f"[{voice.get("identifier", "voice")}]"
+            filename += ".flac"
+            section_filenames.append(filename)
+
+        if warning:
+            printt(warning)
+            b = ask_confirm("Continue anyway? ")
+            if not b:
                 return
 
-        voice = cast(dict, state.voice)
-        dest_file_name = HashFileUtil.make_concat_file_name(state.text_segments, voice)
+        for i in range(len(sections)):
+            printt(f"Creating file {i+1} of {len(sections)}\n")
+            filename = section_filenames[i]
+            segment_file_paths = sections[i]
+            timestamp_subdir = timestamp_string()
+            dest_file_path = os.path.join(state.project.dir_path, CONCAT_SUBDIR, timestamp_subdir, filename)
+            ConcatUtil.concatenate_flacs(file_paths=segment_file_paths, dest_flac_path=dest_file_path)
 
-        ConcatUtil.concatenate_flacs(state.project_dir, file_names, dest_file_name)
+        ask("Finished. Press enter:")
 
     @staticmethod
     def concatenate_flacs(
-        base_dir: str,
-        source_file_names: list[str],
-        dest_file_name: str,
+        file_paths: list[str],
+        dest_flac_path: str,
         emphasize_finished: bool=True,
         ffmpeg_path: str="ffmpeg"
     ):
-        """ Assumes valid dir path """
+        printt(f"Concatenating {len(file_paths)} audio segment files\n")
 
-        base_dir = os.path.abspath(base_dir)
-
-        dest_flac_path = os.path.join(base_dir, dest_file_name)
-
-        printt(f"Combining {len(source_file_names)} audio segment files\n")
-
-        file_paths = [os.path.join(base_dir, file_name) for file_name in source_file_names]
+        dest_base_path = str( Path(dest_flac_path).parent )
+        os.makedirs(dest_base_path, exist_ok=True)
 
         # Make temp file with list of input WAVs for ffmpeg's concat demuxer
-        temp_text_path = os.path.join(base_dir, PROJECT_FFMPEG_TEMP_FILE_NAME)
+        temp_text_path = os.path.join(dest_base_path, PROJECT_FFMPEG_TEMP_FILE_NAME)
         try:
             with open(temp_text_path, 'w', encoding='utf-8') as f:
                 for path in file_paths:
@@ -62,7 +108,6 @@ class ConcatUtil:
                     # And wrap the path in single quotes for robustness (handles spaces etc.)
                     escaped_path = path.replace('\\', '\\\\')
                     f.write(f"file '{escaped_path}'\n")
-
         except Exception as e:
             delete_temp_file(temp_text_path)
             printt(str(e), "error")
@@ -74,7 +119,7 @@ class ConcatUtil:
         # -safe 0: Allow unsafe file paths (useful if paths are complex, though quoting helps)
         # -i list_filename: Input file is the list we created
         # -c:a flac: Specify the audio codec for the output as FLAC
-        temp_flac_path = os.path.join(base_dir, make_random_hex_string() + ".flac")
+        temp_flac_path = os.path.join(dest_base_path, make_random_hex_string() + ".flac")
         command = [
             ffmpeg_path,
             "-hide_banner",
@@ -125,31 +170,17 @@ class ConcatUtil:
             return
 
         delete_temp_file(temp_text_path)
-        s = f"Finished: {COL_ACCENT}{dest_flac_path}"
+
+        s = "Finished concatenating audio file:\n"
+        s += f"{COL_ACCENT}{dest_flac_path}"
         if emphasize_finished:
-            text_len = len(strip_ansi_codes(s))
-            printt("-" * text_len)
+            length = len(dest_flac_path)
+            printt("-" * length)
             printt(s)
-            printt("-" * text_len + "\n")
+            printt("-" * length)
         else:
-            printt(s + "\n")
-
-    @staticmethod
-    def ask_do_dir_concat():
-        path = ask("Enter directory path to concatenate FLAC files:\n")
-        if not path:
-            return
-        elif not os.path.exists(path):
-            ask("Bad directory. Press enter: ")
-            return
-        flac_file_names = list(glob.iglob(f"{path}/*.[fF][lL][aA][cC]"))
-        if len(flac_file_names) <= 1:
-            ask("Two or more FLAC files required. Press enter: ")
-            return
-
-        dest_fn = f"combined {AppUtil.make_timestamp_string()}.flac"
-        ConcatUtil.concatenate_flacs(path, flac_file_names, dest_fn, emphasize_finished=False)
-
+            printt(s)
+        printt()
 
     @staticmethod
     def trim_flac_file(
@@ -211,3 +242,25 @@ class ConcatUtil:
             except Exception as e:
                 L.w(f"subprocess fail, ffmpeg - {e}")
                 return False
+
+
+        # @staticmethod
+        # def make_concat_file_path(state: State) -> str:
+        #     fn = HashFileUtil.make_concat_file_name(state.project.text_segments, cast(dict, state.project.voice))
+        #     return os.path.join(state.prefs.project_dir, fn)
+
+        # @staticmethod
+        # def make_concat_file_name(text_segments: list[str], voice: dict) -> str:
+        #     hash = HashFileUtil.calc_full_hash(text_segments, voice)
+        #     return  f"combined [{voice.get("identifier", "")}] [{hash}] {timestamp_string()}.flac"
+
+        # @staticmethod
+        # def does_concat_file_exist(state: State) -> bool:
+        #     fn = HashFileUtil.make_concat_file_name(state.project.text_segments, cast(dict, state.project.voice))
+        #     file_path = os.path.join(state.prefs.project_dir, fn)
+        #     path = Path(file_path)
+        #     if path.exists:
+        #         if path.stat().st_size > 0:
+        #             return True
+        #     return False
+

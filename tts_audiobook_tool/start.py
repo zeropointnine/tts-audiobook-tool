@@ -23,8 +23,8 @@ printt(f"\n{COL_ACCENT}Initializing...{Ansi.RESET}\n")
 from tts_audiobook_tool.app import App
 app = App()
 
-from tts_audiobook_tool.prefs_util import PrefsUtil
-is_first_run = not os.path.exists(PrefsUtil.get_file_path())
+from tts_audiobook_tool.prefs import Prefs
+is_first_run = not os.path.exists(Prefs.get_file_path())
 if is_first_run:
     printt("\nThis appears to be your first time running tts-audiobook-tool.")
     printt(f"As a reminder, you may want to adjust the settings in the file {COL_ACCENT}model_config.py")

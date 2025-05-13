@@ -4,7 +4,6 @@ import sys
 
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.util import *
@@ -18,38 +17,24 @@ class TextSegmentsUtil:
 
         printt("Enter/paste text of any length.")
         printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT}, depending on platform\n")
-        text = sys.stdin.read().strip()
+        raw_text = sys.stdin.read().strip()
         printt()
-        if not text:
+        if not raw_text:
             return
 
-        texts = TextSegmenter.segment_full_message(text, max_words=max_words_per_segment)
-        texts = TextSegmentsUtil._post_process(texts)
-        if not texts:
+        text_segments = TextSegmenter.segment_full_message(raw_text, max_words=max_words_per_segment)
+        text_segments = TextSegmentsUtil._post_process(text_segments)
+        if not text_segments:
             return
 
-        AppUtil.print_text_segments(texts)
+        AppUtil.print_text_segments(text_segments)
         printt("... is how the text will be segmented for inference.\n")
         hotkey = ask_hotkey(f"Enter {make_hotkey_string("Y")} to confirm: ")
         if hotkey != "y":
             return
 
-        # Save to disk
-        file_path = os.path.join(state.project_dir, PROJECT_TEXT_FILE_NAME)
-        err = AppUtil.save_json(texts, file_path)
-        if err:
-            printt(err, "error")
-            return
-
-        # Save raw text as well
-        file_path = os.path.join(state.project_dir, PROJECT_RAW_TEXT_FILE_NAME)
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(text)
-        except Exception as e:
-            L.e(f"Error saving raw text: {e}") # fail silently
-
-        state.text_segments = texts
+        # Commit
+        state.project.set_text_segments(text_segments, raw_text=raw_text)
 
     @staticmethod
     def _post_process(lines: list[str]) -> list[str]:

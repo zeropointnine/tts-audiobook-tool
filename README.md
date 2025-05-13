@@ -51,7 +51,7 @@ Install Pytorch with CUDA in the normal fashion: Uninstall the vanilla version (
 
 Prefer the ExLllama2 backend if at all possible: (`backend=outetts.Backend.EXL2`). See the example config in `model_config.py`.
 
-Requires manually installing the exllama2 library: `pip install exllamav2`, and also requires installing flash attention.
+Requires manually installing the exllama2 library: `pip install exllamav2`, and also requires installing [flash attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features).
 
 Alternatively, `Backend.HF`, will also be hardware accelerated, just slower.
 
@@ -65,14 +65,20 @@ Use `Backend.LLAMACPP`.
 
 # Usage notes
 
+### Various
+
 The app is designed to save its state between sessions, so you can interrupt the program at any time and resume later.
 
 Inference can take some time, depending on the length of the source text. I'm getting inference speeds of 80+% using `Backend.EXL2` with an undervolted GeForce 3080Ti. And about 20% with an M1 MacBook Pro.
 
-The program can detect and fix most hallucinations by selecting `[D] Detect and fix audio generation errors`.
+The program can detect and fix many or even most "hallucinations" by selecting `[D] Detect and fix audio generation errors`.
 
 Additionally, if you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and select `[G] Generate audio` to re-render them.
 
+### Voice:
+
+When prepping reference audio for doing the voice clone, it can be worthwhile to prepare more than one sound sample from a given source, and then testing each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone can vary more than you might expact.
+
 # Todos
 
-Command line?
+Support for other TTS models?

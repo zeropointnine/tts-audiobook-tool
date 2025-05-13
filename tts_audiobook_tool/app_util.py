@@ -4,7 +4,6 @@ import os
 import glob
 from typing import Any
 import glob
-from datetime import datetime
 from mutagen.flac import FLAC
 
 from tts_audiobook_tool.l import L
@@ -14,28 +13,13 @@ from tts_audiobook_tool.util import *
 class AppUtil:
 
     @staticmethod
-    def init_app_logging() -> None:
+    def init_logging() -> None:
         L.init(APP_NAME)
+        L.i("START " + "-" * 60)
+        # Squelch various 3p lib output
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("filelock").setLevel(logging.WARNING)
-
-    @staticmethod
-    def sanitize_for_filename(filename) -> str:
-        """
-        Replaces all non-alpha-numeric characters with underscores,
-        replaces consecutive underscores with a single underscore,
-        and removes leading/trailing underscores.
-        """
-        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', filename)
-        collapsed = re.sub(r'_+', '_', sanitized)
-        stripped = collapsed.strip('_')
-        return stripped
-
-
-    @staticmethod
-    def make_timestamp_string() -> str:
-        current_time = datetime.now()
-        return current_time.strftime("%y%m%d_%H%M%S")
+        logging.getLogger('numba').setLevel(logging.WARNING)
 
     @staticmethod
     def delete_project_audio_files(dir: str) -> str:
@@ -101,8 +85,7 @@ class AppUtil:
 
     @staticmethod
     def print_text_segments(texts: list[str]) -> None:
-        printt(f"{COL_ACCENT}Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):\n")
+        print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
         for i, segment in enumerate(texts):
             printt(f"{make_hotkey_string(str(i))} {segment}")
         printt()
-
