@@ -1,10 +1,10 @@
 # Description
 
-This is an "audiobook maker", using the [Oute TTS 1.0 1B](https://github.com/edwko/OuteTTS) text-to-speech model. It employs as minimal an interface and feature set as I felt like I could get away with while still keeping it useful and functional. The upside is that it should be very simple to pick up and use.
+This is an "audiobook maker", using the [Oute TTS 1.0 1B](https://github.com/edwko/OuteTTS) text-to-speech model. It employs as minimal an interface and feature set as I felt like I could get away with while still keeping it useful and functional. The upside is that it should be easy to pick up and use.
 
 What's interesting about Oute TTS is that it does zero-shot voice cloning and that it outputs at 44khz, which is CD-quality audio, and quite unusual for a TTS model at the moment.
 
-TLDR usage instructions: (1) Assign a working project directory, (2) select a 15-second reference audio file for the voice cloning, (3) paste in some text, (4) start inferencing, and (5) ... be prepared to wait (that's the catch, lol). And that's it.
+TLDR usage instructions: (1) Assign a working project directory, (2) select a 15-second reference audio file for the voice cloning, (3) paste in some text, (4) start inferencing, and (5) ... be prepared to wait (that's the catch, lol).
 
 # Install
 

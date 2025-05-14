@@ -10,6 +10,7 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -63,21 +64,26 @@ class ValidateUtil:
         else:
             return
 
-        ValidateUtil.do_tests(items, avg_sec_per_char, fix_and_delete=fix_and_delete)
+        did_abort = ValidateUtil.do_tests(items, avg_sec_per_char, fix_and_delete=fix_and_delete)
 
-        ask("Finished. Press enter: ")
+        if did_abort:
+            ask("Press enter: ")
+        else:
+            ask("Finished. Press enter: ")
 
     @staticmethod
     def do_tests(
         items: list[Item],
         avg_sec_per_char: float, # used for duration test
         fix_and_delete: bool
-    ) -> None:
+    ) -> bool:
         """
         Uses whisper to do some kind of a text content comparisons between source text and transcribed text
         Sets "result" on items.
         When there is an opportunity to fix a detected error by simply trimming audio sample, does so.
         Renames files that pass tests with "[pass]"
+
+        Returns True if aborted by control-c
         """
 
         start_time = time.time()
@@ -88,7 +94,16 @@ class ValidateUtil:
         num_corrected = 0
         num_verified = 0
 
+        was_interrupted = False
+        Shared.mode = "validating"
+
         for item in items:
+
+            if Shared.stop_flag:
+                Shared.stop_flag = False
+                Shared.mode = ""
+                was_interrupted = True
+                break
 
             # [0] Do transcription
             if not whisper_model:
@@ -188,6 +203,8 @@ class ValidateUtil:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
+
+        return was_interrupted
 
     @staticmethod
     def detect_is_substring_and_fix(item: Item, whisper_data: dict) -> tuple[bool, str] | None:

@@ -10,6 +10,7 @@ from outetts.version.interface import InterfaceHF
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.hash_file_util import HashFileUtil
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -42,11 +43,11 @@ class GenerateUtil:
 
         print_heading("Generate audio:")
 
-        s = f"Will generate {len(indices)} audio segments"
+        elapsed_message = f"Will generate {len(indices)} audio segments"
         num_completed = original_len - len(indices)
         if num_completed > 0:
-            s += f" (already completed {num_completed} items)"
-        printt(s)
+            elapsed_message += f" (already completed {num_completed} items)"
+        printt(elapsed_message)
         printt()
 
         printt(f"{make_hotkey_string("1")} Generate, and concatenate when finished")
@@ -73,6 +74,9 @@ class GenerateUtil:
         start_time = time.time()
 
         count = 1
+        Shared.mode = "generating"
+        was_interrupted = False
+
         for i in indices:
             _ = GenerateUtil.generate_and_convert_flac(
                 index=i,
@@ -83,9 +87,20 @@ class GenerateUtil:
                 batch_start_time=start_time
             )
             count += 1
+            if Shared.stop_flag:
+                Shared.stop_flag = False
+                Shared.mode = ""
+                was_interrupted = True
+                break
 
-        elapsed = time.time() - start_time
-        printt(f"Elapsed: {AppUtil.time_string(elapsed)}\a\n")
+        elapsed_message = f"Elapsed: {AppUtil.time_string(time.time() - start_time)}"
+        if was_interrupted:
+            printt(elapsed_message)
+            printt()
+            ask("Press enter: ")
+            return
+
+        printt(elapsed_message + "\a")
 
         if and_concat:
             ConcatUtil.concatenate_project_flacs(state)

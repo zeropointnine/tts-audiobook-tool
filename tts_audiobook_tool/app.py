@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
+import signal
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
@@ -18,8 +20,29 @@ class App:
     """
 
     def __init__(self):
+
         AppUtil.init_logging()
+        signal.signal(signal.SIGINT, self.signal_handler)
+
         self.state = State()
+
+    def signal_handler(self, signum, frame):
+        def print_message(s: str):
+            printt()
+            printt(COL_ERROR + "*" * len(s))
+            printt(s)
+            printt(COL_ERROR + "*" * len(s))
+            printt()
+
+        match Shared.mode:
+            case "generating":
+                Shared.stop_flag = True
+                print_message("Control-C pressed, will stop after current gen...")
+            case "validating":
+                Shared.stop_flag = True
+                print_message("Control-C pressed, will stop")
+            case "menu":
+                Shared.stop_flag = True
 
     def loop(self):
         while True:
@@ -32,7 +55,12 @@ class App:
 
             self.print_menu(did_reset=did_reset)
 
+            Shared.mode = "menu"
             hotkey = ask_hotkey()
+            Shared.mode = ""
+            if Shared.stop_flag:
+                Shared.stop_flag = False
+                self.quit()
             if not hotkey:
                 continue
             self.handle_hotkey(hotkey)
@@ -110,8 +138,10 @@ class App:
             printt(s)
 
         # Options
-        s = f"{make_hotkey_string("Z")} Options, Utils"
-        printt(s)
+        printt(f"{make_hotkey_string("O")} Options, Utils")
+
+        # Quit
+        printt(f"{make_hotkey_string("Q")} Quit")
 
         printt()
 
@@ -155,8 +185,10 @@ class App:
                 if not self.state.prefs.project_dir or num_audio_files == 0:
                     return
                 ConcatUtil.concatenate_project_flacs(self.state)
-            case "z":
+            case "o":
                 self.options_submenu()
+            case "q":
+                self.quit()
 
     # ---
 
@@ -260,16 +292,17 @@ class App:
 
     def ask_chapters(self) -> None:
         indices = self.state.project.section_dividers
-        print_heading("Chapters:")
-        printt()
+        print_heading("Chapters dividers:")
         if indices:
             index_strings = [str(index) for index in indices]
             indices_string = ", ".join(index_strings)
             printt("Current chapter divider indices: " + indices_string)
+            printt()
             ranges = make_section_ranges(indices, len(self.state.project.text_segments))
             range_strings = [ str(range[0]) + "-" + str(range[1]) for range in ranges]
             ranges_string = ", ".join(range_strings)
-            printt("In other words: " + ranges_string)
+            printt("The resulting concatenated audio files will include these text segments:")
+            printt(ranges_string)
             printt()
 
         printt("Enter voice line indices which will start new chapter files")
@@ -305,13 +338,11 @@ class App:
         print_heading("Options, utilities:")
         printt(f"{make_hotkey_string("1")} Temperature (currently: {self.state.prefs.temperature})")
         printt(f"{make_hotkey_string("2")} Play audio after each segment is generated (currently: {self.state.prefs.play_on_generate})")
-        printt(f"{make_hotkey_string("Q")} Quit")
         printt()
 
         hotkey = ask_hotkey()
+
         match hotkey:
-            case "q":
-                exit(0)
             case "1":
                 value = ask("Enter temperature (0.0 < value <= 2.0): ")
                 try:
@@ -330,3 +361,7 @@ class App:
                 if MENU_CLEAR_SCREEN:
                     ask_hotkey("Press enter: ")
                 printt()
+
+    def quit(self):
+        printt("State saved. Exiting")
+        exit(0)
