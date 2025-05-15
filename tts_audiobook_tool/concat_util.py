@@ -76,11 +76,12 @@ class ConcatUtil:
             if not b:
                 return
 
+        timestamp_subdir = timestamp_string()
+
         for i in range(len(sections)):
             printt(f"Creating file {i+1} of {len(sections)}\n")
             filename = section_filenames[i]
             segment_file_paths = sections[i]
-            timestamp_subdir = timestamp_string()
             dest_file_path = os.path.join(state.project.dir_path, CONCAT_SUBDIR, timestamp_subdir, filename)
             ConcatUtil.concatenate_flacs(file_paths=segment_file_paths, dest_flac_path=dest_file_path)
 
