@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import signal
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -109,7 +110,10 @@ class App:
             s = f"{make_hotkey_string("D")} Chapter dividers "
             indices = self.state.project.section_dividers
             if indices:
-                s += f"{COL_DIM}(current: {COL_ACCENT}{len(indices) + 1}{COL_DIM} chapters)"
+                num_chapters_string = f"{COL_ACCENT}{len(indices)+1}{COL_DIM} chapters"
+            else:
+                num_chapters_string = f"{COL_ACCENT}None{COL_DIM}"
+            s += f"{COL_DIM}(current: {num_chapters_string}{COL_DIM})"
             printt(s)
 
         # Generate audio
@@ -138,7 +142,7 @@ class App:
             printt(s)
 
         # Options
-        printt(f"{make_hotkey_string("O")} Options, Utils")
+        printt(f"{make_hotkey_string("O")} Options")
 
         # Quit
         printt(f"{make_hotkey_string("Q")} Quit")
@@ -176,11 +180,11 @@ class App:
                     self.ask_chapters()
             case "g":
                 if self.can_generate_audio:
-                    GenerateUtil.submenu_and_generate(self.state)
+                    GenerateValidateSubmenus.generate_submenu(self.state)
             case "y":
                 if not self.state.prefs.project_dir or num_audio_files == 0:
                     return
-                ValidateUtil.validate(self.state)
+                GenerateValidateSubmenus.validate_submenu(self.state)
             case "c":
                 if not self.state.prefs.project_dir or num_audio_files == 0:
                     return
@@ -305,7 +309,7 @@ class App:
             printt(ranges_string)
             printt()
 
-        printt("Enter voice line indices which will start new chapter files")
+        printt("Enter text line indices which will start new chapter files")
         printt("(Enter \"0\" for none)")
         inp = ask()
         printt()
@@ -330,12 +334,10 @@ class App:
         if 0 in int_items:
             del int_items[0]
         self.state.project.section_dividers = int_items
-        ask("Okay. Press enter: ")
-
 
     def options_submenu(self) -> None:
 
-        print_heading("Options, utilities:")
+        print_heading("Options:")
         printt(f"{make_hotkey_string("1")} Temperature (currently: {self.state.prefs.temperature})")
         printt(f"{make_hotkey_string("2")} Play audio after each segment is generated (currently: {self.state.prefs.play_on_generate})")
         printt()

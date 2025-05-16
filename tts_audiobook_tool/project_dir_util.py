@@ -43,7 +43,7 @@ class ProjectDirUtil:
     def get_project_audio_segment_file_paths(state: State) -> dict[int, str]:
         """
         Returns dict (key = text segment index, value = file path)
-        of valid project audio files.
+        of valid project audio files found in the project directory.
         """
         if not state.prefs.project_dir:
             return {}

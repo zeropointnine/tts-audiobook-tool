@@ -213,3 +213,17 @@ def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tup
     ranges.append(range)
 
     return ranges
+
+def time_string(seconds: float) -> str:
+    """ 5h0m0s """
+    seconds = round(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    seconds = seconds % 60
+    if minutes < 60:
+        return f"{minutes}m{seconds}s"
+    hours = minutes // 60
+    minutes = minutes % 60
+    return f"{hours}h{minutes}m{seconds}s"
+

@@ -70,20 +70,6 @@ class AppUtil:
             return None
 
     @staticmethod
-    def time_string(seconds: float) -> str:
-        """ 5h0m0s """
-        seconds = round(seconds)
-        if seconds < 60:
-            return f"{seconds}s"
-        minutes = seconds // 60
-        seconds = seconds % 60
-        if minutes < 60:
-            return f"{minutes}m{seconds}s"
-        hours = minutes // 60
-        minutes = minutes % 60
-        return f"{hours}h{minutes}m{seconds}s"
-
-    @staticmethod
     def print_text_segments(texts: list[str]) -> None:
         print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
         for i, segment in enumerate(texts):

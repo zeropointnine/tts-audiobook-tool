@@ -15,14 +15,13 @@ class HashFileUtil:
 
     @staticmethod
     def make_segment_file_path(index, state: State) -> str:
-        fn = HashFileUtil.make_segment_file_name(index, state)
+        fn = HashFileUtil.make_segment_file_name(index, state.project.text_segments[index], cast(dict, state.project.voice))
         return os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR, fn)
 
     @staticmethod
-    def make_segment_file_name(index: int, state: State, suffix=".flac") -> str:
-        text_segment = state.project.text_segments[index]
-        hash = HashFileUtil.calc_segment_hash(index, text_segment, cast(dict, state.project.voice))
-        voice_id = cast(dict, state.project.voice).get("identifier", "")
+    def make_segment_file_name(index: int, text_segment: str, voice: dict, suffix=".flac") -> str:
+        hash = HashFileUtil.calc_segment_hash(index, text_segment, voice)
+        voice_id = voice.get("identifier", "voice")
         s1 = "[" + voice_id + "] "
         s2 = "[" + str(index).zfill(5) + "] "
         s3 = "[" + hash + "] "
@@ -36,7 +35,10 @@ class HashFileUtil:
 
     @staticmethod
     def calc_segment_hash(index: int, text_segment: str, voice: dict) -> str:
-        """ Returns a hash for a text/audio segment"""
+        """
+        Returns a hash for a text/audio segment
+        Hashes the combination of: index value, text, and voice dict's precalculated hash value
+        """
         s = str(index) + " " + text_segment + " " + voice.get("hash", "")
         if not "hash" in voice:
             L.w("voice dict is missing hash property")

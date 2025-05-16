@@ -190,59 +190,60 @@ class ConcatUtil:
             start_time_seconds: float,
             end_time_seconds: float,
             ffmpeg_path: str="ffmpeg"
-        ) -> bool:
-            """
-            Trims a source FLAC file from start_time_seconds to end_time_seconds
-            and saves it to dest_file_path using ffmpeg.
-            """
-            source_flac_path = os.path.abspath(source_flac_path)
-            dest_file_path = os.path.abspath(dest_file_path)
+    ) -> bool:
+        """
+        Trims a source FLAC file from start_time_seconds to end_time_seconds
+        and saves it to dest_file_path using ffmpeg.
+        """
 
-            if not os.path.exists(source_flac_path):
-                L.w(f"Doesn't exist: {source_flac_path}")
-                return False
+        source_flac_path = os.path.abspath(source_flac_path)
+        dest_file_path = os.path.abspath(dest_file_path)
 
-            duration = end_time_seconds - start_time_seconds
-            if duration <= 0:
-                L.w(f"Bad start/end times {start_time_seconds} {end_time_seconds}")
-                return False
+        if not os.path.exists(source_flac_path):
+            L.w(f"Doesn't exist: {source_flac_path}")
+            return False
 
-            # Construct the ffmpeg command
-            # -y: Overwrite output file without asking
-            # -i: Input file
-            # -ss: Start time
-            # -to: End time (alternatively, -t for duration)
-            # -c:a flac: Specify the audio codec for the output as FLAC
-            command = [
-                ffmpeg_path,
-                "-hide_banner",
-                "-loglevel", "error",
-                "-y",
-                "-i", source_flac_path,
-                "-ss", str(start_time_seconds),
-                "-to", str(end_time_seconds),
-                "-c:a", "flac",
-                dest_file_path
-            ]
+        duration = end_time_seconds - start_time_seconds
+        if duration <= 0:
+            L.w(f"Bad start/end times {start_time_seconds} {end_time_seconds}")
+            return False
 
-            try:
-                completed_process = subprocess.run(
-                    command,
-                    check=True,  # Raise CalledProcessError if ffmpeg returns non-zero exit code
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8'
-                )
-                if completed_process.returncode != 0:
-                    L.w(f"ffmpeg fail, returncode - {completed_process.returncode}")
-                    return False
-                return True
-            except subprocess.CalledProcessError as e:
-                L.w(f"ffmpeg fail, returncode - {e.returncode} - {e.stderr}")
+        # Construct the ffmpeg command
+        # -y: Overwrite output file without asking
+        # -i: Input file
+        # -ss: Start time
+        # -to: End time (alternatively, -t for duration)
+        # -c:a flac: Specify the audio codec for the output as FLAC
+        command = [
+            ffmpeg_path,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-y",
+            "-i", source_flac_path,
+            "-ss", str(start_time_seconds),
+            "-to", str(end_time_seconds),
+            "-c:a", "flac",
+            dest_file_path
+        ]
+
+        try:
+            completed_process = subprocess.run(
+                command,
+                check=True,  # Raise CalledProcessError if ffmpeg returns non-zero exit code
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+            if completed_process.returncode != 0:
+                L.w(f"ffmpeg fail, returncode - {completed_process.returncode}")
                 return False
-            except Exception as e:
-                L.w(f"subprocess fail, ffmpeg - {e}")
-                return False
+            return True
+        except subprocess.CalledProcessError as e:
+            L.w(f"ffmpeg fail, returncode - {e.returncode} - {e.stderr}")
+            return False
+        except Exception as e:
+            L.w(f"subprocess fail, ffmpeg - {e}")
+            return False
 
 
         # @staticmethod
