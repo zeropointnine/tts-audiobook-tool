@@ -136,7 +136,7 @@ class App:
 
         # Concat
         if self.state.prefs.project_dir:
-            s = f"{make_hotkey_string("C")} Concatenate audio segments"
+            s = f"{make_hotkey_string("C")} Combine audio segments"
             if num_audio_files == 0:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
@@ -177,7 +177,7 @@ class App:
                     self.text_submenu()
             case "d":
                 if self.state.project.text_segments:
-                    self.ask_chapters()
+                    self.ask_section_dividers()
             case "g":
                 if self.can_generate_audio:
                     GenerateValidateSubmenus.generate_submenu(self.state)
@@ -188,7 +188,7 @@ class App:
             case "c":
                 if not self.state.prefs.project_dir or num_audio_files == 0:
                     return
-                ConcatUtil.concatenate_project_flacs(self.state)
+                ConcatUtil.ask_concat(self.state)
             case "o":
                 self.options_submenu()
             case "q":
@@ -294,23 +294,18 @@ class App:
                 if ask_hotkey(s):
                     TextSegmentsUtil.ask_text_segments_and_set(self.state)
 
-    def ask_chapters(self) -> None:
-        indices = self.state.project.section_dividers
-        print_heading("Chapters dividers:")
-        if indices:
-            index_strings = [str(index) for index in indices]
-            indices_string = ", ".join(index_strings)
-            printt("Current chapter divider indices: " + indices_string)
-            printt()
-            ranges = make_section_ranges(indices, len(self.state.project.text_segments))
-            range_strings = [ str(range[0]) + "-" + str(range[1]) for range in ranges]
-            ranges_string = ", ".join(range_strings)
-            printt("The resulting concatenated audio files will include these text segments:")
-            printt(ranges_string)
-            printt()
+    def ask_section_dividers(self) -> None:
 
-        printt("Enter text line indices which will start new chapter files")
-        printt("(Enter \"0\" for none)")
+        print_heading("Chapters dividers:")
+
+        num_text_segments = len(self.state.project.text_segments)
+
+        section_dividers = self.state.project.section_dividers
+        if section_dividers:
+            ConcatUtil.print_concat_info(section_dividers, num_text_segments)
+
+        printt("Enter the line numbers where new chapters should begin: ")
+        printt("Eg, \"100, 500\". Enter \"0\" for none.")
         inp = ask()
         printt()
         if not inp:
@@ -334,6 +329,8 @@ class App:
         if 0 in int_items:
             del int_items[0]
         self.state.project.section_dividers = int_items
+
+        # ConcatUtil.print_concat_info(self.state.project.section_dividers, len(self.state.project.text_segments))
 
     def options_submenu(self) -> None:
 

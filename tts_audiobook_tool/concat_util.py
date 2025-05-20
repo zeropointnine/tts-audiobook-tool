@@ -5,6 +5,7 @@ from pathlib import Path
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -12,78 +13,116 @@ from tts_audiobook_tool.util import *
 class ConcatUtil:
 
     @staticmethod
-    def concatenate_project_flacs(state: State):
+    def ask_concat(state: State) -> None:
         """
-        Concats project audio segments into final flac file/s in the `concat` subdir
-        If files missing for whatever reason, prompts to continue
-        Prompts at end.
+        Asks which chapters to create and concats project audio segments into final flac files.
         """
 
-        print_heading(f"Concatenate audio segments:")
+        print_heading(f"Combine audio segments:")
 
-        segment_index_to_file_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        segment_index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         segment_index_ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
 
-        # Parallel liss
-        sections = []
-        section_filenames = []
-        warning = ""
+        section_index_to_paths = {}
 
-        for i, rang in enumerate(segment_index_ranges):
+        for section_index, rang in enumerate(segment_index_ranges):
 
-            start_index = rang[0]
-            end_index = rang[1]
+            segment_index_start = rang[0]
+            segment_index_end = rang[1]
 
-            segment_file_paths = []
+            file_paths = []
             num_missing = 0
-            for segment_index in range(start_index, end_index + 1):
-                segment_file_path = segment_index_to_file_path.get(segment_index, "")
+
+            for segment_index in range(segment_index_start, segment_index_end + 1):
+                segment_file_path = segment_index_to_path.get(segment_index, "")
                 if segment_file_path:
-                    segment_file_paths.append(segment_file_path)
+                    file_paths.append(segment_file_path)
                 else:
                     num_missing += 1
 
-            if num_missing > 0:
-                if len(segment_index_ranges) > 1:
-                    warning += f"Chapter file {i+1} is missing {num_missing} audio segments\n"
-                else:
-                    warning += f"Missing {num_missing} audio segments\n"
+            # Print info
+            are_all_missing = (num_missing == segment_index_end - segment_index_start + 1)
+            index_string = str(section_index+1) if not are_all_missing else "-"
+            if num_missing == 0:
+                desc = "ready"
+            elif are_all_missing:
+                desc = "no audio files generated yet"
+            else:
+                desc = f"{num_missing} file/s missing"
+            label_col = COL_DIM if are_all_missing else COL_DEFAULT
+            printt(f"{COL_DEFAULT}[{COL_ACCENT}{index_string}{COL_DEFAULT}] {label_col}segments {segment_index_start}-{segment_index_end} {COL_DIM}({desc})")
 
-            if len(segment_file_paths) == 0:
+            if not file_paths:
                 continue
+            section_index_to_paths[ section_index ] = file_paths
 
-            sections.append(segment_file_paths)
+        printt()
 
-            # Make Filename
-            # project dir base name
-            filename = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
-            # file number
-            filename += f"[{ i+1 } of {len(segment_index_ranges)}]" + " "
-            # text segment range
-            filename += f"[{start_index}-{end_index}]" + " "
-            # num missing
-            if num_missing > 0:
-                filename += f"[{num_missing} missing]" + " "
-            # voice
-            voice = cast(dict, state.project.voice)
-            filename += f"[{voice.get("identifier", "voice")}]"
-            filename += ".flac"
-            section_filenames.append(filename)
-
-        if warning:
-            printt(warning)
-            b = ask_confirm("Continue anyway? ")
+        if len(section_index_to_paths) == 1:
+            b = ask_confirm("Press [Y] to start: ")
             if not b:
                 return
+            section_indices = [0]
+        else:
+            inp = ask("Enter chapter numbers (eg, \"1, 2, 5-10\", or \"all\"): ")
+            if inp == "all":
+                input_indices = [index + 1 for index in section_index_to_paths.keys()]
+            else:
+                input_indices, warnings = ParseUtil.parse_int_list(inp)
+                if warnings:
+                    for warning in warnings:
+                        printt(warning)
+                    printt()
+                    return
+                if not input_indices:
+                    return
+
+            input_indices = [item - 1 for item in input_indices] # make zero-indexed
+            section_indices = []
+            for section_index in input_indices:
+                if not section_index in section_index_to_paths.keys():
+                    continue # Ignore silently
+                section_indices.append(section_index)
+            if not section_indices:
+                printt("Nothing to combine")
+                printt()
+                return
+
+        strings = [str(index+1) for index in section_indices]
+        string = ", ".join(strings)
+        printt(f"Selected chapter files: {string}")
+        printt()
+        b = ask_confirm()
 
         timestamp_subdir = timestamp_string()
 
-        for i in range(len(sections)):
-            printt(f"Creating file {i+1} of {len(sections)}\n")
-            filename = section_filenames[i]
-            segment_file_paths = sections[i]
-            dest_file_path = os.path.join(state.project.dir_path, CONCAT_SUBDIR, timestamp_subdir, filename)
-            ConcatUtil.concatenate_flacs(file_paths=segment_file_paths, dest_flac_path=dest_file_path)
+        for section_index in section_index_to_paths:
+
+            file_paths = section_index_to_paths[section_index]
+
+            # Make Filename:
+            # project dir base name
+            dest_file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
+            # file number
+            dest_file_name += f"[{ section_index+1 } of {len(segment_index_ranges)}]" + " "
+            # segment range
+            start_index = segment_index_ranges[section_index][0]
+            end_index = segment_index_ranges[section_index][1]
+            dest_file_name += f"[{start_index}-{end_index}]" + " "
+            # num missing
+            num_missing = (end_index - start_index + 1) - len(file_paths)
+            if num_missing > 0:
+                dest_file_name += f"[{num_missing} missing]" + " "
+            # voice
+            voice = cast(dict, state.project.voice)
+            dest_file_name += f"[{voice.get("identifier", "voice")}]"
+            dest_file_name += ".flac"
+
+            dest_file_path = os.path.join(state.project.dir_path, CONCAT_SUBDIR, timestamp_subdir, dest_file_name)
+
+            printt(f"Creating file {section_index+1} of {len(section_index_to_paths)}\n")
+
+            ConcatUtil.concatenate_flacs(file_paths=file_paths, dest_flac_path=dest_file_path)
 
         ask("Finished. Press enter:")
 
@@ -94,7 +133,7 @@ class ConcatUtil:
         emphasize_finished: bool=True,
         ffmpeg_path: str="ffmpeg"
     ):
-        printt(f"Concatenating {len(file_paths)} audio segment files\n")
+        printt(f"Combining {len(file_paths)} audio segment files\n")
 
         dest_base_path = str( Path(dest_flac_path).parent )
         os.makedirs(dest_base_path, exist_ok=True)
@@ -244,6 +283,21 @@ class ConcatUtil:
         except Exception as e:
             L.w(f"subprocess fail, ffmpeg - {e}")
             return False
+
+    @staticmethod
+    def print_concat_info(section_dividers: list[int], num_items: int) -> None:
+
+        section_index_strings = [str(index) for index in section_dividers]
+        section_indices_string = ", ".join(section_index_strings)
+        printt("Current chapter divider indices: " + section_indices_string)
+        printt()
+
+        ranges = make_section_ranges(section_dividers, num_items)
+        range_strings = [ str(range[0]) + "-" + str(range[1]) for range in ranges]
+        ranges_string = ", ".join(range_strings)
+        printt("The combined audio files will include these text segments:")
+        printt(ranges_string)
+        printt()
 
 
         # @staticmethod

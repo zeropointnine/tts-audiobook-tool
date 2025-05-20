@@ -4,6 +4,8 @@ This is an "audiobook maker", using the [Oute TTS 1.0 1B](https://github.com/edw
 
 What's interesting about Oute TTS is that it does zero-shot voice cloning and that it outputs at 44khz, which is CD-quality audio, and quite unusual for a TTS model at the moment.
 
+Unlike older TTS schemes, generative TTS models can hallucinate or repeat sentences and phrases, so the app contains extra logic to mitigate inaccuracies within reason.
+
 TLDR usage instructions: (1) Assign a working project directory, (2) select a 15-second reference audio file for the voice cloning, (3) paste in some text, (4) start inferencing, and (5) ... be prepared to wait (that's the catch, lol).
 
 # Install
@@ -67,11 +69,9 @@ Use `Backend.LLAMACPP`.
 
 ### Various
 
-The app is designed to save its state between sessions, so you can interrupt the program at any time and resume later.
+The app is designed to save its state between sessions, so you can interrupt the program at any time and resume later (which is almost a necessity considering how long generating a full-length novel can take).
 
 Inference can take some time, depending on the length of the source text. I'm getting inference speeds of 80+% using `Backend.EXL2` with an undervolted GeForce 3080Ti. And about 20% with an M1 MacBook Pro.
-
-The program can detect and fix many or even most "hallucinations" by selecting `[D] Detect and fix audio generation errors`.
 
 Additionally, if you don't like the rendition of certain voice lines, you can selectively delete generated audio files from the working project directory, and select `[G] Generate audio` to re-render them.
 

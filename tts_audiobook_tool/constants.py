@@ -21,8 +21,8 @@ PROJECT_SETTINGS_FILE_NAME = "project.json"
 PROJECT_RAW_TEXT_FILE_NAME = "text raw.txt"
 PROJECT_FFMPEG_TEMP_FILE_NAME = "ffmpeg_temp.txt"
 
-AUDIO_SEGMENTS_SUBDIR = "audio_segments"
-CONCAT_SUBDIR = "concatenated"
+AUDIO_SEGMENTS_SUBDIR = "segments"
+CONCAT_SUBDIR = "combined"
 
 ASSETS_DIR_NAME = "assets"
 DEFAULT_VOICE_FILE_NAME = "en-female-1-neutral.json"
