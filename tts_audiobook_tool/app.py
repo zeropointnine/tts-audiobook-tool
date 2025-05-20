@@ -4,9 +4,7 @@ import signal
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.shared import Shared
-from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
-from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.text_segments_util import TextSegmentsUtil

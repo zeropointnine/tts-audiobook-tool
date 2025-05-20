@@ -1,3 +1,4 @@
+import gc
 import json
 import logging
 import os
@@ -5,6 +6,7 @@ import glob
 from typing import Any
 import glob
 from mutagen.flac import FLAC
+import torch
 
 from tts_audiobook_tool.l import L
 
@@ -20,6 +22,11 @@ class AppUtil:
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("filelock").setLevel(logging.WARNING)
         logging.getLogger('numba').setLevel(logging.WARNING)
+        # Used by oute lib
+        from loguru import logger
+        logger.remove()
+        import warnings
+        warnings.filterwarnings("ignore", module="pyloud")
 
     @staticmethod
     def delete_project_audio_files(dir: str) -> str:
@@ -75,3 +82,12 @@ class AppUtil:
         for i, segment in enumerate(texts):
             printt(f"{make_hotkey_string(str(i))} {segment}")
         printt()
+
+    @staticmethod
+    def gc_ram_vram() -> None:
+        # Force-trigger Python garbage collector
+        gc.collect()
+        # "Garbage collect" VRAM
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+

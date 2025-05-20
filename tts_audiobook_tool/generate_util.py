@@ -1,16 +1,10 @@
 import gc
 import os
 import time
-from typing import cast
-from outetts.models.config import GenerationConfig
-from outetts.models.config import GenerationConfig, SamplerConfig
-from outetts.models.info import GenerationType
 
-from outetts.version.interface import InterfaceHF
 import torch
 import whisper
 
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_util import SoundUtil
@@ -23,7 +17,7 @@ from tts_audiobook_tool.validate_util import ValidateItem, ValidateResult, Valid
 class GenerateUtil:
 
     @staticmethod
-    def generate_validate_fix(state: State, indices: list[int], mode: str) -> None:
+    def generate_validate_fix_items(state: State, indices: list[int], mode: str) -> None:
         """
         "generate"
         "generate-and-fix"
@@ -41,13 +35,6 @@ class GenerateUtil:
         else:
             whisper_model = None
 
-        config = GenerationConfig(
-            text="", # type: ignore
-            generation_type= GenerationType.CHUNKED, # type: ignore
-            speaker=cast(dict, state.project.voice), # type: ignore
-            sampler_config=SamplerConfig(temperature=state.prefs.temperature)  # type: ignore
-        )
-
         # TODO: Duplicate work. Need to figure out best way to pass index-and-path through this whole feature, with all its permutations
         index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
 
@@ -61,12 +48,12 @@ class GenerateUtil:
             print_item_heading(state.project.text_segments[i], i, count, len(indices))
 
             if mode == "generate":
-                _ = GenerateUtil.generate_and_make_flac(index=i, state=state, config=config)
+                _ = GenerateUtil.generate_and_make_flac(index=i, state=state)
             elif mode == "generate-and-fix":
-                _ = GenerateUtil.generate_validate_and_fix_item(index=i, state=state, config=config, whisper_model=whisper_model)
+                _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=whisper_model)
             else: # == "validate-and-fix"
                 path = index_to_path[i]
-                _ = GenerateUtil.generate_validate_and_fix_item(index=i, state=state, config=config, whisper_model=whisper_model, skip_generate_file_path=path)
+                _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=whisper_model, skip_generate_file_path=path)
 
             count += 1
             if Shared.stop_flag:
@@ -88,10 +75,9 @@ class GenerateUtil:
         ask("Press enter: ")
 
     @staticmethod
-    def generate_validate_and_fix_item(
+    def generate_validate_fix_item(
         index: int,
         state: State,
-        config: GenerationConfig,
         whisper_model,
         skip_generate_file_path: str=""
     ) -> None:
@@ -102,7 +88,7 @@ class GenerateUtil:
 
             # Make audio file
             if not skip_generate_file_path:
-                file_path = GenerateUtil.generate_and_make_flac(index=index, state=state, config=config, is_retry=(pass_num > 1))
+                file_path = GenerateUtil.generate_and_make_flac(index=index, state=state, is_retry=(pass_num > 1))
                 if not file_path:
                     # Unexpected error making audio file
                     break
@@ -155,7 +141,6 @@ class GenerateUtil:
     def generate_and_make_flac(
         index: int,
         state: State,
-        config: GenerationConfig,
         is_retry: bool=False
     ) -> str:
         """
@@ -163,12 +148,16 @@ class GenerateUtil:
         Prints info
         Returns file path on success, else empty string
         """
+
+        if not state.project.voice:
+            return ""
+
         temp_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
         flac_path = HashFileUtil.make_segment_file_path(index, state)
         text_segment = state.project.text_segments[index]
 
         start_time = time.time()
-        is_success = GenerateUtil.generate_wav_file(temp_wav_path, text_segment, state.interface, config)
+        is_success = GenerateUtil.generate_wav_file(temp_wav_path, text_segment, state.project.voice, state.prefs.temperature)
         if not is_success:
             delete_temp_file(temp_wav_path)
             return ""
@@ -199,19 +188,34 @@ class GenerateUtil:
 
     @staticmethod
     def generate_wav_file(
-            dest_file_path: str,
-            prompt: str,
-            interface: InterfaceHF,
-            config: GenerationConfig
+        dest_file_path: str,
+        prompt: str,
+        voice: dict,
+        temperature: float
     ) -> bool:
+
+        interface = Shared.get_oute_interface()
+
+        from outetts.models.config import GenerationConfig, SamplerConfig
+        from outetts.models.info import GenerationType
+
+        config = GenerationConfig(
+            text="", # type: ignore
+            generation_type= GenerationType.CHUNKED, # type: ignore
+            speaker=voice, # type: ignore
+            sampler_config=SamplerConfig(temperature)  # type: ignore
+        )
+        config.text = prompt
+
         try:
-            config.text = prompt
             output = interface.generate(config=config)
             output.save(dest_file_path)
         except Exception as e:
             printt(str(e), "error")
             return False
         return True
+
+# ---
 
 def print_item_heading(text_segment: str, index: int, count: int, total: int) -> None:
     s  = f"{COL_ACCENT}[{COL_DEFAULT}{count}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "

@@ -1,11 +1,9 @@
-import gc
+import json
 import os
 from pathlib import Path
-from outetts.version.interface import InterfaceHF
-import torch
 
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.hash_file_util import HashFileUtil
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -33,11 +31,11 @@ class VoiceUtil:
         # Get voice
         match inp:
             case "1":
-                result = VoiceUtil.ask_create_voice(state.interface)
+                result = VoiceUtil.ask_create_voice()
             case "2":
-                result = VoiceUtil.ask_load_voice(state.interface)
+                result = VoiceUtil.ask_load_voice()
             case "3":
-                result = VoiceUtil.load_voice(state.interface, DEFAULT_VOICE_FILE_PATH)
+                result = VoiceUtil.load_voice(DEFAULT_VOICE_FILE_PATH)
                 if isinstance(result, dict):
                     result["identifier"] = "default" # special case
             case _:
@@ -72,15 +70,15 @@ class VoiceUtil:
         state.project.voice = voice
 
     @staticmethod
-    def ask_load_voice(interface: InterfaceHF) -> dict | str:
+    def ask_load_voice() -> dict | str:
         """ Returns voice dict or error string or empty string for cancel """
         path = ask("Enter file path of voice json file:\n")
         if not path:
             return ""
-        return VoiceUtil.load_voice(interface, path)
+        return VoiceUtil.load_voice(path)
 
     @staticmethod
-    def ask_create_voice(interface: InterfaceHF) -> dict | str:
+    def ask_create_voice() -> dict | str:
         """ Returns voice dict or error string or empty string for cancel """
         source_path = ask("Enter file path of source audio (up to 15s) for voice clone:\n")
         if not source_path:
@@ -88,44 +86,53 @@ class VoiceUtil:
         if not os.path.exists(source_path):
             return f"File not found: {source_path}"
 
-        printt("Initializing...\n")
-
-        result = VoiceUtil.create_voice(interface, source_path)
+        result = VoiceUtil.create_voice(source_path)
         printt()
 
         return result
 
     @staticmethod
-    def create_voice(interface: InterfaceHF, path: str) -> dict | str:
+    def create_voice(path: str) -> dict | str:
         """ Returns voice dict or error string """
+
+        interface = Shared.get_oute_interface()
+
         try:
             voice = interface.create_speaker(path)
             VoiceUtil._add_special_properties(voice, path)
         except Exception as e:
             return f"Error creating voice: {e}"
 
-        #
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-
+        # Outte created a whisper instance, which will stick around in VRAM
+        # (in addition to app's own whisper instance)
+        # if we don't explicitly flush stuffs
+        AppUtil.gc_ram_vram()
 
         return voice
 
     @staticmethod
-    def load_voice(interface: InterfaceHF, path: str) -> dict | str:
-        """ Returns voice dict or error string """
+    def load_voice(path: str) -> dict | str:
+        """
+        Returns voice dict or error string
+        Note how we are intentionally not using oute interface `load_speaker()`
+        """
         if not os.path.exists(path):
             return f"Doesn't exist: {path}"
         try:
-            voice = interface.load_speaker(path)
-            VoiceUtil._add_special_properties(voice, path)
-            return voice
+            with open(path, 'r', encoding='utf-8') as file:
+                voice = json.load(file)
         except Exception as e:
-            return f"Error loading voice file: {e}"
+            return f"Error loading voice json file: {e}"
+        if not isinstance(voice, dict):
+            return f"Voice json object unexpected type: {type(voice)}"
+        # TODO: do some extra validation here since we are avoiding using "interface.load_speaker()"
+
+        VoiceUtil._add_special_properties(voice, path)
+        return voice
 
     @staticmethod
     def _add_special_properties(voice: dict, path: str) -> None:
+        from tts_audiobook_tool.hash_file_util import HashFileUtil
         # Hash value is cached in the dict itself (perversely; easier this way)
         if not "hash" in voice:
             voice["hash"] = HashFileUtil.get_voice_hash(voice)

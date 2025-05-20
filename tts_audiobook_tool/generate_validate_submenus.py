@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import torch
-import whisper
-
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
@@ -41,9 +38,9 @@ class GenerateValidateSubmenus:
 
         hotkey = ask_hotkey()
         if hotkey == "1":
-            GenerateUtil.generate_validate_fix(state, indices, "generate")
+            GenerateUtil.generate_validate_fix_items(state, indices, "generate")
         elif hotkey == "2":
-            GenerateUtil.generate_validate_fix(state, indices, "generate-and-fix")
+            GenerateUtil.generate_validate_fix_items(state, indices, "generate-and-fix")
 
     @staticmethod
     def validate_submenu(state: State) -> None:
@@ -88,9 +85,8 @@ class GenerateValidateSubmenus:
                 items.append(item)
             ValidateUtil.validate_items(items)
         elif hotkey == "2":
-            GenerateUtil.generate_validate_fix(state, indices, "validate-and-fix")
+            GenerateUtil.generate_validate_fix_items(state, indices, "validate-and-fix")
         else:
             return
 
         ask("Press enter: ")
-

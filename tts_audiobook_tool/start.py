@@ -1,16 +1,6 @@
-import time
-start_time = time.time()
-
-from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.app import App
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.util import *
-
-# Suppress console output from oute lib
-from loguru import logger
-logger.remove()
-
-# Suppress console output from pyloud
-import warnings
-warnings.filterwarnings("ignore", module="pyloud")
 
 # FFMPEG check
 if not is_ffmpeg_available():
@@ -19,18 +9,7 @@ if not is_ffmpeg_available():
     printt("https://ffmpeg.org/download.html")
     exit(1)
 
-# Show some feedback because importing deps takes a few seconds
-printt(f"\n{COL_ACCENT}Initializing...{Ansi.RESET}")
-printt()
-
-from tts_audiobook_tool.app import App
-app = App()
-
-printt()
-printt(f"Elapsed: {time_string(time.time() - start_time)}")
-printt()
-
-from tts_audiobook_tool.prefs import Prefs
+# First-time prompt
 is_first_run = not os.path.exists(Prefs.get_file_path())
 if is_first_run:
     printt("\nThis appears to be your first time running tts-audiobook-tool.")
@@ -42,4 +21,6 @@ elif MENU_CLEAR_SCREEN:
 else:
     printt()
 
+# Start
+app = App()
 app.loop()

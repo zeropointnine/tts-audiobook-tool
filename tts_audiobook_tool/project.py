@@ -2,10 +2,8 @@ from __future__ import annotations
 import json
 import os
 from typing import Any
-from outetts.version.interface import InterfaceHF
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
-
 
 class Project:
     """
@@ -24,7 +22,7 @@ class Project:
         self._section_dividers: list[int] = chapter_indices
 
     @staticmethod
-    def load(dir_path: str, interface: InterfaceHF) -> Project:
+    def load(dir_path: str) -> Project:
         """
         Loads project state from files in a directory
         """
@@ -35,12 +33,11 @@ class Project:
         chapter_indices = []
 
         # Load voice from file
+        from tts_audiobook_tool.voice_util import VoiceUtil
         voice_path = os.path.join(dir_path, PROJECT_VOICE_FILE_NAME)
-        if os.path.exists(voice_path):
-            try:
-                voice = interface.load_speaker(voice_path)
-            except Exception as e:
-                voice = None
+        result = VoiceUtil.load_voice(voice_path)
+        if isinstance(result, dict):
+            voice = result
 
         # Load settings json for the other values
         settings_dict = None

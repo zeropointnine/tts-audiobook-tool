@@ -1,12 +1,11 @@
-from datetime import datetime
 import re
 import os
-from pathlib import Path
 import random
 import subprocess
-import re
-from tts_audiobook_tool.constants import *
+from datetime import datetime
+from pathlib import Path
 
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.ansi import Ansi
 
 def printt(s: str="", type: str="") -> None:
