@@ -15,7 +15,7 @@ from tts_audiobook_tool.voice_util import VoiceUtil
 class App:
     """
     Main app class.
-    Runs a loop that prints menu, responds to menu selection, and updates program state.
+    Runs a loop that prints menu, responds to menu selection.
     """
 
     def __init__(self):
@@ -134,7 +134,7 @@ class App:
 
         # Concat
         if self.state.prefs.project_dir:
-            s = f"{make_hotkey_string("C")} Combine audio segments"
+            s = f"{make_hotkey_string("C")} Combine audio segments and finalize"
             if num_audio_files == 0:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
@@ -170,7 +170,7 @@ class App:
                 if not self.state.prefs.project_dir:
                     return
                 if not self.state.project.text_segments:
-                    TextSegmentsUtil.ask_text_segments_and_set(self.state)
+                    TextSegmentsUtil.set_text_submenu(self.state)
                 else:
                     self.text_submenu()
             case "d":
@@ -281,16 +281,17 @@ class App:
         printt(f"{make_hotkey_string("2")} Replace text\n")
         hotkey = ask()
         if hotkey == "1":
-            AppUtil.print_text_segments(self.state.project.text_segments)
+            strings = [item.text for item in self.state.project.text_segments]
+            AppUtil.print_text_segment_text(strings)
             ask("Press enter: ")
         elif hotkey == "2":
             num_files = ProjectDirUtil.num_audio_segment_files(self.state)
             if num_files == 0:
-                TextSegmentsUtil.ask_text_segments_and_set(self.state)
+                TextSegmentsUtil.set_text_submenu(self.state)
             else:
                 s = f"Replacing text will invalidate {num_files} previously generated audio file fragments for this project.\nAre you sure? "
                 if ask_hotkey(s):
-                    TextSegmentsUtil.ask_text_segments_and_set(self.state)
+                    TextSegmentsUtil.set_text_submenu(self.state)
 
     def ask_section_dividers(self) -> None:
 
@@ -302,33 +303,35 @@ class App:
         if section_dividers:
             ConcatUtil.print_concat_info(section_dividers, num_text_segments)
 
-        printt("Enter the line numbers where new chapters should begin: ")
-        printt("Eg, \"100, 500\". Enter \"0\" for none.")
+        printt("Enter the line numbers where new chapters will begin.")
+        printt("For example, if there are 1000 lines of text and you enter \"250, 700\",")
+        printt("three chapters will be created spanning lines 1-249, 250-699, and 700-1000.")
+        printt("Enter \"1\" for none.")
+        printt()
         inp = ask()
         printt()
         if not inp:
             return
 
         string_items = inp.split(",")
-        int_items = []
+        one_indexed_items = []
         for string_item in string_items:
             try:
                 index = int(string_item)
-                int_items.append(index)
+                one_indexed_items.append(index)
             except:
-                printt(f"Bad value: {string_item}", "error")
+                printt(f"Parse error: {string_item}", "error")
                 return
-        int_items = list(set(int_items))
-        int_items.sort()
-        for item in int_items:
-            if item < 0 or item >= len(self.state.project.text_segments):
+        one_indexed_items = list(set(one_indexed_items))
+        one_indexed_items.sort()
+        for item in one_indexed_items:
+            if item < 1 or item > len(self.state.project.text_segments):
                 printt(f"Index out of range: {item}", "error")
                 return
-        if 0 in int_items:
-            del int_items[0]
-        self.state.project.section_dividers = int_items
-
-        # ConcatUtil.print_concat_info(self.state.project.section_dividers, len(self.state.project.text_segments))
+        zero_indexed_items = [item - 1 for item in one_indexed_items]
+        if 0 in zero_indexed_items:
+            del zero_indexed_items[0]
+        self.state.project.section_dividers = zero_indexed_items
 
     def options_submenu(self) -> None:
 

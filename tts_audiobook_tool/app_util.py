@@ -5,7 +5,6 @@ import os
 import glob
 from typing import Any
 import glob
-from mutagen.flac import FLAC
 import torch
 
 from tts_audiobook_tool.l import L
@@ -63,24 +62,10 @@ class AppUtil:
             return f"Error saving json: {e}"
 
     @staticmethod
-    def get_flac_file_duration(path: str) -> float | None:
-        """
-        Returns the duration in seconds of a FLAC file, or None
-        """
-        try:
-            audio = FLAC(path)
-            if audio.info:
-                return audio.info.length
-            else:
-                return None
-        except Exception:
-            return None
-
-    @staticmethod
-    def print_text_segments(texts: list[str]) -> None:
-        print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
-        for i, segment in enumerate(texts):
-            printt(f"{make_hotkey_string(str(i))} {segment}")
+    def print_text_segment_text(raw_texts: list[str]) -> None:
+        print_heading(f"Text segments ({COL_DEFAULT}{len(raw_texts)}{COL_ACCENT}):")
+        for i, raw_text in enumerate(raw_texts):
+            printt(f"{make_hotkey_string(str(i+1))} {raw_text.strip()}")
         printt()
 
     @staticmethod

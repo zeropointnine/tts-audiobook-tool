@@ -9,6 +9,7 @@ import torch
 from typing import Tuple, Optional, cast
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
+from tts_audiobook_tool.flac_meta_util import FlacMetaUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.shared import Shared
@@ -316,7 +317,7 @@ class ValidateItem:
         self.text = text
         self.transcribed_text: str = ""
 
-        duration = AppUtil.get_flac_file_duration(self.path)
+        duration = FlacMetaUtil.get_duration(self.path)
         if not isinstance(duration, float):
             L.w(f"Couldn't get duration for {self.path}")
             duration = -1

@@ -176,7 +176,7 @@ def massage_for_text_comparison(s: str) -> str:
     s = s.strip(' ')
     return s
 
-def sanitize_for_filename(filename) -> str:
+def sanitize_for_filename(filename: str) -> str:
     """
     Replaces all non-alpha-numeric characters with underscores,
     replaces consecutive underscores with a single underscore,
@@ -190,6 +190,8 @@ def sanitize_for_filename(filename) -> str:
 
 def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tuple[int, int]]:
     """ Assumes `section_dividers` is sorted """
+
+    # TODO: this should be a property in Project
 
     if not section_dividers:
         return [ (0, num_items - 1) ]

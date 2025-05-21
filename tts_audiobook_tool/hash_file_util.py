@@ -6,6 +6,7 @@ import xxhash
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -17,13 +18,13 @@ class HashFileUtil:
         return os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR, fn)
 
     @staticmethod
-    def make_segment_file_name(index: int, text_segment: str, voice: dict, suffix=".flac") -> str:
-        hash = HashFileUtil.calc_segment_hash(index, text_segment, voice)
+    def make_segment_file_name(index: int, text_segment: TextSegment, voice: dict, suffix=".flac") -> str:
+        hash = HashFileUtil.calc_segment_hash(index, text_segment.text, voice)
         voice_id = voice.get("identifier", "voice")
         s1 = "[" + voice_id + "] "
         s2 = "[" + str(index).zfill(5) + "] "
         s3 = "[" + hash + "] "
-        s4 = sanitize_for_filename(text_segment)
+        s4 = sanitize_for_filename(text_segment.text)
         s = s1 + s2 + s3 + s4
         s = s[:100]
         s = s.rstrip("_")
@@ -32,12 +33,12 @@ class HashFileUtil:
         return s
 
     @staticmethod
-    def calc_segment_hash(index: int, text_segment: str, voice: dict) -> str:
+    def calc_segment_hash(index: int, text: str, voice: dict) -> str:
         """
         Returns a hash for a text/audio segment
         Hashes the combination of: index value, text, and voice dict's precalculated hash value
         """
-        s = str(index) + " " + text_segment + " " + voice.get("hash", "")
+        s = str(index) + " " + text + " " + voice.get("hash", "")
         if not "hash" in voice:
             L.w("voice dict is missing hash property")
         return xxhash.xxh3_64(s).hexdigest()

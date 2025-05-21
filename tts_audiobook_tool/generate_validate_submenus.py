@@ -81,7 +81,7 @@ class GenerateValidateSubmenus:
             for index in indices:
                 text_segment = state.project.text_segments[index]
                 file_path = index_to_path[index]
-                item = ValidateItem(index, file_path, text_segment)
+                item = ValidateItem(index, file_path, text_segment.text)
                 items.append(item)
             ValidateUtil.validate_items(items)
         elif hotkey == "2":

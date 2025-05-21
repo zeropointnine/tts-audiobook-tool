@@ -8,9 +8,11 @@ APP_NAME = "tts-audiobook-tool"
 DEFAULT_TEMPERATURE = 0.5
 
 # Different voices may have a varying rates of delivery.
-# You can calibrate this value for the TTS model's recommended max audio duration of around 30s.
-# Value of 65 should be more than conservative enough for typical speech speeds.
-MAX_WORDS_PER_SEGMENT = 65
+# Oute recommends 30s max but can handle longer generations.
+# In practice though, when it approaches around 25-30s,
+# it appears to internally 'segment' the audio itself,
+# which can lead to significant discontinuities/pauses.
+MAX_WORDS_PER_SEGMENT = 40
 
 MENU_CLEAR_SCREEN = False
 

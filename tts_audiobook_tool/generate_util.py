@@ -6,6 +6,7 @@ import torch
 import whisper
 
 from tts_audiobook_tool.hash_file_util import HashFileUtil
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -35,7 +36,7 @@ class GenerateUtil:
         else:
             whisper_model = None
 
-        # TODO: Duplicate work. Need to figure out best way to pass index-and-path through this whole feature, with all its permutations
+        # TODO: Duplicate work. Need to figure out best way to pass index-and-path through this whole feature, with all its permutations. Applies to entire app actually.
         index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
 
         start_time = time.time()
@@ -45,7 +46,7 @@ class GenerateUtil:
 
         for i in indices:
 
-            print_item_heading(state.project.text_segments[i], i, count, len(indices))
+            print_item_heading(state.project.text_segments[i].text, i, count, len(indices))
 
             if mode == "generate":
                 _ = GenerateUtil.generate_and_make_flac(index=i, state=state)
@@ -53,7 +54,8 @@ class GenerateUtil:
                 _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=whisper_model)
             else: # == "validate-and-fix"
                 path = index_to_path[i]
-                _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=whisper_model, skip_generate_file_path=path)
+                _ = GenerateUtil.generate_validate_fix_item(
+                        index=i, state=state, whisper_model=whisper_model, skip_generate_file_path=path)
 
             count += 1
             if Shared.stop_flag:
@@ -98,7 +100,7 @@ class GenerateUtil:
                 skip_generate_file_path = ""
 
             # Validate audio file
-            item = ValidateItem(index, file_path, state.project.text_segments[index])
+            item = ValidateItem(index, file_path, state.project.text_segments[index].text)
             should_fix_delete = (pass_num == 1)
             result, message = ValidateUtil.validate_item(item, should_fix_delete, whisper_model)
 
@@ -116,7 +118,7 @@ class GenerateUtil:
                         pass_num = 2
                         continue
                     case _:
-                        printt("Shouldn't get here")
+                        L.e("Shouldn't get here")
                         break
 
             else: # pass_num == 2:
@@ -132,7 +134,7 @@ class GenerateUtil:
                         printt(message + "\n" + "Voice line still has error" + "\n")
                         break
                     case _:
-                        printt("Shouldn't get here")
+                        L.e("Shouldn't get here")
                         break
 
         # ...
@@ -157,7 +159,7 @@ class GenerateUtil:
         text_segment = state.project.text_segments[index]
 
         start_time = time.time()
-        is_success = GenerateUtil.generate_wav_file(temp_wav_path, text_segment, state.project.voice, state.prefs.temperature)
+        is_success = GenerateUtil.generate_wav_file(temp_wav_path, text_segment.text, state.project.voice, state.prefs.temperature)
         if not is_success:
             delete_temp_file(temp_wav_path)
             return ""
@@ -217,9 +219,9 @@ class GenerateUtil:
 
 # ---
 
-def print_item_heading(text_segment: str, index: int, count: int, total: int) -> None:
+def print_item_heading(text: str, index: int, count: int, total: int) -> None:
     s  = f"{COL_ACCENT}[{COL_DEFAULT}{count}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
     s += f"{COL_ACCENT}Generating audio for text segment index {COL_DEFAULT}{index}{COL_ACCENT}:{COL_DEFAULT}"
     print(s)
-    printt(f"{COL_DIM}{Ansi.ITALICS}{text_segment}")
+    printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
     printt()

@@ -70,7 +70,7 @@ class ProjectDirUtil:
                 continue
 
             text_segment = text_segments[index_from_file_name]
-            segment_hash = HashFileUtil.calc_segment_hash(index_from_file_name, text_segment, cast(dict, state.project.voice))
+            segment_hash = HashFileUtil.calc_segment_hash(index_from_file_name, text_segment.text, cast(dict, state.project.voice))
 
             if hash_from_file_name != segment_hash:
                 continue

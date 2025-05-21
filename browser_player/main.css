@@ -1,0 +1,109 @@
+:root {
+    /* Light mode (default) */
+    --bg-color: #f0f0f0;
+    --content-bg-color: #ffffff;
+    --text-color: #333333;
+    --highlight-color: #ffaa4466;
+    --button-color: #ffaa44;
+    --shadow-color: rgba(0,0,0,0.1);
+}
+
+[data-theme="dark"] {
+    /* Dark mode */
+    --bg-color: #333333;
+    --content-bg-color: #222222;
+    --text-color: #e0e0e0;
+    --highlight-color: #ffaa4433;
+    --button-color: #888888;
+    --shadow-color: rgba(255,255,255,0.1)
+}
+
+body, html {
+    margin: 0;
+    padding: 20px;
+    background-color: var(--bg-color);
+}
+
+.audioPlayerHolder {
+    position: fixed; /* Pins to viewport */
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000; /* Ensures it stays above content */
+}
+
+audio {
+    width: 100%;
+    max-width: 100%; /* Ensures responsiveness */
+    display: none;
+}
+
+.loadButtonLabel {
+    display: block;
+    margin-top:24px;
+    padding: 12px 24px;
+    text-align: center;
+    width: calc(100% - 48px);
+    background: var(--button-color);
+    color: var(--text-color);
+    font-family: sans-serif;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+
+    max-width: 848px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#toggleButton {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    width: 30px;
+    height: 30px;
+    padding:4px;
+    border-radius:8px;
+    background-color: var(--bg-color);
+    box-shadow: 0 4px 8px var(--shadow-color);
+    cursor: pointer;
+}
+
+#textHolder {
+    display: none;
+    font-family: serif;
+    font-size: 32px; /* Large font */
+    line-height: 1.6;
+    white-space: pre-wrap; /* Honor line breaks and wrap text */
+    color: var(--text-color);
+    background-color: var(--content-bg-color);
+    padding: 48px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px var(--shadow-color);
+
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.highlight {
+    background-color: var(--highlight-color);
+    color: var(--text-color);
+    padding: 0.1em 0; /* Slight padding */
+    border-radius: 3px;
+    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
+}
+
+#toggleButton #icon-sun {
+    display: none; /* Hidden by default (in light mode) */
+}
+#toggleButton #icon-moon {
+    display: block; /* Shown by default (in light mode) */
+}
+html[data-theme="dark"] #toggleButton #icon-sun {
+    display: block; /* Show sun icon in dark mode */
+}
+html[data-theme="dark"] #toggleButton #icon-moon {
+    display: none; /* Hide moon icon in dark mode */
+}

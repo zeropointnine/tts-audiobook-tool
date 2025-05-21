@@ -4,6 +4,7 @@ import os
 from typing import Any
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.text_segment import TextSegment
 
 class Project:
     """
@@ -13,7 +14,7 @@ class Project:
             self,
             dir_path: str = "",
             voice: dict | None = None,
-            text_segments: list[str] = [],
+            text_segments: list[TextSegment] = [],
             chapter_indices: list[int] = []
     ) -> None:
         self.dir_path = dir_path
@@ -80,32 +81,44 @@ class Project:
         """ Saves project settings (sans voice) to concomitant files in project directory """
 
         dict = {
-            "text_segments": self._make_text_segments_object(self.text_segments),
+            "text_segments": TextSegment.to_dict_list(self._text_segments),
             "chapter_indices": self._section_dividers
         }
         file_path = os.path.join(self.dir_path, PROJECT_SETTINGS_FILE_NAME)
         try:
-            with open(file_path, "w") as f:
-                json.dump(dict, f, indent=4)
+            with open(file_path, "w") as file:
+                json.dump(dict, file, indent=4)
         except Exception as e:
             L.e(f"Save error: {e}")
 
     @property
-    def text_segments(self) -> list[str]:
+    def text_segments(self) -> list[TextSegment]:
         return self._text_segments
 
-    def set_text_segments(self, text_segments: list[str], raw_text: str) -> None:
+    def set_text_segments(self, text_segments: list[TextSegment], raw_text: str) -> None:
         self._text_segments = text_segments
         # Setting text segments invalidates section dividers
         self._section_dividers =[]
         self._save()
         # Save raw text as well for reference
+        self._save_raw_text(raw_text)
+
+    def _save_raw_text(self, raw_text: str) -> None:
         file_path = os.path.join(self.dir_path, PROJECT_RAW_TEXT_FILE_NAME)
         try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(raw_text)
+            with open(file_path, 'w', encoding='utf-8') as file:
+                file.write(raw_text)
         except Exception as e:
-            L.e(f"Error saving raw text: {e}")
+            L.e(f"Error saving raw text: {e}") # TODO need to return error
+
+    def load_raw_text(self) -> str:
+        file_path = os.path.join(self.dir_path, PROJECT_RAW_TEXT_FILE_NAME)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
+        except Exception as e:
+            L.e(f"Error saving raw text: {e}") # TODO need to return error
+            return ""
 
     @property
     def section_dividers(self) -> list[int]:
@@ -117,25 +130,24 @@ class Project:
         self._save()
 
     @staticmethod
-    def _make_text_segments_object(text_segments: list[str]) -> list[list[Any]]:
-        # Makes list of two-item lists (human readability enhancement)
-        object = []
-        for i, text_segment in enumerate(text_segments):
-            item = [i, text_segment]
-            object.append(item)
-        return object
-
-    @staticmethod
-    def _extract_text_segments(object: list[list[Any]]) -> list[str]:
+    def _extract_text_segments(object: list[dict]) -> list[TextSegment]:
         if not object or not isinstance(object, list):
             L.e(f"bad text segments object: {object}")
             return []
         text_segments = []
         for item in object:
-            if len(item) != 2 or not isinstance(item[1], str):
-                L.e(f"bad text segments item: {item}")
+            if not isinstance(item, dict):
+                L.e(f"bad type: {item}")
                 return []
-            # note how first element (index) exists to make json text more readable only
-            _, text_segment = item
+            if not "text" in item or not "index_start" in item or not "index_end" in item:
+                L.e(f"missing required property in item: {item}")
+                return []
+            try:
+                start = int(item["index_start"])
+                end = int(item["index_end"])
+            except:
+                L.e(f"parse float error: {item}")
+                return []
+            text_segment = TextSegment(item["text"], start, end)
             text_segments.append(text_segment)
         return text_segments
