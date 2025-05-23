@@ -5,10 +5,14 @@ class ParseUtil:
         """
         Expects a comma-delimited list of ints and/or int ranges.
         Eg, "1, 2, 5-10"
+
         Returns tuple of values and warning strings.
+        Values are sorted and unique.
+
+        TODO: max_value param
         """
 
-        values = []
+        ints = []
         warnings: list[str] = []
 
         tokens = split_and_strip(string, ",")
@@ -17,15 +21,17 @@ class ParseUtil:
 
         for token in tokens:
             if token.isdigit():
-                values.append(int(token))
+                ints.append(int(token))
             else:
                 items = parse_int_range_string(token)
                 if not items:
                     warnings.append(f"Bad value: {token}")
                 else:
-                    values.extend(items)
+                    ints.extend(items)
 
-        return values, warnings
+        ints = sorted(set(ints))
+
+        return ints, warnings
 
 # ---
 

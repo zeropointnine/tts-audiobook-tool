@@ -37,6 +37,8 @@ COL_DIM = Ansi.hex("666666")
 COL_INPUT = Ansi.hex("aaaaaa")
 COL_DEFAULT = Ansi.RESET
 
+PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/"
+
 # Regex for "[h...]", where "h" is 16 hex characters.
 # Captures the hex string (w/o the brackets)
 # Eg, "[0123456789ABCDEF]"

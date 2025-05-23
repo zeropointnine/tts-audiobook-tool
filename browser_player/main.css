@@ -62,6 +62,18 @@ audio {
     margin-right: auto;
 }
 
+#fileName {
+    margin-top: 24px;
+    margin-bottom: 24px;
+    font-family: sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--text-color);
+    opacity: 0.33;
+    width: 100%;
+    text-align: center;
+}
+
 #themeButton {
     position: fixed;
     bottom: 12px;

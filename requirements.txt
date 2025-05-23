@@ -57,7 +57,7 @@ networkx==3.4.2
 numba==0.61.2
 numpy==2.2.4
 openai-whisper==20240930
-outetts==0.4.1
+outetts==0.4.2
 packaging==24.2
 parso==0.8.4
 pillow==11.2.1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -12,18 +13,48 @@ class GenerateValidateSubmenus:
     @staticmethod
     def generate_submenu(state: State) -> None:
 
-        indices = list(range(len(state.project.text_segments)))
+        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        num_items = len(state.project.text_segments)
+        num_complete = len(dic.keys())
+        if num_items - num_complete == 0:
+            ask(f"All items already generated. Press enter: ")
+            return
+
+        print_heading("Generate audio:")
+        printt("Enter item numbers to generate (eg, \"1-100, 103\", or \"all\")")
+        inp = ask()
+
+        if inp == "all" or inp == "a":
+            indices = [item for item in range(0, num_items)]
+        else:
+            indices, warnings = ParseUtil.parse_int_list(inp)
+            if warnings:
+                for warning in warnings:
+                    printt(warning)
+                printt()
+                return
+            if not indices:
+                return
+
+            # limit to legal range
+            indices = [item for item in indices if item >= 0 and item < num_items]
+            # make zero-indexed
+            indices = [item - 1 for item in indices]
+
+        GenerateValidateSubmenus.generate_submenu_part_2(state, indices)
+
+    @staticmethod
+    def generate_submenu_part_2(state: State, indices: list[int]) -> None:
+
         dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         already_complete = list(dic.keys())
         original_len = len(indices)
+
         indices = [item for item in indices if item not in already_complete]
-        indices.sort()
 
         if not indices:
             ask(f"All items already generated ({original_len}). Press enter: ")
             return
-
-        print_heading("Generate audio:")
 
         info = f"Will generate {len(indices)} audio segments"
         num_completed = original_len - len(indices)

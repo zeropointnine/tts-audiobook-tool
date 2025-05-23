@@ -1,42 +1,43 @@
 (function() {
 
-    let rawText = ""
-    let timedTextSegments = []
+    let rawText = "";
+    let timedTextSegments = [];
 
-    let flacFileInput = null
-    let audioPlayer = null
-    let textHolder = null
-    let themeButton = null
+    let flacFileInput = null;
+    let fileNameDiv = null;
+    let audioPlayer = null;
+    let textHolder = null;
+    let themeButton = null;
 
     let selectedSpan = null;
-    let intervalId = -1
+    let intervalId = -1;
 
     function init() {
         flacFileInput = document.getElementById('flacFileInput');
+        fileNameDiv = document.getElementById('fileName')
         audioPlayer = document.getElementById('audioPlayer');
         textHolder = document.getElementById('textHolder');
         themeButton = document.getElementById('themeButton');
 
         flacFileInput.addEventListener('change', async () => {
-            clear()
+            clear();
             const file = flacFileInput.files[0];
             if (!file) {
-                return
+                return;
             }
-            result = await loadMetadataFromAppFlac(file)
+            result = await loadMetadataFromAppFlac(file);
             if (!result) {
-                alert("No tts-audiobook-tool metadata found")
-                return
+                alert("No tts-audiobook-tool metadata found");
+                return;
             }
-            initFile(file, result["raw_text"], result["text_segments"])
+            initPage(file, result["raw_text"], result["text_segments"]);
         });
 
         audioPlayer.addEventListener('play', function() {
-            selectedSpan = null; // force scroll to current segment
-          });
+            selectedSpan = null; // ensures scroll to current audio segment
+        });
 
-
-          textHolder.addEventListener('click', (event) => {
+        textHolder.addEventListener('click', (event) => {
             const target = event.target;
             if (target.tagName === 'SPAN' && target.id.startsWith('segment-')) {
                 const segmentIndex = parseInt(target.id.split('-')[1]);
@@ -60,24 +61,29 @@
                 html.setAttribute('data-theme', 'dark');
                 localStorage.setItem('darkMode', 'true');
             }
-          });
-          if (localStorage.getItem('darkMode') === 'true') {
+        });
+        if (localStorage.getItem('darkMode') === 'true') {
             html.setAttribute('data-theme', 'dark');
-          }
+        }
     }
 
     function clear() {
         clearInterval(intervalId)
         audioPlayer.src = null;
         audioPlayer.style.display = "none";
+        fileNameDiv.style.display = "none"
         textHolder.style.display = "none";
         selectedSpan = null
     }
 
-    function initFile(file, pRawText, pTimedTextSegments) {
+    function initPage(file, pRawText, pTimedTextSegments) {
 
         rawText = pRawText
         timedTextSegments = pTimedTextSegments
+
+        fileNameDiv.style.display = "block"
+        fileNameDiv.textContent = file.name
+
         populateText()
 
         audioPlayer.src = URL.createObjectURL(file);

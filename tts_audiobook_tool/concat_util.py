@@ -62,7 +62,7 @@ class ConcatUtil:
 
         if len(section_indices) > 1:
             inp = ask("Enter chapter numbers (eg, \"1, 2, 5-10\", or \"all\"): ")
-            if inp == "all":
+            if inp == "all" or inp == "a":
                 selected_section_indices = section_indices.copy()
             else:
                 input_indices, warnings = ParseUtil.parse_int_list(inp)
@@ -101,7 +101,7 @@ class ConcatUtil:
             else:
                 browser_path = "browser_player" + os.path.sep + "index.html"
             printt(browser_path)
-            printt()
+            printt(f"or on the web here: {PLAYER_URL}")
             state.prefs.has_shown_player_reminder = True
 
         ask("Finished. Press enter:")
@@ -172,7 +172,7 @@ class ConcatUtil:
 
         file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
         file_name += f"[{ section_index+1 } of {num_sections}]" + " "
-        file_name += f"[{segment_index_start}-{segment_index_end}]" + " "
+        file_name += f"[{segment_index_start+1}-{segment_index_end+1}]" + " "
         if num_missing > 0:
             file_name += f"[{num_missing} missing]" + " "
         voice = cast(dict, state.project.voice)
