@@ -13,7 +13,7 @@ if not is_ffmpeg_available():
 is_first_run = not os.path.exists(Prefs.get_file_path())
 if is_first_run:
     printt("\nThis appears to be your first time running tts-audiobook-tool.")
-    printt(f"As a reminder, you may want to adjust the settings in the file {COL_ACCENT}model_config.py")
+    printt(f"As a reminder, you may want to adjust the settings in the file {COL_ACCENT}tts_config.py")
     printt("to enable hardware acceleration, depending on your system setup.\n")
     ask("Press enter to start: ")
 elif MENU_CLEAR_SCREEN:

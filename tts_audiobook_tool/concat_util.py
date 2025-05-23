@@ -92,6 +92,18 @@ class ConcatUtil:
 
         ConcatUtil.concatenate_sections(selected_section_indices, state)
 
+        if not state.prefs.has_shown_player_reminder:
+            printt(f"🔔 {COL_ACCENT}Reminder:")
+            printt("You can use audio files with the interactive player/reader here:")
+            package_dir = get_package_dir()
+            if package_dir:
+                browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
+            else:
+                browser_path = "browser_player" + os.path.sep + "index.html"
+            printt(browser_path)
+            printt()
+            state.prefs.has_shown_player_reminder = True
+
         ask("Finished. Press enter:")
 
     @staticmethod

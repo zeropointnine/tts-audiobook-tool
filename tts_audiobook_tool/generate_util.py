@@ -1,9 +1,6 @@
-import gc
 import os
 import time
-
-import torch
-import whisper
+import copy
 
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
@@ -28,14 +25,6 @@ class GenerateUtil:
         if not mode in ["generate", "generate-and-fix", "validate-and-fix"]:
             raise ValueError("Bad value for mode")
 
-        if mode in ["generate-and-fix", "validate-and-fix"]:
-            printt("Initializing whisper model...")
-            printt()
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            whisper_model = whisper.load_model("turbo", device=device)
-        else:
-            whisper_model = None
-
         # TODO: Duplicate work. Need to figure out best way to pass index-and-path through this whole feature, with all its permutations. Applies to entire app actually.
         index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
 
@@ -51,11 +40,11 @@ class GenerateUtil:
             if mode == "generate":
                 _ = GenerateUtil.generate_and_make_flac(index=i, state=state)
             elif mode == "generate-and-fix":
-                _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=whisper_model)
+                _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=Shared.get_whisper())
             else: # == "validate-and-fix"
                 path = index_to_path[i]
                 _ = GenerateUtil.generate_validate_fix_item(
-                        index=i, state=state, whisper_model=whisper_model, skip_generate_file_path=path)
+                        index=i, state=state, whisper_model=Shared.get_whisper(), skip_generate_file_path=path)
 
             count += 1
             if Shared.stop_flag:
@@ -66,13 +55,7 @@ class GenerateUtil:
         printt(f"Elapsed: {time_string(time.time() - start_time)}")
         printt()
 
-        if whisper_model:
-            printt("Unloading whisper...")
-            printt()
-            del whisper_model
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            gc.collect()
+        Shared.clear_whisper()
 
         ask("Press enter: ")
 
@@ -198,19 +181,22 @@ class GenerateUtil:
 
         interface = Shared.get_oute_interface()
 
+        # First, clone GENERATION_CONFIG from config file
         from outetts.models.config import GenerationConfig, SamplerConfig
         from outetts.models.info import GenerationType
+        from tts_audiobook_tool.tts_config import GENERATION_CONFIG
+        try:
+            from .tts_config_dev import GENERATION_CONFIG
+        except ImportError:
+            pass
+        gen_config = copy.deepcopy(GENERATION_CONFIG)
 
-        config = GenerationConfig(
-            text="", # type: ignore
-            generation_type= GenerationType.CHUNKED, # type: ignore
-            speaker=voice, # type: ignore
-            sampler_config=SamplerConfig(temperature)  # type: ignore
-        )
-        config.text = prompt
+        gen_config.text = prompt
+        gen_config.speaker = voice
+        gen_config.sampler_config = SamplerConfig(temperature)
 
         try:
-            output = interface.generate(config=config)
+            output = interface.generate(config=gen_config)
             output.save(dest_file_path)
         except Exception as e:
             printt(str(e), "error")
@@ -221,7 +207,7 @@ class GenerateUtil:
 
 def print_item_heading(text: str, index: int, count: int, total: int) -> None:
     s  = f"{COL_ACCENT}[{COL_DEFAULT}{count}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
-    s += f"{COL_ACCENT}Generating audio for text segment index {COL_DEFAULT}{index}{COL_ACCENT}:{COL_DEFAULT}"
+    s += f"{COL_ACCENT}Generating audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
     print(s)
     printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
     printt()

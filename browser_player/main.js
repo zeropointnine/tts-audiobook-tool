@@ -6,7 +6,7 @@
     let flacFileInput = null
     let audioPlayer = null
     let textHolder = null
-    let toggleButton = null
+    let themeButton = null
 
     let selectedSpan = null;
     let intervalId = -1
@@ -15,7 +15,7 @@
         flacFileInput = document.getElementById('flacFileInput');
         audioPlayer = document.getElementById('audioPlayer');
         textHolder = document.getElementById('textHolder');
-        toggleButton = document.getElementById('toggleButton');
+        themeButton = document.getElementById('themeButton');
 
         flacFileInput.addEventListener('change', async () => {
             clear()
@@ -36,9 +36,23 @@
           });
 
 
-        // Color theme related
+          textHolder.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target.tagName === 'SPAN' && target.id.startsWith('segment-')) {
+                const segmentIndex = parseInt(target.id.split('-')[1]);
+                if (!isNaN(segmentIndex) && timedTextSegments[segmentIndex]) {
+                    if (selectedSpan && selectedSpan != target) {
+                        selectedSpan.classList.remove('highlight');
+                    }
+                    audioPlayer.currentTime = timedTextSegments[segmentIndex].time_start;
+                    audioPlayer.play();
+                }
+            }
+        });
+
+        // Color theme toggle
         const html = document.documentElement;
-        toggleButton.addEventListener('click', () => {
+        themeButton.addEventListener('click', () => {
             if (html.getAttribute('data-theme') === 'dark') {
                 html.removeAttribute('data-theme');
                 localStorage.setItem('darkMode', 'false');
@@ -63,9 +77,7 @@
     function initFile(file, pRawText, pTimedTextSegments) {
 
         rawText = pRawText
-        console.log(rawText)
         timedTextSegments = pTimedTextSegments
-        console.log(timedTextSegments)
         populateText()
 
         audioPlayer.src = URL.createObjectURL(file);

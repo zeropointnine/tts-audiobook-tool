@@ -10,7 +10,7 @@ from tts_audiobook_tool.constants import *
 
 class Prefs:
     """
-    User settings that persist.
+    User settings that persist to file
     - project dir
     - temperature
     - play_on_generate
@@ -25,6 +25,7 @@ class Prefs:
         self._project_dir = project_dir
         self._temperature = temperature
         self._play_on_generate = play_on_generate
+        self._has_shown_player_reminder = False
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -67,7 +68,13 @@ class Prefs:
             play_on_generate = False
             dirty = True
 
+        has_shown_player_reminder = prefs_dict.get("has_shown_player_reminder", False)
+        if not isinstance(has_shown_player_reminder, bool):
+            has_shown_player_reminder = False
+            dirty = True
+
         prefs = Prefs(project_dir, temperature, play_on_generate)
+        prefs._has_shown_player_reminder = has_shown_player_reminder
         if dirty:
             prefs.save()
         return prefs
@@ -101,11 +108,21 @@ class Prefs:
         self._play_on_generate = value
         self.save()
 
+    @property
+    def has_shown_player_reminder(self) -> bool:
+        return self._has_shown_player_reminder
+
+    @has_shown_player_reminder.setter
+    def has_shown_player_reminder(self, value: bool):
+        self._has_shown_player_reminder = value
+        self.save()
+
     def save(self) -> None:
         dic = {
             "project_dir": self._project_dir,
             "temperature": self._temperature,
-            "play_on_generate": self._play_on_generate
+            "play_on_generate": self._play_on_generate,
+            "has_shown_player_reminder": self._has_shown_player_reminder
         }
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:

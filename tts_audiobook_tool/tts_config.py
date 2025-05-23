@@ -1,5 +1,7 @@
-import outetts
 import torch
+import outetts
+from outetts.models.config import GenerationConfig
+from outetts.models.info import GenerationType
 
 """
 Refer to the Oute TTS project page for more on configuration options, etc.
@@ -11,6 +13,14 @@ MODEL_CONFIG = outetts.ModelConfig.auto_config(
     backend=outetts.Backend.HF
 )
 
+# Note: `text`, `sampler_config`, and `speaker` properties are set dynamically at runtime
+GENERATION_CONFIG = GenerationConfig(
+    text = "",
+    generation_type= GenerationType.REGULAR
+)
+
+# ------------------------------------------------------
+# Examples of some other configurations for MODEL_CONFIG
 
 _EXAMPLE_AUTO_HF = outetts.ModelConfig.auto_config(
     model=outetts.Models.VERSION_1_0_SIZE_1B,

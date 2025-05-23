@@ -72,7 +72,7 @@ class App:
         num_audio_segments_complete = ProjectDirUtil.num_audio_segment_files(self.state)
 
         # Title
-        print_heading(f"Menu - {APP_NAME}:")
+        print_heading(f"Main menu - {APP_NAME}:")
 
         # Dir check
         if did_reset:

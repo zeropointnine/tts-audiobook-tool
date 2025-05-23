@@ -2,6 +2,7 @@ import re
 import os
 import random
 import subprocess
+import importlib
 from datetime import datetime
 from pathlib import Path
 
@@ -228,3 +229,11 @@ def time_string(seconds: float) -> str:
     minutes = minutes % 60
     return f"{hours}h{minutes}m{seconds}s"
 
+def get_package_dir() -> str | None:
+    # Get the current package's root directory
+    if not __package__:
+        return None
+    package = importlib.import_module(__package__)
+    if not package.__file__:
+        return None
+    return os.path.dirname(os.path.abspath(package.__file__))

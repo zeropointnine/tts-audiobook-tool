@@ -1,8 +1,8 @@
 # Description
 
-This is an audiobook maker utility, using the [Oute TTS 1.0 1B](https://github.com/edwko/OuteTTS) text-to-speech model. It uses a rudimentary, no-frills console interface.
+This is an audiobook creation tool, using the [Oute TTS 1.0 1B](https://github.com/edwko/OuteTTS) text-to-speech model. It uses a rudimentary, no-frills console interface.
 
-What's interesting about Oute TTS is that it does zero-shot voice cloning and that it outputs audio at 44khz. Because generative TTS models have a tendency to hallucinate or repeat sentences and phrases, the app tries to mitigate this by using Whisper to compare the transcribed text of the generated audio against the source text.
+What's interesting about Oute TTS is that it does zero-shot voice cloning and that it outputs audio at 44khz. Because generative TTS models can hallucinate or repeat sentences and phrases, the app tries to mitigate this by using Whisper to compare the transcribed text of the generated audio against the source text.
 
 TLDR instructions: (1) Assign a working project directory, (2) select a 15-second reference audio file for the voice cloning, (3) paste in some (or a lot of) text, (3b) optionally define chapter points, (4) start inferencing, and ... be prepared to wait (that's the catch, lol). Finally, (5) concatenate the generated audio segments to create the final FLAC file/s.
 
@@ -43,7 +43,7 @@ Run by entering:
 
 This project relies on the oute-tts reference project, which allows for the use of different backends, different quantizations, with or without flash attention, etc. These settings can greatly affect inference speed, and to a lesser extent, output quality.
 
-To change these settings, hand-edit the Python file **`model_config.py`**, and refer to the  example configs therein.
+To change these settings, hand-edit the Python file **`tts_config.py`**, and refer to the  example configs therein.
 
 Refer to the [OuteTTS interface usage page](https://github.com/edwko/OuteTTS/blob/main/docs/interface_usage.md) for more.
 
@@ -53,7 +53,7 @@ That being said, here are some setup notes, based on my own tests up to this poi
 
 Install Pytorch with CUDA in the normal fashion: Uninstall the vanilla version (`pytorch uninstall torch torchvision torchaudio`) and then [install](https://pytorch.org/get-started/locally/) the CUDA-enabled version.
 
-Prefer the **ExLllama2** backend if at all possible: (`backend=outetts.Backend.EXL2`). See the example config in `model_config.py`. This requires manually installing the exllama2 library: `pip install exllamav2`, and also requires installing [flash attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features).
+Prefer the **ExLllama2** backend if at all possible: (`backend=outetts.Backend.EXL2`). See the example config in `tts_config.py`. This requires manually installing the exllama2 library: `pip install exllamav2`, and also requires installing [flash attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features).
 
 Alternatively, `Backend.HF` is also hardware accelerated but a good deal slower than ExLlama2.
 

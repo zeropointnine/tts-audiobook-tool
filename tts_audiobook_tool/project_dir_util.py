@@ -51,7 +51,6 @@ class ProjectDirUtil:
         audio_segments_path = os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR)
         os.makedirs(Path(audio_segments_path), exist_ok=True)
         file_paths = ProjectDirUtil._get_all_audio_segment_file_paths(audio_segments_path)
-        # print("paths", paths)
 
         result = dict[int, str]()
         text_segments = state.project.text_segments

@@ -31,7 +31,6 @@ class ValidateUtil:
         """
 
         start_time = time.time()
-        whisper_model = None
         num_analysed = 0
         num_detected = 0 # including ones that get corrected
         num_deleted = 0
@@ -47,20 +46,11 @@ class ValidateUtil:
                 Shared.mode = ""
                 break
 
-            # Init whisper
-            if not whisper_model:
-                printt("Initializing whisper model...")
-                printt()
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                whisper_model = whisper.load_model("turbo", device=device)
-                printt("Starting")
-                printt()
-
             # Do test
             result, message = ValidateUtil.validate_item(
                 item=item,
                 fix_or_delete=False,
-                whisper_model=whisper_model
+                whisper_model=Shared.get_whisper()
             )
             num_analysed += 1
 
@@ -93,14 +83,7 @@ class ValidateUtil:
         printt(f"{num_detected} error/s detected")
         printt()
 
-        if whisper_model:
-            # Cleanup
-            printt("Unloading whisper...")
-            printt()
-            del whisper_model
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            gc.collect()
+        Shared.clear_whisper()
 
     @staticmethod
     def validate_item(

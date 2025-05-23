@@ -13,7 +13,7 @@ from tts_audiobook_tool.constants import *
 class HashFileUtil:
 
     @staticmethod
-    def make_segment_file_path(index, state: State) -> str:
+    def make_segment_file_path(index: int, state: State) -> str:
         fn = HashFileUtil.make_segment_file_name(index, state.project.text_segments[index], cast(dict, state.project.voice))
         return os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR, fn)
 
@@ -21,8 +21,9 @@ class HashFileUtil:
     def make_segment_file_name(index: int, text_segment: TextSegment, voice: dict, suffix=".flac") -> str:
         hash = HashFileUtil.calc_segment_hash(index, text_segment.text, voice)
         voice_id = voice.get("identifier", "voice")
+        one_based_index = index + 1
         s1 = "[" + voice_id + "] "
-        s2 = "[" + str(index).zfill(5) + "] "
+        s2 = "[" + str(one_based_index).zfill(5) + "] "
         s3 = "[" + hash + "] "
         s4 = sanitize_for_filename(text_segment.text)
         s = s1 + s2 + s3 + s4
@@ -47,9 +48,10 @@ class HashFileUtil:
     def extract_index_and_hash_from_segment_file_name(file_name: str) -> tuple[int, str]:
         match = AUDIO_SEGMENT_FILE_NAME_PATTERN.match(file_name)
         assert isinstance(match, Match)
-        index = int(match.group(1))
+        one_based_index = int(match.group(1))
         hash = match.group(2)
-        return index, hash
+        zero_based_index = one_based_index - 1
+        return zero_based_index, hash
 
     # ---
 
