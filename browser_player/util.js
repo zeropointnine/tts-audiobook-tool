@@ -2,16 +2,39 @@
  * Reads and decodes the custom tts-audiobook-tool metadata from a FLAC file
  * and returns an object
  */
-async function loadMetadataFromAppFlac(file) {
+
+async function loadMetadataFromAppFlac(fileOrUrl) {
+
+    let file; // Blob/File object
+
+    if (typeof fileOrUrl === 'string' && (fileOrUrl.startsWith('http://') || fileOrUrl.startsWith('https://'))) {
+        try {
+            const response = await fetch(fileOrUrl);
+            if (!response.ok) {
+                console.error(`HTTP error, status ${response.status}`);
+                return null;
+            }
+            file = await response.blob();
+        } catch (error) {
+            console.error("Error fetching URL:", error);
+            return null;
+        }
+    } else if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
+        file = fileOrUrl;
+    } else {
+        console.error("Invalid input: expected File, Blob, or URL string.");
+        return null;
+    }
 
     if (!file) {
-        return null
+        return null;
     }
+
     let tagValue = null
     try {
         tagValue = await findCustomFlacTag(file, "TTS_AUDIOBOOK_TOOL");
     } catch (error) {
-        console.log("Error parsing FLAC:", error);
+        console.error("Error parsing FLAC:", error);
         return null
     } finally {
         // "Closing the file stream" is handled by the browser implicitly
@@ -22,23 +45,23 @@ async function loadMetadataFromAppFlac(file) {
     try {
         o = JSON.parse(tagValue)
     } catch (e) {
-        console.log(e)
+        console.error(e)
         return null
     }
 
     const timedTextSegments = o["text_segments"]
     if (!timedTextSegments) {
-        console.log("missing text_segments")
+        console.error("missing text_segments")
         return null
     }
     if (timedTextSegments.length == 0) {
-        console.log("text_segments is empty")
+        console.error("text_segments is empty")
         return null
     }
 
     const rawTextBase64 = o["raw_text"]
     if (!rawTextBase64) {
-        console.log("empty or missing raw_text field")
+        console.error("empty or missing raw_text field")
         return null
     }
     const binaryStr = atob(rawTextBase64.replace(/_/g, '/').replace(/-/g, '+'));
@@ -50,7 +73,7 @@ async function loadMetadataFromAppFlac(file) {
     const decompressed = pako.inflate(bytes); // zlib decompression
     const rawText = new TextDecoder('utf-8').decode(decompressed);
     if (!rawText) {
-        console.log("decoded rawText is empty?")
+        console.error("decoded rawText is empty?")
         return null
     }
 

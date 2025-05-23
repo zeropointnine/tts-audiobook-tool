@@ -8,29 +8,39 @@
     let audioPlayer = null;
     let textHolder = null;
     let themeButton = null;
+    let loadUrlInput = null;
 
     let selectedSpan = null;
     let intervalId = -1;
 
     function init() {
+
         flacFileInput = document.getElementById('flacFileInput');
         fileNameDiv = document.getElementById('fileName')
         audioPlayer = document.getElementById('audioPlayer');
         textHolder = document.getElementById('textHolder');
         themeButton = document.getElementById('themeButton');
+        loadUrlInput = document.getElementById('loadUrlInput');
+
+        loadUrlInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                const url = loadUrlInput.value.trim()
+                if (url) {
+                    loadUrlInput.blur();
+                    loadFlac(url);
+                }
+            }
+        });
+
+        loadUrlInput.addEventListener('blur', () => {
+            loadUrlInput.value = '';
+        });
 
         flacFileInput.addEventListener('change', async () => {
-            clear();
             const file = flacFileInput.files[0];
-            if (!file) {
-                return;
+            if (file) {
+                loadFlac(file);
             }
-            result = await loadMetadataFromAppFlac(file);
-            if (!result) {
-                alert("No tts-audiobook-tool metadata found");
-                return;
-            }
-            initPage(file, result["raw_text"], result["text_segments"]);
         });
 
         audioPlayer.addEventListener('play', function() {
@@ -65,6 +75,24 @@
         if (localStorage.getItem('darkMode') === 'true') {
             html.setAttribute('data-theme', 'dark');
         }
+
+        // When the queryparam is "url", run the function "loadFlac" using the value.
+        const urlParams = new URLSearchParams(window.location.search);
+        const url = urlParams.get('url');
+        if (url) {
+            loadFlac(url);
+        }
+    }
+
+    async function loadFlac(fileOrUrl) {
+        clear();
+
+        result = await loadMetadataFromAppFlac(fileOrUrl);
+        if (!result) {
+            alert("No tts-audiobook-tool metadata found");
+            return;
+        }
+        initPage(fileOrUrl, result["raw_text"], result["text_segments"]);
     }
 
     function clear() {
@@ -76,17 +104,31 @@
         selectedSpan = null
     }
 
-    function initPage(file, pRawText, pTimedTextSegments) {
+    function initPage(fileOrUrl, pRawText, pTimedTextSegments) {
+
+        let file = null;
+        let url = null;
+        if (typeof fileOrUrl === "string") {
+            url = fileOrUrl;
+        } else {
+            file = fileOrUrl;
+        }
+
+        // if (url) {
+        //     const newUrl = new URL(window.location.href);
+        //     newUrl.searchParams.set('url', url);
+        //     window.history.pushState({ url: url }, document.title, newUrl.toString());
+        // }
 
         rawText = pRawText
         timedTextSegments = pTimedTextSegments
 
         fileNameDiv.style.display = "block"
-        fileNameDiv.textContent = file.name
+        fileNameDiv.textContent = file ? file.name : url
 
         populateText()
 
-        audioPlayer.src = URL.createObjectURL(file);
+        audioPlayer.src = file ? URL.createObjectURL(file) : url
         audioPlayer.play();
         audioPlayer.style.display = "block";
 

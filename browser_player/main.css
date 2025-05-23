@@ -3,6 +3,7 @@
     --bg-color: #f0f0f0;
     --content-bg-color: #ffffff;
     --text-color: #333333;
+    --text-dim-color: #33333388;
     --segment-highlight-color: #ffaa4488;
     --segment-hover-color: #ffaa4444;
     --button-color: #ffaa44;
@@ -14,7 +15,8 @@
     /* Dark mode */
     --bg-color: #2c2c2c;
     --content-bg-color: #222222;
-    --text-color: #e0e0e0;
+    --text-color: #d8d8d8;
+    --text-dim-color: #d8d8d888;
     --segment-highlight-color: #ffaa4466;
     --segment-hover-color: #ffaa4433;
     --button-color: #ffaa44;
@@ -42,34 +44,71 @@ audio {
     display: none;
 }
 
-.loadButtonLabel {
-    display: block;
-    margin-top:24px;
-    padding: 12px 24px;
+.loadHolder {
+    width: 100%;
+    max-width: 800px;
+    margin-left:auto;
+    margin-right:auto;
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
     text-align: center;
-    width: calc(100% - 48px);
+}
+
+.loadPrompt {
+    color: var(--text-color);
+    margin-top:28px;
+    margin-bottom: 18px;
+}
+
+.loadButtonsLine {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px; /* Add some space between the buttons */
+}
+
+.loadButton {
+    padding: 12px 24px;
     background: var(--button-color);
     color: var(--button-text-color);
-    font-family: sans-serif;
-    font-size: 18px;
-    font-weight: bold;
     border-radius: 8px;
     cursor: pointer;
     box-shadow: 0 4px 8px var(--shadow-color);
+}
 
-    max-width: 848px;
-    margin-left: auto;
-    margin-right: auto;
+#loadUrlInput {
+    width: 60%;
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+    color: var(--text-color);
+    background: var(--content-bg-color);
+    text-align: center;
+    padding: 12px 0px;
+    border-radius: 8px;
+    border: 3px solid var(--segment-hover-color); /* Thin black outline */
+}
+
+#loadUrlInput:focus {
+    outline: none; /* Remove default focus outline */
+    border-color: var(--segment-highlight-color); /* Blue outline stroke on focus */
+}
+#loadUrlInput::placeholder {
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+    color: var(--text-dim-color);
+    text-align: center;
 }
 
 #fileName {
-    margin-top: 24px;
-    margin-bottom: 24px;
+    margin-top: 32px;
+    margin-bottom: 32px;
     font-family: sans-serif;
     font-size: 14px;
     font-weight: bold;
-    color: var(--text-color);
-    opacity: 0.33;
+    color: var(--text-dim-color);
     width: 100%;
     text-align: center;
 }
