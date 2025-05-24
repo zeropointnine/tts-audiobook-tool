@@ -8,7 +8,7 @@ TLDR instructions: (1) Assign a working project directory, (2) select a 15-secon
 
 ### Bonus:
 
-I've added a browser-based player/reader which runs without the need for a web server. Simply open `browser_player\index.html` in the web browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves.flac), and choose a FLAC file you've generated using the app. As the audio file plays, the corresponding text is displayed and highlighted. This is made possible by embedding text and timing information as metadata in the FLAC file.
+I've added a browser-based player/reader which runs without the need for a web server. Simply open `browser_player\index.html` in the web browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves.mp4), and choose a FLAC file you've generated using the app. As the audio file plays, the corresponding text is displayed and highlighted. This is made possible by embedding text and timing information as metadata in the FLAC file.
 
 # Installation
 

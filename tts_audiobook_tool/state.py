@@ -8,11 +8,14 @@ from tts_audiobook_tool.constants import *
 
 class State:
     """
+    Holds app's full state ("bad!")
+    Viz: project object and app prefs/settings object
     """
 
     def __init__(self):
 
         self.prefs = Prefs.load()
+
         if not self.prefs.project_dir:
             self.project = Project()
         else:

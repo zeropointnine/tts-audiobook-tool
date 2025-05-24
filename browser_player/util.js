@@ -1,11 +1,15 @@
 /**
- * Reads and decodes the custom tts-audiobook-tool metadata from a FLAC file
+ * Reads and decodes the custom tts-audiobook-tool metadata from a FLAC or MP4 file
  * and returns an object
  */
+async function loadAppMetadata(fileOrUrl) {
 
-async function loadMetadataFromAppFlac(fileOrUrl) {
+    FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
+    MP4_MEAN = "tts-audiobook-tool"
+    MP4_TAG = "audiobook-data"
 
     let file; // Blob/File object
+    let isFlac = false;
 
     if (typeof fileOrUrl === 'string' && (fileOrUrl.startsWith('http://') || fileOrUrl.startsWith('https://'))) {
         try {
@@ -19,8 +23,10 @@ async function loadMetadataFromAppFlac(fileOrUrl) {
             console.error("Error fetching URL:", error);
             return null;
         }
+        isFlac = fileOrUrl.toLowerCase().endsWith("flac");
     } else if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
         file = fileOrUrl;
+        isFlac = file.name.toLowerCase().endsWith("flac")
     } else {
         console.error("Invalid input: expected File, Blob, or URL string.");
         return null;
@@ -32,7 +38,12 @@ async function loadMetadataFromAppFlac(fileOrUrl) {
 
     let tagValue = null
     try {
-        tagValue = await findCustomFlacTag(file, "TTS_AUDIOBOOK_TOOL");
+        if (isFlac) {
+            tagValue = await findCustomFlacTag(file, FLAC_FIELD);
+        } else {
+            // Assume is mp4
+            tagValue = await findCustomMp4Tag(file, MP4_MEAN, MP4_TAG);
+        }
     } catch (error) {
         console.error("Error parsing FLAC:", error);
         return null
@@ -84,7 +95,210 @@ async function loadMetadataFromAppFlac(fileOrUrl) {
     return result
 }
 
-async function findCustomFlacTag(file, targetTagName) {
+async function findCustomMp4Tag(file, targetMean, targetTagName) {
+
+    const textDecoder = new TextDecoder('utf-8');
+    const CHUNK_SIZE = 1024 * 64; // 64KB chunks for reading
+
+    async function readChunk(offset, length) {
+        if (offset < 0) throw new Error("readChunk: start offset cannot be negative.");
+        const end = offset + length;
+        let effectiveLength = length;
+
+        if (offset >= file.size) {
+            // console.debug(`readChunk: Attempt to read at or beyond EOF. Offset: ${offset}, File size: ${file.size}`);
+            return null; // Or throw new Error, depending on desired strictness
+        }
+
+        if (end > file.size) {
+            effectiveLength = file.size - offset;
+            // console.debug(`readChunk: Adjusted read length to EOF. Original: ${length}, Effective: ${effectiveLength}`);
+        }
+        if (effectiveLength <= 0) {
+            // console.debug(`readChunk: Effective length is zero or negative. Offset: ${offset}, File size: ${file.size}`);
+            return null;
+        }
+
+        const slice = file.slice(offset, offset + effectiveLength);
+        const arrayBuffer = await slice.arrayBuffer();
+        return new DataView(arrayBuffer);
+    }
+
+    async function parseAtoms(currentOffset, maxOffset, path = []) {
+        let offset = currentOffset;
+        while (offset < maxOffset && offset < file.size) {
+            if (offset + 8 > file.size) { // Need at least 8 bytes for size and type
+                // console.debug(`parseAtoms: Not enough data for atom header at offset ${offset}. Path: ${path.join('/')}`);
+                break;
+            }
+            const headerView = await readChunk(offset, 8);
+            if (!headerView || headerView.byteLength < 8) {
+                // console.debug(`parseAtoms: Failed to read atom header or insufficient data at offset ${offset}. Path: ${path.join('/')}`);
+                break;
+            }
+
+            let atomSize = headerView.getUint32(0, false); // Big-endian
+            const atomTypeBuffer = headerView.buffer.slice(4, 8);
+            const atomType = textDecoder.decode(atomTypeBuffer);
+            // console.debug(`Atom: Type=${atomType}, Size=${atomSize}, Offset=${offset}, Path: ${path.join('/')}`);
+
+            let atomDataOffset = offset + 8;
+            let atomDataSize = atomSize - 8;
+
+            if (atomSize === 1) { // 64-bit size
+                if (offset + 16 > file.size) {
+                    // console.warn(`parseAtoms: Not enough data for 64-bit atom size at offset ${offset}. Path: ${path.join('/')}`);
+                    break;
+                }
+                const sizeView = await readChunk(offset + 8, 8);
+                if (!sizeView || sizeView.byteLength < 8) {
+                     // console.warn(`parseAtoms: Failed to read 64-bit atom size at offset ${offset}. Path: ${path.join('/')}`);
+                    break;
+                }
+                // JavaScript doesn't handle 64-bit integers natively well,
+                // but for file parsing, we assume sizes fit in Number.MAX_SAFE_INTEGER
+                atomSize = Number(sizeView.getBigUint64(0, false));
+                atomDataOffset = offset + 16;
+                atomDataSize = atomSize - 16;
+            } else if (atomSize === 0) { // Atom extends to end of file (or enclosing atom)
+                atomSize = maxOffset - offset;
+                atomDataSize = atomSize - 8;
+                 // console.debug(`Atom ${atomType} extends to end of current scope. New Size=${atomSize}`);
+            }
+
+            if (atomSize < 8 && atomSize !==0 && atomSize !==1) { // Minimum size for type and size fields
+                console.error(`Invalid atom size ${atomSize} for type ${atomType} at offset ${offset}. Path: ${path.join('/')}`);
+                return null; // Critical error, stop parsing this branch
+            }
+            if (atomDataOffset + atomDataSize > file.size) {
+                console.warn(`Atom ${atomType} at offset ${offset} with size ${atomSize} extends beyond file size ${file.size}. Truncating. Path: ${path.join('/')}`);
+                atomDataSize = file.size - atomDataOffset;
+                if(atomDataSize < 0) atomDataSize = 0;
+            }
+
+            const newPath = [...path, atomType];
+
+            if (atomType === 'moov' || atomType === 'udta' || atomType === 'meta' || atomType === 'ilst' || atomType.startsWith('©') || atomType === '----') {
+                if (atomType === 'meta') {
+                    // The 'meta' atom has a 4-byte version/flags field after the type
+                    atomDataOffset += 4;
+                    atomDataSize -= 4;
+                }
+                if (atomType === '----') {
+                    // This is the custom tag container
+                    if (atomDataSize > 0) {
+                        const dashContentView = await readChunk(atomDataOffset, atomDataSize);
+                        if (dashContentView) {
+                            const foundValue = await parseDashAtomContent(dashContentView, targetMean, targetTagName, newPath);
+                            if (foundValue !== null) return foundValue;
+                        }
+                    }
+                } else {
+                    // Recursively parse container atoms
+                    const result = await parseAtoms(atomDataOffset, atomDataOffset + atomDataSize, newPath);
+                    if (result !== null) return result;
+                }
+            }
+            // else, skip unknown/uninteresting atom content
+
+            offset += atomSize;
+            if (atomSize === 0) { // Should not happen if 'atom extends to end' was handled correctly
+                // console.warn("Atom size was 0, breaking loop to prevent infinite loop. This might indicate a parsing issue or malformed file.");
+                break;
+            }
+        }
+        return null; // Target not found in this branch
+    }
+
+    async function parseDashAtomContent(dashContentDataView, expectedMean, expectedTagName, path) {
+        // A '----' atom contains sub-atoms: 'mean', 'name', and 'data'
+        let actualMean = null;
+        let actualName = null;
+        let dataPayload = null;
+        let subOffset = 0;
+
+        // console.debug(`Parsing '----' atom content. Size: ${dashContentDataView.byteLength}. Path: ${path.join('/')}`);
+
+        while (subOffset < dashContentDataView.byteLength) {
+            if (subOffset + 8 > dashContentDataView.byteLength) {
+                // console.debug(`----: Not enough data for sub-atom header at offset ${subOffset}. Path: ${path.join('/')}`);
+                break;
+            }
+            const subAtomSize = dashContentDataView.getUint32(subOffset, false);
+            const subAtomTypeBuffer = dashContentDataView.buffer.slice(dashContentDataView.byteOffset + subOffset + 4, dashContentDataView.byteOffset + subOffset + 8);
+            const subAtomType = textDecoder.decode(subAtomTypeBuffer);
+
+            // console.debug(`---- Sub-atom: Type=${subAtomType}, Size=${subAtomSize}, Offset=${subOffset}. Path: ${path.join('/')}`);
+
+            if (subAtomSize < 8) {
+                console.error(`----: Invalid sub-atom size ${subAtomSize} for type ${subAtomType} at offset ${subOffset}. Path: ${path.join('/')}`);
+                return null;
+            }
+
+            const subAtomDataOffset = subOffset + 8;
+            let subAtomDataLength = subAtomSize - 8;
+
+            if (subAtomDataOffset + subAtomDataLength > dashContentDataView.byteLength) {
+                console.warn(`----: Sub-atom ${subAtomType} extends beyond parent '----' atom. Truncating. Path: ${path.join('/')}`);
+                subAtomDataLength = dashContentDataView.byteLength - subAtomDataOffset;
+                if(subAtomDataLength < 0) subAtomDataLength = 0;
+            }
+
+            // The 'mean' and 'name' atoms have a 4-byte version/flags field
+            const contentStart = subAtomDataOffset + 4; // Skip version (1 byte) and flags (3 bytes)
+            const contentLength = subAtomDataLength - 4;
+
+            if (contentLength < 0) {
+                 console.warn(`----: Sub-atom ${subAtomType} content length is negative after accounting for version/flags. Path: ${path.join('/')}`);
+                 subOffset += subAtomSize;
+                 continue;
+            }
+
+            if (subAtomType === 'mean') {
+                const meanSlice = new Uint8Array(dashContentDataView.buffer, dashContentDataView.byteOffset + contentStart, contentLength);
+                actualMean = textDecoder.decode(meanSlice);
+                // console.debug(`---- Found mean: '${actualMean}'. Path: ${path.join('/')}`);
+            } else if (subAtomType === 'name') {
+                const nameSlice = new Uint8Array(dashContentDataView.buffer, dashContentDataView.byteOffset + contentStart, contentLength);
+                actualName = textDecoder.decode(nameSlice);
+                // console.debug(`---- Found name: '${actualName}'. Path: ${path.join('/')}`);
+            } else if (subAtomType === 'data') {
+                // Data atom: type (4 bytes), version (1), flags (3), locale (4), data
+                // The first 8 bytes of data atom content are type indicator and locale.
+                // Actual string data starts after that.
+                if (subAtomDataLength >= 8) { // 4 bytes for type/version, 4 for locale
+                    const dataIndicator = dashContentDataView.getUint32(subAtomDataOffset, false); // type + version/flags
+                    // const localeIndicator = dashContentDataView.getUint32(subAtomDataOffset + 4, false);
+
+                    // Type '1' indicates UTF-8 encoded string.
+                    // Others could be integers, images, etc. We only care about UTF-8 strings.
+                    if ((dataIndicator >> 24) === 1 || dataIndicator === 1) { // Check if the type code (first byte of dataIndicator) is 1 for UTF-8
+                        const dataSlice = new Uint8Array(dashContentDataView.buffer, dashContentDataView.byteOffset + subAtomDataOffset + 8, subAtomDataLength - 8);
+                        dataPayload = textDecoder.decode(dataSlice);
+                        // console.debug(`---- Found data (UTF-8): '${dataPayload.substring(0,100)}...'. Path: ${path.join('/')}`);
+                    } else {
+                        // console.debug(`---- Data atom is not UTF-8 (type ${dataIndicator >> 24}), skipping. Path: ${path.join('/')}`);
+                    }
+                } else {
+                    // console.debug(`---- Data atom too short for content. Length: ${subAtomDataLength}. Path: ${path.join('/')}`);
+                }
+            }
+            subOffset += subAtomSize;
+        }
+
+        if (actualMean === expectedMean && actualName === expectedTagName && dataPayload !== null) {
+            // console.log(`Found target MP4 tag: mean='${actualMean}', name='${actualName}'. Path: ${path.join('/')}`);
+            return dataPayload;
+        }
+        return null;
+    }
+
+    // Start parsing from the beginning of the file
+    return await parseAtoms(0, file.size);
+}
+
+async function findCustomFlacTag(file, tagName) {
+
     let offset = 0;
     const textDecoder = new TextDecoder('utf-8');
 
@@ -132,7 +346,7 @@ async function findCustomFlacTag(file, targetTagName) {
                 throw new Error("VORBIS_COMMENT block length exceeds file size.");
             }
             const vorbisCommentDataView = await readChunk(offset, blockLength);
-            const foundValue = parseVorbisCommentBlock(vorbisCommentDataView, targetTagName, textDecoder);
+            const foundValue = parseVorbisCommentBlock(vorbisCommentDataView, tagName, textDecoder);
             if (foundValue !== null) {
                 return foundValue; // Tag found, return its value
             }
@@ -202,6 +416,8 @@ function parseVorbisCommentBlock(dataView, targetTagName, textDecoder) {
     }
     return null; // Target tag not found in this block
 }
+
+
 
 function escapeHtml(unsafe) {
     return unsafe

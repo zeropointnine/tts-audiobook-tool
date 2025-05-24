@@ -1,19 +1,13 @@
 from __future__ import annotations
 
 from enum import Enum, auto
-import gc
 import time
-import whisper
 from pathlib import Path
-import torch
 from typing import Tuple, Optional, cast
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
-from tts_audiobook_tool.flac_meta_util import FlacMetaUtil
+from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.shared import Shared
-from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 class ValidateUtil:
@@ -300,7 +294,7 @@ class ValidateItem:
         self.text = text
         self.transcribed_text: str = ""
 
-        duration = FlacMetaUtil.get_duration(self.path)
+        duration = AppMetaUtil.get_flac_duration(self.path)
         if not isinstance(duration, float):
             L.w(f"Couldn't get duration for {self.path}")
             duration = -1
@@ -321,71 +315,3 @@ class ValidateResult(Enum):
     @property
     def is_fail_detected(self) -> bool:
         return self == ValidateResult.FAILED_ONLY or self == ValidateResult.FAILED_AND_CORRECTED or self == ValidateResult.FAILED_AND_DELETED
-
-
-# with open("temp_items.pickle", 'wb') as f:
-#     pickle.dump(my_object, f)
-
-# with open("temp_items.pickle", 'rb') as f:
-#     items: list[Item] = pickle.load(f)
-
-
-# ------------------------------------------------------
-
-# deprecating this, probably
-
-# # [3] Do duration test, as a bonus (may or may not fill in some cracks)
-# if avg_sec_per_char > 0:
-#     fail_reason = ValidateUtil.is_duration_fail(item, avg_sec_per_char)
-#     if fail_reason:
-#         detected = True
-#         if fix_or_delete:
-#             try:
-#                 Path(item.path).unlink()
-#                 deleted = True
-#                 action_taken = "Deleted"
-#             except:
-#                 action_taken = f"{COL_ERROR}Couldn't delete"
-#         else:
-#             action_taken = ""
-#         print_item_info(item, fail_reason, action_taken)
-#         return detected, corrected, deleted, validated
-
-# def calc_avg_sec_per_char(all_items: list[ValidateItem]) -> float:
-#     MIN_ITEMS = 50
-#     if len(all_items) < MIN_ITEMS:
-#         return 0.0
-
-#     total_chars = 0
-#     total_duration = 0.0
-#     for item in all_items:
-#         total_chars += len(item.text)
-#         total_duration += item.duration
-#     return total_duration / total_chars
-
-# @staticmethod
-# def is_duration_fail(item: ValidateItem, avg_sec_per_char: float) -> str:
-#     """
-#     Does simple "speech rate" test between item and average.
-#     If difference is too large, prints info, returns fail reason message
-#     """
-#     MIN_CHARS = 30
-#     CHARS_A = 30
-#     CHARS_B = 60
-#     MULT_A = 2.5
-#     MULT_B = 1.75
-
-#     num_chars = len(item.text)
-#     if num_chars < MIN_CHARS:
-#         return ""
-#     sec_per_char = item.duration / num_chars
-#     multiplier = sec_per_char / avg_sec_per_char
-#     mult_thresh_max = lerp_clamped(num_chars, CHARS_A, CHARS_B, MULT_A, MULT_B) # As num chars increases, multiplier threshold decreases
-#     MULT_THRESH_MIN = 0.5
-
-#     fail_reason = ""
-#     if multiplier >= mult_thresh_max:
-#         fail_reason = f"Duration too long (multiplier: {multiplier:.2f} vs {mult_thresh_max:.2f})"
-#     elif multiplier <= MULT_THRESH_MIN:
-#         fail_reason = f"Duration too short (multiplier: {multiplier:.2f} vs {MULT_THRESH_MIN:.2f})"
-#     return fail_reason

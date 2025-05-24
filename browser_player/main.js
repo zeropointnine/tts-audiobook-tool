@@ -3,11 +3,12 @@
     let rawText = "";
     let timedTextSegments = [];
 
-    let flacFileInput = null;
+    let loadFileInput = null;
     let fileNameDiv = null;
     let audioPlayer = null;
     let textHolder = null;
     let themeButton = null;
+    let loadLocalButtonLabel = null;
     let loadUrlInput = null;
 
     let selectedSpan = null;
@@ -15,11 +16,12 @@
 
     function init() {
 
-        flacFileInput = document.getElementById('flacFileInput');
+        loadFileInput = document.getElementById('loadFileInput');
         fileNameDiv = document.getElementById('fileName')
         audioPlayer = document.getElementById('audioPlayer');
         textHolder = document.getElementById('textHolder');
         themeButton = document.getElementById('themeButton');
+        loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
         loadUrlInput = document.getElementById('loadUrlInput');
 
         loadUrlInput.addEventListener('keydown', (event) => {
@@ -27,7 +29,7 @@
                 const url = loadUrlInput.value.trim()
                 if (url) {
                     loadUrlInput.blur();
-                    loadFlac(url);
+                    loadFlacOrMp4(url);
                 }
             }
         });
@@ -36,10 +38,10 @@
             loadUrlInput.value = '';
         });
 
-        flacFileInput.addEventListener('change', async () => {
-            const file = flacFileInput.files[0];
+        loadFileInput.addEventListener('change', async () => {
+            const file = loadFileInput.files[0];
             if (file) {
-                loadFlac(file);
+                loadFlacOrMp4(file);
             }
         });
 
@@ -76,23 +78,37 @@
             html.setAttribute('data-theme', 'dark');
         }
 
-        // When the queryparam is "url", run the function "loadFlac" using the value.
+        // When the queryparam is "url", run the function "loadFlacOrMp4" using the value.
         const urlParams = new URLSearchParams(window.location.search);
         const url = urlParams.get('url');
         if (url) {
-            loadFlac(url);
+            loadFlacOrMp4(url);
         }
     }
 
-    async function loadFlac(fileOrUrl) {
+    async function loadFlacOrMp4(fileOrUrl) {
         clear();
 
-        result = await loadMetadataFromAppFlac(fileOrUrl);
+        result = await loadAppMetadata(fileOrUrl);
         if (!result) {
             alert("No tts-audiobook-tool metadata found");
             return;
         }
-        initPage(fileOrUrl, result["raw_text"], result["text_segments"]);
+
+        // TEMP
+        // result = {
+        //     raw_text: "hello",
+        //     text_segments: [
+        //         {
+        //             index_start: 0,
+        //             index_end: 4,
+        //             time_start: 2.0,
+        //             time_end: 3.0
+        //         }
+        //     ]
+        //  }
+
+        start(fileOrUrl, result["raw_text"], result["text_segments"]);
     }
 
     function clear() {
@@ -101,10 +117,12 @@
         audioPlayer.style.display = "none";
         fileNameDiv.style.display = "none"
         textHolder.style.display = "none";
-        selectedSpan = null
+        selectedSpan = null;
+
+        document.removeEventListener("keydown", onKeyDown);
     }
 
-    function initPage(fileOrUrl, pRawText, pTimedTextSegments) {
+    function start(fileOrUrl, pRawText, pTimedTextSegments) {
 
         let file = null;
         let url = null;
@@ -114,6 +132,7 @@
             file = fileOrUrl;
         }
 
+        // TODO: deeplink-driven or at least add to history or smth
         // if (url) {
         //     const newUrl = new URL(window.location.href);
         //     newUrl.searchParams.set('url', url);
@@ -132,7 +151,40 @@
         audioPlayer.play();
         audioPlayer.style.display = "block";
 
+        document.addEventListener("keydown", onKeyDown);
+
         intervalId = setInterval(loop, 50)
+    }
+
+    function onKeyDown(event) {
+        if (event.target.tagName == "INPUT") {
+            return;
+        }
+        // console.log(event.key);
+        switch (event.key) {
+            case "Escape":
+                if (audioPlayer.paused) {
+                    audioPlayer.play();
+                } else {
+                    audioPlayer.pause();
+                }
+                event.preventDefault();
+                break;
+            case "[":
+                seekPreviousSegment();
+                break;
+            case "]":
+                seekNextSegment();
+                break;
+
+            case "Enter": // falls through
+            case " ":
+                if (document.activeElement == loadLocalButtonLabel) {
+                    loadFileInput.click();
+                    event.preventDefault();
+                }
+                break;
+        }
     }
 
     function populateText() {
@@ -162,16 +214,7 @@
 
     function loop() {
 
-        const seconds = audioPlayer.currentTime
-
-        let span = null;
-        for (let i = 0; i < timedTextSegments.length; i++) {
-            const segment = timedTextSegments[i];
-            if (seconds >= segment.time_start && seconds < segment.time_end) {
-                span = document.getElementById(`segment-${i}`);
-                break; // Found the active segment
-            }
-        }
+        let span = getCurrentSpan()
 
         // Update highlighting only if the active segment has changed
         if (selectedSpan !== span) {
@@ -189,6 +232,67 @@
             }
             selectedSpan = span;
         }
+    }
+
+    function seekPreviousSegment() {
+        i = getCurrentSegmentIndex()
+        if (i == -1) {
+            return;
+        }
+        i = i - 1;
+        if (i < 0) {
+            return;
+        }
+        seekBySegmentIndex(i)
+    }
+
+    function seekNextSegment() {
+        i = getCurrentSegmentIndex()
+        if (i == -1) {
+            return;
+        }
+        i = i + 1;
+        if (i >= timedTextSegments.length) {
+            return;
+        }
+        seekBySegmentIndex(i)
+    }
+
+    function seekBySegmentIndex(i) {
+        if (selectedSpan) {
+            selectedSpan.classList.remove('highlight');
+            selectedSpan = null;
+        }
+
+        targetTime = timedTextSegments[i].time_start;
+        audioPlayer.currentTime = targetTime;
+        if (audioPlayer.paused) {
+            audioPlayer.play();
+        }
+    }
+
+    function getCurrentSpan() {
+        i = getCurrentSegmentIndex()
+        if (i == -1) {
+            return null
+        }
+        id = `segment-${i}`
+        span = document.getElementById(id);
+        return span;
+    }
+
+    /**
+     * Returns the index of the segment that spans the current play time, or -1.
+     */
+    function getCurrentSegmentIndex() {
+        const seconds = audioPlayer.currentTime
+        for (let i = 0; i < timedTextSegments.length; i++) {
+            segment = timedTextSegments[i];
+            if (seconds >= segment.time_start && seconds < segment.time_end) {
+                return i
+            }
+        }
+        return -1;
     }
 
     window.app = {

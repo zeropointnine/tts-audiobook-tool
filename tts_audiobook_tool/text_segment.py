@@ -1,11 +1,10 @@
 from __future__ import annotations
-from typing import NamedTuple
 
 class TextSegment:
     def __init__(self, text: str, index_start: int, index_end: int):
         self.text = text
         self.index_start = index_start
-        self.index_end = index_end # exclusive, not inclusive
+        self.index_end = index_end # is exclusive
 
     @staticmethod
     def to_dict(text_segment: TextSegment) -> dict:
@@ -26,7 +25,7 @@ class TimedTextSegment:
     def __init__(self, text: str, index_start: int, index_end: int, time_start: float, time_end: float):
         self.text = text
         self.index_start = index_start
-        self.index_end = index_end # exclusive, not inclusive
+        self.index_end = index_end # is exclusive
         self.time_start = time_start
         self.time_end = time_end
 

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import signal
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.convert_util import ConvertUtil
 from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -66,7 +67,7 @@ class App:
 
     def print_menu(self, did_reset=False):
 
-        if MENU_CLEAR_SCREEN:
+        if MENU_CLEARS_SCREEN:
             os.system('cls' if os.name == 'nt' else 'clear')
 
         num_audio_segments_complete = ProjectDirUtil.num_audio_segment_files(self.state)
@@ -139,6 +140,12 @@ class App:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
 
+        # Convert
+        s = f"{make_hotkey_string("M")} Convert combined FLAC files to to MP4"
+        if True: # TODO
+            s += f" {COL_DIM}(must first create combined FLAC files)"
+        printt(s)
+
         # Options
         printt(f"{make_hotkey_string("O")} Options")
 
@@ -187,6 +194,8 @@ class App:
                 if not self.state.prefs.project_dir or num_audio_files == 0:
                     return
                 ConcatUtil.ask_concat(self.state)
+            case "m":
+                ConvertUtil.ask_convert(self.state)
             case "o":
                 self.options_submenu()
             case "q":
@@ -358,7 +367,7 @@ class App:
             case "2":
                 self.state.prefs.play_on_generate = not self.state.prefs.play_on_generate
                 printt(f"Play audio after each segment is generated set to: {self.state.prefs.play_on_generate}")
-                if MENU_CLEAR_SCREEN:
+                if MENU_CLEARS_SCREEN:
                     ask_hotkey("Press enter: ")
                 printt()
 

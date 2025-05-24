@@ -26,8 +26,14 @@
 
 body, html {
     margin: 0;
-    padding: 20px;
+    padding: 18px;
     background-color: var(--bg-color);
+}
+
+@media (max-width: 600px) {
+    body, html {
+        padding: 9px;
+    }
 }
 
 .audioPlayerHolder {
@@ -134,13 +140,20 @@ audio {
     white-space: pre-wrap; /* Honor line breaks and wrap text */
     color: var(--text-color);
     background-color: var(--content-bg-color);
-    padding: 48px;
+    padding: 36px;
     border-radius: 8px;
     box-shadow: 0 4px 8px var(--shadow-color);
 
     max-width: 800px;
     margin-left: auto;
     margin-right: auto;
+}
+
+@media (max-width: 600px) {
+    #textHolder {
+        font-size: 16px;
+        padding: 16px;
+    }
 }
 
 .highlight {

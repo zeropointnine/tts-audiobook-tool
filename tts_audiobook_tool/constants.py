@@ -14,14 +14,15 @@ DEFAULT_TEMPERATURE = 0.5
 # which can lead to significant discontinuities/pauses.
 MAX_WORDS_PER_SEGMENT = 40
 
-MENU_CLEAR_SCREEN = False
+MENU_CLEARS_SCREEN = True
 
 SETTINGS_FILE_NAME = "tts-audiobook-tool-settings.json"
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 PROJECT_VOICE_FILE_NAME = "voice.json"
 PROJECT_SETTINGS_FILE_NAME = "project.json"
 PROJECT_RAW_TEXT_FILE_NAME = "text raw.txt"
-PROJECT_FFMPEG_TEMP_FILE_NAME = "ffmpeg_temp.txt"
+PROJECT_FFMPEG_CONCAT_TEMP_FILE_NAME = "ffmpeg_temp.txt"
+FFMPEG_COMMAND = "ffmpeg"
 
 AUDIO_SEGMENTS_SUBDIR = "segments"
 CONCAT_SUBDIR = "combined"
@@ -30,6 +31,11 @@ ASSETS_DIR_NAME = "assets"
 DEFAULT_VOICE_FILE_NAME = "en-female-1-neutral.json"
 package_dir = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_VOICE_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, DEFAULT_VOICE_FILE_NAME)
+
+APP_META_FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
+APP_META_MP4_MEAN = "tts-audiobook-tool"
+APP_META_MP4_TAG = "audiobook-data"
+
 
 COL_ACCENT = Ansi.hex("ffaa44")
 COL_ERROR = Ansi.hex("ff0000")

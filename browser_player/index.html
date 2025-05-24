@@ -20,7 +20,7 @@
 
 <body >
     <div class="audioPlayerHolder">
-        <audio id="audioPlayer" controls src="https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves.flac">
+        <audio id="audioPlayer" controls>
     </div>
 
     <div id="themeButton">
@@ -34,7 +34,7 @@
             <!-- <span id="loadUrlButton" class="loadButton">URL</span> -->
             <label id="loadLocalButtonLabel" class="loadButton" tabindex="0">
                 Local File
-                <input type="file" id="flacFileInput" accept=".flac" hidden autofocus>
+                <input type="file" id="loadFileInput" accept=".flac, .mp4" hidden autofocus>
             </label>
             <input id="loadUrlInput" placeholder="... or enter URL">
         </div>

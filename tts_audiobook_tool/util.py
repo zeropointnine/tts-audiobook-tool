@@ -65,19 +65,6 @@ def strip_ansi_codes(s: str) -> str:
 def make_random_hex_string(num_hex_chars: int=32) -> str:
     return f"{random.getrandbits(num_hex_chars * 4):0{num_hex_chars}x}"
 
-def is_ffmpeg_available() -> bool:
-    """Check if 'ffmpeg' is installed and accessible in the system PATH."""
-    try:
-        subprocess.run(
-            ["ffmpeg", "-version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
 def encode_to_flac(wav_path: str, flac_path: str) -> bool:
 
     try:

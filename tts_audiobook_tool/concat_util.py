@@ -1,9 +1,9 @@
 import os
-import subprocess
 from typing import cast
 from pathlib import Path
 
-from tts_audiobook_tool.flac_meta_util import FlacMetaUtil
+from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
+from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -86,6 +86,7 @@ class ConcatUtil:
         strings = [str(index+1) for index in selected_section_indices]
         string = ", ".join(strings)
         printt(f"Will create the following chapter files: {string}")
+        printt()
         b = ask_confirm()
         if not b:
             return
@@ -93,16 +94,7 @@ class ConcatUtil:
         ConcatUtil.concatenate_sections(selected_section_indices, state)
 
         if not state.prefs.has_shown_player_reminder:
-            printt(f"🔔 {COL_ACCENT}Reminder:")
-            printt("You can use audio files with the interactive player/reader here:")
-            package_dir = get_package_dir()
-            if package_dir:
-                browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
-            else:
-                browser_path = "browser_player" + os.path.sep + "index.html"
-            printt(browser_path)
-            printt(f"or on the web here: {PLAYER_URL}")
-            state.prefs.has_shown_player_reminder = True
+            show_player_reminder(state)
 
         ask("Finished. Press enter:")
 
@@ -148,7 +140,7 @@ class ConcatUtil:
                 num_missing,
                 timestamp_subdir
             )
-            printt(f"Creating file {counter} of {len(indices)}\n")
+            printt(f"Creating combined audio file ({counter}/{len(indices)}\n")
             error = ConcatUtil.make_app_flac(raw_text, file_paths, text_segments, dest_file_path)
             if error:
                 printt(error, "error")
@@ -203,7 +195,7 @@ class ConcatUtil:
         for i in range(0, len(file_paths)):
             file_path = file_paths[i]
             text_segment = text_segments[i]
-            duration = FlacMetaUtil.get_duration(file_path)
+            duration = AppMetaUtil.get_flac_duration(file_path)
             if duration is None:
                 return f"Couldn't get duration for {file_path}"
             timed_text_segment = TimedTextSegment.make_using(text_segment, seconds, seconds + duration)
@@ -214,7 +206,7 @@ class ConcatUtil:
         if error:
             return error
 
-        error = FlacMetaUtil.set_app_metadata(
+        error = AppMetaUtil.set_flac_app_metadata(
             flac_path=dest_file_path,
             raw_text=raw_text,
             timed_text_segments=timed_text_segments
@@ -227,8 +219,7 @@ class ConcatUtil:
     @staticmethod
     def concatenate_flacs(
         file_paths: list[str],
-        dest_flac_path: str,
-        ffmpeg_path: str="ffmpeg"
+        dest_flac_path: str
     ) -> str:
         """
         Concatenates a list of flac files into one.
@@ -238,8 +229,9 @@ class ConcatUtil:
         dest_base_path = str( Path(dest_flac_path).parent )
         os.makedirs(dest_base_path, exist_ok=True)
 
-        # Make temp file with list of input WAVs for ffmpeg's concat demuxer
-        temp_text_path = os.path.join(dest_base_path, PROJECT_FFMPEG_TEMP_FILE_NAME)
+        # [1] Make temp text file with list of input WAVs for ffmpeg's concat demuxer
+
+        temp_text_path = os.path.join(dest_base_path, PROJECT_FFMPEG_CONCAT_TEMP_FILE_NAME)
         try:
             with open(temp_text_path, 'w', encoding='utf-8') as f:
                 for path in file_paths:
@@ -252,15 +244,14 @@ class ConcatUtil:
             delete_temp_file(temp_text_path)
             return str(e)
 
-        # Construct the ffmpeg command
+        # [2] Do concat
+
         # -y: Overwrite output file without asking
         # -f concat: Use the concatenation demuxer
         # -safe 0: Allow unsafe file paths (useful if paths are complex, though quoting helps)
         # -i list_filename: Input file is the list we created
         # -c:a flac: Specify the audio codec for the output as FLAC
-        temp_flac_path = os.path.join(dest_base_path, make_random_hex_string() + ".flac")
-        command = [
-            ffmpeg_path,
+        partial_command = [
             "-hide_banner",
             "-loglevel",
             "error",
@@ -269,55 +260,22 @@ class ConcatUtil:
             "-safe", "0",
             "-i", temp_text_path,
             "-c:a", "flac",
-            temp_flac_path
         ]
-
-        # Concat:
-        # printt(f"Running FFmpeg command:\n{' '.join(command)}")
-        try:
-            # capture_output=True hides ffmpeg's verbose output from the console by default
-            # text=True decodes stdout/stderr as text
-            completed_process = subprocess.run(
-                command,
-                check=True,  # Raise CalledProcessError if ffmpeg returns non-zero exit code
-                capture_output=True,
-                text=True,
-                encoding='utf-8' # Explicitly set encoding might help on some systems
-            )
-            if completed_process.returncode != 0:
-                return f"Bad return code: {completed_process.returncode}"
-
-        except subprocess.CalledProcessError as e:
-            delete_temp_file(temp_text_path)
-            return f"Aborting. FFmpeg command failed with exit code {e.returncode}"
-        except Exception as e:
-            delete_temp_file(temp_text_path)
-            return f"Aborting. An unexpected error occurred running FFmpeg: {e}"
-
-        try:
-            if os.path.exists(dest_flac_path):
-                # Delete any pre-existing dest file
-                os.unlink(dest_flac_path)
-            os.rename(temp_flac_path, dest_flac_path)
-        except Exception as e:
-            printt(str(e), type="error")
-            # Don't delete temp file in this case
-            return str(e)
-
+        err = FfmpegUtil.make_file(partial_command, dest_flac_path, use_temp_file=True)
         delete_temp_file(temp_text_path)
-        return ""
+        return err
 
     @staticmethod
     def trim_flac_file(
             source_flac_path: str,
             dest_file_path: str,
             start_time_seconds: float,
-            end_time_seconds: float,
-            ffmpeg_path: str="ffmpeg"
+            end_time_seconds: float
     ) -> bool:
         """
         Trims a source FLAC file from start_time_seconds to end_time_seconds
         and saves it to dest_file_path using ffmpeg.
+        Returns True for success
         """
 
         source_flac_path = os.path.abspath(source_flac_path)
@@ -332,14 +290,9 @@ class ConcatUtil:
             L.w(f"Bad start/end times {start_time_seconds} {end_time_seconds}")
             return False
 
-        # Construct the ffmpeg command
-        # -y: Overwrite output file without asking
-        # -i: Input file
-        # -ss: Start time
-        # -to: End time (alternatively, -t for duration)
-        # -c:a flac: Specify the audio codec for the output as FLAC
-        command = [
-            ffmpeg_path,
+        # TODO: replace with FfmpegUtil.make_file()
+
+        partial_command = [
             "-hide_banner",
             "-loglevel", "error",
             "-y",
@@ -347,27 +300,11 @@ class ConcatUtil:
             "-ss", str(start_time_seconds),
             "-to", str(end_time_seconds),
             "-c:a", "flac",
-            dest_file_path
         ]
-
-        try:
-            completed_process = subprocess.run(
-                command,
-                check=True,  # Raise CalledProcessError if ffmpeg returns non-zero exit code
-                capture_output=True,
-                text=True,
-                encoding='utf-8'
-            )
-            if completed_process.returncode != 0:
-                L.w(f"ffmpeg fail, returncode - {completed_process.returncode}")
-                return False
-            return True
-        except subprocess.CalledProcessError as e:
-            L.w(f"ffmpeg fail, returncode - {e.returncode} - {e.stderr}")
-            return False
-        except Exception as e:
-            L.w(f"subprocess fail, ffmpeg - {e}")
-            return False
+        err = FfmpegUtil.make_file(partial_command, dest_file_path, use_temp_file=False)
+        if err:
+            L.e(err)
+        return not bool(err)
 
     @staticmethod
     def print_concat_info(section_dividers: list[int], num_items: int) -> None:
@@ -379,6 +316,7 @@ class ConcatUtil:
         printt(f"Current chapter dividers: {section_indices_string} {COL_DIM}({ranges_string})")
         printt()
 
+    # TODO: reimplement
     # @staticmethod
     # def does_concat_file_exist(state: State) -> bool:
     #     fn = HashFileUtil.make_concat_file_name(state.project.text_segments, cast(dict, state.project.voice))
@@ -388,3 +326,17 @@ class ConcatUtil:
     #         if path.stat().st_size > 0:
     #             return True
     #     return False
+
+# ---
+
+def show_player_reminder(state: State) -> None:
+    printt(f"🔔 {COL_ACCENT}Reminder:")
+    printt("You can use audio files with the interactive player/reader here:")
+    package_dir = get_package_dir()
+    if package_dir:
+        browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
+    else:
+        browser_path = "browser_player" + os.path.sep + "index.html"
+    printt(browser_path)
+    printt(f"or on the web here: {PLAYER_URL}")
+    state.prefs.has_shown_player_reminder = True
