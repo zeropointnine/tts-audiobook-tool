@@ -19,8 +19,8 @@
 </head>
 
 <body >
-    <div class="audioPlayerHolder">
-        <audio id="audioPlayer" controls>
+    <div id="playerHolder">
+        <audio id="player" controls>
     </div>
 
     <div id="themeButton">
@@ -33,16 +33,19 @@
         <div class="loadButtonsLine">
             <!-- <span id="loadUrlButton" class="loadButton">URL</span> -->
             <label id="loadLocalButtonLabel" class="loadButton" tabindex="0">
-                Local File
+                Local&nbsp;File
                 <input type="file" id="loadFileInput" accept=".flac, .mp4" hidden autofocus>
             </label>
-            <input id="loadUrlInput" placeholder="... or enter URL">
+            <input id="loadUrlInput" placeholder="Or enter URL">
         </div>
 
     </div>
 
     <div id="fileName"></div>
 
-    <pre id="textHolder"></pre>
+    <div class="outerTextHolder">
+        <pre id="textHolder"></pre>
+    </div>
+
 </body>
 </html>

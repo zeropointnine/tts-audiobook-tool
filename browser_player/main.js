@@ -1,28 +1,42 @@
 (function() {
 
-    let rawText = "";
-    let timedTextSegments = [];
+    const DEFAULT_FADE_DELAY = 1000;
 
     let loadFileInput = null;
     let fileNameDiv = null;
-    let audioPlayer = null;
+    let playerHolder = null;
+    let player = null;
     let textHolder = null;
     let themeButton = null;
     let loadLocalButtonLabel = null;
     let loadUrlInput = null;
 
+    let rawText = "";
+    let timedTextSegments = [];
     let selectedSpan = null;
     let intervalId = -1;
+    let fadeOutId = -1;
+    let isStarted = false;
+    let isPlayerHover = false;
+    let isPlayerFocused = false;
+    let fadeOutValue = 0.0;
 
     function init() {
 
         loadFileInput = document.getElementById('loadFileInput');
         fileNameDiv = document.getElementById('fileName')
-        audioPlayer = document.getElementById('audioPlayer');
+        playerHolder = document.getElementById('playerHolder');
+        player = document.getElementById('player');
         textHolder = document.getElementById('textHolder');
         themeButton = document.getElementById('themeButton');
         loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
         loadUrlInput = document.getElementById('loadUrlInput');
+
+        if (!matchMedia('(pointer:fine)').matches) {
+            // Treat as touch device
+            // Disable player fadeout
+            fadeOutValue = 1.0;
+        }
 
         loadUrlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -45,23 +59,37 @@
             }
         });
 
-        audioPlayer.addEventListener('play', function() {
+        player.addEventListener('play', function() {
             selectedSpan = null; // ensures scroll to current audio segment
         });
 
-        textHolder.addEventListener('click', (event) => {
-            const target = event.target;
-            if (target.tagName === 'SPAN' && target.id.startsWith('segment-')) {
-                const segmentIndex = parseInt(target.id.split('-')[1]);
-                if (!isNaN(segmentIndex) && timedTextSegments[segmentIndex]) {
-                    if (selectedSpan && selectedSpan != target) {
-                        selectedSpan.classList.remove('highlight');
-                    }
-                    audioPlayer.currentTime = timedTextSegments[segmentIndex].time_start;
-                    audioPlayer.play();
-                }
-            }
+        playerHolder.addEventListener('mouseenter', () => {
+            isPlayerHover = true;
+            onPlayerIxChange();
         });
+
+        playerHolder.addEventListener('mouseleave', () => {
+            isPlayerHover = false;
+            onPlayerIxChange();
+        });
+
+        // Focus and blur detection (bubbles)
+        playerHolder.addEventListener('focusin', () => {
+            isPlayerFocused = true;
+            onPlayerIxChange();
+        });
+        playerHolder.addEventListener('focusout', () => {
+            setTimeout(() => { // nb, required
+            if (!playerHolder.contains(document.activeElement)) {
+                isPlayerFocused = false;
+                onPlayerIxChange();
+            }
+            }, 0);
+        });
+
+        textHolder.addEventListener('click', onTextClick);
+
+        document.addEventListener("keydown", onKeyDown);
 
         // Color theme toggle
         const html = document.documentElement;
@@ -112,14 +140,13 @@
     }
 
     function clear() {
-        clearInterval(intervalId)
-        audioPlayer.src = null;
-        audioPlayer.style.display = "none";
+        isStarted = false;
+        playerHolder.style.display = "none";
         fileNameDiv.style.display = "none"
         textHolder.style.display = "none";
+        clearInterval(intervalId)
+        player.src = null;
         selectedSpan = null;
-
-        document.removeEventListener("keydown", onKeyDown);
     }
 
     function start(fileOrUrl, pRawText, pTimedTextSegments) {
@@ -132,13 +159,6 @@
             file = fileOrUrl;
         }
 
-        // TODO: deeplink-driven or at least add to history or smth
-        // if (url) {
-        //     const newUrl = new URL(window.location.href);
-        //     newUrl.searchParams.set('url', url);
-        //     window.history.pushState({ url: url }, document.title, newUrl.toString());
-        // }
-
         rawText = pRawText
         timedTextSegments = pTimedTextSegments
 
@@ -147,26 +167,68 @@
 
         populateText()
 
-        audioPlayer.src = file ? URL.createObjectURL(file) : url
-        audioPlayer.play();
-        audioPlayer.style.display = "block";
+        playerHolder.style.display = "block";
+        showPlayerAndFade();
 
-        document.addEventListener("keydown", onKeyDown);
+        player.src = file ? URL.createObjectURL(file) : url
+        playerPlay();
 
-        intervalId = setInterval(loop, 50)
+        if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+        }
+
+        intervalId = setInterval(loop, 50);
+        isStarted = true;
     }
 
+    function onTextClick(event) {
+
+        isSegment = (event.target.tagName === 'SPAN' && event.target.id.startsWith('segment-'));
+        if (!isSegment) {
+            return;
+        }
+
+        const clickedSpan = event.target;
+        const segmentIndex = parseInt(clickedSpan.id.split('-')[1]);
+
+        if (clickedSpan == selectedSpan) {
+            // Toggle play
+            if (player.paused) {
+                playerPlay();
+            } else {
+                player.pause()
+            }
+        } else {
+            seekBySegmentIndex(segmentIndex);
+            showPlayerAndFade();
+        }
+    }
+
+    // --------------------------------------
     function onKeyDown(event) {
+
         if (event.target.tagName == "INPUT") {
             return;
         }
         // console.log(event.key);
+
+        if (event.key === "Enter" || event.key === " ") {
+            if (document.activeElement == loadLocalButtonLabel) {
+                loadFileInput.click();
+                event.preventDefault();
+            }
+            return;
+        }
+
+        if (!isStarted) {
+            return;
+        }
         switch (event.key) {
             case "Escape":
-                if (audioPlayer.paused) {
-                    audioPlayer.play();
+                if (player.paused) {
+                    playerPlay();
                 } else {
-                    audioPlayer.pause();
+                    player.pause();
                 }
                 event.preventDefault();
                 break;
@@ -175,14 +237,6 @@
                 break;
             case "]":
                 seekNextSegment();
-                break;
-
-            case "Enter": // falls through
-            case " ":
-                if (document.activeElement == loadLocalButtonLabel) {
-                    loadFileInput.click();
-                    event.preventDefault();
-                }
                 break;
         }
     }
@@ -265,11 +319,55 @@
         }
 
         targetTime = timedTextSegments[i].time_start;
-        audioPlayer.currentTime = targetTime;
-        if (audioPlayer.paused) {
-            audioPlayer.play();
+        player.currentTime = targetTime;
+        if (player.paused) {
+            playerPlay();
         }
     }
+
+    // --------------------------------------
+    // Player show/hide logic etc
+
+    function playerPlay() {
+        player.play();
+        if (!getPlayerActive()) {
+            showPlayerAndFade();
+        }
+    }
+
+    function onPlayerIxChange() {
+        // Should be called when:
+        // Mouse has either entered or left player holder area
+        // Focus has entered or left thhe player holder and children
+        if (getPlayerActive()) {
+            clearTimeout(fadeOutId);
+            playerHolder.style.opacity = '1.0';
+        } else {
+            showPlayerAndFade(0);
+        }
+    }
+
+    function showPlayerAndFade(duration) {
+        if (isNaN(duration)) {
+            duration = DEFAULT_FADE_DELAY;
+        }
+
+        playerHolder.classList.add('no-transition');
+        playerHolder.style.opacity = '1.0';
+        void playerHolder.offsetHeight; // force reflow
+        playerHolder.classList.remove('no-transition');
+
+        clearTimeout(fadeOutId);
+        fadeOutId = setTimeout(() => {
+            playerHolder.style.opacity = fadeOutValue;
+        }, duration);
+    }
+
+    function getPlayerActive() {
+        return isPlayerFocused || isPlayerHover;
+    }
+
+    // ----------------------------------------
 
     function getCurrentSpan() {
         i = getCurrentSegmentIndex()
@@ -285,7 +383,7 @@
      * Returns the index of the segment that spans the current play time, or -1.
      */
     function getCurrentSegmentIndex() {
-        const seconds = audioPlayer.currentTime
+        const seconds = player.currentTime
         for (let i = 0; i < timedTextSegments.length; i++) {
             segment = timedTextSegments[i];
             if (seconds >= segment.time_start && seconds < segment.time_end) {
