@@ -2,12 +2,13 @@
 
     const DEFAULT_FADE_DELAY = 1000;
 
+    const root = document.documentElement;
+
     let loadFileInput = null;
     let fileNameDiv = null;
     let playerHolder = null;
     let player = null;
     let textHolder = null;
-    let themeButton = null;
     let loadLocalButtonLabel = null;
     let loadUrlInput = null;
 
@@ -28,7 +29,6 @@
         playerHolder = document.getElementById('playerHolder');
         player = document.getElementById('player');
         textHolder = document.getElementById('textHolder');
-        themeButton = document.getElementById('themeButton');
         loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
         loadUrlInput = document.getElementById('loadUrlInput');
 
@@ -60,7 +60,13 @@
         });
 
         player.addEventListener('play', function() {
-            selectedSpan = null; // ensures scroll to current audio segment
+            root.setAttribute("data-player-status", "play");
+            // ensures scroll to current segment
+            selectedSpan = null;
+        });
+
+        player.addEventListener('pause', function() {
+            root.setAttribute("data-player-status", "pause");
         });
 
         playerHolder.addEventListener('mouseenter', () => {
@@ -91,27 +97,73 @@
 
         document.addEventListener("keydown", onKeyDown);
 
-        // Color theme toggle
-        const html = document.documentElement;
-        themeButton.addEventListener('click', () => {
-            if (html.getAttribute('data-theme') === 'dark') {
-                html.removeAttribute('data-theme');
-                localStorage.setItem('darkMode', 'false');
-            } else {
-                html.setAttribute('data-theme', 'dark');
-                localStorage.setItem('darkMode', 'true');
-            }
-        });
-        if (localStorage.getItem('darkMode') === 'true') {
-            html.setAttribute('data-theme', 'dark');
-        }
-
         // When the queryparam is "url", run the function "loadFlacOrMp4" using the value.
         const urlParams = new URLSearchParams(window.location.search);
         const url = urlParams.get('url');
         if (url) {
             loadFlacOrMp4(url);
         }
+
+        initButtons();
+    }
+
+    function initButtons() {
+
+        const uiToggleButton = document.getElementById('uiToggleButton');
+        uiToggleButton.addEventListener('click', (e) => {
+            console.log('button')
+            if (uiOverlay.style.display !== 'block') {
+                uiOverlay.style.display = 'block';
+            } else {
+                uiOverlay.style.display = 'none';
+            }
+        });
+
+        const uiOverlay = document.getElementById("uiOverlay");
+        uiOverlay.addEventListener("click", (e) => {
+            e.stopPropagation();
+            uiOverlay.style.display = "none";
+        });
+
+        const uiPanel = document.getElementById("uiPanel")
+        uiPanel.addEventListener("click", (e) => {
+            e.stopPropagation()
+            console.log('panel')
+        });
+
+        // Scroll to top
+        document.getElementById('scrollTopButton').addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.scrollTo(0, 0);
+        });
+
+        // Color theme
+        themeButton = document.getElementById('themeButton');
+        themeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            value = cycleRootAttribute("data-theme", ["dark"])
+            setChildVisibleWhen(themeButton, "value", value);
+        });
+        value = setRootAttributeFromLocalStorage("data-theme");
+        setChildVisibleWhen(themeButton, "value", value);
+
+
+        // Font size
+        document.getElementById('fontSizeButton')
+        fontSizeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            value = cycleRootAttribute("data-text-size", ["medium", "small"]);
+            setChildVisibleWhen(fontSizeButton, "value", value);
+        });
+        value = setRootAttributeFromLocalStorage("data-text-size");
+        setChildVisibleWhen(fontSizeButton, "value", value);
+
+        // Segment colors
+        document.getElementById('segmentColorsButton').addEventListener('click', (e) => {
+            e.stopPropagation();
+            cycleRootAttribute("data-segment-colors", ["blue"])
+        });
+        setRootAttributeFromLocalStorage("data-segment-colors");
     }
 
     async function loadFlacOrMp4(fileOrUrl) {
@@ -147,6 +199,7 @@
         clearInterval(intervalId)
         player.src = null;
         selectedSpan = null;
+        root.setAttribute("data-player-status", "none");
     }
 
     function start(fileOrUrl, pRawText, pTimedTextSegments) {
@@ -216,6 +269,7 @@
             if (document.activeElement == loadLocalButtonLabel) {
                 loadFileInput.click();
                 event.preventDefault();
+                loadLocalButtonLabel.blur();
             }
             return;
         }
@@ -328,10 +382,14 @@
     // --------------------------------------
     // Player show/hide logic etc
 
-    function playerPlay() {
-        player.play();
-        if (!getPlayerActive()) {
-            showPlayerAndFade();
+    async function playerPlay() {
+        try {
+            await player.play();
+            if (!getPlayerActive()) {
+                showPlayerAndFade();
+            }
+        } catch (error) {
+            console.error("Playback failed:", error);
         }
     }
 
@@ -391,6 +449,95 @@
             }
         }
         return -1;
+    }
+
+
+
+    /**
+     * Cycles between [none], value[0], value[1], etc.
+     * Returns the value which was set on the dataAttribute
+     */
+    function cycleRootAttribute(dataAttribute, values) {
+
+        if (!Array.isArray(values) || values.length == 0) {
+            console.warning("bad value for `values`");
+            return;
+        }
+
+        const currentValue = root.getAttribute(dataAttribute);
+        let currentIndex = values.indexOf(currentValue);
+
+        let nextIndex;
+        if (currentIndex == -1) {
+            nextIndex = 0;
+        } else {
+            nextIndex = currentIndex + 1;
+            if (nextIndex >= values.length) {
+                nextIndex = -1;
+            }
+        }
+
+        let targetValue;
+        if (nextIndex == -1) {
+            targetValue = ""
+        } else {
+            targetValue = values[nextIndex];
+        }
+
+        // console.log('currentvalue', currentValue)
+        // console.log('currentindex', currentIndex)
+        // console.log('nextindex', nextIndex)
+        // console.log('targetvalue', targetValue)
+
+        if (targetValue == "") {
+            root.removeAttribute(dataAttribute);
+        } else {
+            root.setAttribute(dataAttribute, targetValue);
+        }
+
+        // And persist
+        localStorage.setItem(dataAttribute, targetValue);
+
+        return targetValue;
+    }
+
+    /**
+     * Returns the value which was set, if any
+     */
+    function setRootAttributeFromLocalStorage(dataAttribute) {
+        value = localStorage.getItem(dataAttribute)
+        if (value) {
+            root.setAttribute(dataAttribute, value)
+            return value;
+        }
+        return null;
+    }
+
+    /**
+     * Iterates the children of `holder` and sets `display visible`
+     * when it has a data attribute which is equal to `value`, else sets `display none`.
+     *
+     * Rem, when markup is "data-thing", dataAttribute should be "thing" (not "data-thing")
+     */
+    function setChildVisibleWhen(holder, dataAttribute, targetValue) {
+
+        console.log('xxx', targetValue)
+
+        for (const child of holder.children) {
+            child.style.display = "none";
+        }
+
+        for (const child of holder.children) {
+
+            value = child.dataset[dataAttribute]
+
+            let isMatch = (value === targetValue);
+            isMatch |= (!value || value == "default") && (!targetValue || targetValue == "default");
+            if (isMatch) {
+                child.style.display = 'revert';
+                break;
+            }
+        }
     }
 
     window.app = {

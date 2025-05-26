@@ -1,33 +1,72 @@
 :root {
-    /* Light mode (default) */
-    --bg-color: #f0f0f0;
-    --content-bg-color: #ffffff;
-    --text-color: #333333;
-    --text-dim-color: #33333388;
-    --segment-highlight-color: #ffaa4488;
-    --segment-hover-color: #ffaa4433;
-    --button-color: #ffaa44;
-    --button-text-color: #333333;
-    --shadow-color: rgba(0,0,0, 0.1);
+    /* Default css variable values */
+
+    /* Color theme (light mode) */
+    --color-bg: #f0f0f0;
+    --color-content-bg: #ffffff;
+    --color-text: #333333;
+    --color-text-dim: #33333388;
+    --color-shadow: rgba(0,0,0, 0.1);
+    --color-button-bg: #888888;
+
+    /* Highlight colors (orange) */
+    --color-segment-highlight: #ffaa4488;
+    --color-segment-hover: #ffaa4433;
+
+    /* Text size (large) */
+    --text-size: 32px;
+}
+:root {
+    @media (max-width: 600px) {
+        --text-size: 22px;
+    }
 }
 
+
 [data-theme="dark"] {
-    /* Dark mode */
-    --bg-color: #2c2c2c;
-    --content-bg-color: #222222;
-    --text-color: #d8d8d8;
-    --text-dim-color: #d8d8d888;
-    --segment-highlight-color: #ffaa4466;
-    --segment-hover-color: #ffaa4433;
-    --button-color: #ffaa44;
-    --button-text-color: #222222;
-    --shadow-color: rgba(0,0,0, 0.25)
+    --color-bg: #2c2c2c;
+    --color-content-bg: #222222;
+    --color-text: #d8d8d8;
+    --color-text-dim: #d8d8d888;
+    --color-shadow: rgba(0,0,0, 0.25);
+
+    --color-segment-highlight: #ffaa4466;
+    --color-segment-hover: #ffaa4433;
 }
+
+[data-segment-colors="blue"] {
+    --color-segment-highlight: #4444ff55;
+    --color-segment-hover: #4444ff12;
+}
+[data-segment-colors="blue"][data-theme="dark"] {
+    --color-segment-highlight: #8888ff66;
+    --color-segment-hover: #8888ff33;
+}
+
+[data-text-size="medium"] {
+    --text-size: 24px;
+}
+[data-text-size="medium"] {
+    @media (max-width: 600px) {
+        --text-size: 18px;
+    }
+}
+
+[data-text-size="small"] {
+    --text-size: 18px;
+}
+[data-text-size="small"] {
+    @media (max-width: 600px) {
+        --text-size: 14px;
+    }
+}
+
+/* ------------------------------------------------ */
 
 body, html {
     margin: 0;
     padding: 0;
-    background-color: var(--bg-color);
+    background-color: var(--color-bg);
 }
 
 #playerHolder {
@@ -62,7 +101,7 @@ body, html {
 }
 
 .loadPrompt {
-    color: var(--text-color);
+    color: var(--color-text-dim);
     margin-top:28px;
     margin-bottom: 18px;
 }
@@ -76,11 +115,14 @@ body, html {
 
 .loadButton {
     padding: 12px 24px;
-    background: var(--button-color);
-    color: var(--button-text-color);
+    background: var(--color-content-bg);
+    color: var(--color-text-dim);
     border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 8px var(--shadow-color);
+    box-shadow: 0 4px 8px var(--color-shadow);
+}
+.loadButton:focus {
+    outline: 3px solid var(--color-segment-highlight);
 }
 
 @media (max-width: 600px) {
@@ -89,40 +131,37 @@ body, html {
     }
 }
 
-
 #loadUrlInput {
     width: 100%;
     font-size: 18px;
     font-family: sans-serif;
     font-weight: bold;
-    color: var(--text-color);
-    background: var(--content-bg-color);
+    color: var(--color-text);
+    background: var(--color-content-bg);
     padding: 12px 18px;
     border-radius: 8px;
-    border: 3px solid var(--segment-hover-color); /* Thin black outline */
+    border: 0px;  /* 2px solid var(--color-text-dim); */
 }
 #loadUrlInput::placeholder {
     font-size: 18px;
     font-family: sans-serif;
     font-weight: bold;
-
-    color: var(--text-dim-color);
+    color: var(--color-text-dim);
 }
 #loadUrlInput:focus {
-    outline: none; /* Remove default focus outline */
-    border-color: var(--segment-highlight-color); /* Blue outline stroke on focus */
+    outline: 3px solid var(--color-segment-highlight);
 }
 
 #fileName {
     padding-left: 18px;
     padding-right: 18px;
     width: calc(100% - 36px);
-    margin-top: 32px;
-    margin-bottom: 32px;
+    margin-top: 48px;
+    margin-bottom: 16px;
     font-family: sans-serif;
     font-size: 14px;
     font-weight: bold;
-    color: var(--text-dim-color);
+    color: var(--color-text-dim);
     text-align: center;
 }
 @media (max-width: 600px) {
@@ -132,18 +171,53 @@ body, html {
     }
 }
 
+/* square button */
+.button {
+    width: 30px;
+    height: 30px;
+    padding:6px;
+    border-radius:8px;
+    background-color: var(--color-content-bg);
+    box-shadow: 0 4px 8px var(--color-shadow);
+    cursor: pointer;
 
-#themeButton {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.button svg path {
+    fill: var(--color-text-dim);
+}
+
+#uiToggleButton {
     position: fixed;
     bottom: 12px;
     right: 12px;
-    width: 30px;
-    height: 30px;
-    padding:4px;
+}
+
+#uiOverlay {
+    display: none;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    /* background: #00000033; */
+}
+
+#uiPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    position: absolute;
+    bottom: 60px;
+    right: 12px;
+    padding: 12px;
     border-radius:8px;
-    background-color: var(--bg-color);
-    box-shadow: 0 4px 8px var(--shadow-color);
-    cursor: pointer;
+    background: var(--color-bg);
+    box-shadow: 0 4px 8px var(--color-shadow);
+
 }
 
 .outerTextHolder {
@@ -162,51 +236,53 @@ body, html {
     }
 }
 
-
 #textHolder {
     display: none;
     font-family: serif;
-    font-size: 32px;
+    font-size: var(--text-size);
     line-height: 1.6;
     white-space: pre-wrap; /* Honor line breaks and wrap text */
-    color: var(--text-color);
-    background-color: var(--content-bg-color);
+    color: var(--color-text);
+    background-color: var(--color-content-bg);
+    margin:0;
     padding: 36px;
     border-radius: 8px;
-    box-shadow: 0 4px 8px var(--shadow-color);
+    box-shadow: 0 4px 8px var(--color-shadow);
 }
 @media (max-width: 600px) {
     #textHolder {
-        font-size: 20px;
+        padding: 18px;
     }
 }
 
 .highlight {
-    background-color: var(--segment-highlight-color);
-    color: var(--text-color);
+    background-color: var(--color-segment-highlight);
+    color: var(--color-text);
     padding: 0.1em 0; /* Slight padding */
     border-radius: 3px;
     transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
 }
+[data-player-status="pause"] .highlight {
+    background-color: var(--color-segment-hover);
+}
+[data-player-status="none"] .highlight {
+    background-color: var(--color-segment-hover);
+}
 
 @media (pointer: fine) {
-    #textHolder span:hover { /* hover effect only when is pointer device */
-        background-color: var(--segment-hover-color);
+    /* hover effect only when is pointer device */
+    #textHolder span:hover {
+        background-color: var(--color-segment-hover);
         cursor: pointer;
+    }
+    /* hovering over currently highlighted segment shouldn't change its bg color */
+    #textHolder span:hover.highlight {
+        background-color: var(--color-segment-highlight);
     }
 }
 
-#themeButton #icon-sun {
-    display: none; /* Hidden by default (in light mode) */
-}
-#themeButton #icon-moon {
-    display: block; /* Shown by default (in light mode) */
-}
-html[data-theme="dark"] #themeButton #icon-sun {
-    display: block; /* Show sun icon in dark mode */
-}
-html[data-theme="dark"] #themeButton #icon-moon {
-    display: none; /* Hide moon icon in dark mode */
+#segmentColorsButton svg path.colored {
+    fill: var(--color-segment-highlight); /* hah */
 }
 
 /* --- */
