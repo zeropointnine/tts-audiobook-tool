@@ -1,10 +1,12 @@
 (function() {
 
     const DEFAULT_FADE_DELAY = 1000;
+    const SLEEP_DURATION = 1000 * 60 * 15;
 
     const root = document.documentElement;
 
     let loadFileInput = null;
+    let sleepTimeLeft = null;
     let fileNameDiv = null;
     let playerHolder = null;
     let player = null;
@@ -12,11 +14,23 @@
     let loadLocalButtonLabel = null;
     let loadUrlInput = null;
 
+    let uiToggleButton = null;
+    let uiOverlay = null;
+    let uiPanel = null;
+
+    let scrollTopButton = null;
+    let textSizeButton = null;
+    let themeButton = null;
+    let segmentColorsButton = null;
+    let sleepButton = null;
+
     let rawText = "";
     let timedTextSegments = [];
     let selectedSpan = null;
     let intervalId = -1;
     let fadeOutId = -1;
+    let sleepId = -1;
+    let sleepEndTime = -1;
     let isStarted = false;
     let isPlayerHover = false;
     let isPlayerFocused = false;
@@ -25,12 +39,23 @@
     function init() {
 
         loadFileInput = document.getElementById('loadFileInput');
+        sleepTimeLeft = document.getElementById('sleepTimeLeft');
         fileNameDiv = document.getElementById('fileName')
         playerHolder = document.getElementById('playerHolder');
         player = document.getElementById('player');
         textHolder = document.getElementById('textHolder');
         loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
         loadUrlInput = document.getElementById('loadUrlInput');
+
+        uiToggleButton = document.getElementById('uiToggleButton');
+        uiOverlay = document.getElementById("uiOverlay");
+        uiPanel = document.getElementById("uiPanel")
+
+        scrollTopButton = document.getElementById('scrollTopButton')
+        textSizeButton = document.getElementById('textSizeButton')
+        themeButton = document.getElementById('themeButton');
+        segmentColorsButton = document.getElementById('segmentColorsButton')
+        sleepButton = document.getElementById("sleepButton");
 
         if (!matchMedia('(pointer:fine)').matches) {
             // Treat as touch device
@@ -104,66 +129,78 @@
             loadFlacOrMp4(url);
         }
 
-        initButtons();
-    }
-
-    function initButtons() {
-
-        const uiToggleButton = document.getElementById('uiToggleButton');
         uiToggleButton.addEventListener('click', (e) => {
-            console.log('button')
             if (uiOverlay.style.display !== 'block') {
+                updateUiPanelButtons();
                 uiOverlay.style.display = 'block';
             } else {
                 uiOverlay.style.display = 'none';
             }
         });
 
-        const uiOverlay = document.getElementById("uiOverlay");
+        initRootAttributesFromLocalStorage();
+        initUiPanelButtons();
+    }
+
+    function initRootAttributesFromLocalStorage() {
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+            value = localStorage[key]
+            if (key.startsWith("data-")) {
+                root.setAttribute(key, value)
+            }
+        });
+    }
+
+    function initUiPanelButtons() {
+
         uiOverlay.addEventListener("click", (e) => {
             e.stopPropagation();
             uiOverlay.style.display = "none";
         });
 
-        const uiPanel = document.getElementById("uiPanel")
         uiPanel.addEventListener("click", (e) => {
             e.stopPropagation()
-            console.log('panel')
         });
 
         // Scroll to top
-        document.getElementById('scrollTopButton').addEventListener('click', (e) => {
+        scrollTopButton.addEventListener('click', (e) => {
             e.stopPropagation();
             window.scrollTo(0, 0);
         });
 
+        // Text size
+        textSizeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cycleRootAttribute("data-text-size", ["medium", "small"]);
+            updateUiPanelButtons()
+        });
+
         // Color theme
-        themeButton = document.getElementById('themeButton');
         themeButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            value = cycleRootAttribute("data-theme", ["dark"])
-            setChildVisibleWhen(themeButton, "value", value);
+            cycleRootAttribute("data-theme", ["dark"])
+            updateUiPanelButtons()
         });
-        value = setRootAttributeFromLocalStorage("data-theme");
-        setChildVisibleWhen(themeButton, "value", value);
-
-
-        // Font size
-        document.getElementById('fontSizeButton')
-        fontSizeButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            value = cycleRootAttribute("data-text-size", ["medium", "small"]);
-            setChildVisibleWhen(fontSizeButton, "value", value);
-        });
-        value = setRootAttributeFromLocalStorage("data-text-size");
-        setChildVisibleWhen(fontSizeButton, "value", value);
 
         // Segment colors
-        document.getElementById('segmentColorsButton').addEventListener('click', (e) => {
+        segmentColorsButton.addEventListener('click', (e) => {
             e.stopPropagation();
             cycleRootAttribute("data-segment-colors", ["blue"])
+            updateUiPanelButtons()
         });
-        setRootAttributeFromLocalStorage("data-segment-colors");
+
+        // Sleep
+        sleepButton.addEventListener("click", (e) => {
+            e.stopPropagation();
+            value = cycleRootAttribute("data-sleep", ["on"], false);
+            if (value == "on") {
+                startSleep();
+            } else {
+                clearSleep()
+            }
+            updateUiPanelButtons()
+        });
     }
 
     async function loadFlacOrMp4(fileOrUrl) {
@@ -234,30 +271,15 @@
         isStarted = true;
     }
 
-    function onTextClick(event) {
-
-        isSegment = (event.target.tagName === 'SPAN' && event.target.id.startsWith('segment-'));
-        if (!isSegment) {
-            return;
-        }
-
-        const clickedSpan = event.target;
-        const segmentIndex = parseInt(clickedSpan.id.split('-')[1]);
-
-        if (clickedSpan == selectedSpan) {
-            // Toggle play
-            if (player.paused) {
-                playerPlay();
-            } else {
-                player.pause()
-            }
-        } else {
-            seekBySegmentIndex(segmentIndex);
-            showPlayerAndFade();
-        }
+    function updateUiPanelButtons() {
+        setButtonChildVisible(textSizeButton, root.getAttribute("data-text-size"));
+        setButtonChildVisible(themeButton, root.getAttribute("data-theme"));
+        setButtonChildVisible(sleepButton, root.getAttribute("data-sleep"));
+        // rem, segment colors button does not multiple children
     }
 
     // --------------------------------------
+
     function onKeyDown(event) {
 
         if (event.target.tagName == "INPUT") {
@@ -292,6 +314,29 @@
             case "]":
                 seekNextSegment();
                 break;
+        }
+    }
+
+    function onTextClick(event) {
+
+        isSegment = (event.target.tagName === 'SPAN' && event.target.id.startsWith('segment-'));
+        if (!isSegment) {
+            return;
+        }
+
+        const clickedSpan = event.target;
+        const segmentIndex = parseInt(clickedSpan.id.split('-')[1]);
+
+        if (clickedSpan == selectedSpan) {
+            // Toggle play
+            if (player.paused) {
+                playerPlay();
+            } else {
+                player.pause()
+            }
+        } else {
+            seekBySegmentIndex(segmentIndex);
+            showPlayerAndFade();
         }
     }
 
@@ -425,6 +470,30 @@
         return isPlayerFocused || isPlayerHover;
     }
 
+    function startSleep() {
+        sleepEndTime = new Date().getTime() + SLEEP_DURATION;
+
+        clearInterval(sleepId);
+        onSleepInterval();
+        sleepId = setInterval(onSleepInterval, 1000);
+    }
+
+    function clearSleep() {
+        root.setAttribute("data-sleep", "");
+        clearInterval(sleepId);
+        updateUiPanelButtons();
+    }
+
+    function onSleepInterval() {
+        const ms = sleepEndTime - new Date().getTime();
+        if (ms <= 0) {
+            player.pause();
+            clearSleep();
+            return;
+        }
+        sleepTimeLeft.textContent = msToString(ms);
+    }
+
     // ----------------------------------------
 
     function getCurrentSpan() {
@@ -451,20 +520,18 @@
         return -1;
     }
 
-
-
     /**
-     * Cycles between [none], value[0], value[1], etc.
-     * Returns the value which was set on the dataAttribute
+     * Cycles between [none], values[0], values[1], etc.
+     * Returns the value which was set on the attribute
      */
-    function cycleRootAttribute(dataAttribute, values) {
+    function cycleRootAttribute(attribute, values, andPersist=true) {
 
         if (!Array.isArray(values) || values.length == 0) {
             console.warning("bad value for `values`");
             return;
         }
 
-        const currentValue = root.getAttribute(dataAttribute);
+        const currentValue = root.getAttribute(attribute);
         let currentIndex = values.indexOf(currentValue);
 
         let nextIndex;
@@ -490,13 +557,14 @@
         // console.log('targetvalue', targetValue)
 
         if (targetValue == "") {
-            root.removeAttribute(dataAttribute);
+            root.removeAttribute(attribute);
         } else {
-            root.setAttribute(dataAttribute, targetValue);
+            root.setAttribute(attribute, targetValue);
         }
 
-        // And persist
-        localStorage.setItem(dataAttribute, targetValue);
+        if (andPersist) {
+            localStorage.setItem(attribute, targetValue);
+        }
 
         return targetValue;
     }
@@ -514,14 +582,9 @@
     }
 
     /**
-     * Iterates the children of `holder` and sets `display visible`
-     * when it has a data attribute which is equal to `value`, else sets `display none`.
      *
-     * Rem, when markup is "data-thing", dataAttribute should be "thing" (not "data-thing")
      */
-    function setChildVisibleWhen(holder, dataAttribute, targetValue) {
-
-        console.log('xxx', targetValue)
+    function setButtonChildVisible(holder, targetValue) {
 
         for (const child of holder.children) {
             child.style.display = "none";
@@ -529,7 +592,7 @@
 
         for (const child of holder.children) {
 
-            value = child.dataset[dataAttribute]
+            value = child.dataset["value"]
 
             let isMatch = (value === targetValue);
             isMatch |= (!value || value == "default") && (!targetValue || targetValue == "default");
