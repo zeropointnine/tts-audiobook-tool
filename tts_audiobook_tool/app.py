@@ -280,7 +280,7 @@ class App:
         printt(f"{make_hotkey_string("1")} Set temperature (currently: {self.state.prefs.temperature})")
         printt(f"{make_hotkey_string("2")} Normalize audio after generate (currently: {self.state.prefs.should_normalize})")
         printt(f"{make_hotkey_string("3")} Play audio after each segment is generated (currently: {self.state.prefs.play_on_generate})")
-        printt(f"{make_hotkey_string("4")} Transcode FLAC files to to MP4")
+        printt(f"{make_hotkey_string("4")} Transcode FLAC to MP4, preserving app metadata")
         printt()
 
         hotkey = ask_hotkey()

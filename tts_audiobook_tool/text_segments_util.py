@@ -46,7 +46,7 @@ class TextSegmentsUtil:
     @staticmethod
     def ask_text_input_and_set(state: State) -> None:
         printt("Enter/paste text of any length.")
-        printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT}, depending on platform\n")
+        printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT} on its own line, depending on platform\n")
         raw_text = sys.stdin.read().strip()
         printt()
         if raw_text:

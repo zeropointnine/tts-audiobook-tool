@@ -1,10 +1,3 @@
-# from tts_audiobook_tool.app_util import AppUtil
-# from tts_audiobook_tool.loudness_util import LoudnessUtil
-# AppUtil.init_logging()
-# LoudnessUtil.normalize_directory(r"C:\workspace\main example\segments")
-# exit(0)
-
-
 from tts_audiobook_tool.app import App
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
