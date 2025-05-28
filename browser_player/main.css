@@ -39,8 +39,8 @@
     --color-segment-hover: #4444ff12;
 }
 [data-segment-colors="blue"][data-theme="dark"] {
-    --color-segment-highlight: #8888ff66;
-    --color-segment-hover: #8888ff33;
+    --color-segment-highlight: #8888ff88;
+    --color-segment-hover: #8888ff44;
 }
 
 [data-text-size="medium"] {

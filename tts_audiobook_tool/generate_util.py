@@ -4,6 +4,7 @@ import copy
 
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.loudness_util import LoudnessUtil
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -15,11 +16,16 @@ from tts_audiobook_tool.validate_util import ValidateItem, ValidateResult, Valid
 class GenerateUtil:
 
     @staticmethod
-    def generate_validate_fix_items(state: State, indices: list[int], mode: str) -> None:
+    def generate_validate_fix_items(
+            state: State,
+            indices: list[int],
+            mode: str
+    ) -> None:
         """
-        "generate"
-        "generate-and-fix"
-        "validate-and-fix": skips the first generate pass
+        mode:
+            "generate"
+            "generate-and-fix"
+            "validate-and-fix": presupposes pre-existing files, skips the first of two potential generate passes
         """
 
         if not mode in ["generate", "generate-and-fix", "validate-and-fix"]:
@@ -38,9 +44,11 @@ class GenerateUtil:
             print_item_heading(state.project.text_segments[i].text, i, count, len(indices))
 
             if mode == "generate":
-                _ = GenerateUtil.generate_and_make_flac(index=i, state=state)
+                _ = GenerateUtil.generate_and_make_flac(
+                        index=i, state=state, is_retry=False)
             elif mode == "generate-and-fix":
-                _ = GenerateUtil.generate_validate_fix_item(index=i, state=state, whisper_model=Shared.get_whisper())
+                _ = GenerateUtil.generate_validate_fix_item(
+                        index=i, state=state, whisper_model=Shared.get_whisper())
             else: # == "validate-and-fix"
                 path = index_to_path[i]
                 _ = GenerateUtil.generate_validate_fix_item(
@@ -66,6 +74,10 @@ class GenerateUtil:
         whisper_model,
         skip_generate_file_path: str=""
     ) -> None:
+        """
+        skip_generate_file_path
+            is used to "validate pre-existing item and fix" (as opposed to "generate, validate and fix")
+        """
 
         pass_num = 1
 
@@ -114,7 +126,7 @@ class GenerateUtil:
                         printt(message + "\n" + "Corrected on second try" + "\n")
                         break
                     case ValidateResult.FAILED_ONLY:
-                        printt(message + "\n" + "Voice line still has error" + "\n")
+                        printt(message + "\n" + "Voice line still fails test" + "\n")
                         break
                     case _:
                         L.e("Shouldn't get here")
@@ -132,6 +144,8 @@ class GenerateUtil:
         Generates temp wav file, converts to flac, deletes temp wav
         Prints info
         Returns file path on success, else empty string
+
+        # TODO: should return (path, error), mutually exclusive
         """
 
         if not state.project.voice:
@@ -150,21 +164,42 @@ class GenerateUtil:
         # Print time info
         elapsed = time.time() - start_time
         audio_seconds = estimated_wav_seconds(temp_wav_path)
-        s = f"Duration: {COL_ACCENT}{audio_seconds:.1f}s{COL_DEFAULT}, elapsed {COL_ACCENT}{elapsed:.1f}s"
+        s = f"File duration: {COL_ACCENT}{audio_seconds:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
         if elapsed > 0:
             multi = audio_seconds / elapsed
             s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
         printt(s)
+        printt()
 
-        is_success = encode_to_flac(temp_wav_path, flac_path)
+        # Normalize
+        if state.prefs.should_normalize:
+            printt("Performing loudness normalization")
+            printt()
+            temp_normalized_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
+            err = LoudnessUtil.normalize(temp_wav_path, temp_normalized_wav_path)
+            if err:
+                delete_temp_file(temp_wav_path)
+                delete_temp_file(temp_normalized_wav_path)
+                return ""
+        else:
+            temp_normalized_wav_path = ""
+
+        src_wav_path = temp_normalized_wav_path if temp_normalized_wav_path else temp_wav_path
+        is_success = SoundUtil.encode_to_flac(src_wav_path, flac_path)
+
         if not is_success:
             delete_temp_file(temp_wav_path)
+            if temp_normalized_wav_path:
+                delete_temp_file(temp_normalized_wav_path)
             return ""
 
         if not is_retry:
-            printt(f"Saved: {flac_path}\n")
+            printt(f"Saved: {flac_path}")
+            printt()
 
         delete_temp_file(temp_wav_path)
+        if temp_normalized_wav_path:
+            delete_temp_file(temp_normalized_wav_path)
 
         if state.prefs.play_on_generate:
             SoundUtil.play_flac_async(flac_path)

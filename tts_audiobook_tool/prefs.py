@@ -13,6 +13,7 @@ class Prefs:
     User settings that persist to file
     - project dir
     - temperature
+    - should_normalize
     - play_on_generate
     """
 
@@ -20,10 +21,12 @@ class Prefs:
             self,
             project_dir: str = "",
             temperature: float = DEFAULT_TEMPERATURE,
+            should_normalize: bool = True,
             play_on_generate: bool = False
     ) -> None:
         self._project_dir = project_dir
         self._temperature = temperature
+        self._should_normalize = should_normalize
         self._play_on_generate = play_on_generate
         self._has_shown_player_reminder = False
 
@@ -63,6 +66,11 @@ class Prefs:
             temperature = DEFAULT_TEMPERATURE
             dirty = True
 
+        should_normalize = prefs_dict.get("should_normalize", DEFAULT_SHOULD_NORMALIZE)
+        if not isinstance(should_normalize, bool):
+            should_normalize = DEFAULT_SHOULD_NORMALIZE
+            dirty = True
+
         play_on_generate = prefs_dict.get("play_on_generate", False)
         if not isinstance(play_on_generate, bool):
             play_on_generate = False
@@ -73,7 +81,7 @@ class Prefs:
             has_shown_player_reminder = False
             dirty = True
 
-        prefs = Prefs(project_dir, temperature, play_on_generate)
+        prefs = Prefs(project_dir, temperature, should_normalize, play_on_generate)
         prefs._has_shown_player_reminder = has_shown_player_reminder
         if dirty:
             prefs.save()
@@ -100,6 +108,15 @@ class Prefs:
         self.save()
 
     @property
+    def should_normalize(self) -> bool:
+        return self._should_normalize
+
+    @should_normalize.setter
+    def should_normalize(self, value: bool):
+        self._should_normalize = value
+        self.save()
+
+    @property
     def play_on_generate(self) -> bool:
         return self._play_on_generate
 
@@ -121,6 +138,7 @@ class Prefs:
         dic = {
             "project_dir": self._project_dir,
             "temperature": self._temperature,
+            "should_normalize": self._should_normalize,
             "play_on_generate": self._play_on_generate,
             "has_shown_player_reminder": self._has_shown_player_reminder
         }

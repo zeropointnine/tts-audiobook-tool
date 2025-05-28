@@ -9,12 +9,21 @@ import torch
 
 from tts_audiobook_tool.l import L
 
+from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 class AppUtil:
 
+    _is_logging_initialized = False
+
     @staticmethod
     def init_logging() -> None:
+
+        if AppUtil._is_logging_initialized:
+            return
+        AppUtil._is_logging_initialized = True
+
         L.init(APP_NAME)
         L.i("START " + "-" * 60)
         # Squelch various 3p lib output
@@ -66,6 +75,23 @@ class AppUtil:
         print_heading(f"Text segments ({COL_DEFAULT}{len(raw_texts)}{COL_ACCENT}):")
         for i, raw_text in enumerate(raw_texts):
             printt(f"{make_hotkey_string(str(i+1))} {raw_text.strip()}")
+        printt()
+
+    @staticmethod
+    def print_project_text(state: State) -> None:
+
+        index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        indices = index_to_path.keys()
+        texts = [item.text for item in state.project.text_segments]
+
+        print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
+
+        max_width = len(str(len(texts)))
+
+        for i, text in enumerate(texts):
+            s1 = make_hotkey_string( str(i+1).rjust(max_width) )
+            s2 = make_hotkey_string("x" if i in indices else " ")
+            printt(f"{s1} {s2} {text.strip()}")
         printt()
 
     @staticmethod

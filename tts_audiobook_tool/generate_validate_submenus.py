@@ -69,9 +69,9 @@ class GenerateValidateSubmenus:
 
         hotkey = ask_hotkey()
         if hotkey == "1":
-            GenerateUtil.generate_validate_fix_items(state, indices, "generate")
+            GenerateUtil.generate_validate_fix_items(state, indices, mode="generate")
         elif hotkey == "2":
-            GenerateUtil.generate_validate_fix_items(state, indices, "generate-and-fix")
+            GenerateUtil.generate_validate_fix_items(state, indices, mode="generate-and-fix")
 
     @staticmethod
     def validate_submenu(state: State) -> None:

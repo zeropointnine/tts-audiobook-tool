@@ -65,38 +65,6 @@ def strip_ansi_codes(s: str) -> str:
 def make_random_hex_string(num_hex_chars: int=32) -> str:
     return f"{random.getrandbits(num_hex_chars * 4):0{num_hex_chars}x}"
 
-def encode_to_flac(wav_path: str, flac_path: str) -> bool:
-
-    try:
-        # Construct the FFmpeg command with proper escaping for filenames
-        cmd = [
-            'ffmpeg',
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            '-i', wav_path,
-            '-c:a', 'flac',
-            '-compression_level', '5',
-            flac_path
-        ]
-
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        return True
-
-    except subprocess.CalledProcessError as e:
-        printt(str(e.stderr), "error")
-        return False
-    except Exception as e:
-        printt(str(e), "error")
-        return False
-
 def timestamp_string() -> str:
     current_time = datetime.now()
     return current_time.strftime("%y%m%d_%H%M%S")

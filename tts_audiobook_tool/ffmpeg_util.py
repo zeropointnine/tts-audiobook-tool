@@ -3,7 +3,6 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
 
-
 class FfmpegUtil:
 
     @staticmethod
@@ -21,7 +20,11 @@ class FfmpegUtil:
             return False
 
     @staticmethod
-    def make_file(partial_command: list[str], dest_file_path: str, use_temp_file: bool) -> str:
+    def make_file(
+            partial_command: list[str],
+            dest_file_path: str,
+            use_temp_file: bool,
+    ) -> str:
         """
         `partial_command` is expected to be an ffmpeg command _sans_ "ffmpeg" and sans dest path
         (ie, the full command string list w/o the first item and last item).
@@ -39,6 +42,7 @@ class FfmpegUtil:
         else:
             working_dest_file_path = dest_file_path
 
+        # TODO: check for redundant first and last element (especially last element)
         full_command = partial_command[:]
         full_command.insert(0, FFMPEG_COMMAND)
         full_command.append(working_dest_file_path)
@@ -71,6 +75,9 @@ class FfmpegUtil:
             # Rename file
             try:
                 if os.path.exists(dest_file_path):
+                    # Note, deleting pre-existing file
+                    # Note also that this allows the dest path to be the same as the (implicit) src file,
+                    # so long as use_temp_file is True.
                     L.w(f"file already exists, will replace: {dest_file_path}")
                     os.unlink(dest_file_path)
                 os.rename(working_dest_file_path, dest_file_path)
@@ -79,5 +86,5 @@ class FfmpegUtil:
                 return f"Couldn't rename temp file: {e}"
             delete_temp_file(working_dest_file_path)
             return ""
-        else:
-            return ""
+
+        return ""

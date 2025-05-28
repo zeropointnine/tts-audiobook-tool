@@ -1,0 +1,29 @@
+Input #0, flac, from 'C:\workspace\single_segments\control.flac':
+  Metadata:
+    encoder         : Lavf61.9.100
+  Duration: 00:00:03.84, start: 0.000000, bitrate: 311 kb/s
+  Stream #0:0: Audio: flac, 44100 Hz, mono, s16
+Stream mapping:
+  Stream #0:0 -> #0:0 (flac (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, null, to 'pipe:':
+  Metadata:
+    encoder         : Lavf61.9.100
+  Stream #0:0: Audio: pcm_s16le, 192000 Hz, mono, s16, 3072 kb/s
+    Metadata:
+      encoder         : Lavc61.22.100 pcm_s16le
+[Parsed_loudnorm_0 @ 000001a0c62dbc00] 
+{
+	"input_i" : "-18.44",
+	"input_tp" : "-1.08",
+	"input_lra" : "1.20",
+	"input_thresh" : "-28.65",
+	"output_i" : "-18.04",
+	"output_tp" : "-2.00",
+	"output_lra" : "0.00",
+	"output_thresh" : "-28.30",
+	"normalization_type" : "dynamic",
+	"target_offset" : "0.04"
+}
+[out#0/null @ 000001a0c62e4ec0] video:0KiB audio:1440KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown
+size=N/A time=00:00:03.90 bitrate=N/A speed= 116x    

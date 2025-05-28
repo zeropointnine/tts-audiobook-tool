@@ -1,13 +1,49 @@
+import subprocess
 import sounddevice as sd
 import wave
 import numpy as np
 import threading
-import pyloudnorm as pyln
 import soundfile as sf
 
 from tts_audiobook_tool.util import printt
 
 class SoundUtil:
+
+    @staticmethod
+    def encode_to_flac(wav_path: str, flac_path: str) -> bool:
+
+        # TODO: use "make_file" here
+
+        try:
+            # Construct the FFmpeg command with proper escaping for filenames
+            cmd = [
+                'ffmpeg',
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                '-i', wav_path,
+                '-c:a', 'flac',
+                '-compression_level', '5',
+                flac_path
+            ]
+
+            subprocess.run(
+                cmd,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            return True
+
+        except subprocess.CalledProcessError as e:
+            printt(str(e.stderr), "error")
+            return False
+        except Exception as e:
+            printt(str(e), "error")
+            return False
+
 
     @staticmethod
     def play_wav(file_path: str):
@@ -78,53 +114,5 @@ class SoundUtil:
         thread = threading.Thread(target=_play_stream, daemon=True)
         thread.start()
 
-    @staticmethod
-    def normalize_and_overwrite(wav_file_path: str) -> str:
-        """
-        Normalizes the loudness of a WAV file to a target LUFS and overwrites the original file.
-        Returns empty string on success or error string on fail
-        Gemini 2.5 Pro
-        """
-        try:
-            audio, sample_rate = sf.read(wav_file_path, dtype='float32')
+    # ---
 
-            # Ensure mono audio for loudness measurement if stereo
-            if audio.ndim > 1 and audio.shape[1] > 1:
-                 # Average channels for loudness calculation, but keep original channels for output
-                 audio_mono = np.mean(audio, axis=1)
-            else:
-                 audio_mono = audio
-
-            # Measure loudness
-            meter = pyln.Meter(sample_rate)
-
-            if len(audio_mono) < sample_rate * 0.4:
-                 # Skip, needs at least 400ms for reliable measurement
-                 return ""
-
-            loudness = meter.integrated_loudness(audio_mono)
-
-            if loudness == -np.inf:
-                # Skip, avoid division by zero or extreme gain if loudness is -inf (silence)
-                return ""
-
-            # Target loudness (LUFS) - EBU R 128 suggests -23.0 LUFS, but -24 is also common for podcasts/audiobooks
-            target_lufs = -24.0
-            gain_db = target_lufs - loudness
-            gain_linear = 10 ** (gain_db / 20.0)
-
-            # Apply gain
-            normalized_audio = audio * gain_linear
-
-            # Peak normalize to prevent clipping (-1.0 dBTP ceiling is common, 0.0 is max)
-            # Use pyloudnorm's peak normalization
-            normalized_audio = pyln.normalize.peak(normalized_audio, -1.0)
-
-            # Write the normalized audio back to the original file
-            # Use soundfile to preserve original subtype if possible (e.g., PCM_16, PCM_24, FLOAT)
-            sf.write(wav_file_path, normalized_audio, sample_rate) # sf handles dtype conversion based on file subtype
-            return ""
-
-        except Exception as e:
-            return f"Error normalizing {wav_file_path}: {e}"
-            # TODO should do temp file treatment

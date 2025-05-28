@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import signal
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.convert_util import ConvertUtil
+from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -104,17 +104,6 @@ class App:
                 s += f"{COL_DIM}(current: {COL_ACCENT}{len(self.state.project.text_segments)}{COL_DIM} lines)"
             printt(s)
 
-        # Chapters
-        if self.state.prefs.project_dir:
-            s = f"{make_hotkey_string("D")} Chapter dividers "
-            indices = self.state.project.section_dividers
-            if indices:
-                num_chapters_string = f"{COL_ACCENT}{len(indices)+1}{COL_DIM} chapters"
-            else:
-                num_chapters_string = f"{COL_ACCENT}None{COL_DIM}"
-            s += f"{COL_DIM}(current: {num_chapters_string}{COL_DIM})"
-            printt(s)
-
         # Generate audio
         if self.state.prefs.project_dir:
             s = f"{make_hotkey_string("G")} Generate audio"
@@ -140,12 +129,6 @@ class App:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
 
-        # Convert
-        s = f"{make_hotkey_string("M")} Convert combined FLAC files to to MP4"
-        if True: # TODO
-            s += f" {COL_DIM}(must first create combined FLAC files)"
-        printt(s)
-
         # Options
         printt(f"{make_hotkey_string("O")} Options")
 
@@ -167,12 +150,7 @@ class App:
                     self.ask_and_set_existing_project()
             case "v":
                 if self.can_set_voice:
-                    if num_audio_files:
-                        s = f"Replacing voice will invalidate {num_audio_files} previously generated audio file fragments for this project.\nAre you sure? "
-                        if ask_hotkey(s):
-                            VoiceUtil.voice_submenu(self.state)
-                    else:
-                        VoiceUtil.voice_submenu(self.state)
+                    VoiceUtil.voice_submenu(self.state, num_audio_files)
             case "t":
                 if not self.state.prefs.project_dir:
                     return
@@ -180,9 +158,6 @@ class App:
                     TextSegmentsUtil.set_text_submenu(self.state)
                 else:
                     self.text_submenu()
-            case "d":
-                if self.state.project.text_segments:
-                    self.ask_section_dividers()
             case "g":
                 if self.can_generate_audio:
                     GenerateValidateSubmenus.generate_submenu(self.state)
@@ -193,9 +168,7 @@ class App:
             case "c":
                 if not self.state.prefs.project_dir or num_audio_files == 0:
                     return
-                ConcatUtil.ask_concat(self.state)
-            case "m":
-                ConvertUtil.ask_convert(self.state)
+                ConcatUtil.concat_submenu(self.state)
             case "o":
                 self.options_submenu()
             case "q":
@@ -290,8 +263,7 @@ class App:
         printt(f"{make_hotkey_string("2")} Replace text\n")
         hotkey = ask()
         if hotkey == "1":
-            strings = [item.text for item in self.state.project.text_segments]
-            AppUtil.print_text_segment_text(strings)
+            AppUtil.print_project_text(self.state)
             ask("Press enter: ")
         elif hotkey == "2":
             num_files = ProjectDirUtil.num_audio_segment_files(self.state)
@@ -302,51 +274,13 @@ class App:
                 if ask_hotkey(s):
                     TextSegmentsUtil.set_text_submenu(self.state)
 
-    def ask_section_dividers(self) -> None:
-
-        print_heading("Chapters dividers:")
-
-        num_text_segments = len(self.state.project.text_segments)
-
-        section_dividers = self.state.project.section_dividers
-        if section_dividers:
-            ConcatUtil.print_concat_info(section_dividers, num_text_segments)
-
-        printt("Enter the line numbers where new chapters will begin.")
-        printt("For example, if there are 1000 lines of text and you enter \"250, 700\",")
-        printt("three chapters will be created spanning lines 1-249, 250-699, and 700-1000.")
-        printt("Enter \"1\" for none.")
-        printt()
-        inp = ask()
-        printt()
-        if not inp:
-            return
-
-        string_items = inp.split(",")
-        one_indexed_items = []
-        for string_item in string_items:
-            try:
-                index = int(string_item)
-                one_indexed_items.append(index)
-            except:
-                printt(f"Parse error: {string_item}", "error")
-                return
-        one_indexed_items = list(set(one_indexed_items))
-        one_indexed_items.sort()
-        for item in one_indexed_items:
-            if item < 1 or item > len(self.state.project.text_segments):
-                printt(f"Index out of range: {item}", "error")
-                return
-        zero_indexed_items = [item - 1 for item in one_indexed_items]
-        if 0 in zero_indexed_items:
-            del zero_indexed_items[0]
-        self.state.project.section_dividers = zero_indexed_items
-
     def options_submenu(self) -> None:
 
         print_heading("Options:")
-        printt(f"{make_hotkey_string("1")} Temperature (currently: {self.state.prefs.temperature})")
-        printt(f"{make_hotkey_string("2")} Play audio after each segment is generated (currently: {self.state.prefs.play_on_generate})")
+        printt(f"{make_hotkey_string("1")} Set temperature (currently: {self.state.prefs.temperature})")
+        printt(f"{make_hotkey_string("2")} Normalize audio after generate (currently: {self.state.prefs.should_normalize})")
+        printt(f"{make_hotkey_string("3")} Play audio after each segment is generated (currently: {self.state.prefs.play_on_generate})")
+        printt(f"{make_hotkey_string("4")} Transcode FLAC files to to MP4")
         printt()
 
         hotkey = ask_hotkey()
@@ -365,11 +299,19 @@ class App:
                 except:
                     printt("Bad value", "error")
             case "2":
-                self.state.prefs.play_on_generate = not self.state.prefs.play_on_generate
-                printt(f"Play audio after each segment is generated set to: {self.state.prefs.play_on_generate}")
+                self.state.prefs.should_normalize = not self.state.prefs.should_normalize
+                printt(f"Normalize audio after generate set to: {self.state.prefs.should_normalize}")
+                printt()
                 if MENU_CLEARS_SCREEN:
                     ask_hotkey("Press enter: ")
+            case "3":
+                self.state.prefs.play_on_generate = not self.state.prefs.play_on_generate
+                printt(f"Play audio after each segment is generated set to: {self.state.prefs.play_on_generate}")
                 printt()
+                if MENU_CLEARS_SCREEN:
+                    ask_hotkey("Press enter: ")
+            case "4":
+                TranscodeUtil.ask_transcode(self.state)
 
     def quit(self):
         printt("State saved. Exiting")

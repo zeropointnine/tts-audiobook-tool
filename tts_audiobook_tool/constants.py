@@ -6,6 +6,8 @@ from tts_audiobook_tool.ansi import Ansi
 APP_NAME = "tts-audiobook-tool"
 
 DEFAULT_TEMPERATURE = 0.5
+DEFAULT_SHOULD_NORMALIZE = True
+
 
 # Different voices may have a varying rates of delivery.
 # Oute recommends 30s max but can handle longer generations.

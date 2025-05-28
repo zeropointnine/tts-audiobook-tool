@@ -2,6 +2,7 @@ import os
 from typing import cast
 from pathlib import Path
 
+from tts_audiobook_tool.chapter_info import ChapterInfo
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
@@ -10,60 +11,58 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_segment import TextSegment, TimedTextSegment
+from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:
 
     @staticmethod
-    def ask_concat(state: State) -> None:
+    def concat_submenu(state: State) -> None:
         """
-        Asks which chapters to create and concats project audio segments into final flac files.
         """
-
         print_heading(f"Combine audio segments:")
 
-        segment_index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
-        segment_index_ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
-        section_indices = []
+        infos = ChapterInfo.make_chapter_infos(state)
+        print_chapter_segment_info(infos)
 
-        for section_index, rang in enumerate(segment_index_ranges):
+        if not state.project.section_dividers:
+            chapter_dividers_string = "none"
+        else:
+            strings = [str(item) for item in state.project.section_dividers]
+            chapter_dividers_string = ", ".join(strings)
 
-            segment_index_start = rang[0]
-            segment_index_end = rang[1]
-
-            segment_indices_and_paths: list[tuple[int, str]] = []
-            num_missing = 0
-
-            for segment_index in range(segment_index_start, segment_index_end + 1):
-                segment_file_path = segment_index_to_path.get(segment_index, "")
-                if segment_file_path:
-                    segment_indices_and_paths.append( (segment_index, segment_file_path) )
-                else:
-                    num_missing += 1
-
-            # Print info
-            are_all_missing = (num_missing == segment_index_end - segment_index_start + 1)
-            index_string = str(section_index+1) if not are_all_missing else "-"
-            if num_missing == 0:
-                desc = "ready"
-            elif are_all_missing:
-                desc = "no audio files generated yet"
-            else:
-                desc = f"{num_missing} file/s missing"
-            label_col = COL_DIM if are_all_missing else COL_DEFAULT
-            printt(f"{COL_DEFAULT}[{COL_ACCENT}{index_string}{COL_DEFAULT}] {label_col}segments {segment_index_start}-{segment_index_end} {COL_DIM}({desc})")
-
-            if not segment_indices_and_paths:
-                continue
-
-            section_indices.append(section_index)
-
+        printt(f"{make_hotkey_string('1')} Define chapter dividers {COL_DIM}(currently: {chapter_dividers_string})")
+        printt(f"{make_hotkey_string('2')} Combine to FLAC")
+        printt(f"{make_hotkey_string('3')} Combine to FLAC, and transcode to MP4")
+        printt()
+        hotkey = ask_hotkey()
         printt()
 
-        if len(section_indices) > 1:
-            inp = ask("Enter chapter numbers (eg, \"1, 2, 5-10\", or \"all\"): ")
+        if hotkey == "1":
+            ConcatUtil.ask_chapter_dividers(state)
+            ConcatUtil.concat_submenu(state)
+            return
+
+        if hotkey == "2":
+            ConcatUtil.ask_chapters(infos, state, and_transcode=False)
+        elif hotkey == "3":
+            ConcatUtil.ask_chapters(infos, state, and_transcode=True)
+
+    @staticmethod
+    def ask_chapters(infos: list[ChapterInfo], state: State, and_transcode: bool) -> None:
+
+        # Chapter indices that have any files
+        chapter_indices = []
+        for i, info in enumerate(infos):
+            if info.num_files_exist > 0:
+                chapter_indices.append(i)
+
+        if len(chapter_indices) > 1:
+            printt("Enter chapter numbers for which you want to combine audio segments")
+            printt("(For example: \"1, 2, 4\" or  \"5-10\", or \"all\")")
+            inp = ask()
             if inp == "all" or inp == "a":
-                selected_section_indices = section_indices.copy()
+                selected_chapter_indices = chapter_indices.copy()
             else:
                 input_indices, warnings = ParseUtil.parse_int_list(inp)
                 if warnings:
@@ -74,24 +73,24 @@ class ConcatUtil:
                 if not input_indices:
                     return
                 input_indices = [item - 1 for item in input_indices] # make zero-indexed
-                selected_section_indices = [item for item in input_indices if item in section_indices]
+                selected_chapter_indices = [item for item in input_indices if item in chapter_indices]
 
-                if not selected_section_indices:
+                if not selected_chapter_indices:
                     ask("No valid chapters numbers entered. Press enter: ")
                     return
 
         else:
-            selected_section_indices = [0]
+            selected_chapter_indices = [0]
 
-        strings = [str(index+1) for index in selected_section_indices]
+        strings = [str(index+1) for index in selected_chapter_indices]
         string = ", ".join(strings)
-        printt(f"Will create the following chapter files: {string}")
+        printt(f"Will concatenate audio segments to create the following chapters: {string}")
         printt()
         b = ask_confirm()
         if not b:
             return
 
-        ConcatUtil.concatenate_sections(selected_section_indices, state)
+        ConcatUtil.concatenate_sections(selected_chapter_indices, state, and_transcode)
 
         if not state.prefs.has_shown_player_reminder:
             show_player_reminder(state)
@@ -99,7 +98,9 @@ class ConcatUtil:
         ask("Finished. Press enter:")
 
     @staticmethod
-    def concatenate_sections(indices: list[int], state: State) -> None:
+    def concatenate_sections(indices: list[int], state: State, and_transcode: bool) -> None:
+
+        # TODO: make interruptable after concat and after compress
 
         raw_text = state.project.load_raw_text()
         if not raw_text:
@@ -146,8 +147,20 @@ class ConcatUtil:
                 printt(error, "error")
                 return
 
-            printt(f"Saved: {COL_ACCENT}{dest_file_path}")
+            col = COL_DEFAULT if and_transcode else COL_ACCENT
+            printt(f"Saved: {col}{dest_file_path}")
             printt()
+
+            if and_transcode:
+                printt("Transcoding to MP4")
+                printt()
+                transcode_path, err = TranscodeUtil.transcode_flac_to_aac(dest_file_path)
+                printt()
+                if err:
+                    printt(err, "error")
+                    return
+                printt(f"Saved: {COL_ACCENT}{transcode_path}")
+                printt()
 
             counter += 1
 
@@ -231,6 +244,8 @@ class ConcatUtil:
 
         # [1] Make temp text file with list of input WAVs for ffmpeg's concat demuxer
 
+        printt("Creating temp file")
+
         temp_text_path = os.path.join(dest_base_path, PROJECT_FFMPEG_CONCAT_TEMP_FILE_NAME)
         try:
             with open(temp_text_path, 'w', encoding='utf-8') as f:
@@ -246,6 +261,9 @@ class ConcatUtil:
 
         # [2] Do concat
 
+        printt(f"Concatenating {len(file_paths)} files")
+        printt()
+
         # -y: Overwrite output file without asking
         # -f concat: Use the concatenation demuxer
         # -safe 0: Allow unsafe file paths (useful if paths are complex, though quoting helps)
@@ -259,10 +277,14 @@ class ConcatUtil:
             "-f", "concat",
             "-safe", "0",
             "-i", temp_text_path,
-            "-c:a", "flac",
+            "-c:a", "flac"
         ]
+
+        # ffmpeg -f concat -safe 0 -i mylist.txt -c copy output_concatenated.flac
+
         err = FfmpegUtil.make_file(partial_command, dest_flac_path, use_temp_file=True)
         delete_temp_file(temp_text_path)
+
         return err
 
     @staticmethod
@@ -306,6 +328,50 @@ class ConcatUtil:
             L.e(err)
         return not bool(err)
 
+    # ---
+
+    @staticmethod
+    def ask_chapter_dividers(state: State) -> None:
+
+        print_heading("Combine > Chapters dividers:")
+
+        num_text_segments = len(state.project.text_segments)
+
+        section_dividers = state.project.section_dividers
+        if section_dividers:
+            ConcatUtil.print_concat_info(section_dividers, num_text_segments)
+
+        printt("Enter the line numbers where new chapters will begin.")
+        printt("For example, if there are 1000 lines of text and you enter \"250, 700\",")
+        printt("three chapters will be created spanning lines 1-249, 250-699, and 700-1000.")
+        printt("Enter \"1\" for none.")
+        printt()
+        inp = ask()
+        printt()
+        if not inp:
+            return
+
+        string_items = inp.split(",")
+        one_indexed_items = []
+        for string_item in string_items:
+            try:
+                index = int(string_item)
+                one_indexed_items.append(index)
+            except:
+                printt(f"Parse error: {string_item}", "error")
+                return
+        one_indexed_items = list(set(one_indexed_items))
+        one_indexed_items.sort()
+        for item in one_indexed_items:
+            if item < 1 or item > len(state.project.text_segments):
+                printt(f"Index out of range: {item}", "error")
+                return
+        zero_indexed_items = [item - 1 for item in one_indexed_items]
+        if 0 in zero_indexed_items:
+            del zero_indexed_items[0]
+        state.project.section_dividers = zero_indexed_items
+
+
     @staticmethod
     def print_concat_info(section_dividers: list[int], num_items: int) -> None:
         section_index_strings = [str(index+1) for index in section_dividers]
@@ -328,6 +394,17 @@ class ConcatUtil:
     #     return False
 
 # ---
+
+def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
+    for i, info in enumerate(infos):
+        if info.num_files_missing == 0:
+            desc = "all audio segments generated"
+        elif info.num_files_exist == 0:
+            desc = "no audio files generated yet"
+        else:
+            desc = f"{info.num_files_missing} of {info.num_segments} files missing"
+        printt(f"Chapter {i+1}: segments {info.segment_index_start + 1}-{info.segment_index_end + 1} {COL_DIM}({desc})")
+    printt()
 
 def show_player_reminder(state: State) -> None:
     printt(f"🔔 {COL_ACCENT}Reminder:")

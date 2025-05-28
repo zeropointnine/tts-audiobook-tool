@@ -11,13 +11,18 @@ from tts_audiobook_tool.constants import *
 class VoiceUtil:
 
     @staticmethod
-    def voice_submenu(state: State) -> None:
+    def voice_submenu(state: State, num_audio_files: int) -> None:
         """
         Gets/creates voice json, re-saves it to the project dir, and updates State.
         Or prints error message.
 
         Deletes any extant audio files in project dir.
         """
+
+        def confirm() -> bool:
+            printt(f"Replacing voice will invalidate {num_audio_files} previously generated audio file fragments for this project.")
+            return ask_confirm("Are you sure? ")
+
         voice = None
 
         word = "Set" if not state.project.voice else "Replace"
@@ -31,10 +36,16 @@ class VoiceUtil:
         # Get voice
         match inp:
             case "1":
+                if not confirm():
+                    return
                 result = VoiceUtil.ask_create_voice()
             case "2":
+                if not confirm():
+                    return
                 result = VoiceUtil.ask_load_voice()
             case "3":
+                if not confirm():
+                    return
                 result = VoiceUtil.load_voice(DEFAULT_VOICE_FILE_PATH)
                 if isinstance(result, dict):
                     result["identifier"] = "default" # special case
