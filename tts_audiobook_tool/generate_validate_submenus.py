@@ -20,10 +20,28 @@ class GenerateValidateSubmenus:
             ask(f"All items already generated. Press enter: ")
             return
 
-        print_heading("Generate audio:")
+        print_heading("Generate audio")
+        printt(f"{make_hotkey_string("1")} Generate")
+        printt(f"{make_hotkey_string("2")} Generate, plus validate and attempt fix when necessary")
+        printt()
+        hotkey = ask_hotkey()
+
+        if hotkey == "1":
+            and_fix = False
+        elif hotkey == "2":
+            and_fix = True
+        else:
+            return
+
+        GenerateValidateSubmenus.generate_submenu_part_2(state, and_fix)
+
+    @staticmethod
+    def generate_submenu_part_2(state: State, and_fix: bool) -> None:
+
+        num_items = len(state.project.text_segments)
+
         printt("Enter item numbers to generate (eg, \"1-100, 103\", or \"all\")")
         inp = ask()
-
         if inp == "all" or inp == "a":
             indices = [item for item in range(0, num_items)]
         else:
@@ -41,11 +59,6 @@ class GenerateValidateSubmenus:
             # make zero-indexed
             indices = [item - 1 for item in indices]
 
-        GenerateValidateSubmenus.generate_submenu_part_2(state, indices)
-
-    @staticmethod
-    def generate_submenu_part_2(state: State, indices: list[int]) -> None:
-
         dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         already_complete = list(dic.keys())
         original_len = len(indices)
@@ -62,16 +75,12 @@ class GenerateValidateSubmenus:
             info += f" (already complete: {num_completed} items)"
         printt(info)
         printt()
+        b = ask_confirm()
+        if not b:
+            return
 
-        printt(f"{make_hotkey_string("1")} Generate")
-        printt(f"{make_hotkey_string("2")} Generate, plus validate and attempt fix when necessary")
-        printt()
-
-        hotkey = ask_hotkey()
-        if hotkey == "1":
-            GenerateUtil.generate_validate_fix_items(state, indices, mode="generate")
-        elif hotkey == "2":
-            GenerateUtil.generate_validate_fix_items(state, indices, mode="generate-and-fix")
+        mode = "generate-and-fix" if and_fix else "generate"
+        GenerateUtil.generate_validate_fix_items(state, indices, mode=mode)
 
     @staticmethod
     def validate_submenu(state: State) -> None:

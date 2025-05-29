@@ -113,6 +113,3 @@ class SoundUtil:
 
         thread = threading.Thread(target=_play_stream, daemon=True)
         thread.start()
-
-    # ---
-

@@ -5,7 +5,7 @@ import subprocess
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.util import *
 
-class LoudnessUtil:
+class LoudnessNormalizationUtil:
     """
     "Two-Pass Loudness Normalization (to EBU R128 / ITU-R BS.1770 specifications)"
     """
@@ -30,14 +30,14 @@ class LoudnessUtil:
 
 
         # Pass 1
-        result = LoudnessUtil.get_loudness_json(source_path, i, lra, tp)
+        result = LoudnessNormalizationUtil.get_loudness_json(source_path, i, lra, tp)
         if isinstance(result, str):
             return result
         else:
             loudness_stats = result
 
         # Pass 2
-        err = LoudnessUtil.do_loudness_transform(source_path, dest_path, loudness_stats)
+        err = LoudnessNormalizationUtil.do_loudness_transform(source_path, dest_path, loudness_stats)
         return err
 
     @staticmethod
@@ -205,7 +205,7 @@ class LoudnessUtil:
         for file in os.listdir(dir_path):
             file_path = os.path.join(dir_path, file)
             printt(file_path)
-            err = LoudnessUtil.normalize(file_path)
+            err = LoudnessNormalizationUtil.normalize(file_path)
             printt(err if err else "ok")
 
     @staticmethod
@@ -215,7 +215,7 @@ class LoudnessUtil:
         sum = 0
         for file in os.listdir(dir_path):
             file_path = os.path.join(dir_path, file)
-            result = LoudnessUtil.get_lra(file_path)
+            result = LoudnessNormalizationUtil.get_lra(file_path)
             if isinstance(result, float):
                 count += 1
                 sum += result
@@ -232,7 +232,7 @@ class LoudnessUtil:
         LRA = EBU R128 Loudness Range
         FYI, this is the value shown in Roon for albums and tracks ("Dynamic range (R128)")
         """
-        result = LoudnessUtil.get_loudness_json(file_path, no_params=True)
+        result = LoudnessNormalizationUtil.get_loudness_json(file_path, no_params=True)
         if isinstance(result, str):
             return result
         lra = result["input_lra"]

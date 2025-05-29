@@ -4,6 +4,7 @@ from enum import Enum, auto
 import time
 from pathlib import Path
 from typing import Tuple, Optional, cast
+import soundfile as sf
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
@@ -41,9 +42,9 @@ class ValidateUtil:
                 break
 
             # Do test
-            result, message = ValidateUtil.validate_item(
+            result, fail_message = ValidateUtil.validate_item(
                 item=item,
-                fix_or_delete=False,
+                should_fix_or_delete=False,
                 whisper_model=Shared.get_whisper()
             )
             num_analysed += 1
@@ -58,14 +59,14 @@ class ValidateUtil:
                 num_detected += 1
 
             if result == ValidateResult.FAILED_ONLY:
-                item_info += message + "\n"
+                item_info += "Failed: " + fail_message + "\n"
                 printt(item_info)
             if result == ValidateResult.FAILED_AND_CORRECTED:
-                item_info += message + "\n" + "Corrected" + "\n"
+                item_info += "Failed: " + fail_message + "\n" + "Corrected" + "\n"
                 printt(item_info)
                 num_corrected += 1
             if result == ValidateResult.FAILED_AND_DELETED:
-                item_info += message + "\n"
+                item_info += "Failed: " + fail_message + "\n"
                 printt(item_info)
                 num_deleted += 1
 
@@ -82,7 +83,7 @@ class ValidateUtil:
     @staticmethod
     def validate_item(
         item: ValidateItem,
-        fix_or_delete: bool,
+        should_fix_or_delete: bool,
         whisper_model
     ) -> tuple[ValidateResult, str]:
         """
@@ -94,8 +95,8 @@ class ValidateUtil:
 
         item.transcribed_text = whisper_data["text"].strip()
 
-        # [1] Do "substring" test
-        if fix_or_delete:
+        # [1] Do "substring" test (and potentially fix)
+        if should_fix_or_delete:
             substring_test_result = ValidateUtil.detect_is_substring_and_fix(item, cast(dict, whisper_data))
             if substring_test_result:
                 did_save, error_message = substring_test_result
@@ -111,15 +112,28 @@ class ValidateUtil:
         # [2] Do word count test
         fail_reason = ValidateUtil.is_word_count_fail(item)
         if fail_reason:
-            if fix_or_delete:
+            if should_fix_or_delete:
                 try:
                     Path(item.path).unlink()
-                    deleted = True
                     return ValidateResult.FAILED_AND_DELETED, fail_reason
                 except:
                     return ValidateResult.NOOP, "Detected error but couldn't delete file"
             else:
                 return ValidateResult.FAILED_ONLY, fail_reason
+
+        # [3] Static audio test
+        is_static = ValidateUtil.is_audio_static(item, whisper_data)
+        if is_static:
+            fail_reason = "Audio data is static"
+            if should_fix_or_delete:
+                try:
+                    Path(item.path).unlink()
+                    return ValidateResult.FAILED_AND_DELETED, fail_reason
+                except:
+                    return ValidateResult.NOOP, "Detected error but couldn't delete file"
+            else:
+                return ValidateResult.FAILED_ONLY, fail_reason
+
 
         # At this point we consider the item to have "passed"
         path_str = item.path
@@ -146,7 +160,7 @@ class ValidateUtil:
 
         start_time, end_time = timestamps
 
-        message = f"Failed test: Excess audio detected, but substring exists at {start_time:.2f}-{end_time:.2f}"
+        message = f"Excess audio detected, but substring exists at {start_time:.2f}-{end_time:.2f}"
 
         # Make trimmed copy of audio file with updated filename and delete old version
         old_path = item.path
@@ -184,14 +198,14 @@ class ValidateUtil:
             abs_delta = abs(words_delta)
             if abs_delta >= 2:
                 phrase = "too long" if abs_delta > 0 else "too short"
-                fail_message = f"Failed test: Transcription word count {phrase} (short phrase) (delta: {abs_delta})"
+                fail_message = f"Transcription word count {phrase} (short phrase) (delta: {abs_delta})"
         else:
             # Normal test
             ratio = words_delta / words_src
             if ratio > 0.20:
-                fail_message = f"Failed test: Transcription word count too long (ratio: +{int(ratio*100)}%) (words: {words_src})"
+                fail_message = f"Transcription word count too long (ratio: +{int(ratio*100)}%) (words: {words_src})"
             elif ratio < -0.20:
-                fail_message = f"Failed test: Transcription word count too short (ratio: {int(ratio*100)}%) (words: {words_src})"
+                fail_message = f"Transcription word count too short (ratio: {int(ratio*100)}%) (words: {words_src})"
         return fail_message
 
 
@@ -284,6 +298,45 @@ class ValidateUtil:
                     break
 
         return None
+
+    @staticmethod
+    def is_audio_static(validateItem: ValidateItem, whisper_data: dict) -> bool:
+        # Test for Oute issue with very short prompts, static output
+
+        DURATION_THRESH = 2.0
+
+        end_time = ValidateUtil.get_whisper_data_last_end(whisper_data)
+        if end_time is not None and end_time > DURATION_THRESH:
+            return False
+
+        audio, sr = sf.read(validateItem.path, dtype="float32")
+        duration = len(audio) / sr
+        if duration > DURATION_THRESH:
+            return False
+
+        is_first = True
+        num_changes = 0
+        last_value = 0
+
+        for item in audio:
+            item = round(item, 1)
+            if is_first:
+                is_first = False
+                last_value = item
+                continue
+            if item != last_value:
+                num_changes += 1
+                if num_changes > 5:
+                    return False
+            last_value = item
+        return True
+
+    @staticmethod
+    def get_whisper_data_last_end(whisper_data: dict) -> float | None:
+        try:
+            return float( whisper_data['segments'][-1]["end"] )
+        except:
+            return None
 
 # ---
 

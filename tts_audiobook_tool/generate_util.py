@@ -4,7 +4,7 @@ import copy
 
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.loudness_util import LoudnessUtil
+from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -120,13 +120,13 @@ class GenerateUtil:
 
                 match result:
                     case ValidateResult.VALIDATED_AND_TAGGED:
-                        printt("Validated on second try" + "\n")
+                        printt("Validated on second attempt" + "\n")
                         break
                     case ValidateResult.FAILED_AND_CORRECTED:
-                        printt(message + "\n" + "Corrected on second try" + "\n")
+                        printt(message + "\n" + "Corrected on second attempt" + "\n")
                         break
                     case ValidateResult.FAILED_ONLY:
-                        printt(message + "\n" + "Voice line still fails test" + "\n")
+                        printt(message + "\n" + "Still fails on second attempt" + "\n")
                         break
                     case _:
                         L.e("Shouldn't get here")
@@ -176,7 +176,7 @@ class GenerateUtil:
             printt("Performing loudness normalization")
             printt()
             temp_normalized_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
-            err = LoudnessUtil.normalize(temp_wav_path, temp_normalized_wav_path)
+            err = LoudnessNormalizationUtil.normalize(temp_wav_path, temp_normalized_wav_path)
             if err:
                 delete_temp_file(temp_wav_path)
                 delete_temp_file(temp_normalized_wav_path)

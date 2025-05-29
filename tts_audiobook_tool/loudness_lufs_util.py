@@ -4,16 +4,14 @@ import pyloudnorm as pyln
 import soundfile as sf
 
 
-class LoudnessLinearUtil:
+class LoudnessLufsUtil:
     """
-    Makes ~linear loudness adjustment
-    Currently not using.
     """
 
     @staticmethod
-    def measure_loudness(audio: np.ndarray, sample_rate) -> float | None:
+    def calculate_integrated_loudness(audio: np.ndarray, sample_rate) -> float | None:
         """
-        Measures "integrated loudness" (EBU R128 / ITU-R BS.1770 algorithm)
+        Measures "integrated loudness" (EBU R128 / ITU-R BS.1770 algorithm) in LUFS
         """
 
         # Ensure mono audio for loudness measurement if stereo
@@ -37,13 +35,15 @@ class LoudnessLinearUtil:
     def normalize_and_overwrite(wav_file_path: str) -> str:
         """
         Normalizes the loudness of a WAV file to a target LUFS and overwrites the original file.
-        This is a ~"linear transformation".
+        This is a more or less linear transformation.
         Returns empty string on success or no-action, else error string on fail
+
+        (Not currently using)
         """
         try:
             audio, sample_rate = sf.read(wav_file_path, dtype='float32')
 
-            loudness = LoudnessLinearUtil.measure_loudness(audio, sample_rate)
+            loudness = LoudnessLufsUtil.calculate_integrated_loudness(audio, sample_rate)
             print("loudness", loudness)
             if loudness is None:
                 # Skip, sample too short
@@ -83,25 +83,23 @@ class LoudnessLinearUtil:
         except Exception as e:
             return f"Error normalizing {wav_file_path}: {e}"
 
-    # ---
-
     @staticmethod
-    def measure_loudness_file(file_path: str) -> float | None | str:
+    def calculate_integrated_loudness_file(file_path: str) -> float | None | str:
         """ Returns float or None if sample too short or str if error message """
         try:
             audio, sample_rate = sf.read(file_path, dtype='float32')
         except Exception as e:
             return str(e)
-        return LoudnessLinearUtil.measure_loudness(audio, sample_rate)
+        return LoudnessLufsUtil.calculate_integrated_loudness(audio, sample_rate)
 
     @staticmethod
-    def print_loudness_directory(dir_path: str):
+    def print_integrated_loudness_directory(dir_path: str):
         """ For development"""
         count = 0
         sum = 0
         for file in os.listdir(dir_path):
             file_path = os.path.join(dir_path, file)
-            result = LoudnessLinearUtil.measure_loudness_file(file_path)
+            result = LoudnessLufsUtil.calculate_integrated_loudness_file(file_path)
             if isinstance(result, float):
                 count += 1
                 sum += result
@@ -109,3 +107,18 @@ class LoudnessLinearUtil:
             print(result, file_path)
 
         print("\navg:", (sum / count))
+
+    # ---
+
+    @staticmethod
+    def calculate_loudness_rms(file_path: str) -> float:
+        """
+        Returns RMS loudness (0.0 = silence, ~1.0 = max loudness for normalized audio)
+        """
+        # Load FLAC (automatically converts to float32 in [-1.0, 1.0])
+        audio, _ = sf.read(file_path, dtype="float32")
+        # Handle stereo by averaging channels (if needed)
+        if audio.ndim > 1:
+            audio = np.mean(audio, axis=1)  # Convert to mono
+        return np.sqrt(np.mean(audio**2))
+
