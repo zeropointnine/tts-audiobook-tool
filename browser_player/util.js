@@ -26,7 +26,7 @@ async function loadAppMetadata(fileOrUrl) {
         isFlac = fileOrUrl.toLowerCase().endsWith("flac");
     } else if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
         file = fileOrUrl;
-        isFlac = file.name.toLowerCase().endsWith("flac")
+        isFlac = file.name.toLowerCase().endsWith("flac");
     } else {
         console.error("Invalid input: expected File, Blob, or URL string.");
         return null;
@@ -36,7 +36,7 @@ async function loadAppMetadata(fileOrUrl) {
         return null;
     }
 
-    let tagValue = null
+    let tagValue = null;
     try {
         if (isFlac) {
             tagValue = await findCustomFlacTag(file, FLAC_FIELD);
@@ -46,7 +46,7 @@ async function loadAppMetadata(fileOrUrl) {
         }
     } catch (error) {
         console.error("Error parsing FLAC:", error);
-        return null
+        return null;
     } finally {
         // "Closing the file stream" is handled by the browser implicitly
         // when the File/Blob objects are no longer referenced and garbage collected.
@@ -56,36 +56,41 @@ async function loadAppMetadata(fileOrUrl) {
     try {
         o = JSON.parse(tagValue)
     } catch (e) {
-        console.error(e)
-        return null
+        console.error(e);
+        return null;
     }
 
-    const timedTextSegments = o["text_segments"]
+    // Text segments
+    const timedTextSegments = o["text_segments"];
     if (!timedTextSegments) {
-        console.error("missing text_segments")
-        return null
+        console.error("missing text_segments");
+        return null;
     }
     if (timedTextSegments.length == 0) {
-        console.error("text_segments is empty")
-        return null
+        console.error("text_segments is empty");
+        return null;
     }
 
+    // Raw text (no longer required but)
+    let rawText = ""
     const rawTextBase64 = o["raw_text"]
     if (!rawTextBase64) {
-        console.error("empty or missing raw_text field")
-        return null
+        console.log("empty or missing raw_text field")
+    } else {
+        const binaryStr = atob(rawTextBase64.replace(/_/g, '/').replace(/-/g, '+'));
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+        // Decompress
+        const decompressed = pako.inflate(bytes); // zlib decompression
+        rawText = new TextDecoder('utf-8').decode(decompressed);
+        if (!rawText) {
+            console.error("decoded rawText is empty?");
+        }
     }
-    const binaryStr = atob(rawTextBase64.replace(/_/g, '/').replace(/-/g, '+'));
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-    }
-    // Decompress
-    const decompressed = pako.inflate(bytes); // zlib decompression
-    const rawText = new TextDecoder('utf-8').decode(decompressed);
     if (!rawText) {
-        console.error("decoded rawText is empty?")
-        return null
+        rawText = "";
     }
 
     result = {
@@ -417,8 +422,6 @@ function parseVorbisCommentBlock(dataView, targetTagName, textDecoder) {
     return null; // Target tag not found in this block
 }
 
-
-
 function escapeHtml(unsafe) {
     return unsafe
          .replace(/&/g, "&")
@@ -426,6 +429,18 @@ function escapeHtml(unsafe) {
          .replace(/>/g, ">")
          .replace(/"/g, "\"")
          .replace(/'/g, "'")
+}
+
+function splitWhitespace(str) {
+    // Match leading whitespace, content, and trailing whitespace
+    const match = str.match(/^(\s*)(.*?)(\s*)$/);
+
+    // Return as an object (or array if preferred)
+    return {
+      before: match[1],
+      content: match[2],
+      after: match[3]
+    };
 }
 
 function msToString(milliseconds) {
@@ -437,4 +452,16 @@ function msToString(milliseconds) {
     } else {
         return `${seconds}s`;
     }
+}
+
+function isTouchDevice() {
+    // hand-wavey
+    return !matchMedia('(pointer:fine)').matches
+}
+
+function hasPersistentKeyboard() {
+    // hand-wavey
+    const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+    const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
+    return (hasFinePointer && hasHoverSupport);
 }

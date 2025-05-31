@@ -12,21 +12,21 @@ class TextSegmenter:
         Segments by sentence. When sentence is longer than max_words, splits sentence into chunks.
         """
 
-        # Segment text into sentences using pysbd
+        # Pass 1: Segment text into sentences using pysbd
         segmenter = pysbd.Segmenter(language=language, clean=False, char_span=False) # clean=False - important
         texts = segmenter.segment(full_text)
 
-        # pysbd treats quotes with multiple sentences as a single sentence, so split them up
+        # Pass 2: pysbd treats everything enclosed in quotes as a single sentence, so split those up
         new_texts = []
         for text in texts:
-            if is_double_quote(text):
+            if is_quotation(text):
                 lst = segment_quote(text, segmenter)
                 new_texts.extend(lst)
             else:
                 new_texts.append(text)
         texts = new_texts
 
-        # Split long sentences using own algo
+        # Pass 3: Split any segments that are longer than max_words using own algo
         new_texts = []
         for text in texts:
             lst = SentenceSegmenter.segment_sentence(text, max_words=max_words)
@@ -45,16 +45,16 @@ class TextSegmenter:
 
 # ---
 
-def is_double_quote(s: str) -> bool:
+def is_quotation(s: str) -> bool:
     """
-    Returns True if string starts and ends with a double-quote character, whitespace notwithstanding
+    Returns True if stripped string starts and ends with quotation characters
     """
     s = s.strip()
     if len(s) <= 3:
         return False
     first = s[0]
     last = s[-1]
-    return first in '"＂″‶〝〞' and last in '"＂″‶〝〞'
+    return first in QUOTATION_CHARS and last in QUOTATION_CHARS
 
 
 def segment_quote(text: str, segmenter) -> list[str]:
@@ -98,3 +98,5 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
     content = text[content_start:content_end]
 
     return (before, content, end)
+
+QUOTATION_CHARS = "\"'“”"

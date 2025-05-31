@@ -3,28 +3,80 @@ from __future__ import annotations
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
 class State:
     """
-    Holds app's full state ("bad!")
+    Holds app's full state
     Viz: project object and app prefs/settings object
     """
 
     def __init__(self):
-
         self.prefs = Prefs.load()
 
         if not self.prefs.project_dir:
-            self.project = Project()
+            self.project = Project("", Shared.get_model_type())
         else:
-            self.project = Project.load(self.prefs.project_dir)
+            result = Project.load(self.prefs.project_dir)
+            if isinstance(result, str):
+                printt(result, "error")
+                self.prefs.project_dir = ""
+                self.project = Project("", Shared.get_model_type())
+            else:
+                self.project = result
 
-    def set_project(self, path: str) -> None:
+    def make_new_project(self, path: str) -> str:
+        """
+        Inits project directory and sets new project instance
+        Return error string on fail
+        """
+
+        # Make sure is a legal path
+        try:
+            project_dir_path = Path(path).resolve()
+        except:
+            return "Bad path"
+
+        if project_dir_path.exists():
+            # If exists, make sure dir is empty
+            if os.listdir(project_dir_path):
+                return "Directory is not empty"
+        else:
+            # Make project dir
+            try:
+                os.makedirs(project_dir_path, exist_ok=True)
+            except:
+                return "Error creating directory"
+
+        # Make subdirs
+        try:
+            # Make audio segments subdir
+            audio_segments_path = project_dir_path / AUDIO_SEGMENTS_SUBDIR
+            os.makedirs(audio_segments_path, exist_ok=True)
+            # Make concat subdir
+            concat_path = project_dir_path / CONCAT_SUBDIR
+            os.makedirs(concat_path, exist_ok=True)
+        except Exception as e:
+            return f"Error creating subdirectory"
+
+        self.prefs.project_dir = str( project_dir_path )
+        self.project = Project(path, Shared.get_model_type())
+        self.project.save()
+
+        return ""
+
+
+    def set_existing_project(self, path: str) -> None:
         self.prefs.project_dir = path
-        self.project = Project.load(path)
+        result = Project.load(path)
+        if isinstance(result, str):
+            printt(result, "error")
+            self.project = Project("", Shared.get_model_type())
+        else:
+            self.project = result
 
     def reset(self):
         self.prefs = Prefs.new_and_save()
-        self.project = Project()
+        self.project = Project("", Shared.get_model_type())

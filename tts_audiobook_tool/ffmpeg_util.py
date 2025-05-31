@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
@@ -88,3 +89,35 @@ class FfmpegUtil:
             return ""
 
         return ""
+
+    @staticmethod
+    def transcode_to_aac(source_file_path: str, kbps=96) -> tuple[str, str]:
+        """
+        Transcodes an audio file to AAC/MP4 format.
+        Returns saved file name and error string, mutually exclusive
+        """
+
+        path = Path(source_file_path)
+        if path.suffix in [".mp4", ".m4a", ".m4b"]:
+            return "", "Is already an mp4 file"
+
+        dest_file_path = str(path.with_suffix(".mp4"))
+        dest_file_path = get_unique_file_path(dest_file_path)
+
+        partial_command = [
+            "-i",
+            source_file_path,
+            "-c:a",
+            "aac",
+            "-b:a",
+            f"{kbps}k",
+            "-v",
+            "warning",
+            "-progress",
+            "-",
+        ]
+        err = FfmpegUtil.make_file(partial_command, dest_file_path, False)
+        if err:
+            return "", err
+
+        return dest_file_path, ""

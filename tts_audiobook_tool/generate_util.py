@@ -5,6 +5,7 @@ import copy
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -148,7 +149,7 @@ class GenerateUtil:
         # TODO: should return (path, error), mutually exclusive
         """
 
-        if not state.project.voice:
+        if not state.project.has_voice:
             return ""
 
         temp_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
@@ -156,7 +157,19 @@ class GenerateUtil:
         text_segment = state.project.text_segments[index]
 
         start_time = time.time()
-        is_success = GenerateUtil.generate_wav_file(temp_wav_path, text_segment.text, state.project.voice, state.prefs.temperature)
+
+        if Shared.is_oute():
+            is_success = GenerateUtil.generate_wav_file_oute(
+                temp_wav_path,
+                text_segment.text,
+                state.project.oute_voice_json,
+                state.project.oute_temperature)
+        else:
+            is_success = GenerateUtil.generate_wav_file_chatterbox(
+                temp_wav_path,
+                text_segment.text,
+                state.project)
+
         if not is_success:
             delete_temp_file(temp_wav_path)
             return ""
@@ -207,34 +220,62 @@ class GenerateUtil:
         return flac_path
 
     @staticmethod
-    def generate_wav_file(
+    def generate_wav_file_oute(
         dest_file_path: str,
         prompt: str,
         voice: dict,
-        temperature: float
+        temperature: float = -1
     ) -> bool:
 
-        interface = Shared.get_oute_interface()
+        oute = Shared.get_oute()
 
         # First, clone GENERATION_CONFIG from config file
-        from outetts.models.config import GenerationConfig, SamplerConfig
-        from outetts.models.info import GenerationType
-        from tts_audiobook_tool.tts_config import GENERATION_CONFIG
+        from outetts.models.config import SamplerConfig # type: ignore
+        from tts_audiobook_tool.config_oute import GENERATION_CONFIG
         try:
-            from .tts_config_dev import GENERATION_CONFIG
+            from .config_oute_dev import GENERATION_CONFIG
         except ImportError:
             pass
         gen_config = copy.deepcopy(GENERATION_CONFIG)
 
         gen_config.text = prompt
         gen_config.speaker = voice
-        gen_config.sampler_config = SamplerConfig(temperature)
+        if temperature != -1:
+            gen_config.sampler_config = SamplerConfig(temperature)
 
         try:
-            output = interface.generate(config=gen_config)
+            output = oute.generate(config=gen_config)
             output.save(dest_file_path)
         except Exception as e:
-            printt(str(e), "error")
+            printt(f"Oute model error: {e}\a", "error")
+            return False
+        return True
+
+    @staticmethod
+    def generate_wav_file_chatterbox(
+        dest_file_path: str,
+        prompt: str,
+        project: Project
+    ) -> bool:
+
+        import torchaudio as ta
+        chatterbox = Shared.get_chatterbox()
+
+        d = {}
+        path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
+        d["audio_prompt_path"] = path
+        if project.chatterbox_exaggeration != -1:
+            d["exaggeration"] = project.chatterbox_exaggeration
+        if project.chatterbox_cfg != -1:
+            d["cfg_weight"] = project.chatterbox_cfg
+        if project.chatterbox_temperature != -1:
+            d["temperature"] = project.chatterbox_temperature
+
+        try:
+            wav = chatterbox.generate(prompt, **d)
+            ta.save(dest_file_path, wav, chatterbox.sr)
+        except Exception as e:
+            printt(f"Chatterbox model error: {e}\a", "error")
             return False
         return True
 

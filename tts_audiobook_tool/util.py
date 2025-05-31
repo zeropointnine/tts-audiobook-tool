@@ -1,7 +1,6 @@
 import re
 import os
 import random
-import subprocess
 import importlib
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +56,12 @@ def ask_confirm(message: str="") -> bool:
         message = f"Press {make_hotkey_string("Y")} to confirm: "
     inp = ask_hotkey(message)
     return inp == "y"
+
+def ask_continue(message_prefix: str="") -> None:
+    message = "Press enter: "
+    if message_prefix:
+        message = f"{message_prefix} {message}"
+    ask(message)
 
 def strip_ansi_codes(s: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -174,6 +179,7 @@ def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tup
 def time_string(seconds: float) -> str:
     """ 5h0m0s """
     seconds = round(seconds)
+
     if seconds < 60:
         return f"{seconds}s"
     minutes = seconds // 60
@@ -184,6 +190,32 @@ def time_string(seconds: float) -> str:
     minutes = minutes % 60
     return f"{hours}h{minutes}m{seconds}s"
 
+def time_stamp(seconds: float, with_tenth: bool=True) -> str:
+    """ 05:00:00 """
+
+    tenths = int((seconds - int(seconds)) * 10)
+    seconds = int(seconds)
+
+    minutes = seconds // 60
+    seconds = seconds % 60
+    hours = minutes // 60
+    minutes = minutes % 60
+
+    hours_string = str(hours).rjust(2, "0")
+    minutes_string = str(minutes).rjust(2, "0")
+    seconds_string = str(seconds).rjust(2, "0")
+
+    if with_tenth:
+        return f"{hours_string}:{minutes_string}:{seconds_string}.{tenths}"
+    else:
+        return f"{hours_string}:{minutes_string}:{seconds_string}"
+
+def ellipsize(s: str, length: int) -> str:
+    if len(s) > length:
+        s = s[:length - 3] + "..."
+    return s
+
+
 def get_package_dir() -> str | None:
     # Get the current package's root directory
     if not __package__:
@@ -192,3 +224,16 @@ def get_package_dir() -> str | None:
     if not package.__file__:
         return None
     return os.path.dirname(os.path.abspath(package.__file__))
+
+
+def get_unique_file_path(file_path: str) -> str:
+    """
+    Generates a unique file path by adding incrementing numbers to stem if needed.
+    """
+    file_path = re.sub(r'-\d+$', '', file_path)
+    path = Path(file_path)
+    counter = 1
+    while path.exists():
+        path = path.with_stem(f"{path.stem}-{str(counter)}")
+        counter = 1
+    return str(path)

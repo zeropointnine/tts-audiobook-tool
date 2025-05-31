@@ -16,6 +16,7 @@ docstring_parser==0.16
 einops==0.8.1
 encodec==0.1.1
 executing==2.2.0
+ffmpeg-python==0.2.0
 ffmpy==0.5.0
 filelock==3.18.0
 fire==0.7.0
@@ -37,7 +38,7 @@ julius==0.2.7
 kiwisolver==1.4.8
 lazy_loader==0.4
 librosa==0.11.0
-llama_cpp_python==0.3.8
+llama_cpp_python==0.3.9
 llvmlite==0.44.0
 loguru==0.7.3
 Markdown==3.8
@@ -100,10 +101,9 @@ tokenizers==0.21.1
 torch==2.7.0
 torch-stoi==0.2.3
 torchaudio==2.7.0
-torchvision==0.22.0
 tqdm==4.67.1
 traitlets==5.14.3
-transformers==4.48.3
+transformers==4.51.3
 typeguard==4.4.2
 typing_extensions==4.13.2
 unidic-lite==1.0.8

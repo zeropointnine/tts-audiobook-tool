@@ -1,5 +1,8 @@
 __pycache__/
 venv/
+venv1/
+venv2/
+venv3/
 .vscode/
 pyrightconfig.json
-tts_config_dev.py
+config_oute_dev.py

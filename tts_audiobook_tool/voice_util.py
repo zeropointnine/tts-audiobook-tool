@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -11,7 +12,7 @@ from tts_audiobook_tool.constants import *
 class VoiceUtil:
 
     @staticmethod
-    def voice_submenu(state: State, num_audio_files: int) -> None:
+    def voice_submenu(state: State) -> None:
         """
         Gets/creates voice json, re-saves it to the project dir, and updates State.
         Or prints error message.
@@ -19,110 +20,92 @@ class VoiceUtil:
         Deletes any extant audio files in project dir.
         """
 
-        def confirm() -> bool:
-            printt(f"Replacing voice will invalidate {num_audio_files} previously generated audio file fragments for this project.")
-            return ask_confirm("Are you sure? ")
+        if Shared.is_oute():
 
-        voice = None
+            word = "Set" if not state.project.has_voice else "Replace"
+            print_heading(f"{word} voice:")
+            printt(f"{make_hotkey_string('1')} Create voice file using reference WAV file (15s or less)")
+            printt(f"{make_hotkey_string('2')} Use pre-existing voice json file")
+            if Shared.is_oute():
+                printt(f"{make_hotkey_string('3')} Use oute-tts default voice")
+            printt()
+            inp = ask()
 
-        word = "Set" if not state.project.voice else "Replace"
-        print_heading(f"{word} voice:")
-        printt(f"[{COL_ACCENT}1{Ansi.RESET}] Create voice file using reference WAV file (15s or less)")
-        printt(f"[{COL_ACCENT}2{Ansi.RESET}] Use pre-existing voice json file")
-        printt(f"[{COL_ACCENT}3{Ansi.RESET}] Use oute-tts default voice")
-        printt()
-        inp = ask()
+            match inp:
+                case "1":
+                    VoiceUtil.ask_create_oute_voice(state)
+                case "2":
+                    VoiceUtil.ask_load_oute_voice(state)
+                case "3":
+                    result = VoiceUtil.load_voice_json(DEFAULT_VOICE_JSON_FILE_PATH)
+                    if isinstance(result, dict):
+                        result["identifier"] = "default" # special case
+                case _:
+                    return
 
-        # Get voice
-        match inp:
-            case "1":
-                if not confirm():
-                    return
-                result = VoiceUtil.ask_create_voice()
-            case "2":
-                if not confirm():
-                    return
-                result = VoiceUtil.ask_load_voice()
-            case "3":
-                if not confirm():
-                    return
-                result = VoiceUtil.load_voice(DEFAULT_VOICE_FILE_PATH)
-                if isinstance(result, dict):
-                    result["identifier"] = "default" # special case
-            case _:
+        elif Shared.is_chatterbox():
+
+            path = ask("Enter file path of source audio for voice clone:\n")
+            if not path:
                 return
-
-        if isinstance(result, str):
-            if result == "":
-                return # signifies cancel
-            else:
-                printt(f"Error: {result}", "error")
+            if not os.path.exists(path):
+                ask_continue(f"File not found: {path}")
                 return
+            from mutagen._file import File
+            try:
+                File(path)
+            except Exception as e:
+                printt("Not a valid audio file: {e}", "error")
+                return
+            err = state.project.set_chatterbox_voice_and_save(path)
+            if err:
+                printt(err, "error")
+            elif MENU_CLEARS_SCREEN:
+                    ask_continue("Saved.")
 
-        voice = result
-
-        # Save voice to project dir and set state
-        VoiceUtil.save_to_project_dir_and_set_state(voice, state)
-
-        # Delete any existing audio files in project dir, which are now 'invalid'
-        err = AppUtil.delete_project_audio_files(state.prefs.project_dir)
-        if err:
-            printt(err, "error")
 
     @staticmethod
-    def save_to_project_dir_and_set_state(voice: dict, state: State):  # TODO: should probably live in State, as as "setter"
-        """Prints error on fail"""
-        dest_path = os.path.join(state.prefs.project_dir, PROJECT_VOICE_FILE_NAME)
-        assert isinstance(voice, dict)
-        err = AppUtil.save_json(voice, dest_path)
-        if err:
-            printt(err, "error")
-            return
-        state.project.voice = voice
+    def ask_create_oute_voice(state: State) -> None:
 
-    @staticmethod
-    def ask_load_voice() -> dict | str:
-        """ Returns voice dict or error string or empty string for cancel """
-        path = ask("Enter file path of voice json file:\n")
+        path = ask("Enter file path of source audio (up to 15s) for voice clone:\n")
         if not path:
-            return ""
-        return VoiceUtil.load_voice(path)
+            return
+        if not os.path.exists(path):
+            ask_continue(f"File not found: {path}")
+            return
 
-    @staticmethod
-    def ask_create_voice() -> dict | str:
-        """ Returns voice dict or error string or empty string for cancel """
-        source_path = ask("Enter file path of source audio (up to 15s) for voice clone:\n")
-        if not source_path:
-            return ""
-        if not os.path.exists(source_path):
-            return f"File not found: {source_path}"
-
-        result = VoiceUtil.create_voice(source_path)
-        printt()
-
-        return result
-
-    @staticmethod
-    def create_voice(path: str) -> dict | str:
-        """ Returns voice dict or error string """
-
-        interface = Shared.get_oute_interface()
-
+        interface = Shared.get_oute()
         try:
-            voice = interface.create_speaker(path)
-            VoiceUtil._add_special_properties(voice, path)
+            voice_json = interface.create_speaker(path)
+            printt()
         except Exception as e:
-            return f"Error creating voice: {e}"
+            printt(f"Error creating voice: {e}", "error")
+            return
+
+        state.project.set_oute_voice_and_save(voice_json, Path(path).stem)
 
         # Outte created a whisper instance, which will stick around in VRAM
         # (in addition to app's own whisper instance)
         # if we don't explicitly flush stuffs
         AppUtil.gc_ram_vram()
 
-        return voice
+    @staticmethod
+    def ask_load_oute_voice(state: State):
+
+        path = ask("Enter file path of voice json file:\n")
+        if not path:
+            return
+
+        result = VoiceUtil.load_voice_json(path)
+        if isinstance(result, str):
+            printt(result)
+            ask_confirm()
+            return
+
+        state.project.set_oute_voice_and_save(result, Path(path).stem)
 
     @staticmethod
-    def load_voice(path: str) -> dict | str:
+    def load_voice_json(path: str) -> dict | str:
         """
         Returns voice dict or error string
         Note how we are intentionally not using oute interface `load_speaker()`
@@ -138,16 +121,4 @@ class VoiceUtil:
             return f"Voice json object unexpected type: {type(voice)}"
         # TODO: do some extra validation here since we are avoiding using "interface.load_speaker()"
 
-        VoiceUtil._add_special_properties(voice, path)
         return voice
-
-    @staticmethod
-    def _add_special_properties(voice: dict, path: str) -> None:
-        from tts_audiobook_tool.hash_file_util import HashFileUtil
-        # Hash value is cached in the dict itself (perversely; easier this way)
-        if not "hash" in voice:
-            voice["hash"] = HashFileUtil.get_voice_hash(voice)
-        # Identifier
-        if not "identifier" in voice:
-            s = sanitize_for_filename(Path(path).stem[:20])
-            voice["identifier"] = s

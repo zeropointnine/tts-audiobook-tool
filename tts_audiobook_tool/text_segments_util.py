@@ -55,7 +55,7 @@ class TextSegmentsUtil:
     @staticmethod
     def _finish_set_text(state: State, raw_text: str) -> None:
 
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=DEFAULT_MAX_WORDS_PER_SEGMENT)
 
         # Filter out items w/o 'vocalizable content'
         text_segments = [item for item in text_segments if TextSegmentsUtil._has_alpha_numeric(item.text)]
@@ -72,7 +72,7 @@ class TextSegmentsUtil:
             return
 
         # Commit
-        state.project.set_text_segments(text_segments, raw_text=raw_text)
+        state.project.set_text_segments_and_save(text_segments, raw_text=raw_text)
 
     @staticmethod
     def _post_process(lines: list[str]) -> list[str]:

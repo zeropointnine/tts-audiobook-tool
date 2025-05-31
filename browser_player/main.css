@@ -36,11 +36,11 @@
 
 [data-segment-colors="blue"] {
     --color-segment-highlight: #4444ff55;
-    --color-segment-hover: #4444ff12;
+    --color-segment-hover: #4444ff20;
 }
 [data-segment-colors="blue"][data-theme="dark"] {
     --color-segment-highlight: #8888ff88;
-    --color-segment-hover: #8888ff44;
+    --color-segment-hover: #8888ff49;
 }
 
 [data-text-size="medium"] {
@@ -220,10 +220,12 @@ body, html {
     fill: var(--color-text-dim);
 }
 
-#uiToggleButton {
+#uiPanelButton {
     position: fixed;
-    bottom: 12px;
-    right: 12px;
+    bottom: 0;
+    right: 0;
+    padding: 12px; /* enlarged hit area */
+    cursor: pointer;
 }
 
 #uiOverlay {
@@ -233,7 +235,7 @@ body, html {
     height: 100%;
     top: 0;
     left: 0;
-    /* background: #00000033; */
+    background: #00000044;
 }
 
 #uiPanel {
@@ -242,7 +244,7 @@ body, html {
     gap: 16px;
 
     position: absolute;
-    bottom: 60px;
+    bottom: 64px;
     right: 12px;
     padding: 12px;
     border-radius:8px;
@@ -251,21 +253,23 @@ body, html {
 
 }
 
-.outerTextHolder {
+/* ------------------- */
+
+#outerTextHolder {
     width: calc(100% - 36px);
     max-width: 800px;
-    padding-left: 18px;
-    padding-right: 18px;
+    padding: 0 18px 18px 18px;
     margin-left: auto;
     margin-right: auto;
 }
 @media (max-width: 600px) {
-    .outerTextHolder {
+    #outerTextHolder {
         width: 100%;
-        padding-left:0;
-        padding-right: 0;
+        padding: 0;
     }
 }
+
+/* ------------------- */
 
 #textHolder {
     display: none;
@@ -279,24 +283,34 @@ body, html {
     padding: 36px;
     border-radius: 8px;
     box-shadow: 0 4px 8px var(--color-shadow);
+
 }
 @media (max-width: 600px) {
     #textHolder {
         padding: 18px;
-    }
+        border-radius: 0;
+        box-shadow: none;
+        }
 }
 
-.highlight {
+span {
+    background-color: transparent;
+    /* transition: background-color 0.3s ease, color 0.3s ease; */
+}
+span.highlight {
     background-color: var(--color-segment-highlight);
     color: var(--color-text);
-    padding: 0.1em 0; /* Slight padding */
+    padding: 0.1em 0;
     border-radius: 3px;
-    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
+    transition: background-color 0.3s ease, color 0.3s ease;
+
+    display: inline;
+    box-decoration-break: clone;
 }
-[data-player-status="pause"] .highlight {
+[data-player-status="pause"] span.highlight {
     background-color: var(--color-segment-hover);
 }
-[data-player-status="none"] .highlight {
+[data-player-status="none"] span.highlight {
     background-color: var(--color-segment-hover);
 }
 
@@ -304,10 +318,13 @@ body, html {
     /* hover effect only when is pointer device */
     #textHolder span:hover {
         background-color: var(--color-segment-hover);
+        padding: 0.1em 0;
+        border-radius: 3px;
         cursor: pointer;
     }
     /* hovering over currently highlighted segment shouldn't change its bg color */
     #textHolder span:hover.highlight {
+        border-radius: 3px;
         background-color: var(--color-segment-highlight);
     }
 }
@@ -316,8 +333,46 @@ body, html {
     fill: var(--color-segment-highlight); /* hah */
 }
 
-/* --- */
+/* ------------------- */
+
+#helpHolder {
+    display: none;
+    font-size: 16px;
+    font-family: sans-serif;
+    color: var(--color-text-dim);
+    margin:0;
+    padding-top: 36px;
+    padding-bottom: 36px;
+}
+@media (max-width: 600px) {
+    #helpHolder {
+        padding: 18px;
+    }
+}
+
+#helpHolder thead th {
+    padding-bottom: 12px;
+}
+#helpHolder tbody tr td {
+    text-align: left;
+}
+#helpHolder tbody tr td:first-child {
+    text-align: left;
+    padding-right: 24px;
+}
+
+#githubCorner {
+    position:fixed;
+    right: 0;
+    top: 0;
+}
+#githubCorner svg {
+    fill: var(--color-text-dim);
+}
+
+/* ------------------- */
 
 .no-transition {
     transition: none !important;
 }
+

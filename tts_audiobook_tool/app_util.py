@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import glob
+import tempfile
 from typing import Any
 import glob
 import torch
@@ -102,3 +103,22 @@ class AppUtil:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    @staticmethod
+    def get_app_temp_dir() -> str:
+        app_temp_dir = os.path.join(tempfile.gettempdir(), APP_TEMP_SUBDIR)
+        Path(app_temp_dir).mkdir(exist_ok=True) # not catching error here
+        return app_temp_dir
+
+    @staticmethod
+    def get_temp_file_path_by_hash(hash: str) -> str:
+        """
+        Returns file path of item in the app temp directory or empty string
+        """
+        dir = AppUtil.get_app_temp_dir()
+        if not dir:
+            return ""
+        items = os.listdir(dir)
+        for item in items:
+            if hash in item:
+                return os.path.join(dir, item)
+        return ""

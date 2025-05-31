@@ -12,7 +12,6 @@ class Prefs:
     """
     User settings that persist to file
     - project dir
-    - temperature
     - should_normalize
     - play_on_generate
     """
@@ -20,12 +19,10 @@ class Prefs:
     def __init__(
             self,
             project_dir: str = "",
-            temperature: float = DEFAULT_TEMPERATURE,
             should_normalize: bool = True,
             play_on_generate: bool = False
     ) -> None:
         self._project_dir = project_dir
-        self._temperature = temperature
         self._should_normalize = should_normalize
         self._play_on_generate = play_on_generate
         self._has_shown_player_reminder = False
@@ -61,11 +58,6 @@ class Prefs:
             project_dir = ""
             dirty = True
 
-        temperature = prefs_dict.get("temperature", DEFAULT_TEMPERATURE)
-        if not isinstance(temperature, float) or not (0 < temperature <= 2.0):
-            temperature = DEFAULT_TEMPERATURE
-            dirty = True
-
         should_normalize = prefs_dict.get("should_normalize", DEFAULT_SHOULD_NORMALIZE)
         if not isinstance(should_normalize, bool):
             should_normalize = DEFAULT_SHOULD_NORMALIZE
@@ -81,7 +73,7 @@ class Prefs:
             has_shown_player_reminder = False
             dirty = True
 
-        prefs = Prefs(project_dir, temperature, should_normalize, play_on_generate)
+        prefs = Prefs(project_dir, should_normalize, play_on_generate)
         prefs._has_shown_player_reminder = has_shown_player_reminder
         if dirty:
             prefs.save()
@@ -94,17 +86,6 @@ class Prefs:
     @project_dir.setter
     def project_dir(self, value: str):
         self._project_dir = value
-        self.save()
-
-    @property
-    def temperature(self) -> float:
-        return self._temperature
-
-    @temperature.setter
-    def temperature(self, value: float):
-        value = min(value, 2.0)
-        value = max(value, 0.000001)
-        self._temperature = value
         self.save()
 
     @property
@@ -137,7 +118,6 @@ class Prefs:
     def save(self) -> None:
         dic = {
             "project_dir": self._project_dir,
-            "temperature": self._temperature,
             "should_normalize": self._should_normalize,
             "play_on_generate": self._play_on_generate,
             "has_shown_player_reminder": self._has_shown_player_reminder

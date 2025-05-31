@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Tuple, Optional, cast
 import soundfile as sf
+from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
@@ -124,7 +125,7 @@ class ValidateUtil:
         # [3] Static audio test
         is_static = ValidateUtil.is_audio_static(item, whisper_data)
         if is_static:
-            fail_reason = "Audio data is static"
+            fail_reason = "Audio is silent"
             if should_fix_or_delete:
                 try:
                     Path(item.path).unlink()
@@ -347,7 +348,7 @@ class ValidateItem:
         self.text = text
         self.transcribed_text: str = ""
 
-        duration = AppMetaUtil.get_flac_duration(self.path)
+        duration = AudioMetaUtil.get_audio_duration(self.path)
         if not isinstance(duration, float):
             L.w(f"Couldn't get duration for {self.path}")
             duration = -1

@@ -24,13 +24,13 @@ class ProjectDirUtil:
             return ""
 
         # Directory with a voice and/or text json file considered valid
-        if PROJECT_VOICE_FILE_NAME in items or PROJECT_SETTINGS_FILE_NAME in items:
+        if PROJECT_JSON_FILE_NAME in items:
             return ""
 
         return f"{project_dir} does not appear to be a project directory"
 
     @staticmethod
-    def has_audio_segment_files(state: State) -> bool:
+    def has_generated_audio(state: State) -> bool:
         dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         return bool(dic)
 
@@ -45,6 +45,7 @@ class ProjectDirUtil:
         Returns dict (key = text segment index, value = file path)
         of valid project audio files found in the project directory.
         """
+
         if not state.prefs.project_dir:
             return {}
 
@@ -58,21 +59,20 @@ class ProjectDirUtil:
         for path in file_paths:
 
             file_name = Path(path).name
-            # print("fn", file_name)
 
-            # Note we do not simply compare against the full file name,
-            # because the full file name includes the text segment in massaged form,
-            # which we don't rly want to treat as 'idempotent'
-            index_from_file_name, hash_from_file_name = HashFileUtil.extract_index_and_hash_from_segment_file_name(file_name)
+            parts = HashFileUtil.extract_index_and_hash_from_segment_file_name(file_name)
+            if parts is None:
+                continue
 
+            index_from_file_name, hash_from_file_name = parts
             if index_from_file_name >= len(text_segments):
                 continue
 
             text_segment = text_segments[index_from_file_name]
-            segment_hash = HashFileUtil.calc_segment_hash(index_from_file_name, text_segment.text, cast(dict, state.project.voice))
-
+            segment_hash = HashFileUtil.calc_segment_hash(index_from_file_name, text_segment.text)
             if hash_from_file_name != segment_hash:
                 continue
+
             if index_from_file_name in result:
                 continue
 

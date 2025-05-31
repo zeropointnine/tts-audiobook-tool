@@ -75,9 +75,6 @@ class GenerateValidateSubmenus:
             info += f" (already complete: {num_completed} items)"
         printt(info)
         printt()
-        b = ask_confirm()
-        if not b:
-            return
 
         mode = "generate-and-fix" if and_fix else "generate"
         GenerateUtil.generate_validate_fix_items(state, indices, mode=mode)

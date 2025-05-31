@@ -1,3 +1,4 @@
+from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.state import State
@@ -45,7 +46,7 @@ class TranscodeUtil:
                 if mp4_path.exists():
                     warnings.append(f"MP4 file already exists for {Path(dir_flac_path).name}")
                 else:
-                    meta_string = AppMetaUtil.get_flac_metadata_field(dir_flac_path, APP_META_FLAC_FIELD)
+                    meta_string = AudioMetaUtil.get_flac_metadata_field(dir_flac_path, APP_META_FLAC_FIELD)
                     if not meta_string:
                         warnings.append(f"Not a tts-audiobook-tool FLAC file: {Path(dir_flac_path).name}")
                     else:
@@ -77,7 +78,7 @@ class TranscodeUtil:
         printt(f"Transcoding to MP4: {flac_path}")
         printt()
 
-        new_path, err = TranscodeUtil.transcode_flac_to_aac(flac_path)
+        new_path, err = TranscodeUtil.transcode_to_aac(flac_path)
         printt()
 
         if err:
@@ -89,7 +90,7 @@ class TranscodeUtil:
 
 
     @staticmethod
-    def transcode_flac_to_aac(flac_path: str, kbps=96) -> tuple[str, str]:
+    def transcode_to_aac(src_path: str, kbps=96) -> tuple[str, str]:
         """
         1) Reads the app metadata from flac file
         2) Converts flac to to MP4 using ffmpeg
@@ -98,18 +99,18 @@ class TranscodeUtil:
         Returns tuple of output file path and error message, mutually exclusive
         """
 
-        mp4_path = Path(flac_path).with_suffix(".mp4")
+        mp4_path = Path(src_path).with_suffix(".mp4")
         if mp4_path.exists():
             return "", "MP4 file already exists with same file stem"
         mp4_path = str(mp4_path)
 
-        meta_string = AppMetaUtil.get_flac_metadata_field(flac_path, APP_META_FLAC_FIELD)
+        meta_string = AudioMetaUtil.get_flac_metadata_field(src_path, APP_META_FLAC_FIELD)
         if not meta_string:
             return "", "FLAC file has no tts-audiobook-tool metadata"
 
         partial_command = [
             "-hide_banner", "-loglevel", "warning", "-stats",
-            "-i", flac_path,
+            "-i", src_path,
             "-c:a", "aac",
             "-b:a", f"{kbps}k",
         ]
@@ -117,7 +118,7 @@ class TranscodeUtil:
         if err:
             return "", err
 
-        err = AppMetaUtil.set_mp4_metadata_tag(mp4_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, meta_string)
+        err = AudioMetaUtil.set_mp4_metadata_tag(mp4_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, meta_string)
         if err:
             try:
                 os.unlink(mp4_path) # even though encoding itself is success

@@ -1,64 +1,60 @@
-(function() {
+window.app = function() {
 
     const DEFAULT_FADE_DELAY = 1000;
     const SLEEP_DURATION = 1000 * 60 * 15;
+    const DEMO_URL_A = "waves-oute"
+    const DEMO_URL_B = "waves-chatterbox"
 
     const root = document.documentElement;
+    const helpHolder = document.getElementById("helpHolder");
+    const loadFileInput = document.getElementById('loadFileInput');
+    const sleepTimeLeft = document.getElementById('sleepTimeLeft');
+    const fileNameDiv = document.getElementById('fileName')
+    const playerHolder = document.getElementById('playerHolder');
+    const player = document.getElementById('player');
+    const textHolder = document.getElementById('textHolder');
+    const loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
+    const loadUrlInput = document.getElementById('loadUrlInput');
 
-    let loadFileInput = null;
-    let sleepTimeLeft = null;
-    let fileNameDiv = null;
-    let playerHolder = null;
-    let player = null;
-    let textHolder = null;
-    let loadLocalButtonLabel = null;
-    let loadUrlInput = null;
+    const uiPanelButton = document.getElementById('uiPanelButton');
+    const uiOverlay = document.getElementById("uiOverlay");
+    const uiPanel = document.getElementById("uiPanel")
 
-    let uiToggleButton = null;
-    let uiOverlay = null;
-    let uiPanel = null;
+    const scrollTopButton = document.getElementById('scrollTopButton')
+    const textSizeButton = document.getElementById('textSizeButton')
+    const themeButton = document.getElementById('themeButton');
+    const segmentColorsButton = document.getElementById('segmentColorsButton')
+    const sleepButton = document.getElementById("sleepButton");
 
-    let scrollTopButton = null;
-    let textSizeButton = null;
-    let themeButton = null;
-    let segmentColorsButton = null;
-    let sleepButton = null;
-
-    let rawText = "";
+    let fileId = null;
     let timedTextSegments = [];
-    let selectedSpan = null;
+    let spans = []; // cached text segment spans array
+
+    let isStarted = false;
+    let isPlayerHover = false;
+    let isPlayerFocused = false;
+
+    let currentIndex = -1; // segment index whose time range encloses the player's currentTime
+    let previousIndex = -1;
+
     let intervalId = -1;
     let fadeOutId = -1;
     let sleepId = -1;
     let sleepEndTime = -1;
-    let isStarted = false;
-    let isPlayerHover = false;
-    let isPlayerFocused = false;
     let fadeOutValue = 0.0;
+    let lastSavePositionTime = 0
+
+    // ****
+    init();
+    // ****
 
     function init() {
 
-        loadFileInput = document.getElementById('loadFileInput');
-        sleepTimeLeft = document.getElementById('sleepTimeLeft');
-        fileNameDiv = document.getElementById('fileName')
-        playerHolder = document.getElementById('playerHolder');
-        player = document.getElementById('player');
-        textHolder = document.getElementById('textHolder');
-        loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
-        loadUrlInput = document.getElementById('loadUrlInput');
+        if (hasPersistentKeyboard()) {
+            helpHolder.style.display = "block";
+        }
 
-        uiToggleButton = document.getElementById('uiToggleButton');
-        uiOverlay = document.getElementById("uiOverlay");
-        uiPanel = document.getElementById("uiPanel")
-
-        scrollTopButton = document.getElementById('scrollTopButton')
-        textSizeButton = document.getElementById('textSizeButton')
-        themeButton = document.getElementById('themeButton');
-        segmentColorsButton = document.getElementById('segmentColorsButton')
-        sleepButton = document.getElementById("sleepButton");
-
-        if (!matchMedia('(pointer:fine)').matches) {
-            // Treat as touch device
+        if (isTouchDevice()) {
             // Disable player fadeout
             fadeOutValue = 1.0;
         }
@@ -87,7 +83,7 @@
         player.addEventListener('play', function() {
             root.setAttribute("data-player-status", "play");
             // ensures scroll to current segment
-            selectedSpan = null;
+            currentIndex = -1;
         });
 
         player.addEventListener('pause', function() {
@@ -129,7 +125,7 @@
             loadFlacOrMp4(url);
         }
 
-        uiToggleButton.addEventListener('click', (e) => {
+        uiPanelButton.addEventListener('click', (e) => {
             if (uiOverlay.style.display !== 'block') {
                 updateUiPanelButtons();
                 uiOverlay.style.display = 'block';
@@ -211,21 +207,7 @@
             alert("No tts-audiobook-tool metadata found");
             return;
         }
-
-        // TEMP
-        // result = {
-        //     raw_text: "hello",
-        //     text_segments: [
-        //         {
-        //             index_start: 0,
-        //             index_end: 4,
-        //             time_start: 2.0,
-        //             time_end: 3.0
-        //         }
-        //     ]
-        //  }
-
-        start(fileOrUrl, result["raw_text"], result["text_segments"]);
+        start(fileOrUrl, result["text_segments"]);
     }
 
     function clear() {
@@ -235,22 +217,32 @@
         textHolder.style.display = "none";
         clearInterval(intervalId)
         player.src = null;
-        selectedSpan = null;
+        currentIndex = -1;
+        previousIndex = -1
+        spans = [];
         root.setAttribute("data-player-status", "none");
     }
 
-    function start(fileOrUrl, pRawText, pTimedTextSegments) {
+    function start(fileOrUrl, pTimedTextSegments) {
 
         let file = null;
         let url = null;
         if (typeof fileOrUrl === "string") {
             url = fileOrUrl;
+            fileId = url;
         } else {
             file = fileOrUrl;
+            fileId = file.name;
         }
 
-        rawText = pRawText
+        isDemoUrl = url && (url.includes(DEMO_URL_A) || url.includes(DEMO_URL_B));
+        if (!isDemoUrl) {
+            document.getElementById("githubCorner").style.display = "none";
+        }
+
         timedTextSegments = pTimedTextSegments
+
+        helpHolder.style.display = "none";
 
         fileNameDiv.style.display = "block"
         fileNameDiv.textContent = file ? file.name : url
@@ -263,12 +255,49 @@
         player.src = file ? URL.createObjectURL(file) : url
         playerPlay();
 
+        time = localStorage.getItem("fileId_" + fileId)
+        if (time) {
+            time = parseFloat(time);
+            if (time) {
+                player.currentTime = time;
+            }
+        }
+
         if (document.activeElement && document.activeElement.blur) {
             document.activeElement.blur();
         }
 
         intervalId = setInterval(loop, 50);
         isStarted = true;
+    }
+
+    function populateText() {
+
+        let contentHtml = '';
+        timedTextSegments.forEach((segment, i) => {
+
+            // contentHtml += `<span id="segment-${i}">${segment.text}</span>`;
+
+            o = splitWhitespace(segment.text)
+            if (o["before"]) {
+                contentHtml += o["before"];
+            }
+            contentHtml += `<span id="segment-${i}">${o["content"]}</span>`;
+            if (o["after"]) {
+                contentHtml += o["after"];
+            }
+
+
+        });
+
+        textHolder.innerHTML = contentHtml;
+        textHolder.style.display = "block";
+
+        // Cache span references
+        spans = [];
+        for (let i = 0; i < timedTextSegments.length; i++) {
+            spans[i] = document.getElementById("segment-" + i);
+        }
     }
 
     function updateUiPanelButtons() {
@@ -285,20 +314,28 @@
         if (event.target.tagName == "INPUT") {
             return;
         }
-        // console.log(event.key);
 
-        if (event.key === "Enter" || event.key === " ") {
-            if (document.activeElement == loadLocalButtonLabel) {
-                loadFileInput.click();
-                event.preventDefault();
-                loadLocalButtonLabel.blur();
+        const doLoadLocal = function() {
+            loadFileInput.click();
+            event.preventDefault();
+            loadLocalButtonLabel.blur();
+        };
+        if (document.activeElement == loadLocalButtonLabel) {
+            if (event.key === "Enter" || event.key === " ") {
+                doLoadLocal()
+                return;
             }
+        }
+        if (event.key == "o") {
+            doLoadLocal()
             return;
         }
 
         if (!isStarted) {
             return;
         }
+
+        // Hotkeys that are active while audio is loaded
         switch (event.key) {
             case "Escape":
                 if (player.paused) {
@@ -314,20 +351,32 @@
             case "]":
                 seekNextSegment();
                 break;
+            case ",":
+                player.currentTime -= 60;
+                break;
+            case ".":
+                player.currentTime += 60;
+                break;
         }
     }
 
     function onTextClick(event) {
 
-        isSegment = (event.target.tagName === 'SPAN' && event.target.id.startsWith('segment-'));
+        const clickedSpan = event.target;
+
+        isSegment = (clickedSpan.tagName === 'SPAN' && clickedSpan.id.startsWith('segment-'));
         if (!isSegment) {
             return;
         }
 
-        const clickedSpan = event.target;
         const segmentIndex = parseInt(clickedSpan.id.split('-')[1]);
+        const segment = timedTextSegments[segmentIndex]
 
-        if (clickedSpan == selectedSpan) {
+        if (segment["time_start"] == 0 && segment["time_end"] == 0) {
+            return
+        }
+
+        if (clickedSpan == getCurrentSpan()) {
             // Toggle play
             if (player.paused) {
                 playerPlay();
@@ -340,84 +389,109 @@
         }
     }
 
-    function populateText() {
-
-        let contentHtml = '';
-        let lastIndex = 0;
-
-        timedTextSegments.forEach((segment, i) => {
-            // Add text before the current segment (if any)
-            if (segment.index_start > lastIndex) {
-                contentHtml += escapeHtml(rawText.substring(lastIndex, segment.index_start));
-            }
-            // Add the current segment wrapped in a span
-            const segmentText = rawText.substring(segment.index_start, segment.index_end);
-            contentHtml += `<span id="segment-${i}">${escapeHtml(segmentText)}</span>`;
-            lastIndex = segment.index_end;
-        });
-
-        // Add any remaining text after the last segment
-        if (lastIndex < rawText.length) {
-            contentHtml += escapeHtml(rawText.substring(lastIndex));
-        }
-
-        textHolder.innerHTML = contentHtml;
-        textHolder.style.display = "block";
-    }
-
     function loop() {
 
-        let span = getCurrentSpan()
+        // Save currentTime every 10 seconds
+        if (Date.now() - lastSavePositionTime > 10000) {
+            localStorage.setItem("fileId_" + fileId, player.currentTime);
+            lastSavePositionTime = Date.now()
+        }
 
-        // Update highlighting only if the active segment has changed
-        if (selectedSpan !== span) {
-            if (selectedSpan) {
-                selectedSpan.classList.remove('highlight');
+        const i = getSegmentIndexBySeconds(player.currentTime);
+        if (i == currentIndex) {
+            // Update only when index has changed
+            return;
+        }
+        previousIndex = currentIndex;
+        const previousSpan = getSpanByIndex(currentIndex);
+        currentIndex = i;
+
+        // Unhighlight previous
+        previousSpan?.classList.remove('highlight');
+
+        // Highlight active and scroll-to
+        if (currentIndex >= 0) {
+            getCurrentSpan().classList.add('highlight');
+            getCurrentSpan().scrollIntoView({
+                behavior: 'smooth',
+                block: 'center', // 'start', 'center', 'end', or 'nearest'
+                inline: 'nearest' // 'start', 'center', 'end', or 'nearest'
+            });
+            localStorage.setItem("fileId_" + fileId, player.currentTime);
+            lastSavePositionTime = Date.now()
+        }
+
+        // Save currentTime
+        localStorage.setItem("fileId_" + fileId, player.currentTime);
+    }
+
+    // -------------------------------------
+
+    function getSpanByIndex(i) {
+        return i >= 0 ? spans[i] : null;
+    }
+
+    function getCurrentSpan() {
+        return currentIndex >= 0 ? spans[currentIndex] : null;
+    }
+
+    function getSegmentIndexBySeconds(seconds) {
+        // TODO: should have "startFromIndex" and fans out from there
+        for (let i = 0; i < timedTextSegments.length; i++) {
+            segment = timedTextSegments[i];
+            if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
+                return i
             }
-            if (span) {
-                span.classList.add('highlight');
-                // Scroll the new highlighted span into view, centered
-                span.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center', // 'start', 'center', 'end', or 'nearest'
-                    inline: 'nearest' // 'start', 'center', 'end', or 'nearest'
-                });
+        }
+        return -1
+    }
+
+    /**
+     * Seeks to the next segment that has a starting time
+     */
+    function seekNextSegment() {
+        let index = currentIndex;
+        if (index == -1) {
+            index = previousIndex;
+        }
+
+        for (let i = index + 1; i <= index + 100; i++) {
+            if (i >= timedTextSegments.length) {
+                return;
             }
-            selectedSpan = span;
+            segment = timedTextSegments[i]
+            has_time = (segment["time_end"] > 0);
+            if (has_time) {
+                console.log("will seek", segment)
+                seekBySegmentIndex(i);
+                return;
+            }
         }
     }
 
     function seekPreviousSegment() {
-        i = getCurrentSegmentIndex()
-        if (i == -1) {
-            return;
+        let index = currentIndex;
+        if (index == -1) {
+            index = previousIndex + 1; // nb +1
         }
-        i = i - 1;
-        if (i < 0) {
-            return;
-        }
-        seekBySegmentIndex(i)
-    }
 
-    function seekNextSegment() {
-        i = getCurrentSegmentIndex()
-        if (i == -1) {
-            return;
+        for (let i = index - 1; i >= index - 100; i--) {
+            if (i < 0) {
+                break;
+            }
+            segment = timedTextSegments[i]
+            has_time = (segment["time_end"] > 0);
+            if (has_time) {
+                seekBySegmentIndex(i);
+                break;
+            }
         }
-        i = i + 1;
-        if (i >= timedTextSegments.length) {
-            return;
-        }
-        seekBySegmentIndex(i)
     }
 
     function seekBySegmentIndex(i) {
-        if (selectedSpan) {
-            selectedSpan.classList.remove('highlight');
-            selectedSpan = null;
-        }
+        getCurrentSpan()?.classList.remove('highlight');
 
-        targetTime = timedTextSegments[i].time_start;
+        targetTime = timedTextSegments[i]["time_start"];
         player.currentTime = targetTime;
         if (player.paused) {
             playerPlay();
@@ -495,30 +569,6 @@
     }
 
     // ----------------------------------------
-
-    function getCurrentSpan() {
-        i = getCurrentSegmentIndex()
-        if (i == -1) {
-            return null
-        }
-        id = `segment-${i}`
-        span = document.getElementById(id);
-        return span;
-    }
-
-    /**
-     * Returns the index of the segment that spans the current play time, or -1.
-     */
-    function getCurrentSegmentIndex() {
-        const seconds = player.currentTime
-        for (let i = 0; i < timedTextSegments.length; i++) {
-            segment = timedTextSegments[i];
-            if (seconds >= segment.time_start && seconds < segment.time_end) {
-                return i
-            }
-        }
-        return -1;
-    }
 
     /**
      * Cycles between [none], values[0], values[1], etc.
@@ -603,8 +653,4 @@
         }
     }
 
-    window.app = {
-        init: init
-    };
-
-})();
+};

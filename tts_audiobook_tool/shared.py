@@ -3,28 +3,64 @@ import torch
 import whisper
 from whisper.model import Whisper
 
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.util import *
 
 class Shared:
 
-    _oute_interface: Any = None
     _whisper: Whisper | None = None
+    _oute_interface: Any = None
+    _chatterbox: Any = None
+
+    _model_type: str = ""
+    _MODEL_TYPES = ["oute", "chatterbox"]
+
+
+    # Cheesy control-c capture flag variables
+    mode = ""
+    stop_flag = False
+
 
     @staticmethod
-    def get_oute_interface() -> Any:
+    def set_model_type(typ: str) -> None:
+        if not typ in Shared._MODEL_TYPES:
+            raise Exception(f"Bad model type; must be in {Shared._MODEL_TYPES}")
+        Shared._model_type = typ
+
+    @staticmethod
+    def get_model_type() -> str:
+        return Shared._model_type
+
+    @staticmethod
+    def is_oute() -> bool:
+        return Shared._model_type == "oute"
+
+    @staticmethod
+    def is_chatterbox() -> bool:
+        return Shared._model_type == "chatterbox"
+
+    @staticmethod
+    def get_chatterbox() -> Any:
+        if not Shared._chatterbox:
+            device = Shared.get_torch_device()
+            printt(f"Initializing Chatterbox TTS model ({device})...")
+            printt()
+            from chatterbox.tts import ChatterboxTTS  # type: ignore
+            Shared._chatterbox = ChatterboxTTS.from_pretrained(device=device)
+        return Shared._chatterbox
+
+    @staticmethod
+    def get_oute() -> Any:
         if not Shared._oute_interface:
             printt("Initializing Oute TTS model...")
             printt()
 
-            # Lazy import of oute machinery
-            import outetts
-            from outetts.version.interface import InterfaceHF
+            # Lazy import
+            import outetts # type: ignore
 
-            from tts_audiobook_tool.tts_config import MODEL_CONFIG
+            from tts_audiobook_tool.config_oute import MODEL_CONFIG
             try:
                 # Overwrite with dev version if exists
-                from .tts_config_dev import MODEL_CONFIG
+                from .config_oute_dev import MODEL_CONFIG
             except ImportError:
                 pass
 
@@ -40,6 +76,7 @@ class Shared:
         printt("Unloading Oute TTS model...")
         printt()
         Shared._oute_interface = None
+        from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram()
 
     # Whisper
@@ -47,9 +84,9 @@ class Shared:
     @staticmethod
     def get_whisper() -> Whisper:
         if Shared._whisper is None:
-            printt("Initializing whisper model...")
+            device = Shared.get_torch_device()
+            printt(f"Initializing whisper model ({device})...")
             printt()
-            device = "cuda" if torch.cuda.is_available() else "cpu"
             Shared._whisper = whisper.load_model("turbo", device=device)
         return Shared._whisper
 
@@ -60,10 +97,14 @@ class Shared:
         printt("Unloading whisper...")
         printt()
         Shared._whisper = None
+        from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram()
 
-
-    # Cheesy control-c capture flag variables
-
-    mode = ""
-    stop_flag = False
+    @staticmethod
+    def get_torch_device() -> str:
+        if torch.cuda.is_available():
+            return "cuda"
+        elif torch.backends.mps.is_available():
+            return "mps"
+        else:
+            return "cpu"

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import signal
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.options_util import OptionsUtil
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.shared import Shared
@@ -70,10 +71,11 @@ class App:
         if MENU_CLEARS_SCREEN:
             os.system('cls' if os.name == 'nt' else 'clear')
 
-        num_audio_segments_complete = ProjectDirUtil.num_audio_segment_files(self.state)
+        num_segments_complete = ProjectDirUtil.num_audio_segment_files(self.state)
 
         # Title
-        print_heading(f"Main menu - {APP_NAME}:")
+        model_name = "Oute TTS" if Shared.is_oute() else "Chatterbox TTS"
+        print_heading(f"{APP_NAME} (active model: {model_name})")
 
         # Dir check
         if did_reset:
@@ -91,10 +93,9 @@ class App:
 
         # Voice
         if self.state.prefs.project_dir:
-            s = f"{make_hotkey_string("V")} Voice "
-            if self.state.project.voice:
-                identifier = self.state.project.voice.get("identifier", "voice") if self.state.project.voice else "None"
-                s += f"{COL_DIM}(current: {COL_ACCENT}{identifier}{COL_DIM}){Ansi.RESET}"
+            pass
+            s = f"{make_hotkey_string("V")} Voice clone "
+            s += f"{COL_DIM}(current: {COL_ACCENT}{self.state.project.get_voice_label()}{COL_DIM})"
             printt(s)
 
         # Text
@@ -107,14 +108,14 @@ class App:
         # Generate audio
         if self.state.prefs.project_dir:
             s = f"{make_hotkey_string("G")} Generate audio"
-            if not self.state.project.voice and not self.state.project.text_segments:
+            if not self.state.project.has_voice and not self.state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set voice and text)"
-            elif not self.state.project.voice:
+            elif not self.state.project.has_voice:
                 s2 = f"{COL_DIM} (must first set voice)"
             elif not self.state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set text)"
             else:
-                s2 = f" {COL_DIM}({COL_ACCENT}{num_audio_segments_complete}{COL_DIM} of {COL_ACCENT}{len(self.state.project.text_segments)}{COL_DIM} lines complete)"
+                s2 = f" {COL_DIM}({COL_ACCENT}{num_segments_complete}{COL_DIM} of {COL_ACCENT}{len(self.state.project.text_segments)}{COL_DIM} lines complete)"
             printt(s + s2)
 
         # Detect errors
@@ -143,14 +144,10 @@ class App:
 
         match hotkey:
             case "p":
-                project_type = self.project_dir_submenu()
-                if project_type == "new":
-                    self.ask_and_set_new_project(self.state.project.voice)
-                elif project_type == "existing":
-                    self.ask_and_set_existing_project()
+                self.project_dir_submenu()
             case "v":
-                if self.can_set_voice:
-                    VoiceUtil.voice_submenu(self.state, num_audio_files)
+                if self.state.prefs.project_dir:
+                    VoiceUtil.voice_submenu(self.state)
             case "t":
                 if not self.state.prefs.project_dir:
                     return
@@ -159,7 +156,7 @@ class App:
                 else:
                     self.text_submenu()
             case "g":
-                if self.can_generate_audio:
+                if self.state.project.can_generate_audio:
                     GenerateValidateSubmenus.generate_submenu(self.state)
             case "y":
                 if not self.state.prefs.project_dir or num_audio_files == 0:
@@ -170,23 +167,13 @@ class App:
                     return
                 ConcatUtil.concat_submenu(self.state)
             case "o":
-                self.options_submenu()
+                OptionsUtil.options_submenu(self.state)
             case "q":
                 self.quit()
 
     # ---
 
-    @property
-    def can_set_voice(self) -> bool:
-        return bool(self.state.prefs.project_dir)
-
-    @property
-    def can_generate_audio(self) -> bool:
-        return bool(self.state.project.voice and self.state.project.text_segments)
-
-    # ---
-
-    def project_dir_submenu(self) -> str:
+    def project_dir_submenu(self) -> None:
         """ Returns new | existing | empty string """
         print_heading("Project directory:")
         printt(f"{make_hotkey_string("1")} Create new project directory")
@@ -194,53 +181,30 @@ class App:
         printt()
         hotkey = ask_hotkey()
         if hotkey == "1":
-            return "new"
+            self.ask_and_set_new_project(self.state.project.oute_voice_json)
         elif hotkey == "2":
-            return "existing"
-        else:
-            return ""
+            self.ask_and_set_existing_project()
 
     def ask_and_set_new_project(self, previous_voice: dict | None) -> None:
         """ Asks user for directory and creates new project if directory is ok, else prints error feedback """
 
         printt("Enter directory path for new project:")
-        inp = ask()
-        if not inp:
+        path = ask()
+        if not path:
+            return
+        err = self.state.make_new_project(path)
+        if err:
+            printt(err, "error")
             return
 
-        if os.path.exists(inp):
-            if os.listdir(inp):
-                printt("Directory is not empty", "error")
-                return
-            else:
-                dir = inp
-        else:
-            try:
-                project_path = Path(inp)
-                dir = str(project_path)
-            except Exception as e:
-                printt(f"Bad path: {e}", "error")
-                return
-            try:
-                # Make project dir
-                os.makedirs(project_path, exist_ok=True)
-                # Make audio segment subdir
-                audio_segments_path = project_path / AUDIO_SEGMENTS_SUBDIR
-                os.makedirs(audio_segments_path, exist_ok=True)
-                # Make concatenated subdir
-                concat_path = project_path / CONCAT_SUBDIR
-                os.makedirs(concat_path, exist_ok=True)
-            except Exception as e:
-                printt(f"Error creating directory: {e}", "error")
-                return
+        if MENU_CLEARS_SCREEN:
+            ask_continue("Project set.")
 
-        dir = str( Path(dir).resolve() )
-        self.state.set_project(dir)
-
-        if isinstance(previous_voice, dict):
-            b = ask_confirm(f"Carry over voice data ({previous_voice.get("identifier", "voice")})? ")
-            if b:
-                VoiceUtil.save_to_project_dir_and_set_state(previous_voice, self.state)
+        #x
+        # if isinstance(previous_voice, dict):
+        #     b = ask_confirm(f"Carry over voice data ({previous_voice.get("identifier", "voice")})? ")
+        #     if b:
+        #         VoiceUtil.save_to_project_dir_and_set_state(previous_voice, self.state)
 
     def ask_and_set_existing_project(self) -> None:
         """ Asks user for directory and if valid, sets state to existing project, else prints error feedback """
@@ -255,7 +219,7 @@ class App:
             return
 
         dir = str( Path(dir).resolve() )
-        self.state.set_project(dir)
+        self.state.set_existing_project(dir)
 
     def text_submenu(self) -> None:
         print_heading("Text:")
@@ -273,45 +237,6 @@ class App:
                 s = f"Replacing text will invalidate {num_files} previously generated audio file fragments for this project.\nAre you sure? "
                 if ask_hotkey(s):
                     TextSegmentsUtil.set_text_submenu(self.state)
-
-    def options_submenu(self) -> None:
-
-        print_heading("Options:")
-        printt(f"{make_hotkey_string("1")} Set temperature (currently: {self.state.prefs.temperature})")
-        printt(f"{make_hotkey_string("2")} Normalize audio after generate (currently: {self.state.prefs.should_normalize})")
-        printt(f"{make_hotkey_string("3")} Play audio after each segment is generated (currently: {self.state.prefs.play_on_generate})")
-        printt(f"{make_hotkey_string("4")} Transcode FLAC to MP4, preserving app metadata")
-        printt()
-
-        hotkey = ask_hotkey()
-
-        match hotkey:
-            case "1":
-                value = ask("Enter temperature (0.0 < value <= 2.0): ")
-                try:
-                    value = float(value)
-                    if not (0.0 < value <= 2.0):
-                        printt("Out of range", "error")
-                    else:
-                        self.state.prefs.temperature = value
-                        ask("Changed. Press enter: ")
-                        printt()
-                except:
-                    printt("Bad value", "error")
-            case "2":
-                self.state.prefs.should_normalize = not self.state.prefs.should_normalize
-                printt(f"Normalize audio after generate set to: {self.state.prefs.should_normalize}")
-                printt()
-                if MENU_CLEARS_SCREEN:
-                    ask_hotkey("Press enter: ")
-            case "3":
-                self.state.prefs.play_on_generate = not self.state.prefs.play_on_generate
-                printt(f"Play audio after each segment is generated set to: {self.state.prefs.play_on_generate}")
-                printt()
-                if MENU_CLEARS_SCREEN:
-                    ask_hotkey("Press enter: ")
-            case "4":
-                TranscodeUtil.ask_transcode(self.state)
 
     def quit(self):
         printt("State saved. Exiting")
