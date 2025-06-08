@@ -462,7 +462,6 @@ window.app = function() {
             segment = timedTextSegments[i]
             has_time = (segment["time_end"] > 0);
             if (has_time) {
-                console.log("will seek", segment)
                 seekBySegmentIndex(i);
                 return;
             }

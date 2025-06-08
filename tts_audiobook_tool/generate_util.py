@@ -177,7 +177,7 @@ class GenerateUtil:
         # Print time info
         elapsed = time.time() - start_time
         audio_seconds = estimated_wav_seconds(temp_wav_path)
-        s = f"File duration: {COL_ACCENT}{audio_seconds:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
+        s = f"Audio duration: {COL_ACCENT}{audio_seconds:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
         if elapsed > 0:
             multi = audio_seconds / elapsed
             s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"

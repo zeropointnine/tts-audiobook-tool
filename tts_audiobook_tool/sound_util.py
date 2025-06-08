@@ -22,9 +22,10 @@ class SoundUtil:
                 "-loglevel",
                 "error",
                 "-y",
-                '-i', wav_path,
-                '-c:a', 'flac',
-                '-compression_level', '5',
+                "-i", wav_path,
+                "-c:a", "flac",
+                "-frame_size", "4096",
+                "-compression_level", "5",
                 flac_path
             ]
 

@@ -25,7 +25,8 @@ class ConcatUtil:
         print_heading(f"Combine audio segments:")
 
         infos = ChapterInfo.make_chapter_infos(state)
-        print_chapter_segment_info(infos)
+        if len(infos) > 1:
+            print_chapter_segment_info(infos)
 
         if not state.project.section_dividers:
             chapter_dividers_string = "none"
@@ -33,22 +34,23 @@ class ConcatUtil:
             strings = [str(item) for item in state.project.section_dividers]
             chapter_dividers_string = ", ".join(strings)
 
-        printt(f"{make_hotkey_string('1')} Define chapter dividers {COL_DIM}(currently: {chapter_dividers_string})")
-        printt(f"{make_hotkey_string('2')} Combine to FLAC")
-        printt(f"{make_hotkey_string('3')} Combine to FLAC, and transcode to MP4")
+        printt(f"{make_hotkey_string('1')} Combine to FLAC")
+        printt(f"{make_hotkey_string('2')} Combine to FLAC, and transcode to MP4")
+        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(current: {chapter_dividers_string})")
         printt()
         hotkey = ask_hotkey()
         printt()
 
         if hotkey == "1":
+            ConcatUtil.ask_chapters(infos, state, and_transcode=False)
+        elif hotkey == "2":
+            ConcatUtil.ask_chapters(infos, state, and_transcode=True)
+        elif hotkey == "3":
             ConcatUtil.ask_chapter_dividers(state)
             ConcatUtil.concat_submenu(state)
             return
 
-        if hotkey == "2":
-            ConcatUtil.ask_chapters(infos, state, and_transcode=False)
-        elif hotkey == "3":
-            ConcatUtil.ask_chapters(infos, state, and_transcode=True)
+
 
     @staticmethod
     def ask_chapters(infos: list[ChapterInfo], state: State, and_transcode: bool) -> None:
@@ -60,13 +62,13 @@ class ConcatUtil:
                 chapter_indices.append(i)
 
         if len(chapter_indices) > 1:
-            printt("Enter chapter numbers for which you want to combine audio segments")
-            printt("(For example: \"1, 2, 4\" or  \"5-10\", or \"all\")")
+            printt("Enter file numbers for which you want to combine audio segments")
+            printt("(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
             inp = ask()
             if inp == "all" or inp == "a":
                 selected_chapter_indices = chapter_indices.copy()
             else:
-                input_indices, warnings = ParseUtil.parse_int_list(inp)
+                input_indices, warnings = ParseUtil.parse_one_indexed_ranges_string(inp, len(state.project.text_segments))
                 if warnings:
                     for warning in warnings:
                         printt(warning)
@@ -133,7 +135,7 @@ class ConcatUtil:
                 file_paths.append(file_path)
 
             # Make the concatenated "chapter" audio file
-            printt(f"Creating combined audio file ({counter}/{len(chapter_indices)}\n")
+            printt(f"Creating finalized concatenated audio file ({counter}/{len(chapter_indices)})\n")
             dest_file_path = ConcatUtil._make_file_path(
                 state,
                 chapter_index,
@@ -351,7 +353,7 @@ class ConcatUtil:
     @staticmethod
     def ask_chapter_dividers(state: State) -> None:
 
-        print_heading("Combine > Chapters dividers:")
+        print_heading("Combine > Chapters cut points:")
 
         num_text_segments = len(state.project.text_segments)
 
@@ -359,9 +361,9 @@ class ConcatUtil:
         if section_dividers:
             ConcatUtil.print_concat_info(section_dividers, num_text_segments)
 
-        printt("Enter the line numbers where new chapters will begin.")
+        printt("Enter the line numbers where new files will begin.")
         printt("For example, if there are 1000 lines of text and you enter \"250, 700\",")
-        printt("three chapters will be created spanning lines 1-249, 250-699, and 700-1000.")
+        printt("three audio files will be created spanning lines 1-249, 250-699, and 700-1000.")
         printt("Enter \"1\" for none.")
         printt()
         inp = ask()
@@ -397,7 +399,7 @@ class ConcatUtil:
         ranges = make_section_ranges(section_dividers, num_items)
         range_strings = [ str(range[0]+1) + "-" + str(range[1]+1) for range in ranges]
         ranges_string = ", ".join(range_strings)
-        printt(f"Current chapter dividers: {section_indices_string} {COL_DIM}({ranges_string})")
+        printt(f"Current cut points: {section_indices_string} {COL_DIM}({ranges_string})")
         printt()
 
     # TODO: reimplement
@@ -416,12 +418,13 @@ class ConcatUtil:
 def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
     for i, info in enumerate(infos):
         if info.num_files_missing == 0:
-            desc = "all audio segments generated"
-        elif info.num_files_exist == 0:
-            desc = "no audio files generated yet"
+            desc = ""
         else:
             desc = f"{info.num_files_missing} of {info.num_segments} files missing"
-        printt(f"Chapter {i+1}: segments {info.segment_index_start + 1}-{info.segment_index_end + 1} {COL_DIM}({desc})")
+        s = f"File {i+1}: lines {info.segment_index_start + 1}-{info.segment_index_end + 1}"
+        if desc:
+            s += f" {COL_DIM}({desc})"
+        printt(s)
     printt()
 
 def show_player_reminder(state: State) -> None:

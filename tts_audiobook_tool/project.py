@@ -29,6 +29,10 @@ class Project:
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
 
+    # Does not persist
+    generate_ints: set[int] = set()
+
+
     def __init__(self, dir_path: str, model_type: str):
         self.dir_path = dir_path
         self.model_type = model_type
@@ -75,7 +79,7 @@ class Project:
                     is_list_valid = False
                     break
             if not is_list_valid:
-                printt(f"Chapter dividers invalid: {lst}")
+                printt(f"File cut points invalid: {lst}")
             else:
                 project.section_dividers = lst
 

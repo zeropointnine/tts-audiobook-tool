@@ -4,9 +4,9 @@ This is an audiobook creation tool, designed to support multiple text-to-speech 
 
 The app attempts to detect and potentially correct audio inference hallucinations/errors, and can also apply dynamic loudness normalization to the generated audio. These are important quality control features due to the umm... *variable* nature of generative text-to-speech models.
 
-**Player/reader feature**: The repo includes a browser-based player/reader which runs without the need for a web server. Simply open `browser_player\index.html` in the web browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.mp4) ([Oute output example](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.mp4) | [Chatterbox output example](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.mp4)), and choose a FLAC or MP4 file you've generated using the app. As the audio file plays, the corresponding text is displayed and highlighted (think Kindle app + Audible). This is made possible by embedding text and timing information as custom metadata in the audio file.
+**Player/reader feature**: The repo includes a browser-based player/reader which runs without the need for a web server. Simply open `browser_player\index.html` in the web browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.mp4) ([Oute output example](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.mp4) | [Chatterbox output example](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.mp4)), and choose a FLAC or MP4 file you've generated using the app. As the audio file plays, the corresponding text is displayed and highlighted (somehwat akin to using the Kindle app + Audible). This is made possible by embedding text and timing information as custom metadata in the audio file.
 
-**Bonus speech-to-text feature**: The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be played using the custom player/reader. Select `Options` > `Add tts-audiobook-tool metadata to a pre-existing audiobook`, and point it to the source audio file and the source book text.
+**Bonus speech-to-text feature**: The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be played using the custom player/reader. Select `Options` > `Add tts-audiobook-tool metadata to a pre-existing audiobook`, and point it to your source audiobook file and corresponding book text.
 
 **How to create an audiobook (quick summary):**
 1. Assign a working project directory.
@@ -107,8 +107,6 @@ Inference can take some time, depending on the length of the source text. Using 
 
 
 ### Known issues
-
-Mac and Linux compatibility testing are still a TBD
 
 The player/reader still probably needs work re: small screens
 

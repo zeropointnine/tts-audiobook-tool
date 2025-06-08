@@ -84,7 +84,7 @@ class Shared:
     @staticmethod
     def get_whisper() -> Whisper:
         if Shared._whisper is None:
-            device = Shared.get_torch_device()
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             printt(f"Initializing whisper model ({device})...")
             printt()
             Shared._whisper = whisper.load_model("turbo", device=device)
