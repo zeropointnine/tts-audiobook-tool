@@ -5,25 +5,26 @@ from tts_audiobook_tool.ansi import Ansi
 
 APP_NAME = "tts-audiobook-tool"
 
-DEFAULT_TEMPERATURE = 0.5
-DEFAULT_SHOULD_NORMALIZE = True
+# Max words per text chunk, applied to the source text.
+MAX_WORDS_PER_SEGMENT = 40
+# Max words per text chunk, applied to the source text for "STT mode"
+MAX_WORDS_PER_SEGMENT_STT = 40
 
-
-# Different voices may have a varying rates of delivery.
-# Oute recommends 30s max but can handle longer generations.
-# In practice though, when it approaches around 25-30s,
-# it appears to internally 'segment' the audio itself,
-# which can lead to significant discontinuities/pauses.
-DEFAULT_MAX_WORDS_PER_SEGMENT = 40
+TRIM_SENTENCE_CONTINUATIONS_MAX_DURATION = 0.5
 
 MENU_CLEARS_SCREEN = False
 
 SETTINGS_FILE_NAME = "tts-audiobook-tool-settings.json"
+
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
+PREFS_PLAY_ON_GENERATE_DEFAULT = False
+PREFS_SHOULD_NORMALIZE = True
+PREFS_TRIM_SC_DEFAULT = True
+
 PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
-PROJECT_FFMPEG_CONCAT_TEMP_FILE_NAME = "ffmpeg_temp.txt"
+PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
 FFMPEG_COMMAND = "ffmpeg"
 
 APP_TEMP_SUBDIR = "tts_audiobook_tool"

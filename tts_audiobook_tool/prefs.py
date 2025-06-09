@@ -19,12 +19,15 @@ class Prefs:
     def __init__(
             self,
             project_dir: str = "",
-            should_normalize: bool = True,
-            play_on_generate: bool = False
+            should_normalize: bool = PREFS_SHOULD_NORMALIZE,
+            play_on_generate: bool = PREFS_PLAY_ON_GENERATE_DEFAULT,
+            trim_sentence_continuations: bool = PREFS_TRIM_SC_DEFAULT
     ) -> None:
         self._project_dir = project_dir
         self._should_normalize = should_normalize
         self._play_on_generate = play_on_generate
+        self._trim_sentence_continuations = trim_sentence_continuations
+
         self._has_shown_player_reminder = False
 
     @staticmethod
@@ -58,14 +61,19 @@ class Prefs:
             project_dir = ""
             dirty = True
 
-        should_normalize = prefs_dict.get("should_normalize", DEFAULT_SHOULD_NORMALIZE)
+        should_normalize = prefs_dict.get("should_normalize", PREFS_SHOULD_NORMALIZE)
         if not isinstance(should_normalize, bool):
-            should_normalize = DEFAULT_SHOULD_NORMALIZE
+            should_normalize = PREFS_SHOULD_NORMALIZE
             dirty = True
 
-        play_on_generate = prefs_dict.get("play_on_generate", False)
+        play_on_generate = prefs_dict.get("play_on_generate", PREFS_PLAY_ON_GENERATE_DEFAULT)
         if not isinstance(play_on_generate, bool):
-            play_on_generate = False
+            play_on_generate = PREFS_PLAY_ON_GENERATE_DEFAULT
+            dirty = True
+
+        trim_sc = prefs_dict.get("trim_sc", PREFS_TRIM_SC_DEFAULT)
+        if not isinstance(trim_sc, bool):
+            trim_sc = PREFS_TRIM_SC_DEFAULT
             dirty = True
 
         has_shown_player_reminder = prefs_dict.get("has_shown_player_reminder", False)
@@ -73,7 +81,12 @@ class Prefs:
             has_shown_player_reminder = False
             dirty = True
 
-        prefs = Prefs(project_dir, should_normalize, play_on_generate)
+        prefs = Prefs(
+            project_dir=project_dir,
+            should_normalize=should_normalize,
+            play_on_generate=play_on_generate,
+            trim_sentence_continuations=trim_sc
+        )
         prefs._has_shown_player_reminder = has_shown_player_reminder
         if dirty:
             prefs.save()
@@ -107,6 +120,15 @@ class Prefs:
         self.save()
 
     @property
+    def trim_sentence_continuations(self) -> bool:
+        return self._trim_sentence_continuations
+
+    @trim_sentence_continuations.setter
+    def trim_sentence_continuations(self, value: bool):
+        self._trim_sentence_continuations = value
+        self.save()
+
+    @property
     def has_shown_player_reminder(self) -> bool:
         return self._has_shown_player_reminder
 
@@ -120,6 +142,7 @@ class Prefs:
             "project_dir": self._project_dir,
             "should_normalize": self._should_normalize,
             "play_on_generate": self._play_on_generate,
+            "trim_sc": self._trim_sentence_continuations,
             "has_shown_player_reminder": self._has_shown_player_reminder
         }
         try:

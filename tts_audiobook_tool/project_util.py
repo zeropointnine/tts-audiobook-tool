@@ -35,7 +35,7 @@ class ProjectUtil:
         """ Asks user for directory and creates new project if directory is ok, else prints error feedback """
 
         printt("Enter directory path for new project:")
-        path = ask()
+        path = ask_path()
         if not path:
             return
         err = state.make_new_project(path)
@@ -57,7 +57,7 @@ class ProjectUtil:
         """ Asks user for directory and if valid, sets state to existing project, else prints error feedback """
 
         printt("Enter directory path of existing project:")
-        dir = ask()
+        dir = ask_path()
         if not dir:
             return
         err = ProjectDirUtil.check_project_dir_valid(dir)

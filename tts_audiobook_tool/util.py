@@ -4,6 +4,8 @@ import random
 import importlib
 from datetime import datetime
 from pathlib import Path
+import platform
+import subprocess
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.ansi import Ansi
@@ -24,7 +26,7 @@ def printt(s: str="", type: str="") -> None:
 
 def print_heading(s: str) -> None:
     """ """
-    length = len(s)
+    length = len(s) # TODO need to filter out control codes :/
     printt(f"{COL_ACCENT}{s}")
     printt("-" * length)
 
@@ -33,6 +35,9 @@ def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     App-standard way of getting user input.
     Prints extra line after the input by default.
     """
+
+    clear_input_buffer()
+
     message = f"{message}{COL_INPUT}"
     try:
         inp = input(message).strip()
@@ -49,6 +54,19 @@ def ask_hotkey(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     inp = ask(message, lower, extra_line)
     if inp:
         inp = inp[0]
+    return inp
+
+def ask_path(message: str="") -> str:
+    """
+    Get file/directory path, strip outer quotes
+    Could potentially open standard file requestor here
+    """
+    inp = ask(message, lower=False, extra_line=True)
+    if len(inp) >= 2:
+        first = inp[0]
+        last = inp[-1]
+        if (first == "'" and last == "'") or (first == "\"" and last == "\""):
+            inp = inp[1:-1]
     return inp
 
 def ask_confirm(message: str="") -> bool:
@@ -237,3 +255,48 @@ def get_unique_file_path(file_path: str) -> str:
         path = path.with_stem(f"{path.stem}-{str(counter)}")
         counter = 1
     return str(path)
+
+def has_gui():
+    """Check if the environment supports opening a GUI file explorer etc"""
+    s = platform.system()
+    if s == "Linux":
+        return "DISPLAY" in os.environ  # X11 GUI environment check
+    elif s == "Darwin":  # macOS (assumes GUI is available)
+        return True
+    elif s == "Windows":
+        return True  # Assume GUI is available on Windows
+    else:
+        return False  # Unknown system
+
+def open_directory_gui(path) -> str:
+    """
+    Open the directory in the OS's default file explorer.
+    Returns error string on fail
+    """
+    if not os.path.isdir(path):
+        return "Directory doesn't exist"
+
+    system = platform.system()
+    try:
+        if system == "Windows":
+            os.startfile(path)  # Works on Windows
+        elif system == "Darwin":  # macOS
+            subprocess.run(["open", path])
+        else:  # Linux and others
+            subprocess.run(["xdg-open", path])
+    except Exception as e:
+        return f"Failed to open directory: {e}"
+    return ""
+
+def clear_input_buffer() -> None:
+    """ Use before "input()" to prevent buffered keystrokes from being registered """
+    import sys
+    try:
+        import msvcrt # only exists if windows
+        def clear_input_buffer():
+            while msvcrt.kbhit(): # type: ignore
+                msvcrt.getch()
+    except ImportError:
+        import termios  # Only exists if linux/macos
+        def clear_input_buffer():
+            termios.tcflush(sys.stdin, termios.TCIOFLUSH) # type: ignore

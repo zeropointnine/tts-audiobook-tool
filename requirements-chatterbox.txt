@@ -4,7 +4,7 @@ certifi==2025.4.26
 cffi==1.17.1
 cfgv==3.4.0
 charset-normalizer==3.4.2
-chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@aa003f2d66b27cfff68c71a3a0c15408bf329ec0
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@a65a3f8374d4481e9eca53700362c22d78087d9e
 colorama==0.4.6
 conformer==0.3.2
 decorator==5.2.1

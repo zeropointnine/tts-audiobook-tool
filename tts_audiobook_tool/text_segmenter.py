@@ -1,7 +1,7 @@
 import pysbd
 
 from tts_audiobook_tool.sentence_segmenter import SentenceSegmenter
-from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
 
 class TextSegmenter:
 
@@ -13,7 +13,8 @@ class TextSegmenter:
         """
 
         # Pass 1: Segment text into sentences using pysbd
-        segmenter = pysbd.Segmenter(language=language, clean=False, char_span=False) # clean=False - important
+        # Important: "clean=False" preserves leading and trailing whitespace
+        segmenter = pysbd.Segmenter(language=language, clean=False, char_span=False)
         texts = segmenter.segment(full_text)
 
         # Pass 2: pysbd treats everything enclosed in quotes as a single sentence, so split those up
@@ -27,17 +28,21 @@ class TextSegmenter:
         texts = new_texts
 
         # Pass 3: Split any segments that are longer than max_words using own algo
-        new_texts = []
+        tups = []
         for text in texts:
             lst = SentenceSegmenter.segment_sentence(text, max_words=max_words)
-            new_texts.extend(lst)
-        texts = new_texts
+            for i, subsegment in enumerate(lst):
+                reason = TextSegmentReason.SENTENCE if i == 0 else TextSegmentReason.INSIDE_SENTENCE
+                tups.append( (subsegment, reason) )
 
         counter = 0
         result = []
-        for text in texts:
+        for text, reason in tups:
             length = len(text)
-            text_segment = TextSegment(text, counter, counter + length)
+            text_segment = TextSegment(
+                text=text, index_start=counter, index_end=counter + length, reason=reason
+            )
+            print(text_segment)
             result.append(text_segment)
             counter += length
 

@@ -64,19 +64,21 @@ class ProjectDirUtil:
             if parts is None:
                 continue
 
-            index_from_file_name, hash_from_file_name = parts
-            if index_from_file_name >= len(text_segments):
+            index, hash = parts
+            if index >= len(text_segments):
                 continue
 
-            text_segment = text_segments[index_from_file_name]
-            segment_hash = HashFileUtil.calc_segment_hash(index_from_file_name, text_segment.text)
-            if hash_from_file_name != segment_hash:
+            text_segment = text_segments[index]
+            segment_hash = HashFileUtil.calc_segment_hash(index, text_segment.text)
+            if hash != segment_hash:
                 continue
 
-            if index_from_file_name in result:
-                continue
+            if index in result:
+                preexisting_file_name = result[index]
+                if "[pass]" in preexisting_file_name:
+                    continue
 
-            result[index_from_file_name] = str(path)
+            result[index] = str(path)
 
         return result
 

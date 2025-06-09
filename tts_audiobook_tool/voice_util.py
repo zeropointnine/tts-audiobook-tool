@@ -25,7 +25,7 @@ class VoiceUtil:
             word = "Set" if not state.project.has_voice else "Replace"
             print_heading(f"{word} voice:")
             printt(f"{make_hotkey_string('1')} Create voice file using reference WAV file (15s or less)")
-            printt(f"{make_hotkey_string('2')} Use pre-existing voice json file")
+            printt(f"{make_hotkey_string('2')} Use pre-existing Oute voice json file")
             if Shared.is_oute():
                 printt(f"{make_hotkey_string('3')} Use oute-tts default voice")
             printt()
@@ -45,7 +45,7 @@ class VoiceUtil:
 
         elif Shared.is_chatterbox():
 
-            path = ask("Enter file path of source audio for voice clone:\n")
+            path = ask_path("Enter file path of source audio for voice clone:\n")
             if not path:
                 return
             if not os.path.exists(path):
@@ -67,7 +67,7 @@ class VoiceUtil:
     @staticmethod
     def ask_create_oute_voice(state: State) -> None:
 
-        path = ask("Enter file path of source audio (up to 15s) for voice clone:\n")
+        path = ask_path("Enter file path of source audio (up to 15s) for voice clone:\n")
         if not path:
             return
         if not os.path.exists(path):

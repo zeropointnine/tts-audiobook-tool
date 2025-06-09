@@ -187,7 +187,8 @@ class LoudnessNormalizationUtil:
             "-loglevel", "error", # Show only errors
             "-i", input_file_path,
             "-af", filter_string,
-            "-c:a", "flac",      # Specify FLAC codec
+            "-c:a", "flac",
+            "-frame_size", "4096",
             "-compression_level", "5"
         ]
         err = FfmpegUtil.make_file(partial_command, output_file_path, use_temp_file=True)

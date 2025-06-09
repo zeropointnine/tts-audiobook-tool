@@ -26,7 +26,7 @@ class TextSegmentsUtil:
 
     @staticmethod
     def ask_text_import_and_set(state: State) -> None:
-        path = ask("Enter text file path: ")
+        path = ask_path("Enter text file path: ")
         if not path:
             return
         if not os.path.exists(path):
@@ -55,7 +55,7 @@ class TextSegmentsUtil:
     @staticmethod
     def _finish_set_text(state: State, raw_text: str) -> None:
 
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=DEFAULT_MAX_WORDS_PER_SEGMENT)
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
 
         # Filter out items w/o 'vocalizable content'
         text_segments = [item for item in text_segments if TextSegmentsUtil._has_alpha_numeric(item.text)]

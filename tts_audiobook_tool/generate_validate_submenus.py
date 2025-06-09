@@ -19,8 +19,8 @@ class GenerateValidateSubmenus:
         ranges_string = ParseUtil.make_one_indexed_ranges_string(state.project.generate_ints, num_segments)
 
         print_heading("Generate audio")
-        printt(f"{make_hotkey_string("1")} Generate")
-        printt(f"{make_hotkey_string("2")} Generate, plus validate and attempt fix when necessary")
+        printt(f"{make_hotkey_string("1")} Generate, plus validate and attempt fix when necessary")
+        printt(f"{make_hotkey_string("2")} Generate only")
         printt(f"{make_hotkey_string("3")} Specify text segments to generate {COL_DIM}(current: {COL_ACCENT}{ranges_string}{COL_DIM})")
         printt()
         hotkey = ask_hotkey()
@@ -43,14 +43,14 @@ class GenerateValidateSubmenus:
             ask(f"All specified items already generated ({original_len}). Press enter: ")
             return
 
-        info = f"Will generate {len(indices)} audio segment/s"
+        info = f"Generate {len(indices)} audio segment/s..."
         num_completed = original_len - len(indices)
         if num_completed > 0:
             info += f" (already complete: {num_completed} items)"
         printt(info)
         printt()
 
-        mode = "generate-and-fix" if hotkey == "2" else "generate"
+        mode = "generate-and-fix" if hotkey == "1" else "generate"
         GenerateUtil.generate_validate_fix_items(state, indices, mode=mode)
 
 

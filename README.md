@@ -6,7 +6,7 @@ The app attempts to detect and potentially correct audio inference hallucination
 
 **Player/reader feature**: The repo includes a browser-based player/reader which runs without the need for a web server. Simply open `browser_player\index.html` in the web browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.mp4) ([Oute output example](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.mp4) | [Chatterbox output example](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.mp4)), and choose a FLAC or MP4 file you've generated using the app. As the audio file plays, the corresponding text is displayed and highlighted (somehwat akin to using the Kindle app + Audible). This is made possible by embedding text and timing information as custom metadata in the audio file.
 
-**Bonus speech-to-text feature**: The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be played using the custom player/reader. Select `Options` > `Add tts-audiobook-tool metadata to a pre-existing audiobook`, and point it to your source audiobook file and corresponding book text.
+**Bonus speech-to-text feature**: The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be played using the custom player/reader. Select `Options` > `Create tts-audiobook-tool metadata for a pre-existing audiobook`, and point it to your source audiobook file and corresponding book text.
 
 **How to create an audiobook (quick summary):**
 1. Assign a working project directory.
@@ -76,7 +76,7 @@ Use `Backend.LLAMACPP`.
 
 Setting up the app to use Chatterbox TTS is less involved.
 
-Initialize a Python v3.12 virtual environment named "venv-chatterbox". For example:
+Initialize a Python virtual environment named "venv-chatterbox" (Using Python 3.13 should work). For example:
 
     C:\path\to\v3.12\python.exe -m venv venv-chatterbox
 

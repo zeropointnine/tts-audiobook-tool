@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.options_util import OptionsUtil
 from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.project_util import ProjectUtil
@@ -19,7 +20,7 @@ class MainMenuUtil:
     """
 
     @staticmethod
-    def menu(state: State, did_reset=False):
+    def menu(state: State, did_reset=False) -> None:
 
         MainMenuUtil._print_menu(state, did_reset)
 
@@ -31,7 +32,6 @@ class MainMenuUtil:
             MainMenuUtil.quit()
         if not hotkey:
             return
-
         MainMenuUtil._handle_menu_hotkey(hotkey, state)
 
 
@@ -64,7 +64,7 @@ class MainMenuUtil:
         # Voice
         if state.prefs.project_dir:
             pass
-            name = "Oute" if state.project.is_model_oute else "Chatterbox"
+            name = "Oute" if Shared.is_oute() else "Chatterbox"
             s = f"{make_hotkey_string("V")} Voice clone ({name})"
             s += f"{COL_DIM}(current: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
             printt(s)
@@ -73,16 +73,17 @@ class MainMenuUtil:
         if state.prefs.project_dir:
             s = f"{make_hotkey_string("T")} Text "
             if state.project.text_segments:
-                s += f"{COL_DIM}(current: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
+                s += f"{COL_DIM}(current: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} segmented lines)"
             printt(s)
 
         # Generate audio
         if state.prefs.project_dir:
             s = f"{make_hotkey_string("G")} Generate audio"
+            voice_name = "Oute" if Shared.is_oute() else "Chatterbox"
             if not state.project.has_voice and not state.project.text_segments:
-                s2 = f"{COL_DIM} (must first set voice and text)"
+                s2 = f"{COL_DIM} (must first set {voice_name} voice and text)"
             elif not state.project.has_voice:
-                s2 = f"{COL_DIM} (must first set voice)"
+                s2 = f"{COL_DIM} (must first set {voice_name} voice)"
             elif not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set text)"
             else:
@@ -138,7 +139,7 @@ class MainMenuUtil:
             case "c":
                 if not state.prefs.project_dir or num_audio_files == 0:
                     return
-                ConcatUtil.concat_submenu(state)
+                ConcatSubmenu.concat_submenu(state)
             case "o":
                 OptionsUtil.options_submenu(state)
             case "q":
@@ -153,7 +154,7 @@ class MainMenuUtil:
         printt(f"{make_hotkey_string("2")} Replace text\n")
         hotkey = ask()
         if hotkey == "1":
-            AppUtil.print_project_text(state)
+            print_project_text(state)
             ask("Press enter: ")
         elif hotkey == "2":
             num_files = ProjectDirUtil.num_audio_segment_files(state)
@@ -168,3 +169,22 @@ class MainMenuUtil:
     def quit():
         printt("State saved. Exiting")
         exit(0)
+
+# ---
+
+def print_project_text(state: State) -> None:
+
+    index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+    indices = index_to_path.keys()
+    texts = [item.text for item in state.project.text_segments]
+
+    print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
+
+    max_width = len(str(len(texts)))
+
+    for i, text in enumerate(texts):
+        s1 = make_hotkey_string( str(i+1).rjust(max_width) )
+        s2 = "☑" if i in indices else "☐"
+        printt(f"{s1}  {s2}    {text.strip()}")
+    printt()
+

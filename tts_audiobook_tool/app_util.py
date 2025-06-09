@@ -10,6 +10,7 @@ import torch
 
 from tts_audiobook_tool.l import L
 
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -79,23 +80,6 @@ class AppUtil:
         printt()
 
     @staticmethod
-    def print_project_text(state: State) -> None:
-
-        index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
-        indices = index_to_path.keys()
-        texts = [item.text for item in state.project.text_segments]
-
-        print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
-
-        max_width = len(str(len(texts)))
-
-        for i, text in enumerate(texts):
-            s1 = make_hotkey_string( str(i+1).rjust(max_width) )
-            s2 = make_hotkey_string("x" if i in indices else " ")
-            printt(f"{s1} {s2} {text.strip()}")
-        printt()
-
-    @staticmethod
     def gc_ram_vram() -> None:
         # Force-trigger Python garbage collector
         gc.collect()
@@ -122,3 +106,19 @@ class AppUtil:
             if hash in item:
                 return os.path.join(dir, item)
         return ""
+
+    @staticmethod
+    def show_player_reminder(prefs: Prefs) -> None:
+
+        printt(f"🔔 {COL_ACCENT}Reminder:")
+        printt("You can open audio files with the interactive player/reader here:")
+        package_dir = get_package_dir()
+        if package_dir:
+            browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
+        else:
+            browser_path = "browser_player" + os.path.sep + "index.html"
+        printt(browser_path)
+        printt(f"or on the web here: {PLAYER_URL}")
+        printt()
+
+        prefs.has_shown_player_reminder = True

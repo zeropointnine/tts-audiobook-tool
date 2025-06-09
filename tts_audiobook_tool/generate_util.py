@@ -7,7 +7,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.shared import Shared
-from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -107,10 +107,10 @@ class GenerateUtil:
                         printt("Validated" + "\n")
                         break
                     case ValidateResult.FAILED_AND_CORRECTED:
-                        printt(message + "\n" + "Corrected" + "\n")
+                        printt(message + "\n" + f"{COL_OK}Corrected" + "\n")
                         break
                     case ValidateResult.FAILED_AND_DELETED:
-                        printt(message + "\n" + "Will regenerate" + "\n")
+                        printt(message + "\n" + f"{COL_ERROR}Will regenerate" + "\n")
                         pass_num = 2
                         continue
                     case _:
@@ -121,13 +121,13 @@ class GenerateUtil:
 
                 match result:
                     case ValidateResult.VALIDATED_AND_TAGGED:
-                        printt("Validated on second attempt" + "\n")
+                        printt(f"{COL_OK}Validated on second attempt" + "\n")
                         break
                     case ValidateResult.FAILED_AND_CORRECTED:
-                        printt(message + "\n" + "Corrected on second attempt" + "\n")
+                        printt(message + "\n" + f"{COL_OK}Corrected on second attempt" + "\n")
                         break
                     case ValidateResult.FAILED_ONLY:
-                        printt(message + "\n" + "Still fails on second attempt" + "\n")
+                        printt(message + "\n" + f"{COL_ERROR}Failed again on second attempt, continuing" + "\n")
                         break
                     case _:
                         L.e("Shouldn't get here")
@@ -198,7 +198,7 @@ class GenerateUtil:
             temp_normalized_wav_path = ""
 
         src_wav_path = temp_normalized_wav_path if temp_normalized_wav_path else temp_wav_path
-        is_success = SoundUtil.encode_to_flac(src_wav_path, flac_path)
+        is_success = SoundFileUtil.encode_to_flac(src_wav_path, flac_path)
 
         if not is_success:
             delete_temp_file(temp_wav_path)
@@ -215,7 +215,7 @@ class GenerateUtil:
             delete_temp_file(temp_normalized_wav_path)
 
         if state.prefs.play_on_generate:
-            SoundUtil.play_flac_async(flac_path)
+            SoundFileUtil.play_flac_async(flac_path)
 
         return flac_path
 

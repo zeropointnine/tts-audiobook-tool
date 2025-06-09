@@ -465,3 +465,4 @@ function hasPersistentKeyboard() {
     const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
     return (hasFinePointer && hasHoverSupport);
 }
+

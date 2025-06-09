@@ -2,9 +2,10 @@ import os
 from pathlib import Path
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.constants import DEFAULT_MAX_WORDS_PER_SEGMENT
-from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.hash_file_util import HashFileUtil
+from tts_audiobook_tool.prefs import Prefs
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.stt_util import SttUtil
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter
@@ -16,17 +17,18 @@ class SttFlow:
 
     # TODO show reminder message once. use same message for both places.
     # TODO delete temp files
-    # TODO dont overwrite ffs
 
     @staticmethod
-    def ask_make():
+    def ask_make(prefs: Prefs):
 
         # TODO add more ui description here
 
         # Ask text file
-        inp = ask("Step 1/2 - Enter text file path: ")
+        inp = ask_path("Step 1/2 - Enter text file path: ")
+        if not inp:
+            return
         if not os.path.exists(inp):
-            ask_continue(f"File doesn't exist")
+            ask_continue(f"File doesn't exist.")
             return
         source_text_path = Path(inp)
 
@@ -42,9 +44,11 @@ class SttFlow:
             return
 
         # Ask audio file
-        inp = ask("Step 2/2 - Enter audiobook file path: ")
+        inp = ask_path("Step 2/2 - Enter audiobook file path: ")
+        if not inp:
+            return
         if not os.path.exists(inp):
-            printt(f"File doesn't exist")
+            printt(f"File doesn't exist.")
             return
         source_audio_path = inp
 
@@ -53,7 +57,7 @@ class SttFlow:
             b = ask_confirm("MP3 file must first be transcoded to AAC/MP4. Continue? ")
             if not b:
                 return
-            path, err = FfmpegUtil.transcode_to_aac(source_audio_path)
+            path, err = SoundFileUtil.transcode_to_aac(source_audio_path)
             if err:
                 printt(err, "error")
                 return
@@ -85,29 +89,32 @@ class SttFlow:
             if not b:
                 source_pickle_path = ""
 
-        SttFlow.make(
+        ok = SttFlow.make(
             raw_text,
             source_audio_path=source_audio_path,
             source_pickle_path=source_pickle_path
         )
-
+        if ok and not prefs.has_shown_player_reminder:
+            AppUtil.show_player_reminder(prefs)
 
     @staticmethod
     def make(
             raw_text: str,
             source_audio_path: str,
             source_pickle_path: str=""
-    ) -> None:
+    ) -> bool:
         """
         Optional source_pickle_path is the already-transcribed data derived from source_audio_path.
         When using pickle, still need source_audio_path from which we will derive dest file path.
+
+        Returns True for success
         """
 
         # [1] Make segmented source text
 
         printt("Segmenting source text...")
         printt()
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=DEFAULT_MAX_WORDS_PER_SEGMENT)
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT_STT)
 
         # [2] Transcribe audio file (or load pickle file)
 
@@ -118,7 +125,7 @@ class SttFlow:
                     words = pickle.load(file)
             except Exception as e:
                 printt(str(e), "error")
-                return
+                return False
 
         else:
 
@@ -163,15 +170,15 @@ class SttFlow:
         printt()
 
         if dest_path.lower().endswith(".flac"):
-            printt("TODO") # TODO
-            return
+            ask("TODO: ") # TODO
+            return False
         else:
             err = AppMetaUtil.set_mp4_app_metadata(
                 str(source_audio_path), raw_text, timed_text_segments, str(dest_path)
             )
             if err:
                 printt(f"Error creating audio file: {err}")
-                return
+                return False
 
             printt(f"Saved")
             printt()
@@ -181,14 +188,13 @@ class SttFlow:
         discon_ranges = TimedTextSegment.get_discontinuities(timed_text_segments)
         if not discon_ranges:
             ask_confirm()
-            return
+            return True
 
         b = ask_confirm("View discontinuity info? ")
-        if not b:
-            return
-
-        print_discontinuity_info(timed_text_segments)
-        ask_continue()
+        if b:
+            print_discontinuity_info(timed_text_segments)
+            ask_continue()
+        return True
 
 # ---
 

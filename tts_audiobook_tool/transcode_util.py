@@ -78,7 +78,7 @@ class TranscodeUtil:
         printt(f"Transcoding to MP4: {flac_path}")
         printt()
 
-        new_path, err = TranscodeUtil.transcode_to_aac(flac_path)
+        new_path, err = TranscodeUtil.transcode_abr_flac_to_aac(flac_path)
         printt()
 
         if err:
@@ -90,7 +90,7 @@ class TranscodeUtil:
 
 
     @staticmethod
-    def transcode_to_aac(src_path: str, kbps=96) -> tuple[str, str]:
+    def transcode_abr_flac_to_aac(src_path: str, kbps=96) -> tuple[str, str]:
         """
         1) Reads the app metadata from flac file
         2) Converts flac to to MP4 using ffmpeg

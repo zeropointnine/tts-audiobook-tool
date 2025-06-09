@@ -80,10 +80,38 @@ def split_and_strip(s: str, delimiter: str) -> list[str]:
 
 def parse_one_indexed_range_string(string: str, max_one_indexed: int) -> list[int]:
     """
-    Expects a string like "5-10" of one-indexed values.
+    Expects a string like "5-10" of one-indexed values. Or, "-5" or "5-".
     Returns zero-indexed list of expanded ints.
     Or empty string on parse error.
     """
+    if not string:
+        return []
+
+    # All ints up to n (eg, "-5")
+    if string[0] == "-":
+        string = string[1:]
+        if not string.isdigit():
+            return []
+        value = int(string)
+        if value < 1:
+            return []
+        if value > max_one_indexed:
+            value = max_one_indexed
+        return [i for i in range(0, value)]
+
+    # All ints from n to max (eg, "5-")
+    if string[-1] == "-":
+        string = string[:-1]
+        if not string.isdigit():
+            return []
+        value = int(string)
+        if value < 1:
+            return []
+        if value > max_one_indexed:
+            return []
+        return [i for i in range(value -1 , max_one_indexed)]
+
+    # Eg, "5-10"
     tokens = string.split("-")
     if len(tokens) != 2:
         return []

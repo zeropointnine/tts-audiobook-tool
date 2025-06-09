@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum, auto
+import json
 import time
 from pathlib import Path
 from typing import Tuple, Optional, cast
@@ -10,6 +11,7 @@ from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.shared import Shared
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.util import *
 
 class ValidateUtil:
@@ -96,7 +98,7 @@ class ValidateUtil:
 
         item.transcribed_text = whisper_data["text"].strip()
 
-        # [1] Do "substring" test (and potentially fix)
+        # Substring test (and potentially fix)
         if should_fix_or_delete:
             substring_test_result = ValidateUtil.detect_is_substring_and_fix(item, cast(dict, whisper_data))
             if substring_test_result:
@@ -106,11 +108,11 @@ class ValidateUtil:
                 else:
                     return ValidateResult.NOOP, f"{COL_ERROR}Couldn't save corrected FLAC file"
         else:
-            timestamps = ValidateUtil.detect_is_substring(item, cast(dict, whisper_data))
+            timestamps = ValidateUtil.get_substring_timestamp_range(item, cast(dict, whisper_data))
             if timestamps:
                 return ValidateResult.FAILED_ONLY, f"Excess audio detected, but substring exists at {timestamps[0]:.2f}-{timestamps[1]:.2f}"
 
-        # [2] Do word count test
+        # Word count test
         fail_reason = ValidateUtil.is_word_count_fail(item)
         if fail_reason:
             if should_fix_or_delete:
@@ -122,7 +124,23 @@ class ValidateUtil:
             else:
                 return ValidateResult.FAILED_ONLY, fail_reason
 
-        # [3] Static audio test
+        # End excess audio test
+        if should_fix_or_delete:
+            excess_test_result = ValidateUtil.detect_excess_audio_and_fix(
+                item, cast(dict, whisper_data)
+            )
+            if excess_test_result:
+                did_save, error_message = excess_test_result
+                if did_save:
+                    return ValidateResult.FAILED_AND_CORRECTED, error_message
+                else:
+                    return ValidateResult.NOOP, f"{COL_ERROR}Couldn't save corrected FLAC file"
+        else:
+            end_time = ValidateUtil.get_excess_audio_timestamp(item, whisper_data)
+            if end_time:
+                return ValidateResult.FAILED_ONLY, f"Excess audio detected past transcription end {end_time:.2f}"
+
+        # Static audio test
         is_static = ValidateUtil.is_audio_static(item, whisper_data)
         if is_static:
             fail_reason = "Audio is silent"
@@ -155,7 +173,7 @@ class ValidateUtil:
             [0] True if trim was successful
             [1] Messaging
         """
-        timestamps = ValidateUtil.detect_is_substring(item, whisper_data)
+        timestamps = ValidateUtil.get_substring_timestamp_range(item, whisper_data)
         if not timestamps:
             return None
 
@@ -166,7 +184,35 @@ class ValidateUtil:
         # Make trimmed copy of audio file with updated filename and delete old version
         old_path = item.path
         new_path = insert_bracket_tag_file_path(item.path, "pass")
-        trim_success = ConcatUtil.trim_flac_file(old_path, new_path, start_time, end_time)
+        trim_success = SoundFileUtil.trim_flac_file(old_path, new_path, start_time, end_time)
+        if not trim_success:
+            return False, message
+
+        item.path = new_path
+        try:
+            Path(old_path).unlink()
+        except:
+            L.w(f"Couldn't delete original file {old_path}")
+        return True, message
+
+    @staticmethod
+    def detect_excess_audio_and_fix(item: ValidateItem, whisper_data: dict) -> tuple[bool, str] | None:
+        """
+        Returns None if no action needed
+        Returns
+            [0] True if trim was successful
+            [1] Messaging
+        """
+        end_time = ValidateUtil.get_excess_audio_timestamp(item, whisper_data)
+        if not end_time:
+            return None
+
+        message = f"Excess audio detected past transcription end {end_time:.2f}"
+
+        # Make trimmed copy of audio file with updated filename and delete old version
+        old_path = item.path
+        new_path = insert_bracket_tag_file_path(item.path, "pass")
+        trim_success = SoundFileUtil.trim_flac_file(old_path, new_path, 0, end_time)
         if not trim_success:
             return False, message
 
@@ -182,6 +228,8 @@ class ValidateUtil:
         """
         Does simple word count comparison between transcribed text vs original text
         If difference is too large, returns fail reason message
+
+        Threshold values are kept conservative by design.
         """
         if not item.transcribed_text:
             return ""
@@ -209,15 +257,64 @@ class ValidateUtil:
                 fail_message = f"Transcription word count too short (ratio: {int(ratio*100)}%) (words: {words_src})"
         return fail_message
 
+    @staticmethod
+    def get_excess_audio_timestamp(
+        item: ValidateItem,
+        whisper_data: dict
+    ) -> float | None:
+        """
+        Tests if last two words of transcript matches last two words of source text.
+        Checks timestamp of last transcription word end against audio clip duration.
+        If excess duration exists beyond a certain threshold,
+        returns timestamp at which audio should be trimmed.
+
+        Test is meant to address Chatterbox's propensity for generating excess "spooky"-sounding audio.
+        """
+
+        whisper_word_dicts = get_flattened_whisper_word_dicts(whisper_data)
+        if len( whisper_word_dicts ) < 2:
+            return None
+
+        source_words = massage_for_text_comparison(item.text)
+        source_words = source_words.split(" ")
+        if len(source_words) < 2:
+            return None
+
+        whisper_word_dict_y = whisper_word_dicts[-2]
+        whisper_word_dict_z = whisper_word_dicts[-1]
+        whisper_word_y = massage_for_text_comparison(whisper_word_dict_y["word"])
+        whisper_word_z = massage_for_text_comparison(whisper_word_dict_z["word"])
+        source_word_y = source_words[-2]
+        source_word_z = source_words[-1]
+        is_match = (whisper_word_y == source_word_y and whisper_word_z == source_word_z)
+        if not is_match:
+            return None
+
+        audio, sr = sf.read(item.path, dtype="float32")
+        audio_duration = len(audio) / sr
+        trans_end_time = float( whisper_word_dict_z["end"] )
+
+        # Rem, whisper end timestamp is typically a shade too early
+        # Also, we don't want to crop too aggressively regardless
+        THRESH = 0.66
+
+        delta = audio_duration - trans_end_time
+        if delta > THRESH:
+            return trans_end_time + THRESH
+        else:
+            return None
+
 
     @staticmethod
-    def detect_is_substring(
+    def get_substring_timestamp_range(
         item: ValidateItem,
         whisper_data: dict,
     ) -> Optional[Tuple[float, float]]:
         """
-        Detects if "ground truth" text exists as a substring in a Whisper transcription and returns its start/end timestamps.
-        Ignores case where ground truth text exactly maches transcription text.
+        Detects if "ground truth" text exists as a substring in a Whisper transcription,
+        and returns its start/end timestamps.
+
+        (Ignores case where both are equal)
 
         The matching is done by normalizing both the ground truth text and segments of the
         transcribed text using the massage_for_comparison function. It looks for an exact
@@ -369,3 +466,11 @@ class ValidateResult(Enum):
     @property
     def is_fail_detected(self) -> bool:
         return self == ValidateResult.FAILED_ONLY or self == ValidateResult.FAILED_AND_CORRECTED or self == ValidateResult.FAILED_AND_DELETED
+
+# ---
+
+def get_flattened_whisper_word_dicts(whisper_data: dict) -> list[dict]:
+    word_dicts = []
+    for segment in whisper_data["segments"]:
+        word_dicts.extend(segment["words"])
+    return word_dicts

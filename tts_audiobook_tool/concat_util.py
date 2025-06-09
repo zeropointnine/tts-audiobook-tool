@@ -2,16 +2,18 @@ import os
 from typing import cast
 from pathlib import Path
 
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
-from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.silence_cut_util import SilenceCutUtil
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
@@ -19,136 +21,79 @@ from tts_audiobook_tool.util import *
 class ConcatUtil:
 
     @staticmethod
-    def concat_submenu(state: State) -> None:
+    def concatenate_chapters(
+        chapter_indices: list[int],
+        state: State,
+        and_transcode: bool,
+        base_dir: str
+    ) -> bool:
         """
+        Returns False on (any) fail
         """
-        print_heading(f"Combine audio segments:")
-
-        infos = ChapterInfo.make_chapter_infos(state)
-        if len(infos) > 1:
-            print_chapter_segment_info(infos)
-
-        if not state.project.section_dividers:
-            chapter_dividers_string = "none"
-        else:
-            strings = [str(item) for item in state.project.section_dividers]
-            chapter_dividers_string = ", ".join(strings)
-
-        printt(f"{make_hotkey_string('1')} Combine to FLAC")
-        printt(f"{make_hotkey_string('2')} Combine to FLAC, and transcode to MP4")
-        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(current: {chapter_dividers_string})")
-        printt()
-        hotkey = ask_hotkey()
-        printt()
-
-        if hotkey == "1":
-            ConcatUtil.ask_chapters(infos, state, and_transcode=False)
-        elif hotkey == "2":
-            ConcatUtil.ask_chapters(infos, state, and_transcode=True)
-        elif hotkey == "3":
-            ConcatUtil.ask_chapter_dividers(state)
-            ConcatUtil.concat_submenu(state)
-            return
-
-
-
-    @staticmethod
-    def ask_chapters(infos: list[ChapterInfo], state: State, and_transcode: bool) -> None:
-
-        # Chapter indices that have any files
-        chapter_indices = []
-        for i, info in enumerate(infos):
-            if info.num_files_exist > 0:
-                chapter_indices.append(i)
-
-        if len(chapter_indices) > 1:
-            printt("Enter file numbers for which you want to combine audio segments")
-            printt("(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
-            inp = ask()
-            if inp == "all" or inp == "a":
-                selected_chapter_indices = chapter_indices.copy()
-            else:
-                input_indices, warnings = ParseUtil.parse_one_indexed_ranges_string(inp, len(state.project.text_segments))
-                if warnings:
-                    for warning in warnings:
-                        printt(warning)
-                    printt()
-                    return
-                if not input_indices:
-                    return
-                input_indices = [item - 1 for item in input_indices] # make zero-indexed
-                selected_chapter_indices = [item for item in input_indices if item in chapter_indices]
-
-                if not selected_chapter_indices:
-                    ask("No valid chapters numbers entered. Press enter: ")
-                    return
-
-        else:
-            selected_chapter_indices = [0]
-
-        strings = [str(index+1) for index in selected_chapter_indices]
-        string = ", ".join(strings)
-        printt(f"Will concatenate audio segments to create the following chapters: {string}")
-        printt()
-        b = ask_confirm()
-        if not b:
-            return
-
-        ConcatUtil.concatenate_chapters(selected_chapter_indices, state, and_transcode)
-
-        if not state.prefs.has_shown_player_reminder:
-            show_player_reminder(state)
-
-        ask("Finished. Press enter:")
-
-    @staticmethod
-    def concatenate_chapters(chapter_indices: list[int], state: State, and_transcode: bool) -> None:
 
         # TODO: make interruptable after concat and after compress
 
         raw_text = state.project.load_raw_text()
         if not raw_text:
             printt("Error loading text", "error")
-            return
+            return False
 
-        text_segments = state.project.text_segments
         ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
         segment_index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
         counter = 1
-        timestamp_subdir = timestamp_string()
 
         for chapter_index in chapter_indices:
 
-            # Make file paths list
+            # Make tuples list
+            # This list is the full length of the project.text_segments,
+            # but uses empty strings for file paths outside the range of the chapter
+
             chapter_index_start, chapter_index_end = ranges[chapter_index]
             num_missing = 0
-            file_paths = []
-            for segment_index in range(0, len(text_segments)):
+
+            # Make text segment + file path list
+            segments_and_paths: list[ tuple[TextSegment, str]] = []
+            for segment_index, segment in enumerate(state.project.text_segments):
                 if segment_index < chapter_index_start or segment_index > chapter_index_end:
-                    file_paths.append("")
+                    # Out of range
+                    segments_and_paths.append((segment, ""))
                     continue
                 if not segment_index in segment_index_to_path:
-                    file_paths.append("")
+                    # Audio segment file not yet generated
+                    segments_and_paths.append((segment, ""))
                     num_missing += 1
                     continue
                 file_path = segment_index_to_path[segment_index]
-                file_paths.append(file_path)
+                segments_and_paths.append((segment, file_path))
 
-            # Make the concatenated "chapter" audio file
-            printt(f"Creating finalized concatenated audio file ({counter}/{len(chapter_indices)})\n")
-            dest_file_path = ConcatUtil._make_file_path(
-                state,
-                chapter_index,
-                len(ranges),
-                chapter_index_start,
-                chapter_index_end,
-                num_missing,
-                timestamp_subdir
-            )
-            error = ConcatUtil.make_app_flac(raw_text, file_paths, text_segments, dest_file_path)
+            # Trim silence pass
+            # Note how this is being done at 'concatenation time' ATM, not 'generation time'
+            if state.prefs.trim_sentence_continuations:
+                printt("Trimming sentence continuation pauses...")
+                printt()
+                ConcatUtil.trim_sentence_continuation_pauses(
+                    segments_and_paths, TRIM_SENTENCE_CONTINUATIONS_MAX_DURATION
+                )
+
+            # Make final concatenated audio file
+            printt(f"Creating finalized, concatenated audio file ({counter}/{len(chapter_indices)})\n")
+
+            file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
+            # file number
+            file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
+            # line range
+            file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
+            # num segments missing
+            if num_missing > 0:
+                file_name += f"[{num_missing} missing]" + " "
+            # voice name
+            file_name += f"[{state.project.get_voice_label()}]" + ".abr.flac"
+            dest_file_path = os.path.join(base_dir, file_name)
+
+            error = ConcatUtil.make_app_flac(raw_text, segments_and_paths, dest_file_path)
             if error:
                 printt(error, "error")
-                return
+                return False
 
             col = COL_DEFAULT if and_transcode else COL_ACCENT
             printt(f"Saved: {col}{dest_file_path}")
@@ -157,66 +102,63 @@ class ConcatUtil:
             if and_transcode:
                 printt("Transcoding to MP4")
                 printt()
-                transcode_path, err = TranscodeUtil.transcode_to_aac(dest_file_path)
+                transcode_path, err = TranscodeUtil.transcode_abr_flac_to_aac(dest_file_path)
                 printt()
                 if err:
                     printt(err, "error")
-                    return
+                    return False
                 printt(f"Saved: {COL_ACCENT}{transcode_path}")
                 printt()
 
             counter += 1
 
+        return True
+
     @staticmethod
-    def _make_file_path(
-        state: State,
-        section_index: int,
-        num_sections: int,
-        segment_index_start: int,
-        segment_index_end: int,
-        num_missing: int,
-        subdir: str
-    ) -> str:
+    def trim_sentence_continuation_pauses(
+        segments_and_paths: list[ tuple[TextSegment, str] ],
+        max_duration: float=0.5
+    ):
+        """
+        Trims excessive silence between adjacent segments when segment is a sentence continuation.
+        """
 
-        file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
-        file_name += f"[{ section_index+1 } of {num_sections}]" + " "
-        file_name += f"[{segment_index_start+1}-{segment_index_end+1}]" + " "
-        if num_missing > 0:
-            file_name += f"[{num_missing} missing]" + " "
-        file_name += f"[{state.project.get_voice_label()}]" + ".flac"
+        for i in range( 1, len(segments_and_paths) ):
 
-        file_path = os.path.join(state.project.dir_path, CONCAT_SUBDIR, subdir, file_name)
-        return file_path
+            _, last_path = segments_and_paths[i - 1]
+            segment, path = segments_and_paths[i]
+
+            if segment.reason != TextSegmentReason.INSIDE_SENTENCE:
+                continue
+            if not path or not last_path:
+                continue
+
+            result = SilenceCutUtil.cut_adjacent_silence(last_path, path, max_duration)
+            if isinstance(result, str):
+                printt(f"{COL_ERROR}{result}")
+
 
     @staticmethod
     def make_app_flac(
         raw_text: str,
-        project_audio_file_paths: list[str],
-        project_text_segments: list[TextSegment],
+        segments_and_paths: list[ tuple[TextSegment, str] ],
         dest_file_path: str
     ) -> str:
         """
-        :param project_text_segments:
-            the full set of text segments of the project
-        :param file_paths:
-            parallel list of file paths per text segment
-            element should be empty string when no audio for segment
-
-        Make "app flac" (concatenated text segment audio files plus app metadata)
+        Makes ".abr.flac" file (concatenated audio segments plus custom app metadata)
         Returns error message or empty string.
-        """
 
-        if len(project_audio_file_paths) != len(project_text_segments):
-            raise ValueError("length of file paths and text segments don't match")
+        :param segments_and_paths:
+            List of tuples of TextSegment and corresponding audio file path
+            Should contain all the text segments of the project
+            File paths which are empty will be skipped.
+        """
 
         # Make app metadata ("timed text segments")
         timed_text_segments = []
         seconds = 0.0
 
-        for i in range(0, len(project_text_segments)):
-
-            text_segment = project_text_segments[i]
-            audio_file_path = project_audio_file_paths[i]
+        for text_segment, audio_file_path in segments_and_paths:
 
             if not audio_file_path:
                 timed_text_segment = TimedTextSegment.make_using(text_segment, 0, 0) # has no start/end times
@@ -230,8 +172,10 @@ class ConcatUtil:
             timed_text_segments.append(timed_text_segment)
             seconds += duration
 
+        file_paths = [path for _, path in segments_and_paths if path]
+
         # Make concatenated file
-        error = ConcatUtil.concatenate_flacs(project_audio_file_paths, dest_file_path)
+        error = SoundFileUtil.concatenate_flacs(file_paths, dest_file_path)
         if error:
             return error
 
@@ -246,161 +190,6 @@ class ConcatUtil:
 
         return "" # success
 
-    @staticmethod
-    def concatenate_flacs(
-        file_paths: list[str],
-        dest_flac_path: str
-    ) -> str:
-        """
-        Concatenates a list of flac files into one.
-        Empty items in list are ignored.
-        Returns error message or empty string.
-        """
-
-        dest_base_path = str( Path(dest_flac_path).parent )
-        os.makedirs(dest_base_path, exist_ok=True)
-
-        # [1] Make temp text file with list of input WAVs for ffmpeg's concat demuxer
-
-        printt("Creating temp file")
-
-        temp_text_path = os.path.join(dest_base_path, PROJECT_FFMPEG_CONCAT_TEMP_FILE_NAME)
-        try:
-            with open(temp_text_path, 'w', encoding='utf-8') as f:
-                for path in file_paths:
-                    # Must be absolute paths
-                    # Important: Escape backslashes for ffmpeg on all platforms within the list file
-                    # And wrap the path in single quotes for robustness (handles spaces etc.)
-                    if not path:
-                        continue
-                    escaped_path = path.replace('\\', '\\\\')
-                    f.write(f"file '{escaped_path}'\n")
-        except Exception as e:
-            delete_temp_file(temp_text_path)
-            return str(e)
-
-        # [2] Do concat
-
-        printt(f"Concatenating {len(file_paths)} files")
-        printt()
-
-        # -y: Overwrite output file without asking
-        # -f concat: Use the concatenation demuxer
-        # -safe 0: Allow unsafe file paths (useful if paths are complex, though quoting helps)
-        # -i list_filename: Input file is the list we created
-        # -c:a flac: Specify the audio codec for the output as FLAC
-        partial_command = [
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", temp_text_path,
-            "-c:a", "flac"
-        ]
-
-        # ffmpeg -f concat -safe 0 -i mylist.txt -c copy output_concatenated.flac
-
-        err = FfmpegUtil.make_file(partial_command, dest_flac_path, use_temp_file=True)
-        delete_temp_file(temp_text_path)
-
-        return err
-
-    @staticmethod
-    def trim_flac_file(
-            source_flac_path: str,
-            dest_file_path: str,
-            start_time_seconds: float,
-            end_time_seconds: float
-    ) -> bool:
-        """
-        Trims a source FLAC file from start_time_seconds to end_time_seconds
-        and saves it to dest_file_path using ffmpeg.
-        Returns True for success
-        """
-
-        source_flac_path = os.path.abspath(source_flac_path)
-        dest_file_path = os.path.abspath(dest_file_path)
-
-        if not os.path.exists(source_flac_path):
-            L.w(f"Doesn't exist: {source_flac_path}")
-            return False
-
-        duration = end_time_seconds - start_time_seconds
-        if duration <= 0:
-            L.w(f"Bad start/end times {start_time_seconds} {end_time_seconds}")
-            return False
-
-        # TODO: replace with FfmpegUtil.make_file()
-
-        partial_command = [
-            "-hide_banner",
-            "-loglevel", "error",
-            "-y",
-            "-i", source_flac_path,
-            "-ss", str(start_time_seconds),
-            "-to", str(end_time_seconds),
-            "-c:a", "flac",
-        ]
-        err = FfmpegUtil.make_file(partial_command, dest_file_path, use_temp_file=False)
-        if err:
-            L.e(err)
-        return not bool(err)
-
-    # ---
-
-    @staticmethod
-    def ask_chapter_dividers(state: State) -> None:
-
-        print_heading("Combine > Chapters cut points:")
-
-        num_text_segments = len(state.project.text_segments)
-
-        section_dividers = state.project.section_dividers
-        if section_dividers:
-            ConcatUtil.print_concat_info(section_dividers, num_text_segments)
-
-        printt("Enter the line numbers where new files will begin.")
-        printt("For example, if there are 1000 lines of text and you enter \"250, 700\",")
-        printt("three audio files will be created spanning lines 1-249, 250-699, and 700-1000.")
-        printt("Enter \"1\" for none.")
-        printt()
-        inp = ask()
-        printt()
-        if not inp:
-            return
-
-        string_items = inp.split(",")
-        one_indexed_items = []
-        for string_item in string_items:
-            try:
-                index = int(string_item)
-                one_indexed_items.append(index)
-            except:
-                printt(f"Parse error: {string_item}", "error")
-                return
-        one_indexed_items = list(set(one_indexed_items))
-        one_indexed_items.sort()
-        for item in one_indexed_items:
-            if item < 1 or item > len(state.project.text_segments):
-                printt(f"Index out of range: {item}", "error")
-                return
-        zero_indexed_items = [item - 1 for item in one_indexed_items]
-        if 0 in zero_indexed_items:
-            del zero_indexed_items[0]
-        state.project.section_dividers = zero_indexed_items
-
-
-    @staticmethod
-    def print_concat_info(section_dividers: list[int], num_items: int) -> None:
-        section_index_strings = [str(index+1) for index in section_dividers]
-        section_indices_string = ", ".join(section_index_strings)
-        ranges = make_section_ranges(section_dividers, num_items)
-        range_strings = [ str(range[0]+1) + "-" + str(range[1]+1) for range in ranges]
-        ranges_string = ", ".join(range_strings)
-        printt(f"Current cut points: {section_indices_string} {COL_DIM}({ranges_string})")
-        printt()
 
     # TODO: reimplement
     # @staticmethod
@@ -413,31 +202,3 @@ class ConcatUtil:
     #             return True
     #     return False
 
-# ---
-
-def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
-    for i, info in enumerate(infos):
-        if info.num_files_missing == 0:
-            desc = ""
-        else:
-            desc = f"{info.num_files_missing} of {info.num_segments} files missing"
-        s = f"File {i+1}: lines {info.segment_index_start + 1}-{info.segment_index_end + 1}"
-        if desc:
-            s += f" {COL_DIM}({desc})"
-        printt(s)
-    printt()
-
-def show_player_reminder(state: State) -> None:
-
-    printt(f"🔔 {COL_ACCENT}Reminder:")
-    printt("You can use audio files with the interactive player/reader here:")
-    package_dir = get_package_dir()
-    if package_dir:
-        browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
-    else:
-        browser_path = "browser_player" + os.path.sep + "index.html"
-    printt(browser_path)
-    printt(f"or on the web here: {PLAYER_URL}")
-    printt()
-
-    state.prefs.has_shown_player_reminder = True
