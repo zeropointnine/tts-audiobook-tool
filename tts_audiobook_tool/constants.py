@@ -10,7 +10,8 @@ MAX_WORDS_PER_SEGMENT = 40
 # Max words per text chunk, applied to the source text for "STT mode"
 MAX_WORDS_PER_SEGMENT_STT = 40
 
-TRIM_SENTENCE_CONTINUATIONS_MAX_DURATION = 0.5
+SENTENCE_CONTINUATION_MAX_DURATION = 0.5
+PARAGRAPH_SILENCE_MIN_DURATION = 0.75
 
 MENU_CLEARS_SCREEN = False
 
@@ -19,7 +20,7 @@ SETTINGS_FILE_NAME = "tts-audiobook-tool-settings.json"
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 PREFS_PLAY_ON_GENERATE_DEFAULT = False
 PREFS_SHOULD_NORMALIZE = True
-PREFS_TRIM_SC_DEFAULT = True
+PREFS_OPTIMIZE_SS_DEFAULT = True
 
 PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
@@ -38,6 +39,20 @@ ASSETS_DIR_NAME = "assets"
 DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 package_dir = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, DEFAULT_VOICE_JSON_FILE_NAME)
+
+
+# Note use single value app-wide, 44k matching Oute's output sample rate
+# Also, un-complicates concatenation of mixed model outputs
+FLAC_OUTPUT_SAMPLE_RATE = 44100
+
+# App's standardized ffmpeg arguments for outputting FLAC files
+FLAC_OUTPUT_FFMPEG_ARGUMENTS = [
+    "-c:a", "flac",
+    "-sample_fmt",  "s16",
+    "-frame_size", "4096",
+    "-ar", f"{FLAC_OUTPUT_SAMPLE_RATE}",
+    "-compression_level", "6"
+]
 
 APP_META_FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
 APP_META_MP4_MEAN = "tts-audiobook-tool"

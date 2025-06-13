@@ -69,10 +69,16 @@ class TextSegment:
 
 class TextSegmentReason(Enum):
     """
-    Reason for the text segment being split
-
-    (Using enum for potential expandability)
+    Reason for the text segment being segmented
     """
     UNDEFINED = "undefined" # for back-compat
+
+    # Segment is a start of a sentence
     SENTENCE = "s"
+
+    # Segment is the start of a paragraph
+    # (and also by our definition is the start of a sentence too)
+    PARAGRAPH = "p"
+
+    # Segment is a continuation of a sentence
     INSIDE_SENTENCE = "is"

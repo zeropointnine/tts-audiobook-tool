@@ -3,6 +3,7 @@ import os
 import subprocess
 
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
 class LoudnessNormalizationUtil:
@@ -27,7 +28,6 @@ class LoudnessNormalizationUtil:
         """
         if not dest_path:
             dest_path = source_path # ie, overwrite original
-
 
         # Pass 1
         result = LoudnessNormalizationUtil.get_loudness_json(source_path, i, lra, tp)
@@ -183,14 +183,11 @@ class LoudnessNormalizationUtil:
 
         partial_command = [
             "-y",  # Overwrite output file if it exists
-            "-hide_banner",
-            "-loglevel", "error", # Show only errors
+            "-hide_banner", "-loglevel", "error",
             "-i", input_file_path,
-            "-af", filter_string,
-            "-c:a", "flac",
-            "-frame_size", "4096",
-            "-compression_level", "5"
+            "-af", filter_string
         ]
+        partial_command.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
         err = FfmpegUtil.make_file(partial_command, output_file_path, use_temp_file=True)
         return err
 
@@ -201,7 +198,7 @@ class LoudnessNormalizationUtil:
         """
         Normalizes and overwrites files in a directory
         Prints status
-        For development (not used in current UX flow)
+        For development only.
         """
         for file in os.listdir(dir_path):
             file_path = os.path.join(dir_path, file)

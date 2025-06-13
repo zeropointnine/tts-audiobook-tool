@@ -6,3 +6,4 @@ venv3/
 .vscode/
 pyrightconfig.json
 config_oute_dev.py
+tts_audiobook_util/test*.py

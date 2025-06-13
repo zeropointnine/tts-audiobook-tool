@@ -35,20 +35,31 @@ class TextSegmenter:
                 reason = TextSegmentReason.SENTENCE if i == 0 else TextSegmentReason.INSIDE_SENTENCE
                 tups.append( (subsegment, reason) )
 
+        # Make TextSegments proper
         counter = 0
-        result = []
+        text_segments: list[TextSegment] = []
         for text, reason in tups:
             length = len(text)
             text_segment = TextSegment(
                 text=text, index_start=counter, index_end=counter + length, reason=reason
             )
-            print(text_segment)
-            result.append(text_segment)
+            text_segments.append(text_segment)
             counter += length
 
-        return result
+        # Pass 4 retroactive - assign paragraph reason
+        for i in range(1, len(text_segments)):
+            segment_a = text_segments[i - 1]
+            segment_b = text_segments[i]
+            if has_trailing_line_break(segment_a.text):
+                segment_b.reason = TextSegmentReason.PARAGRAPH
+
+        return text_segments
 
 # ---
+
+def has_trailing_line_break(s: str) -> bool:
+    trailing_whitespace = s[len(s.rstrip()):]
+    return "\n" in trailing_whitespace
 
 def is_quotation(s: str) -> bool:
     """

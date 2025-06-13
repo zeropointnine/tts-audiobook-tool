@@ -73,7 +73,7 @@ class MainMenuUtil:
         if state.prefs.project_dir:
             s = f"{make_hotkey_string("T")} Text "
             if state.project.text_segments:
-                s += f"{COL_DIM}(current: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} segmented lines)"
+                s += f"{COL_DIM}(current: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
             printt(s)
 
         # Generate audio
@@ -97,7 +97,7 @@ class MainMenuUtil:
 
         # Concat
         if state.prefs.project_dir:
-            s = f"{make_hotkey_string("C")} Combine audio segments and finalize"
+            s = f"{make_hotkey_string("C")} Combine audio segments to create audiobook file/s"
             if num_audio_files == 0:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)

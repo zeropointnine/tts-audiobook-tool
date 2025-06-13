@@ -21,12 +21,12 @@ class Prefs:
             project_dir: str = "",
             should_normalize: bool = PREFS_SHOULD_NORMALIZE,
             play_on_generate: bool = PREFS_PLAY_ON_GENERATE_DEFAULT,
-            trim_sentence_continuations: bool = PREFS_TRIM_SC_DEFAULT
+            optimize_ss: bool = PREFS_OPTIMIZE_SS_DEFAULT
     ) -> None:
         self._project_dir = project_dir
         self._should_normalize = should_normalize
         self._play_on_generate = play_on_generate
-        self._trim_sentence_continuations = trim_sentence_continuations
+        self._optimize_segment_silence = optimize_ss
 
         self._has_shown_player_reminder = False
 
@@ -71,9 +71,9 @@ class Prefs:
             play_on_generate = PREFS_PLAY_ON_GENERATE_DEFAULT
             dirty = True
 
-        trim_sc = prefs_dict.get("trim_sc", PREFS_TRIM_SC_DEFAULT)
-        if not isinstance(trim_sc, bool):
-            trim_sc = PREFS_TRIM_SC_DEFAULT
+        optimize_ss = prefs_dict.get("optimize_ss", PREFS_OPTIMIZE_SS_DEFAULT)
+        if not isinstance(optimize_ss, bool):
+            optimize_ss = PREFS_OPTIMIZE_SS_DEFAULT
             dirty = True
 
         has_shown_player_reminder = prefs_dict.get("has_shown_player_reminder", False)
@@ -85,7 +85,7 @@ class Prefs:
             project_dir=project_dir,
             should_normalize=should_normalize,
             play_on_generate=play_on_generate,
-            trim_sentence_continuations=trim_sc
+            optimize_ss=optimize_ss
         )
         prefs._has_shown_player_reminder = has_shown_player_reminder
         if dirty:
@@ -120,12 +120,12 @@ class Prefs:
         self.save()
 
     @property
-    def trim_sentence_continuations(self) -> bool:
-        return self._trim_sentence_continuations
+    def optimize_segment_silence(self) -> bool:
+        return self._optimize_segment_silence
 
-    @trim_sentence_continuations.setter
-    def trim_sentence_continuations(self, value: bool):
-        self._trim_sentence_continuations = value
+    @optimize_segment_silence.setter
+    def optimize_segment_silence(self, value: bool):
+        self._optimize_segment_silence = value
         self.save()
 
     @property
@@ -142,7 +142,7 @@ class Prefs:
             "project_dir": self._project_dir,
             "should_normalize": self._should_normalize,
             "play_on_generate": self._play_on_generate,
-            "trim_sc": self._trim_sentence_continuations,
+            "optimize_ss": self._optimize_segment_silence,
             "has_shown_player_reminder": self._has_shown_player_reminder
         }
         try:

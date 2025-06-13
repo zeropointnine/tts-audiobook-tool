@@ -10,7 +10,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
-from tts_audiobook_tool.silence_cut_util import SilenceCutUtil
+from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
@@ -68,11 +68,20 @@ class ConcatUtil:
 
             # Trim silence pass
             # Note how this is being done at 'concatenation time' ATM, not 'generation time'
-            if state.prefs.trim_sentence_continuations:
+            if state.prefs.optimize_segment_silence:
                 printt("Trimming sentence continuation pauses...")
                 printt()
                 ConcatUtil.trim_sentence_continuation_pauses(
-                    segments_and_paths, TRIM_SENTENCE_CONTINUATIONS_MAX_DURATION
+                    segments_and_paths, SENTENCE_CONTINUATION_MAX_DURATION
+                )
+
+            # Append minimum duration of silence at paragraph breaks
+            # Note how this is being done at 'concatenation time' ATM, not 'generation time'
+            if state.prefs.optimize_segment_silence: # TODO rename pref or add independent pref value
+                printt("Enforcing minimum silence duration at paragraph breaks...")
+                printt()
+                ConcatUtil.add_silence_at_paragraph_breaks(
+                    segments_and_paths, PARAGRAPH_SILENCE_MIN_DURATION
                 )
 
             # Make final concatenated audio file
@@ -125,18 +134,39 @@ class ConcatUtil:
 
         for i in range( 1, len(segments_and_paths) ):
 
-            _, last_path = segments_and_paths[i - 1]
-            segment, path = segments_and_paths[i]
+            segment_a, path_a = segments_and_paths[i - 1]
+            segment_b, path_b = segments_and_paths[i]
 
-            if segment.reason != TextSegmentReason.INSIDE_SENTENCE:
+            if segment_b.reason != TextSegmentReason.INSIDE_SENTENCE:
                 continue
-            if not path or not last_path:
+            if not path_b or not path_a:
                 continue
 
-            result = SilenceCutUtil.cut_adjacent_silence(last_path, path, max_duration)
+            result = SilenceUtil.trim_silence_if_necessary(path_a, path_b, max_duration)
             if isinstance(result, str):
                 printt(f"{COL_ERROR}{result}")
 
+    @staticmethod
+    def add_silence_at_paragraph_breaks(
+        segments_and_paths: list[ tuple[TextSegment, str] ],
+        min_duration: float=0.5
+    ):
+        """
+        Enforces a minimum duration of silence at paragraph breaks
+        """
+        for i in range( 1, len(segments_and_paths) ):
+
+            segment_a, path_a = segments_and_paths[i - 1]
+            segment_b, path_b = segments_and_paths[i]
+
+            if not path_a or not path_b:
+                continue
+
+            if segment_b.reason == TextSegmentReason.PARAGRAPH:
+
+                result = SilenceUtil.add_silence_if_necessary(path_a, path_b, min_duration)
+                if isinstance(result, str):
+                    printt(f"{COL_ERROR}{result}")
 
     @staticmethod
     def make_app_flac(

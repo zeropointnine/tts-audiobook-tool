@@ -38,7 +38,7 @@ class ConcatSubmenu:
         printt(f"{make_hotkey_string('1')} Combine to FLAC, and transcode to MP4")
         printt(f"{make_hotkey_string('2')} Combine to FLAC only")
         printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(current: {chapter_dividers_string})")
-        printt(f"{make_hotkey_string('4')} Trim sentence continuation pauses {COL_DIM}(current: {state.prefs.trim_sentence_continuations})")
+        printt(f"{make_hotkey_string('4')} Trim sentence continuation pauses {COL_DIM}(current: {state.prefs.optimize_segment_silence})")
         printt()
         hotkey = ask_hotkey()
 
@@ -50,8 +50,8 @@ class ConcatSubmenu:
             ConcatSubmenu.ask_cut_points(state)
             ConcatSubmenu.concat_submenu(state)
         elif hotkey == "4":
-            state.prefs.trim_sentence_continuations = not state.prefs.trim_sentence_continuations
-            printt(f"Trim sentence continuation pauses set to: {state.prefs.trim_sentence_continuations}")
+            state.prefs.optimize_segment_silence = not state.prefs.optimize_segment_silence
+            printt(f"Optimize silence duration between segments: {state.prefs.optimize_segment_silence}") # TODO needs some explanation
             printt()
             ConcatSubmenu.concat_submenu(state)
 
@@ -165,8 +165,8 @@ class ConcatSubmenu:
         else:
             printt("Finished.")
             printt()
-            hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("V")} to view file/s: ")
-            if hotkey == "v":
+            hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
+            if hotkey == "o":
                 err = open_directory_gui(dest_subdir)
                 if err:
                     printt(err, "error")

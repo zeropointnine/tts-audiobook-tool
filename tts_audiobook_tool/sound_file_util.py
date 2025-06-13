@@ -8,6 +8,7 @@ import soundfile as sf
 
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
 class SoundFileUtil:
@@ -18,19 +19,13 @@ class SoundFileUtil:
         # TODO: use "make_file" here
 
         try:
-            # Construct the FFmpeg command with proper escaping for filenames
             cmd = [
                 'ffmpeg',
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i", wav_path,
-                "-c:a", "flac",
-                "-frame_size", "4096",
-                "-compression_level", "5",
-                flac_path
+                "-y", "-hide_banner", "-loglevel", "error",
+                "-i", wav_path
             ]
+            cmd.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
+            cmd.append(flac_path)
 
             subprocess.run(
                 cmd,
@@ -76,15 +71,12 @@ class SoundFileUtil:
         # TODO: replace with FfmpegUtil.make_file()
 
         partial_command = [
-            "-hide_banner",
-            "-loglevel", "error",
-            "-y",
+            "-hide_banner", "-loglevel", "error", "-y",
             "-i", source_flac_path,
             "-ss", str(start_time_seconds),
             "-to", str(end_time_seconds),
-            "-c:a", "flac",
-            "-frame_size", "4096"
         ]
+        partial_command.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
         err = FfmpegUtil.make_file(partial_command, dest_file_path, use_temp_file=False)
         if err:
             L.e(err)
@@ -130,25 +122,34 @@ class SoundFileUtil:
         # -f concat: Use the concatenation demuxer
         # -safe 0: Allow unsafe file paths (useful if paths are complex, though quoting helps)
         # -i list_filename: Input file is the list we created
-        # -c:a flac: Specify the audio codec for the output as FLAC
         partial_command = [
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
+            "-hide_banner", "-loglevel", "error", "-y",
             "-f", "concat",
             "-safe", "0",
-            "-i", temp_text_path,
-            "-c:a", "flac",
-            "-frame_size", "4096"
+            "-i", temp_text_path
         ]
-
-        # ffmpeg -f concat -safe 0 -i mylist.txt -c copy output_concatenated.flac
+        partial_command.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
 
         err = FfmpegUtil.make_file(partial_command, dest_flac_path, use_temp_file=True)
         delete_temp_file(temp_text_path)
 
         return err
+
+    @staticmethod
+    def add_silence_flac(src_path: str, dest_path: str, duration: float) -> str:
+        """
+        Returns error message on fail or empty string
+        """
+        data, samplerate = sf.read(src_path)
+        silence = np.zeros(int(samplerate * duration), dtype=data.dtype) # Match dtype for concatenation
+        new_data = np.concatenate([data, silence])
+        try:
+            sf.write(dest_path, new_data, samplerate, format='FLAC', subtype='PCM_16')
+            data, samplerate = sf.read(dest_path)
+
+        except Exception as e:
+            return str(e)
+        return ""
 
     @staticmethod
     def transcode_to_aac(source_file_path: str, kbps=96) -> tuple[str, str]:
@@ -165,15 +166,10 @@ class SoundFileUtil:
         dest_file_path = get_unique_file_path(dest_file_path)
 
         partial_command = [
-            "-i",
-            source_file_path,
-            "-c:a",
-            "aac",
-            "-b:a",
-            f"{kbps}k",
-            "-v",
-            "warning",
-            "-progress",
+            "-i", source_file_path,
+            "-c:a", "aac",
+            "-b:a", f"{kbps}k",
+            "-v", "warning", "-progress",
             "-",
         ]
         err = FfmpegUtil.make_file(partial_command, dest_file_path, False)
@@ -250,3 +246,15 @@ class SoundFileUtil:
 
         thread = threading.Thread(target=_play_stream, daemon=True)
         thread.start()
+
+    @staticmethod
+    def print_samplerates(dir_path: str):
+        """ Dev"""
+
+        for item in os.listdir(dir_path):
+            path = os.path.join(dir_path, item)
+            if path.endswith(".flac"):
+                data, samplerate = sf.read(path)
+                print(item)
+                print(samplerate, data.dtype)
+                print()

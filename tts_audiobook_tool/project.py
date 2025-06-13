@@ -87,7 +87,7 @@ class Project:
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
 
-        if project.oute_voice_file_name and model_type == "oute":
+        if project.oute_voice_file_name:
             from tts_audiobook_tool.voice_util import VoiceUtil
             voice_path = os.path.join(dir_path, project.oute_voice_file_name)
             result = VoiceUtil.load_voice_json(voice_path)

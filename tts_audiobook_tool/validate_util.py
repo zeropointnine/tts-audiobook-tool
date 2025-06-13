@@ -138,7 +138,7 @@ class ValidateUtil:
         else:
             end_time = ValidateUtil.get_excess_audio_timestamp(item, whisper_data)
             if end_time:
-                return ValidateResult.FAILED_ONLY, f"Excess audio detected past transcription end {end_time:.2f}"
+                return ValidateResult.FAILED_ONLY, f"Audio extends past transcription end timestamp by too much {end_time:.2f}"
 
         # Static audio test
         is_static = ValidateUtil.is_audio_static(item, whisper_data)
@@ -207,7 +207,7 @@ class ValidateUtil:
         if not end_time:
             return None
 
-        message = f"Excess audio detected past transcription end {end_time:.2f}"
+        message = f"Audio extends past transcription end timestamp by too much: {end_time:.2f}"
 
         # Make trimmed copy of audio file with updated filename and delete old version
         old_path = item.path
@@ -296,7 +296,7 @@ class ValidateUtil:
 
         # Rem, whisper end timestamp is typically a shade too early
         # Also, we don't want to crop too aggressively regardless
-        THRESH = 0.66
+        THRESH = 0.75
 
         delta = audio_duration - trans_end_time
         if delta > THRESH:

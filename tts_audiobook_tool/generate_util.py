@@ -66,7 +66,7 @@ class GenerateUtil:
 
         Shared.clear_whisper()
 
-        ask("Press enter: ")
+        ask("Press enter: \a")
 
     @staticmethod
     def generate_validate_fix_item(

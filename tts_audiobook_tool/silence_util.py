@@ -6,29 +6,29 @@ import os
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.util import *
 
-class SilenceCutUtil:
+class SilenceUtil:
 
     @staticmethod
-    def cut_adjacent_silence(file_a: str, file_b: str, max_duration: float=0.5) -> str | bool:
+    def trim_silence_if_necessary(file_a: str, file_b: str, max_duration: float=0.5) -> str | bool:
         """
         Prints to console if action taken
 
         Returns False if no action taken,
-        True if file/s were successfully cropped,
-        or error message string if crop failed
+        True if file/s successfully modified,
+        or error message string on fail
         """
 
-        a_end_duration = SilenceCutUtil.get_silence_duration_end(file_a)
+        a_end_duration = SilenceUtil.get_silence_duration_end(file_a)
         if a_end_duration is None:
             return f"Could not get silence duration for {file_a}"
 
-        b_start_duration = SilenceCutUtil.get_silence_duration_start(file_b)
+        b_start_duration = SilenceUtil.get_silence_duration_start(file_b)
         if b_start_duration is None:
             return f"Could not get silence duration for {file_b}"
 
         overage = (a_end_duration + b_start_duration) - max_duration
-        epsilon = 0.01 # ... files that have previously been cut will result in overage being _around_ 0.0
-        if overage <= epsilon:
+        epsilon = 0.02 # ... files that have previously been cut will result in overage being _around_ 0.0
+        if overage < epsilon:
             return False
 
         duration_a = AudioMetaUtil.get_audio_duration(file_a)
@@ -86,13 +86,52 @@ class SilenceCutUtil:
                 return f"Failed to trim {file_b}"
             os.replace(temp_file_b, file_b)
 
+        # TODO print feedback
+        printt()
+        return True
+
+    @staticmethod
+    def add_silence_if_necessary(file_a: str, file_b: str, min_duration: float) -> str | bool:
+        """
+        Enforces a minimum duration of silence in the audio of two adjacent sound files
+        by appending silence to file_a if necessary.
+
+        Prints to console if action taken
+
+        Returns False if no action taken,
+        True if file successfully modified,
+        or error message string on fail
+        """
+
+        a_end_duration = SilenceUtil.get_silence_duration_end(file_a)
+        if a_end_duration is None:
+            return f"Could not get silence duration for {file_a}"
+
+        b_start_duration = SilenceUtil.get_silence_duration_start(file_b)
+        if b_start_duration is None:
+            return f"Could not get silence duration for {file_b}"
+
+        underage = min_duration - (a_end_duration + b_start_duration)
+        epsilon = 0.02
+        if underage < epsilon:
+            return False
+
+        temp_dest_file = make_sibling_random_file_path(file_a)
+        err = SoundFileUtil.add_silence_flac(file_a, temp_dest_file, underage)
+        if err:
+            return err
+        err = swap_and_delete_file(temp_dest_file, file_a)
+        if err:
+            return err
+
+        printt(f"Silence ({underage:.2f}s) added to end of {file_a}")
         printt()
         return True
 
     @staticmethod
     def get_silence_duration_start(path: str) -> float | None:
         try:
-            silent_segments, _ = SilenceCutUtil.detect_silence(path)
+            silent_segments, _ = SilenceUtil.detect_silence(path)
             if silent_segments and silent_segments[0][0] == 0.0:
                 return silent_segments[0][1] - silent_segments[0][0]
             return 0.0
@@ -102,7 +141,7 @@ class SilenceCutUtil:
     @staticmethod
     def get_silence_duration_end(path: str) -> float | None:
         try:
-            silent_segments, total_duration = SilenceCutUtil.detect_silence(path)
+            silent_segments, total_duration = SilenceUtil.detect_silence(path)
             if silent_segments and silent_segments[-1][1] == total_duration:
                 return silent_segments[-1][1] - silent_segments[-1][0]
             return 0.0

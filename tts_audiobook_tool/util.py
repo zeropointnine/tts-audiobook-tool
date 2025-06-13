@@ -88,6 +88,32 @@ def strip_ansi_codes(s: str) -> str:
 def make_random_hex_string(num_hex_chars: int=32) -> str:
     return f"{random.getrandbits(num_hex_chars * 4):0{num_hex_chars}x}"
 
+def make_sibling_random_file_path(source_file_path: str, new_suffix: str="") -> str:
+    """
+    When no new_suffix, uses source_file_path's suffix
+    """
+    source_path = Path(source_file_path)
+    parent_dir = source_path.parent
+    new_suffix = new_suffix or source_path.suffix
+    new_file_name = make_random_hex_string() + new_suffix
+    new_path = os.path.join(parent_dir, new_file_name)
+    return new_path
+
+def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
+    """
+    Returns error message on fail, else empty string
+    """
+    if Path(target_file_path).exists():
+        try:
+            Path(target_file_path).unlink()
+        except Exception as e:
+            return f"Couldn't delete original {temp_file_path}, {e}"
+    try:
+        Path(temp_file_path).rename(target_file_path)
+    except Exception as e:
+        return f"Couldn't rename {temp_file_path} to {target_file_path}, {e}"
+    return ""
+
 def timestamp_string() -> str:
     current_time = datetime.now()
     return current_time.strftime("%y%m%d_%H%M%S")
