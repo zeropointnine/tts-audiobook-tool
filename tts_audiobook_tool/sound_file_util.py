@@ -13,6 +13,19 @@ from tts_audiobook_tool.util import *
 
 class SoundFileUtil:
 
+    _current_playback_thread = None
+    _stop_playback_event = threading.Event()
+
+    @staticmethod
+    def is_valid_sound_file(path: str) -> str:
+        """ Returns error string or empty string"""
+        from mutagen._file import File
+        try:
+            File(path)
+        except Exception as e:
+            return "Not a valid audio file: {e}"
+        return ""
+
     @staticmethod
     def encode_to_flac(wav_path: str, flac_path: str) -> bool:
 
@@ -187,7 +200,8 @@ class SoundFileUtil:
 
             def callback(outdata, frames, time, status):
                 if status:
-                    print(f"Audio callback status: {status}")
+                    # print(f"Audio callback status: {status}")
+                    ...
                 data = wf.readframes(frames)
                 if len(data) == 0:
                     raise sd.CallbackStop()
@@ -197,55 +211,59 @@ class SoundFileUtil:
                 sd.sleep(int(wf.getnframes() / sample_rate * 1000))
 
     @staticmethod
+    @staticmethod
     def play_flac_async(file_path: str):
         """
         Plays a FLAC file asynchronously using a streaming approach.
+        A new playback will cancel the previous one.
         Eats exceptions and prints them.
         """
-        def _play_stream():
+        # Signal previous thread to stop if it exists and is alive
+        if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
+            SoundFileUtil._stop_playback_event.set() # Set the event to signal stopping
+            SoundFileUtil._current_playback_thread.join(timeout=0.5) # Wait a short time for it to stop
+
+        # Clear the event for the new playback
+        SoundFileUtil._stop_playback_event.clear()
+
+        def _play_stream(stop_event: threading.Event):
             try:
                 with sf.SoundFile(file_path, 'r') as flac_file:
-                    samplerate = flac_file.samplerate
-                    channels = flac_file.channels
-
                     stream_finished_event = threading.Event()
 
                     def callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags):
-                        if status:
-                            print(f"Audio callback status (FLAC): {status}")
+                        if stop_event.is_set():
+                            raise sd.CallbackStop
 
-                        # Read 'frames' number of frames from the FLAC file
-                        # always_2d=True ensures data is (n_frames, n_channels)
                         data_read = flac_file.read(frames, dtype='float32', always_2d=True)
 
-                        if data_read.shape[0] == 0: # No more data
-                            raise sd.CallbackStop()
-
-                        # Fill outdata
-                        if data_read.shape[0] < frames:
+                        if data_read.shape[0] > 0:
                             outdata[:data_read.shape[0]] = data_read
-                            # Zero out the rest of the buffer
-                            outdata[data_read.shape[0]:] = 0
+                            if data_read.shape[0] < frames:
+                                outdata[data_read.shape[0]:] = 0
                         else:
-                            outdata[:] = data_read
+                            raise sd.CallbackStop
 
                     def set_event_on_finish():
                         stream_finished_event.set()
 
                     with sd.OutputStream(
-                        samplerate=samplerate,
-                        channels=channels,
+                        samplerate=flac_file.samplerate,
+                        channels=flac_file.channels,
                         callback=callback,
-                        dtype='float32', # Ensure this matches data_read dtype
+                        dtype='float32',
                         finished_callback=set_event_on_finish
                     ):
-                        stream_finished_event.wait() # Wait for playback to complete
+                        stream_finished_event.wait() # Wait for playback to complete or be cancelled
 
+            except sd.CallbackStop:
+                pass # Normal exit from the stream
             except Exception as e:
                 printt(f"Couldn't play FLAC audio file via stream: {file_path} - {e}")
 
-        thread = threading.Thread(target=_play_stream, daemon=True)
-        thread.start()
+        new_thread = threading.Thread(target=_play_stream, args=(SoundFileUtil._stop_playback_event,), daemon=True)
+        new_thread.start()
+        SoundFileUtil._current_playback_thread = new_thread
 
     @staticmethod
     def print_samplerates(dir_path: str):

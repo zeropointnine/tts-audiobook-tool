@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 import signal
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.main_menu_util import MainMenuUtil
-from tts_audiobook_tool.options_util import OptionsUtil
+from tts_audiobook_tool.main_menu import MainMenu
+from tts_audiobook_tool.options_submenu import OptionsSubmenu
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
 from tts_audiobook_tool.shared import Shared
@@ -13,7 +13,7 @@ from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.text_segments_util import TextSegmentsUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.voice_util import VoiceUtil
+from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu
 
 class App:
     """
@@ -55,4 +55,4 @@ class App:
                 self.state.reset()
                 did_reset = True
 
-            MainMenuUtil.menu(self.state, did_reset=did_reset)
+            MainMenu.menu(self.state, did_reset=did_reset)

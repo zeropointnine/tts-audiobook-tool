@@ -4,6 +4,7 @@ import os
 import shutil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
@@ -12,10 +13,6 @@ class Project:
     """
     """
     dir_path: str
-
-    # Note, currently not doing anything with this value,
-    # as we are letting a project be used regardless of the runtime's active model
-    model_type: str
 
     text_segments: list[TextSegment] = []
     section_dividers: list[int] = []
@@ -29,13 +26,11 @@ class Project:
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
 
-    # Does not persist
-    generate_ints: set[int] = set()
+    generate_range_string: str = ""
 
 
-    def __init__(self, dir_path: str, model_type: str):
+    def __init__(self, dir_path: str):
         self.dir_path = dir_path
-        self.model_type = model_type
 
     @staticmethod
     def load(dir_path: str) -> Project | str:
@@ -58,11 +53,7 @@ class Project:
         if not isinstance(d, dict):
             return f"Project settings file bad type: {type(d)}"
 
-
-        # Note: We allow project to load regardless of original 'model type'. By design?
-        model_type = d.get("model_type", "")
-
-        project = Project(dir_path, model_type)
+        project = Project(dir_path)
 
         # Text segments
         if "text_segments" in d:
@@ -83,18 +74,29 @@ class Project:
             else:
                 project.section_dividers = lst
 
+        # Generate range string
+        project.generate_range_string = d.get("generate_range", "")
+
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
 
-        if project.oute_voice_file_name:
-            from tts_audiobook_tool.voice_util import VoiceUtil
-            voice_path = os.path.join(dir_path, project.oute_voice_file_name)
-            result = VoiceUtil.load_voice_json(voice_path)
+        if not project.oute_voice_file_name:
+            # Pre-existing project has no oute voice set, so set it Oute default
+            result = OuteUtil.load_oute_voice_json(DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
-                printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}")
+                printt(result, "error") # not ideal
+            else:
+                project.set_oute_voice_and_save(result, "default")
+        else:
+            # Load specified oute voice json file
+            voice_path = os.path.join(dir_path, project.oute_voice_file_name)
+            result = OuteUtil.load_oute_voice_json(voice_path)
+            if isinstance(result, str):
+                printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}") # not ideal
             else:
                 project.oute_voice_json = result
+
 
         # Chatterbox
         project.chatterbox_voice_file_name = d.get("chatterbox_voice_file_name", "")
@@ -108,9 +110,9 @@ class Project:
 
         d = {
             "dir_path": self.dir_path,
-            "model_type": self.model_type,
             "text_segments": TextSegment.list_to_dict_list(self.text_segments),
             "chapter_indices": self.section_dividers,
+            "generate_range": self.generate_range_string,
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
             "chatterbox_voice_file_name": self.chatterbox_voice_file_name,
@@ -127,9 +129,11 @@ class Project:
             L.e(f"Save error: {e}") # TODO: need to handle this
 
     def set_text_segments_and_save(self, text_segments: list[TextSegment], raw_text: str) -> None:
+
         self.text_segments = text_segments
-        # Setting text segments invalidates section dividers
+        # Setting text segments invalidates some things
         self.section_dividers =[]
+        self.generate_range_string = ""
         self.save()
         # Save raw text as well for reference
         self.save_raw_text(raw_text)
@@ -151,9 +155,9 @@ class Project:
             L.e(f"Error saving raw text: {e}") # TODO need to return error
             return ""
 
-    def set_oute_voice_and_save(self, voice_json: dict, source_file_stem: str) -> None:
+    def set_oute_voice_and_save(self, voice_json: dict, dest_file_stem: str) -> None:
         from tts_audiobook_tool.app_util import AppUtil
-        file_name = source_file_stem + ".json"
+        file_name = dest_file_stem + ".json"
         err = AppUtil.save_json(voice_json, os.path.join(self.dir_path, file_name))
         if err:
             printt(err, "error")
@@ -178,30 +182,25 @@ class Project:
 
     def get_voice_label(self) -> str:
         if Shared.is_oute() and self.has_voice:
-            label = Path(self.oute_voice_file_name).stem[:20]
+            label = Path(self.oute_voice_file_name).stem[:30]
             label = sanitize_for_filename(label)
             return label
-        elif Shared.is_chatterbox() and self.chatterbox_voice_file_name:
-            label = Path(self.chatterbox_voice_file_name).stem[:20]
+        elif Shared.is_chatterbox():
+            if not self.chatterbox_voice_file_name:
+                return "default"
+            label = Path(self.chatterbox_voice_file_name).stem[:30]
             label = sanitize_for_filename(label)
             return label
         else:
-            return "None"
-
-    @property
-    def is_model_oute(self) -> bool:
-        return self.model_type == "oute"
-
-    @property
-    def is_model_chatterbox(self) -> bool:
-        return self.model_type == "chatterbox"
+            return "none"
 
     @property
     def has_voice(self) -> bool:
         if Shared.is_oute():
             return bool(self.oute_voice_json)
         elif Shared.is_chatterbox():
-            return bool(self.chatterbox_voice_file_name)
+            # Is true even when no 'voice prompt' is supplied
+            return True
         else:
             return False
 

@@ -62,12 +62,15 @@ def ask_path(message: str="") -> str:
     Could potentially open standard file requestor here
     """
     inp = ask(message, lower=False, extra_line=True)
-    if len(inp) >= 2:
-        first = inp[0]
-        last = inp[-1]
+    return strip_quotes_from_ends(inp)
+
+def strip_quotes_from_ends(s: str) -> str:
+    if len(s) >= 2:
+        first = s[0]
+        last = s[-1]
         if (first == "'" and last == "'") or (first == "\"" and last == "\""):
-            inp = inp[1:-1]
-    return inp
+            s = s[1:-1]
+    return s
 
 def ask_confirm(message: str="") -> bool:
     if not message:

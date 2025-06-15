@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tts_audiobook_tool.l import L # type: ignore
+from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.shared import Shared
@@ -17,13 +18,13 @@ class State:
         self.prefs = Prefs.load()
 
         if not self.prefs.project_dir:
-            self.project = Project("", Shared.get_model_type())
+            self.project = Project("")
         else:
             result = Project.load(self.prefs.project_dir)
             if isinstance(result, str):
                 printt(result, "error")
                 self.prefs.project_dir = ""
-                self.project = Project("", Shared.get_model_type())
+                self.project = Project("")
             else:
                 self.project = result
 
@@ -61,8 +62,18 @@ class State:
         except Exception as e:
             return f"Error creating subdirectory"
 
+        # Make project instance
         self.prefs.project_dir = str( project_dir_path )
-        self.project = Project(path, Shared.get_model_type())
+        self.project = Project(path)
+
+        if Shared.is_oute():
+            # Set Oute default voice
+            result = OuteUtil.load_oute_voice_json(DEFAULT_VOICE_JSON_FILE_PATH)
+            if isinstance(result, str):
+                printt(result) # not ideal
+            else:
+                self.project.set_oute_voice_and_save(result, "default")
+
         self.project.save()
 
         return ""
@@ -73,10 +84,10 @@ class State:
         result = Project.load(path)
         if isinstance(result, str):
             printt(result, "error")
-            self.project = Project("", Shared.get_model_type())
+            self.project = Project("")
         else:
             self.project = result
 
     def reset(self):
         self.prefs = Prefs.new_and_save()
-        self.project = Project("", Shared.get_model_type())
+        self.project = Project("")

@@ -13,46 +13,72 @@ class GenerateValidateSubmenus:
     @staticmethod
     def generate_submenu(state: State) -> None:
 
-        num_segments = len(state.project.text_segments)
-        if not state.project.generate_ints:
-            state.project.generate_ints = set(range(num_segments)) # this should happen elsewhere
-        ranges_string = ParseUtil.make_one_indexed_ranges_string(state.project.generate_ints, num_segments)
+        while True:
 
-        print_heading("Generate audio")
-        printt(f"{make_hotkey_string("1")} Generate, plus validate and attempt fix when necessary")
-        printt(f"{make_hotkey_string("2")} Generate only")
-        printt(f"{make_hotkey_string("3")} Specify text segments to generate {COL_DIM}(current: {COL_ACCENT}{ranges_string}{COL_DIM})")
-        printt()
-        hotkey = ask_hotkey()
+            num_segments_project = len(state.project.text_segments)
 
-        if hotkey == "3":
-            GenerateValidateSubmenus.ask_items(state)
-            GenerateValidateSubmenus.generate_submenu(state)
-            return
+            gen_range_string = state.project.generate_range_string
+            is_all = not gen_range_string or gen_range_string == "all" or gen_range_string == "a"
+            if is_all:
+                gen_range_ints = set(range(num_segments_project))
+            else:
+                result = ParseUtil.parse_one_indexed_ranges_string(gen_range_string, num_segments_project)
+                gen_range_ints = result[0]
 
-        if not (hotkey == "1" or hotkey == "2"):
-            return
+            num_generated = ProjectDirUtil.num_generated_in_set(state, gen_range_ints)
 
-        dic = ProjectDirUtil.get_project_audio_segment_file_paths(state)
-        already_complete = list(dic.keys())
-        original_len = len(state.project.generate_ints)
+            print_heading("Generate audio")
+            printt(f"{make_hotkey_string("1")} Generate, plus validate and attempt fix when necessary")
+            printt(f"{make_hotkey_string("2")} Generate only")
+            s = f"{make_hotkey_string("3")} Specify audio segments to generate {COL_DIM}"
+            s += f"(currently: {COL_ACCENT}{gen_range_string or "all"}{COL_DIM}) "
+            s += f"({num_generated} of {len(gen_range_ints)} complete)"
+            printt(s)
+            s = f"{make_hotkey_string("4")} Normalize audio after generate "
+            s += f"(currently: {state.prefs.should_normalize})"
+            printt(s)
+            printt(f"{make_hotkey_string("5")} Play audio after each segment is generated (currently: {state.prefs.play_on_generate})")
 
-        indices = [item for item in state.project.generate_ints if item not in already_complete]
+            printt()
+            hotkey = ask_hotkey()
 
-        if not indices:
-            ask(f"All specified items already generated ({original_len}). Press enter: ")
-            return
+            match hotkey:
 
-        info = f"Generate {len(indices)} audio segment/s..."
-        num_completed = original_len - len(indices)
-        if num_completed > 0:
-            info += f" (already complete: {num_completed} items)"
-        printt(info)
-        printt()
+                case value if value in ["1", "2"]:
 
-        mode = "generate-and-fix" if hotkey == "1" else "generate"
-        GenerateUtil.generate_validate_fix_items(state, indices, mode=mode)
+                    mode = "generate-and-fix" if hotkey == "1" else "generate"
 
+                    dic = ProjectDirUtil.get_indices_and_paths(state)
+                    already_complete = list(dic.keys())
+                    indices = [item for item in gen_range_ints if item not in already_complete]
+                    if not indices:
+                        ask(f"All specified items already generated. Press enter: ")
+                        return
+
+                    printt(f"Generating {len(indices)} audio segment/s...")
+                    printt()
+                    GenerateUtil.generate_validate_fix_items(state, indices, mode=mode)
+                    return
+
+                case "3":
+                    GenerateValidateSubmenus.ask_items(state)
+
+                case "4":
+                    state.prefs.should_normalize = not state.prefs.should_normalize
+                    printt(f"Set to: {state.prefs.should_normalize}")
+                    printt()
+                    if MENU_CLEARS_SCREEN:
+                        ask_continue()
+
+                case "5":
+                    state.prefs.play_on_generate = not state.prefs.play_on_generate
+                    printt(f"Set to: {state.prefs.play_on_generate}")
+                    printt()
+                    if MENU_CLEARS_SCREEN:
+                        ask_continue()
+
+                case _:
+                    return
 
     @staticmethod
     def ask_items(state: State) -> None:
@@ -72,14 +98,16 @@ class GenerateValidateSubmenus:
             if not indices:
                 return
 
-        state.project.generate_ints = indices
+        s = ParseUtil.make_one_indexed_ranges_string(indices, len(state.project.text_segments))
+        state.project.generate_range_string = s
+        state.project.save()
 
     @staticmethod
     def validate_submenu(state: State) -> None:
 
         print_heading("Validate/fix generated audio:")
 
-        index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        index_to_path = ProjectDirUtil.get_indices_and_paths(state)
         all_indices = list( index_to_path.keys() )
 
         if not all_indices:

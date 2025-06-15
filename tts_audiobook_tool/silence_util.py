@@ -13,9 +13,10 @@ class SilenceUtil:
         """
         Prints to console if action taken
 
-        Returns False if no action taken,
-        True if file/s successfully modified,
-        or error message string on fail
+        Returns:
+            False if no action taken
+            True if file/s successfully modified
+            or error message string on fail
         """
 
         a_end_duration = SilenceUtil.get_silence_duration_end(file_a)
@@ -56,8 +57,6 @@ class SilenceUtil:
 
         # Trim file_a if necessary
         if trim_from_a > 0:
-            printt(file_a)
-            printt(f"Trim from end {trim_from_a:.2f}s")
             success_a = SoundFileUtil.trim_flac_file(
                 source_flac_path=file_a,
                 dest_file_path=temp_file_a,
@@ -69,11 +68,10 @@ class SilenceUtil:
                     os.remove(temp_file_a)
                 return f"Failed to trim {file_a}"
             os.replace(temp_file_a, file_a)
+            printt(f"Trimed {trim_from_a:.2f}s from end of {file_a}")
 
         # Trim file_b if necessary
         if trim_from_b > 0:
-            printt(file_b)
-            printt(f"Trim from start {trim_from_b:.2f}s")
             success_b = SoundFileUtil.trim_flac_file(
                 source_flac_path=file_b,
                 dest_file_path=temp_file_b,
@@ -85,9 +83,8 @@ class SilenceUtil:
                     os.remove(temp_file_b)
                 return f"Failed to trim {file_b}"
             os.replace(temp_file_b, file_b)
+            printt(f"Trimed {trim_from_b:.2f}s from start of {file_b}")
 
-        # TODO print feedback
-        printt()
         return True
 
     @staticmethod
@@ -125,7 +122,6 @@ class SilenceUtil:
             return err
 
         printt(f"Silence ({underage:.2f}s) added to end of {file_a}")
-        printt()
         return True
 
     @staticmethod
@@ -175,7 +171,7 @@ class SilenceUtil:
         try:
             y, sr = librosa.load(audio_path, sr=None) # Load audio, sr=None preserves original sample rate
         except Exception as e:
-            print(f"Error loading audio file {audio_path}: {e}")
+            printt(f"Error loading audio file {audio_path}: {e}")
             return [], 0.0
 
         # Convert ms to samples
@@ -186,7 +182,7 @@ class SilenceUtil:
         rms_frames = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
 
         if len(rms_frames) == 0:
-            print("Warning: No RMS frames computed. Audio might be too short or parameters incorrect.")
+            printt("Warning: No RMS frames computed. Audio might be too short or parameters incorrect.")
             # If audio is shorter than frame_length, librosa.feature.rms can return empty
             # Treat as entirely silent or non-silent based on your preference, or return empty
             if len(y) / sr * 1000 < min_silence_duration_ms:

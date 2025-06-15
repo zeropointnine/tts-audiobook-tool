@@ -69,6 +69,15 @@ COL_DEFAULT = Ansi.RESET
 
 PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/"
 
+# App uses this format for file names of audio fragments.
+# Example file name: "[00001] [0123456789ABCDEF] [my_voice] [pass] Hello_world.flac"
+# Capturing group 1 is segment index - digits enclosed in brackets (eg, "00001")
+# Capturing group 2 is hex hash - 16 hex characters enclosed brackets (eg, "0123456789ABCDEF")
+# Capturing group 3 is voice label - alphanumeric chars (and underscores) enclosed in brackets
+# Rest of string can be anything
+pattern = r"\[(\d+)\] \[([0-9A-Fa-f]{16})\] \[(\w+)\] .*"
+AUDIO_SEGMENT_FILE_NAME_PATTERN = re.compile(pattern)
+
 # Regex for "[h...]", where "h" is 16 hex characters.
 # Captures the hex string (w/o the brackets)
 # Eg, "[0123456789ABCDEF]"
@@ -76,14 +85,3 @@ PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/
 pattern = r'\[([0-9a-fA-F]{16})\]'
 HASH_PATTERN = re.compile(pattern)
 
-# Regex
-# Eg, "[00001] [0123456789ABCDEF]..."
-# Real-world filename example: "[00001] [0123456789ABCDEF] [my_voice] [pass] Hello_world.flac"
-# Capturing group 1 is any number of digits enclosed in second set of brackets (eg, "00001")
-# Capturing group 2 is a string of exactly 16 hex characters enclosed in third set of brackets (eg, "0123456789ABCDEF")
-# App uses this format for file names of audio fragments.
-
-# pattern = r"\[.*?\] \[(\d+)\] \[([0-9A-Fa-f]{16})\] .*"
-
-pattern = r"\[(\d+)\] \[([0-9A-Fa-f]{16})\] .*"
-AUDIO_SEGMENT_FILE_NAME_PATTERN = re.compile(pattern)

@@ -6,10 +6,11 @@ window.app = function() {
     const DEMO_URL_B = "waves-chatterbox"
 
     const root = document.documentElement;
-    const helpHolder = document.getElementById("helpHolder");
     const loadFileInput = document.getElementById('loadFileInput');
+    const loadLastHolder = document.getElementById("loadLast")
     const sleepTimeLeft = document.getElementById('sleepTimeLeft');
     const fileNameDiv = document.getElementById('fileName')
+    const helpHolder = document.getElementById("helpHolder");
     const playerHolder = document.getElementById('playerHolder');
     const player = document.getElementById('player');
     const textHolder = document.getElementById('textHolder');
@@ -134,6 +135,12 @@ window.app = function() {
             }
         });
 
+        lastFileId = localStorage.getItem("last_file_id")
+        if (lastFileId) {
+            document.getElementById("loadLastId").textContent = lastFileId;
+            loadLastHolder.style.display = "block";
+        }
+
         initRootAttributesFromLocalStorage();
         initUiPanelButtons();
     }
@@ -235,6 +242,8 @@ window.app = function() {
             fileId = file.name;
         }
 
+        localStorage.setItem("last_file_id", fileId);
+
         isDemoUrl = url && (url.includes(DEMO_URL_A) || url.includes(DEMO_URL_B));
         if (!isDemoUrl) {
             document.getElementById("githubCorner").style.display = "none";
@@ -242,6 +251,8 @@ window.app = function() {
 
         timedTextSegments = pTimedTextSegments
 
+
+        loadLastHolder.style.display = "none";
         helpHolder.style.display = "none";
 
         fileNameDiv.style.display = "block"

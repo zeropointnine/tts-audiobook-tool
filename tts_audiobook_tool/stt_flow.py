@@ -19,7 +19,7 @@ class SttFlow:
     # TODO delete temp files
 
     @staticmethod
-    def ask_make(prefs: Prefs):
+    def ask_and_make(prefs: Prefs) -> None:
 
         # TODO add more ui description here
 
@@ -162,9 +162,7 @@ class SttFlow:
 
         dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.mp4"
         dest_path = str( Path(source_audio_path).with_name(dest_name) )
-        print("a", dest_path)
         dest_path = get_unique_file_path(dest_path)
-        print("a", dest_path)
         printt(f"\nSaving audio file with metadata")
         printt(f"{dest_path}")
         printt()

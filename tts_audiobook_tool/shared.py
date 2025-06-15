@@ -12,7 +12,7 @@ class Shared:
     _chatterbox: Any = None
 
     _model_type: str = ""
-    _MODEL_TYPES = ["oute", "chatterbox"]
+    _MODEL_TYPES = ["oute", "chatterbox"] # TODO enum
 
 
     # Cheesy control-c capture flag variables
@@ -29,6 +29,19 @@ class Shared:
     @staticmethod
     def get_model_type() -> str:
         return Shared._model_type
+
+    @staticmethod
+    def get_model_label() -> str:
+        typ = Shared.get_model_type()
+        if not typ:
+            return "None"
+        match typ:
+            case "oute":
+                return "Oute"
+            case "chatterbox":
+                return "Chatterbox"
+            case _:
+                raise ValueError("Bad type")
 
     @staticmethod
     def is_oute() -> bool:

@@ -21,7 +21,7 @@ from tts_audiobook_tool.util import *
 class ConcatSubmenu:
 
     @staticmethod
-    def concat_submenu(state: State) -> None:
+    def submenu(state: State) -> None:
 
         print_heading(f"Combine audio segments:")
 
@@ -32,13 +32,13 @@ class ConcatSubmenu:
         if not state.project.section_dividers:
             chapter_dividers_string = "none"
         else:
-            strings = [str(item) for item in state.project.section_dividers]
+            strings = [str(item+1) for item in state.project.section_dividers] # 1-indexed
             chapter_dividers_string = ", ".join(strings)
 
         printt(f"{make_hotkey_string('1')} Combine to FLAC, and transcode to MP4")
         printt(f"{make_hotkey_string('2')} Combine to FLAC only")
-        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(current: {chapter_dividers_string})")
-        printt(f"{make_hotkey_string('4')} Trim sentence continuation pauses {COL_DIM}(current: {state.prefs.optimize_segment_silence})")
+        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently {len(state.project.section_dividers)} cut point/s: {COL_ACCENT}{chapter_dividers_string}{COL_DIM})")
+        printt(f"{make_hotkey_string('4')} Optimize silence at audio segment boundaries {COL_DIM}(currently: {COL_ACCENT}{state.prefs.optimize_segment_silence}{COL_DIM})")
         printt()
         hotkey = ask_hotkey()
 
@@ -48,12 +48,12 @@ class ConcatSubmenu:
             ConcatSubmenu.ask_chapters(infos, state, and_transcode=False)
         elif hotkey == "3":
             ConcatSubmenu.ask_cut_points(state)
-            ConcatSubmenu.concat_submenu(state)
+            ConcatSubmenu.submenu(state)
         elif hotkey == "4":
             state.prefs.optimize_segment_silence = not state.prefs.optimize_segment_silence
-            printt(f"Optimize silence duration between segments: {state.prefs.optimize_segment_silence}") # TODO needs some explanation
+            printt(f"Optimize pauses at segment boundaries: {state.prefs.optimize_segment_silence}")
             printt()
-            ConcatSubmenu.concat_submenu(state)
+            ConcatSubmenu.submenu(state)
 
 
     @staticmethod
@@ -98,8 +98,6 @@ class ConcatSubmenu:
         state.project.section_dividers = zero_indexed_items
         state.project.save()
 
-
-
     @staticmethod
     def ask_chapters(infos: list[ChapterInfo], state: State, and_transcode: bool) -> None:
 
@@ -124,7 +122,6 @@ class ConcatSubmenu:
                     return
                 if not input_indices:
                     return
-                input_indices = [item - 1 for item in input_indices] # make zero-indexed
                 selected_chapter_indices = [item for item in input_indices if item in chapter_indices]
 
                 if not selected_chapter_indices:
@@ -161,9 +158,9 @@ class ConcatSubmenu:
             AppUtil.show_player_reminder(state.prefs)
 
         if not ok or not has_gui():
-            ask_continue("Finished.")
+            ask_continue("Finished. \a")
         else:
-            printt("Finished.")
+            printt("Finished. \a")
             printt()
             hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
             if hotkey == "o":

@@ -569,7 +569,7 @@ class SttUtil:
 
             found_merge_point: bool = False
             # This will be the index in current_words_in_chunk from which to append.
-            actual_start_idx_for_append_in_current: int = -1
+            actual_start_idx_for_append_in_currently: int = -1
 
             for i in range(start_search_idx_in_current_chunk, len(word_list)):
                 candidate_word = word_list[i]
@@ -590,7 +590,7 @@ class SttUtil:
                         final_words.pop()
 
                 # Add the new words from current_words_in_chunk, starting from the identified merge point.
-                final_words.extend(word_list[actual_start_idx_for_append_in_current:])
+                final_words.extend(word_list[actual_start_idx_for_append_in_currently:])
             else:
                 # No suitable merge point found in the "reliable" part of current_words_in_chunk.
                 # This implies current_words_in_chunk doesn't significantly or reliably extend

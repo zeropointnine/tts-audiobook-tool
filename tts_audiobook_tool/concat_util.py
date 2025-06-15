@@ -39,7 +39,7 @@ class ConcatUtil:
             return False
 
         ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
-        segment_index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        segment_index_to_path = ProjectDirUtil.get_indices_and_paths(state)
         counter = 1
 
         for chapter_index in chapter_indices:
@@ -74,6 +74,7 @@ class ConcatUtil:
                 ConcatUtil.trim_sentence_continuation_pauses(
                     segments_and_paths, SENTENCE_CONTINUATION_MAX_DURATION
                 )
+                printt()
 
             # Append minimum duration of silence at paragraph breaks
             # Note how this is being done at 'concatenation time' ATM, not 'generation time'
@@ -83,10 +84,12 @@ class ConcatUtil:
                 ConcatUtil.add_silence_at_paragraph_breaks(
                     segments_and_paths, PARAGRAPH_SILENCE_MIN_DURATION
                 )
+                printt()
 
             # Make final concatenated audio file
             printt(f"Creating finalized, concatenated audio file ({counter}/{len(chapter_indices)})\n")
 
+            # project name
             file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
             # file number
             file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
@@ -95,8 +98,13 @@ class ConcatUtil:
             # num segments missing
             if num_missing > 0:
                 file_name += f"[{num_missing} missing]" + " "
-            # voice name
-            file_name += f"[{state.project.get_voice_label()}]" + ".abr.flac"
+            # voice label
+            extant_paths = [item[1] for item in segments_and_paths if item[1]]
+            common_voice_label = ProjectDirUtil.get_common_voice_label(extant_paths)
+            if common_voice_label:
+                file_name += f"[{state.project.get_voice_label()}]"
+            file_name += ".abr.flac"
+
             dest_file_path = os.path.join(base_dir, file_name)
 
             error = ConcatUtil.make_app_flac(raw_text, segments_and_paths, dest_file_path)
@@ -109,7 +117,7 @@ class ConcatUtil:
             printt()
 
             if and_transcode:
-                printt("Transcoding to MP4")
+                printt("Transcoding to MP4...")
                 printt()
                 transcode_path, err = TranscodeUtil.transcode_abr_flac_to_aac(dest_file_path)
                 printt()
@@ -141,6 +149,7 @@ class ConcatUtil:
                 continue
             if not path_b or not path_a:
                 continue
+
 
             result = SilenceUtil.trim_silence_if_necessary(path_a, path_b, max_duration)
             if isinstance(result, str):

@@ -74,7 +74,7 @@ class ValidateUtil:
                 num_deleted += 1
 
         # Done - print info
-        print(f"Elapsed: {time_string(time.time() - start_time)}")
+        printt(f"Elapsed: {time_string(time.time() - start_time)}")
         printt()
         printt(f"{num_analysed} file/s analysed")
         printt(f"{num_validated} file/s marked as 'verified'")
@@ -90,6 +90,7 @@ class ValidateUtil:
         whisper_model
     ) -> tuple[ValidateResult, str]:
         """
+        Returns ValidateResult, message string, and potentially modified filename
         """
 
         whisper_data = whisper_model.transcribe(item.path, word_timestamps=True, language=None)

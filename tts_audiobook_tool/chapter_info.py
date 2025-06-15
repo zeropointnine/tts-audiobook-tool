@@ -29,7 +29,7 @@ class ChapterInfo:
 
         result = []
 
-        all_segment_index_to_path = ProjectDirUtil.get_project_audio_segment_file_paths(state)
+        all_segment_index_to_path = ProjectDirUtil.get_indices_and_paths(state)
 
         segment_index_ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
 

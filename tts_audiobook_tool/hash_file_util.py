@@ -41,18 +41,6 @@ class HashFileUtil:
         s = str(index) + " " + text
         return xxhash.xxh3_64(s).hexdigest()
 
-    @staticmethod
-    def extract_index_and_hash_from_segment_file_name(file_name: str) -> tuple[int, str] | None:
-        try:
-            match = AUDIO_SEGMENT_FILE_NAME_PATTERN.match(file_name)
-            assert isinstance(match, Match)
-            one_based_index = int(match.group(1))
-            hash = match.group(2)
-            zero_based_index = one_based_index - 1
-            return zero_based_index, hash
-        except:
-            return None
-
     # ---
 
     @staticmethod
