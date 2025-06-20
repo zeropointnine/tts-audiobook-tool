@@ -56,6 +56,7 @@ class GenerateValidateSubmenus:
                         return
 
                     printt(f"Generating {len(indices)} audio segment/s...")
+                    printt(f"{COL_DIM}Press control-c to interrupt")
                     printt()
                     GenerateUtil.generate_validate_fix_items(state, indices, mode=mode)
                     return

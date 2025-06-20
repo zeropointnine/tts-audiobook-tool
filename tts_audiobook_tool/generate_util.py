@@ -107,7 +107,7 @@ class GenerateUtil:
             # Validate audio file
             item = ValidateItem(index, file_path, state.project.text_segments[index].text)
             should_fix_delete = (pass_num == 1)
-            result, message = ValidateUtil.validate_item(item, should_fix_delete, whisper_model)
+            result, message = ValidateUtil.validate_fix_item(item, should_fix_delete, whisper_model)
 
             if pass_num == 1:
 

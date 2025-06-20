@@ -9,6 +9,7 @@ import subprocess
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.ansi import Ansi
+from tts_audiobook_tool.l import L
 
 def printt(s: str="", type: str="") -> None:
     if type == "disabled":
@@ -137,7 +138,8 @@ def delete_temp_file(path: str):
         return
     try:
         os.remove(path)
-    except:
+    except Exception as e:
+        L.w(f"Couldn't delete temp file {path} {e}")
         pass # eat
 
 def make_hotkey_string(hotkey: str, color: str=COL_ACCENT) -> str:

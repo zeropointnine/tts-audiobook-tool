@@ -20,8 +20,8 @@ class TextSegmenter:
         # Pass 2: pysbd treats everything enclosed in quotes as a single sentence, so split those up
         new_texts = []
         for text in texts:
-            if is_quotation(text):
-                lst = segment_quote(text, segmenter)
+            if starts_and_ends_with_quote(text):
+                lst = segment_quote_text(text, segmenter)
                 new_texts.extend(lst)
             else:
                 new_texts.append(text)
@@ -46,34 +46,148 @@ class TextSegmenter:
             text_segments.append(text_segment)
             counter += length
 
-        # Pass 4 retroactive - assign paragraph reason
+        # Pass 4 Set paragraph breaks
         for i in range(1, len(text_segments)):
             segment_a = text_segments[i - 1]
             segment_b = text_segments[i]
             if has_trailing_line_break(segment_a.text):
                 segment_b.reason = TextSegmentReason.PARAGRAPH
 
+        # Pass 5 - merge short segments
+        text_segments = merge_short_segments_all(text_segments, max_words)
+
         return text_segments
 
 # ---
 
-def has_trailing_line_break(s: str) -> bool:
-    trailing_whitespace = s[len(s.rstrip()):]
-    return "\n" in trailing_whitespace
+def merge_short_segments_all(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
 
-def is_quotation(s: str) -> bool:
+    result = []
+
+    # Merge only within paragraphs
+    paragraphs = make_paragraph_lists(segments)
+
+    if True: # temp
+        print("\n\nbefore")
+        for paragraph in paragraphs:
+            print("---------------------------")
+            for segment in paragraph:
+                print(segment)
+
+    for paragraph in paragraphs:
+        items = merge_short_segments(paragraph, max_words)
+        result.extend(items)
+
+    if True:
+        new_paragraphs = make_paragraph_lists(result)
+        print("\n\nafter")
+        for paragraph in new_paragraphs:
+            print("---------------------------")
+            for segment in paragraph:
+                print(segment)
+
+    return result
+
+def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
     """
-    Returns True if stripped string starts and ends with quotation characters
+    Merges short segments (<= 2 words) with their neighbors.
+    A merge is only performed if the combined word count does not exceed max_words.
+    If segment starts with a quote, dont' merge with previous.
+    If segment ends with quote, don't merge with next
     """
-    s = s.strip()
-    if len(s) <= 3:
-        return False
-    first = s[0]
-    last = s[-1]
-    return first in QUOTATION_CHARS and last in QUOTATION_CHARS
+    if not segments:
+        return []
+
+    merged_segments = list(segments)
+
+    while True:
+
+        was_merged_in_pass = False
+        i = 0
+
+        while i < len(merged_segments):
+
+            current_segment = merged_segments[i]
+
+            if word_count(current_segment.text) > 2:
+                i += 1
+                continue
+
+            if starts_and_ends_with_quote(current_segment.text):
+                i += 1
+                continue
+
+            # Current segment is short, and is not a self-contained quote.
+
+            # Try to merge with the next segment
+            if i + 1 < len(merged_segments):
+
+                next_segment = merged_segments[i+1]
+                merged_text = current_segment.text + next_segment.text
+
+                should = word_count(merged_text) <= max_words
+                if should:
+                    # Perform the merge
+                    new_segment = TextSegment(
+                        text=merged_text,
+                        index_start=current_segment.index_start,
+                        index_end=next_segment.index_end,
+                        reason=current_segment.reason
+                    )
+                    merged_segments[i] = new_segment
+                    del merged_segments[i+1]
+                    was_merged_in_pass = True
+                    # A merge happened, so we restart the scan to re-evaluate from the beginning
+                    break
+
+            # Try to merge with the previous segment
+            if i > 0:
+
+                prev_segment = merged_segments[i-1]
+                merged_text = prev_segment.text + current_segment.text
+
+                should = word_count(merged_text) <= max_words
+                if should:
+                    # Perform the merge
+                    new_segment = TextSegment(
+                        text=merged_text,
+                        index_start=prev_segment.index_start,
+                        index_end=current_segment.index_end,
+                        reason=prev_segment.reason
+                    )
+                    merged_segments[i-1] = new_segment
+                    del merged_segments[i]
+                    was_merged_in_pass = True
+                    # A merge happened, so we restart the scan
+                    break
+
+            i += 1
+
+        # If we went through a whole pass without any merges, we're done.
+        if not was_merged_in_pass:
+            break
+
+    return merged_segments
 
 
-def segment_quote(text: str, segmenter) -> list[str]:
+def make_paragraph_lists(segments: list[TextSegment]) -> list[list[TextSegment]]:
+
+    paragraphs = []
+
+    paragraph = []
+    for i, segment in enumerate(segments):
+        if segment.reason == TextSegmentReason.PARAGRAPH:
+            paragraphs.append(paragraph)
+            paragraph = []
+        paragraph.append(segment)
+
+    if paragraph:
+        paragraphs.append(paragraph)
+
+    return paragraphs
+
+
+def segment_quote_text(text: str, segmenter) -> list[str]:
     """
     Given a quote which may consist of multiple sentences and may have whitespace before and/or after the quote,
     segment the quote by sentence, preserving whitespace.
@@ -89,7 +203,7 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
     Splits a string into three parts:
     - before: Leading whitespace + first non-whitespace character
     - content: Everything between before and end
-    - end: Last non-whitespace character + trailing whitespace
+    - after: Last non-whitespace character + trailing whitespace
     Returns:
         Tuple of (before, content, end)
     """
@@ -106,13 +220,45 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
     # Calculate 'end'
     stripped_right = text.rstrip()
     trailing_ws = text[len(stripped_right):] if stripped_right else text
-    end = (stripped_right[-1] if stripped_right else '') + trailing_ws
+    after = (stripped_right[-1] if stripped_right else '') + trailing_ws
 
     # Calculate 'content'
     content_start = len(before)
-    content_end = -len(end) if end else None
+    content_end = -len(after) if after else None
     content = text[content_start:content_end]
 
-    return (before, content, end)
+    return (before, content, after)
+
+def starts_and_ends_with_quote(s: str) -> bool:
+    return starts_with_quote(s) and ends_with_quote(s)
+
+def starts_with_quote_only(s: str) -> bool:
+    return starts_with_quote(s) and not ends_with_quote(s)
+
+def ends_with_quote_only(s: str) -> bool:
+    return ends_with_quote(s) and not starts_with_quote(s)
+
+def starts_with_quote(s: str) -> bool:
+    start, _, _ = split_string_parts(s)
+    return has_quote_char(start)
+
+def ends_with_quote(s: str) -> bool:
+    _, _, end = split_string_parts(s)
+    return has_quote_char(end)
+
+def has_quote_char(s: str) -> bool:
+    for char in QUOTATION_CHARS:
+        if char in s:
+            return True
+    return False
+
+def has_trailing_line_break(s: str) -> bool:
+    trailing_whitespace = s[len(s.rstrip()):]
+    return "\n" in trailing_whitespace
+
+def word_count(text: str) -> int:
+    """Counts words in a string. Strips leading/trailing whitespace and splits."""
+    return len(text.strip().split())
+
 
 QUOTATION_CHARS = "\"'“”"

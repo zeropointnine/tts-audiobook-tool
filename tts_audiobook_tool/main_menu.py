@@ -64,7 +64,7 @@ class MainMenu:
         if state.prefs.project_dir:
             pass
             model_name = "Oute" if Shared.is_oute() else "Chatterbox"
-            s = f"{make_hotkey_string("V")} {model_name} voice clone and options "
+            s = f"{make_hotkey_string("V")} Voice clone and options "
             s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
             printt(s)
 
