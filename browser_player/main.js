@@ -286,19 +286,14 @@ window.app = function() {
 
         let contentHtml = '';
         timedTextSegments.forEach((segment, i) => {
-
-            // contentHtml += `<span id="segment-${i}">${segment.text}</span>`;
-
             o = splitWhitespace(segment.text)
             if (o["before"]) {
-                contentHtml += o["before"];
+                contentHtml += escapeHtml( o["before"] );
             }
-            contentHtml += `<span id="segment-${i}">${o["content"]}</span>`;
+            contentHtml += `<span id="segment-${i}">${ escapeHtml( o["content"] ) }</span>`;
             if (o["after"]) {
-                contentHtml += o["after"];
+                contentHtml += escapeHtml( o["after"] );
             }
-
-
         });
 
         textHolder.innerHTML = contentHtml;

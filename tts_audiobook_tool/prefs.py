@@ -29,6 +29,7 @@ class Prefs:
         self._optimize_segment_silence = optimize_ss
 
         self._has_shown_player_reminder = False
+        self._has_set_any_text = False
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -77,9 +78,7 @@ class Prefs:
             dirty = True
 
         has_shown_player_reminder = prefs_dict.get("has_shown_player_reminder", False)
-        if not isinstance(has_shown_player_reminder, bool):
-            has_shown_player_reminder = False
-            dirty = True
+        has_set_any_text = prefs_dict.get("has_set_any_text", False)
 
         prefs = Prefs(
             project_dir=project_dir,
@@ -88,6 +87,7 @@ class Prefs:
             optimize_ss=optimize_ss
         )
         prefs._has_shown_player_reminder = has_shown_player_reminder
+        prefs._has_set_any_text = has_set_any_text
         if dirty:
             prefs.save()
         return prefs
@@ -137,13 +137,23 @@ class Prefs:
         self._has_shown_player_reminder = value
         self.save()
 
+    @property
+    def has_set_any_text(self) -> bool:
+        return self._has_set_any_text
+
+    @has_set_any_text.setter
+    def has_set_any_text(self, value: bool):
+        self._has_set_any_text = value
+        self.save()
+
     def save(self) -> None:
         dic = {
             "project_dir": self._project_dir,
             "should_normalize": self._should_normalize,
             "play_on_generate": self._play_on_generate,
             "optimize_ss": self._optimize_segment_silence,
-            "has_shown_player_reminder": self._has_shown_player_reminder
+            "has_shown_player_reminder": self._has_shown_player_reminder,
+            "has_set_any_text": self._has_set_any_text
         }
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:

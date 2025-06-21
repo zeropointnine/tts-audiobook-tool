@@ -10,7 +10,7 @@ from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
-from tts_audiobook_tool.text_segments_util import TextSegmentsUtil
+from tts_audiobook_tool.text_submenu import TextSubmenu
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu

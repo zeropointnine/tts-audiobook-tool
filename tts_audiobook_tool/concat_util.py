@@ -103,7 +103,7 @@ class ConcatUtil:
             common_voice_label = ProjectDirUtil.get_common_voice_label(extant_paths)
             if common_voice_label:
                 file_name += f"[{state.project.get_voice_label()}]"
-            file_name += ".abr.flac"
+            file_name = file_name.strip() + ".abr.flac"
 
             dest_file_path = os.path.join(base_dir, file_name)
 

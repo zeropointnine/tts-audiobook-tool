@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import Enum, auto
-import json
 import time
 from pathlib import Path
 from typing import Tuple, Optional, cast
@@ -134,9 +133,10 @@ class ValidateUtil:
                 else:
                     return ValidateResult.NOOP, f"{COL_ERROR}Couldn't save corrected FLAC file"
         else:
-            end_time = ValidateUtil.get_excess_audio_end_time(item, whisper_data)
-            if end_time:
-                return ValidateResult.FAILED_ONLY, f"Audio extends past transcription end timestamp by too much {end_time:.2f}"
+            result = ValidateUtil.get_semantic_end_time_excess(item, whisper_data)
+            if result:
+                _, message = result
+                return ValidateResult.FAILED_ONLY, message
 
         # Substring test (and potentially fix)
         if should_delete_or_fix:
@@ -172,11 +172,11 @@ class ValidateUtil:
             [1] Messaging
         Or None if no action needed
         """
-        end_time = ValidateUtil.get_excess_audio_end_time(item, whisper_data)
-        if not end_time:
+        result = ValidateUtil.get_semantic_end_time_excess(item, whisper_data)
+        if not result:
             return None
 
-        message = f"Audio extends past transcription end timestamp by too much: {end_time:.2f}"
+        end_time, message = result
 
         # Make trimmed copy of audio file with updated filename and delete old version
         old_path = item.path
@@ -293,60 +293,69 @@ class ValidateUtil:
     # ---
 
     @staticmethod
-    def get_excess_audio_end_time(
+    def get_semantic_end_time_excess(
         item: ValidateItem,
         whisper_data: dict
-    ) -> float | None:
+    ) -> tuple[float, str] | None:
         """
-        Tests if last words match between transcript and source text (to prevent false positives)
-        If excess duration exists after last transcript timestamp,
-        returns timestamp at which audio should be trimmed.
+        Intent here is to identify last "real" word's end time to potentially trim audio.
+        TTS models like to add random noise or words beyond the source text.
 
-        Is meant to address Chatterbox's propensity for generating
-        excess "spooky"-sounding audio in particular..
+        Returns the end
         """
-
-        whisper_word_dicts = get_flattened_whisper_word_dicts(whisper_data)
-        if len( whisper_word_dicts ) < 2:
-            return None
 
         source_words = massage_for_text_comparison(item.text)
         source_words = source_words.split(" ")
-        if len(source_words) < 2:
+        if len(source_words) < 1:
             return None
 
-        whisper_word_dict_y = whisper_word_dicts[-2]
-        whisper_word_dict_z = whisper_word_dicts[-1]
-        whisper_word_y = massage_for_text_comparison(whisper_word_dict_y["word"])
-        whisper_word_z = massage_for_text_comparison(whisper_word_dict_z["word"])
-        source_word_y = source_words[-2]
-        source_word_z = source_words[-1]
-        is_match = (whisper_word_y == source_word_y and whisper_word_z == source_word_z)
-        if not is_match:
+        source_word_last = source_words[-1]
+
+        # Being conservative here
+        just_once = source_words.count(source_word_last) > 1
+
+        word_dicts = get_flattened_whisper_word_dicts(whisper_data)
+        if len( word_dicts ) < 1:
             return None
+
+        num_words_trimmed_from_end = 0
+        last_dict = {}
+        while len(word_dicts) >= 1:
+            last_dict = word_dicts[-1]
+            last_word = massage_for_text_comparison(last_dict["word"])
+            is_match = (last_word == source_word_last)
+            if is_match:
+                break
+            word_dicts = word_dicts[:-1]
+            num_words_trimmed_from_end += 1
+            if len(word_dicts) <= 1:
+                return None
+
+        end_time = float( last_dict["end"] )
+        if True:
+            end_time += WHISPER_END_TIME_OFFSET
 
         audio, sr = sf.read(item.path, dtype="float32")
         audio_duration = len(audio) / sr
-        trans_end_time = float( whisper_word_dict_z["end"] )
+        THRESH = 0.5
+        end_time += THRESH
 
-        # Rem, whisper end timestamp is typically a shade too early
-        # Also, we don't want to crop too aggressively regardless
-        THRESH = 0.25 + 0.75
-
-        delta = audio_duration - trans_end_time
-        if delta > THRESH:
-            return trans_end_time + THRESH
+        excess = audio_duration - end_time
+        if excess > THRESH:
+            return end_time, f"Excess audio beyond threshold detected ({excess:.1f})"
         else:
             return None
 
     @staticmethod
-    def get_excess_audio_start_time(
+    def get_semantic_start_time_excess(
         item: ValidateItem,
         whisper_data: dict
     ) -> float | None:
         """
-        Like the above basically. Tests only for first common word.
+        TODO
         """
+        source_words = massage_for_text_comparison(item.text)
+
 
     @staticmethod
     def get_substring_time_range(

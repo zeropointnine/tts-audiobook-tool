@@ -424,11 +424,11 @@ function parseVorbisCommentBlock(dataView, targetTagName, textDecoder) {
 
 function escapeHtml(unsafe) {
     return unsafe
-         .replace(/&/g, "&")
-         .replace(/</g, "<")
-         .replace(/>/g, ">")
-         .replace(/"/g, "\"")
-         .replace(/'/g, "'")
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#39;")
 }
 
 function splitWhitespace(str) {

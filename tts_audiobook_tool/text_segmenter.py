@@ -65,32 +65,18 @@ def merge_short_segments_all(segments: list[TextSegment], max_words: int) -> lis
     result = []
 
     # Merge only within paragraphs
+    # TODO Reconsider that. Chatterbox (and probably oute) fails _a lot_ on one-word gens.
     paragraphs = make_paragraph_lists(segments)
-
-    if True: # temp
-        print("\n\nbefore")
-        for paragraph in paragraphs:
-            print("---------------------------")
-            for segment in paragraph:
-                print(segment)
 
     for paragraph in paragraphs:
         items = merge_short_segments(paragraph, max_words)
         result.extend(items)
 
-    if True:
-        new_paragraphs = make_paragraph_lists(result)
-        print("\n\nafter")
-        for paragraph in new_paragraphs:
-            print("---------------------------")
-            for segment in paragraph:
-                print(segment)
-
     return result
 
 def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
     """
-    Merges short segments (<= 2 words) with their neighbors.
+    Merges short segments with their neighbors.
     A merge is only performed if the combined word count does not exceed max_words.
     If segment starts with a quote, dont' merge with previous.
     If segment ends with quote, don't merge with next
@@ -109,11 +95,10 @@ def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[Te
 
             current_segment = merged_segments[i]
 
-            if word_count(current_segment.text) > 2:
-                i += 1
-                continue
-
-            if starts_and_ends_with_quote(current_segment.text):
+            # Two words seems to do mostly alright (Chatterbox and Oute).
+            # One word definitely does not.
+            MAX_WORDS = 1
+            if word_count(current_segment.text) > MAX_WORDS:
                 i += 1
                 continue
 
@@ -230,21 +215,8 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
     return (before, content, after)
 
 def starts_and_ends_with_quote(s: str) -> bool:
-    return starts_with_quote(s) and ends_with_quote(s)
-
-def starts_with_quote_only(s: str) -> bool:
-    return starts_with_quote(s) and not ends_with_quote(s)
-
-def ends_with_quote_only(s: str) -> bool:
-    return ends_with_quote(s) and not starts_with_quote(s)
-
-def starts_with_quote(s: str) -> bool:
-    start, _, _ = split_string_parts(s)
-    return has_quote_char(start)
-
-def ends_with_quote(s: str) -> bool:
-    _, _, end = split_string_parts(s)
-    return has_quote_char(end)
+    start, _, end = split_string_parts(s)
+    return has_quote_char(start) and has_quote_char(end)
 
 def has_quote_char(s: str) -> bool:
     for char in QUOTATION_CHARS:

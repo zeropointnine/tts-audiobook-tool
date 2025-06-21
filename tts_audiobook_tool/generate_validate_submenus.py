@@ -4,6 +4,7 @@ from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validate_util import ValidateItem, ValidateUtil
@@ -136,17 +137,19 @@ class GenerateValidateSubmenus:
         printt()
 
         hotkey = ask_hotkey()
+
         if hotkey == "1":
-            # Make 'ValidateItem' list
-            items = []
+            items: list[ValidateItem] = []
             for index in indices:
                 text_segment = state.project.text_segments[index]
                 file_path = index_to_path[index]
                 item = ValidateItem(index, file_path, text_segment.text)
                 items.append(item)
             ValidateUtil.validate_items(items)
+
         elif hotkey == "2":
             GenerateUtil.generate_validate_fix_items(state, indices, "validate-and-fix")
+
         else:
             return
 

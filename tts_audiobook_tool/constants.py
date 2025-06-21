@@ -40,6 +40,8 @@ DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 package_dir = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, DEFAULT_VOICE_JSON_FILE_NAME)
 
+# Offset for whisper word end timestamp being consistently too early
+WHISPER_END_TIME_OFFSET = 0.25
 
 # Note use single value app-wide, 44k matching Oute's output sample rate
 # Also, un-complicates concatenation of mixed model outputs
