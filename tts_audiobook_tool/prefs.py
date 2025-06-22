@@ -26,7 +26,6 @@ class Prefs:
         self._project_dir = project_dir
         self._should_normalize = should_normalize
         self._play_on_generate = play_on_generate
-        self._optimize_segment_silence = optimize_ss
 
         self._has_shown_player_reminder = False
         self._has_set_any_text = False
@@ -120,15 +119,6 @@ class Prefs:
         self.save()
 
     @property
-    def optimize_segment_silence(self) -> bool:
-        return self._optimize_segment_silence
-
-    @optimize_segment_silence.setter
-    def optimize_segment_silence(self, value: bool):
-        self._optimize_segment_silence = value
-        self.save()
-
-    @property
     def has_shown_player_reminder(self) -> bool:
         return self._has_shown_player_reminder
 
@@ -151,7 +141,6 @@ class Prefs:
             "project_dir": self._project_dir,
             "should_normalize": self._should_normalize,
             "play_on_generate": self._play_on_generate,
-            "optimize_ss": self._optimize_segment_silence,
             "has_shown_player_reminder": self._has_shown_player_reminder,
             "has_set_any_text": self._has_set_any_text
         }

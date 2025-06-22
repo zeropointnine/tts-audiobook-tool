@@ -1,6 +1,5 @@
 import os
 
-from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -22,8 +21,10 @@ class VoiceChatterboxSubmenu:
     @staticmethod
     def _print(state: State) -> None:
 
-        print_heading(f"Voice clone and options ({Shared.get_model_label()})")
-        s = f"{make_hotkey_string('1')} Set voice "
+        s = f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
+        print_heading(f"Voice clone and options {s}")
+
+        s = f"{make_hotkey_string('1')} Set Chatterbox voice "
         s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
         printt(s)
         cb_temp = state.project.chatterbox_temperature

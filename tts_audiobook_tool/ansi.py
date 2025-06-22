@@ -1,5 +1,4 @@
 import os
-import math
 
 # Standard 256-color palette (indices 16-231 are a 6x6x6 color cube)
 # Standard 256-color palette (indices 232-255 are grayscale)

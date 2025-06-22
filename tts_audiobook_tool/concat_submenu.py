@@ -1,21 +1,13 @@
 import os
-from typing import cast
-from pathlib import Path
 
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
-from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.concat_util import ConcatUtil
-from tts_audiobook_tool.l import L
+from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
-from tts_audiobook_tool.timed_text_segment import TimedTextSegment
-from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
 
 class ConcatSubmenu:
@@ -25,34 +17,37 @@ class ConcatSubmenu:
 
         print_heading(f"Combine audio segments:")
 
-        infos = ChapterInfo.make_chapter_infos(state)
+        infos = ChapterInfo.make_chapter_infos(state.project)
         if len(infos) > 1:
             print_chapter_segment_info(infos)
 
         if not state.project.section_dividers:
-            chapter_dividers_string = "none"
+            chapter_dividers_desc = ""
         else:
             strings = [str(item+1) for item in state.project.section_dividers] # 1-indexed
-            chapter_dividers_string = ", ".join(strings)
+            chapter_dividers_desc = ", ".join(strings)
+            chapter_dividers_desc = f": {COL_ACCENT}{chapter_dividers_desc}{COL_DIM}"
 
-        printt(f"{make_hotkey_string('1')} Combine to FLAC, and transcode to MP4")
-        printt(f"{make_hotkey_string('2')} Combine to FLAC only")
-        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently {len(state.project.section_dividers)} cut point/s: {COL_ACCENT}{chapter_dividers_string}{COL_DIM})")
-        printt(f"{make_hotkey_string('4')} Optimize silence at audio segment boundaries {COL_DIM}(currently: {COL_ACCENT}{state.prefs.optimize_segment_silence}{COL_DIM})")
+        printt(f"{make_hotkey_string('1')} Combine to FLAC file")
+        printt(f"{make_hotkey_string('2')} Combine to AAC/MP4 file")
+        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently {len(state.project.section_dividers)} cut point/s{chapter_dividers_desc})")
+        printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{state.prefs.should_normalize}{COL_DIM})")
         printt()
-        hotkey = ask_hotkey()
 
+        hotkey = ask_hotkey()
         if hotkey == "1":
-            ConcatSubmenu.ask_chapters(infos, state, and_transcode=True)
+            ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=False)
         elif hotkey == "2":
-            ConcatSubmenu.ask_chapters(infos, state, and_transcode=False)
+            ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=True)
         elif hotkey == "3":
             ConcatSubmenu.ask_cut_points(state)
             ConcatSubmenu.submenu(state)
         elif hotkey == "4":
-            state.prefs.optimize_segment_silence = not state.prefs.optimize_segment_silence
-            printt(f"Optimize pauses at segment boundaries: {state.prefs.optimize_segment_silence}")
+            state.prefs.should_normalize = not state.prefs.should_normalize
+            printt(f"Loudness normalization set to: {state.prefs.should_normalize}")
             printt()
+            if MENU_CLEARS_SCREEN:
+                ask_continue()
             ConcatSubmenu.submenu(state)
 
 
@@ -68,8 +63,8 @@ class ConcatSubmenu:
             print_concat_info(section_dividers, num_text_segments)
 
         printt("Enter the line numbers where new files will begin.")
-        printt("For example, if there are 1000 lines of text and you enter \"250, 700\",")
-        printt("three audio files will be created spanning lines 1-249, 250-699, and 700-1000.")
+        printt("For example, if there are 400 lines of text and you enter \"101, 201\",")
+        printt("three audio files will be created spanning lines 1-100, 101-200, and 201-400.")
         printt("Enter \"1\" for no cut points.")
         printt()
         inp = ask()
@@ -99,7 +94,7 @@ class ConcatSubmenu:
         state.project.save()
 
     @staticmethod
-    def ask_chapters(infos: list[ChapterInfo], state: State, and_transcode: bool) -> None:
+    def ask_chapters_and_make(infos: list[ChapterInfo], state: State, to_aac_not_flac: bool) -> None:
 
         # Chapter indices that have any files
         chapter_indices = []
@@ -112,7 +107,7 @@ class ConcatSubmenu:
             printt("(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
             inp = ask()
             if inp == "all" or inp == "a":
-                selected_chapter_indices = chapter_indices.copy()
+                chapter_indices = chapter_indices.copy()
             else:
                 input_indices, warnings = ParseUtil.parse_one_indexed_ranges_string(inp, len(state.project.text_segments))
                 if warnings:
@@ -122,16 +117,16 @@ class ConcatSubmenu:
                     return
                 if not input_indices:
                     return
-                selected_chapter_indices = [item for item in input_indices if item in chapter_indices]
+                chapter_indices = [item for item in input_indices if item in chapter_indices]
 
-                if not selected_chapter_indices:
+                if not chapter_indices:
                     ask("No valid chapters numbers entered. Press enter: ")
                     return
 
         else:
-            selected_chapter_indices = [0]
+            chapter_indices = [0]
 
-        strings = [str(index+1) for index in selected_chapter_indices]
+        strings = [str(index+1) for index in chapter_indices]
         string = ", ".join(strings)
         printt(f"Will concatenate audio segments to create the following chapters: {string}")
         printt()
@@ -139,6 +134,12 @@ class ConcatSubmenu:
         if not b:
             return
 
+        ConcatSubmenu.make_chapter_files(state, chapter_indices, to_aac_not_flac)
+
+    @staticmethod
+    def make_chapter_files(state: State, chapter_indices: list[int], to_aac_not_flac: bool) -> None:
+
+        # Make subdir
         timestamp_subdir = timestamp_string()
         dest_subdir = os.path.join(state.project.dir_path, CONCAT_SUBDIR, timestamp_subdir)
         try:
@@ -147,26 +148,59 @@ class ConcatSubmenu:
             printt(f"Couldn't make directory {dest_subdir}", "error")
             return
 
-        ok = ConcatUtil.concatenate_chapters(
-            chapter_indices=selected_chapter_indices,
-            state=state,
-            and_transcode=and_transcode,
-            base_dir=dest_subdir
-        )
+        for i, chapter_index in enumerate(chapter_indices):
 
-        if ok and not state.prefs.has_shown_player_reminder:
-            AppUtil.show_player_reminder(state.prefs)
-
-        if not ok or not has_gui():
-            ask_continue("Finished. \a")
-        else:
-            printt("Finished. \a")
+            if len(chapter_indices) > 1:
+                s = f" {i+1} of {len(chapter_indices)} - chapter {chapter_index+1})"
+            else:
+                s = ""
+            printt(f"Creating finalized, concatenated audio file{s}...")
             printt()
-            hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
-            if hotkey == "o":
-                err = open_directory_gui(dest_subdir)
+
+            # Concat
+            is_final_file = not state.prefs.should_normalize
+            is_concat_aac = is_final_file and to_aac_not_flac
+
+            path, err = ConcatUtil.concatenate_chapter_file(
+                state=state,
+                chapter_index=chapter_index,
+                to_aac_not_flac=is_concat_aac,
+                base_dir=dest_subdir
+            )
+            if err:
+                printt(err, "error")
+                return
+
+            # Normalize
+            if state.prefs.should_normalize:
+
+                source_path = path
+                norm_path = insert_bracket_tag_file_path(path, "normalized")
+                if to_aac_not_flac:
+                    norm_path = str( Path(norm_path).with_suffix(".m4a") )
+
+                err = LoudnessNormalizationUtil.normalize_file(path, norm_path)
                 if err:
                     printt(err, "error")
+                    return
+                if not DEBUG_SAVE_INTERMEDIATE_FILES:
+                    delete_temp_file(source_path)
+                path = norm_path
+
+            printt(f"Saved {COL_ACCENT}{path}")
+            printt()
+
+        # Post-concat feedback
+        if not state.prefs.has_shown_player_reminder:
+            AppUtil.show_player_reminder(state.prefs)
+
+        printt("Finished. \a")
+        printt()
+        hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
+        if hotkey == "o":
+            err = open_directory_gui(dest_subdir)
+            if err:
+                printt(err, "error")
 
 # ---
 
@@ -183,9 +217,9 @@ def print_concat_info(section_dividers: list[int], num_items: int) -> None:
 def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
     for i, info in enumerate(infos):
         if info.num_files_missing == 0:
-            desc = ""
+            desc = "all lines generated"
         else:
-            desc = f"{info.num_files_missing} of {info.num_segments} files missing"
+            desc = f"{info.num_files_exist} of {info.num_segments} lines generated"
         s = f"File {i+1}: lines {info.segment_index_start + 1}-{info.segment_index_end + 1}"
         if desc:
             s += f" {COL_DIM}({desc})"

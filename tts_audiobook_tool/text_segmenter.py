@@ -95,9 +95,9 @@ def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[Te
 
             current_segment = merged_segments[i]
 
-            # Two words seems to do mostly alright (Chatterbox and Oute).
-            # One word definitely does not.
-            MAX_WORDS = 1
+            # Two words prompts only occassionally has problems (Chatterbox and Oute).
+            # Single word often does.
+            MAX_WORDS = 2
             if word_count(current_segment.text) > MAX_WORDS:
                 i += 1
                 continue

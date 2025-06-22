@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
-from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 
@@ -25,13 +25,13 @@ class ChapterInfo:
         return self.num_segments - self.num_files_exist
 
     @staticmethod
-    def make_chapter_infos(state: State) -> list[ChapterInfo]:
+    def make_chapter_infos(project: Project) -> list[ChapterInfo]:
 
         result = []
 
-        all_segment_index_to_path = ProjectDirUtil.get_indices_and_paths(state)
+        all_segment_index_to_path = ProjectDirUtil.get_items(project)
 
-        segment_index_ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
+        segment_index_ranges = make_section_ranges(project.section_dividers, len(project.text_segments))
 
         for chapter_index, rang in enumerate(segment_index_ranges):
 

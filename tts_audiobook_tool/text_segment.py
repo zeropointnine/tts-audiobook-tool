@@ -1,6 +1,5 @@
 from __future__ import annotations
-from enum import Enum, auto
-import json
+from enum import Enum
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
@@ -70,6 +69,7 @@ class TextSegment:
 class TextSegmentReason(Enum):
     """
     Reason for the text segment being segmented
+    Value is used in teh json
     """
     UNDEFINED = "undefined" # for back-compat
 

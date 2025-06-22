@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from enum import Enum, auto
 import time
-from pathlib import Path
-from typing import Tuple, Optional, cast
-import soundfile as sf
+from typing import NamedTuple
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.concat_util import ConcatUtil
-from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.transcribe_util import TranscribeUtil
 from tts_audiobook_tool.util import *
 
 class ValidateUtil:
@@ -20,13 +19,16 @@ class ValidateUtil:
         items: list[ValidateItem],
     ) -> None:
         """
-        For each file, tags validated file name with "pass", else prints fail info.
-        (Skips files already tagged with "pass")
+        Validation-only flow
 
+        For each file, tags validated file name with "pass", else prints fail info.
+        Skips files already tagged with "pass".
         Prints counts at end.
 
         Inits whisper at start, and unloads it at end.
         """
+
+        #x
 
         start_time = time.time()
         num_analysed = 0
@@ -37,6 +39,8 @@ class ValidateUtil:
 
         Shared.mode = "validating"
 
+        whisper_model = Shared.get_whisper()
+
         for item in items:
 
             if Shared.stop_flag:
@@ -44,34 +48,34 @@ class ValidateUtil:
                 Shared.mode = ""
                 break
 
-            # Do test
-            result, fail_message = ValidateUtil.validate_fix_item(
-                item=item,
-                should_delete_or_fix=False,
-                whisper_model=Shared.get_whisper()
-            )
+            whisper_data = SoundUtil.transcribe_file(whisper_model, item.path)
+            if isinstance(whisper_data, str):
+                printt(f"{COL_ERROR}Unexpected whisper result, skipping item: {whisper_data}")
+                continue
+
+            sound =SoundFileUtil.load(item.path, WHISPER_SAMPLERATE)
+            if isinstance(sound, str):
+                printt(f"{COL_ERROR}Error loading file, skipping item: {sound}")
+                continue
+
+            validate_result = ValidateUtil.validate_item(sound, item.text, whisper_data)
+
             num_analysed += 1
 
             item_info = f"{COL_ACCENT}[{COL_DEFAULT}{num_analysed}{COL_ACCENT}/{COL_DEFAULT}{len(items)}{COL_ACCENT}] Line index {COL_DEFAULT}{item.index}{COL_ACCENT}:\n"
             item_info += f"{COL_DIM}{item.path}\n{COL_DEFAULT}"
 
-            if result == ValidateResult.VALIDATED_AND_TAGGED:
-                num_validated += 1
+            match validate_result.result:
 
-            if result.is_fail_detected:
-                num_detected += 1
+                case ValidateResultType.VALID:
+                    # TODO rename
+                    num_validated += 1
+                    ...
+                case ValidateResultType.TRIMMABLE:
 
-            if result == ValidateResult.FAILED_ONLY:
-                item_info += "Failed: " + fail_message + "\n"
-                printt(item_info)
-            if result == ValidateResult.FAILED_AND_CORRECTED:
-                item_info += "Failed: " + fail_message + "\n" + "Corrected" + "\n"
-                printt(item_info)
-                num_corrected += 1
-            if result == ValidateResult.FAILED_AND_DELETED:
-                item_info += "Failed: " + fail_message + "\n"
-                printt(item_info)
-                num_deleted += 1
+                    ...
+                case ValidateResultType.INVALID:
+                    ...
 
         # Done - print info
         printt(f"Elapsed: {time_string(time.time() - start_time)}")
@@ -84,371 +88,111 @@ class ValidateUtil:
         Shared.clear_whisper()
 
     @staticmethod
-    def validate_fix_item(item: ValidateItem, should_delete_or_fix: bool, whisper_model
-    ) -> tuple[ValidateResult, str]:
+    def validate_and_save(
+        sound: Sound,
+        source_text: str,
+        whisper_data: dict,
+        save_path: str,
+        save_if_bad: bool,
+        play_on_save: bool
+    ) -> ValidateAction:
         """
-        Returns ValidateResult, message string
+        Takes in a generated + postprocessed sound clip
+        Returns ValidateAction which describes what action was taken
         """
 
-        whisper_data = whisper_model.transcribe(item.path, word_timestamps=True, language=None)
-        if not whisper_data or not "text" in whisper_data or not isinstance(whisper_data["text"], str):
-            return ValidateResult.NOOP, "{COL_ERROR}Unexpected whisper result, skipping item"
+        def save(sound_to_save: Sound, success_action: ValidateAction):
+            err = SoundFileUtil.save_flac(save_path, sound_to_save)
+            if not err:
+                if play_on_save:
+                    SoundFileUtil.play_sound_async(sound_to_save)
+                return success_action
+            else:
+                return ValidateAction(ValidateActionType.ACTION_FAILED, err)
 
-        item.transcribed_text = whisper_data["text"].strip()
+        validate_result = ValidateUtil.validate_item(sound, source_text, whisper_data)
+
+        match validate_result.result:
+
+            case ValidateResultType.VALID:
+
+                return save(sound, ValidateAction(ValidateActionType.SAVED, "Saved"))
+
+            case ValidateResultType.TRIMMABLE:
+
+                if not validate_result.trim_start and not validate_result.trim_end:
+                    raise ValueError("Bad value")
+
+                start_time = validate_result.trim_start or 0
+                end_time = validate_result.trim_end or sound.duration
+                new_sound = SoundUtil.trim(sound, start_time, end_time)
+                action = ValidateAction(ValidateActionType.TRIMMED_AND_SAVED, "Fixed: " + validate_result.message)
+                return save(new_sound, action)
+
+            case ValidateResultType.INVALID:
+
+                if save_if_bad:
+                    action = ValidateAction(ValidateActionType.INVALID_SAVED_ANYWAY, validate_result.message)
+                    # Add fail tag to filename
+                    save_path = insert_bracket_tag_file_path(save_path, "fail")
+                    return save(sound, action)
+                else:
+                    return ValidateAction(ValidateActionType.INVALID_DIDNT_SAVE, validate_result.message)
+
+
+    @staticmethod
+    def validate_item(sound: Sound, reference_text: str, whisper_data: dict) -> ValidateResult:
+
+        # Order of tests matter here
 
         # Static audio test
-        is_static = ValidateUtil.is_audio_static(item, whisper_data)
+        is_static = TranscribeUtil.is_audio_static(sound, whisper_data)
         if is_static:
-            message = "Audio is silent"
-            if should_delete_or_fix:
-                try:
-                    Path(item.path).unlink()
-                    return ValidateResult.FAILED_AND_DELETED, message
-                except:
-                    return ValidateResult.NOOP, "Detected error but couldn't delete file"
-            else:
-                return ValidateResult.FAILED_ONLY, message
+            return ValidateResult(ValidateResultType.INVALID, "Audio is static")
+
+        # Substring test
+        timestamps = TranscribeUtil.get_substring_time_range(reference_text, whisper_data)
+        if timestamps:
+            message = f"Excess words detected, substring at {timestamps[0]:.2f}-{timestamps[1]:.2f}"
+            result = ValidateResult(
+                ValidateResultType.TRIMMABLE,
+                message,
+                timestamps[0],
+                timestamps[1]
+            )
+            return result
+
+        # Repeat phrases test
+        repeats = TranscribeUtil.find_bad_repeats(reference_text, whisper_data)
+        if repeats:
+            return ValidateResult(ValidateResultType.INVALID, f"Repeated word/phrase: {", ".join(repeats)}")
 
         # Word count delta test
-        message = ValidateUtil.is_word_count_fail(item)
-        if message:
-            if should_delete_or_fix:
-                try:
-                    Path(item.path).unlink()
-                    return ValidateResult.FAILED_AND_DELETED, message
-                except:
-                    return ValidateResult.NOOP, "Detected error but couldn't delete file"
-            else:
-                return ValidateResult.FAILED_ONLY, message
+        fail_reason = TranscribeUtil.is_word_count_fail(reference_text, whisper_data)
+        if fail_reason:
+            return ValidateResult(ValidateResultType.INVALID, fail_reason)
 
         # Excess audio
-        if should_delete_or_fix:
-            excess_test_result = ValidateUtil.detect_excess_audio_and_fix(
-                item, cast(dict, whisper_data)
+        trim_start_time = TranscribeUtil.get_semantic_match_start_time_trim(reference_text, whisper_data, sound)
+        trim_end_time = TranscribeUtil.get_semantic_match_end_time_trim(reference_text, whisper_data, sound)
+
+        messages = []
+        if trim_start_time:
+            messages.append(f"Excess at start ({(trim_start_time):.2f}s)")
+        if trim_end_time:
+            messages.append(f"Excess at end ({(sound.duration - trim_end_time):.2f}s)")
+
+        if trim_start_time or trim_end_time:
+            result = ValidateResult(
+                ValidateResultType.TRIMMABLE,
+                ", ".join(messages),
+                trim_start_time,
+                trim_end_time
             )
-            if excess_test_result:
-                did_save, error_message = excess_test_result
-                if did_save:
-                    return ValidateResult.FAILED_AND_CORRECTED, error_message
-                else:
-                    return ValidateResult.NOOP, f"{COL_ERROR}Couldn't save corrected FLAC file"
-        else:
-            result = ValidateUtil.get_semantic_end_time_excess(item, whisper_data)
-            if result:
-                _, message = result
-                return ValidateResult.FAILED_ONLY, message
-
-        # Substring test (and potentially fix)
-        if should_delete_or_fix:
-            substring_test_result = ValidateUtil.detect_is_substring_and_fix(item, cast(dict, whisper_data))
-            if substring_test_result:
-                did_save, error_message = substring_test_result
-                if did_save:
-                    return ValidateResult.FAILED_AND_CORRECTED, error_message
-                else:
-                    return ValidateResult.NOOP, f"{COL_ERROR}Couldn't save corrected FLAC file"
-        else:
-            timestamps = ValidateUtil.get_substring_time_range(item, cast(dict, whisper_data))
-            if timestamps:
-                return ValidateResult.FAILED_ONLY, f"Excess audio detected, but substring exists at {timestamps[0]:.2f}-{timestamps[1]:.2f}"
-
+            return result
 
         # At this point we consider the item to have "passed"
-        path_str = item.path
-        new_path_str = insert_bracket_tag_file_path(path_str,"pass")
-        try:
-            path = Path(path_str)
-            new_path = Path(new_path_str)
-            path.rename(new_path)
-        except Exception:
-            L.w(f"Couldn't rename {path_str} to {new_path_str}") # meh
-        return ValidateResult.VALIDATED_AND_TAGGED, ""
-
-    @staticmethod
-    def detect_excess_audio_and_fix(item: ValidateItem, whisper_data: dict) -> tuple[bool, str] | None:
-        """
-        Returns
-            [0] True if trim was successful
-            [1] Messaging
-        Or None if no action needed
-        """
-        result = ValidateUtil.get_semantic_end_time_excess(item, whisper_data)
-        if not result:
-            return None
-
-        end_time, message = result
-
-        # Make trimmed copy of audio file with updated filename and delete old version
-        old_path = item.path
-        new_path = insert_bracket_tag_file_path(item.path, "pass")
-        trim_success = SoundFileUtil.trim_flac_file(old_path, new_path, 0, end_time)
-        if not trim_success:
-            return False, message
-
-        item.path = new_path
-        try:
-            Path(old_path).unlink()
-        except:
-            L.w(f"Couldn't delete original file {old_path}") # Return True anyway
-        return True, message
-
-    @staticmethod
-    def detect_is_substring_and_fix(item: ValidateItem, whisper_data: dict) -> tuple[bool, str] | None:
-        """
-        Returns None if no action needed
-        Returns
-            [0] True if trim was successful
-            [1] Messaging
-        """
-        timestamps = ValidateUtil.get_substring_time_range(item, whisper_data)
-        if not timestamps:
-            return None
-
-        start_time, end_time = timestamps
-
-        message = f"Excess audio detected, but substring exists at {start_time:.2f}-{end_time:.2f}"
-
-        # Make trimmed copy of audio file with updated filename and delete old version
-        old_path = item.path
-        new_path = insert_bracket_tag_file_path(item.path, "pass")
-        trim_success = SoundFileUtil.trim_flac_file(old_path, new_path, start_time, end_time)
-        if not trim_success:
-            return False, message
-
-        item.path = new_path
-        try:
-            Path(old_path).unlink()
-        except:
-            L.w(f"Couldn't delete original file {old_path}")
-        return True, message
-
-    # ---
-
-    @staticmethod
-    def is_audio_static(validateItem: ValidateItem, whisper_data: dict) -> bool:
-        # Test for Oute issue with very short prompts, static output
-
-        DURATION_THRESH = 2.0
-
-        end_time = get_whisper_data_last_end(whisper_data)
-        if end_time is not None and end_time > DURATION_THRESH:
-            return False
-
-        audio, sr = sf.read(validateItem.path, dtype="float32")
-        duration = len(audio) / sr
-        if duration > DURATION_THRESH:
-            return False
-
-        is_first = True
-        num_changes = 0
-        last_value = 0
-
-        for item in audio:
-            item = round(item, 1)
-            if is_first:
-                is_first = False
-                last_value = item
-                continue
-            if item != last_value:
-                num_changes += 1
-                if num_changes > 5:
-                    return False
-            last_value = item
-        return True
-
-    @staticmethod
-    def is_word_count_fail(item: ValidateItem) -> str:
-        """
-        Does simple word count comparison between transcribed text vs original text
-        If difference is too large, returns fail reason message
-
-        Threshold values are kept conservative here.
-        """
-        if not item.transcribed_text:
-            return ""
-
-        massaged_text = massage_for_text_comparison(item.text)
-        transcribed_text = cast(str, item.transcribed_text)
-        massaged_transcribed_text = massage_for_text_comparison(transcribed_text)
-        words_src = len(massaged_text.split(" "))
-        words_stt = len(massaged_transcribed_text.split(" "))
-        words_delta = words_stt - words_src
-
-        fail_message = ""
-        if words_src <= 5:
-            # Short phrase test
-            abs_delta = abs(words_delta)
-            if abs_delta >= 2:
-                phrase = "too long" if abs_delta > 0 else "too short"
-                fail_message = f"Transcription word count {phrase} (short phrase) (delta: {abs_delta})"
-        else:
-            # Normal test
-            ratio = words_delta / words_src
-            if ratio > 0.20:
-                fail_message = f"Transcription word count too long (ratio: +{int(ratio*100)}%) (words: {words_src})"
-            elif ratio < -0.20:
-                fail_message = f"Transcription word count too short (ratio: {int(ratio*100)}%) (words: {words_src})"
-        return fail_message
-
-    # ---
-
-    @staticmethod
-    def get_semantic_end_time_excess(
-        item: ValidateItem,
-        whisper_data: dict
-    ) -> tuple[float, str] | None:
-        """
-        Intent here is to identify last "real" word's end time to potentially trim audio.
-        TTS models like to add random noise or words beyond the source text.
-
-        Returns the end
-        """
-
-        source_words = massage_for_text_comparison(item.text)
-        source_words = source_words.split(" ")
-        if len(source_words) < 1:
-            return None
-
-        source_word_last = source_words[-1]
-
-        # Being conservative here
-        just_once = source_words.count(source_word_last) > 1
-
-        word_dicts = get_flattened_whisper_word_dicts(whisper_data)
-        if len( word_dicts ) < 1:
-            return None
-
-        num_words_trimmed_from_end = 0
-        last_dict = {}
-        while len(word_dicts) >= 1:
-            last_dict = word_dicts[-1]
-            last_word = massage_for_text_comparison(last_dict["word"])
-            is_match = (last_word == source_word_last)
-            if is_match:
-                break
-            word_dicts = word_dicts[:-1]
-            num_words_trimmed_from_end += 1
-            if len(word_dicts) <= 1:
-                return None
-
-        end_time = float( last_dict["end"] )
-        if True:
-            end_time += WHISPER_END_TIME_OFFSET
-
-        audio, sr = sf.read(item.path, dtype="float32")
-        audio_duration = len(audio) / sr
-        THRESH = 0.5
-        end_time += THRESH
-
-        excess = audio_duration - end_time
-        if excess > THRESH:
-            return end_time, f"Excess audio beyond threshold detected ({excess:.1f})"
-        else:
-            return None
-
-    @staticmethod
-    def get_semantic_start_time_excess(
-        item: ValidateItem,
-        whisper_data: dict
-    ) -> float | None:
-        """
-        TODO
-        """
-        source_words = massage_for_text_comparison(item.text)
-
-
-    @staticmethod
-    def get_substring_time_range(
-        item: ValidateItem,
-        whisper_data: dict,
-    ) -> Optional[Tuple[float, float]]:
-        """
-        Detects if "ground truth" text exists as a substring in a Whisper transcription,
-        and returns its start/end timestamps.
-
-        (Ignores case where both are equal)
-
-        The matching is done by normalizing both the ground truth text and segments of the
-        transcribed text using the massage_for_comparison function. It looks for an exact
-        match of a sequence of transcribed words to the ground truth phrase.
-
-        Args:
-            whisper_json: The JSON output from Whisper, expected to have 'segments'
-                        each containing 'words' with 'word', 'start', and 'end' keys.
-            ground_truth_text: The text phrase to search for.
-
-        Returns:
-            A tuple (start_timestamp, end_timestamp) if the phrase is found,
-            otherwise None.
-        """
-        norm_ground_truth = massage_for_text_comparison(item.text)
-        if not norm_ground_truth:
-            return None
-
-        # Create list of dicts with "text", "start", and "end" properties
-        all_whisper_words = []
-        if whisper_data and 'segments' in whisper_data and isinstance(whisper_data['segments'], list):
-            for segment in whisper_data['segments']:
-                if segment and 'words' in segment and isinstance(segment['words'], list):
-                    for word_info in segment['words']:
-                        if (isinstance(word_info, dict) and
-                                all(k in word_info for k in ('word', 'start', 'end')) and
-                                isinstance(word_info['word'], str)):
-                            try:
-                                start_time = float(word_info['start'])
-                                end_time = float(word_info['end'])
-                                all_whisper_words.append({
-                                    'text': word_info['word'],
-                                    'start': start_time,
-                                    'end': end_time
-                                })
-                            except (ValueError, TypeError) as e:
-                                # Skip word if timestamps are not valid numbers
-                                L.w("Bad value in whisper data, skipping: {e}")
-                                continue
-
-        if not all_whisper_words:
-            return None
-
-        num_whisper_words = len(all_whisper_words)
-
-        for i in range(num_whisper_words):
-
-            current_concatenated_raw_text = ""
-            current_start_index = i
-            current_start_time = all_whisper_words[i]['start']
-
-            for j in range(i, num_whisper_words):
-                current_concatenated_raw_text += all_whisper_words[j]['text']
-
-                norm_segment_text = massage_for_text_comparison(current_concatenated_raw_text)
-
-                if norm_segment_text == norm_ground_truth:
-
-                    # Substring found
-
-                    if current_start_index == 0 and j == num_whisper_words - 1:
-                        # printt("is full match")
-                        return None
-
-                    start_time = current_start_time
-                    end_time = all_whisper_words[j]['end']
-
-                    # Adjust start and end times to help ensure we encompass the full audio clip
-                    START_OFFSET = -0.1 # For good measure
-                    END_OFFSET = 0.25 # Because whisper consistently reports end timestamp too early
-                    start_time += START_OFFSET
-                    start_time = max(start_time, 0)
-                    end_time += END_OFFSET
-
-                    return (start_time, end_time)
-
-                if len(norm_segment_text) > len(norm_ground_truth) and \
-                not norm_segment_text.startswith(norm_ground_truth):
-                    break
-
-        return None
-
+        return ValidateResult(ValidateResultType.VALID, "Passed validation tests")
 
 # ---
 
@@ -457,7 +201,6 @@ class ValidateItem:
         self.index = i
         self.path = path
         self.text = text
-        self.transcribed_text: str = ""
 
         duration = AudioMetaUtil.get_audio_duration(self.path)
         if not isinstance(duration, float):
@@ -465,32 +208,26 @@ class ValidateItem:
             duration = -1
         self.duration = duration
 
-class ValidateResult(Enum):
-    # File passed tests, and the file name tagged with "[pass]"
-    VALIDATED_AND_TAGGED = auto()
-    # File failed a test but no further action was taken
-    FAILED_ONLY = auto()
-    # File failed a test but was able to be corrected/edited (re-saved), file named tagged with "[pass]"
-    FAILED_AND_CORRECTED = auto()
-    # File failed a test and was deleted (with expectation that it will be regenerated)
-    FAILED_AND_DELETED = auto()
-    # Couldn't run test for whatever reason (eg, file error or smth)
-    NOOP = auto()
+class ValidateResult(NamedTuple):
+    result: ValidateResultType
+    message: str
+    trim_start: float | None = None
+    trim_end: float | None = None
 
-    @property
-    def is_fail_detected(self) -> bool:
-        return self == ValidateResult.FAILED_ONLY or self == ValidateResult.FAILED_AND_CORRECTED or self == ValidateResult.FAILED_AND_DELETED
+class ValidateResultType(Enum):
+    VALID = auto()
+    TRIMMABLE = auto()
+    INVALID = auto()
 
 # ---
 
-def get_flattened_whisper_word_dicts(whisper_data: dict) -> list[dict]:
-    word_dicts = []
-    for segment in whisper_data["segments"]:
-        word_dicts.extend(segment["words"])
-    return word_dicts
+class ValidateAction(NamedTuple):
+    action: ValidateActionType
+    message: str
 
-def get_whisper_data_last_end(whisper_data: dict) -> float | None:
-    try:
-        return float( whisper_data['segments'][-1]["end"] )
-    except:
-        return None
+class ValidateActionType(Enum):
+    SAVED = auto()
+    TRIMMED_AND_SAVED = auto()
+    INVALID_SAVED_ANYWAY = auto()
+    ACTION_FAILED = auto()
+    INVALID_DIDNT_SAVE = auto()

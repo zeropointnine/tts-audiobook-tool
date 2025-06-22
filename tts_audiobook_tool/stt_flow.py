@@ -160,7 +160,7 @@ class SttFlow:
 
         # [4] Save "abr" audio file
 
-        dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.mp4"
+        dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.m4a"
         dest_path = str( Path(source_audio_path).with_name(dest_name) )
         dest_path = get_unique_file_path(dest_path)
         printt(f"\nSaving audio file with metadata")

@@ -8,44 +8,66 @@ from tts_audiobook_tool.util import *
 
 class LoudnessNormalizationUtil:
     """
-    "Two-Pass Loudness Normalization (to EBU R128 / ITU-R BS.1770 specifications)"
+    Two-Pass Loudness Normalization (to EBU R128 / ITU-R BS.1770 specifications)
+
+    I = integrated loudness - average loudness over whole clip; measured in LUFS
+    LRA = loudness range - dynamic range; lower values = less dynamic range / more compression
+    TP = true peak - highest peak after processing; acts as a limiter, prevents clipping
     """
 
-    DEFAULT_I = -18.0
-    DEFAULT_LRA = 7.0
-    DEFAULT_TP = -2.0
+    # Tracks with 'ACX standard' somewhat
+    # TARGET_I = -19.0
+    # TARGET_LRA = 9.0
+    # TARGET_TP = -3.0
+
+
+    # A little more 'aggressive' than 'ACX standard':
+    TARGET_I = -17.0
+    TARGET_LRA = 7.0
+    TARGET_TP = -2.5
 
     @staticmethod
-    def normalize(
+    def normalize_file(
             source_path: str,
             dest_path: str="",
-            i: float=DEFAULT_I,
-            lra: float=DEFAULT_LRA,
-            tp: float=DEFAULT_TP
+            i: float=TARGET_I,
+            lra: float=TARGET_LRA,
+            tp: float=TARGET_TP
     ) -> str:
         """
+        Source file must be FLAC.
         Returns error message string on fail, else empty string
+
+        Prints some status
         """
+        if not source_path.lower().endswith(".flac"):
+            return "Source file must be .flac"
+
         if not dest_path:
             dest_path = source_path # ie, overwrite original
 
-        # Pass 1
+        printt("EBU R128 normalization pass 1, please wait (no feedback shown)...")
+
         result = LoudnessNormalizationUtil.get_loudness_json(source_path, i, lra, tp)
         if isinstance(result, str):
             return result
         else:
             loudness_stats = result
 
-        # Pass 2
-        err = LoudnessNormalizationUtil.do_loudness_transform(source_path, dest_path, loudness_stats)
+        printt("EBU R128 normalization pass 2...")
+        printt()
+
+        err = LoudnessNormalizationUtil.do_loudness_transform_and_save(source_path, dest_path, loudness_stats)
+        print()
+
         return err
 
     @staticmethod
     def get_loudness_json(
         path: str,
-        i: float=DEFAULT_I,
-        lra: float=DEFAULT_LRA,
-        tp: float=DEFAULT_TP,
+        i: float=TARGET_I,
+        lra: float=TARGET_LRA,
+        tp: float=TARGET_TP,
         no_params: bool = False
     ) -> dict | str:
         """
@@ -57,59 +79,54 @@ class LoudnessNormalizationUtil:
         else:
             loudnorm_string = f"loudnorm=I={i}:LRA={lra}:TP={tp}:print_format=json"
 
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-nostats",
-            "-hide_banner",
-            "-loglevel", "info",
-            "-i", path,
-            "-af", loudnorm_string,
-            "-f", "null",
-            "-"
+        # Rem, cannot show status here bc corrupts output being captured
+        ffmpeg_command = [
+            'ffmpeg',
+            '-nostats', "-hide_banner", '-i',
+            path,
+            '-af', loudnorm_string,
+            '-f', 'null', '-'
         ]
 
         # Run ffmpeg and capture stderr (yes, stderr)
         try:
-            process = subprocess.Popen(ffmpeg_cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-            _, stderr = process.communicate()
+            process = subprocess.run(ffmpeg_command, capture_output=True, text=True, encoding='utf-8')
         except Exception as e:
             return str(e)
+        if process.returncode != 0:
+            return f"Ffmpeg error - return code {process.returncode}"
 
-        # Simple curly string search
-        output = str(stderr)
-        start = output.find('{')
-        end = output.find('}', start) + 1
-        if start != -1 and end != 0:  # Both braces found
-            json_str = output[start:end]
-        else:
-            return "No valid substring found"
-
+        raw_stderr_string = process.stderr
         try:
-            json_dict = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            return str(e)
+            start_index = raw_stderr_string.rfind('{')
+            end_index = raw_stderr_string.rfind('}') + 1
+            clean_json_string = raw_stderr_string[start_index:end_index]
+            loudness_data = json.loads(clean_json_string)
+        except Exception as e:
+            return f"Error: {e}\nRaw output:\n{raw_stderr_string}"
 
         # Some validation
         for item in ["input_i", "input_tp", "input_lra", "input_thresh", "target_offset"]:
-            if not item in json_dict:
+            if not item in loudness_data:
                 return f"Missing expected field {item}"
 
-        return json_dict
+        return loudness_data
 
         """
-        Example output
-        {
-            "input_i": "-18.44",
-            "input_tp": "-1.08",
-            "input_lra": "1.20",
-            "input_thresh": "-28.65",
-            "output_i": "-18.04",
-            "output_tp": "-2.00",
-            "output_lra": "0.00",
-            "output_thresh": "-28.30",
-            "normalization_type": "dynamic",
-            "target_offset": "0.04"
-        }
+        Example output:
+
+            {
+                "input_i": "-18.44",
+                "input_tp": "-1.08",
+                "input_lra": "1.20",
+                "input_thresh": "-28.65",
+                "output_i": "-18.04",
+                "output_tp": "-2.00",
+                "output_lra": "0.00",
+                "output_thresh": "-28.30",
+                "normalization_type": "dynamic",
+                "target_offset": "0.04"
+            }
 
         input_i - measured integrated loudness
         input_tp - measured true peak
@@ -118,23 +135,24 @@ class LoudnessNormalizationUtil:
         target_offset - "This is the calculated gain offset in dB that loudnorm has determined should be applied to the file to reach the target integrated loudness (I), while also considering the LRA and TP constraints."
         """
 
-
     @staticmethod
-    def do_loudness_transform(
+    def do_loudness_transform_and_save(
         input_file_path: str,
         output_file_path: str,
         loudness_stats: dict,
-        target_i: float = DEFAULT_I,
-        target_lra: float = DEFAULT_LRA,
-        target_tp: float = DEFAULT_TP
+        target_i: float = TARGET_I,
+        target_lra: float = TARGET_LRA,
+        target_tp: float = TARGET_TP
     ) -> str:
         """
+        Returns error message on failure
+
         Performs the second pass of FFmpeg's loudnorm filter to normalize an audio file.
-        Assumes mono audio and outputs to FLAC format.
+        Assumes mono audio.
+        Source file must be FLAC.
+        Exports to FLAC or AAC based on output file path suffix.
 
         Args:
-            input_file_path (str): Path to the original input audio file.
-            output_file_path (str): Path for the normalized output FLAC file.
             loudness_stats (dict): A dictionary containing the loudness statistics
                                 from FFmpeg's loudnorm pass 1 (parsed JSON).
                                 Expected keys: "input_i", "input_lra", "input_tp",
@@ -143,10 +161,7 @@ class LoudnessNormalizationUtil:
             target_lra (float): Target Loudness Range in LU.
             target_tp (float): Target True Peak in dBTP.
 
-            Rem, i, tp, and tp values must match those used to obtain loudness_stats from "pass 1"
-
-        Returns:
-            str: Empty string on success, or an error message string on failure.
+            Rem, i, lra, and tp values must match those used to obtain loudness_stats from "pass 1"
         """
 
         if not os.path.exists(input_file_path):
@@ -183,41 +198,41 @@ class LoudnessNormalizationUtil:
 
         partial_command = [
             "-y",  # Overwrite output file if it exists
-            "-hide_banner", "-loglevel", "error",
+            "-hide_banner", "-loglevel", "error", "-stats",
             "-i", input_file_path,
             "-af", filter_string
         ]
-        partial_command.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
+
+        output_suffix = Path(output_file_path).suffix.lower()
+        if output_suffix == ".flac":
+            partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
+        elif output_suffix in AAC_SUFFIXES:
+            partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_AAC)
+        else:
+            return "Unsupported output type"
+
         err = FfmpegUtil.make_file(partial_command, output_file_path, use_temp_file=True)
         return err
 
     # ---
 
     @staticmethod
-    def normalize_directory(dir_path: str) -> None:
-        """
-        Normalizes and overwrites files in a directory
-        Prints status
-        For development only.
-        """
-        for file in os.listdir(dir_path):
-            file_path = os.path.join(dir_path, file)
-            printt(file_path)
-            err = LoudnessNormalizationUtil.normalize(file_path)
-            printt(err if err else "ok")
-
-    @staticmethod
     def print_lra_directory(dir_path: str):
-        """ For development"""
+        """ For development """
         count = 0
         sum = 0
         for file in os.listdir(dir_path):
+            if not file.endswith(".flac"):
+                continue
             file_path = os.path.join(dir_path, file)
+
             result = LoudnessNormalizationUtil.get_lra(file_path)
             if isinstance(result, float):
                 count += 1
                 sum += result
                 result = f"{result:.2f}"
+            else:
+                print("error?", result)
             print(result, file_path)
 
         print("\navg:", (sum / count))
@@ -234,4 +249,8 @@ class LoudnessNormalizationUtil:
         if isinstance(result, str):
             return result
         lra = result["input_lra"]
+        try:
+            lra = float(lra)
+        except:
+            return f"Parse error on {lra}"
         return lra

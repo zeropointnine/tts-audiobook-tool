@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 
@@ -24,13 +23,15 @@ class VoiceOuteSubmenu:
     @staticmethod
     def _print(state: State) -> None:
 
-        print_heading(f"Voice clone and options ({Shared.get_model_label()})")
-        printt(f"{make_hotkey_string('1')} Set voice using reference WAV file (15s or less)")
-        printt(f"{make_hotkey_string('2')} Set voice using Oute voice json file")
+        s = f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
+        print_heading(f"Voice clone and options {s}")
+
+        printt(f"{make_hotkey_string('1')} Set Oute voice using reference WAV file (15s or less)")
+        printt(f"{make_hotkey_string('2')} Set Oute voice using Oute voice json file")
         printt(f"{make_hotkey_string('3')} Set Oute default voice")
         temp = state.project.oute_temperature
         s = "default" if temp == -1 else str(temp)
-        printt(f"{make_hotkey_string("5")} Oute temperature (currently: {s})")
+        printt(f"{make_hotkey_string("4")} Temperature (currently: {s})")
         printt()
 
     @staticmethod

@@ -1,11 +1,9 @@
 import json
 import os
-from re import Match
-from typing import Any, cast
 import xxhash
 
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.state import State
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -13,9 +11,11 @@ from tts_audiobook_tool.constants import *
 class HashFileUtil:
 
     @staticmethod
-    def make_segment_file_path(index: int, state: State) -> str:
-        fn = HashFileUtil.make_segment_file_name(index, state.project.text_segments[index], state.project.get_voice_label())
-        return os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR, fn)
+    def make_segment_file_path(index: int, project: Project) -> str:
+        fn = HashFileUtil.make_segment_file_name(
+            index, project.text_segments[index], project.get_voice_label()
+        )
+        return os.path.join(project.dir_path, AUDIO_SEGMENTS_SUBDIR, fn)
 
     @staticmethod
     def make_segment_file_name(index: int, text_segment: TextSegment, voice_label: str, suffix=".flac") -> str:

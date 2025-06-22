@@ -25,7 +25,7 @@
         <div class="loadButtonsLine">
             <label id="loadLocalButtonLabel" class="loadButton" tabindex="0">
                 Local&nbsp;File
-                <input type="file" id="loadFileInput" accept=".flac, .mp4, .m4a, .m4b" hidden autofocus>
+                <input type="file" id="loadFileInput" accept="audio/mp4, .m4a, .m4b, audio/flac, .flac" hidden autofocus>
             </label>
             <input id="loadUrlInput" placeholder="Or enter URL">
         </div>
@@ -80,6 +80,9 @@
                         <tr>
                             <td>Load local file</td>
                             <td>o</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" class="help2">Playback can also be toggled<br>by clicking the current text</td>
                         </tr>
                     </tbody>
                 </table>

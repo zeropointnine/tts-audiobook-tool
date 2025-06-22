@@ -69,6 +69,31 @@ class TimedTextSegment:
         return f"{s1}{s2}{s3}{s4}"
 
     @staticmethod
+    def make_list_using(text_segments: list[TextSegment], durations: list[float]) -> list[TimedTextSegment]:
+
+        if len(text_segments) != len(durations):
+            raise ValueError(f"Parallel arrays have different lengths {len(text_segments)} {len(durations)}")
+
+        timed_text_segments = []
+        total_seconds = 0.0
+
+        for i in range(len(text_segments)):
+
+            text_segment = text_segments[i]
+            duration = durations[i]
+
+            if not duration:
+                timed_text_segment = TimedTextSegment.make_using(text_segment, 0, 0) # has no start/end times
+                timed_text_segments.append(timed_text_segment)
+                continue
+
+            timed_text_segment = TimedTextSegment.make_using(text_segment, total_seconds, total_seconds + duration)
+            timed_text_segments.append(timed_text_segment)
+            total_seconds += duration
+
+        return timed_text_segments
+
+    @staticmethod
     def get_discontinuities(items: list[TimedTextSegment]) -> list[tuple[int, int]]:
         """
         Returns a list of index ranges where 2 or more consecutive items have a time_start and time_end of 0

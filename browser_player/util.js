@@ -1,6 +1,6 @@
 /**
  * Reads and decodes the custom tts-audiobook-tool metadata from a FLAC or MP4 file
- * and returns an object
+ * Returns metadata object or an error string
  */
 async function loadAppMetadata(fileOrUrl) {
 
@@ -8,74 +8,73 @@ async function loadAppMetadata(fileOrUrl) {
     MP4_MEAN = "tts-audiobook-tool"
     MP4_TAG = "audiobook-data"
 
-    let file; // Blob/File object
+    let file = null; // Blob/File object
     let isFlac = false;
 
-    if (typeof fileOrUrl === 'string' && (fileOrUrl.startsWith('http://') || fileOrUrl.startsWith('https://'))) {
+    if (typeof fileOrUrl === 'string') {
+        url = fileOrUrl; // Note, url must include scheme
         try {
-            const response = await fetch(fileOrUrl);
+            const response = await fetch(url);
             if (!response.ok) {
-                console.error(`HTTP error, status ${response.status}`);
-                return null;
+                return `HTTP error, status ${response.status}`;
             }
             file = await response.blob();
         } catch (error) {
-            console.error("Error fetching URL:", error);
-            return null;
+            return "Error fetching URL:" + error;
         }
         isFlac = fileOrUrl.toLowerCase().endsWith("flac");
     } else if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
         file = fileOrUrl;
         isFlac = file.name.toLowerCase().endsWith("flac");
     } else {
-        console.error("Invalid input: expected File, Blob, or URL string.");
-        return null;
+        return "Invalid input: expected File, Blob, or URL string.";
     }
 
     if (!file) {
         return null;
     }
 
+    // Read "abr" metadata (json string)
     let tagValue = null;
     try {
         if (isFlac) {
             tagValue = await findCustomFlacTag(file, FLAC_FIELD);
         } else {
-            // Assume is mp4
+            // Assume is mp4/m4a
             tagValue = await findCustomMp4Tag(file, MP4_MEAN, MP4_TAG);
         }
     } catch (error) {
-        console.error("Error parsing FLAC:", error);
-        return null;
+        return "Error parsing data:" + error;
     } finally {
         // "Closing the file stream" is handled by the browser implicitly
         // when the File/Blob objects are no longer referenced and garbage collected.
         // There's no explicit close() method for File objects in the browser.
     }
+    if (!tagValue) {
+        return "File as no ABR metadata";
+    }
 
+    // Parse json, validate
     try {
         o = JSON.parse(tagValue)
     } catch (e) {
-        console.error(e);
-        return null;
+        return "Couldn't parse metadata: " + e
+    }
+    if (!o) {
+        return "Couldn't parse metadata"
     }
 
     // Text segments
     const timedTextSegments = o["text_segments"];
-    if (!timedTextSegments) {
-        console.error("missing text_segments");
-        return null;
-    }
-    if (timedTextSegments.length == 0) {
-        console.error("text_segments is empty");
-        return null;
+    if (!timedTextSegments || timedTextSegments.length == 0) {
+        return "ABR metadata missing required field 'text_segments'";
     }
 
     // Raw text (no longer required but)
     let rawText = ""
     const rawTextBase64 = o["raw_text"]
     if (!rawTextBase64) {
-        console.log("empty or missing raw_text field")
+        console.warning("empty or missing raw_text field")
     } else {
         const binaryStr = atob(rawTextBase64.replace(/_/g, '/').replace(/-/g, '+'));
         const bytes = new Uint8Array(binaryStr.length);
@@ -86,7 +85,7 @@ async function loadAppMetadata(fileOrUrl) {
         const decompressed = pako.inflate(bytes); // zlib decompression
         rawText = new TextDecoder('utf-8').decode(decompressed);
         if (!rawText) {
-            console.error("decoded rawText is empty?");
+            console.warning("decoded rawText is empty?");
         }
     }
     if (!rawText) {

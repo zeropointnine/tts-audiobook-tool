@@ -1,6 +1,5 @@
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
-from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -24,9 +23,9 @@ class TranscodeUtil:
                 if not path.lower().endswith(".flac"):
                     ask("Must have \".flac\" file suffix. Press enter: ")
                     return
-                mp4_path = Path(path).with_stem(".mp4")
-                if mp4_path.exists():
-                    ask("MP4 file already exists with that file stem. Press enter: ")
+                m4a_path = Path(path).with_stem(".m4a")
+                if m4a_path.exists():
+                    ask("M4A file already exists with that file stem. Press enter: ")
                     return
                 dir_flac_paths = [path]
         else:
@@ -42,9 +41,9 @@ class TranscodeUtil:
             warnings = []
             flac_paths = []
             for dir_flac_path in dir_flac_paths:
-                mp4_path = Path(dir_flac_path).with_suffix(".mp4")
-                if mp4_path.exists():
-                    warnings.append(f"MP4 file already exists for {Path(dir_flac_path).name}")
+                m4a_path = Path(dir_flac_path).with_suffix(".m4a")
+                if m4a_path.exists():
+                    warnings.append(f"M4A file already exists for {Path(dir_flac_path).name}")
                 else:
                     meta_string = AudioMetaUtil.get_flac_metadata_field(dir_flac_path, APP_META_FLAC_FIELD)
                     if not meta_string:
@@ -75,7 +74,7 @@ class TranscodeUtil:
     @staticmethod
     def do_transcode_aac(state: State, flac_path: str) -> None:
 
-        printt(f"Transcoding to MP4: {flac_path}")
+        printt(f"Transcoding to AAC/M4A: {flac_path}")
         printt()
 
         new_path, err = TranscodeUtil.transcode_abr_flac_to_aac(flac_path)
@@ -99,10 +98,10 @@ class TranscodeUtil:
         Returns tuple of output file path and error message, mutually exclusive
         """
 
-        mp4_path = Path(src_path).with_suffix(".mp4")
-        if mp4_path.exists():
-            return "", "MP4 file already exists with same file stem"
-        mp4_path = str(mp4_path)
+        m4a_path = Path(src_path).with_suffix(".m4a")
+        if m4a_path.exists():
+            return "", "M4A file already exists with same file stem"
+        m4a_path = str(m4a_path)
 
         meta_string = AudioMetaUtil.get_flac_metadata_field(src_path, APP_META_FLAC_FIELD)
         if not meta_string:
@@ -112,18 +111,18 @@ class TranscodeUtil:
             "-hide_banner", "-loglevel", "warning", "-stats",
             "-i", src_path,
             "-c:a", "aac",
-            "-b:a", f"{kbps}k",
+            "-b:a", f"{kbps}k"
         ]
-        err = FfmpegUtil.make_file(partial_command, dest_file_path=mp4_path, use_temp_file=True)
+        err = FfmpegUtil.make_file(partial_command, dest_file_path=m4a_path, use_temp_file=True)
         if err:
             return "", err
 
-        err = AudioMetaUtil.set_mp4_metadata_tag(mp4_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, meta_string)
+        err = AudioMetaUtil.set_mp4_metadata_tag(m4a_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, meta_string)
         if err:
             try:
-                os.unlink(mp4_path) # even though encoding itself is success
+                os.unlink(m4a_path) # even though encoding itself is success
             except:
                 pass # meh
             return "", err
 
-        return mp4_path, "" # success
+        return m4a_path, "" # success

@@ -1,11 +1,10 @@
 import os
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.options_submenu import OptionsSubmenu
-from tts_audiobook_tool.generate_validate_submenus import GenerateValidateSubmenus
-from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.generate_submenu import GenerateSubmenu
 from tts_audiobook_tool.project_submenu import ProjectSubmenu
 from tts_audiobook_tool.shared import Shared
-from tts_audiobook_tool.l import L
+from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.text_submenu import TextSubmenu
 from tts_audiobook_tool.util import *
@@ -40,17 +39,18 @@ class MainMenu:
         if MENU_CLEARS_SCREEN:
             os.system('cls' if os.name == 'nt' else 'clear')
 
-        num_segments_complete = ProjectDirUtil.num_generated(state)
+        total_segments_generated = ProjectDirUtil.num_generated(state.project)
 
         # Title
         model_name = "Oute TTS" if Shared.is_oute() else "Chatterbox TTS"
-        print_heading(f"{APP_NAME} (active model: {model_name})")
+        s = f"{COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"
+        print_heading(f"{APP_NAME} {s}")
 
         # Dir check
         if did_reset:
             printt(f"{COL_ERROR}Directory {state.prefs.project_dir} not found.\nCleared project settings.\n")
 
-        num_audio_files = ProjectDirUtil.num_generated(state)
+        num_audio_files = ProjectDirUtil.num_generated(state.project)
 
         # Project
         s = f"{make_hotkey_string("P")} Project directory "
@@ -64,7 +64,7 @@ class MainMenu:
         if state.prefs.project_dir:
             pass
             model_name = "Oute" if Shared.is_oute() else "Chatterbox"
-            s = f"{make_hotkey_string("V")} Voice clone and options "
+            s = f"{make_hotkey_string("V")} Voice clone "
             s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
             printt(s)
 
@@ -72,7 +72,7 @@ class MainMenu:
         if state.prefs.project_dir:
             s = f"{make_hotkey_string("T")} Text "
             if state.project.text_segments:
-                s += f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} total lines)"
+                s += f"{COL_DIM}({COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
             printt(s)
 
         # Generate audio
@@ -86,17 +86,12 @@ class MainMenu:
             elif not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set text)"
             else:
-                s2 = f" {COL_DIM}({COL_ACCENT}{num_segments_complete}{COL_DIM}/{COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
+                s2 = f" {COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
             printt(s + s2)
-
-        # Detect errors
-        if state.prefs.project_dir and num_audio_files > 0:
-            s = f"{make_hotkey_string("Y")} Validate generated audio"
-            printt(s)
 
         # Concat
         if state.prefs.project_dir:
-            s = f"{make_hotkey_string("C")} Combine audio segments to create audiobook file/s"
+            s = f"{make_hotkey_string("C")} Create audiobook file/s"
             if num_audio_files == 0:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
@@ -113,7 +108,7 @@ class MainMenu:
     @staticmethod
     def _handle_menu_hotkey(hotkey: str, state: State) -> None:
 
-        num_audio_files = ProjectDirUtil.num_generated(state)
+        num_audio_files = ProjectDirUtil.num_generated(state.project)
 
         match hotkey:
             case "p":
@@ -133,11 +128,7 @@ class MainMenu:
                     TextSubmenu.submenu(state)
             case "g":
                 if state.project.can_generate_audio:
-                    GenerateValidateSubmenus.generate_submenu(state)
-            case "y":
-                if not state.prefs.project_dir or num_audio_files == 0:
-                    return
-                GenerateValidateSubmenus.validate_submenu(state)
+                    GenerateSubmenu.generate_submenu(state)
             case "c":
                 if not state.prefs.project_dir or num_audio_files == 0:
                     return

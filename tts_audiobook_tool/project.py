@@ -5,6 +5,7 @@ import shutil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
+from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
@@ -33,7 +34,7 @@ class Project:
         self.dir_path = dir_path
 
     @staticmethod
-    def load(dir_path: str) -> Project | str:
+    def load_using_dir_path(dir_path: str) -> Project | str:
         """
         Loads project json from directory path and returns parsed project instance.
         Returns error string if json is unviable.
@@ -207,3 +208,16 @@ class Project:
     @property
     def can_generate_audio(self) -> bool:
         return self.has_voice and len(self.text_segments) > 0
+
+    def get_indices_to_generate(self) -> set[int]:
+        """
+        Returns the set of indices to be generated,
+        derived from the user-inputted and human readable "generate_range_string"
+        """
+        range_string = self.generate_range_string
+        is_all = not range_string or range_string == "all" or range_string == "a"
+        if is_all:
+            result = set(range(len(self.text_segments)))
+        else:
+            result, _ = ParseUtil.parse_one_indexed_ranges_string(range_string, len(self.text_segments))
+        return result

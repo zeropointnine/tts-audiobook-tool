@@ -6,7 +6,7 @@ import zlib
 from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.l import L
+from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 
 class AppMetaUtil:
@@ -16,15 +16,15 @@ class AppMetaUtil:
         suffix = Path(path).suffix.lower()
         if suffix == ".flac":
             return AppMetaUtil.get_app_metadata_flac(path)
-        elif suffix in MP4_SUFFIXES:
+        elif suffix in AAC_SUFFIXES:
             return AppMetaUtil.get_app_metadata_mp4(path)
 
     @staticmethod
-    def get_app_metadata_flac(flac_path: str) -> AppMetadata | None:
+    def get_app_metadata_flac(path: str) -> AppMetadata | None:
         """
         TODO: untested
         """
-        string = AudioMetaUtil.get_flac_metadata_field(flac_path, APP_META_FLAC_FIELD)
+        string = AudioMetaUtil.get_flac_metadata_field(path, APP_META_FLAC_FIELD)
         if not string:
             return None
         result = AppMetaUtil.get_app_metadata_from_json_string(string)
@@ -34,12 +34,12 @@ class AppMetaUtil:
             return result
 
     @staticmethod
-    def set_flac_app_metadata(flac_path: str, raw_text: str, timed_text_segments: list[TimedTextSegment]) -> str:
+    def set_flac_app_metadata(path: str, raw_text: str, timed_text_segments: list[TimedTextSegment]) -> str:
         """
         Returns error string on fail
         """
         string = AppMetaUtil._make_app_metadata_json_string(raw_text, timed_text_segments)
-        error = AudioMetaUtil.set_flac_custom_metadata_field(flac_path, APP_META_FLAC_FIELD, string)
+        error = AudioMetaUtil.set_flac_custom_metadata_field(path, APP_META_FLAC_FIELD, string)
         return error
 
     @staticmethod
@@ -91,14 +91,14 @@ class AppMetaUtil:
 
     @staticmethod
     def set_mp4_app_metadata(
-        src_path: str, raw_text: str, timed_text_segments: list[TimedTextSegment], dest_path: str=""
+        path: str, raw_text: str, timed_text_segments: list[TimedTextSegment], dest_path: str=""
      ) -> str:
         """
         Returns error string on fail
         """
         string = AppMetaUtil._make_app_metadata_json_string(raw_text, timed_text_segments)
         error = AudioMetaUtil.set_mp4_metadata_tag(
-            src_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, string, dest_path
+            path, APP_META_MP4_MEAN, APP_META_MP4_TAG, string, dest_path
         )
         return error
 
@@ -110,7 +110,6 @@ class AppMetaUtil:
         data = zlib.compress(bytes, level=6)
         raw_text_base64 = base64.urlsafe_b64encode(data).decode('ascii')
 
-        # TODO: text segments may yet need to be properly escaped or maybe even blob-ized. or not.
         dic = {
             "raw_text": raw_text_base64,
             "text_segments": TimedTextSegment.to_dict_list(timed_text_segments)

@@ -1,9 +1,9 @@
-from tts_audiobook_tool.shared import Shared
+from tts_audiobook_tool.generate_submenu import GenerateSubmenu
+from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt_flow import SttFlow
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
-
 
 class OptionsSubmenu:
 
@@ -12,17 +12,23 @@ class OptionsSubmenu:
 
         while True:
 
-            print_heading("Options, tools:")
-            printt(f"{make_hotkey_string("1")} Create tts-audiobook-tool metadata for a pre-existing audiobook")
-            printt(f"{make_hotkey_string("2")} Transcode FLAC to MP4, preserving tts-audiobook-tool metadata")
-            printt()
-            hotkey = ask_hotkey()
+            failed_items = ProjectDirUtil.get_items_with_tag(state.project, "fail")
 
+            print_heading("Options, tools:")
+            printt(f"{make_hotkey_string("1")} Regenerate voice lines tagged as having potential errors {COL_DIM}(currently: {COL_ACCENT}{len(failed_items)}{COL_DIM} file/s)")
+            printt(f"{make_hotkey_string("2")} Create tts-audiobook-tool metadata for a pre-existing audiobook")
+            printt(f"{make_hotkey_string("3")} Transcode FLAC to MP4, preserving tts-audiobook-tool metadata")
+            printt()
+
+            hotkey = ask_hotkey()
             match hotkey:
                 case "1":
-                    SttFlow.ask_and_make(state.prefs)
+                    GenerateSubmenu.do_regenerate_items(state)
                     break
                 case "2":
+                    SttFlow.ask_and_make(state.prefs)
+                    break
+                case "3":
                     TranscodeUtil.ask_transcode(state)
                     break
                 case _:

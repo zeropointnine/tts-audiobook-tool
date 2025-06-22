@@ -1,13 +1,15 @@
 import os
 import subprocess
+import time
+from typing import Any
+import librosa
 import sounddevice as sd
-import wave
 import numpy as np
 import threading
-import soundfile as sf
+import soundfile
 
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
@@ -15,6 +17,48 @@ class SoundFileUtil:
 
     _current_playback_thread = None
     _stop_playback_event = threading.Event()
+    debug_save_dir: str = ""
+
+
+    @staticmethod
+    def load(path: str, resample_rate: int=0) -> Sound | str:
+        """
+        Returns data as normalized np32 floats, mono
+        """
+
+        try:
+            data, sr = librosa.load(path)
+            sr = int(sr)
+        except Exception as e:
+            return str(e)
+
+        if resample_rate != 0 and resample_rate != sr:
+            data = librosa.resample(data, orig_sr=sr, target_sr=16000)
+            return Sound(data, resample_rate)
+        else:
+            return Sound(data, sr)
+
+    @staticmethod
+    def save_flac(flac_path: str, sound: Sound) -> str:
+        """ Return error string on fail """
+        try:
+            soundfile.write(
+                flac_path,
+                sound.data,
+                sound.sr,
+                format="FLAC",
+                subtype="PCM_16"
+            )
+            return ""
+        except Exception as e:
+            return f"Error saving sound file {flac_path}: {type(e)} {e}"
+
+    @staticmethod
+    def debug_save(label: str, sound: Any): # sound = Sound
+        if DEBUG_SAVE_INTERMEDIATE_FILES:
+            fn = f"{int(time.time()*1000)} {label}.flac"
+            path = os.path.join(SoundFileUtil.debug_save_dir, fn)
+            SoundFileUtil.save_flac(path, sound)
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:
@@ -37,7 +81,7 @@ class SoundFileUtil:
                 "-y", "-hide_banner", "-loglevel", "error",
                 "-i", wav_path
             ]
-            cmd.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
+            cmd.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
             cmd.append(flac_path)
 
             subprocess.run(
@@ -55,45 +99,6 @@ class SoundFileUtil:
         except Exception as e:
             printt(str(e), "error")
             return False
-
-    @staticmethod
-    def trim_flac_file(
-            source_flac_path: str,
-            dest_file_path: str,
-            start_time_seconds: float,
-            end_time_seconds: float
-    ) -> bool:
-        """
-        Trims a source FLAC file from start_time_seconds to end_time_seconds
-        and saves it to dest_file_path using ffmpeg.
-        Returns True for success
-        """
-
-        source_flac_path = os.path.abspath(source_flac_path)
-        dest_file_path = os.path.abspath(dest_file_path)
-
-        if not os.path.exists(source_flac_path):
-            L.w(f"Doesn't exist: {source_flac_path}")
-            return False
-
-        duration = end_time_seconds - start_time_seconds
-        if duration <= 0:
-            L.w(f"Bad start/end times {start_time_seconds} {end_time_seconds}")
-            return False
-
-        # TODO: replace with FfmpegUtil.make_file()
-
-        partial_command = [
-            "-hide_banner", "-loglevel", "error", "-y",
-            "-i", source_flac_path,
-            "-ss", str(start_time_seconds),
-            "-to", str(end_time_seconds),
-        ]
-        partial_command.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
-        err = FfmpegUtil.make_file(partial_command, dest_file_path, use_temp_file=False)
-        if err:
-            L.e(err)
-        return not bool(err)
 
     @staticmethod
     def concatenate_flacs(
@@ -141,28 +146,12 @@ class SoundFileUtil:
             "-safe", "0",
             "-i", temp_text_path
         ]
-        partial_command.extend(FLAC_OUTPUT_FFMPEG_ARGUMENTS)
+        partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
 
         err = FfmpegUtil.make_file(partial_command, dest_flac_path, use_temp_file=True)
         delete_temp_file(temp_text_path)
 
         return err
-
-    @staticmethod
-    def add_silence_flac(src_path: str, dest_path: str, duration: float) -> str:
-        """
-        Returns error message on fail or empty string
-        """
-        data, samplerate = sf.read(src_path)
-        silence = np.zeros(int(samplerate * duration), dtype=data.dtype) # Match dtype for concatenation
-        new_data = np.concatenate([data, silence])
-        try:
-            sf.write(dest_path, new_data, samplerate, format='FLAC', subtype='PCM_16')
-            data, samplerate = sf.read(dest_path)
-
-        except Exception as e:
-            return str(e)
-        return ""
 
     @staticmethod
     def transcode_to_aac(source_file_path: str, kbps=96) -> tuple[str, str]:
@@ -172,10 +161,10 @@ class SoundFileUtil:
         """
 
         path = Path(source_file_path)
-        if path.suffix in [".mp4", ".m4a", ".m4b"]:
-            return "", "Is already an mp4 file"
+        if path.suffix in AAC_SUFFIXES:
+            return "", "Is already an mp4/m4a file"
 
-        dest_file_path = str(path.with_suffix(".mp4"))
+        dest_file_path = str(path.with_suffix(".m4a"))
         dest_file_path = get_unique_file_path(dest_file_path)
 
         partial_command = [
@@ -192,31 +181,13 @@ class SoundFileUtil:
         return dest_file_path, ""
 
     @staticmethod
-    def play_wav(file_path: str):
-        with wave.open(file_path, 'rb') as wf:
-            sample_rate = wf.getframerate()
-            num_channels = wf.getnchannels()
-            dtype = 'int16' if wf.getsampwidth() == 2 else 'int32'
-
-            def callback(outdata, frames, time, status):
-                if status:
-                    # print(f"Audio callback status: {status}")
-                    ...
-                data = wf.readframes(frames)
-                if len(data) == 0:
-                    raise sd.CallbackStop()
-                outdata[:len(data)] = np.frombuffer(data, dtype=dtype).reshape(-1, num_channels)
-
-            with sd.OutputStream(samplerate=sample_rate, channels=num_channels, callback=callback, dtype=dtype):
-                sd.sleep(int(wf.getnframes() / sample_rate * 1000))
-
-    @staticmethod
-    @staticmethod
     def play_flac_async(file_path: str):
         """
         Plays a FLAC file asynchronously using a streaming approach.
         A new playback will cancel the previous one.
         Eats exceptions and prints them.
+
+        # TODO play in-memory sound data
         """
         # Signal previous thread to stop if it exists and is alive
         if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
@@ -228,7 +199,7 @@ class SoundFileUtil:
 
         def _play_stream(stop_event: threading.Event):
             try:
-                with sf.SoundFile(file_path, 'r') as flac_file:
+                with soundfile.SoundFile(file_path, 'r') as flac_file:
                     stream_finished_event = threading.Event()
 
                     def callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags):
@@ -266,13 +237,79 @@ class SoundFileUtil:
         SoundFileUtil._current_playback_thread = new_thread
 
     @staticmethod
+    def play_sound_async(sound: Sound):
+        """
+        Plays in-memory sound data asynchronously.
+        A new playback will cancel the previous one.
+        Eats exceptions and prints them.
+        """
+        # Signal previous thread to stop if it exists and is alive
+        if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
+            SoundFileUtil._stop_playback_event.set() # Set the event to signal stopping
+            SoundFileUtil._current_playback_thread.join(timeout=0.5) # Wait a short time for it to stop
+
+        # Clear the event for the new playback
+        SoundFileUtil._stop_playback_event.clear()
+
+        def _play_stream_from_data(sound_data: np.ndarray, samplerate: int, channels: int, stop_event: threading.Event):
+            try:
+                stream_finished_event = threading.Event()
+                current_frame = 0
+
+                def callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags):
+                    nonlocal current_frame
+                    if stop_event.is_set():
+                        raise sd.CallbackStop
+
+                    # Calculate how many frames are left in the sound_data
+                    frames_to_read = min(frames, len(sound_data) - current_frame)
+
+                    if frames_to_read > 0:
+                        # Copy data from sound_data to outdata
+                        outdata[:frames_to_read] = sound_data[current_frame : current_frame + frames_to_read]
+                        # Fill remaining part of outdata with zeros if less data was read than requested
+                        if frames_to_read < frames:
+                            outdata[frames_to_read:] = 0
+                        current_frame += frames_to_read
+                    else:
+                        # No more data to play
+                        raise sd.CallbackStop
+
+                def set_event_on_finish():
+                    stream_finished_event.set()
+
+                with sd.OutputStream(
+                    samplerate=samplerate,
+                    channels=channels,
+                    callback=callback,
+                    dtype='float32',
+                    finished_callback=set_event_on_finish
+                ):
+                    stream_finished_event.wait() # Wait for playback to complete or be cancelled
+
+            except sd.CallbackStop:
+                pass # Normal exit from the stream
+            except Exception as e:
+                printt(f"Couldn't play in-memory audio data: {e}")
+
+        # Ensure sound_data is 2D for sounddevice (frames, channels)
+        # If it's 1D (mono), convert it to 2D
+        sound_data_2d = sound.data.reshape(-1, 1) if sound.data.ndim == 1 else sound.data
+        channels = sound_data_2d.shape[1]
+
+        new_thread = threading.Thread(target=_play_stream_from_data, args=(sound_data_2d, sound.sr, channels, SoundFileUtil._stop_playback_event,), daemon=True)
+        new_thread.start()
+        SoundFileUtil._current_playback_thread = new_thread
+
+
+    @staticmethod
     def print_samplerates(dir_path: str):
         """ Dev"""
 
         for item in os.listdir(dir_path):
             path = os.path.join(dir_path, item)
             if path.endswith(".flac"):
-                data, samplerate = sf.read(path)
+                data, samplerate = soundfile.read(path)
                 print(item)
                 print(samplerate, data.dtype)
                 print()

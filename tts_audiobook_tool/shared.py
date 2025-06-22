@@ -14,7 +14,6 @@ class Shared:
     _model_type: str = ""
     _MODEL_TYPES = ["oute", "chatterbox"] # TODO enum
 
-
     # Cheesy control-c capture flag variables
     mode = ""
     stop_flag = False
@@ -121,3 +120,4 @@ class Shared:
             return "mps"
         else:
             return "cpu"
+

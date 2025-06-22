@@ -1,7 +1,6 @@
 import sys
 
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
@@ -14,19 +13,21 @@ class TextSubmenu:
     @staticmethod
     def submenu(state: State) -> None:
 
-        print_heading("Text:")
+        s = f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
+        print_heading(f"Text {s}")
         printt(f"{make_hotkey_string("1")} View text")
         printt(f"{make_hotkey_string("2")} Replace text\n")
+
         hotkey = ask()
         if hotkey == "1":
             print_project_text(state)
             ask("Press enter: ")
         elif hotkey == "2":
-            num_files = ProjectDirUtil.num_generated(state)
+            num_files = ProjectDirUtil.num_generated(state.project)
             if num_files == 0:
                 TextSubmenu.set_text_submenu(state, "Replace text:")
             else:
-                s = f"Replacing text will invalidate {num_files} previously generated audio file fragments for this project.\nAre you sure? "
+                s = f"Replacing text will invalidate all ({num_files}) previously generated audio file fragments for this project.\nAre you sure? "
                 if ask_hotkey(s):
                     TextSubmenu.set_text_submenu(state, "Replace text:")
 
@@ -119,7 +120,7 @@ class TextSubmenu:
 
 def print_project_text(state: State) -> None:
 
-    index_to_path = ProjectDirUtil.get_indices_and_paths(state)
+    index_to_path = ProjectDirUtil.get_items(state.project)
     indices = index_to_path.keys()
     texts = [item.text for item in state.project.text_segments]
 
@@ -133,7 +134,7 @@ def print_project_text(state: State) -> None:
         printt(f"{s1} {s2}  {text.strip()}")
     printt()
 
-    indices = set( list( ProjectDirUtil.get_indices_and_paths(state).keys() ) )
+    indices = set( list( ProjectDirUtil.get_items(state.project).keys() ) )
     s = ParseUtil.make_one_indexed_ranges_string(indices, len(texts))
     printt(f"Generated segments: {s}")
     printt()

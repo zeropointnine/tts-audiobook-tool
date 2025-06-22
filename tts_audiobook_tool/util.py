@@ -27,7 +27,7 @@ def printt(s: str="", type: str="") -> None:
 
 def print_heading(s: str) -> None:
     """ """
-    length = len(s) # TODO need to filter out control codes :/
+    length = get_string_len_printable(s)
     printt(f"{COL_ACCENT}{s}")
     printt("-" * length)
 
@@ -176,12 +176,13 @@ def insert_bracket_tag_file_path(file_path: str, tag: str) -> str:
     return str(new_path)
 
 def massage_for_text_comparison(s: str) -> str:
-    # Massages text so that source text can be reliably compared to transcribed text
+    # Massages text so that source text and transcribed text can be compared
     s = s.lower().strip()
     # First replace fancy apost with normal apost
     s = s.replace("’", "'") #
     # Replace all non-alpha-numerics with space, except for apost that is inside a word
     s = re.sub(r"[^a-zA-Z0-9'’]|(?<![a-zA-Z])['’]|['’](?![a-zA-Z])", ' ', s)
+    # Strip white space from the ends
     s = re.sub(r' +', ' ', s)
     s = s.strip(' ')
     return s
@@ -331,3 +332,39 @@ def clear_input_buffer() -> None:
         import termios  # Only exists if linux/macos
         def clear_input_buffer():
             termios.tcflush(sys.stdin, termios.TCIOFLUSH) # type: ignore
+
+def get_string_len_printable(string: str) -> int:
+    """
+    Returns the length of the string, filtering out non-printable characters like ANSI codes.
+    """
+    # ANSI escape code pattern: \x1b\[[0-?]*[ -/]*[@-~]
+    # This pattern covers most common ANSI SGR (Select Graphic Rendition) codes.
+    # It matches:
+    # \x1b or \033 (ESC)
+    # \[ (opening bracket)
+    # [0-?]* (zero or more characters in the range 0x30-0x3F, typically numbers and semicolons)
+    # [ -/]* (zero or more intermediate characters in the range 0x20-0x2F)
+    # [@-~] (final character in the range 0x40-0x7E, which indicates the end of the sequence)
+    ansi_escape_pattern = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+
+    # Remove ANSI escape codes
+    clean_string = ansi_escape_pattern.sub('', string)
+
+    return len(clean_string)
+
+
+def is_long_path_enabled():
+
+    if platform.system() != "Windows":
+        return True
+
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+            return bool(value)
+    except FileNotFoundError:
+        return False  # Key doesn't exist (older Windows)
+    except Exception as e:
+        print(f"Error checking registry: {e}")
+        return False

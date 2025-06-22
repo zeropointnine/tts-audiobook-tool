@@ -1,15 +1,14 @@
 import os
 from pathlib import Path
 from re import Match
-from typing import cast
 
 from tts_audiobook_tool.hash_file_util import HashFileUtil
-from tts_audiobook_tool.state import State
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
 class ProjectDirUtil:
-    """ Methods that get or infer state from the contents of the project directory """
+    """ Functions for getting audio segment files in the project directory """
 
     @staticmethod
     def check_dir_valid(project_dir: str) -> str:
@@ -31,18 +30,18 @@ class ProjectDirUtil:
         return f"{project_dir} does not appear to be a project directory"
 
     @staticmethod
-    def has_generated_any(state: State) -> bool:
-        dic = ProjectDirUtil.get_indices_and_paths(state)
+    def has_generated_any(project: Project) -> bool:
+        dic = ProjectDirUtil.get_items(project)
         return bool(dic)
 
     @staticmethod
-    def num_generated(state: State) -> int:
-        dic = ProjectDirUtil.get_indices_and_paths(state)
+    def num_generated(project: Project) -> int:
+        dic = ProjectDirUtil.get_items(project)
         return len( list( dic.keys() ) )
 
     @staticmethod
-    def num_generated_in_set(state: State, set_: set[int]) -> int:
-        dic = ProjectDirUtil.get_indices_and_paths(state)
+    def count_num_generated_in(project: Project, set_: set[int]) -> int:
+        dic = ProjectDirUtil.get_items(project)
         count = 0
         for key in dic.keys():
             if key in set_:
@@ -50,21 +49,36 @@ class ProjectDirUtil:
         return count
 
     @staticmethod
-    def get_indices_and_paths(state: State) -> dict[int, str]:
+    def get_items_with_tag(project: Project, tag: str) -> dict[int, str]:
+        """
+        "tag"
+            is a so-called "bracket tag"
+            (app nomenclature for strings like "[fail]" inserted in filename)
+        """
+        tag = tag.lstrip("[")
+        tag = tag.rstrip("]")
+        tag = f"[{tag}]"
+
+        items = ProjectDirUtil.get_items(project)
+        result = { index: path for index, path in items.items() if tag in path }
+        return result
+
+    @staticmethod
+    def get_items(project: Project) -> dict[int, str]:
         """
         Returns dict (key = text segment index, value = file path)
         of valid project audio files found in the project directory.
         """
 
-        if not state.prefs.project_dir:
+        if not project.dir_path:
             return {}
 
-        audio_segments_path = os.path.join(state.prefs.project_dir, AUDIO_SEGMENTS_SUBDIR)
+        audio_segments_path = os.path.join(project.dir_path, AUDIO_SEGMENTS_SUBDIR)
         os.makedirs(Path(audio_segments_path), exist_ok=True)
         file_paths = ProjectDirUtil._get_all_paths(audio_segments_path)
 
         result = dict[int, str]()
-        text_segments = state.project.text_segments
+        text_segments = project.text_segments
 
         for path in file_paths:
 
@@ -84,8 +98,8 @@ class ProjectDirUtil:
                 continue
 
             if index in result:
-                preexisting_file_name = result[index]
-                if "[pass]" in preexisting_file_name:
+                # in case of duplicate
+                if "[fail]" in path:
                     continue
 
             result[index] = str(path)

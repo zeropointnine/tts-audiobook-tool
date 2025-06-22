@@ -20,7 +20,7 @@ class State:
         if not self.prefs.project_dir:
             self.project = Project("")
         else:
-            result = Project.load(self.prefs.project_dir)
+            result = Project.load_using_dir_path(self.prefs.project_dir)
             if isinstance(result, str):
                 printt(result, "error")
                 self.prefs.project_dir = ""
@@ -81,7 +81,7 @@ class State:
 
     def set_existing_project(self, path: str) -> None:
         self.prefs.project_dir = path
-        result = Project.load(path)
+        result = Project.load_using_dir_path(path)
         if isinstance(result, str):
             printt(result, "error")
             self.project = Project("")

@@ -11,8 +11,6 @@ import torch
 from tts_audiobook_tool.l import L
 
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
-from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 class AppUtil:

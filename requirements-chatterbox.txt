@@ -11,7 +11,6 @@ decorator==5.2.1
 diffusers==0.29.0
 distlib==0.3.9
 einops==0.8.1
-ffmpeg-python==0.2.0
 filelock==3.18.0
 fsspec==2025.5.1
 future==1.0.0

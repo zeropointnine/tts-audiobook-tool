@@ -43,6 +43,15 @@
     --color-segment-hover: #8888ff49;
 }
 
+[data-segment-colors="red"] {
+    --color-segment-highlight: #ffbbff;
+    --color-segment-hover: #ffbbff60;
+}
+[data-segment-colors="red"][data-theme="dark"] {
+    --color-segment-highlight: #603060;
+    --color-segment-hover: #60306050;
+}
+
 [data-text-size="medium"] {
     --text-size: 24px;
 }
@@ -158,11 +167,11 @@ body, html {
     font-size: 16px;
     font-family: sans-serif;
     font-weight: normal;
+    font-style: italic;
     color: var(--color-text-dim);
 }
 #loadLastId {
     margin-top:4px;
-    font-style: italic;
 }
 
 /* --------------------------------------- */
@@ -366,20 +375,26 @@ span.highlight {
 }
 
 #helpHolder thead th {
-    padding-bottom: 12px;
+    padding-bottom: 16px;
 }
-#helpHolder tbody tr td {
+#helpHolder td {
     text-align: left;
+    padding-bottom: 8px;
 }
-#helpHolder tbody tr td:first-child {
+#helpHolder td:first-child {
     text-align: left;
-    padding-right: 24px;
+    padding-right: 32px;
+}
+#helpHolder td.help2 {
+    padding-top:16px;
+    text-align: center;
 }
 
 #githubCorner {
     position:fixed;
     right: 0;
     top: 0;
+    opacity:0.66;
 }
 #githubCorner svg {
     fill: var(--color-text-dim);

@@ -32,6 +32,7 @@ window.app = function() {
     let spans = []; // cached text segment spans array
 
     let isStarted = false;
+    let hasPlayedOnce = false; // has audio playback happened at least once
     let isPlayerHover = false;
     let isPlayerFocused = false;
 
@@ -82,9 +83,9 @@ window.app = function() {
         });
 
         player.addEventListener('play', function() {
+            hasPlayedOnce = true;
             root.setAttribute("data-player-status", "play");
-            // ensures scroll to current segment
-            currentIndex = -1;
+            currentIndex = -1; // ensures scroll to current segment
         });
 
         player.addEventListener('pause', function() {
@@ -119,7 +120,7 @@ window.app = function() {
 
         document.addEventListener("keydown", onKeyDown);
 
-        // When the queryparam is "url", run the function "loadFlacOrMp4" using the value.
+        // Load file from queryparam "url"
         const urlParams = new URLSearchParams(window.location.search);
         const url = urlParams.get('url');
         if (url) {
@@ -189,7 +190,7 @@ window.app = function() {
         // Segment colors
         segmentColorsButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            cycleRootAttribute("data-segment-colors", ["blue"])
+            cycleRootAttribute("data-segment-colors", ["blue", "red"])
             updateUiPanelButtons()
         });
 
@@ -208,10 +209,10 @@ window.app = function() {
 
     async function loadFlacOrMp4(fileOrUrl) {
         clear();
-
         result = await loadAppMetadata(fileOrUrl);
-        if (!result) {
-            alert("No tts-audiobook-tool metadata found");
+        if (!result || typeof result === 'string') {
+            errorMessage = result || "No tts-audiobook-tool metadata found"
+            alert(errorMessage);
             return;
         }
         start(fileOrUrl, result["text_segments"]);
@@ -242,26 +243,23 @@ window.app = function() {
             fileId = file.name;
         }
 
-        localStorage.setItem("last_file_id", fileId);
-
-        isDemoUrl = url && (url.includes(DEMO_URL_A) || url.includes(DEMO_URL_B));
-        if (!isDemoUrl) {
-            document.getElementById("githubCorner").style.display = "none";
-        }
-
         timedTextSegments = pTimedTextSegments
 
+        localStorage.setItem("last_file_id", fileId);
 
+        document.getElementById("githubCorner").style.display = "none";
         loadLastHolder.style.display = "none";
         helpHolder.style.display = "none";
-
         fileNameDiv.style.display = "block"
         fileNameDiv.textContent = file ? file.name : url
 
         populateText()
 
         playerHolder.style.display = "block";
-        showPlayerAndFade();
+        // Don't auto-hide player on first audio load
+        if (hasPlayedOnce) {
+            showPlayerAndFade();
+        }
 
         player.src = file ? URL.createObjectURL(file) : url
         playerPlay();

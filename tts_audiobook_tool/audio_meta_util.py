@@ -5,6 +5,7 @@ import mutagen.mp4
 from mutagen.mp4 import MP4, MP4Tags, MP4FreeForm, AtomDataType
 from mutagen.flac import FLAC, FLACNoHeaderError, FLACVorbisError
 
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 
 class AudioMetaUtil:
@@ -132,7 +133,7 @@ class AudioMetaUtil:
                 return flac.info.length
             else:
                 return None
-        elif suffix in [".mp4", ".m4a", ".m4b"]:
+        elif suffix in AAC_SUFFIXES:
             try:
                 mp4 = MP4(path)
             except Exception as e:

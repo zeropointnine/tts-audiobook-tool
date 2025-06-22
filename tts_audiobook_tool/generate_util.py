@@ -2,60 +2,74 @@ import os
 import time
 import copy
 
-from tts_audiobook_tool.concat_submenu import ConcatSubmenu
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.shared import Shared
+from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.state import State
+from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_dir_util import *
-from tts_audiobook_tool.validate_util import ValidateItem, ValidateResult, ValidateUtil
+from tts_audiobook_tool.validate_util import ValidateActionType, ValidateUtil
 
 class GenerateUtil:
 
     @staticmethod
-    def generate_validate_fix_items(
-            state: State,
-            indices: list[int],
-            mode: str
-    ) -> None:
+    def generate_items(
+            project: Project,
+            indices_to_generate: set[int],
+            items_to_regenerate: dict[int, str],
+            play_on_save: bool
+    ) -> bool:
         """
-        mode:
-            "generate"
-            "generate-and-fix"
-            "validate-and-fix": presupposes pre-existing files, skips the first of two potential generate passes
+        indices_to_generate and items_to_regenerate are mutually exclusive
+
+        "Regenerate" here simply means that the currently existing, failed file
+        for the given index will be deleted first.
+
+        Returns True if ended because interrupted
         """
 
-        if not mode in ["generate", "generate-and-fix", "validate-and-fix"]:
-            raise ValueError("Bad value for mode")
+        # not great
+        SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, AUDIO_SEGMENTS_SUBDIR)
 
-        index_to_path = ProjectDirUtil.get_indices_and_paths(state)
+        if indices_to_generate:
+            is_regenerate = False
+            # Convert list to dict for compatibility
+            items = {}
+            for index in indices_to_generate:
+                items[index] = ""
+        else:
+            is_regenerate = True
+            items = items_to_regenerate
 
         did_interrupt = False
         start_time = time.time()
         count = 0
         Shared.mode = "generating"
 
-        for i in indices:
+        for i, path in sorted(items.items()):
 
             printt()
-            print_item_heading(state.project.text_segments[i].text, i, count, len(indices))
+            print_item_heading(
+                is_regenerate, project.text_segments[i].text, i, count, len(items)
+            )
 
-            if mode == "generate":
-                _ = GenerateUtil.generate_and_make_flac(index=i, state=state, is_retry=False)
+            if is_regenerate and path and os.path.exists(path):
+                try:
+                    Path(path).unlink()
+                except:
+                    ...
 
-            elif mode == "generate-and-fix":
-                GenerateUtil.generate_validate_fix_item(
-                    index=i, state=state, whisper_model=Shared.get_whisper())
-
-            else: # == "validate-and-fix"
-                flac_path = index_to_path[i]
-                GenerateUtil.generate_validate_fix_item(
-                        index=i, state=state, whisper_model=Shared.get_whisper(), skip_generate_file_path=flac_path)
+            GenerateUtil.generate_item_full(
+                index=i,
+                project=project,
+                whisper_model=Shared.get_whisper(),
+                play_on_save=play_on_save
+            )
 
             count += 1
             if Shared.stop_flag:
@@ -64,180 +78,175 @@ class GenerateUtil:
                 did_interrupt = True
                 break
 
+        Shared.clear_whisper()
+
         printt()
         printt(f"Elapsed: {time_string(time.time() - start_time)}")
         printt()
 
-        Shared.clear_whisper()
-
-        if did_interrupt:
-            ask("Press enter: \a")
-        else:
-            hotkey = ask_hotkey(f"Press enter or {make_hotkey_string("C")} to concatenate files now: ")
-            if hotkey == "c":
-                ConcatSubmenu.submenu(state)
+        return did_interrupt
 
     @staticmethod
-    def generate_validate_fix_item(
+    def generate_item_full(
         index: int,
-        state: State,
+        project: Project,
         whisper_model,
-        skip_generate_file_path: str=""
+        play_on_save: bool
     ) -> None:
         """
-        skip_generate_file_path
-            is used to "validate pre-existing item and fix" (as opposed to "generate, validate and fix")
+        Full workflow for generating an item
+        (ie, generate audio, trim silence, validate, fix, retry, giveup)
         """
 
         pass_num = 1
 
         while True:
 
-            # Make audio file
-            if not skip_generate_file_path:
-                file_path = GenerateUtil.generate_and_make_flac(index=index, state=state, is_retry=(pass_num > 1))
-                if not file_path:
-                    # Unexpected error making audio file
-                    break
-            else:
-                # Validate-and-then-fix
-                file_path = skip_generate_file_path
-                skip_generate_file_path = ""
+            # Generate
+            sound = GenerateUtil.generate(index, project, True)
+            if not sound:
+                return # Unexpected error
 
-            # Validate audio file
-            item = ValidateItem(index, file_path, state.project.text_segments[index].text)
-            should_fix_delete = (pass_num == 1)
-            result, message = ValidateUtil.validate_fix_item(item, should_fix_delete, whisper_model)
+            # Post process
+            sound = GenerateUtil.post_process(sound)
+
+            # Transcribe and potentially take 'validation action'
+            whisper_data = SoundUtil.transcribe(whisper_model, sound)
+            if isinstance(whisper_data, str):
+                printt(f"{COL_ERROR}Unexpected whisper result, skipping item: {whisper_data}")
+                return
+
+            save_path = HashFileUtil.make_segment_file_path(index, project)
+            validate_action = ValidateUtil.validate_and_save(
+                sound,
+                project.text_segments[index].text,
+                whisper_data,
+                save_path,
+                (pass_num == 2),
+                play_on_save=play_on_save
+            )
 
             if pass_num == 1:
 
-                match result:
-                    case ValidateResult.VALIDATED_AND_TAGGED:
-                        printt("Validated")
-                        break
-                    case ValidateResult.FAILED_AND_CORRECTED:
-                        printt(message)
-                        printt(f"{COL_OK}Corrected")
-                        break
-                    case ValidateResult.FAILED_AND_DELETED:
-                        printt(message)
+                match validate_action.action:
+                    case ValidateActionType.SAVED:
+                        printt(f"Saved {save_path}")
+                        return
+                    case ValidateActionType.TRIMMED_AND_SAVED:
+                        printt(validate_action.message)
+                        printt(f"Saved {save_path}")
+                        return
+                    case ValidateActionType.INVALID_DIDNT_SAVE:
+                        printt(validate_action.message)
                         printt(f"{COL_ERROR}Will regenerate")
                         pass_num = 2
                         continue
+                    case ValidateActionType.ACTION_FAILED:
+                        printt(validate_action.message)
+                        printt(f"{COL_ERROR}Unexpected error")
+                        return
                     case _:
                         L.e("Shouldn't get here")
-                        break
+                        return
 
             else: # pass_num == 2:
 
-                match result:
-                    case ValidateResult.VALIDATED_AND_TAGGED:
-                        printt(f"{COL_OK}")
-                        printt("Validated on second attempt")
-                        break
-                    case ValidateResult.FAILED_AND_CORRECTED:
-                        printt(message)
-                        printt(f"{COL_OK}Corrected on second attempt")
-                        break
-                    case ValidateResult.FAILED_ONLY:
-                        printt(message)
-                        printt(f"{COL_ERROR}Failed again on second attempt, continuing")
-                        break
+                match validate_action.action:
+                    case ValidateActionType.SAVED:
+                        printt(f"Saved {save_path}")
+                        return
+                    case ValidateActionType.TRIMMED_AND_SAVED:
+                        printt(validate_action.message)
+                        printt(f"Saved {save_path}")
+                        return
+                    case ValidateActionType.INVALID_SAVED_ANYWAY:
+                        printt(validate_action.message)
+                        printt(f"{COL_ERROR}Failed again on second gen, keeping anyway")
+                        printt(f"Saved {save_path}")
+                        return
+                    case ValidateActionType.ACTION_FAILED:
+                        printt(validate_action.message)
+                        printt(f"{COL_ERROR}Unexpected error")
+                        return
                     case _:
                         L.e("Shouldn't get here")
                         break
 
-        # ...
+    @staticmethod
+    def generate_post_process_save(
+        index: int,
+        project: Project
+    ) -> tuple[str, str]:
+        """
+        Returns saved file path, error string
+        """
+
+        sound = GenerateUtil.generate(index, project)
+        if not sound:
+            return "", "Couldn't generate audio clip"
+
+        sound = GenerateUtil.post_process(sound)
+
+        flac_path = HashFileUtil.make_segment_file_path(index, project)
+        err = SoundFileUtil.save_flac(flac_path, sound)
+        if err:
+            return "", err
+        else:
+            return flac_path, err
 
     @staticmethod
-    def generate_and_make_flac(
+    def post_process(sound: Sound) -> Sound:
+
+        # Trim all silence from ends of audio clip
+        sound = SilenceUtil.trim_silence(sound)
+        SoundFileUtil.debug_save("after trim silence", sound)
+
+        return sound
+
+
+    @staticmethod
+    def generate(
         index: int,
-        state: State,
-        is_retry: bool=False
-    ) -> str:
+        project: Project,
+        print_info: bool=True
+    ) -> Sound | None:
         """
-        Generates temp wav file, converts to flac, deletes temp wav
-        Prints info
-        Returns file path on success, else empty string
-
-        # TODO: should return (path, error), mutually exclusive
+        Returns model-generated normalized sound data, in model's native samplerate.
         """
-
-        if not state.project.has_voice:
-            return ""
-
-        temp_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
-        flac_path = HashFileUtil.make_segment_file_path(index, state)
-        text_segment = state.project.text_segments[index]
 
         start_time = time.time()
+        text_segment = project.text_segments[index]
 
         if Shared.is_oute():
-            is_success = GenerateUtil.generate_wav_file_oute(
-                temp_wav_path,
+            sound = GenerateUtil.generate_oute(
                 text_segment.text,
-                state.project.oute_voice_json,
-                state.project.oute_temperature)
+                project.oute_voice_json,
+                project.oute_temperature)
         else:
-            is_success = GenerateUtil.generate_wav_file_chatterbox(
-                temp_wav_path,
+            sound = GenerateUtil.generate_chatterbox(
                 text_segment.text,
-                state.project)
+                project)
 
-        if not is_success:
-            delete_temp_file(temp_wav_path)
-            return ""
+        if not sound:
+            return None
 
-        # Print time info
-        elapsed = time.time() - start_time
-        audio_seconds = estimated_wav_seconds(temp_wav_path)
-        s = f"Audio duration: {COL_ACCENT}{audio_seconds:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
-        if elapsed > 0:
-            multi = audio_seconds / elapsed
+        if print_info:
+            elapsed = time.time() - start_time or 1.0
+            s = f"Audio duration: {COL_ACCENT}{sound.duration:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
+            multi = sound.duration / elapsed
             s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
-        printt(s)
+            printt(s)
 
-        # Normalize
-        if state.prefs.should_normalize:
-            printt("Performing loudness normalization")
-            temp_normalized_wav_path = os.path.join(state.prefs.project_dir, make_random_hex_string() + ".wav")
-            err = LoudnessNormalizationUtil.normalize(temp_wav_path, temp_normalized_wav_path)
-            if err:
-                delete_temp_file(temp_wav_path)
-                delete_temp_file(temp_normalized_wav_path)
-                return ""
-        else:
-            temp_normalized_wav_path = ""
+        SoundFileUtil.debug_save("after gen", sound)
 
-        src_wav_path = temp_normalized_wav_path if temp_normalized_wav_path else temp_wav_path
-        is_success = SoundFileUtil.encode_to_flac(src_wav_path, flac_path)
-
-        if not is_success:
-            delete_temp_file(temp_wav_path)
-            if temp_normalized_wav_path:
-                delete_temp_file(temp_normalized_wav_path)
-            return ""
-
-        if not is_retry:
-            printt(f"Saved: {flac_path}")
-
-        delete_temp_file(temp_wav_path)
-        if temp_normalized_wav_path:
-            delete_temp_file(temp_normalized_wav_path)
-
-        # TODO: this should get triggered _after_ regenerate/fix, but can't rly unless much refactor ugh
-        if state.prefs.play_on_generate:
-            SoundFileUtil.play_flac_async(flac_path)
-
-        return flac_path
+        return sound
 
     @staticmethod
-    def generate_wav_file_oute(
-        dest_file_path: str,
+    def generate_oute(
         prompt: str,
         voice: dict,
         temperature: float = -1
-    ) -> bool:
+    ) -> Sound | None:
 
         oute = Shared.get_oute()
 
@@ -257,20 +266,23 @@ class GenerateUtil:
 
         try:
             output = oute.generate(config=gen_config)
-            output.save(dest_file_path)
+            audio = output.audio.cpu().clone().squeeze().numpy()
+            return Sound(audio, output.sr)
+
         except Exception as e:
-            printt(f"Oute model error: {e}\a", "error")
-            return False
-        return True
+            printt(f"{COL_ERROR}Oute model error: {e}")
+            return None
 
     @staticmethod
-    def generate_wav_file_chatterbox(
-        dest_file_path: str,
+    def generate_chatterbox(
         prompt: str,
         project: Project
-    ) -> bool:
+    ) -> Sound | None:
+        """
+        Returns normalized sound data and sample rate
+        Returns None on fail
+        """
 
-        import torchaudio as ta
         chatterbox = Shared.get_chatterbox()
 
         d = {}
@@ -286,18 +298,21 @@ class GenerateUtil:
             d["temperature"] = project.chatterbox_temperature
 
         try:
-            wav = chatterbox.generate(prompt, **d)
-            ta.save(dest_file_path, wav, chatterbox.sr)
+            data = chatterbox.generate(prompt, **d)
+            data = data.numpy().squeeze()
+            data = SoundUtil.normalize(data, headroom_db=1.0)
+            return Sound(data, chatterbox.sr)
+
         except Exception as e:
-            printt(f"Chatterbox model error: {e}\a", "error")
-            return False
-        return True
+            print(f"{COL_ERROR}Chatterbox model error: {e}\a", "error")
+            return None
 
 # ---
 
-def print_item_heading(text: str, index: int, count: int, total: int) -> None:
+def print_item_heading(is_regenerate: bool, text: str, index: int, count: int, total: int) -> None:
+    verb = "Regenerating" if is_regenerate else "Generate"
     s  = f"{COL_ACCENT}[{COL_DEFAULT}{count+1}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
-    s += f"{COL_ACCENT}Generating audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
+    s += f"{COL_ACCENT}{verb} audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
     printt(s)
     printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
     printt()
