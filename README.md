@@ -4,7 +4,7 @@ This is an audiobook creation tool, designed to support multiple text-to-speech 
 
 The app attempts to detect and correct inference errors using speech-to-text, regulates the pacing of pauses between sentences/sound segments, and applies loudness normalization to the generated audio. These are important quality control features due to the uh *variable* nature of generative text-to-speech models.
 
-**Web-based player:**
+### Web-based player:
 
 The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (think Kindle+Audible). You simply open `browser_player/index.html` in the browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player).
 
@@ -12,11 +12,11 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 [Online example 2 (same text, using Chatterbox)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.m4a)
 
-**Bonus speech-to-text feature:**
+### Bonus speech-to-text feature:
 
 The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be opened using the custom player/reader. Select `Options` > `Add app metadata to a pre-existing audiobook`, and point it at your source audiobook file and corresponding book text. This feature is experimental.
 
-**How to create an audiobook (quick summary):**
+### How to create an audiobook (quick summary):
 
 1. Assign a working project directory.
 2. Select a short reference audio clip for the voice clone.
