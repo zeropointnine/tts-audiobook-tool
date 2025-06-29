@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.util import *
 
 
@@ -29,7 +28,7 @@ class ChapterInfo:
 
         result = []
 
-        all_segment_index_to_path = ProjectDirUtil.get_items(project)
+        all_sound_segments = project.sound_segments.sound_segments
 
         segment_index_ranges = make_section_ranges(project.section_dividers, len(project.text_segments))
 
@@ -41,7 +40,7 @@ class ChapterInfo:
             segment_index_to_path: dict[int, str] = {}
 
             for segment_index in range(segment_index_start, segment_index_end + 1):
-                segment_file_path = all_segment_index_to_path.get(segment_index, "")
+                segment_file_path = all_sound_segments.get(segment_index, "")
                 if segment_file_path:
                     segment_index_to_path[segment_index] = segment_file_path
 

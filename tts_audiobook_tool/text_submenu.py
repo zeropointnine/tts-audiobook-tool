@@ -2,7 +2,6 @@ import sys
 
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.util import *
@@ -23,7 +22,7 @@ class TextSubmenu:
             print_project_text(state)
             ask("Press enter: ")
         elif hotkey == "2":
-            num_files = ProjectDirUtil.num_generated(state.project)
+            num_files = state.project.sound_segments.num_generated()
             if num_files == 0:
                 TextSubmenu.set_text_submenu(state, "Replace text:")
             else:
@@ -120,8 +119,7 @@ class TextSubmenu:
 
 def print_project_text(state: State) -> None:
 
-    index_to_path = ProjectDirUtil.get_items(state.project)
-    indices = index_to_path.keys()
+    indices = state.project.sound_segments.sound_segments.keys()
     texts = [item.text for item in state.project.text_segments]
 
     print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
@@ -134,7 +132,6 @@ def print_project_text(state: State) -> None:
         printt(f"{s1} {s2}  {text.strip()}")
     printt()
 
-    indices = set( list( ProjectDirUtil.get_items(state.project).keys() ) )
-    s = ParseUtil.make_one_indexed_ranges_string(indices, len(texts))
+    s = ParseUtil.make_one_indexed_ranges_string(set(indices), len(texts))
     printt(f"Generated segments: {s}")
     printt()

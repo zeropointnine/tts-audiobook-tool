@@ -1,5 +1,5 @@
 from pathlib import Path
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 
@@ -49,7 +49,7 @@ class ProjectSubmenu:
         dir = ask_path()
         if not dir:
             return
-        err = ProjectDirUtil.check_dir_valid(dir)
+        err = ProjectSoundSegments.check_dir_valid(dir)
         if err:
             printt(err, "error")
             return

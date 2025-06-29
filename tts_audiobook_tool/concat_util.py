@@ -8,7 +8,7 @@ from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
+from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -38,7 +38,7 @@ class ConcatUtil:
         # but uses empty strings for file paths outside the range of the chapter
 
         ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
-        segment_index_to_path = ProjectDirUtil.get_items(state.project)
+        sound_segments = state.project.sound_segments.sound_segments
 
         chapter_index_start, chapter_index_end = ranges[chapter_index]
         num_missing = 0
@@ -50,12 +50,12 @@ class ConcatUtil:
                 # Out of range
                 segments_and_paths.append((segment, ""))
                 continue
-            if not segment_index in segment_index_to_path:
+            if not segment_index in sound_segments:
                 # Audio segment file not yet generated
                 segments_and_paths.append((segment, ""))
                 num_missing += 1
                 continue
-            file_path = segment_index_to_path[segment_index]
+            file_path = sound_segments[segment_index]
             segments_and_paths.append((segment, file_path))
 
         # Filename
@@ -65,7 +65,7 @@ class ConcatUtil:
         if num_missing > 0:
             file_name += f"[{num_missing} missing]" + " " # num segments missing
         extant_paths = [item[1] for item in segments_and_paths if item[1]] # voice label
-        common_voice_label = ProjectDirUtil.get_common_voice_label(extant_paths)
+        common_voice_label = ProjectSoundSegments.get_common_voice_label(extant_paths)
         if common_voice_label:
             file_name += f"[{state.project.get_voice_label()}]"
         file_name = file_name.strip() + ".abr" + (".m4a" if to_aac_not_flac else ".flac")

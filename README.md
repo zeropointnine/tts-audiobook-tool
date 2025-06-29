@@ -14,7 +14,7 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 ### Bonus speech-to-text feature:
 
-The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be opened using the custom player/reader. Select `Options` > `Add app metadata to a pre-existing audiobook`, and point it at your source audiobook file and corresponding book text. This feature is experimental.
+The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be opened and used with the custom player/reader. Select `Options` > `Add app metadata to a pre-existing audiobook`, and point it at your source audiobook file and corresponding book text. This feature is experimental.
 
 ### How to create an audiobook (quick summary):
 
@@ -109,7 +109,7 @@ When prepping reference audio for doing the voice clone, it can be worthwhile to
 
 With Oute TTS, I get inference speeds of 80-85% of realtime using `Backend.EXL2` with a GeForce 3080Ti. And about 20% with an M1 MacBook Pro (using llama.cpp as the configured backend).
 
-Chatterbox is considerably faster, about 130% of realtime using a GeForce 3080Ti.
+Chatterbox is considerably faster, about 130% of realtime for me using a GeForce 3080Ti, 25-30% of realtime on M1 Macbook Pro.
 
 
 # Updates

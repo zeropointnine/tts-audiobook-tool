@@ -1,5 +1,4 @@
 from tts_audiobook_tool.generate_submenu import GenerateSubmenu
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt_flow import SttFlow
 from tts_audiobook_tool.transcode_util import TranscodeUtil
@@ -12,7 +11,7 @@ class OptionsSubmenu:
 
         while True:
 
-            failed_items = ProjectDirUtil.get_items_with_tag(state.project, "fail")
+            failed_items = state.project.sound_segments.get_sound_segments_with_tag("fail")
 
             print_heading("Options, tools:")
             printt(f"{make_hotkey_string("1")} Regenerate voice lines tagged as having potential errors {COL_DIM}(currently: {COL_ACCENT}{len(failed_items)}{COL_DIM} file/s)")

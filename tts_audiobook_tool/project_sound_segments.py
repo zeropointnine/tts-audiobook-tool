@@ -7,49 +7,38 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
-class ProjectDirUtil:
-    """ Functions for getting audio segment files in the project directory """
+class ProjectSoundSegments:
+    """
+    Catalogs the project's list of "sound segment" files
+    """
 
-    @staticmethod
-    def check_dir_valid(project_dir: str) -> str:
-        """ Returns error feedback text or empty string if success """
+    def __init__(self, project: Project):
+        self.project = project
+        self._sound_segments: dict[int, str] = {}
+        self._dirty = True
 
-        if not os.path.exists(project_dir):
-            return f"Doesn't exist: {project_dir}"
+    def set_dirty(self) -> None:
+        self._dirty = True
 
-        items = os.listdir(project_dir)
+    @property
+    def sound_segments(self) -> dict[int, str]:
+        if self._dirty   or True: # TODO implement invalidation
+            self._sound_segments = ProjectSoundSegments.get_project_sound_segments(self.project)
+            self._dirty = False
+        return self._sound_segments
 
-        # Empty directory is considered valid
-        if not items:
-            return ""
+    def num_generated(self) -> int:
+        return len( self.sound_segments.keys() )
 
-        # Directory with a voice and/or text json file considered valid
-        if PROJECT_JSON_FILE_NAME in items:
-            return ""
-
-        return f"{project_dir} does not appear to be a project directory"
-
-    @staticmethod
-    def has_generated_any(project: Project) -> bool:
-        dic = ProjectDirUtil.get_items(project)
-        return bool(dic)
-
-    @staticmethod
-    def num_generated(project: Project) -> int:
-        dic = ProjectDirUtil.get_items(project)
-        return len( list( dic.keys() ) )
-
-    @staticmethod
-    def count_num_generated_in(project: Project, set_: set[int]) -> int:
-        dic = ProjectDirUtil.get_items(project)
+    def count_num_generated_in(self, set_: set[int]) -> int:
+        dic = self.sound_segments
         count = 0
         for key in dic.keys():
             if key in set_:
                 count += 1
         return count
 
-    @staticmethod
-    def get_items_with_tag(project: Project, tag: str) -> dict[int, str]:
+    def get_sound_segments_with_tag(self, tag: str) -> dict[int, str]:
         """
         "tag"
             is a so-called "bracket tag"
@@ -59,15 +48,16 @@ class ProjectDirUtil:
         tag = tag.rstrip("]")
         tag = f"[{tag}]"
 
-        items = ProjectDirUtil.get_items(project)
-        result = { index: path for index, path in items.items() if tag in path }
+        result = { index: path for index, path in self._sound_segments.items() if tag in path }
         return result
 
+    # ---
+
     @staticmethod
-    def get_items(project: Project) -> dict[int, str]:
+    def get_project_sound_segments(project: Project) -> dict[int, str]:
         """
         Returns dict (key = text segment index, value = file path)
-        of valid project audio files found in the project directory.
+        of valid project audio files found in project's directory.
         """
 
         if not project.dir_path:
@@ -75,7 +65,7 @@ class ProjectDirUtil:
 
         audio_segments_path = os.path.join(project.dir_path, AUDIO_SEGMENTS_SUBDIR)
         os.makedirs(Path(audio_segments_path), exist_ok=True)
-        file_paths = ProjectDirUtil._get_all_paths(audio_segments_path)
+        file_paths = ProjectSoundSegments.get_all_sound_gen_paths_from_dir(audio_segments_path)
 
         result = dict[int, str]()
         text_segments = project.text_segments
@@ -84,7 +74,7 @@ class ProjectDirUtil:
 
             file_name = Path(path).name
 
-            parts = ProjectDirUtil.extract_parts_from_file_name(file_name)
+            parts = ProjectSoundSegments.extract_parts_from_file_name(file_name)
             if parts is None:
                 continue
 
@@ -105,6 +95,25 @@ class ProjectDirUtil:
             result[index] = str(path)
 
         return result
+
+    @staticmethod
+    def check_dir_valid(project_dir: str) -> str:
+        """ Returns error feedback text or empty string if is-valid """
+
+        if not os.path.exists(project_dir):
+            return f"Doesn't exist: {project_dir}"
+
+        items = os.listdir(project_dir)
+
+        # Empty directory is considered valid
+        if not items:
+            return ""
+
+        # Directory with a voice and/or text json file considered valid
+        if PROJECT_JSON_FILE_NAME in items:
+            return ""
+
+        return f"{project_dir} does not appear to be a project directory"
 
     @staticmethod
     def extract_parts_from_file_name(file_name: str) -> tuple[int, str, str] | None:
@@ -128,7 +137,7 @@ class ProjectDirUtil:
         result = ""
         for path in paths:
             stem = Path(path).stem
-            parts = ProjectDirUtil.extract_parts_from_file_name(stem)
+            parts = ProjectSoundSegments.extract_parts_from_file_name(stem)
             if not parts or not parts[2]:
                 return ""
             voice = parts[2]
@@ -139,10 +148,12 @@ class ProjectDirUtil:
         return result
 
     @staticmethod
-    def _get_all_paths(dir_path: str) -> list[str]:
+    def get_all_sound_gen_paths_from_dir(dir_path: str) -> list[str]:
         """
-        Returns the file paths of audio files in directory that have app's "audio segment" filename format.
-        Does not filter by content hash etc.
+        Returns the file paths of generated sound files in directory
+        that have app's "audio segment" filename format.
+
+        Ie, does not filter by content hash etc.
         """
         result = []
         for path in Path(dir_path).iterdir():
@@ -159,3 +170,4 @@ class ProjectDirUtil:
 
         result.sort()
         return result
+

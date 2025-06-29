@@ -33,6 +33,9 @@ class Project:
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
 
+        from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
+        self.sound_segments = ProjectSoundSegments(self)
+
     @staticmethod
     def load_using_dir_path(dir_path: str) -> Project | str:
         """

@@ -5,7 +5,6 @@ from tts_audiobook_tool.generate_submenu import GenerateSubmenu
 from tts_audiobook_tool.project_submenu import ProjectSubmenu
 from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.l import L # type: ignore
-from tts_audiobook_tool.project_dir_util import ProjectDirUtil
 from tts_audiobook_tool.text_submenu import TextSubmenu
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -39,8 +38,6 @@ class MainMenu:
         if MENU_CLEARS_SCREEN:
             os.system('cls' if os.name == 'nt' else 'clear')
 
-        total_segments_generated = ProjectDirUtil.num_generated(state.project)
-
         # Title
         model_name = "Oute TTS" if Shared.is_oute() else "Chatterbox TTS"
         s = f"{COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"
@@ -50,7 +47,7 @@ class MainMenu:
         if did_reset:
             printt(f"{COL_ERROR}Directory {state.prefs.project_dir} not found.\nCleared project settings.\n")
 
-        num_audio_files = ProjectDirUtil.num_generated(state.project)
+        num_generated = state.project.sound_segments.num_generated()
 
         # Project
         s = f"{make_hotkey_string("P")} Project directory "
@@ -86,13 +83,13 @@ class MainMenu:
             elif not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set text)"
             else:
-                s2 = f" {COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
+                s2 = f" {COL_DIM}({COL_ACCENT}{num_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
             printt(s + s2)
 
         # Concat
         if state.prefs.project_dir:
             s = f"{make_hotkey_string("C")} Create audiobook file/s"
-            if num_audio_files == 0:
+            if num_generated == 0:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
 
@@ -108,7 +105,7 @@ class MainMenu:
     @staticmethod
     def _handle_menu_hotkey(hotkey: str, state: State) -> None:
 
-        num_audio_files = ProjectDirUtil.num_generated(state.project)
+        num_generated = state.project.sound_segments.num_generated()
 
         match hotkey:
             case "p":
@@ -130,7 +127,7 @@ class MainMenu:
                 if state.project.can_generate_audio:
                     GenerateSubmenu.generate_submenu(state)
             case "c":
-                if not state.prefs.project_dir or num_audio_files == 0:
+                if not state.prefs.project_dir or num_generated == 0:
                     return
                 ConcatSubmenu.submenu(state)
             case "o":

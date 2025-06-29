@@ -14,7 +14,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.project_dir_util import *
+from tts_audiobook_tool.project_sound_segments import *
 from tts_audiobook_tool.validate_util import ValidateActionType, ValidateUtil
 
 class GenerateUtil:
