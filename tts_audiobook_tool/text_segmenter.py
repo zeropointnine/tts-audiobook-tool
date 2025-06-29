@@ -61,17 +61,13 @@ class TextSegmenter:
 # ---
 
 def merge_short_segments_all(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
-
     result = []
-
     # Merge only within paragraphs
-    # TODO Reconsider that. Chatterbox (and probably oute) fails _a lot_ on one-word gens.
+    # TODO Reconsider that. Chatterbox fails _a lot_ on one-word gens. Oute too IIRC.
     paragraphs = make_paragraph_lists(segments)
-
     for paragraph in paragraphs:
         items = merge_short_segments(paragraph, max_words)
         result.extend(items)
-
     return result
 
 def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
@@ -183,40 +179,58 @@ def segment_quote_text(text: str, segmenter) -> list[str]:
     segments[-1] = segments[-1] + after
     return segments
 
+def starts_and_ends_with_quote(s: str) -> bool:
+    start, _, end = split_string_parts(s)
+    return has_quote_char(start) and has_quote_char(end)
+
 def split_string_parts(text: str) -> tuple[str, str, str]:
     """
     Splits a string into three parts:
     - before: Leading whitespace + first non-whitespace character
-    - content: Everything between before and end
+    - content: Everything between before and after
     - after: Last non-whitespace character + trailing whitespace
+
+    If there is only one non-whitespace character,
+    it should be assigned to "before", and "content" should be empty.
+
+    If there are only two non-whitespace characters,
+    the first character should be assigned to "before",
+    the second character should be assigned to "after",
+    and "content" should be empty.
+
     Returns:
-        Tuple of (before, content, end)
+        Tuple of (before, content, after)
     """
     if not text:
         return ('', '', '')
 
-    # Get leading whitespace
-    leading_ws = text[:len(text) - len(text.lstrip())]
+    stripped_text = text.strip()
 
-    # Calculate 'before'
-    stripped_left = text.lstrip()
-    before = leading_ws + (stripped_left[0] if stripped_left else '')
+    # Handle strings that are empty or contain only whitespace.
+    # In this case, 'before' contains the whole string.
+    if not stripped_text:
+        return (text, '', '')
 
-    # Calculate 'end'
-    stripped_right = text.rstrip()
-    trailing_ws = text[len(stripped_right):] if stripped_right else text
-    after = (stripped_right[-1] if stripped_right else '') + trailing_ws
+    # Find the indices of the first and last non-whitespace characters.
+    # This is a more direct and robust way to find the split points.
+    first_char_index = text.find(stripped_text[0])
+    last_char_index = text.rfind(stripped_text[-1])
 
-    # Calculate 'content'
-    content_start = len(before)
-    content_end = -len(after) if after else None
-    content = text[content_start:content_end]
+    # If the first and last non-whitespace character is the same,
+    # it fully belongs to 'before' as per the docstring.
+    if first_char_index == last_char_index:
+        before = text[:first_char_index + 1]
+        content = ''
+        after = text[first_char_index + 1:]
+        return (before, content, after)
+
+    # For all other cases (2 or more non-whitespace characters),
+    # slice the string based on the found indices.
+    before = text[:first_char_index + 1]
+    content = text[first_char_index + 1:last_char_index]
+    after = text[last_char_index:]
 
     return (before, content, after)
-
-def starts_and_ends_with_quote(s: str) -> bool:
-    start, _, end = split_string_parts(s)
-    return has_quote_char(start) and has_quote_char(end)
 
 def has_quote_char(s: str) -> bool:
     for char in QUOTATION_CHARS:
