@@ -115,6 +115,31 @@ class SoundUtil:
         return normalized_arr
 
     @staticmethod
+    def is_data_invalid(sound: Sound) -> list[str]:
+        """ Returns list of 'reasons' why data is invalid """
+
+        if not isinstance(sound.data, np.ndarray):
+            return [f"Data is not a NumPy array, but {type(sound.data)}"]
+
+        # Check for empty data or incorrect dimensions
+        if sound.data.size == 0 or sound.data.ndim not in [1, 2]:
+            return [f"Invalid shape or empty data. Shape: {sound.data.shape}"]
+
+        reasons = []
+
+        if np.isnan(sound.data).any():
+            reasons.append("Data contains NaN value/s")
+
+        if np.isinf(sound.data).any():
+            reasons.append("Data contains Inf value/s")
+
+        if np.max(np.abs(sound.data)) > 1.0:
+            reasons.append(f"Value/s out of range, max value found: {np.max(np.abs(sound.data)):.2f}")
+
+        return reasons
+
+
+    @staticmethod
     def add_silence(sound: Sound, duration: float) -> Sound:
         """
         Returns error message on fail or empty string

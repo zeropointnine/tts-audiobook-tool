@@ -184,8 +184,6 @@ class TranscribeUtil:
         temp_sound = SoundUtil.trim(sound, value, None)
         offset = SilenceUtil.get_start_silence_end_time(temp_sound) or 0
 
-        print("xxx start time trim verify: value", value, "offset", offset, "equals", (value + offset))
-
         return value + offset
 
     @staticmethod

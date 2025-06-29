@@ -2,6 +2,8 @@ import os
 import time
 import copy
 
+import numpy as np
+
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.l import L
@@ -98,14 +100,22 @@ class GenerateUtil:
         (ie, generate audio, trim silence, validate, fix, retry, giveup)
         """
 
+        MAX_PASSES = 2
         pass_num = 1
 
         while True:
 
             # Generate
             sound = GenerateUtil.generate(index, project, True)
-            if not sound:
-                return # Unexpected error
+            if isinstance(sound, str):
+                printt(f"{sound}")
+                pass_num += 1
+                if pass_num > MAX_PASSES:
+                    printt(f"{COL_ERROR}Giving up on item")
+                    break
+                else:
+                    printt(f"{COL_ERROR}Will regenerate")
+                    continue
 
             # Post process
             sound = GenerateUtil.post_process(sound)
@@ -114,7 +124,7 @@ class GenerateUtil:
             whisper_data = SoundUtil.transcribe(whisper_model, sound)
             if isinstance(whisper_data, str):
                 printt(f"{COL_ERROR}Unexpected whisper result, skipping item: {whisper_data}")
-                return
+                continue
 
             save_path = HashFileUtil.make_segment_file_path(index, project)
             validate_action = ValidateUtil.validate_and_save(
@@ -161,7 +171,7 @@ class GenerateUtil:
                         return
                     case ValidateActionType.INVALID_SAVED_ANYWAY:
                         printt(validate_action.message)
-                        printt(f"{COL_ERROR}Failed again on second gen, keeping anyway")
+                        printt(f"{COL_ERROR}Failed again on second attempt, keeping anyway")
                         printt(f"Saved {save_path}")
                         return
                     case ValidateActionType.ACTION_FAILED:
@@ -178,12 +188,15 @@ class GenerateUtil:
         project: Project
     ) -> tuple[str, str]:
         """
+        Generates, does post process step and saves
+        Ie, skips error detect / error fix steps.
+
         Returns saved file path, error string
         """
 
         sound = GenerateUtil.generate(index, project)
-        if not sound:
-            return "", "Couldn't generate audio clip"
+        if isinstance(sound, str):
+            return "", f"Couldn't generate audio clip: {sound}"
 
         sound = GenerateUtil.post_process(sound)
 
@@ -201,6 +214,10 @@ class GenerateUtil:
         sound = SilenceUtil.trim_silence(sound)
         SoundFileUtil.debug_save("after trim silence", sound)
 
+        # Prevent 0-byte audio data as a failsafe
+        if len(sound.data) == 0:
+            sound = sound._replace(data=np.array([0], dtype=sound.data.dtype))
+
         return sound
 
 
@@ -209,7 +226,7 @@ class GenerateUtil:
         index: int,
         project: Project,
         print_info: bool=True
-    ) -> Sound | None:
+    ) -> Sound | str:
         """
         Returns model-generated normalized sound data, in model's native samplerate.
         """
@@ -228,7 +245,11 @@ class GenerateUtil:
                 project)
 
         if not sound:
-            return None
+            return "Model failed"
+
+        num_nans = np.sum(np.isnan(sound.data))
+        if num_nans > 0:
+            return "Model outputted NaN, discarding"
 
         if print_info:
             elapsed = time.time() - start_time or 1.0

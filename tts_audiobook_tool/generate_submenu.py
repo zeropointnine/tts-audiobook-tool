@@ -56,18 +56,20 @@ class GenerateSubmenu:
     @staticmethod
     def do_generate_items(state: State) -> None:
 
-        indices_to_generate = state.project.get_indices_to_generate()
-        if not indices_to_generate:
+        all_indices = state.project.get_indices_to_generate()
+        already_generated = set(ProjectDirUtil.get_items(state.project).keys())
+        not_yet_generated = all_indices - already_generated
+        if not not_yet_generated:
             ask(f"All specified items already generated. Press enter: ")
             return
 
-        printt(f"Generating {len(indices_to_generate)} audio segment/s...")
+        printt(f"Generating {len(not_yet_generated)} audio segment/s...")
         printt(f"{COL_DIM}Press control-c to interrupt")
         printt()
 
         did_interrupt = GenerateUtil.generate_items(
             project=state.project,
-            indices_to_generate=indices_to_generate,
+            indices_to_generate=not_yet_generated,
             items_to_regenerate={},
             play_on_save=state.prefs.play_on_generate
         )
