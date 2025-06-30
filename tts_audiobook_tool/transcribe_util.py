@@ -4,6 +4,7 @@ from typing import Tuple
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 
@@ -121,11 +122,10 @@ class TranscribeUtil:
             return None
 
         # Account for potential silence before that value.
-        # This could be done using "get-silences" but yea
-        temp_sound = SoundUtil.trim(sound, value, None)
+        # This could be done using "get-silences" but
+        temp_sound = SoundUtil.trim(sound, 0, value)
         temp_sound_end = SilenceUtil.get_start_silence_end_time(temp_sound) or temp_sound.duration
         offset = (temp_sound.duration - temp_sound_end) * -1
-
         return value + offset
 
     @staticmethod
