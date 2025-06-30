@@ -12,9 +12,11 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 [Online example 2 - Chatterbox (same text)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.m4a)
 
-### Bonus speech-to-text feature:
+### Bonus feature: Enhance existing audiobooks
 
-The application can also add its custom metadata to pre-existing (ie, professionally produced) audiobook files (M4B, etc) so that they can be opened and used with the custom player/reader. Select `Options` > `Add app metadata to a pre-existing audiobook`, and point it at your source audiobook file and corresponding book text. This feature is experimental.
+The app can embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player/reader.
+
+Simply select `Options` > `Add app metadata to a pre-existing audiobook`, and select your source audiobook file (typically M4B) and corresponding book text. This feature is experimental.
 
 ### How to create an audiobook (quick summary):
 
@@ -43,8 +45,6 @@ Once the desired virtual environment/s are set up and activated, run the app by 
 
 
 ## Install the Chatterbox TTS flavor of the application:
-
-This is considerably easier compared to setting up the Oute environment:
 
 Initialize a Python virtual environment named "venv-chatterbox" (Python 3.13 or recent earlier versions should be okay). For example:
 
@@ -77,17 +77,17 @@ Install dependencies:
 
 ### Oute TTS model configuration
 
-The Oute TTS model requires some configuration, as it supports multiple backends and more than one model flavor, which can greatly affect inference speed and also output quality. You will want to review and hand-edit the Python file **`config_oute.py`** accordingly.
+Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends and different model sizes and quantizations. You will need to review and hand-edit the Python file **`config_oute.py`** accordingly.
 
-The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. That being said, here are some recommendations, based on my own tests up to this point...
+The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. Here are some recommendations, based on my own tests up to this point...
 
 **Nvidia (CUDA) cards:**
 
-Install Pytorch with CUDA in the normal fashion: Uninstall the vanilla version (`pytorch uninstall torch torchvision torchaudio`) and then [install](https://pytorch.org/get-started/locally/) the CUDA-enabled version.
+Uninstall the vanilla version of pytorch (`pytorch uninstall torch torchvision torchaudio`) and then [install](https://pytorch.org/get-started/locally/) the CUDA-enabled version.
 
-Prefer the *ExLllama2* backend if at all possible: (`backend=outetts.Backend.EXL2`). See the example config in `config_oute.py`. However, this requires successfully installing into the environment three extra things: the exllama2 library (`pip install exllamav2`); [Flash Attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features); and Triton (eg, `pip install triton-windows==3.2.0.post19`).
+Prefer the *ExLllama2* backend if at all possible: `backend=outetts.Backend.EXL2` (See the example config in `config_oute.py`). However, this requires successfully installing into the environment three extra things: the exllama2 library (`pip install exllamav2`); [Flash Attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features); and Triton (eg, on Windows, `pip install triton-windows==3.2.0.post19`).
 
-Alternatively, `Backend.HF` is also hardware accelerated but maybe 50% slower.
+Alternatively, `Backend.HF` is also hardware accelerated but considerably slower.
 
 I couldn't get acceleration going using `Backend.LLAMACPP` but I'm not sure if that's just be me.
 

@@ -138,6 +138,6 @@ class MainMenu:
 
     @staticmethod
     def quit():
-        printt("State saved. Exiting")
+        printt("State saved. Exiting.")
         exit(0)
 

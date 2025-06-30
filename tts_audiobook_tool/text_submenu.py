@@ -14,7 +14,7 @@ class TextSubmenu:
 
         s = f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
         print_heading(f"Text {s}")
-        printt(f"{make_hotkey_string("1")} View text")
+        printt(f"{make_hotkey_string("1")} View text lines")
         printt(f"{make_hotkey_string("2")} Replace text\n")
 
         hotkey = ask()
@@ -34,13 +34,14 @@ class TextSubmenu:
     def set_text_submenu(state: State, heading: str) -> None:
 
         print_heading(heading)
-        printt(f"{make_hotkey_string("1")} Import text file")
+        printt(f"{make_hotkey_string("1")} Import from text file")
         printt(f"{make_hotkey_string("2")} Manually enter/paste text")
         printt()
 
         if not state.prefs.has_set_any_text:
+            state.prefs.has_set_any_text = True
             printt("⚠ Note: Line breaks are treated as paragraph delimiters.")
-            printt("        If your text uses manual line breaks for formatting (eg, Project Gutenberg files), ")
+            printt("        If your source text uses line breaks for word wrapping (eg, Project Gutenberg),")
             printt("        you will want to reformat it first.")
             printt()
 
@@ -56,7 +57,7 @@ class TextSubmenu:
         if not path:
             return
         if not os.path.exists(path):
-            printt("No such file", "error")
+            ask_error("No such file")
             return
 
         try:
@@ -85,7 +86,7 @@ class TextSubmenu:
 
         text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
 
-        # Filter out items w/o 'vocalizable content'
+        # Filter out items w/o 'vocalizable' content
         text_segments = [item for item in text_segments if TextSubmenu._has_alpha_numeric_char(item.text)]
 
         if not text_segments:
@@ -98,6 +99,10 @@ class TextSubmenu:
         hotkey = ask_hotkey(f"Enter {make_hotkey_string("Y")} to confirm: ")
         if hotkey != "y":
             return
+
+        old_sound_segments = state.project.sound_segments.sound_segments
+        for path in old_sound_segments.values():
+            delete_silently(path)
 
         # Commit
         state.project.set_text_segments_and_save(text_segments, raw_text=raw_text)

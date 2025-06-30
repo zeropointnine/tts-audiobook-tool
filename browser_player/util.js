@@ -432,9 +432,8 @@ function escapeHtml(unsafe) {
 
 function splitWhitespace(str) {
     // Match leading whitespace, content, and trailing whitespace
+    str = str || "";
     const match = str.match(/^(\s*)(.*?)(\s*)$/);
-
-    // Return as an object (or array if preferred)
     return {
       before: match[1],
       content: match[2],

@@ -34,7 +34,20 @@ class Project:
         self.dir_path = dir_path
 
         from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
+
+        if dir_path:
+            # Ensure subdir exists
+            ss_path = os.path.join(dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+            if not os.path.exists(ss_path):
+                try:
+                    os.mkdir(ss_path)
+                except:
+                    ...
+                if not os.path.exists(ss_path):
+                    return Exception(f"Couldn't create required subdirectory {ss_path}")
+
         self.sound_segments = ProjectSoundSegments(self)
+
 
     @staticmethod
     def load_using_dir_path(dir_path: str) -> Project | str:
@@ -89,7 +102,7 @@ class Project:
             # Pre-existing project has no oute voice set, so set it Oute default
             result = OuteUtil.load_oute_voice_json(DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
-                printt(result, "error") # not ideal
+                ask_error(result) # not ideal
             else:
                 project.set_oute_voice_and_save(result, "default")
         else:
@@ -164,7 +177,7 @@ class Project:
         file_name = dest_file_stem + ".json"
         err = AppUtil.save_json(voice_json, os.path.join(self.dir_path, file_name))
         if err:
-            printt(err, "error")
+            ask_error(err)
             return
         self.oute_voice_file_name = file_name
         self.oute_voice_json = voice_json
@@ -224,3 +237,23 @@ class Project:
         else:
             result, _ = ParseUtil.parse_one_indexed_ranges_string(range_string, len(self.text_segments))
         return result
+
+    @staticmethod
+    def is_valid_project_dir(project_dir: str) -> str:
+        """ Returns error feedback text or empty string if is-valid """
+
+        if not os.path.exists(project_dir):
+            return f"Doesn't exist: {project_dir}"
+
+        items = os.listdir(project_dir)
+
+        # Empty directory is considered valid
+        if not items:
+            return ""
+
+        # Directory with a voice and/or text json file considered valid
+        if PROJECT_JSON_FILE_NAME in items:
+            return ""
+
+        return f"{project_dir} does not appear to be a project directory"
+

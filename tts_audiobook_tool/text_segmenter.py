@@ -62,13 +62,13 @@ class TextSegmenter:
 
 def merge_short_segments_all(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
     result = []
-    # Merge only within paragraphs
-    # TODO Reconsider that. Chatterbox fails _a lot_ on one-word gens. Oute too IIRC.
+    # Will merge only within a paragraph
     paragraphs = make_paragraph_lists(segments)
     for paragraph in paragraphs:
         items = merge_short_segments(paragraph, max_words)
         result.extend(items)
     return result
+
 
 def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[TextSegment]:
     """

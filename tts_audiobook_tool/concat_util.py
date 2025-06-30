@@ -4,11 +4,11 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
+from sound_segment_file_util import SoundSegmentFileUtil
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -65,7 +65,7 @@ class ConcatUtil:
         if num_missing > 0:
             file_name += f"[{num_missing} missing]" + " " # num segments missing
         extant_paths = [item[1] for item in segments_and_paths if item[1]] # voice label
-        common_voice_label = ProjectSoundSegments.get_common_voice_label(extant_paths)
+        common_voice_label = SoundSegmentFileUtil.get_common_voice_label(extant_paths)
         if common_voice_label:
             file_name += f"[{state.project.get_voice_label()}]"
         file_name = file_name.strip() + ".abr" + (".m4a" if to_aac_not_flac else ".flac")
@@ -126,7 +126,7 @@ class ConcatUtil:
 
         for i in range(0, len(segments_and_paths) - 1):
 
-            segment_a, path_a = segments_and_paths[i]
+            _, path_a = segments_and_paths[i]
             segment_b, path_b = segments_and_paths[i + 1]
 
             if not path_a:
@@ -137,16 +137,7 @@ class ConcatUtil:
                 # Gap in the sequence, use some default silence padding value
                 silence_duration = 1.0
             else:
-                silence_duration = 0.5
-                match segment_b.reason:
-                    case TextSegmentReason.INSIDE_SENTENCE:
-                        silence_duration = 0.33 # TODO comma or not etc
-                    case TextSegmentReason.SENTENCE:
-                        silence_duration = 0.8
-                    case TextSegmentReason.PARAGRAPH:
-                        silence_duration = 1.2
-                    case TextSegmentReason.UNDEFINED:
-                        silence_duration = 0.5
+                silence_duration = segment_b.reason.pause_duration
 
             if print_progress:
                 s = f"{time_stamp(total_duration, with_tenth=False)} {Path(path_a).stem[:80]} ..."

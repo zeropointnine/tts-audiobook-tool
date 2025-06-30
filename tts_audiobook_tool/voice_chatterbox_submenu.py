@@ -52,12 +52,12 @@ class VoiceChatterboxSubmenu:
                 try:
                     value = float(value)
                     if not (0.0 < value <= 5.0):
-                        printt("Out of range", "error")
+                        ask_error("Out of range")
                     else:
                         state.project.chatterbox_temperature = value
                         state.project.save()
                 except:
-                    printt("Bad value", "error")
+                    ask_error("Bad value")
                     return False
             case "3":
                 value = ask("Enter value for exaggeration (0.25-2.0): ")
@@ -66,13 +66,13 @@ class VoiceChatterboxSubmenu:
                 try:
                     value = float(value)
                     if not (0.25 <= value <= 2.0):
-                        printt("Out of range", "error")
+                        ask_error("Out of range")
                     else:
                         state.project.chatterbox_exaggeration = value
                         state.project.save()
                     return False
                 except:
-                    printt("Bad value", "error")
+                    ask_error("Bad value")
                     return False
             case "4":
                 value = ask("Enter value for cfg/pace (0.2-1.0): ")
@@ -81,12 +81,12 @@ class VoiceChatterboxSubmenu:
                 try:
                     value = float(value)
                     if not (0.2 <= value <= 1.0):
-                        printt("Out of range", "error")
+                        ask_error("Out of range")
                     else:
                         state.project.chatterbox_cfg = value
                         state.project.save()
                 except:
-                    printt("Bad value", "error")
+                    ask_error("Bad value")
                 return False
             case _:
                 return True
@@ -107,12 +107,12 @@ class VoiceChatterboxSubmenu:
 
         err = SoundFileUtil.is_valid_sound_file(path)
         if err:
-            printt(err, "error")
+            ask_error(err)
             return
 
         err = state.project.set_chatterbox_voice_and_save(path)
 
         if err:
-            printt(err, "error")
+            ask_error(err)
         elif MENU_CLEARS_SCREEN:
                 ask_continue("Saved.")

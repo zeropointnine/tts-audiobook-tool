@@ -47,7 +47,7 @@ class VoiceOuteSubmenu:
             case "3":
                 result = OuteUtil.load_oute_voice_json(DEFAULT_VOICE_JSON_FILE_PATH)
                 if isinstance(result, str):
-                    printt(result, "error")
+                    ask_error(result)
                     return False
                 state.project.set_oute_voice_and_save(result, "default")
                 return False
@@ -58,12 +58,12 @@ class VoiceOuteSubmenu:
                 try:
                     value = float(value)
                     if not (0.0 < value <= 2.0):
-                        printt("Out of range", "error")
+                        ask_error("Out of range")
                     else:
                         state.project.oute_temperature = value
                         state.project.save()
                 except:
-                    printt("Bad value", "error")
+                    ask_error("Bad value")
                 return False
 
             case _:
@@ -84,7 +84,7 @@ class VoiceOuteSubmenu:
             voice_json = interface.create_speaker(path)
             printt()
         except Exception as e:
-            printt(f"Error creating voice: {e}", "error")
+            ask_error(f"Error creating voice: {e}")
             return
 
         state.project.set_oute_voice_and_save(voice_json, Path(path).stem)
@@ -104,8 +104,7 @@ class VoiceOuteSubmenu:
 
         result = OuteUtil.load_oute_voice_json(path)
         if isinstance(result, str):
-            printt(result, "error")
+            ask_error(result)
             return
 
         state.project.set_oute_voice_and_save(result, Path(path).stem)
-

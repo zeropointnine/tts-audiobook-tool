@@ -15,7 +15,7 @@ class HashFileUtil:
         fn = HashFileUtil.make_segment_file_name(
             index, project.text_segments[index], project.get_voice_label()
         )
-        return os.path.join(project.dir_path, AUDIO_SEGMENTS_SUBDIR, fn)
+        return os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR, fn)
 
     @staticmethod
     def make_segment_file_name(index: int, text_segment: TextSegment, voice_label: str, suffix=".flac") -> str:

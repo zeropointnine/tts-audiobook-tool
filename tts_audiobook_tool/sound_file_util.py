@@ -1,5 +1,4 @@
 import os
-import subprocess
 import time
 from typing import Any
 import librosa
@@ -17,7 +16,7 @@ class SoundFileUtil:
 
     _current_playback_thread = None
     _stop_playback_event = threading.Event()
-    debug_save_dir: str = ""
+    debug_save_dir: str = "C:/workspace"
 
 
     @staticmethod
@@ -39,7 +38,7 @@ class SoundFileUtil:
             return Sound(data, sr)
 
     @staticmethod
-    def save_flac(flac_path: str, sound: Sound) -> str:
+    def save_flac(sound: Sound, flac_path: str) -> str:
         """ Return error string on fail """
         try:
             soundfile.write(
@@ -58,7 +57,7 @@ class SoundFileUtil:
         if DEBUG_SAVE_INTERMEDIATE_FILES:
             fn = f"{int(time.time()*1000)} {label}.flac"
             path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-            SoundFileUtil.save_flac(path, sound)
+            SoundFileUtil.save_flac(sound, path)
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:
@@ -69,36 +68,6 @@ class SoundFileUtil:
         except Exception as e:
             return "Not a valid audio file: {e}"
         return ""
-
-    @staticmethod
-    def encode_to_flac(wav_path: str, flac_path: str) -> bool:
-
-        # TODO: use "make_file" here
-
-        try:
-            cmd = [
-                'ffmpeg',
-                "-y", "-hide_banner", "-loglevel", "error",
-                "-i", wav_path
-            ]
-            cmd.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
-            cmd.append(flac_path)
-
-            subprocess.run(
-                cmd,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            return True
-
-        except subprocess.CalledProcessError as e:
-            printt(str(e.stderr), "error")
-            return False
-        except Exception as e:
-            printt(str(e), "error")
-            return False
 
     @staticmethod
     def concatenate_flacs(
@@ -128,7 +97,7 @@ class SoundFileUtil:
                     escaped_path = path.replace('\\', '\\\\')
                     f.write(f"file '{escaped_path}'\n")
         except Exception as e:
-            delete_temp_file(temp_text_path)
+            delete_silently(temp_text_path)
             return str(e)
 
         # [2] Do concat
@@ -149,7 +118,7 @@ class SoundFileUtil:
         partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
 
         err = FfmpegUtil.make_file(partial_command, dest_flac_path, use_temp_file=True)
-        delete_temp_file(temp_text_path)
+        delete_silently(temp_text_path)
 
         return err
 

@@ -68,6 +68,7 @@ transformers==4.46.3
 typing_extensions==4.14.0
 urllib3==2.4.0
 virtualenv==20.31.2
+watchdog==6.0.0
 win32_setctime==1.2.0
 xxhash==3.5.0
 zipp==3.22.0

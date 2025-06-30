@@ -6,6 +6,9 @@ from whisper.model import Whisper
 from tts_audiobook_tool.util import *
 
 class Shared:
+    """
+    TODO: most of this should be moved to smth like "ModelShared"
+    """
 
     _whisper: Whisper | None = None
     _oute_interface: Any = None
@@ -41,6 +44,15 @@ class Shared:
                 return "Chatterbox"
             case _:
                 raise ValueError("Bad type")
+
+    @staticmethod
+    def get_model_samplerate() -> int:
+        if Shared.is_oute():
+            return 44100
+        elif Shared.is_chatterbox():
+            return 24000
+        else:
+            return 0
 
     @staticmethod
     def is_oute() -> bool:
@@ -104,8 +116,13 @@ class Shared:
 
     @staticmethod
     def clear_whisper() -> None:
+        """
+        In general, do not hold onto a reference to whisper from outside.
+        If you do, delete the reference before calling this
+        """
         if Shared._whisper is None:
             return
+        printt()
         printt("Unloading whisper...")
         printt()
         Shared._whisper = None

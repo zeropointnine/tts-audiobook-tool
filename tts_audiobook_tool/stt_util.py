@@ -379,11 +379,11 @@ class SttUtil:
         list_of_lists: list[list[TranscribedWord]] = []
         time_offset = 0.0
 
-        duration_string = ""
+        duration_str = ""
         if with_printout:
             value = AudioMetaUtil.get_audio_duration(path)
             if value:
-                duration_string = time_string(value)
+                duration_str = duration_string(value)
             print("Transcribing...")
             print()
 
@@ -395,9 +395,9 @@ class SttUtil:
             )
         ):
             if with_printout:
-                s = f"{Ansi.LINE_HOME}{time_string(time_offset)}"
-                if duration_string:
-                    s += f" / {duration_string}"
+                s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
+                if duration_str:
+                    s += f" / {duration_str}"
                 s += f"{Ansi.ERASE_REST_OF_LINE}"
                 print(s, end="", flush=True)
 

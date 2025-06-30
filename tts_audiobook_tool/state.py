@@ -22,7 +22,7 @@ class State:
         else:
             result = Project.load_using_dir_path(self.prefs.project_dir)
             if isinstance(result, str):
-                printt(result, "error")
+                ask_error(result)
                 self.prefs.project_dir = ""
                 self.project = Project("")
             else:
@@ -54,10 +54,10 @@ class State:
         # Make subdirs
         try:
             # Make audio segments subdir
-            audio_segments_path = project_dir_path / AUDIO_SEGMENTS_SUBDIR
+            audio_segments_path = project_dir_path / PROJECT_SOUND_SEGMENTS_SUBDIR
             os.makedirs(audio_segments_path, exist_ok=True)
             # Make concat subdir
-            concat_path = project_dir_path / CONCAT_SUBDIR
+            concat_path = project_dir_path / PROJECT_CONCAT_SUBDIR
             os.makedirs(concat_path, exist_ok=True)
         except Exception as e:
             return f"Error creating subdirectory"
@@ -83,7 +83,7 @@ class State:
         self.prefs.project_dir = path
         result = Project.load_using_dir_path(path)
         if isinstance(result, str):
-            printt(result, "error")
+            ask_error(result)
             self.project = Project("")
         else:
             self.project = result

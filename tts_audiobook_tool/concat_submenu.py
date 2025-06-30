@@ -79,13 +79,13 @@ class ConcatSubmenu:
                 index = int(string_item)
                 one_indexed_items.append(index)
             except:
-                printt(f"Parse error: {string_item}", "error")
+                ask_error(f"Parse error: {string_item}")
                 return
         one_indexed_items = list(set(one_indexed_items))
         one_indexed_items.sort()
         for item in one_indexed_items:
             if item < 1 or item > len(state.project.text_segments):
-                printt(f"Index out of range: {item}", "error")
+                ask_error(f"Index out of range: {item}")
                 return
         zero_indexed_items = [item - 1 for item in one_indexed_items]
         if 0 in zero_indexed_items:
@@ -128,7 +128,7 @@ class ConcatSubmenu:
 
         strings = [str(index+1) for index in chapter_indices]
         string = ", ".join(strings)
-        printt(f"Will concatenate audio segments to create the following chapters: {string}")
+        printt(f"Will concatenate audio segments to create the following chapter files: {string}")
         printt()
         b = ask_confirm()
         if not b:
@@ -141,17 +141,17 @@ class ConcatSubmenu:
 
         # Make subdir
         timestamp_subdir = timestamp_string()
-        dest_subdir = os.path.join(state.project.dir_path, CONCAT_SUBDIR, timestamp_subdir)
+        dest_subdir = os.path.join(state.project.dir_path, PROJECT_CONCAT_SUBDIR, timestamp_subdir)
         try:
             os.makedirs(dest_subdir, exist_ok=True)
         except:
-            printt(f"Couldn't make directory {dest_subdir}", "error")
+            ask_error(f"Couldn't make directory {dest_subdir}")
             return
 
         for i, chapter_index in enumerate(chapter_indices):
 
             if len(chapter_indices) > 1:
-                s = f" {i+1} of {len(chapter_indices)} - chapter {chapter_index+1})"
+                s = f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
             else:
                 s = ""
             printt(f"Creating finalized, concatenated audio file{s}...")
@@ -168,7 +168,7 @@ class ConcatSubmenu:
                 base_dir=dest_subdir
             )
             if err:
-                printt(err, "error")
+                ask_error(err)
                 return
 
             # Normalize
@@ -181,10 +181,10 @@ class ConcatSubmenu:
 
                 err = LoudnessNormalizationUtil.normalize_file(path, norm_path)
                 if err:
-                    printt(err, "error")
+                    ask_error(err)
                     return
                 if not DEBUG_SAVE_INTERMEDIATE_FILES:
-                    delete_temp_file(source_path)
+                    delete_silently(source_path)
                 path = norm_path
 
             printt(f"Saved {COL_ACCENT}{path}")
@@ -200,7 +200,7 @@ class ConcatSubmenu:
         if hotkey == "o":
             err = open_directory_gui(dest_subdir)
             if err:
-                printt(err, "error")
+                ask_error(err)
 
 # ---
 

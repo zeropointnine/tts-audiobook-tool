@@ -27,14 +27,14 @@ PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
+PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
+PROJECT_CONCAT_SUBDIR = "combined"
+
 FFMPEG_COMMAND = "ffmpeg"
 
 APP_TEMP_SUBDIR = "tts_audiobook_tool"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
-
-AUDIO_SEGMENTS_SUBDIR = "segments"
-CONCAT_SUBDIR = "combined"
 
 ASSETS_DIR_NAME = "assets"
 DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
@@ -53,6 +53,8 @@ WHISPER_START_TIME_OFFSET = -0.1
 # App should use single sample rate up until final audio output
 # Also, this un-complicates concatenation of mixed model audio clips
 APP_SAMPLE_RATE = 44100
+
+REAL_TIME_BUFFER_MAX_SECONDS = 60 * 5
 
 FFMPEG_ARGUMENTS_OUTPUT_FLAC = [
     "-c:a", "flac",
@@ -99,3 +101,4 @@ pattern = r'\[([0-9a-fA-F]{16})\]'
 HASH_PATTERN = re.compile(pattern)
 
 DEBUG_SAVE_INTERMEDIATE_FILES = socket.gethostname() == "mini" and True
+

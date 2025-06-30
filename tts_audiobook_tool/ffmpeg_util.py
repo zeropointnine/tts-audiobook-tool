@@ -57,17 +57,17 @@ class FfmpegUtil:
             )
             if completed_process.returncode != 0:
                 if use_temp_file:
-                    delete_temp_file(working_dest_file_path)
+                    delete_silently(working_dest_file_path)
                 return f"ffmpeg fail, returncode - {completed_process.returncode}"
 
         except subprocess.CalledProcessError as e:
             if use_temp_file:
-                delete_temp_file(working_dest_file_path)
+                delete_silently(working_dest_file_path)
             return f"ffmpeg fail, returncode - {e.returncode} - {e.stderr}"
 
         except Exception as e:
             if use_temp_file:
-                delete_temp_file(working_dest_file_path)
+                delete_silently(working_dest_file_path)
             return f"subprocess fail, ffmpeg - {e}"
 
         # Ffmpeg finished successfully
@@ -85,7 +85,7 @@ class FfmpegUtil:
             except Exception as e:
                 # Don't delete temp file in this case
                 return f"Couldn't rename temp file: {e}"
-            delete_temp_file(working_dest_file_path)
+            delete_silently(working_dest_file_path)
             return ""
 
         return ""

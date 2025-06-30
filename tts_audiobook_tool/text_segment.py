@@ -15,7 +15,9 @@ class TextSegment:
         self.reason = reason
 
     def __str__(self):
-        return f"TextSegment: {str(self.index_start).rjust(6)}-{str(self.index_end).ljust(6)} {str(self.reason.value).ljust(4)} text: {self.text.strip()}"
+        s = f"TextSegment: {str(self.index_start).rjust(6)}-{str(self.index_end).ljust(6)} "
+        s += f"{str(self.reason.json_value).ljust(4)} text: {self.text.strip()}"
+        return s
 
     @staticmethod
     def to_dict(text_segment: TextSegment) -> dict:
@@ -23,7 +25,7 @@ class TextSegment:
             "text": text_segment.text,
             "index_start": text_segment.index_start,
             "index_end": text_segment.index_end,
-            "reason": text_segment.reason.value
+            "reason": text_segment.reason.json_value
         }
 
     @staticmethod
@@ -71,14 +73,27 @@ class TextSegmentReason(Enum):
     Reason for the text segment being segmented
     Value is used in teh json
     """
-    UNDEFINED = "undefined" # for back-compat
+    UNDEFINED = ("undefined", 1.0) # for back-compat
 
     # Segment is a start of a sentence
-    SENTENCE = "s"
+    SENTENCE = ("s",0.8)
 
     # Segment is the start of a paragraph
     # (and also by our definition is the start of a sentence too)
-    PARAGRAPH = "p"
+    PARAGRAPH = ("p", 1.2)
 
     # Segment is a continuation of a sentence
-    INSIDE_SENTENCE = "is"
+    # TODO currently no differentiation btw 'phrase' (eg at comma) versus btw random words
+    INSIDE_SENTENCE = ("is", 0.5)
+
+    @property
+    def json_value(self) -> str:
+        return self.value[0]
+
+    @property
+    def pause_duration(self) -> float:
+        """
+        Duration of silence that should be inserted
+        "between" the given text segment and the one preceding it
+        """
+        return self.value[1]

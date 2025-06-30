@@ -4,11 +4,13 @@ from typing import Tuple
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.silence_util import SilenceUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 
 class TranscribeUtil:
+    """
+    Functions that compare transcription data (Whisper) to ground truth text
+    """
 
     @staticmethod
     def is_audio_static(sound: Sound, whisper_data: dict) -> bool:
@@ -59,7 +61,10 @@ class TranscribeUtil:
     def find_bad_repeats(reference_text: str, whisper_data: dict) -> set[str]:
         """
         Returns "adjacent words or phrases" found in the transcription but not the reference text
-        (implying a bad audio generation)
+        (implying hallucinated repeated word/phrase)
+
+        "Over-occurences" test overlaps with this, but this does pick up some occasional extra
+        things and does not give false positives hardly at all so... keeping
         """
 
         reference_repeats = TranscribeUtil.find_repeats(reference_text)
@@ -75,6 +80,7 @@ class TranscribeUtil:
         """
         Finds words or phrases that repeat one or more times.
         The repeated word or phrase must be adjacent to each other.
+        TODO: this returns overlapping items (but no practical harm done atm so)
         """
 
         string = massage_for_text_comparison(string)
@@ -101,6 +107,52 @@ class TranscribeUtil:
                     found_repeats.add(" ".join(phrase1))
 
         return found_repeats
+
+    @staticmethod
+    def num_bad_over_occurrences(reference_text: str, whisper_data: dict) -> int:
+        """
+        Returns a value if number of "word over-occurrences" is over a certain threshold
+        """
+        s = massage_for_text_comparison(reference_text)
+        num_words = len(s.split(" "))
+        thresh = 2 if num_words <= 10 else 3
+        count = TranscribeUtil.count_word_over_occurrences(reference_text, whisper_data)
+        return count if count >= thresh else 0
+
+
+    @staticmethod
+    def count_word_over_occurrences(reference_text: str, whisper_data: dict) -> int:
+        """
+        Count the number of extra occurrences of words found in transcription, basically
+        This is another attempt at finding repeat phrases hallucinated by Oute in particular.
+        """
+        ref_counts = TranscribeUtil.count_words(reference_text)
+        transcribed_text = TranscribeUtil.get_whisper_data_text(whisper_data)
+        trans_counts = TranscribeUtil.count_words(transcribed_text)
+
+        count = 0
+        for ref_word in ref_counts:
+            if trans_counts.get(ref_word):
+                # Both dicts have word
+                ref_count = ref_counts[ref_word]
+                trans_count = trans_counts[ref_word]
+                delta = trans_count - ref_count
+                if delta > 0:
+                    count += delta
+        return count
+        # FYI, factoring in probability property is almost useful but overall isn't
+
+    @staticmethod
+    def count_words(string: str) -> dict[str, int]:
+        string = massage_for_text_comparison(string)
+        words = string.split()
+        counts = {}
+        for word in words:
+            if not counts.get(word):
+                counts[word] = 1
+            else:
+                counts[word] += 1
+        return counts
 
     @staticmethod
     def get_semantic_match_end_time_trim(

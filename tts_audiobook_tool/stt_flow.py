@@ -59,7 +59,7 @@ class SttFlow:
                 return
             path, err = SoundFileUtil.transcode_to_aac(source_audio_path)
             if err:
-                printt(err, "error")
+                ask_error(err)
                 return
             source_audio_path = path
 
@@ -124,7 +124,7 @@ class SttFlow:
                 with open(source_pickle_path, "rb") as file:
                     words = pickle.load(file)
             except Exception as e:
-                printt(str(e), "error")
+                ask_error(str(e))
                 return False
 
         else:
@@ -211,7 +211,7 @@ def print_discontinuity_info(timed_text_segments: list[TimedTextSegment]):
        start_time = timed_text_segments[start - 1].time_end if start > 0 else 0
        end_time = timed_text_segments[end + 1].time_start if end + 1 < len(timed_text_segments) else start_time
        duration = end_time - start_time # TODO unconfirmed
-       printt(f"{start}-{end} ({end - start + 1}) duration: {time_string(duration)}")
+       printt(f"{start}-{end} ({end - start + 1}) duration: {duration_string(duration)}")
 
        first_text = timed_text_segments[start].text.strip()
        last_text = timed_text_segments[end].text.strip()

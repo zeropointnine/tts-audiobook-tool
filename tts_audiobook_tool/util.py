@@ -11,19 +11,14 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.l import L
 
-def printt(s: str="", type: str="") -> None:
-    if type == "disabled":
-        s = strip_ansi_codes(s)
-        s = Ansi.hex("666666") + s
-    elif type == "error":
-        s = strip_ansi_codes(s)
-        s = Ansi.hex("ff0000") + s
+
+def printt(s: str="") -> None:
+    """
+    App-wide print() wrapper
+    (Doesn't do anything extra or different at the moment)
+    """
     s += Ansi.RESET
     print(s)
-
-    if type == "error":
-        ask("\nPress enter: ")
-        printt()
 
 def print_heading(s: str) -> None:
     """ """
@@ -65,14 +60,6 @@ def ask_path(message: str="") -> str:
     inp = ask(message, lower=False, extra_line=True)
     return strip_quotes_from_ends(inp)
 
-def strip_quotes_from_ends(s: str) -> str:
-    if len(s) >= 2:
-        first = s[0]
-        last = s[-1]
-        if (first == "'" and last == "'") or (first == "\"" and last == "\""):
-            s = s[1:-1]
-    return s
-
 def ask_confirm(message: str="") -> bool:
     if not message:
         message = f"Press {make_hotkey_string("Y")} to confirm: "
@@ -84,6 +71,19 @@ def ask_continue(message_prefix: str="") -> None:
     if message_prefix:
         message = f"{message_prefix} {message}"
     ask(message)
+
+def ask_error(message_prefix: str) -> None:
+    message = f"{COL_ERROR}{message_prefix}"
+    message += "\nPress enter: "
+    ask(message)
+
+def strip_quotes_from_ends(s: str) -> str:
+    if len(s) >= 2:
+        first = s[0]
+        last = s[-1]
+        if (first == "'" and last == "'") or (first == "\"" and last == "\""):
+            s = s[1:-1]
+    return s
 
 def strip_ansi_codes(s: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -132,7 +132,7 @@ def estimated_wav_seconds(file_path: str) -> float:
         return 0
     return num_bytes / (44_100 * 2)
 
-def delete_temp_file(path: str):
+def delete_silently(path: str):
     """ Deletes a file and fails silently """
     if not os.path.exists(path):
         return
@@ -226,7 +226,7 @@ def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tup
 
     return ranges
 
-def time_string(seconds: float) -> str:
+def duration_string(seconds: float) -> str:
     """ 5h0m0s """
     seconds = round(seconds)
 
