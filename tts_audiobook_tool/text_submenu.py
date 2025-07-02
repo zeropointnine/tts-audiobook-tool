@@ -1,9 +1,7 @@
-import sys
-
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_segmenter import TextSegmenter
+from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -34,91 +32,39 @@ class TextSubmenu:
     def set_text_submenu(state: State, heading: str) -> None:
 
         print_heading(heading)
+        AppUtil.show_hint_if_necessary(state.prefs, "line_breaks", "Note:", HINT_LINE_BREAKS)
         printt(f"{make_hotkey_string("1")} Import from text file")
         printt(f"{make_hotkey_string("2")} Manually enter/paste text")
         printt()
 
-        if not state.prefs.has_set_any_text:
-            state.prefs.has_set_any_text = True
-            printt("⚠ Note: Line breaks are treated as paragraph delimiters.")
-            printt("        If your source text uses line breaks for word wrapping (eg, Project Gutenberg),")
-            printt("        you will want to reformat it first.")
-            printt()
-
         inp = ask_hotkey()
         if inp == "1":
-            TextSubmenu.ask_text_import_and_set(state)
+            text_segments, raw_text = AppUtil.get_text_from_ask_text_file()
+            TextSubmenu._finish_set_text(state, text_segments, raw_text)
         elif inp == "2":
-            TextSubmenu.ask_text_input_and_set(state)
+            text_segments, raw_text = AppUtil.get_segments_from_ask()
+            TextSubmenu._finish_set_text(state, text_segments, raw_text)
 
     @staticmethod
-    def ask_text_import_and_set(state: State) -> None:
-        path = ask_path("Enter text file path: ")
-        if not path:
-            return
-        if not os.path.exists(path):
-            ask_error("No such file")
-            return
+    def _finish_set_text(state: State, text_segments: list[TextSegment], raw_text: str) -> None:
 
-        try:
-            with open(path, 'r', encoding='utf-8') as file:
-                raw_text = file.read()
-        except Exception as e:
-            printt(f"Error: {e}")
-            return
-
-        TextSubmenu._finish_set_text(state, raw_text)
-
-
-    @staticmethod
-    def ask_text_input_and_set(state: State) -> None:
-        printt("Enter/paste text of any length.")
-        printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT} on its own line, depending on platform\n")
-        raw_text = sys.stdin.read().strip()
-        printt()
-        if raw_text:
-            TextSubmenu._finish_set_text(state, raw_text)
-
-    @staticmethod
-    def _finish_set_text(state: State, raw_text: str) -> None:
-
-        state.prefs.has_set_any_text = True
-
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
-
-        # Filter out items w/o 'vocalizable' content
-        text_segments = [item for item in text_segments if TextSubmenu._has_alpha_numeric_char(item.text)]
-
-        if not text_segments:
-            return
-
+        # Print text segments
         strings = [item.text for item in text_segments]
         AppUtil.print_text_segment_text(strings)
         printt("... is how the text will be segmented for inference.\n")
 
-        hotkey = ask_hotkey(f"Enter {make_hotkey_string("Y")} to confirm: ")
-        if hotkey != "y":
+        # Ask for confirmation
+        b = ask_confirm()
+        if not b:
             return
 
+        # Delete now-outdated gens
         old_sound_segments = state.project.sound_segments.sound_segments
         for path in old_sound_segments.values():
             delete_silently(path)
 
         # Commit
         state.project.set_text_segments_and_save(text_segments, raw_text=raw_text)
-
-    @staticmethod
-    def _post_process(lines: list[str]) -> list[str]:
-        # Strip
-        lines = [line.strip() for line in lines]
-        lines = [line for line in lines if line]
-        # Filter out any lines that do not have at least one alpha/numeric char
-        lines = [line for line in lines if TextSubmenu._has_alpha_numeric_char(line)]
-        return lines
-
-    @staticmethod
-    def _has_alpha_numeric_char(s: str) -> bool:
-        return any(c.isalnum() for c in s)
 
 # ---
 

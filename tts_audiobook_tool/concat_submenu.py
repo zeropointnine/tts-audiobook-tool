@@ -191,11 +191,11 @@ class ConcatSubmenu:
             printt()
 
         # Post-concat feedback
-        if not state.prefs.has_shown_player_reminder:
-            AppUtil.show_player_reminder(state.prefs)
-
         printt("Finished. \a")
         printt()
+
+        AppUtil.show_player_hint_if_necessary(state.prefs)
+
         hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
         if hotkey == "o":
             err = open_directory_gui(dest_subdir)
@@ -225,4 +225,5 @@ def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
             s += f" {COL_DIM}({desc})"
         printt(s)
     printt()
+
 

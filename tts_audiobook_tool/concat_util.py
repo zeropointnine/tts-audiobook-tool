@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
-from sound_segment_file_util import SoundSegmentFileUtil
+from tts_audiobook_tool.sound_segment_file_util import SoundSegmentFileUtil
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.l import L # type: ignore

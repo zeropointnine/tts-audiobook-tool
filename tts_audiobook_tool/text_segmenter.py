@@ -46,7 +46,7 @@ class TextSegmenter:
             text_segments.append(text_segment)
             counter += length
 
-        # Pass 4 Set paragraph breaks
+        # Pass 4 Set paragraph break reason
         for i in range(1, len(text_segments)):
             segment_a = text_segments[i - 1]
             segment_b = text_segments[i]
@@ -55,6 +55,10 @@ class TextSegmenter:
 
         # Pass 5 - merge short segments
         text_segments = merge_short_segments_all(text_segments, max_words)
+
+        # Pass 6 - Filter out items w/o 'vocalizable' content
+        # TODO: all text should be retained for display purposes. wd require a lot of reworking tho.
+        text_segments = [item for item in text_segments if has_alpha_numeric_char(item.text)]
 
         return text_segments
 
@@ -245,6 +249,9 @@ def has_trailing_line_break(s: str) -> bool:
 def word_count(text: str) -> int:
     """Counts words in a string. Strips leading/trailing whitespace and splits."""
     return len(text.strip().split())
+
+def has_alpha_numeric_char(s: str) -> bool:
+    return any(c.isalnum() for c in s)
 
 
 QUOTATION_CHARS = "\"'“”"

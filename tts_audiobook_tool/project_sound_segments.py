@@ -4,7 +4,7 @@ from typing import Callable
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from sound_segment_file_util import SoundSegmentFileUtil
+from tts_audiobook_tool.sound_segment_file_util import SoundSegmentFileUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *

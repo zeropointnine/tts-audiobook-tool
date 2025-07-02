@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import glob
+import sys
 import tempfile
 from typing import Any
 import glob
@@ -11,6 +12,8 @@ import torch
 from tts_audiobook_tool.l import L
 
 from tts_audiobook_tool.prefs import Prefs
+from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.util import *
 
 class AppUtil:
@@ -106,17 +109,72 @@ class AppUtil:
         return ""
 
     @staticmethod
-    def show_player_reminder(prefs: Prefs) -> None:
+    def get_text_from_ask_text_file() -> tuple[ list[TextSegment], str ]:
+        """
+        Asks user for path to text file and returns list of TextSegments and raw text.
+        Shows feedback except when text segments are returned
+        """
+        path = ask_path("Enter text file path: ")
+        if not path:
+            return [], ""
+        if not os.path.exists(path):
+            ask_error("No such file")
+            return [], ""
 
-        printt(f"🔔 {COL_ACCENT}Reminder:")
-        printt("You can open audio files with the interactive player/reader here:")
+        try:
+            with open(path, 'r', encoding='utf-8') as file:
+                raw_text = file.read()
+        except Exception as e:
+            ask_error(f"Error: {e}")
+            return [], ""
+
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
+
+        if not text_segments:
+            ask_continue("No text segments.")
+            return [], raw_text
+
+        return text_segments, raw_text
+
+    @staticmethod
+    def get_segments_from_ask() -> tuple[ list[TextSegment], str ]:
+        """
+        Asks user to input text using stdin.read() and returns list of TextSegments and raw text
+        """
+        printt("Enter/paste text of any length.")
+        printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT} on its own line, depending on platform\n")
+        raw_text = sys.stdin.read().strip()
+        printt()
+        if not raw_text:
+            return [], ""
+
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
+
+        if not text_segments:
+            ask_continue("No text segments.")
+            return [], raw_text
+
+        return text_segments, raw_text
+
+    @staticmethod
+    def show_hint_if_necessary(prefs: Prefs, prefs_hint_key: str, heading: str, text: str) -> None:
+        if prefs.get_hint(prefs_hint_key):
+            return
+        prefs.set_hint_true(prefs_hint_key)
+        printt(f"🔔 {COL_ACCENT}{heading}")
+        printt(text)
+        printt()
+
+    @staticmethod
+    def show_player_hint_if_necessary(prefs: Prefs) -> None:
+        s = "You can open audio files with the interactive player/reader here:\n"
         package_dir = get_package_dir()
         if package_dir:
             browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
         else:
             browser_path = "browser_player" + os.path.sep + "index.html"
-        printt(browser_path)
-        printt(f"or on the web here: {PLAYER_URL}")
-        printt()
+        s += browser_path + "\n"
+        s += "or on the web here:" + "\n"
+        s += PLAYER_URL
 
-        prefs.has_shown_player_reminder = True
+        AppUtil.show_hint_if_necessary(prefs, "player", "Reminder:", s)

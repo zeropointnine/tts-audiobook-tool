@@ -94,8 +94,7 @@ class SttFlow:
             source_audio_path=source_audio_path,
             source_pickle_path=source_pickle_path
         )
-        if ok and not prefs.has_shown_player_reminder:
-            AppUtil.show_player_reminder(prefs)
+        AppUtil.show_player_hint_if_necessary(prefs)
 
     @staticmethod
     def make(

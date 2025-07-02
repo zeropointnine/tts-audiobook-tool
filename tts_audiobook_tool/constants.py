@@ -102,3 +102,8 @@ HASH_PATTERN = re.compile(pattern)
 
 DEBUG_SAVE_INTERMEDIATE_FILES = socket.gethostname() == "mini" and True
 
+# ---
+
+HINT_LINE_BREAKS = "Line breaks are treated as paragraph delimiters.\n"
+HINT_LINE_BREAKS = HINT_LINE_BREAKS + "If your source text uses manual line breaks for word wrapping\n"
+HINT_LINE_BREAKS = HINT_LINE_BREAKS + "(eg, Project Gutenberg), you will want to reformat it first."

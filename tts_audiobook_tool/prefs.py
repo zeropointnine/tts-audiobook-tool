@@ -14,21 +14,21 @@ class Prefs:
     - project dir
     - should_normalize
     - play_on_generate
+
+    hint flags: "player"; "line_breaks"; "real_time"
     """
 
     def __init__(
             self,
             project_dir: str = "",
+            hints: dict = {},
             should_normalize: bool = PREFS_SHOULD_NORMALIZE,
-            play_on_generate: bool = PREFS_PLAY_ON_GENERATE_DEFAULT,
-            optimize_ss: bool = PREFS_OPTIMIZE_SS_DEFAULT
+            play_on_generate: bool = PREFS_PLAY_ON_GENERATE_DEFAULT
     ) -> None:
         self._project_dir = project_dir
+        self._hints = hints
         self._should_normalize = should_normalize
         self._play_on_generate = play_on_generate
-
-        self._has_shown_player_reminder = False
-        self._has_set_any_text = False
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -71,22 +71,15 @@ class Prefs:
             play_on_generate = PREFS_PLAY_ON_GENERATE_DEFAULT
             dirty = True
 
-        optimize_ss = prefs_dict.get("optimize_ss", PREFS_OPTIMIZE_SS_DEFAULT)
-        if not isinstance(optimize_ss, bool):
-            optimize_ss = PREFS_OPTIMIZE_SS_DEFAULT
-            dirty = True
-
-        has_shown_player_reminder = prefs_dict.get("has_shown_player_reminder", False)
-        has_set_any_text = prefs_dict.get("has_set_any_text", False)
+        hints = prefs_dict.get("hints", None) or {}
 
         prefs = Prefs(
             project_dir=project_dir,
             should_normalize=should_normalize,
             play_on_generate=play_on_generate,
-            optimize_ss=optimize_ss
+            hints=hints
         )
-        prefs._has_shown_player_reminder = has_shown_player_reminder
-        prefs._has_set_any_text = has_set_any_text
+
         if dirty:
             prefs.save()
         return prefs
@@ -118,31 +111,19 @@ class Prefs:
         self._play_on_generate = value
         self.save()
 
-    @property
-    def has_shown_player_reminder(self) -> bool:
-        return self._has_shown_player_reminder
+    def get_hint(self, key: str) -> bool:
+        return bool(self._hints.get(key, False))
 
-    @has_shown_player_reminder.setter
-    def has_shown_player_reminder(self, value: bool):
-        self._has_shown_player_reminder = value
-        self.save()
-
-    @property
-    def has_set_any_text(self) -> bool:
-        return self._has_set_any_text
-
-    @has_set_any_text.setter
-    def has_set_any_text(self, value: bool):
-        self._has_set_any_text = value
+    def set_hint_true(self, key: str) -> None:
+        self._hints[key] = True
         self.save()
 
     def save(self) -> None:
         dic = {
             "project_dir": self._project_dir,
+            "hints": self._hints,
             "should_normalize": self._should_normalize,
-            "play_on_generate": self._play_on_generate,
-            "has_shown_player_reminder": self._has_shown_player_reminder,
-            "has_set_any_text": self._has_set_any_text
+            "play_on_generate": self._play_on_generate
         }
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:
