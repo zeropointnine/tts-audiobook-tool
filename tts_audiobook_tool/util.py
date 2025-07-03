@@ -8,6 +8,7 @@ import platform
 import subprocess
 
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.l import L
 
@@ -20,9 +21,13 @@ def printt(s: str="") -> None:
     s += Ansi.RESET
     print(s)
 
-def print_heading(s: str) -> None:
+def print_heading(s: str, dont_clear: bool=False) -> None:
     """ """
+    if MENU_CLEARS_SCREEN and not dont_clear:
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     length = get_string_len_printable(s)
+    printt("-" * length)
     printt(f"{COL_ACCENT}{s}")
     printt("-" * length)
 

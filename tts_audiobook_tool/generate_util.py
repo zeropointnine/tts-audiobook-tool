@@ -50,6 +50,8 @@ class GenerateUtil:
             is_regenerate = True
             items = items_to_regenerate
 
+        Shared.warm_up_models()
+
         did_interrupt = False
         start_time = time.time()
         count = 0

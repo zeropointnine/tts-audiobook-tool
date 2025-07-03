@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -35,7 +35,7 @@ class GenerateSubmenu:
             failed_items = state.project.sound_segments.get_sound_segments_with_tag("fail")
             printt(f"{make_hotkey_string("3")} Regenerate audio segments tagged as having potential errors {COL_DIM}(currently: {COL_DEFAULT}{len(failed_items)}{COL_DIM} file/s)")
 
-            # s = f"{make_hotkey_string("3")} Play audio after each segment is generated "
+            # s = f"{make_hotkey_string("4")} Play audio after each segment is generated "
             # s += f"{COL_DIM}(currently: {COL_ACCENT}{state.prefs.play_on_generate}{COL_DIM})"
             # printt(s)
 
@@ -69,9 +69,8 @@ class GenerateSubmenu:
             ask(f"All items in specified range already generated. Press enter: ")
             return
 
-        Shared.warm_up_models()
-
-        printt(f"Generating {len(selected_indices_not_generated)} audio segment/s...")
+        s = f"Generating {len(selected_indices_not_generated)} audio segment/s..."
+        print_heading(s, dont_clear=True)
         printt(f"{COL_DIM}Press control-c to interrupt")
         printt()
 
@@ -84,7 +83,8 @@ class GenerateSubmenu:
         if did_interrupt:
             ask("Press enter: \a")
         else:
-            hotkey = ask_hotkey(f"Press enter or {make_hotkey_string("C")} to concatenate files now: ")
+            s = f"Press enter or {make_hotkey_string("C")} to concatenate files now: "
+            hotkey = ask_hotkey(s)
             if hotkey == "c":
                 ConcatSubmenu.submenu(state)
         return
@@ -97,9 +97,16 @@ class GenerateSubmenu:
             ask_continue("No failed items to regenerate.")
             return
 
-        printt(f"Regenerating {len(failed_items)} audio segment/s...")
+        print_heading(f"Regenerating {len(failed_items)} audio segment/s...", dont_clear=True)
         printt(f"{COL_DIM}Press control-c to interrupt")
         printt()
+
+        will_hint = not state.prefs.get_hint("regenerate")
+        AppUtil.show_hint_if_necessary(state.prefs, "regenerate", "Hint:", REGEN_HINT)
+        if will_hint:
+            b = ask_confirm(f"Press {make_hotkey_string("Y")} to start: ")
+            if not b:
+                return
 
         _ = GenerateUtil.generate_items_to_files(
             project=state.project,
@@ -130,3 +137,8 @@ class GenerateSubmenu:
         s = ParseUtil.make_one_indexed_ranges_string(indices, len(state.project.text_segments))
         state.project.generate_range_string = s
         state.project.save()
+
+REGEN_HINT = """Please note, it's oftentimes not possible to get all voice lines to validate,
+even after repeated re-generations (especially with Oute).
+
+Increasing temperature temporarily can sometimes help."""

@@ -37,6 +37,9 @@ class RealTimeSubmenu:
                 ask_continue("No text segments specified")
                 return
             RealTime.start(state.project, text_segments)
+            RealTimeSubmenu.submenu(state)
+            return
+
         elif hotkey == "2":
             RealTimeSubmenu.text_submenu(state)
 

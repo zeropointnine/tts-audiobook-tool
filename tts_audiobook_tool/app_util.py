@@ -9,8 +9,8 @@ from typing import Any
 import glob
 import torch
 
+from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
-
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter

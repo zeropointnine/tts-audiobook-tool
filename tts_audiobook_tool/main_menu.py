@@ -1,4 +1,3 @@
-import os
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.options_submenu import OptionsSubmenu
 from tts_audiobook_tool.generate_submenu import GenerateSubmenu
@@ -34,9 +33,6 @@ class MainMenu:
 
     @staticmethod
     def _print_menu(state: State, did_reset: bool):
-
-        if MENU_CLEARS_SCREEN:
-            os.system('cls' if os.name == 'nt' else 'clear')
 
         # Title
         model_name = "Oute TTS" if Shared.is_oute() else "Chatterbox TTS"

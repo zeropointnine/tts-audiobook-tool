@@ -45,7 +45,7 @@ class VoiceOuteSubmenu:
                 VoiceOuteSubmenu.ask_load_oute_voice(state)
                 return False
             case "3":
-                result = OuteUtil.load_oute_voice_json(DEFAULT_VOICE_JSON_FILE_PATH)
+                result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
                 if isinstance(result, str):
                     ask_error(result)
                     return False

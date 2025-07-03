@@ -5,6 +5,7 @@ from tts_audiobook_tool.chapter_info import ChapterInfo
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State

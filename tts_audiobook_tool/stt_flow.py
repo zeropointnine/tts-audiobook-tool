@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import pickle
 from tts_audiobook_tool.app_meta_util import AppMetaUtil
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
@@ -9,7 +10,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.stt_util import SttUtil
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter
-import pickle
+from tts_audiobook_tool.constants_config import *
 
 from tts_audiobook_tool.util import *
 

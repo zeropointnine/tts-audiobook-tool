@@ -7,6 +7,7 @@ from tts_audiobook_tool.l import L
 
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants_config import *
 
 class Prefs:
     """
@@ -22,8 +23,8 @@ class Prefs:
             self,
             project_dir: str = "",
             hints: dict = {},
-            should_normalize: bool = PREFS_SHOULD_NORMALIZE,
-            play_on_generate: bool = PREFS_PLAY_ON_GENERATE_DEFAULT
+            should_normalize: bool = PREFS_DEFULT_SHOULD_NORMALIZE,
+            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -61,14 +62,14 @@ class Prefs:
             project_dir = ""
             dirty = True
 
-        should_normalize = prefs_dict.get("should_normalize", PREFS_SHOULD_NORMALIZE)
+        should_normalize = prefs_dict.get("should_normalize", PREFS_DEFULT_SHOULD_NORMALIZE)
         if not isinstance(should_normalize, bool):
-            should_normalize = PREFS_SHOULD_NORMALIZE
+            should_normalize = PREFS_DEFULT_SHOULD_NORMALIZE
             dirty = True
 
-        play_on_generate = prefs_dict.get("play_on_generate", PREFS_PLAY_ON_GENERATE_DEFAULT)
+        play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
-            play_on_generate = PREFS_PLAY_ON_GENERATE_DEFAULT
+            play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
         hints = prefs_dict.get("hints", None) or {}

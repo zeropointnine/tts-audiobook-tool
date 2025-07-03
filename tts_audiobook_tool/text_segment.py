@@ -3,6 +3,7 @@ from enum import Enum
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants_config import *
 
 class TextSegment:
     """

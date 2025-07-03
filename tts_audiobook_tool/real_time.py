@@ -8,6 +8,7 @@ from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.util import *
 
 
@@ -44,8 +45,8 @@ class RealTime:
 
         # Start loop
 
-        printt("Starting...")
-        printt(f"Press {make_hotkey_string("Control-C")} to interrupt")
+        print_heading("Starting real-time playback...", dont_clear=True)
+        printt(f"{COL_DIM}Press {make_hotkey_string("Control-C")}{COL_DIM} to interrupt")
         printt()
 
         Shared.mode = "generating"
@@ -98,9 +99,8 @@ class RealTime:
                 value = stream.buffer_duration - current_sound.duration - pause_duration
                 if value <= 0.0:
                     value = +0.0
-                s = f"{duration_string(value, include_tenth=True)}"
-                if value < 0.1:
-                    s = f"{COL_ERROR}{s}"
+                s = f"{COL_ERROR}" if value < 0.1 else f"{COL_ACCENT}"
+                s += f"{duration_string(value, include_tenth=True)}"
                 printt(f"Buffer duration: {s}")
 
                 SoundFileUtil.debug_save("realtime", current_sound)
@@ -115,8 +115,5 @@ class RealTime:
             last_text_segment = current_text_segment
             last_sound = current_sound
 
-        printt()
-        printt("Closing stream")
         stream.shut_down()
         printt()
-        ask_continue()

@@ -6,61 +6,33 @@ from tts_audiobook_tool.ansi import Ansi
 
 APP_NAME = "tts-audiobook-tool"
 
-# Max words per text chunk, applied to the source text.
-MAX_WORDS_PER_SEGMENT = 40
-# Max words per text chunk, applied to the source text for "STT mode"
-MAX_WORDS_PER_SEGMENT_STT = 40
-
-SENTENCE_CONTINUATION_MAX_DURATION = 0.5
-PARAGRAPH_SILENCE_MIN_DURATION = 0.75
-
-MENU_CLEARS_SCREEN = False
+APP_TEMP_SUBDIR = "tts_audiobook_tool"
+ASSETS_DIR_NAME = "assets"
 
 SETTINGS_FILE_NAME = "tts-audiobook-tool-settings.json"
 
-PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
-PREFS_PLAY_ON_GENERATE_DEFAULT = False
-PREFS_SHOULD_NORMALIZE = True
-PREFS_OPTIMIZE_SS_DEFAULT = True
-
+PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
+PROJECT_CONCAT_SUBDIR = "combined"
 PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
-PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
-PROJECT_CONCAT_SUBDIR = "combined"
+
+PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 
 FFMPEG_COMMAND = "ffmpeg"
 
-APP_TEMP_SUBDIR = "tts_audiobook_tool"
-
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 
-ASSETS_DIR_NAME = "assets"
-DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
+OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 package_dir = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, DEFAULT_VOICE_JSON_FILE_NAME)
+OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
 WHISPER_SAMPLERATE = 16000
 
-# Offset for whisper word end timestamp being consistently too early
-# The amount varies too much, is usually around 0.15, but is always too early.
-# This is obviously very model-specific
-WHISPER_END_TIME_OFFSET = 0.40
-
-WHISPER_START_TIME_OFFSET = -0.1
-
-PAUSE_DURATION_SENTENCE = 1.0
-PAUSE_DURATION_PARAGRAPH = 1.2
-PAUSE_DURATION_INSIDE_SENTENCE = 0.5
-PAUSE_DURATION_UNDEFINED = 1.0
-
-
-# App should use single sample rate up until final audio output
+# App should use single sample rate up uptil outputting final audio
 # Also, this un-complicates concatenation of mixed model audio clips
 APP_SAMPLE_RATE = 44100
-
-REAL_TIME_BUFFER_MAX_SECONDS = 60 * 5
 
 FFMPEG_ARGUMENTS_OUTPUT_FLAC = [
     "-c:a", "flac",

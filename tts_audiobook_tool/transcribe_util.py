@@ -6,6 +6,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants_config import *
 
 class TranscribeUtil:
     """

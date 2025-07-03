@@ -12,14 +12,13 @@ class TextSubmenu:
 
         s = f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
         print_heading(f"Text {s}")
-        printt(f"{make_hotkey_string("1")} View text lines")
-        printt(f"{make_hotkey_string("2")} Replace text\n")
+        printt(f"{make_hotkey_string("1")} Replace text")
+        printt(f"{make_hotkey_string("2")} View text lines")
+        printt()
 
         hotkey = ask()
+
         if hotkey == "1":
-            print_project_text(state)
-            ask("Press enter: ")
-        elif hotkey == "2":
             num_files = state.project.sound_segments.num_generated()
             if num_files == 0:
                 TextSubmenu.set_text_submenu(state, "Replace text:")
@@ -27,6 +26,12 @@ class TextSubmenu:
                 s = f"Replacing text will invalidate all ({num_files}) previously generated audio file fragments for this project.\nAre you sure? "
                 if ask_hotkey(s):
                     TextSubmenu.set_text_submenu(state, "Replace text:")
+                else:
+                    TextSubmenu.submenu(state)
+        elif hotkey == "2":
+            print_project_text(state)
+            ask("Press enter: ")
+            TextSubmenu.submenu(state)
 
     @staticmethod
     def set_text_submenu(state: State, heading: str) -> None:
@@ -44,6 +49,7 @@ class TextSubmenu:
         elif inp == "2":
             text_segments, raw_text = AppUtil.get_text_segments_from_ask_std_in()
             TextSubmenu._finish_set_text(state, text_segments, raw_text)
+        TextSubmenu.submenu(state)
 
     @staticmethod
     def _finish_set_text(state: State, text_segments: list[TextSegment], raw_text: str) -> None:
