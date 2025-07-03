@@ -3,6 +3,7 @@ import numpy as np
 from numpy import ndarray
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.shared import Shared
 
 class SoundUtil:
     """
@@ -23,7 +24,7 @@ class SoundUtil:
         return Sound(data, WHISPER_SAMPLERATE)
 
     @staticmethod
-    def transcribe(whisper_model, sound: Sound) -> dict | str:
+    def transcribe(sound: Sound) -> dict | str:
         """
         Transcribes the audio data.
         Makes temporary resampled audio if necessary.
@@ -34,7 +35,7 @@ class SoundUtil:
         else:
             temp_sound = sound
 
-        whisper_data = whisper_model.transcribe(temp_sound.data, word_timestamps=True, language=None)
+        whisper_data = Shared.get_whisper().transcribe(temp_sound.data, word_timestamps=True, language=None)
 
         # Minor validation
         if not "text" in whisper_data or not isinstance(whisper_data["text"], str):
@@ -43,10 +44,10 @@ class SoundUtil:
         return whisper_data
 
     @staticmethod
-    def transcribe_file(whisper_model, path: str) -> dict | str:
+    def transcribe_file(path: str) -> dict | str:
         """ Returns error string on fail """
         try:
-            whisper_data = whisper_model.transcribe(path, word_timestamps=True, language=None)
+            whisper_data = Shared.get_whisper().transcribe(path, word_timestamps=True, language=None)
         except Exception as e:
             return str(e)
         # Minor validation

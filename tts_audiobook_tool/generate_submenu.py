@@ -4,6 +4,7 @@ from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -20,23 +21,23 @@ class GenerateSubmenu:
 
             s1 = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string or "all"}{COL_DIM})"
 
-            num_selected_indices_all = len( state.project.get_indices_to_generate() )
-            num_selected_indices_generated = len( state.project.sound_segments.sound_segments )
+            selected_indices = state.project.get_indices_to_generate()
+            all_generated_indices = state.project.sound_segments.sound_segments.keys()
+            selected_indices_not_generated = selected_indices - all_generated_indices
+            num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
 
-            # TODO BUG
-            # [1] Generate (currently set to generate lines 2168-3500) (3496 of 1333 complete)
-
-            s2 = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{num_selected_indices_all}{COL_DIM} complete)"
+            s2 = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
             printt(f"{make_hotkey_string("1")} Generate {s1} {s2}")
 
             s = f"{make_hotkey_string("2")} Specify audio segments to generate"
             printt(s)
-            s = f"{make_hotkey_string("3")} Play audio after each segment is generated "
-            s += f"{COL_DIM}(currently: {COL_ACCENT}{state.prefs.play_on_generate}{COL_DIM})"
-            printt(s)
 
             failed_items = state.project.sound_segments.get_sound_segments_with_tag("fail")
-            printt(f"{make_hotkey_string("4")} Regenerate voice lines tagged as having potential errors {COL_DIM}(currently: {COL_ACCENT}{len(failed_items)}{COL_DIM} file/s)")
+            printt(f"{make_hotkey_string("3")} Regenerate audio segments tagged as having potential errors {COL_DIM}(currently: {COL_DEFAULT}{len(failed_items)}{COL_DIM} file/s)")
+
+            # s = f"{make_hotkey_string("3")} Play audio after each segment is generated "
+            # s += f"{COL_DIM}(currently: {COL_ACCENT}{state.prefs.play_on_generate}{COL_DIM})"
+            # printt(s)
 
             printt()
             hotkey = ask_hotkey()
@@ -47,13 +48,13 @@ class GenerateSubmenu:
                 case "2":
                     GenerateSubmenu.ask_items(state)
                 case "3":
-                    state.prefs.play_on_generate = not state.prefs.play_on_generate
-                    printt(f"Set to: {state.prefs.play_on_generate}")
-                    printt()
-                    if MENU_CLEARS_SCREEN:
-                        ask_continue()
-                case "4":
                     GenerateSubmenu.do_regenerate_items(state)
+                # case "xxx":
+                #     state.prefs.play_on_generate = not state.prefs.play_on_generate
+                #     printt(f"Set to: {state.prefs.play_on_generate}")
+                #     printt()
+                #     if MENU_CLEARS_SCREEN:
+                #         ask_continue()
                 case _:
                     return
 
@@ -68,6 +69,8 @@ class GenerateSubmenu:
             ask(f"All items in specified range already generated. Press enter: ")
             return
 
+        Shared.warm_up_models()
+
         printt(f"Generating {len(selected_indices_not_generated)} audio segment/s...")
         printt(f"{COL_DIM}Press control-c to interrupt")
         printt()
@@ -75,8 +78,7 @@ class GenerateSubmenu:
         did_interrupt = GenerateUtil.generate_items_to_files(
             project=state.project,
             indices_to_generate=selected_indices_not_generated,
-            items_to_regenerate={},
-            play_on_save=state.prefs.play_on_generate
+            items_to_regenerate={}
         )
 
         if did_interrupt:
@@ -92,7 +94,7 @@ class GenerateSubmenu:
 
         failed_items = state.project.sound_segments.get_sound_segments_with_tag("fail")
         if not failed_items:
-            ask_continue("No failed items to regenerate")
+            ask_continue("No failed items to regenerate.")
             return
 
         printt(f"Regenerating {len(failed_items)} audio segment/s...")
@@ -102,8 +104,7 @@ class GenerateSubmenu:
         _ = GenerateUtil.generate_items_to_files(
             project=state.project,
             indices_to_generate=set(),
-            items_to_regenerate=failed_items,
-            play_on_save=state.prefs.play_on_generate
+            items_to_regenerate=failed_items
         )
 
         ask_continue()

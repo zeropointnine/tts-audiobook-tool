@@ -5,18 +5,14 @@ import threading
 from numpy import ndarray
 from typing import Optional
 
-# Suppress PortAudio warning messages on initialization
-# This can be helpful in environments where many devices are available but not all are used.
-# It's good practice to handle initialization/deinitialization of the sound library properly.
-sd._terminate()
-sd._initialize()
-
 
 class SoundDeviceStream:
     """
     A class to stream audio data to the default output device in a separate thread.
     This class manages a buffer of audio data and uses the sounddevice library
     to play it back in realtime.
+
+    # TODO using this causes app exit to take a long time?
     """
 
     def __init__(self, sample_rate: int):
@@ -37,6 +33,7 @@ class SoundDeviceStream:
         # A lock is crucial to ensure thread-safe access to the buffer from both the
         # main thread (adding data) and the audio callback thread (consuming data).
         self.lock = threading.Lock()
+        self._stop_requested = threading.Event()
 
         # The sounddevice stream object. It's None until start() is called.
         self.stream: Optional[sd.OutputStream] = None
@@ -49,6 +46,10 @@ class SoundDeviceStream:
         The heart of the audio streamer, called by sounddevice in a separate thread.
         It pulls data from the buffer and sends it to the audio output.
         """
+        if self._stop_requested.is_set():
+            outdata.fill(0)
+            raise sd.CallbackStop
+
         if status.output_underflow:
             # This can happen if the buffer runs out of data.
             # It's good practice to log or print a warning.

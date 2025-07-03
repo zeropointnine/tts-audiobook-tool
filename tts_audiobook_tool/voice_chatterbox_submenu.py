@@ -22,7 +22,7 @@ class VoiceChatterboxSubmenu:
     def _print(state: State) -> None:
 
         s = f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
-        print_heading(f"Voice clone and options {s}")
+        print_heading(f"Voice clone and model options {s}")
 
         s = f"{make_hotkey_string('1')} Set Chatterbox voice "
         s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"

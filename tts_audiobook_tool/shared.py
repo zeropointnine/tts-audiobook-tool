@@ -55,6 +55,23 @@ class Shared:
             return 0
 
     @staticmethod
+    def warm_up_models() -> None:
+        """ Instantiates tts and stt models if not already, as a convenience """
+
+        no_tts = (Shared.is_oute() and not Shared._oute_interface) or (Shared.is_chatterbox() and not Shared._chatterbox)
+        if no_tts and not Shared._whisper:
+            print("Warming up models...")
+            printt()
+
+        if Shared.is_oute() and not Shared._oute_interface:
+            _ = Shared.get_oute()
+        if Shared.is_chatterbox() and not Shared._chatterbox:
+            _ = Shared.get_chatterbox()
+        if not Shared._whisper:
+            _ = Shared.get_whisper()
+
+
+    @staticmethod
     def is_oute() -> bool:
         return Shared._model_type == "oute"
 

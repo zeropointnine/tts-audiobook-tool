@@ -1,20 +1,20 @@
 # Description
 
-This is an audiobook creation tool, designed to support multiple text-to-speech models. Currently, Oute TTS and Chatterbox TTS are supported. Both Oute and Chatterbox support "zero shot voice cloning", which is in my opinion what makes creating audiobooks using these two models so appealing.
+This is an audiobook creation tool designed to support multiple text-to-speech models. Currently, Oute TTS and Chatterbox TTS are supported. Both Oute and Chatterbox support "zero shot voice cloning", which is in my opinion what makes creating audiobooks using these two models so appealing.
 
-The app attempts to detect and correct inference errors using speech-to-text, regulates the pacing of pauses between sentences/sound segments, and applies loudness normalization to the generated audio. These are important quality control features due to the uh *variable* nature of generative text-to-speech models.
+The app attempts to detect and correct inference errors, regulates the pacing of pauses between sentences/sound segments, and applies loudness normalization to the generated audio. These are important quality control features to mitigate the inherently unreliable nature of generative text-to-speech models.
 
 ### Web-based player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (think Kindle+Audible). You simply open `browser_player/index.html` in the browser or navigate to the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player).
+The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (think Kindle+Audible).
 
 [Online example 1 - Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.m4a)
 
-[Online example 2 - Chatterbox (same text)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.m4a)
+[Online example 2 - Chatterbox (using the same text and same voice sample)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.m4a)
 
 ### Bonus feature: Enhance existing audiobooks
 
-The app can embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player/reader.
+Using speech-to-text, the app is able to embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player/reader.
 
 Simply select `Options` > `Add app metadata to a pre-existing audiobook`, and select your source audiobook file (typically M4B) and corresponding book text. This feature is experimental.
 

@@ -12,6 +12,7 @@ from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_sound_segments import *
@@ -23,8 +24,7 @@ class GenerateUtil:
     def generate_items_to_files(
             project: Project,
             indices_to_generate: set[int],
-            items_to_regenerate: dict[int, str],
-            play_on_save: bool
+            items_to_regenerate: dict[int, str]
     ) -> bool:
         """
         indices_to_generate and items_to_regenerate are mutually exclusive
@@ -59,13 +59,13 @@ class GenerateUtil:
         num_saved_with_error = 0
         num_failed = 0
 
-        whisper_model = Shared.get_whisper()
-
         for i, path in sorted(items.items()):
+
+            text_segment = project.text_segments[i]
 
             printt()
             print_item_heading(
-                is_regenerate, project.text_segments[i].text, i, count, len(items)
+                is_regenerate, text_segment.text, i, count, len(items)
             )
 
             if is_regenerate:
@@ -76,9 +76,7 @@ class GenerateUtil:
                     except:
                         ...
 
-            opt_sound, validate_result = GenerateUtil.generate_sound_full(
-                index=i, project=project, whisper_model=whisper_model
-            )
+            opt_sound, validate_result = GenerateUtil.generate_sound_full(project, text_segment)
 
             s = validate_result.message
             if validate_result.result == ValidateResultType.TRIMMABLE:
@@ -110,8 +108,6 @@ class GenerateUtil:
                 did_interrupt = True
                 break
 
-        Shared.clear_whisper()
-
         printt(f"Elapsed: {duration_string(time.time() - start_time)}")
         printt()
 
@@ -124,9 +120,8 @@ class GenerateUtil:
 
     @staticmethod
     def generate_sound_full(
-        index: int,
         project: Project,
-        whisper_model,
+        text_segment: TextSegment,
         max_passes: int = 2
     ) -> tuple[Sound | None, ValidateResult]:
         """
@@ -142,7 +137,7 @@ class GenerateUtil:
             pass_num += 1
 
             # Generate
-            o = GenerateUtil.generate(index, project, True)
+            o = GenerateUtil.generate(project, text_segment)
             if isinstance(o, str):
                 # Failed to generate
                 if pass_num < max_passes:
@@ -157,7 +152,7 @@ class GenerateUtil:
             sound = GenerateUtil.post_process(sound)
 
             # Transcribe
-            o = SoundUtil.transcribe(whisper_model, sound)
+            o = SoundUtil.transcribe(sound)
             if isinstance(o, str):
                 if pass_num < max_passes:
                     print_will_regenerate(o)
@@ -168,7 +163,7 @@ class GenerateUtil:
                 whisper_data = o
 
             # Validate
-            validate_result = ValidateUtil.validate_item(sound, project.text_segments[index].text, whisper_data)
+            validate_result = ValidateUtil.validate_item(sound, text_segment.text, whisper_data)
             match validate_result.result:
                 case ValidateResultType.VALID:
                     return sound, validate_result
@@ -197,7 +192,8 @@ class GenerateUtil:
         Returns saved file path, error string
         """
 
-        sound = GenerateUtil.generate(index, project)
+        text_segment = project.text_segments[index]
+        sound = GenerateUtil.generate(project, text_segment)
         if isinstance(sound, str):
             return "", f"Couldn't generate audio clip: {sound}"
 
@@ -226,8 +222,8 @@ class GenerateUtil:
 
     @staticmethod
     def generate(
-        index: int,
         project: Project,
+        text_segment: TextSegment,
         print_info: bool=True
     ) -> Sound | str:
         """
@@ -235,7 +231,6 @@ class GenerateUtil:
         """
 
         start_time = time.time()
-        text_segment = project.text_segments[index]
 
         if Shared.is_oute():
             sound = GenerateUtil.generate_oute(

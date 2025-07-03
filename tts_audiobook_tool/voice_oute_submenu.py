@@ -24,7 +24,7 @@ class VoiceOuteSubmenu:
     def _print(state: State) -> None:
 
         s = f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
-        print_heading(f"Voice clone and options {s}")
+        print_heading(f"Voice clone and model options {s}")
 
         printt(f"{make_hotkey_string('1')} Set Oute voice using reference WAV file (15s or less)")
         printt(f"{make_hotkey_string('2')} Set Oute voice using Oute voice json file")
@@ -72,12 +72,18 @@ class VoiceOuteSubmenu:
     @staticmethod
     def ask_create_oute_voice(state: State) -> None:
 
+        from tts_audiobook_tool.app_util import AppUtil
+
         path = ask_path("Enter file path of source audio (up to 15s) for voice clone:\n")
         if not path:
             return
         if not os.path.exists(path):
             ask_continue(f"File not found: {path}")
             return
+
+        # Outte is about to load its own instance of whisper, so better clear ours first
+        Shared.clear_whisper()
+        AppUtil.gc_ram_vram()
 
         interface = Shared.get_oute()
         try:
@@ -89,10 +95,7 @@ class VoiceOuteSubmenu:
 
         state.project.set_oute_voice_and_save(voice_json, Path(path).stem)
 
-        # Outte created a whisper instance, which will stick around
-        # (in addition to app's own whisper instance)
-        # if we don't explicitly flush stuffs
-        from tts_audiobook_tool.app_util import AppUtil
+        # Outte created a whisper instance so force its eviction
         AppUtil.gc_ram_vram()
 
     @staticmethod

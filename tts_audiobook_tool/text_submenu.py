@@ -39,10 +39,10 @@ class TextSubmenu:
 
         inp = ask_hotkey()
         if inp == "1":
-            text_segments, raw_text = AppUtil.get_text_from_ask_text_file()
+            text_segments, raw_text = AppUtil.get_text_segments_from_ask_text_file()
             TextSubmenu._finish_set_text(state, text_segments, raw_text)
         elif inp == "2":
-            text_segments, raw_text = AppUtil.get_segments_from_ask()
+            text_segments, raw_text = AppUtil.get_text_segments_from_ask_std_in()
             TextSubmenu._finish_set_text(state, text_segments, raw_text)
 
     @staticmethod

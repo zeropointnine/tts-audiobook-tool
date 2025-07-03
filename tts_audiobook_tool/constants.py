@@ -50,6 +50,12 @@ WHISPER_END_TIME_OFFSET = 0.40
 
 WHISPER_START_TIME_OFFSET = -0.1
 
+PAUSE_DURATION_SENTENCE = 1.0
+PAUSE_DURATION_PARAGRAPH = 1.2
+PAUSE_DURATION_INSIDE_SENTENCE = 0.5
+PAUSE_DURATION_UNDEFINED = 1.0
+
+
 # App should use single sample rate up until final audio output
 # Also, this un-complicates concatenation of mixed model audio clips
 APP_SAMPLE_RATE = 44100

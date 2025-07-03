@@ -375,7 +375,6 @@ class SttUtil:
         CHUNK_DURATION = 30
         OVERLAP_DURATION = 5
 
-        whisper = Shared.get_whisper()
         list_of_lists: list[list[TranscribedWord]] = []
         time_offset = 0.0
 
@@ -401,7 +400,7 @@ class SttUtil:
                 s += f"{Ansi.ERASE_REST_OF_LINE}"
                 print(s, end="", flush=True)
 
-            whisper_data = whisper.transcribe(chunk, word_timestamps=True, language=None)
+            whisper_data = Shared.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
             words = SttUtil.whisper_data_to_word_dicts(whisper_data, time_offset)
             list_of_lists.append(words)
 

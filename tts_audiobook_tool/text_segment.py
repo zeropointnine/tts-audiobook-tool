@@ -73,18 +73,18 @@ class TextSegmentReason(Enum):
     Reason for the text segment being segmented
     Value is used in teh json
     """
-    UNDEFINED = ("undefined", 1.0) # for back-compat
+    UNDEFINED = ("undefined", PAUSE_DURATION_SENTENCE) # for back-compat
 
     # Segment is a start of a sentence
-    SENTENCE = ("s",0.8)
+    SENTENCE = ("s",PAUSE_DURATION_SENTENCE)
 
     # Segment is the start of a paragraph
     # (and also by our definition is the start of a sentence too)
-    PARAGRAPH = ("p", 1.2)
+    PARAGRAPH = ("p", PAUSE_DURATION_PARAGRAPH)
 
     # Segment is a continuation of a sentence
-    # TODO currently no differentiation btw 'phrase' (eg at comma) versus btw random words
-    INSIDE_SENTENCE = ("is", 0.5)
+    # TODO currently no differentiation btw 'phrase' (eg at various punctuation) versus btw random words
+    INSIDE_SENTENCE = ("is", PAUSE_DURATION_INSIDE_SENTENCE)
 
     @property
     def json_value(self) -> str:
@@ -94,6 +94,6 @@ class TextSegmentReason(Enum):
     def pause_duration(self) -> float:
         """
         Duration of silence that should be inserted
-        "between" the given text segment and the one preceding it
+        between the given text segment and the one preceding it
         """
         return self.value[1]

@@ -109,7 +109,7 @@ class AppUtil:
         return ""
 
     @staticmethod
-    def get_text_from_ask_text_file() -> tuple[ list[TextSegment], str ]:
+    def get_text_segments_from_ask_text_file() -> tuple[ list[TextSegment], str ]:
         """
         Asks user for path to text file and returns list of TextSegments and raw text.
         Shows feedback except when text segments are returned
@@ -137,7 +137,7 @@ class AppUtil:
         return text_segments, raw_text
 
     @staticmethod
-    def get_segments_from_ask() -> tuple[ list[TextSegment], str ]:
+    def get_text_segments_from_ask_std_in() -> tuple[ list[TextSegment], str ]:
         """
         Asks user to input text using stdin.read() and returns list of TextSegments and raw text
         """
