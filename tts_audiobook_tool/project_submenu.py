@@ -7,7 +7,7 @@ from tts_audiobook_tool.state import State
 class ProjectSubmenu:
 
     @staticmethod
-    def project_submenu(state:State) -> None:
+    def submenu(state:State) -> None:
         """ Returns new | existing | empty string """
 
         print_heading("Project directory:")
@@ -16,25 +16,31 @@ class ProjectSubmenu:
         printt()
         hotkey = ask_hotkey()
         if hotkey == "1":
-            ProjectSubmenu.ask_and_set_new_project(state, state.project.oute_voice_json)
+            did = ProjectSubmenu.ask_and_set_new_project(state, state.project.oute_voice_json)
+            if not did:
+                ProjectSubmenu.submenu(state)
         elif hotkey == "2":
-            ProjectSubmenu.ask_and_set_existing_project(state)
+            did = ProjectSubmenu.ask_and_set_existing_project(state)
+            if not did:
+                ProjectSubmenu.submenu(state)
+
 
     @staticmethod
-    def ask_and_set_new_project(state: State, previous_voice: dict | str | None) -> None:
-        """ Asks user for directory and creates new project if directory is ok, else prints error feedback """
-
-        printt("Enter directory path for new project:")
-        path = ask_path()
+    def ask_and_set_new_project(state: State, previous_voice: dict | str | None) -> bool:
+        """
+        Asks user for directory and creates new project
+        Returns True on success
+        """
+        s = "Enter empty directory path for new project:"
+        path = ask_dir_path(s, initialdir=state.project.dir_path, mustexist=False)
         if not path:
-            return
+            return False
         err = state.make_new_project(path)
         if err:
             ask_error(err)
-            return
+            return False
 
-        if MENU_CLEARS_SCREEN:
-            ask_continue("Project set.")
+        return True
 
         # TODO
         # if isinstance(previous_voice, dict):
@@ -43,17 +49,20 @@ class ProjectSubmenu:
         #         VoiceUtil.save_to_project_dir_and_set_state(previous_voice, self.state)
 
     @staticmethod
-    def ask_and_set_existing_project(state: State) -> None:
-        """ Asks user for directory and if valid, sets state to existing project, else prints error feedback """
-
-        printt("Enter directory path of existing project:")
-        dir = ask_path()
+    def ask_and_set_existing_project(state: State) -> bool:
+        """
+        Asks user for directory and if valid, sets state to existing project
+        Returns True on success
+        """
+        s = "Enter directory path of existing project:"
+        dir = ask_dir_path(s, initialdir=state.project.dir_path, mustexist=True)
         if not dir:
-            return
+            return False
         err = Project.is_valid_project_dir(dir)
         if err:
             ask_error(err)
-            return
+            return False
 
         dir = str( Path(dir).resolve() )
         state.set_existing_project(dir)
+        return True

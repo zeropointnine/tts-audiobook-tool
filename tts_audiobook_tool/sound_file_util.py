@@ -54,7 +54,7 @@ class SoundFileUtil:
 
     @staticmethod
     def debug_save(label: str, sound: Any): # sound = Sound
-        if DEBUG_SAVE_INTERMEDIATE_FILES:
+        if DEV_SAVE_INTERMEDIATE_FILES:
             fn = f"{int(time.time()*1000)} {label}.flac"
             path = os.path.join(SoundFileUtil.debug_save_dir, fn)
             SoundFileUtil.save_flac(sound, path)

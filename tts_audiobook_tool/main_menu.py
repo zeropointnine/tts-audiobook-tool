@@ -105,7 +105,7 @@ class MainMenu:
 
         match hotkey:
             case "p":
-                ProjectSubmenu.project_submenu(state)
+                ProjectSubmenu.submenu(state)
             case "v":
                 if state.prefs.project_dir:
                     if Shared.is_oute():

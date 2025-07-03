@@ -1,3 +1,4 @@
+import json
 import re
 import os
 import random
@@ -6,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import platform
 import subprocess
+from typing import Any
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -15,7 +17,7 @@ from tts_audiobook_tool.l import L
 
 def printt(s: str="") -> None:
     """
-    App-wide print() wrapper
+    App-standard way of printing to the console.
     (Doesn't do anything extra or different at the moment)
     """
     s += Ansi.RESET
@@ -26,7 +28,7 @@ def print_heading(s: str, dont_clear: bool=False) -> None:
     if MENU_CLEARS_SCREEN and not dont_clear:
         os.system('cls' if os.name == 'nt' else 'clear')
 
-    length = get_string_len_printable(s)
+    length = get_string_printable_len(s)
     printt("-" * length)
     printt(f"{COL_ACCENT}{s}")
     printt("-" * length)
@@ -37,7 +39,8 @@ def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     Prints extra line after the input by default.
     """
 
-    clear_input_buffer()
+    if not DEV:
+        clear_input_buffer()
 
     message = f"{message}{COL_INPUT}"
     try:
@@ -57,12 +60,45 @@ def ask_hotkey(message: str="", lower: bool=True, extra_line: bool=True) -> str:
         inp = inp[0]
     return inp
 
-def ask_path(message: str="") -> str:
+def ask_file_path(
+        message: str,
+        filetypes: list[tuple[str, str]] = [],
+        initialdir: str=""
+) -> str:
+    try:
+        from tkinter import filedialog
+        printt(message)
+        result = filedialog.askopenfilename(title=message, filetypes=filetypes, initialdir=initialdir)
+        printt(result)
+        printt()
+        return result
+    except Exception as e:
+        pass
+    return ask_path_input(message)
+
+def ask_dir_path(
+        message: str,
+        initialdir: str = "",
+        mustexist: bool = True,
+) -> str:
+    try:
+        from tkinter import filedialog
+        printt(message)
+        result = filedialog.askdirectory(title=message, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows
+        printt(result)
+        printt()
+        return result
+    except Exception as e:
+        pass
+    return ask_path_input(message)
+
+def ask_path_input(message: str="") -> str:
     """
     Get file/directory path, strip outer quotes
     Could potentially open standard file requestor here
     """
-    inp = ask(message, lower=False, extra_line=True)
+    printt(message)
+    inp = ask("")
     return strip_quotes_from_ends(inp)
 
 def ask_confirm(message: str="") -> bool:
@@ -273,7 +309,6 @@ def ellipsize(s: str, length: int) -> str:
         s = s[:length - 3] + "..."
     return s
 
-
 def get_package_dir() -> str | None:
     # Get the current package's root directory
     if not __package__:
@@ -282,7 +317,6 @@ def get_package_dir() -> str | None:
     if not package.__file__:
         return None
     return os.path.dirname(os.path.abspath(package.__file__))
-
 
 def get_unique_file_path(file_path: str) -> str:
     """
@@ -296,6 +330,22 @@ def get_unique_file_path(file_path: str) -> str:
         counter = 1
     return str(path)
 
+def is_long_path_enabled():
+
+    if platform.system() != "Windows":
+        return True
+
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+            return bool(value)
+    except FileNotFoundError:
+        return False  # Key doesn't exist (older Windows)
+    except Exception as e:
+        print(f"Error checking registry: {e}")
+        return False
+
 def has_gui():
     """Check if the environment supports opening a GUI file explorer etc"""
     s = platform.system()
@@ -308,7 +358,7 @@ def has_gui():
     else:
         return False  # Unknown system
 
-def open_directory_gui(path) -> str:
+def open_directory_in_gui(path) -> str:
     """
     Open the directory in the OS's default file explorer.
     Returns error string on fail
@@ -332,16 +382,16 @@ def clear_input_buffer() -> None:
     """ Use before "input()" to prevent buffered keystrokes from being registered """
     import sys
     try:
-        import msvcrt # only exists if windows
-        def clear_input_buffer():
-            while msvcrt.kbhit(): # type: ignore
-                msvcrt.getch()
+        # Windows
+        import msvcrt
+        while msvcrt.kbhit(): # type: ignore
+            msvcrt.getch()
     except ImportError:
-        import termios  # Only exists if linux/macos
-        def clear_input_buffer():
-            termios.tcflush(sys.stdin, termios.TCIOFLUSH) # type: ignore
+        # Linux/macos
+        import termios
+        termios.tcflush(sys.stdin, termios.TCIOFLUSH) # type: ignore
 
-def get_string_len_printable(string: str) -> int:
+def get_string_printable_len(string: str) -> int:
     """
     Returns the length of the string, filtering out non-printable characters like ANSI codes.
     """
@@ -360,19 +410,13 @@ def get_string_len_printable(string: str) -> int:
 
     return len(clean_string)
 
-
-def is_long_path_enabled():
-
-    if platform.system() != "Windows":
-        return True
-
-    import winreg
+def save_json(json_object: Any, path: str) -> str:
+    """
+    Returns error message on fail, else empty string
+    """
     try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
-            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
-            return bool(value)
-    except FileNotFoundError:
-        return False  # Key doesn't exist (older Windows)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(json_object, f, ensure_ascii=False, indent=4)
+            return ""
     except Exception as e:
-        print(f"Error checking registry: {e}")
-        return False
+        return f"Error saving json: {e}"

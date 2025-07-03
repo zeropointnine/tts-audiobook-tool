@@ -96,8 +96,7 @@ class VoiceChatterboxSubmenu:
     @staticmethod
     def ask_voice_file(state: State):
 
-        printt("Enter file path of source audio for voice clone:")
-        path = ask_path()
+        path = ask_file_path("Enter file path of source audio for voice clone:")
         if not path:
             return
 

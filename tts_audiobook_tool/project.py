@@ -173,9 +173,8 @@ class Project:
             return ""
 
     def set_oute_voice_and_save(self, voice_json: dict, dest_file_stem: str) -> None:
-        from tts_audiobook_tool.app_util import AppUtil
         file_name = dest_file_stem + ".json"
-        err = AppUtil.save_json(voice_json, os.path.join(self.dir_path, file_name))
+        err = save_json(voice_json, os.path.join(self.dir_path, file_name))
         if err:
             ask_error(err)
             return

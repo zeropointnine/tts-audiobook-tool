@@ -25,7 +25,7 @@ class SttFlow:
         # TODO add more ui description here
 
         # Ask text file
-        inp = ask_path("Step 1/2 - Enter text file path: ")
+        inp = ask_file_path("Step 1/2 - Enter text file path:")
         if not inp:
             return
         if not os.path.exists(inp):
@@ -45,7 +45,7 @@ class SttFlow:
             return
 
         # Ask audio file
-        inp = ask_path("Step 2/2 - Enter audiobook file path: ")
+        inp = ask_file_path("Step 2/2 - Enter audiobook file path: ")
         if not inp:
             return
         if not os.path.exists(inp):
@@ -75,7 +75,7 @@ class SttFlow:
         # Check if already has meta
         meta = AppMetaUtil.get_app_metadata(source_audio_path)
         if meta is not None:
-            b = ask_confirm("File already has tts-audiobook-tool metadata. Continue anyway? ")
+            b = ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
             if not b:
                 return
 

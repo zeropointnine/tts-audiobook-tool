@@ -74,7 +74,7 @@ class VoiceOuteSubmenu:
 
         from tts_audiobook_tool.app_util import AppUtil
 
-        path = ask_path("Enter file path of source audio (up to 15s) for voice clone:\n")
+        path = ask_file_path("Enter file path of source audio (up to 15s) for voice clone:")
         if not path:
             return
         if not os.path.exists(path):

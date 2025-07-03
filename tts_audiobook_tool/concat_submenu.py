@@ -184,7 +184,7 @@ class ConcatSubmenu:
                 if err:
                     ask_error(err)
                     return
-                if not DEBUG_SAVE_INTERMEDIATE_FILES:
+                if not DEV_SAVE_INTERMEDIATE_FILES:
                     delete_silently(source_path)
                 path = norm_path
 
@@ -199,7 +199,7 @@ class ConcatSubmenu:
 
         hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
         if hotkey == "o":
-            err = open_directory_gui(dest_subdir)
+            err = open_directory_in_gui(dest_subdir)
             if err:
                 ask_error(err)
 

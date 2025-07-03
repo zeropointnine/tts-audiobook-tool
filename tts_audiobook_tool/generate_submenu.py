@@ -16,20 +16,18 @@ class GenerateSubmenu:
         while True:
 
             total_segments_generated = state.project.sound_segments.num_generated()
-            s = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
+            s = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} total lines complete)"
             print_heading(f"Generate audio {s}")
 
-            s1 = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string or "all"}{COL_DIM})"
+            printt(f"{make_hotkey_string("1")} Generate audio")
 
+            s1 = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string or "all"}{COL_DIM})"
             selected_indices = state.project.get_indices_to_generate()
             all_generated_indices = state.project.sound_segments.sound_segments.keys()
             selected_indices_not_generated = selected_indices - all_generated_indices
             num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
-
             s2 = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
-            printt(f"{make_hotkey_string("1")} Generate {s1} {s2}")
-
-            s = f"{make_hotkey_string("2")} Specify audio segments to generate"
+            s = f"{make_hotkey_string("2")} Specify segments to generate {s1} {s2}"
             printt(s)
 
             failed_items = state.project.sound_segments.get_sound_segments_with_tag("fail")

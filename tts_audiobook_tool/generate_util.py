@@ -54,9 +54,9 @@ class GenerateUtil:
 
         did_interrupt = False
         start_time = time.time()
-        count = 0
         Shared.mode = "generating"
 
+        count = 0
         num_saved_ok = 0
         num_saved_with_error = 0
         num_failed = 0
@@ -70,8 +70,7 @@ class GenerateUtil:
                 is_regenerate, text_segment.text, i, count, len(items)
             )
 
-            if is_regenerate:
-                # First delete original
+            if is_regenerate: # Delete original
                 if path and os.path.exists(path):
                     try:
                         Path(path).unlink()

@@ -1,11 +1,9 @@
 import gc
-import json
 import logging
 import os
 import glob
 import sys
 import tempfile
-from typing import Any
 import glob
 import torch
 
@@ -40,7 +38,7 @@ class AppUtil:
         warnings.filterwarnings("ignore", module="pyloud")
 
     @staticmethod
-    def delete_project_audio_files(dir: str) -> str:
+    def delete_project_sound_files(dir: str) -> str:
         """
         Deletes all FLAC files in the specified directory.
         Returns user-facing error message string on fail else empty string on success
@@ -60,18 +58,6 @@ class AppUtil:
             return f"Warning: Couldn't delete {num_fail} now-outdated audio segment(s)."
         else:
             return ""
-
-    @staticmethod
-    def save_json(json_object: Any, path: str) -> str:
-        """
-        Returns error message on fail, else empty string
-        """
-        try:
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(json_object, f, ensure_ascii=False, indent=4)
-                return ""
-        except Exception as e:
-            return f"Error saving json: {e}"
 
     @staticmethod
     def print_text_segment_text(raw_texts: list[str]) -> None:
@@ -114,7 +100,7 @@ class AppUtil:
         Asks user for path to text file and returns list of TextSegments and raw text.
         Shows feedback except when text segments are returned
         """
-        path = ask_path("Enter text file path: ")
+        path = ask_file_path("Enter text file path: ")
         if not path:
             return [], ""
         if not os.path.exists(path):

@@ -1,5 +1,11 @@
 """
+
 """
+
+import socket
+
+DEV = socket.gethostname() == "mini" and True
+DEV_SAVE_INTERMEDIATE_FILES = DEV and True
 
 # Max words per text chunk, applied to the source text.
 MAX_WORDS_PER_SEGMENT = 40

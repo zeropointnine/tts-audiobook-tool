@@ -92,3 +92,7 @@ def print_project_text(state: State) -> None:
     s = ParseUtil.make_one_indexed_ranges_string(set(indices), len(texts))
     printt(f"Generated segments: {s}")
     printt()
+
+HINT_LINE_BREAKS = "Line breaks are treated as paragraph delimiters.\n"
+HINT_LINE_BREAKS = HINT_LINE_BREAKS + "If your source text uses manual line breaks for word wrapping\n"
+HINT_LINE_BREAKS = HINT_LINE_BREAKS + "(eg, Project Gutenberg), you will want to reformat it first."

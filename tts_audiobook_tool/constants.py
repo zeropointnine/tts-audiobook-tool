@@ -1,6 +1,5 @@
 import os
 import re
-import socket
 
 from tts_audiobook_tool.ansi import Ansi
 
@@ -77,11 +76,3 @@ AUDIO_SEGMENT_FILE_NAME_PATTERN = re.compile(pattern)
 # App uses this format for including 64-bit hash values in filenames.
 pattern = r'\[([0-9a-fA-F]{16})\]'
 HASH_PATTERN = re.compile(pattern)
-
-DEBUG_SAVE_INTERMEDIATE_FILES = socket.gethostname() == "mini" and True
-
-# ---
-
-HINT_LINE_BREAKS = "Line breaks are treated as paragraph delimiters.\n"
-HINT_LINE_BREAKS = HINT_LINE_BREAKS + "If your source text uses manual line breaks for word wrapping\n"
-HINT_LINE_BREAKS = HINT_LINE_BREAKS + "(eg, Project Gutenberg), you will want to reformat it first."
