@@ -70,8 +70,8 @@ class RealTimeSubmenu:
         RealTimeSubmenu.submenu(state)
 
 
-HINT_TEXT = """This uses the same quality-control steps as the normal "Generate" workflow
+HINT_TEXT = f"""This uses the same quality-control steps as the normal "Generate" workflow
 except for loudness normalization.
 
-For uninterrupted playback, your system must be able to to do the audio inference
-faster-than-realtime."""
+To achieve uninterrupted playback, your system must be able to to do the audio inference
+faster-than-realtime, which also means using {COL_ACCENT}Chatterbox{COL_DEFAULT} (not Oute)."""

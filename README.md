@@ -114,6 +114,12 @@ Chatterbox is considerably faster, about 130% of realtime for me using a GeForce
 
 # Updates
 
+**2025-07-02**
+
+New feature: Real-time generation and playback (`Options > Real-time generation and playback`)
+
+This serves as a quicker and more "casual" alternative to the regular `Generate audio` UI flow, and allows for more-or-less immediate -- and uninterrupted -- audio playback (contingent on system specs, naturally). It employs the same quality control measures except for loudness normalization, and does not save its output.
+
 **2025-06-28** (many)
 
 Generated audio segments now have silence trimmed off the ends, and in the concatenation step, stitched-together lines have pauses of varying lengths inserted at paragraph, sentence, and phrase boundaries, resulting in much improved prosody / flow.
