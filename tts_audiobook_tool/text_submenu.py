@@ -23,7 +23,7 @@ class TextSubmenu:
             if num_files == 0:
                 TextSubmenu.set_text_submenu(state, "Replace text:")
             else:
-                s = f"Replacing text will invalidate all ({num_files}) previously generated audio file fragments for this project.\nAre you sure? "
+                s = f"Replacing text will invalidate all ({num_files}) previously generated sound segment files for this project.\nAre you sure? "
                 if ask_hotkey(s):
                     TextSubmenu.set_text_submenu(state, "Replace text:")
                 else:
@@ -37,7 +37,7 @@ class TextSubmenu:
     def set_text_submenu(state: State, heading: str) -> None:
 
         print_heading(heading)
-        AppUtil.show_hint_if_necessary(state.prefs, "line_breaks", "Note:", HINT_LINE_BREAKS)
+        AppUtil.show_hint_if_necessary(state.prefs, HINT_LINE_BREAKS)
         printt(f"{make_hotkey_string("1")} Import from text file")
         printt(f"{make_hotkey_string("2")} Manually enter/paste text")
         printt()
@@ -92,7 +92,3 @@ def print_project_text(state: State) -> None:
     s = ParseUtil.make_one_indexed_ranges_string(set(indices), len(texts))
     printt(f"Generated segments: {s}")
     printt()
-
-HINT_LINE_BREAKS = "Line breaks are treated as paragraph delimiters.\n"
-HINT_LINE_BREAKS = HINT_LINE_BREAKS + "If your source text uses manual line breaks for word wrapping\n"
-HINT_LINE_BREAKS = HINT_LINE_BREAKS + "(eg, Project Gutenberg), you will want to reformat it first."

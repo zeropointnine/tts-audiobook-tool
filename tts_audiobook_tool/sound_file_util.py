@@ -8,6 +8,7 @@ import threading
 import soundfile
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
@@ -16,7 +17,7 @@ class SoundFileUtil:
 
     _current_playback_thread = None
     _stop_playback_event = threading.Event()
-    debug_save_dir: str = "C:/workspace"
+    debug_save_dir: str = AppUtil.get_app_temp_dir()
 
 
     @staticmethod
@@ -123,11 +124,13 @@ class SoundFileUtil:
         return err
 
     @staticmethod
-    def transcode_to_aac(source_file_path: str, kbps=96) -> tuple[str, str]:
+    def transcode_to_aac(source_file_path: str) -> tuple[str, str]:
         """
         Transcodes an audio file to AAC/MP4 format.
         Returns saved file name and error string, mutually exclusive
         """
+
+        # TODO i refactored things, re-verify
 
         path = Path(source_file_path)
         if path.suffix in AAC_SUFFIXES:
@@ -136,13 +139,11 @@ class SoundFileUtil:
         dest_file_path = str(path.with_suffix(".m4a"))
         dest_file_path = get_unique_file_path(dest_file_path)
 
-        partial_command = [
-            "-i", source_file_path,
-            "-c:a", "aac",
-            "-b:a", f"{kbps}k",
-            "-v", "warning", "-progress",
-            "-",
-        ]
+        partial_command = FFMPEG_TYPICAL_OPTIONS[:]
+        partial_command.extend(["-i", source_file_path])
+        partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_AAC[:])
+        partial_command.append("-")
+
         err = FfmpegUtil.make_file(partial_command, dest_file_path, False)
         if err:
             return "", err

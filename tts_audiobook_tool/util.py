@@ -61,36 +61,38 @@ def ask_hotkey(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     return inp
 
 def ask_file_path(
-        message: str,
+        console_message: str,
+        requestor_title: str,
         filetypes: list[tuple[str, str]] = [],
         initialdir: str=""
 ) -> str:
     try:
         from tkinter import filedialog
-        printt(message)
-        result = filedialog.askopenfilename(title=message, filetypes=filetypes, initialdir=initialdir)
+        printt(console_message)
+        result = filedialog.askopenfilename(title=requestor_title, filetypes=filetypes, initialdir=initialdir)
         printt(result)
         printt()
         return result
     except Exception as e:
         pass
-    return ask_path_input(message)
+    return ask_path_input(console_message)
 
 def ask_dir_path(
-        message: str,
+        console_message: str,
+        ui_title: str,
         initialdir: str = "",
         mustexist: bool = True,
 ) -> str:
     try:
         from tkinter import filedialog
-        printt(message)
-        result = filedialog.askdirectory(title=message, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows
+        printt(console_message)
+        result = filedialog.askdirectory(title=ui_title, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows
         printt(result)
         printt()
         return result
     except Exception as e:
         pass
-    return ask_path_input(message)
+    return ask_path_input(console_message)
 
 def ask_path_input(message: str="") -> str:
     """
@@ -200,22 +202,6 @@ def lerp_clamped(
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
-def insert_bracket_tag_file_path(file_path: str, tag: str) -> str:
-    """
-    Eg, "[one] [two] hello.flac" -> "[one] [two] [newtag] hello.flac"
-    """
-    path = Path(file_path)
-    stem = path.stem
-    i = stem.rfind("]") + 1
-    substring = f"[{tag}]"
-    if i > 0:
-        substring = " " + substring
-    else:
-        substring = substring + " "
-    new_stem = stem[:i] + substring + stem[i:]
-    new_path = path.with_stem(new_stem)
-    return str(new_path)
-
 def massage_for_text_comparison(s: str) -> str:
     # Massages text so that source text and transcribed text can be compared
     s = s.lower().strip()
@@ -226,7 +212,45 @@ def massage_for_text_comparison(s: str) -> str:
     # Strip white space from the ends
     s = re.sub(r' +', ' ', s)
     s = s.strip(' ')
+    # Standardize the spelling of numbers from 1-20
+    # (More could be done past 20, but let's not)
+    s = substitute_smol_numbers(s)
     return s
+
+def substitute_smol_numbers(text) -> str:
+    """Replace standalone numbers 1-20 with their written equivalents (in lowercase)."""
+    number_map = {
+        '1': 'one',
+        '2': 'two',
+        '3': 'three',
+        '4': 'four',
+        '5': 'five',
+        '6': 'six',
+        '7': 'seven',
+        '8': 'eight',
+        '9': 'nine',
+        '10': 'ten',
+        '11': 'eleven',
+        '12': 'twelve',
+        '13': 'thirteen',
+        '14': 'fourteen',
+        '15': 'fifteen',
+        '16': 'sixteen',
+        '17': 'seventeen',
+        '18': 'eighteen',
+        '19': 'nineteen',
+        '20': 'twenty'
+    }
+    # Use regex to find standalone numbers (surrounded by word boundaries)
+    pattern = r'\b(?:' + '|'.join(number_map.keys()) + r')\b'
+    # Replace each found number with its word equivalent
+    result = re.sub(
+        pattern,
+        lambda match: number_map[match.group()],
+        text
+    )
+    return result
+
 
 def sanitize_for_filename(filename: str) -> str:
     """
@@ -347,10 +371,10 @@ def is_long_path_enabled():
         return False
 
 def has_gui():
-    """Check if the environment supports opening a GUI file explorer etc"""
+    """Check if a GUI shell exists or whatever"""
     s = platform.system()
     if s == "Linux":
-        return "DISPLAY" in os.environ  # X11 GUI environment check
+        return "DISPLAY" in os.environ  # X11 GUI environment check # This also returns true when using WSL
     elif s == "Darwin":  # macOS (assumes GUI is available)
         return True
     elif s == "Windows":
@@ -365,11 +389,16 @@ def open_directory_in_gui(path) -> str:
     """
     if not os.path.isdir(path):
         return "Directory doesn't exist"
+    if not has_gui():
+        return "No recognized GUI environment detected"
+
+    if is_wsl():
+        return "Unsupported for WSL"
 
     system = platform.system()
     try:
         if system == "Windows":
-            os.startfile(path)  # Works on Windows
+            os.startfile(path)
         elif system == "Darwin":  # macOS
             subprocess.run(["open", path])
         else:  # Linux and others
@@ -377,6 +406,17 @@ def open_directory_in_gui(path) -> str:
     except Exception as e:
         return f"Failed to open directory: {e}"
     return ""
+
+def is_wsl():
+    if not platform.system() == "Linux":
+        return False
+    # Combine checks for robustness
+    checks = [
+        "microsoft" in platform.uname().release.lower(),
+        "WSL_DISTRO_NAME" in os.environ,
+        os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop")
+    ]
+    return any(checks)
 
 def clear_input_buffer() -> None:
     """ Use before "input()" to prevent buffered keystrokes from being registered """

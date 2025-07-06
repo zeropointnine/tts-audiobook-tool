@@ -2,23 +2,26 @@ from __future__ import annotations
 
 from enum import Enum, auto
 from typing import NamedTuple
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, TtsInfo
 from tts_audiobook_tool.transcribe_util import TranscribeUtil
 from tts_audiobook_tool.util import *
 
 class ValidateUtil:
 
     @staticmethod
-    def validate_item(sound: Sound, reference_text: str, whisper_data: dict) -> ValidateResult:
+    def validate_item(sound: Sound, reference_text: str, whisper_data: dict, tts_specs: TtsInfo) -> ValidateResult:
 
-        # Order of tests matter here
+        # Runs various tests to determine if audio generation seems to be valid.
+        # Tests err on the conservative side and prioritize avoiding false positives
+        # Think layers of swiss cheese mkay.
+        # Order of tests matter here.
 
         # Static audio test
         is_static = TranscribeUtil.is_audio_static(sound, whisper_data)
         if is_static:
             return ValidateResult(ValidateResultType.INVALID, "Audio is static")
 
-        # Substring test
+        # Substring test (fixable)
         timestamps = TranscribeUtil.get_substring_time_range(reference_text, whisper_data)
         if timestamps:
             message = f"Excess words detected, substring at {timestamps[0]:.2f}-{timestamps[1]:.2f}"
@@ -29,6 +32,8 @@ class ValidateUtil:
                 timestamps[1]
             )
             return result
+
+        transcribed_text = TranscribeUtil.get_whisper_data_text(whisper_data)
 
         # Repeat phrases test
         repeats = TranscribeUtil.find_bad_repeats(reference_text, whisper_data)
@@ -43,6 +48,10 @@ class ValidateUtil:
         if num_over_occurrences:
             return ValidateResult(ValidateResultType.INVALID, f"Words over-occurrence count: {num_over_occurrences}")
 
+        # Dropped words at end or beginning
+        if TranscribeUtil.is_drop_fail_tail(reference_text, transcribed_text):
+            return ValidateResult(ValidateResultType.INVALID, "Dropped phrase at end")
+
         # Word count delta test
         fail_reason = TranscribeUtil.is_word_count_fail(reference_text, whisper_data)
         if fail_reason:
@@ -50,7 +59,9 @@ class ValidateUtil:
 
         # Excess audio
         trim_start_time = TranscribeUtil.get_semantic_match_start_time_trim(reference_text, whisper_data, sound)
-        trim_end_time = TranscribeUtil.get_semantic_match_end_time_trim(reference_text, whisper_data, sound)
+        trim_end_time = TranscribeUtil.get_semantic_match_end_time_trim(
+            reference_text, whisper_data, sound, include_last_word=tts_specs.semantic_trim_last
+        )
 
         messages = []
         if trim_start_time:

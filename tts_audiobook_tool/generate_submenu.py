@@ -11,7 +11,7 @@ from tts_audiobook_tool.util import *
 class GenerateSubmenu:
 
     @staticmethod
-    def generate_submenu(state: State) -> None:
+    def submenu(state: State) -> None:
 
         while True:
 
@@ -39,6 +39,8 @@ class GenerateSubmenu:
 
             printt()
             hotkey = ask_hotkey()
+            if not hotkey:
+                return
 
             match hotkey:
                 case "1":
@@ -54,7 +56,7 @@ class GenerateSubmenu:
                 #     if MENU_CLEARS_SCREEN:
                 #         ask_continue()
                 case _:
-                    return
+                    break
 
     @staticmethod
     def do_generate_items(state: State) -> None:
@@ -79,9 +81,9 @@ class GenerateSubmenu:
         )
 
         if did_interrupt:
-            ask("Press enter: \a")
+            ask_continue()
         else:
-            s = f"Press enter or {make_hotkey_string("C")} to concatenate files now: "
+            s = f"Press enter or {make_hotkey_string("C")} to concatenate files now: \a"
             hotkey = ask_hotkey(s)
             if hotkey == "c":
                 ConcatSubmenu.submenu(state)
@@ -100,7 +102,7 @@ class GenerateSubmenu:
         printt()
 
         will_hint = not state.prefs.get_hint("regenerate")
-        AppUtil.show_hint_if_necessary(state.prefs, "regenerate", "Hint:", REGEN_HINT)
+        AppUtil.show_hint_if_necessary(state.prefs, HINT_REGEN)
         if will_hint:
             b = ask_confirm(f"Press {make_hotkey_string("Y")} to start: ")
             if not b:
@@ -128,6 +130,8 @@ class GenerateSubmenu:
             if warnings:
                 printt("\n".join(warnings))
                 printt()
+                if MENU_CLEARS_SCREEN:
+                    ask_continue()
                 return
             if not indices:
                 return
@@ -136,7 +140,3 @@ class GenerateSubmenu:
         state.project.generate_range_string = s
         state.project.save()
 
-REGEN_HINT = """Please note, it's oftentimes not possible to get all voice lines to validate,
-even after repeated re-generations (especially with Oute).
-
-Increasing temperature temporarily can sometimes help."""

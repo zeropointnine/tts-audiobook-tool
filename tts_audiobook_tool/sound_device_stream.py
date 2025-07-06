@@ -4,6 +4,7 @@ import sounddevice as sd
 import threading
 from numpy import ndarray
 from typing import Optional
+from tts_audiobook_tool.util import *
 
 
 class SoundDeviceStream:
@@ -110,7 +111,6 @@ class SoundDeviceStream:
         """
         Starts the audio stream.
 
-        If the stream is already running, this method does nothing.
         If there is no data in the buffer, the stream will start and play silence
         until data is added.
         """
@@ -119,14 +119,20 @@ class SoundDeviceStream:
             return
 
         # Create and start the output stream. We assume a mono output (channels=1).
-        # The callback function will be called by sounddevice in a separate, high-priority thread.
-        self.stream = sd.OutputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            callback=self._callback,
-            dtype=np.float32  # We work with float32 internally
-        )
-        self.stream.start()
+        # Note big block size and latency=high
+        try:
+            self.stream = sd.OutputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                callback=self._callback,
+                dtype=np.float32,  # We work with float32 internally
+                blocksize=8192,
+                latency="high"
+
+            )
+            self.stream.start()
+        except Exception as e:
+            printt(f"{COL_ERROR}Couldn't open sounddevice output stream: {e}")
 
     def shut_down(self) -> None:
         """
@@ -144,7 +150,7 @@ class SoundDeviceStream:
     @property
     def buffer_duration(self) -> float:
         """
-        Returns the current duration of the audio in the buffer, in seconds.
+        Returns the current duration of the audio in the 'external' buffer, in seconds.
 
         Returns:
             float: The duration of the buffered audio in seconds.

@@ -1,9 +1,7 @@
-import os
-
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 
 class VoiceChatterboxSubmenu:
 
@@ -21,11 +19,10 @@ class VoiceChatterboxSubmenu:
     @staticmethod
     def _print(state: State) -> None:
 
-        s = f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
-        print_heading(f"Voice clone and model options {s}")
+        print_heading(f"Voice clone and options")
 
-        s = f"{make_hotkey_string('1')} Set Chatterbox voice "
-        s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
+        s = f"{make_hotkey_string('1')} Set voice clone audio clip"
+        s += f" {COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
         printt(s)
         cb_temp = state.project.chatterbox_temperature
         s = "default" if cb_temp == -1 else str(cb_temp)
@@ -95,22 +92,11 @@ class VoiceChatterboxSubmenu:
 
     @staticmethod
     def ask_voice_file(state: State):
-
-        path = ask_file_path("Enter file path of source audio for voice clone:")
+        path = VoiceSubmenuShared.ask_voice_file(state.project.dir_path)
         if not path:
             return
 
-        if not os.path.exists(path):
-            ask_continue(f"File not found: {path}")
-            return
-
-        err = SoundFileUtil.is_valid_sound_file(path)
-        if err:
-            ask_error(err)
-            return
-
         err = state.project.set_chatterbox_voice_and_save(path)
-
         if err:
             ask_error(err)
         elif MENU_CLEARS_SCREEN:

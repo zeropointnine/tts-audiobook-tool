@@ -39,8 +39,8 @@
     --color-segment-hover: #4444ff20;
 }
 [data-segment-colors="blue"][data-theme="dark"] {
-    --color-segment-highlight: #8888ff88;
-    --color-segment-hover: #8888ff49;
+    --color-segment-highlight: #8888ff80;
+    --color-segment-hover: #8888ff40;
 }
 
 [data-segment-colors="red"] {
@@ -48,8 +48,8 @@
     --color-segment-hover: #ffbbff60;
 }
 [data-segment-colors="red"][data-theme="dark"] {
-    --color-segment-highlight: #603060;
-    --color-segment-hover: #60306050;
+    --color-segment-highlight: #603060ff;
+    --color-segment-hover: #60306066;
 }
 
 [data-text-size="medium"] {

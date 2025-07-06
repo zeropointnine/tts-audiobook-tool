@@ -1,10 +1,9 @@
 import os
-import time
 from typing import Callable
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from tts_audiobook_tool.sound_segment_file_util import SoundSegmentFileUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -21,7 +20,7 @@ class ProjectSoundSegments:
         self._sound_segments: dict[int, str] = {}
         self._dirty = True
 
-        event_handler = DirHandler(self.on_dir_change)
+        event_handler = DirHandler(self.on_dir_change) # TODO does not work under WSL without extra stuffs
         observer = Observer()
 
         if project.dir_path:
@@ -35,8 +34,9 @@ class ProjectSoundSegments:
     @property
     def sound_segments(self) -> dict[int, str]:
         if self._dirty:
-            start = time.time()
-            self._sound_segments = SoundSegmentFileUtil.get_project_sound_segments(self.project)
+            print("Scanning project directory...", end="\r")
+            self._sound_segments = SoundSegmentUtil.get_project_sound_segments(self.project)
+            print(f"{Ansi.ERASE_REST_OF_LINE}", end="\r")
             self._dirty = False
         return self._sound_segments
 

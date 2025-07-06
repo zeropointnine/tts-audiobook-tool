@@ -1,9 +1,10 @@
 import os
 
 
-class WordsValidator:
+class Dictionary:
     """
-    WORK IN PROGRESS
+    Literally an English dictionary of words
+    Must call init()
     """
 
     words: set[str]
@@ -11,8 +12,9 @@ class WordsValidator:
     @staticmethod
     def init():
         """
-        COCA words list plus contractions added
+        `words.txt` is COCA words list (including word variations)
         https://www.eapfoundation.com/vocab/general/bnccoca
+        Plus contractions.
         """
         this_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(this_dir, "assets", "words.txt")
@@ -22,19 +24,16 @@ class WordsValidator:
             words_text = file.read()
 
         lst = words_text.split("\n")
-        WordsValidator.words = set(lst)
+        Dictionary.words = set(lst)
 
 
     @staticmethod
-    def filter_out(words: list[str]) -> list[str]:
+    def dict_words_only(words: list[str]) -> list[str]:
         result = []
         for word in words:
-            if word in WordsValidator.words:
+            if word in Dictionary.words:
                 result.append(word)
             else:
-                result.append("#")
+                result.append("#") # Experiment, WIP
         return result
 
-    @staticmethod
-    def are_equal(source_words: list[str], trans_words: list[str]):
-        return source_words == trans_words

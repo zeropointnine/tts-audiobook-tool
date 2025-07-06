@@ -9,12 +9,15 @@ class RealTimeSubmenu:
 
     use_custom_text = False
     custom_text_segments: list[TextSegment] = []
+    start_index: int = 0
 
     @staticmethod
     def submenu(state: State):
 
+        # TODO add start-at option here, which should invalidate when text is replace
+
         print_heading("Real-time generation and playback")
-        AppUtil.show_hint_if_necessary(state.prefs, "real_time", "About:", HINT_TEXT)
+        AppUtil.show_hint_if_necessary(state.prefs, HINT_REAL_TIME)
         printt(f"{make_hotkey_string("1")} Start")
 
         if RealTimeSubmenu.use_custom_text:
@@ -22,6 +25,7 @@ class RealTimeSubmenu:
         else:
             s = "currently: using project text"
         printt(f"{make_hotkey_string("2")} Text source {COL_DIM}({s})")
+        printt(f"{make_hotkey_string("3")} Start at line number {COL_DIM}(currently: {COL_ACCENT}{RealTimeSubmenu.start_index + 1}{COL_DIM})")
         printt()
 
         hotkey = ask_hotkey()
@@ -35,13 +39,43 @@ class RealTimeSubmenu:
                 text_segments = state.project.text_segments
             if not text_segments:
                 ask_continue("No text segments specified")
+                RealTimeSubmenu.submenu(state)
                 return
-            RealTime.start(state.project, text_segments)
+            RealTime.start(state.project, text_segments, RealTimeSubmenu.start_index)
             RealTimeSubmenu.submenu(state)
             return
 
         elif hotkey == "2":
             RealTimeSubmenu.text_submenu(state)
+            RealTimeSubmenu.submenu(state)
+
+        elif hotkey == "3":
+            RealTimeSubmenu.ask_start_line_number(state)
+            RealTimeSubmenu.submenu(state)
+
+    @staticmethod
+    def ask_start_line_number(state: State) -> None:
+        inp = ask("Line number to start at: ")
+        if not inp:
+            return
+        try:
+            line_number = int(inp)
+        except:
+            ask_continue("Bad value.")
+            return
+
+        if RealTimeSubmenu.use_custom_text:
+            text_segments = RealTimeSubmenu.custom_text_segments
+        else:
+            text_segments = state.project.text_segments
+        length = len(text_segments)
+
+        if line_number < 1 or line_number > length:
+            ask_continue("Out of range")
+            return
+
+        RealTimeSubmenu.start_index = line_number - 1
+
 
     @staticmethod
     def text_submenu(state: State) -> None: # type: ignore
@@ -54,27 +88,21 @@ class RealTimeSubmenu:
 
         hotkey = ask_hotkey()
         if not hotkey:
-            RealTimeSubmenu.submenu(state)
-        elif hotkey == "1":
+            return
+
+        if hotkey == "1" and RealTimeSubmenu.use_custom_text:
             RealTimeSubmenu.use_custom_text = False
             RealTimeSubmenu.custom_text_segments = state.project.text_segments
-            RealTimeSubmenu.submenu(state)
-        if hotkey == "2":
+            RealTimeSubmenu.start_index = 0
+        elif hotkey == "2":
             text_segments, _ = AppUtil.get_text_segments_from_ask_text_file()
             if text_segments:
                 RealTimeSubmenu.use_custom_text = True
                 RealTimeSubmenu.custom_text_segments = text_segments
-        if hotkey == "3":
+                RealTimeSubmenu.start_index = 0
+        elif hotkey == "3":
             text_segments, _ = AppUtil.get_text_segments_from_ask_std_in()
             if text_segments:
                 RealTimeSubmenu.use_custom_text = True
                 RealTimeSubmenu.custom_text_segments = text_segments
-
-        RealTimeSubmenu.submenu(state)
-
-
-HINT_TEXT = f"""This uses the same quality-control steps as the normal "Generate" workflow
-except for loudness normalization.
-
-To achieve uninterrupted playback, your system must be able to to do the audio inference
-faster-than-realtime, which also means using {COL_ACCENT}Chatterbox{COL_DEFAULT} (not Oute)."""
+                RealTimeSubmenu.start_index = 0

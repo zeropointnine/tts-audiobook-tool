@@ -9,25 +9,24 @@ class TranscodeUtil:
     """
 
     @staticmethod
-    def ask_transcode(state: State) -> None:
+    def ask_transcode_abr_flac_to_aac(state: State) -> None:
 
         path = ask("Enter FLAC file path or directory of FLAC files: ")
         if not path:
             return
         if not os.path.exists(path):
-            ask("No such file or directory. Press enter: ")
+            ask_continue("No such file or directory.")
             return
 
         if os.path.isfile(path):
-            if os.path.isfile(path):
-                if not path.lower().endswith(".flac"):
-                    ask("Must have \".flac\" file suffix. Press enter: ")
-                    return
-                m4a_path = Path(path).with_stem(".m4a")
-                if m4a_path.exists():
-                    ask("M4A file already exists with that file stem. Press enter: ")
-                    return
-                dir_flac_paths = [path]
+            if not path.lower().endswith(".flac"):
+                ask_continue("Must have \".flac\" file suffix.")
+                return
+            m4a_path = Path(path).with_stem(".m4a")
+            if m4a_path.exists():
+                ask_continue("M4A file already exists with that file stem.")
+                return
+            dir_flac_paths = [path]
         else:
             dir_flac_paths = []
             for file in os.listdir(path):
@@ -35,61 +34,56 @@ class TranscodeUtil:
                 if file_path.lower().endswith(".flac"):
                     dir_flac_paths.append(file_path)
             if not dir_flac_paths:
-                ask("No FLAC files in directory. Press enter: ")
+                ask_continue("No FLAC files in directory.")
                 return
 
-            warnings = []
-            flac_paths = []
-            for dir_flac_path in dir_flac_paths:
-                m4a_path = Path(dir_flac_path).with_suffix(".m4a")
-                if m4a_path.exists():
-                    warnings.append(f"M4A file already exists for {Path(dir_flac_path).name}")
+        warnings = []
+        flac_paths = []
+        for dir_flac_path in dir_flac_paths:
+            m4a_path = Path(dir_flac_path).with_suffix(".m4a")
+            if m4a_path.exists():
+                warnings.append(f"M4A file already exists for {Path(dir_flac_path).name}")
+            else:
+                meta_string = AudioMetaUtil.get_flac_metadata_field(dir_flac_path, APP_META_FLAC_FIELD)
+                if not meta_string:
+                    warnings.append(f"Not a tts-audiobook-tool FLAC file: {Path(dir_flac_path).name}")
                 else:
-                    meta_string = AudioMetaUtil.get_flac_metadata_field(dir_flac_path, APP_META_FLAC_FIELD)
-                    if not meta_string:
-                        warnings.append(f"Not a tts-audiobook-tool FLAC file: {Path(dir_flac_path).name}")
-                    else:
-                        flac_paths.append(dir_flac_path)
+                    flac_paths.append(dir_flac_path)
 
-            if warnings:
-                printt("\n".join(warnings))
-                printt()
-
-            if not flac_paths:
-                ask("No files to transcode. Press enter: ")
-                return
-
-            printt("Will transcode the following files:")
-            printt("\n".join(flac_paths))
+        if warnings:
+            printt("\n".join(warnings))
             printt()
-            if not ask_confirm():
-                return
 
-            for flac_path in flac_paths:
-                TranscodeUtil.do_transcode_aac(state, flac_path)
+        if not flac_paths:
+            ask("No files to transcode. Press enter: ")
+            return
+
+        printt("Will transcode the following files:")
+        printt("\n".join(flac_paths))
+        printt()
+        if not ask_confirm():
+            return
+
+        for flac_path in flac_paths:
+
+            printt(f"Transcoding to AAC/M4A: {flac_path}")
+            printt()
+
+            new_path, err = TranscodeUtil.transcode_abr_flac_to_aac(flac_path)
+            printt()
+
+            if err:
+                s = f"{COL_ERROR}{err}"
+            else:
+                s = f"Saved: {COL_ACCENT}{new_path}"
+            printt(s)
+            printt()
 
         ask("Press enter to continue: ")
 
 
     @staticmethod
-    def do_transcode_aac(state: State, flac_path: str) -> None:
-
-        printt(f"Transcoding to AAC/M4A: {flac_path}")
-        printt()
-
-        new_path, err = TranscodeUtil.transcode_abr_flac_to_aac(flac_path)
-        printt()
-
-        if err:
-            s = f"{COL_ERROR}{err}"
-        else:
-            s = f"Saved: {COL_ACCENT}{new_path}"
-        printt(s)
-        printt()
-
-
-    @staticmethod
-    def transcode_abr_flac_to_aac(src_path: str, kbps=96) -> tuple[str, str]:
+    def transcode_abr_flac_to_aac(src_path: str, kbps: int=96) -> tuple[str, str]:
         """
         1) Reads the app metadata from flac file
         2) Converts flac to to MP4 using ffmpeg
@@ -107,12 +101,12 @@ class TranscodeUtil:
         if not meta_string:
             return "", "FLAC file has no tts-audiobook-tool metadata"
 
-        partial_command = [
-            "-hide_banner", "-loglevel", "warning", "-stats",
+        partial_command = FFMPEG_TYPICAL_OPTIONS[:]
+        partial_command.extend([
             "-i", src_path,
             "-c:a", "aac",
             "-b:a", f"{kbps}k"
-        ]
+        ])
         err = FfmpegUtil.make_file(partial_command, dest_file_path=m4a_path, use_temp_file=True)
         if err:
             return "", err

@@ -1,9 +1,6 @@
 __pycache__/
-venv/
-venv1/
-venv2/
-venv3/
+venv*/
 .vscode/
 pyrightconfig.json
 config_oute_dev.py
-test?.py
+test*.py

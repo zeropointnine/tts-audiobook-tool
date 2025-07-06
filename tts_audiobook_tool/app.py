@@ -1,11 +1,11 @@
 import os
-import signal
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.main_menu import MainMenu
-from tts_audiobook_tool.shared import Shared
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.words_dict import Dictionary
 
 class App:
     """
@@ -16,31 +16,13 @@ class App:
     def __init__(self):
 
         AppUtil.init_logging()
-        signal.signal(signal.SIGINT, self.signal_handler)
+        SigIntHandler().init()
+        Dictionary.init()
+
         self.state = State()
-
-    def signal_handler(self, _, __):
-
-        def print_message(s: str):
-            printt()
-            printt(COL_ERROR + "*" * len(s))
-            printt(s)
-            printt(COL_ERROR + "*" * len(s))
-            printt()
-
-        match Shared.mode:
-            case "generating":
-                Shared.stop_flag = True
-                print_message("Control-C pressed, will stop after current gen...")
-            case "validating":
-                Shared.stop_flag = True
-                print_message("Control-C pressed, will stop")
-            case "menu":
-                Shared.stop_flag = True
 
     def loop(self):
         while True:
-
             # Dir check # TODO refactor this out
             did_reset = False
             if self.state.prefs.project_dir and not os.path.exists(self.state.prefs.project_dir):

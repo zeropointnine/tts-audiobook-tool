@@ -73,11 +73,6 @@ class LoudnessLufsUtil:
             # Use soundfile to preserve original subtype if possible (e.g., PCM_16, PCM_24, FLOAT)
             sf.write(wav_file_path, normalized_audio, sample_rate) # sf handles dtype conversion based on file subtype
 
-            # temp
-            # audio, sample_rate = sf.read(wav_file_path, dtype='float32')
-            # loudness = SoundUtil.measure_loudness(audio, sample_rate)
-            # print("loudness after", loudness)
-
             return ""
 
         except Exception as e:

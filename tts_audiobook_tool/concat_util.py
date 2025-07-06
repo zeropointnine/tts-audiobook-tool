@@ -4,9 +4,10 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
-from tts_audiobook_tool.sound_segment_file_util import SoundSegmentFileUtil
+from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.app_meta_util import AppMetaUtil
+from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -59,15 +60,24 @@ class ConcatUtil:
             segments_and_paths.append((segment, file_path))
 
         # Filename
-        file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " " # proj name
-        file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " " # file number
-        file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " " # line range
+        extant_paths = [item[1] for item in segments_and_paths if item[1]]
+        # [1] project name
+        file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
+        # [2] file number
+        file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
+        # [3] line range
+        file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
+        # [4] num lines missing within that range
         if num_missing > 0:
-            file_name += f"[{num_missing} missing]" + " " # num segments missing
-        extant_paths = [item[1] for item in segments_and_paths if item[1]] # voice label
-        common_voice_label = SoundSegmentFileUtil.get_common_voice_label(extant_paths)
-        if common_voice_label:
-            file_name += f"[{state.project.get_voice_label()}]"
+            file_name += f"[{num_missing} missing]" + " "
+        # [5] model tag
+        common_model_tag = SoundSegmentUtil.get_common_model_tag(extant_paths)
+        if common_model_tag:
+            file_name += f"[{common_model_tag}]" + " "
+        # [5] voice tag
+        common_voice_tag = SoundSegmentUtil.get_common_voice_tag(extant_paths)
+        if common_voice_tag:
+            file_name += f"[{common_voice_tag}]" + " "
         file_name = file_name.strip() + ".abr" + (".m4a" if to_aac_not_flac else ".flac")
         dest_path = os.path.join(base_dir, file_name)
 
@@ -81,19 +91,12 @@ class ConcatUtil:
         # Add the app metadata
         text_segments = [item[0] for item in segments_and_paths]
         timed_text_segments = TimedTextSegment.make_list_using(text_segments, durations)
+        meta = AppMetadata(raw_text=raw_text, timed_text_segments=timed_text_segments)
 
         if to_aac_not_flac:
-            err = AppMetaUtil.set_mp4_app_metadata(
-                path=dest_path,
-                raw_text=raw_text,
-                timed_text_segments=timed_text_segments
-            )
+            err = AppMetadata.save_to_mp4(meta, dest_path)
         else:
-            err = AppMetaUtil.set_flac_app_metadata(
-                path=dest_path,
-                raw_text=raw_text,
-                timed_text_segments=timed_text_segments
-            )
+            err = AppMetadata.save_to_flac(meta, dest_path)
         if err:
             return "", err
 
@@ -124,7 +127,15 @@ class ConcatUtil:
         segments_and_paths = segments_and_paths.copy()
         segments_and_paths.append((TextSegment("", -1, -1, TextSegmentReason.UNDEFINED), ""))
 
+        SigIntHandler().set("concat")
+
         for i in range(0, len(segments_and_paths) - 1):
+
+            if SigIntHandler().did_interrupt:
+                SigIntHandler().clear()
+                ConcatUtil.close_ffmpeg_stream(process)
+                delete_silently(dest_path) # TODO delete parent dir silently if empty
+                return "Interrupted by user"
 
             _, path_a = segments_and_paths[i]
             segment_b, path_b = segments_and_paths[i + 1]
@@ -241,17 +252,14 @@ class ConcatUtil:
         file_paths = [path for _, path in segments_and_paths if path]
 
         # Make concatenated file
-        error = SoundFileUtil.concatenate_flacs(file_paths, dest_file_path)
-        if error:
-            return error
+        err = SoundFileUtil.concatenate_flacs(file_paths, dest_file_path)
+        if err:
+            return err
 
         # Add the app metadata
-        error = AppMetaUtil.set_flac_app_metadata(
-            path=dest_file_path,
-            raw_text=raw_text,
-            timed_text_segments=timed_text_segments
-        )
-        if error:
-            return error
+        meta = AppMetadata(raw_text=raw_text, timed_text_segments=timed_text_segments)
+        err = AppMetadata.save_to_flac(meta, dest_file_path)
+        if err:
+            return err
 
         return "" # success

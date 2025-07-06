@@ -1,10 +1,9 @@
 import os
 from pathlib import Path
 import pickle
-from tts_audiobook_tool.app_meta_util import AppMetaUtil
+from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.hash_file_util import HashFileUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.stt_util import SttUtil
@@ -12,6 +11,7 @@ from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.constants_config import *
 
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class SttFlow:
@@ -24,8 +24,8 @@ class SttFlow:
 
         # TODO add more ui description here
 
-        # Ask text file
-        inp = ask_file_path("Step 1/2 - Enter text file path:")
+        # [1] Ask text file
+        inp = ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
         if not inp:
             return
         if not os.path.exists(inp):
@@ -37,15 +37,15 @@ class SttFlow:
             with open(source_text_path, "r", encoding="utf-8") as file:
                 raw_text = file.read()
         except Exception as e:
-            ask_continue("Error: {e}\n")
+            ask_error(f"Error: {e}")
             return
 
         if not raw_text:
             ask_continue("File has no content.")
             return
 
-        # Ask audio file
-        inp = ask_file_path("Step 2/2 - Enter audiobook file path: ")
+        # [2] Ask audio file
+        inp = ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
         if not inp:
             return
         if not os.path.exists(inp):
@@ -53,9 +53,10 @@ class SttFlow:
             return
         source_audio_path = inp
 
+        # Optional transcode step
         if Path(source_audio_path).suffix == ".mp3":
-            # Transcode
-            b = ask_confirm("MP3 file must first be transcoded to AAC/MP4. Continue? ")
+            AppUtil.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
+            b = ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
             if not b:
                 return
             path, err = SoundFileUtil.transcode_to_aac(source_audio_path)
@@ -73,39 +74,46 @@ class SttFlow:
         source_audio_path = str(Path(source_audio_path).resolve().as_posix())
 
         # Check if already has meta
-        meta = AppMetaUtil.get_app_metadata(source_audio_path)
+        meta = AppMetadata.load_from_file(source_audio_path)
         if meta is not None:
             b = ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
             if not b:
                 return
 
-        # Check if already transcribed
-        fn = f"transcription {HashFileUtil.calc_hash(str(source_audio_path))}.pkl"
-        source_pickle_path = os.path.join(AppUtil.get_app_temp_dir(), fn)
+        # [3] Calc hash
+        source_audio_hash, err = AppUtil.calc_hash_file(source_audio_path)
+        if err:
+            ask_error(err)
+            return
 
-        if not os.path.exists(source_pickle_path):
-            source_pickle_path = ""
+        # [4] Check if already has transcription pickle file
+        transcription_pickle_path = make_transcription_pickle_file_path(source_audio_hash)
+        if not os.path.exists(transcription_pickle_path):
+            transcription_pickle_path = ""
         else:
             b = ask_confirm("You've previously transcribed this file. Use saved transcription data? ")
             if not b:
-                source_pickle_path = ""
+                transcription_pickle_path = ""
 
+        # [5] Start
         ok = SttFlow.make(
             raw_text,
             source_audio_path=source_audio_path,
-            source_pickle_path=source_pickle_path
+            source_audio_hash=source_audio_hash,
+            source_pickle_path=transcription_pickle_path
         )
-        AppUtil.show_player_hint_if_necessary(prefs)
+        if ok:
+            AppUtil.show_player_hint_if_necessary(prefs)
 
     @staticmethod
     def make(
             raw_text: str,
             source_audio_path: str,
+            source_audio_hash: str,
             source_pickle_path: str=""
     ) -> bool:
         """
-        Optional source_pickle_path is the already-transcribed data derived from source_audio_path.
-        When using pickle, still need source_audio_path from which we will derive dest file path.
+        Optional source_pickle_path is the already-transcribed data from source_audio_path,
 
         Returns True for success
         """
@@ -133,12 +141,15 @@ class SttFlow:
 
             printt("Transcribing audio...")
             printt()
+
+            # Warm up
+            _ = Tts.get_whisper()
+
             words = SttUtil.transcribe_to_words(str(source_audio_path))
             printt("\a")
 
             # Save to pickle
-            fn = f"transcription {HashFileUtil.calc_hash(str(source_audio_path))}.pkl"
-            pickle_path = os.path.join(AppUtil.get_app_temp_dir(), fn)
+            pickle_path = make_transcription_pickle_file_path(source_audio_hash)
             try:
                 with open(pickle_path, "wb") as file:
                     pickle.dump(words, file)
@@ -152,11 +163,8 @@ class SttFlow:
         printt()
         timed_text_segments = SttUtil.make_timed_text_segments(text_segments, words)
 
-        with open("temp_timed_segments.pickle", "wb") as file: # TODO: meh?
-            pickle.dump(timed_text_segments, file)
-
-        # with open("temp_timed_segments.pickle", "rb") as file:  # "rb" = read binary
-        #     timed_text_segments = pickle.load(file)
+        # with open("temp_timed_segments.pickle", "wb") as file: # TODO: meh?
+        #     pickle.dump(timed_text_segments, file)
 
         # [4] Save "abr" audio file
 
@@ -171,9 +179,8 @@ class SttFlow:
             ask("TODO: ") # TODO
             return False
         else:
-            err = AppMetaUtil.set_mp4_app_metadata(
-                str(source_audio_path), raw_text, timed_text_segments, str(dest_path)
-            )
+            meta = AppMetadata(raw_text, timed_text_segments)
+            err = AppMetadata.save_to_mp4(meta, str(source_audio_path), str(dest_path))
             if err:
                 printt(f"Error creating audio file: {err}")
                 return False
@@ -195,6 +202,10 @@ class SttFlow:
         return True
 
 # ---
+
+def make_transcription_pickle_file_path(hash: str) -> str:
+    file_name = f"transcription {hash}.pkl"
+    return os.path.join(AppUtil.get_app_user_dir(), file_name)
 
 def print_discontinuity_info(timed_text_segments: list[TimedTextSegment]):
 

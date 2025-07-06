@@ -32,7 +32,15 @@ class TextSegmenter:
         for text in texts:
             lst = SentenceSegmenter.segment_sentence(text, max_words=max_words)
             for i, subsegment in enumerate(lst):
-                reason = TextSegmentReason.SENTENCE if i == 0 else TextSegmentReason.INSIDE_SENTENCE
+                if i == 0:
+                    reason = TextSegmentReason.SENTENCE
+                else:
+                    previous_subsegment = lst[i - 1].strip()
+                    last_char = previous_subsegment[-1]
+                    if last_char.isalpha():
+                        reason = TextSegmentReason.WORD
+                    else:
+                        reason = TextSegmentReason.PHRASE # assumption, good enough
                 tups.append( (subsegment, reason) )
 
         # Make TextSegments proper
@@ -61,6 +69,26 @@ class TextSegmenter:
         text_segments = [item for item in text_segments if has_alpha_numeric_char(item.text)]
 
         return text_segments
+
+    @staticmethod
+    def segment_text_test_paras(full_text: str, max_words: int, language:str="en") -> list[TextSegment]:
+        """ WIP """
+
+        lst = full_text.split("\n")
+        new_lst = []
+        for item in lst:
+            if item.strip():
+                new_lst.append(item)
+
+        result = []
+        counter = 0
+        for item in new_lst:
+            start = counter
+            counter = counter + len(item)
+            seg = TextSegment(item, start, counter, TextSegmentReason.PARAGRAPH)
+            result.append(seg)
+
+        return result
 
 # ---
 

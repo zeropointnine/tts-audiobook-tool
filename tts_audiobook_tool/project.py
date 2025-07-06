@@ -2,11 +2,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from tts_audiobook_tool.app_types import TtsType
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.shared import Shared
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
 
@@ -26,6 +27,10 @@ class Project:
     chatterbox_temperature: float = -1
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
+
+    fish_voice_file_name: str = ""
+    fish_voice_text: str = ""
+    fish_temperature: float = -1
 
     generate_range_string: str = ""
 
@@ -121,6 +126,11 @@ class Project:
         project.chatterbox_cfg = d.get("chatterbox_cfg", -1)
         project.chatterbox_exaggeration = d.get("chatterbox_exaggeration", -1)
 
+        # Fish
+        project.fish_voice_file_name = d.get("fish_voice_file_name", "")
+        project.fish_voice_text = d.get("fish_voice_text", "")
+        project.fish_temperature = d.get("fish_temperature", -1)
+
         return project
 
     def save(self) -> None:
@@ -135,7 +145,10 @@ class Project:
             "chatterbox_voice_file_name": self.chatterbox_voice_file_name,
             "chatterbox_temperature": self.chatterbox_temperature,
             "chatterbox_cfg": self.chatterbox_cfg,
-            "chatterbox_exaggeration": self.chatterbox_exaggeration
+            "chatterbox_exaggeration": self.chatterbox_exaggeration,
+            "fish_voice_file_name": self.fish_voice_file_name,
+            "fish_voice_text": self.fish_voice_text,
+            "fish_temperature": self.fish_temperature,
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -196,33 +209,82 @@ class Project:
         self.save()
         return ""
 
+    def set_fish_voice_and_save(self, src_path: str, text: str) -> str:
+        """ Returns error string on fail """
+        source_path = Path(src_path)
+        file_name = source_path.name
+        dest_path = Path(self.dir_path) / file_name
+        if source_path != dest_path:
+            try:
+                shutil.copy(source_path, dest_path)
+            except Exception as e:
+                return str(e)
+        self.fish_voice_file_name = file_name
+        self.fish_voice_text = text
+        self.save()
+        return ""
+
+    def clear_fish_voice_and_save(self) -> None:
+        self.fish_voice_file_name = ""
+        self.fish_voice_text = ""
+        self.save()
+
     def get_voice_label(self) -> str:
-        if Shared.is_oute() and self.has_voice:
-            label = Path(self.oute_voice_file_name).stem[:30]
-            label = sanitize_for_filename(label)
-            return label
-        elif Shared.is_chatterbox():
-            if not self.chatterbox_voice_file_name:
-                return "default"
-            label = Path(self.chatterbox_voice_file_name).stem[:30]
-            label = sanitize_for_filename(label)
-            return label
-        else:
-            return "none"
+        match Tts.get_type():
+            case TtsType.OUTE:
+                if self.has_voice:
+                    label = Path(self.oute_voice_file_name).stem[:30]
+                    label = sanitize_for_filename(label)
+                    return label
+                else:
+                    return "none" # shouldn't happen
+            case TtsType.CHATTERBOX:
+                if not self.chatterbox_voice_file_name:
+                    return "none"
+                label = Path(self.chatterbox_voice_file_name).stem[:30]
+                label = sanitize_for_filename(label)
+                return label
+            case TtsType.FISH:
+                if not self.fish_voice_file_name:
+                    return "none"
+                label = Path(self.fish_voice_file_name).stem[:30]
+                label = sanitize_for_filename(label)
+                return label
+            case TtsType.NONE:
+                return "none"
+            case _:
+                return "none"
 
     @property
     def has_voice(self) -> bool:
-        if Shared.is_oute():
-            return bool(self.oute_voice_json)
-        elif Shared.is_chatterbox():
-            # Is true even when no 'voice prompt' is supplied
-            return True
-        else:
-            return False
+        """
+        Returns True if current state allows for outputting a "voice" of any kind.
+        """
+        match Tts.get_type():
+            case TtsType.OUTE:
+                # must have oute json file
+                # (rem, we default to using Oute's own "official" default voice)
+                return bool(self.oute_voice_json)
+            case TtsType.CHATTERBOX:
+                # always true bc does not require voice sample
+                return True
+            case TtsType.FISH:
+                # always true bc does not require voice sample
+                return True
+            case TtsType.NONE:
+                return False
+            case _:
+                return False
 
     @property
     def can_generate_audio(self) -> bool:
         return self.has_voice and len(self.text_segments) > 0
+
+    @property
+    def sound_segments_dir_path(self) -> str:
+        if not self.dir_path:
+            return "" # TODO this feels off, smth abt project not yet having a dir_path, etc
+        return os.path.join(self.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
 
     def get_indices_to_generate(self) -> set[int]:
         """
@@ -255,4 +317,3 @@ class Project:
             return ""
 
         return f"{project_dir} does not appear to be a project directory"
-
