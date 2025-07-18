@@ -1,6 +1,6 @@
 import os
 
-from tts_audiobook_tool.app_types import NormalizationType, TtsType
+from tts_audiobook_tool.app_types import NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -12,6 +12,7 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 
 class ConcatSubmenu:
@@ -33,7 +34,7 @@ class ConcatSubmenu:
             chapter_dividers_desc = f": {COL_ACCENT}{chapter_dividers_desc}{COL_DIM}"
 
         printt(f"{make_hotkey_string('1')} Create FLAC file")
-        printt(f"{make_hotkey_string('2')} CreateAAC/M4A file")
+        printt(f"{make_hotkey_string('2')} Create AAC/M4A file")
         printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently {len(state.project.section_dividers)} cut point/s{chapter_dividers_desc})")
         printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{state.prefs.normalization_type.value.json_value}{COL_DIM})")
         printt()

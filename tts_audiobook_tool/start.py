@@ -1,10 +1,11 @@
 from tts_audiobook_tool.app import App
-from tts_audiobook_tool.app_types import TtsType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
+
 
 """
 App entrypoint:
@@ -12,8 +13,9 @@ App entrypoint:
 - Prints one-time info messages, depending
 """
 
-print()
+printt()
 
+# TTS model check
 err = Tts.init_active_model()
 if err:
     ask_error(err)
@@ -28,15 +30,12 @@ if not FfmpegUtil.is_ffmpeg_available():
 
 # Print some one-time messages
 prefs = Prefs.load()
-
 if not is_long_path_enabled():
     AppUtil.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
-
 if Tts.get_type() == TtsType.OUTE:
     AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_CONFIG, and_prompt=True)
 
-printt()
-
 # Start proper
+printt()
 app = App()
 app.loop()

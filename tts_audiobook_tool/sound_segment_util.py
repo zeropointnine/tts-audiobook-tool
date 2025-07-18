@@ -1,12 +1,12 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import NamedTuple
-from tts_audiobook_tool.app_types import TtsType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 
 

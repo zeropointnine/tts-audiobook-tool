@@ -1,64 +1,57 @@
 from __future__ import annotations
 
 from importlib import util
-from typing import Any
+from typing import Any, cast
 import torch
 import whisper
 from whisper.model import Whisper
 
-from tts_audiobook_tool.app_types import TtsType
 from tts_audiobook_tool.fish_generator import FishGenerator
+from tts_audiobook_tool.higgs_generator import HiggsGenerator
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 
 class Tts:
     """
-    Static class for accessing TTS model (and also Whisper)
+    Static class for accessing the TTS model (and also Whisper)
     """
+
+    # TODO: create tts interface to replace hardcoded logic; this also applies to Project and GenerateUtil ideally
 
     _whisper: Whisper | None = None
 
     _oute: Any = None
     _chatterbox: Any = None
     _fish: Any = None
+    _higgs: Any = None
 
     _type: TtsType
 
     @staticmethod
     def init_active_model() -> str:
         """
-        Sets the tts model type by 'reflecting' on the existing modules in the environment.
-        Returns error string on fail, else empty string
+        Sets the tts model type by reflecting on the existing modules in the environment.
+        Returns error string on fail, else empty string on success
         """
-        has_oute = util.find_spec("outetts") is not None
-        has_chatterbox = util.find_spec("chatterbox") is not None
-        has_fish = util.find_spec("fish_speech") is not None
-
         num_models = 0
-        if has_oute:
-            num_models += 1
-        if has_chatterbox:
-            num_models += 1
-        if has_fish:
-            num_models += 1
-
+        tts_type = None
+        for item in TtsType:
+            exists = util.find_spec(item.value.module_test) is not None
+            if exists:
+                num_models += 1
+                tts_type = item
         if num_models == 0:
-            s = "None of the supported TTS models are currently installed." + "\n"
+            s = "None of the supported TTS models are currently installed.\n"
             s += "Please follow the install instructions in the README."
             return s
         elif num_models > 1:
-            s = "More than one of the supported TTS model libraries is currently installed."
-            s += "Please follow the install instructions in the README."
+            s = "More than one of the supported TTS model libraries is currently installed.\n"
+            s = "This is not recommended.\n"
+            s += "Please re-install python environment, following the instructions in the README."
             return s
 
-        if has_oute:
-            Tts.set_type(TtsType.OUTE)
-        elif has_chatterbox:
-            Tts.set_type(TtsType.CHATTERBOX)
-        else:
-            Tts.set_type(TtsType.FISH)
-
+        Tts.set_type(cast(TtsType, tts_type))
         return ""
-
 
     @staticmethod
     def set_type(typ: TtsType) -> None:
@@ -124,6 +117,15 @@ class Tts:
             printt()
             Tts._fish = FishGenerator(device)
         return Tts._fish
+
+    @staticmethod
+    def get_higgs() -> HiggsGenerator:
+        if not Tts._higgs:
+            device = Tts.get_best_torch_device() # TODO
+            printt(f"Initializing Higgs V2 TTS model ({device})...")
+            printt()
+            Tts._higgs = HiggsGenerator(device)
+        return Tts._higgs
 
     @staticmethod
     def clear_oute() -> None:

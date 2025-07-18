@@ -308,6 +308,11 @@ body, html {
     border-radius: 8px;
     box-shadow: 0 4px 8px var(--color-shadow);
 
+    overflow-wrap: break-word;
+    word-break: break-word;
+
+    max-width: 100%;
+    box-sizing: border-box;
 }
 @media (max-width: 600px) {
     #textHolder {

@@ -6,16 +6,16 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 
-class VoiceFishSubmenu:
+class VoiceHiggsSubmenu:
 
     @staticmethod
     def submenu(state: State) -> None:
         """
         """
         while True:
-            VoiceFishSubmenu._print(state)
+            VoiceHiggsSubmenu._print(state)
             hotkey = ask_hotkey()
-            should_exit = VoiceFishSubmenu._handle_hotkey(state, hotkey)
+            should_exit = VoiceHiggsSubmenu._handle_hotkey(state, hotkey)
             if should_exit:
                 return
 
@@ -31,9 +31,9 @@ class VoiceFishSubmenu:
         s = f"{make_hotkey_string("2")} Clear voice clone"
         printt(s)
 
-        temperature = state.project.fish_temperature
-        s = "default" if temperature == -1 else str(temperature)
-        printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        # temperature = state.project.fish_temperature
+        # s = "default" if temperature == -1 else str(temperature)
+        # printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
 
         printt()
 
@@ -42,56 +42,27 @@ class VoiceFishSubmenu:
 
         match hotkey:
             case "1":
-                VoiceFishSubmenu.ask_voice_file(state)
+                VoiceHiggsSubmenu.ask_voice_file(state)
                 return False
             case "2":
-                state.project.clear_fish_voice_and_save()
+                state.project.clear_higgs_voice_and_save()
                 printt("Cleared")
                 printt()
                 return False
-            case "3":
-                value = ask(f"Enter temperature (0.0 < value < 2.0): ")
-                if not value:
-                    return False
-                try:
-                    value = float(value)
-                    if not (0.0 < value < 2.0):
-                        ask_error("Out of range")
-                    else:
-                        state.project.fish_temperature = value
-                        state.project.save()
-                except:
-                    ask_error("Bad value")
-                    return False
             # case "3":
-            #     value = ask("Enter value for exaggeration (0.25-2.0): ")
+            #     value = ask(f"Enter temperature (0.0 < value < 2.0): ")
             #     if not value:
             #         return False
             #     try:
             #         value = float(value)
-            #         if not (0.25 <= value <= 2.0):
+            #         if not (0.0 < value < 2.0):
             #             ask_error("Out of range")
             #         else:
-            #             state.project.chatterbox_exaggeration = value
-            #             state.project.save()
-            #         return False
-            #     except:
-            #         ask_error("Bad value")
-            #         return False
-            # case "4":
-            #     value = ask("Enter value for cfg/pace (0.2-1.0): ")
-            #     if not value:
-            #         return False
-            #     try:
-            #         value = float(value)
-            #         if not (0.2 <= value <= 1.0):
-            #             ask_error("Out of range")
-            #         else:
-            #             state.project.chatterbox_cfg = value
+            #             state.project.fish_temperature = value
             #             state.project.save()
             #     except:
             #         ask_error("Bad value")
-            #     return False
+            #         return False
             case _:
                 return True
 
@@ -115,7 +86,7 @@ class VoiceFishSubmenu:
             return
         text = TranscribeUtil.get_whisper_data_text(result)
 
-        err = state.project.set_fish_voice_and_save(path, text)
+        err = state.project.set_higgs_voice_and_save(path, text)
         if err:
             ask_error(err)
             return

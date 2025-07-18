@@ -1,4 +1,3 @@
-from tts_audiobook_tool.app_types import TtsType
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.options_submenu import OptionsSubmenu
@@ -7,11 +6,15 @@ from tts_audiobook_tool.project_submenu import ProjectSubmenu
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.text_submenu import TextSubmenu
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu
 from tts_audiobook_tool.voice_fish_submenu import VoiceFishSubmenu
+from tts_audiobook_tool.voice_higgs_submenu import VoiceHiggsSubmenu
 from tts_audiobook_tool.voice_oute_submenu import VoiceOuteSubmenu
+
+# TODO some import above is triggering unsightly warning from "jieba"...
 
 class MainMenu:
     """
@@ -56,7 +59,7 @@ class MainMenu:
         printt(s)
 
         # Voice
-        if state.prefs.project_dir:
+        if state.prefs.project_dir and Tts.get_type() != TtsType.NONE:
             s = f"{make_hotkey_string("V")} Voice clone "
             s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
             printt(s)
@@ -69,7 +72,7 @@ class MainMenu:
             printt(s)
 
         # Generate audio
-        if state.prefs.project_dir:
+        if state.prefs.project_dir and Tts.get_type() != TtsType.NONE:
             s = f"{make_hotkey_string("G")} Generate audio"
             if not state.project.has_voice and not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set voice and text)"
@@ -113,6 +116,8 @@ class MainMenu:
                         VoiceChatterboxSubmenu.submenu(state)
                     elif Tts.get_type() == TtsType.FISH:
                         VoiceFishSubmenu.submenu(state)
+                    elif Tts.get_type() == TtsType.HIGGS:
+                        VoiceHiggsSubmenu.submenu(state)
             case "t":
                 if not state.prefs.project_dir:
                     return

@@ -37,8 +37,6 @@ class AppUtil:
         logging.getLogger("filelock").setLevel(logging.WARNING)
         logging.getLogger('numba').setLevel(logging.WARNING)
         # Used by oute lib
-        from loguru import logger
-        logger.remove()
         import warnings
         warnings.filterwarnings("ignore", module="pyloud")
 
@@ -127,7 +125,9 @@ class AppUtil:
             ask_error(f"Error: {e}")
             return [], ""
 
+        print("Segmenting text... ", end="", flush=True)
         text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
+        print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
         if not text_segments:
             ask_continue("No text segments.")
@@ -255,4 +255,3 @@ class AppUtil:
         new_stem = stem[:i] + substring + stem[i:]
         new_path = path.with_stem(new_stem)
         return str(new_path)
-
