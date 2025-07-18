@@ -26,7 +26,7 @@ class AudioMetaUtil:
         return result
 
 
-    # TODO: add optional dest file path matching mp4 fversion
+    # TODO: add optional dest file path, matching mp4 version
     @staticmethod
     def set_flac_custom_metadata_field(flac_path: str, field_name: str, value: str) -> str:
         """

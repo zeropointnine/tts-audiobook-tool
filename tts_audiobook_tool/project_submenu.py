@@ -32,7 +32,8 @@ class ProjectSubmenu:
         Returns True on success
         """
         s = "Enter empty directory path for new project:"
-        path = ask_dir_path(s, initialdir=state.project.dir_path, mustexist=False)
+        s2 = "Select empty directory"
+        path = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=False)
         if not path:
             return False
         err = state.make_new_project(path)
@@ -54,8 +55,9 @@ class ProjectSubmenu:
         Asks user for directory and if valid, sets state to existing project
         Returns True on success
         """
-        s = "Enter directory path of existing project:"
-        dir = ask_dir_path(s, initialdir=state.project.dir_path, mustexist=True)
+        s = "Enter existing project directory path:"
+        s2 = "Select existing project directory"
+        dir = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
         if not dir:
             return False
         err = Project.is_valid_project_dir(dir)

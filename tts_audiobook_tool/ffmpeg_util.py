@@ -8,7 +8,7 @@ class FfmpegUtil:
 
     @staticmethod
     def is_ffmpeg_available() -> bool:
-        """Check if 'ffmpeg' is installed and accessible in the system PATH."""
+        """ Checks if 'ffmpeg' is installed and accessible in the system PATH """
         try:
             subprocess.run(
                 [FFMPEG_COMMAND, "-version"],
@@ -33,7 +33,7 @@ class FfmpegUtil:
         When `use_temp_file`, outputs a temp file in same directory as `dest_file_path`,
         and on success, renames temp file to `dest_file_path`.
 
-        Returns error message on fail
+        Returns error string on fail, else empty string
         """
 
         if use_temp_file:
@@ -48,6 +48,10 @@ class FfmpegUtil:
         full_command.insert(0, FFMPEG_COMMAND)
         full_command.append(working_dest_file_path)
 
+        if False:
+            printt(" ".join(full_command))
+            printt()
+
         try:
             completed_process = subprocess.run(
                 full_command,
@@ -58,19 +62,19 @@ class FfmpegUtil:
             if completed_process.returncode != 0:
                 if use_temp_file:
                     delete_silently(working_dest_file_path)
-                return f"ffmpeg fail, returncode - {completed_process.returncode}"
+                return f"Ffmpeg error, returncode - {completed_process.returncode}"
 
         except subprocess.CalledProcessError as e:
             if use_temp_file:
                 delete_silently(working_dest_file_path)
-            return f"ffmpeg fail, returncode - {e.returncode} - {e.stderr}"
+            return f"Ffmpeg error, returncode - {e.returncode} - {e.stderr}"
 
         except Exception as e:
             if use_temp_file:
                 delete_silently(working_dest_file_path)
-            return f"subprocess fail, ffmpeg - {e}"
+            return f"Subprocess error: {e}"
 
-        # Ffmpeg finished successfully
+        # Success at this point
 
         if use_temp_file:
             # Rename file

@@ -38,6 +38,7 @@ window.app = function() {
 
     let currentIndex = -1; // segment index whose time range encloses the player's currentTime
     let previousIndex = -1;
+    let directSelections = []
 
     let intervalId = -1;
     let fadeOutId = -1;
@@ -315,6 +316,8 @@ window.app = function() {
 
     function onKeyDown(event) {
 
+        // console.log(event.target.tagName)
+
         if (event.target.tagName == "INPUT") {
             return;
         }
@@ -349,16 +352,22 @@ window.app = function() {
                 }
                 event.preventDefault();
                 break;
-            case "[":
+            case ",":
                 seekPreviousSegment();
                 break;
-            case "]":
+            case ".":
                 seekNextSegment();
                 break;
-            case ",":
+            case "`":
+                if (directSelections.length > 0) {
+                    index = directSelections.pop();
+                    seekBySegmentIndex(index);
+                }
+                break;
+            case "[":
                 player.currentTime -= 60;
                 break;
-            case ".":
+            case "]":
                 player.currentTime += 60;
                 break;
         }
@@ -374,10 +383,10 @@ window.app = function() {
         }
 
         const segmentIndex = parseInt(clickedSpan.id.split('-')[1]);
-        const segment = timedTextSegments[segmentIndex]
+        const segment = timedTextSegments[segmentIndex];
 
         if (segment["time_start"] == 0 && segment["time_end"] == 0) {
-            return
+            return;
         }
 
         if (clickedSpan == getCurrentSpan()) {
@@ -388,8 +397,13 @@ window.app = function() {
                 player.pause()
             }
         } else {
-            seekBySegmentIndex(segmentIndex);
+            seekBySegmentIndex(segmentIndex, true);
             showPlayerAndFade();
+
+            const isSameAsLast = (directSelections.at(-1) !== undefined) && (directSelections.at(-1) == segmentIndex)
+            if (!isSameAsLast) {
+                directSelections.push(segmentIndex);
+            }
         }
     }
 
@@ -491,12 +505,12 @@ window.app = function() {
         }
     }
 
-    function seekBySegmentIndex(i) {
+    function seekBySegmentIndex(i, andPlay) {
         getCurrentSpan()?.classList.remove('highlight');
 
         targetTime = timedTextSegments[i]["time_start"];
         player.currentTime = targetTime;
-        if (player.paused) {
+        if (player.paused && andPlay) {
             playerPlay();
         }
     }

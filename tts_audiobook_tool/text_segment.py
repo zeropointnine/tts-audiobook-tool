@@ -60,7 +60,7 @@ class TextSegment:
                 return []
 
             try:
-                reason = TextSegmentReason(item["reason"])
+                reason = TextSegmentReason.from_json_value(item.get("reason"))
             except:
                 reason = TextSegmentReason.UNDEFINED
 
@@ -76,16 +76,18 @@ class TextSegmentReason(Enum):
     """
     UNDEFINED = ("undefined", PAUSE_DURATION_SENTENCE) # for back-compat
 
-    # Segment is a start of a sentence
-    SENTENCE = ("s",PAUSE_DURATION_SENTENCE)
-
     # Segment is the start of a paragraph
     # (and also by our definition is the start of a sentence too)
     PARAGRAPH = ("p", PAUSE_DURATION_PARAGRAPH)
 
-    # Segment is a continuation of a sentence
-    # TODO currently no differentiation btw 'phrase' (eg at various punctuation) versus btw random words
-    INSIDE_SENTENCE = ("is", PAUSE_DURATION_INSIDE_SENTENCE)
+    # Segment is a start of a sentence
+    SENTENCE = ("s",PAUSE_DURATION_SENTENCE)
+
+    # Segment is inside a sentence, at phrase boundary
+    PHRASE = ("is", PAUSE_DURATION_PHRASE) # json value "is" is for legacy reasons
+
+    # Segment is inside a sentence, at a random word
+    WORD = ("w", PAUSE_DURATION_WORD)
 
     @property
     def json_value(self) -> str:
@@ -98,3 +100,12 @@ class TextSegmentReason(Enum):
         between the given text segment and the one preceding it
         """
         return self.value[1]
+
+    @classmethod
+    def from_json_value(cls, value: str | None) -> TextSegmentReason:
+        if value is None:
+            return TextSegmentReason.UNDEFINED
+        for member in cls:
+            if member.json_value == value:
+                return member
+        return TextSegmentReason.UNDEFINED

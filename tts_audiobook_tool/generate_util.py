@@ -4,15 +4,17 @@ import copy
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.hash_file_util import HashFileUtil
+from tts_audiobook_tool.app_types import Sound, TtsType
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.shared import Shared
+from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_sound_segments import *
@@ -27,6 +29,8 @@ class GenerateUtil:
             items_to_regenerate: dict[int, str]
     ) -> bool:
         """
+        Subroutine for doing multiple audio generations
+
         indices_to_generate and items_to_regenerate are mutually exclusive
 
         "Regenerate" here simply means that the currently existing, failed file
@@ -50,18 +54,20 @@ class GenerateUtil:
             is_regenerate = True
             items = items_to_regenerate
 
-        Shared.warm_up_models()
+        Tts.warm_up_models()
 
-        did_interrupt = False
+        SigIntHandler().set("generating")
         start_time = time.time()
-        Shared.mode = "generating"
-
         count = 0
         num_saved_ok = 0
         num_saved_with_error = 0
         num_failed = 0
 
+        saved_start_time = time.time()
+        saved_duration_and_elapsed: list[ tuple[float, float] ] = []
+
         for i, path in sorted(items.items()):
+
 
             text_segment = project.text_segments[i]
 
@@ -70,12 +76,9 @@ class GenerateUtil:
                 is_regenerate, text_segment.text, i, count, len(items)
             )
 
-            if is_regenerate: # Delete original
+            if is_regenerate: # First, delete original
                 if path and os.path.exists(path):
-                    try:
-                        Path(path).unlink()
-                    except:
-                        ...
+                    delete_silently(path)
 
             opt_sound, validate_result = GenerateUtil.generate_sound_full(project, text_segment)
 
@@ -85,29 +88,38 @@ class GenerateUtil:
             printt(s)
 
             if opt_sound:
-                if validate_result.result == ValidateResultType.INVALID:
-                    printt("{COL_ERROR}Max fails reached, will save anyway}")
+                is_invalid = (validate_result.result == ValidateResultType.INVALID)
+                if is_invalid:
+                    printt(f"{COL_ERROR}Max fails reached{COL_DEFAULT}, tagging as failed but will save anyway")
                     num_saved_with_error += 1
                 else:
                     num_saved_ok += 1
 
-                path = HashFileUtil.make_segment_file_path(i, project)
+                path = SoundSegmentUtil.make_segment_file_path(i, project)
+                if is_invalid:
+                    path = AppUtil.insert_bracket_tag_file_path(path, "fail")
+
                 err = SoundFileUtil.save_flac(opt_sound, path)
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {path}")
                 else:
                     printt(f"Saved file: {path}")
+                    saved_duration_and_elapsed.append( (opt_sound.duration, time.time() - saved_start_time) )
+                    saved_start_time = time.time()
+                    if len(saved_duration_and_elapsed) % 100 == 0:
+                        print_cumulative_speed_info(saved_duration_and_elapsed, 100)
+
             else:
-                printt("{COL_ERROR}Skipped item")
+                printt(f"{COL_ERROR}Skipped item")
                 num_failed += 1
 
             count += 1
 
-            if Shared.stop_flag:
-                Shared.stop_flag = False
-                Shared.mode = ""
-                did_interrupt = True
+            if SigIntHandler().did_interrupt:
                 break
+
+        did_interrupt = SigIntHandler().did_interrupt
+        SigIntHandler().clear()
 
         printt(f"Elapsed: {duration_string(time.time() - start_time)}")
         printt()
@@ -164,7 +176,9 @@ class GenerateUtil:
                 whisper_data = o
 
             # Validate
-            validate_result = ValidateUtil.validate_item(sound, text_segment.text, whisper_data)
+            validate_result = ValidateUtil.validate_item(
+                sound, text_segment.text, whisper_data,Tts.get_type().value
+            )
             match validate_result.result:
                 case ValidateResultType.VALID:
                     return sound, validate_result
@@ -200,7 +214,7 @@ class GenerateUtil:
 
         sound = GenerateUtil.post_process(sound)
 
-        flac_path = HashFileUtil.make_segment_file_path(index, project)
+        flac_path = SoundSegmentUtil.make_segment_file_path(index, project)
         err = SoundFileUtil.save_flac(sound, flac_path)
         if err:
             return "", err
@@ -228,21 +242,40 @@ class GenerateUtil:
         print_info: bool=True
     ) -> Sound | str:
         """
-        Returns model-generated normalized sound data, in model's native samplerate.
+        Returns model-generated sound data, in model's native samplerate.
         """
 
         start_time = time.time()
 
-        if Shared.is_oute():
-            sound = GenerateUtil.generate_oute(
-                text_segment.text,
-                project.oute_voice_json,
-                project.oute_temperature)
-        else:
-            sound = GenerateUtil.generate_chatterbox(
-                text_segment.text,
-                project)
+        text = GenerateUtil._preprocess_text(text_segment.text)
 
+        match Tts.get_type():
+
+            case TtsType.OUTE:
+                sound = GenerateUtil.generate_oute(
+                    text,
+                    project.oute_voice_json,
+                    project.oute_temperature)
+
+            case TtsType.CHATTERBOX:
+                sound = GenerateUtil.generate_chatterbox(text, project)
+
+            case TtsType.FISH:
+                if project.fish_voice_file_name:
+                    Tts.get_fish().set_voice_clone_using(
+                        source_path=os.path.join(project.dir_path, project.fish_voice_file_name),
+                        transcribed_text=project.fish_voice_text
+                    )
+                else:
+                    Tts.get_fish().clear_voice_clone()
+
+                sound = Tts.get_fish().generate(text, project.fish_temperature)
+
+            case TtsType.NONE:
+                return "No active TTS model"
+
+        if isinstance(sound, str):
+            return sound
         if not sound:
             return "Model failed"
 
@@ -252,10 +285,7 @@ class GenerateUtil:
 
         if print_info:
             elapsed = time.time() - start_time or 1.0
-            s = f"Audio duration: {COL_ACCENT}{sound.duration:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
-            multi = sound.duration / elapsed
-            s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
-            printt(s)
+            print_speed_info(sound.duration, elapsed)
 
         SoundFileUtil.debug_save("after gen", sound)
 
@@ -267,8 +297,8 @@ class GenerateUtil:
         voice: dict,
         temperature: float = -1
     ) -> Sound | None:
+        """ Returns sound or None on fail """
 
-        oute = Shared.get_oute()
 
         # First, clone GENERATION_CONFIG from config file
         from outetts.models.config import SamplerConfig # type: ignore
@@ -285,7 +315,7 @@ class GenerateUtil:
             gen_config.sampler_config = SamplerConfig(temperature)
 
         try:
-            output = oute.generate(config=gen_config)
+            output = Tts.get_oute().generate(config=gen_config)
             audio = output.audio.cpu().clone().squeeze().numpy()
             return Sound(audio, output.sr)
 
@@ -298,13 +328,7 @@ class GenerateUtil:
         prompt: str,
         project: Project
     ) -> Sound | None:
-        """
-        Returns normalized sound data and sample rate
-        Returns None on fail
-        """
-
-        chatterbox = Shared.get_chatterbox()
-
+        """ Returns sound or None on fail """
         d = {}
         if project.chatterbox_voice_file_name:
             # Rem, this is actually optional
@@ -318,21 +342,96 @@ class GenerateUtil:
             d["temperature"] = project.chatterbox_temperature
 
         try:
-            data = chatterbox.generate(prompt, **d)
+            data = Tts.get_chatterbox().generate(prompt, **d)
             data = data.numpy().squeeze()
             data = SoundUtil.normalize(data, headroom_db=1.0)
-            return Sound(data, chatterbox.sr)
+            return Sound(data, Tts.get_chatterbox().sr)
 
         except Exception as e:
             print(f"{COL_ERROR}Chatterbox model error: {e}\a", "error")
             return None
 
+    @staticmethod
+    def generate_kyutai(
+        prompt: str,
+        project: Project
+    ) -> Sound | None:
+
+        ...
+
+        # kyutai = Tts.get_fish()
+
+        # entries = kyutai.prepare_script([prompt], padding_between=1)
+
+        # # male midwestern twang
+        # # voice = "expresso/ex03-ex01_happy_001_channel1_334s.wav"
+        # # female narration style somewhat
+        # voice = "expresso/ex04-ex01_narration_001_channel1_605s.wav"
+
+        # voice_path = kyutai.get_voice_path(voice)
+        # condition_attributes = kyutai.make_condition_attributes(
+        #     [voice_path], cfg_coef=2.0
+        # )
+
+        # pcms = []
+        # def _on_frame(frame):
+        #     print("Step", len(pcms), end="\r")
+        #     if (frame != -1).all():
+        #         pcm = kyutai.mimi.decode(frame[:, 1:, :]).cpu().numpy()
+        #         pcms.append(np.clip(pcm[0, 0], -1, 1))
+
+        # all_entries = [entries]
+        # all_condition_attributes = [condition_attributes]
+        # with kyutai.mimi.streaming(len(all_entries)):
+        #     _ = kyutai.generate(all_entries, all_condition_attributes, on_frame=_on_frame)
+
+        # audio = np.concatenate(pcms, axis=-1)
+
+        # del kyutai
+        # return Sound(audio, 24000)
+
+    @staticmethod
+    def _preprocess_text(text: str) -> str:
+        """
+        Transform text before passing it off as a prompt for the TTS model.
+        """
+
+        if Tts.get_type().value.em_dash_replace:
+            text = text.replace("—", Tts.get_type().value.em_dash_replace)
+
+        # Limited case where free-standing paragraph is simply a number (eg, chapter headings)
+        text = TextUtil.number_string_to_words(text)
+        return text
+
 # ---
 
 def print_item_heading(is_regenerate: bool, text: str, index: int, count: int, total: int) -> None:
-    verb = "Regenerating" if is_regenerate else "Generate"
+    verb = "Regenerating" if is_regenerate else "Generating"
     s  = f"{COL_ACCENT}[{COL_DEFAULT}{count+1}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
     s += f"{COL_ACCENT}{verb} audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
     printt(s)
     printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
+    printt()
+
+def print_speed_info(sound_duration: float, elapsed: float) -> None:
+    multi = sound_duration / elapsed
+    s = f"Audio duration: {COL_ACCENT}{sound_duration:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
+    s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
+    printt(s)
+
+def print_cumulative_speed_info(duration_and_elapsed: list[tuple[float, float]], last_n=0) -> None:
+    if last_n:
+        duration_and_elapsed = duration_and_elapsed[-last_n:]
+    duration_sum = 0
+    elapsed_sum = 0
+    for duration, elapsed in duration_and_elapsed:
+        duration_sum += duration
+        elapsed_sum += elapsed
+    printt()
+    if last_n:
+        s = f"{COL_ACCENT}Cumulative inference speed including overhead (last {last_n} saved sound segments):"
+    else:
+        s = f"{COL_ACCENT}Cumulative inference speed including overhead (all {len(duration_and_elapsed)} saved sound segments)"
+    printt(s)
+    print_speed_info(duration_sum, elapsed_sum)
     printt()

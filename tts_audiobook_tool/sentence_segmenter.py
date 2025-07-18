@@ -3,6 +3,10 @@ import re
 
 class SentenceSegmenter:
 
+    # comma, semicolon, colon, en-dash, em-dash, open paren, close paren
+    # not including dash (which can just as often be used as a connecting-character-between-words)
+    PHRASE_DELIMITERS = r'[(),;:\–\—]'
+
     @staticmethod
     def segment_sentence(sentence, max_words=25):
         """
@@ -109,8 +113,8 @@ class SentenceSegmenter:
         start_search = max(0, middle_char_index - search_radius)
         end_search = min(len(segment), middle_char_index + search_radius)
 
-        # Find all punc  in the search range
-        punc_indices = [m.start() for m in re.finditer(r'[,;:]', segment[start_search:end_search])]
+        # Find all punc in the search range
+        punc_indices = [m.start() for m in re.finditer(SentenceSegmenter.PHRASE_DELIMITERS, segment[start_search:end_search])]
 
         punc_indices = [idx + start_search for idx in punc_indices]
 
@@ -202,7 +206,10 @@ class SentenceSegmenter:
         # start_index remains -1.
         return start_index
 
+
 # ---
+
+
 
 if __name__ == "__main__":
     test_cases = [

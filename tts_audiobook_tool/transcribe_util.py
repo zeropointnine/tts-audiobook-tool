@@ -7,6 +7,7 @@ from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.words_dict import Dictionary
 
 class TranscribeUtil:
     """
@@ -156,13 +157,90 @@ class TranscribeUtil:
         return counts
 
     @staticmethod
+    def is_drop_fail_tail(source_text: str, trans_text: str):
+        """
+        Tries to determine if generated audio has missing phrase at the very end.
+        Occurs especially with Fish.
+        """
+
+        # To be considered a fail:
+        # Source text - need to have 2 words of the last three that are dictionary words
+        # Trans text  - must not have ANY of those 2 words in its last 4 words
+
+        source_text = massage_for_text_comparison(source_text)
+        trans_text = massage_for_text_comparison(trans_text)
+
+        source_words = source_text.split(" ")
+        trans_words = trans_text.split(" ")
+        if len(trans_words) >= len(source_words):
+            return False
+        if len(source_words) < 4 or len(trans_words) < 4:
+            return False # Keep things simple
+
+        tail_source_words = source_words[-3:]
+        dict_words = []
+        for i in reversed(range(len(tail_source_words))):
+            word = tail_source_words[i]
+            if word in Dictionary.words:
+                dict_words.append(word)
+                if len(dict_words) >= 2:
+                    break
+        if len(dict_words) < 2:
+            return False
+
+        tail_trans_words = trans_words[-4:]
+        for word in dict_words:
+            if word in tail_trans_words:
+                return False
+
+        return True
+
+    @staticmethod
+    def is_drop_fail_head(source_text: str, trans_text: str):
+        """
+        Tries to determine if generated audio has missing phrase at the beginning.
+        WIP: Unlike tail, same logic yields almost all false positives at least with __
+        """
+        source_text = massage_for_text_comparison(source_text)
+        trans_text = massage_for_text_comparison(trans_text)
+
+        source_words = source_text.split(" ")
+        trans_words = trans_text.split(" ")
+        if len(trans_words) >= len(source_words):
+            return False
+        if len(source_words) < 4 or len(trans_words) < 4:
+            return False # Keep things simple
+
+        head_source_words = source_words[:3]
+        dict_words = []
+        for i in range(len(head_source_words)):
+            word = head_source_words[i]
+            if word in Dictionary.words:
+                dict_words.append(word)
+                if len(dict_words) >= 2:
+                    break
+        if len(dict_words) < 2:
+            return False
+
+        head_trans_words = trans_words[:4]
+        for word in dict_words:
+            if word in head_trans_words:
+                return False
+
+        # print(source_text)
+        # print(trans_text)
+        # print(dict_words, head_trans_words)
+
+        return True
+
+    @staticmethod
     def get_semantic_match_end_time_trim(
-        reference_text: str, whisper_data: dict, sound: Sound
+        reference_text: str, whisper_data: dict, sound: Sound, include_last_word
     ) -> float | None:
         """
         Returns adjusted time at which sound clip should be trimmed if necessary
         """
-        value = TranscribeUtil.get_semantic_match_end_time(reference_text, whisper_data)
+        value = TranscribeUtil.get_semantic_match_end_time(reference_text, whisper_data, include_last_word)
         if not value:
             return None
 
@@ -182,10 +260,15 @@ class TranscribeUtil:
         return value + offset
 
     @staticmethod
-    def get_semantic_match_end_time(reference_text: str, whisper_data: dict, last_word_only: bool=False
+    def get_semantic_match_end_time(
+        reference_text: str, whisper_data: dict, include_last_word: bool
     ) -> float | None:
         """
         Matches last transcription word and reference word and returns word end time
+
+        include_last_word:
+            returns 'semantic end time' even if the match is the last word
+            (which you might normally treat as redundant)
         """
         reference_words = massage_for_text_comparison(reference_text)
         reference_words = reference_words.split(" ")
@@ -212,11 +295,13 @@ class TranscribeUtil:
             last_word = massage_for_text_comparison(last_dict["word"])
             is_match = (last_word == last_reference_word)
             if is_match:
+                if num_iterations == 0 and not include_last_word:
+                    return None
                 end_time = float( last_dict["end"] )
                 return end_time
             word_dicts = word_dicts[:-1]
             num_iterations += 1
-            if last_word_only or len(word_dicts) <= 1 or num_iterations >= MAX_ITERATIONS:
+            if len(word_dicts) <= 1 or num_iterations >= MAX_ITERATIONS:
                 return None
 
         return None
@@ -379,8 +464,6 @@ class TranscribeUtil:
     @staticmethod
     def get_whisper_data_text(whisper_data: dict) -> str:
         return whisper_data["text"].strip()
-
-
 
 # ---
 

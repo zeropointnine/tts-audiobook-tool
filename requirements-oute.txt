@@ -16,6 +16,7 @@ docstring_parser==0.16
 einops==0.8.1
 encodec==0.1.1
 executing==2.2.0
+ffmpeg-python==0.2.0
 ffmpy==0.5.0
 filelock==3.18.0
 fire==0.7.0

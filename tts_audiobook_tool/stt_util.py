@@ -6,7 +6,7 @@ import numpy as np
 import difflib
 from typing import List, NamedTuple
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.shared import Shared
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
@@ -360,12 +360,12 @@ class SttUtil:
         """
         Creates a list of TranscribedWord instances by transcribing the audio at the given file path
         """
-        list_of_lists = SttUtil._transcribe_stream_with_overlap(path, with_printout=True)
+        list_of_lists = SttUtil._transcribe_stream_with_overlap(path)
         words_list = SttUtil._stitch_transcripts(list_of_lists)
         return words_list
 
     @staticmethod
-    def _transcribe_stream_with_overlap(path: str, with_printout: bool) -> list[list[TranscribedWord]]:
+    def _transcribe_stream_with_overlap(path: str) -> list[list[TranscribedWord]]:
         """
         Transcribes audio file of any length using "stream with overlap".
         The resulting data will have overlapping data on each end,
@@ -379,12 +379,9 @@ class SttUtil:
         time_offset = 0.0
 
         duration_str = ""
-        if with_printout:
-            value = AudioMetaUtil.get_audio_duration(path)
-            if value:
-                duration_str = duration_string(value)
-            print("Transcribing...")
-            print()
+        value = AudioMetaUtil.get_audio_duration(path)
+        if value:
+            duration_str = duration_string(value)
 
         for i, chunk in enumerate(
             SttUtil._stream_audio_with_overlap(
@@ -393,22 +390,20 @@ class SttUtil:
                 overlap_duration=OVERLAP_DURATION
             )
         ):
-            if with_printout:
-                s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
-                if duration_str:
-                    s += f" / {duration_str}"
-                s += f"{Ansi.ERASE_REST_OF_LINE}"
-                print(s, end="", flush=True)
+            s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
+            if duration_str:
+                s += f" / {duration_str}"
+            s += f"{Ansi.ERASE_REST_OF_LINE}"
+            print(s, end="", flush=True)
 
-            whisper_data = Shared.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
+            whisper_data = Tts.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
             words = SttUtil.whisper_data_to_word_dicts(whisper_data, time_offset)
             list_of_lists.append(words)
 
             time_offset += CHUNK_DURATION - OVERLAP_DURATION
 
-        if with_printout:
-            print() # clear status printout
-            print()
+        print() # clear status printout
+        print()
 
         return list_of_lists
 
@@ -629,4 +624,3 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     text = re.sub(r'\s+', ' ', text).strip()  # Normalize whitespace
     return text
-

@@ -2,6 +2,8 @@ import json
 import os
 import subprocess
 
+from tts_audiobook_tool.app_metadata import AppMetadata
+from tts_audiobook_tool.app_types import NormalizationSpecs
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
@@ -15,49 +17,41 @@ class LoudnessNormalizationUtil:
     TP = true peak - highest peak after processing; acts as a limiter, prevents clipping
     """
 
-    # Tracks with 'ACX standard' somewhat
-    # TARGET_I = -19.0
-    # TARGET_LRA = 9.0
-    # TARGET_TP = -3.0
-
-
-    # A little more 'aggressive' than 'ACX standard':
-    TARGET_I = -17.0
-    TARGET_LRA = 7.0
-    TARGET_TP = -2.5
-
     @staticmethod
     def normalize_file(
-            source_path: str,
-            dest_path: str="",
-            i: float=TARGET_I,
-            lra: float=TARGET_LRA,
-            tp: float=TARGET_TP
+            source_flac: str,
+            specs: NormalizationSpecs,
+            dest_path: str=""
     ) -> str:
         """
         Source file must be FLAC.
         Returns error message string on fail, else empty string
 
+        Dest audio codec is chosen based on dest file suffix
+
         Prints some status
         """
-        if not source_path.lower().endswith(".flac"):
+        if not source_flac.lower().endswith(".flac"):
             return "Source file must be .flac"
 
         if not dest_path:
-            dest_path = source_path # ie, overwrite original
+            dest_path = source_flac # ie, overwrite original
 
-        printt("EBU R128 normalization pass 1, please wait (no feedback shown)...")
+        printt(f"EBU R 128 loudness normalization ({specs.label})")
+        printt()
 
-        result = LoudnessNormalizationUtil.get_loudness_json(source_path, i, lra, tp)
+        printt(f"Pass 1, please wait... {COL_DIM}(no feedback shown)")
+        printt()
+        result = LoudnessNormalizationUtil.get_loudness_json(source_flac, specs.i, specs.lra, specs.tp)
         if isinstance(result, str):
             return result
         else:
             loudness_stats = result
 
-        printt("EBU R128 normalization pass 2...")
+        printt("Pass 2...")
         printt()
-
-        err = LoudnessNormalizationUtil.do_loudness_transform_and_save(source_path, dest_path, loudness_stats)
+        err = LoudnessNormalizationUtil.do_loudness_transform_and_save(
+            source_flac, dest_path, loudness_stats, specs.i, specs.lra, specs.tp)
         print()
 
         return err
@@ -65,9 +59,9 @@ class LoudnessNormalizationUtil:
     @staticmethod
     def get_loudness_json(
         path: str,
-        i: float=TARGET_I,
-        lra: float=TARGET_LRA,
-        tp: float=TARGET_TP,
+        i: float,
+        lra: float,
+        tp: float,
         no_params: bool = False
     ) -> dict | str:
         """
@@ -137,15 +131,15 @@ class LoudnessNormalizationUtil:
 
     @staticmethod
     def do_loudness_transform_and_save(
-        input_file_path: str,
+        input_flac_path: str,
         output_file_path: str,
         loudness_stats: dict,
-        target_i: float = TARGET_I,
-        target_lra: float = TARGET_LRA,
-        target_tp: float = TARGET_TP
+        target_i: float,
+        target_lra: float,
+        target_tp: float
     ) -> str:
         """
-        Returns error message on failure
+        Returns error message on failure else empty string.
 
         Performs the second pass of FFmpeg's loudnorm filter to normalize an audio file.
         Assumes mono audio.
@@ -164,8 +158,8 @@ class LoudnessNormalizationUtil:
             Rem, i, lra, and tp values must match those used to obtain loudness_stats from "pass 1"
         """
 
-        if not os.path.exists(input_file_path):
-            return f"File not found: {input_file_path}"
+        if not os.path.exists(input_flac_path):
+            return f"File not found: {input_flac_path}"
 
         required_keys = ["input_i", "input_lra", "input_tp", "input_thresh", "target_offset"]
         for key in required_keys:
@@ -199,7 +193,7 @@ class LoudnessNormalizationUtil:
         partial_command = [
             "-y",  # Overwrite output file if it exists
             "-hide_banner", "-loglevel", "error", "-stats",
-            "-i", input_file_path,
+            "-i", input_flac_path,
             "-af", filter_string
         ]
 
@@ -212,45 +206,16 @@ class LoudnessNormalizationUtil:
             return "Unsupported output type"
 
         err = FfmpegUtil.make_file(partial_command, output_file_path, use_temp_file=True)
-        return err
+        if err:
+            return err
 
-    # ---
+        if output_suffix in AAC_SUFFIXES:
+            # Re-add app metadata from source flac file
+            # (When dest is flac, the original abr metadata does get passed along and preserved properly)
+            meta = AppMetadata.load_from_flac(input_flac_path)
+            if meta:
+                err = AppMetadata.save_to_mp4(meta, output_file_path)
+                if err:
+                    return err
 
-    @staticmethod
-    def print_lra_directory(dir_path: str):
-        """ For development """
-        count = 0
-        sum = 0
-        for file in os.listdir(dir_path):
-            if not file.endswith(".flac"):
-                continue
-            file_path = os.path.join(dir_path, file)
-
-            result = LoudnessNormalizationUtil.get_lra(file_path)
-            if isinstance(result, float):
-                count += 1
-                sum += result
-                result = f"{result:.2f}"
-            else:
-                print("error?", result)
-            print(result, file_path)
-
-        print("\navg:", (sum / count))
-
-
-    @staticmethod
-    def get_lra(file_path: str) -> float | str:
-        """
-        Returns LRA or error string
-        LRA = EBU R128 Loudness Range
-        FYI, this is the value shown in Roon for albums and tracks ("Dynamic range (R128)")
-        """
-        result = LoudnessNormalizationUtil.get_loudness_json(file_path, no_params=True)
-        if isinstance(result, str):
-            return result
-        lra = result["input_lra"]
-        try:
-            lra = float(lra)
-        except:
-            return f"Parse error on {lra}"
-        return lra
+        return "" # success

@@ -1,5 +1,6 @@
 import os
 
+from tts_audiobook_tool.app_types import NormalizationType, TtsType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -8,7 +9,9 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class ConcatSubmenu:
@@ -16,7 +19,7 @@ class ConcatSubmenu:
     @staticmethod
     def submenu(state: State) -> None:
 
-        print_heading(f"Combine audio segments:")
+        print_heading(f"Concatenate audio segments:")
 
         infos = ChapterInfo.make_chapter_infos(state.project)
         if len(infos) > 1:
@@ -29,10 +32,10 @@ class ConcatSubmenu:
             chapter_dividers_desc = ", ".join(strings)
             chapter_dividers_desc = f": {COL_ACCENT}{chapter_dividers_desc}{COL_DIM}"
 
-        printt(f"{make_hotkey_string('1')} Combine to FLAC file")
-        printt(f"{make_hotkey_string('2')} Combine to AAC/MP4 file")
+        printt(f"{make_hotkey_string('1')} Create FLAC file")
+        printt(f"{make_hotkey_string('2')} CreateAAC/M4A file")
         printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently {len(state.project.section_dividers)} cut point/s{chapter_dividers_desc})")
-        printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{state.prefs.should_normalize}{COL_DIM})")
+        printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{state.prefs.normalization_type.value.json_value}{COL_DIM})")
         printt()
 
         hotkey = ask_hotkey()
@@ -44,13 +47,37 @@ class ConcatSubmenu:
             ConcatSubmenu.ask_cut_points(state)
             ConcatSubmenu.submenu(state)
         elif hotkey == "4":
-            state.prefs.should_normalize = not state.prefs.should_normalize
-            printt(f"Loudness normalization set to: {state.prefs.should_normalize}")
-            printt()
-            if MENU_CLEARS_SCREEN:
-                ask_continue()
+            ConcatSubmenu.ask_normalization(state.prefs)
             ConcatSubmenu.submenu(state)
 
+    @staticmethod
+    def ask_normalization(prefs: Prefs) -> None:
+
+        hotkey_to_norm_type: dict[str, NormalizationType] = {}
+        hotkey = "1"
+        for item in NormalizationType:
+            hotkey_to_norm_type[hotkey] = item
+            hotkey = chr(ord(hotkey) + 1)
+
+        print_heading("Loudness normalization:")
+
+        if Tts.get_type() == TtsType.OUTE:
+            AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_LOUD_NORM)
+
+        for hotkey, norm_type in hotkey_to_norm_type.items():
+            s = f"{make_hotkey_string(hotkey)}"
+            printt(f"{s} {norm_type.value.label}")
+        printt()
+
+        hotkey = ask_hotkey()
+        if hotkey in hotkey_to_norm_type:
+            norm_type = hotkey_to_norm_type[hotkey].value
+            prefs.set_normalization_type_value(norm_type.json_value)
+            return
+        elif hotkey == "":
+            return
+        else:
+            ConcatSubmenu.ask_normalization(prefs)
 
     @staticmethod
     def ask_cut_points(state: State) -> None:
@@ -127,9 +154,14 @@ class ConcatSubmenu:
         else:
             chapter_indices = [0]
 
-        strings = [str(index+1) for index in chapter_indices]
+        printt(f"Will concatenate audio segments to create the following chapter file/s:")
+        strings = []
+        for chapter_index in chapter_indices:
+            info = infos[chapter_index]
+            s = f"{chapter_index+1} (lines {info.segment_index_start+1}-{info.segment_index_end+1})"
+            strings.append(s)
         string = ", ".join(strings)
-        printt(f"Will concatenate audio segments to create the following chapter files: {string}")
+        printt(string)
         printt()
         b = ask_confirm()
         if not b:
@@ -155,13 +187,12 @@ class ConcatSubmenu:
                 s = f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
             else:
                 s = ""
-            printt(f"Creating finalized, concatenated audio file{s}...")
-            printt()
+            print_heading(f"Creating concatenated audio file{s}...", dont_clear=True)
+
+            is_norm = (state.prefs.normalization_type != NormalizationType.DISABLED)
+            is_concat_aac = not is_norm and to_aac_not_flac
 
             # Concat
-            is_final_file = not state.prefs.should_normalize
-            is_concat_aac = is_final_file and to_aac_not_flac
-
             path, err = ConcatUtil.concatenate_chapter_file(
                 state=state,
                 chapter_index=chapter_index,
@@ -169,18 +200,21 @@ class ConcatSubmenu:
                 base_dir=dest_subdir
             )
             if err:
+                printt()
                 ask_error(err)
                 return
 
             # Normalize
-            if state.prefs.should_normalize:
+            if state.prefs.normalization_type != NormalizationType.DISABLED:
 
                 source_path = path
-                norm_path = insert_bracket_tag_file_path(path, "normalized")
+                norm_path = AppUtil.insert_bracket_tag_file_path(path, "normalized")
                 if to_aac_not_flac:
                     norm_path = str( Path(norm_path).with_suffix(".m4a") )
 
-                err = LoudnessNormalizationUtil.normalize_file(path, norm_path)
+                err = LoudnessNormalizationUtil.normalize_file(
+                    path, state.prefs.normalization_type.value, norm_path
+                )
                 if err:
                     ask_error(err)
                     return
@@ -226,5 +260,3 @@ def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
             s += f" {COL_DIM}({desc})"
         printt(s)
     printt()
-
-

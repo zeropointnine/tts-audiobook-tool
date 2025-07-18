@@ -5,7 +5,9 @@ import glob
 import sys
 import tempfile
 import glob
+import time
 import torch
+import xxhash
 
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
@@ -15,6 +17,9 @@ from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.util import *
 
 class AppUtil:
+    """
+    Need separation btw 'low level' and 'high level' functions
+    """
 
     _is_logging_initialized = False
 
@@ -68,7 +73,7 @@ class AppUtil:
 
     @staticmethod
     def gc_ram_vram() -> None:
-        # Force-trigger Python garbage collector
+        """ Trigger Python garbage collector, plus torch"""
         gc.collect()
         # "Garbage collect" VRAM
         if torch.cuda.is_available():
@@ -76,9 +81,17 @@ class AppUtil:
 
     @staticmethod
     def get_app_temp_dir() -> str:
-        app_temp_dir = os.path.join(tempfile.gettempdir(), APP_TEMP_SUBDIR)
-        Path(app_temp_dir).mkdir(exist_ok=True) # not catching error here
-        return app_temp_dir
+        # eg, 'C:\Users\me\AppData\Local\Temp\tts_audiobook_tool'
+        dir = os.path.join(tempfile.gettempdir(), APP_TEMP_SUBDIR)
+        Path(dir).mkdir(exist_ok=True) # not catching error here
+        return dir
+
+    @staticmethod
+    def get_app_user_dir() -> str:
+        # eg, 'C:\Users\me\tts_audiobook_tool'
+        dir = os.path.join(Path.home(), APP_USER_SUBDIR)
+        Path(dir).mkdir(exist_ok=True) # not catching error here
+        return dir
 
     @staticmethod
     def get_temp_file_path_by_hash(hash: str) -> str:
@@ -100,7 +113,7 @@ class AppUtil:
         Asks user for path to text file and returns list of TextSegments and raw text.
         Shows feedback except when text segments are returned
         """
-        path = ask_file_path("Enter text file path: ")
+        path = ask_file_path("Enter text file path: ", "Select text file")
         if not path:
             return [], ""
         if not os.path.exists(path):
@@ -128,7 +141,12 @@ class AppUtil:
         Asks user to input text using stdin.read() and returns list of TextSegments and raw text
         """
         printt("Enter/paste text of any length.")
-        printt(f"Finish with {COL_ACCENT}[CTRL-Z + ENTER]{COL_DEFAULT} or {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT} on its own line, depending on platform\n")
+        if platform.system() == "Windows":
+            s = f"Finish with {COL_ACCENT}[CTRL-Z + ENTER] {COL_DEFAULT}on its own line"
+        else:
+            s = f"Finish with [ENTER + CTRL-D]"
+        printt(s)
+        printt()
         raw_text = sys.stdin.read().strip()
         printt()
         if not raw_text:
@@ -143,13 +161,27 @@ class AppUtil:
         return text_segments, raw_text
 
     @staticmethod
-    def show_hint_if_necessary(prefs: Prefs, prefs_hint_key: str, heading: str, text: str) -> None:
-        if prefs.get_hint(prefs_hint_key):
+    def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_prompt: bool=False) -> None:
+        """
+        If hint has not yet been shown, shows it.
+        Then either shows a prompt, or shows a 3-second 'animation'
+        """
+        if prefs.get_hint(hint.key):
             return
-        prefs.set_hint_true(prefs_hint_key)
-        printt(f"🔔 {COL_ACCENT}{heading}")
-        printt(text)
+        prefs.set_hint_true(hint.key)
+        printt(f"🔔 {COL_ACCENT}{hint.heading}")
+        printt(hint.text)
         printt()
+
+        if and_prompt:
+            ask_continue()
+        else:
+            # Anim
+            lines = ["[   ]", "[.  ]", "[.. ]", "[...]"]
+            for i, line in enumerate(lines):
+                print(f"{COL_DIM}{line}{Ansi.RESET}", end="\r", flush=True)
+                time.sleep(0.66)
+            print(f"{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
     @staticmethod
     def show_player_hint_if_necessary(prefs: Prefs) -> None:
@@ -163,4 +195,64 @@ class AppUtil:
         s += "or on the web here:" + "\n"
         s += PLAYER_URL
 
-        AppUtil.show_hint_if_necessary(prefs, "player", "Reminder:", s)
+        hint = Hint(key="player", heading="Reminder", text = s)
+        AppUtil.show_hint_if_necessary(prefs, hint)
+
+    @staticmethod
+    def calc_hash_string(string: str) -> str:
+        return xxhash.xxh3_64(string).hexdigest()
+
+    @staticmethod
+    def calc_hash_file(path: str, with_progress: bool=False) -> tuple[str, str]:
+        """ Returns hash and error string, mutually exclusive"""
+
+        if not os.path.exists(path):
+            return "", f"File not found: {path}"
+        if os.path.isdir(path):
+            return "", f"Is not a file: {path}"
+        if not os.access(path, os.R_OK):
+            return "",  f"No read permission for file: {path}"
+
+        hasher = xxhash.xxh64()
+        file_size = os.path.getsize(path)
+        processed = 0
+
+        try:
+            with open(path, 'rb') as f:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+                    processed += len(chunk)
+                    print(f"\rHashing file: {processed/file_size:.1%}", end='')
+
+        except Exception as e:
+            return "", f"Error while hashing file: {e}"
+
+        print("\r", end = "")  # Clear progress text
+
+        return hasher.hexdigest(), ""
+
+    @staticmethod
+    def is_app_hash(hash: str) -> bool:
+        """ hash must be a 16-character hex string (case insensitive) """
+        return len(hash) == 16 and all(c in '0123456789abcdefABCDEF' for c in hash)
+
+    @staticmethod
+    def insert_bracket_tag_file_path(file_path: str, tag: str) -> str:
+        """
+        Eg, "[one] [two] hello.flac" -> "[one] [two] [newtag] hello.flac"
+        """
+        path = Path(file_path)
+        stem = path.stem
+        i = stem.rfind("]") + 1
+        substring = f"[{tag}]"
+        if i > 0:
+            substring = " " + substring
+        else:
+            substring = substring + " "
+        new_stem = stem[:i] + substring + stem[i:]
+        new_path = path.with_stem(new_stem)
+        return str(new_path)
+
