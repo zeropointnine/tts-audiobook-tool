@@ -1,6 +1,7 @@
 __pycache__/
 venv*/
 .vscode/
+checkpoints/
 pyrightconfig.json
 config_oute_dev.py
 test*.py
