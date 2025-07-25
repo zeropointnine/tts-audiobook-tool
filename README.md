@@ -16,7 +16,7 @@ Plain-vanilla interactive console interface.
 
 ### Web-based player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped github url.
+The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped github.io url.
 
 **Online examples**, all using the same source text and voice clone sample:
 
@@ -131,7 +131,7 @@ Alternatively, `Backend.HF` is also hardware accelerated but considerably slower
 
 I couldn't get acceleration going using `Backend.LLAMACPP` but I'm not sure if that's just be me.
 
-**Mac with Apple silicon**
+**Mac with Apple silicon:**
 
 Use `Backend.LLAMACPP`.
 
@@ -141,11 +141,11 @@ The app saves its state between sessions, so you can interrupt the program at an
 
 Additionally, setting chapter cut points can be useful to generate and export a long work in  manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
 
-Note too that it's possible to utilize different voices and even different models while generating the audio segments for a single project.
+Note too that it's possible to utilize different voices and even different models while generating the audio segments for a given project.
 
 ### Voice cloning
 
-When prepping reference audio for voice cloning, it's worthwhile to prepare three or so sound samples from a given source (not just one), and then testing each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone from the same source can vary quite a bit (as well as the word error rate!).
+When prepping reference audio for voice cloning, it's worthwhile to prepare three or more sound samples from a given source (not just one), and then testing each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone from the same source can vary quite a bit (as well as the word error rate!).
 
 ### Inference speed, expectations, etc.
 
@@ -153,7 +153,7 @@ With Oute TTS, I get inference speeds of 80-85% of realtime using `Backend.EXL2`
 
 Chatterbox is considerably faster, about 130% of realtime for me using a GeForce 3080Ti, 25-30% of realtime on M1 Macbook Pro.
 
-Using CUDA, Fish OpenAudio S1-mini is the fastest of the three by far, about 2-3x faster than Chatterbox.
+On the same setup, Fish OpenAudio S1-mini is the fastest of the three by far, about 2-3x faster than Chatterbox.
 
 
 # Updates
@@ -164,7 +164,7 @@ Added support for Fish OpenAudio S1-mini
 
 Logic to detect dropped phrases at end of generated audio segments (common occurrence with the Fish model)
 
-Added utility to transcode and concatenate directory of MP3 chapter files to M4A (for use with the "Enhance existing audiobook" tool)
+Added utility to transcode and concatenate directory of MP3 chapter files to M4A (meant for use with the "Enhance existing audiobook" tool)
 
 **2025-07-02**
 
