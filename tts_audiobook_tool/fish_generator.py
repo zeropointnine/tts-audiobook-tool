@@ -40,11 +40,7 @@ class FishGenerator:
 
         from fish_speech.models.dac.inference import load_model as load_dac_model # type: ignore
 
-        # Real (library) version, currently has memory leak (7-2025)
-        # from fish_speech.models.text2semantic.inference import init_model as init_t2s_model
-
-        # Fix for memory leak, will use until pypi lib is updated
-        from tts_audiobook_tool.fish_text2semantic_inference_temp_fix import init_model as init_t2s_model # type: ignore
+        from fish_speech.models.text2semantic.inference import init_model as init_t2s_model
 
         # Doesn't raise error when token fails and dest directory already has things, fyi
         try:
@@ -112,11 +108,7 @@ class FishGenerator:
 
             # Step 2: Make semantic tokens using prompt tokens
 
-            # original:
-            # from fish_speech.models.text2semantic.inference import generate_long # type: ignore
-
-            # temp fix:
-            from tts_audiobook_tool.fish_text2semantic_inference_temp_fix import generate_long # type: ignore
+            from fish_speech.models.text2semantic.inference import generate_long # type: ignore
 
             prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
 

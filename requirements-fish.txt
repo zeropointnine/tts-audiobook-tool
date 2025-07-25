@@ -34,7 +34,8 @@ ffmpeg-python==0.2.0
 ffmpy==0.6.0
 filelock==3.18.0
 fire==0.7.0
-fish-speech==0.1.0
+# fish-speech==0.1.0
+git+https://github.com/fishaudio/fish-speech@54458f7cd5d9a0bcfff56f7d4854fa08b421bef6#egg=fish-speech
 flatbuffers==25.2.10
 flatten-dict==0.4.2
 fonttools==4.58.5
