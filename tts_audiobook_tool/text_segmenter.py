@@ -282,4 +282,6 @@ def has_alpha_numeric_char(s: str) -> bool:
     return any(c.isalnum() for c in s)
 
 
-QUOTATION_CHARS = "\"'“”"
+QUOTATION_CHARS = "\"'‘’“”"
+
+#  ' ), the closing single quote ( ' )

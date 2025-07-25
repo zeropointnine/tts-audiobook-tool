@@ -88,6 +88,10 @@ Install dependencies:
 
     pip install -r requirements-fish.txt
 
+And if using CUDA on Windows, also do:
+
+    pip install triton-windows
+
 And then, two extra steps:
 
 You have to opt in to gain access to the Fish/OpenAudio model by visiting the FishAudio [Hugging Face page](https://huggingface.co/fishaudio/openaudio-s1-mini), using a logged-in HF account.

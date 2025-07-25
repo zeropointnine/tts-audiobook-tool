@@ -107,9 +107,9 @@ HINT_LINE_BREAKS = Hint(
 )
 HINT_REGEN = Hint(
     "regenerate",
-    "Hint",
-"""Please note, it's oftentimes not possible to get all voice lines to validate,
-even after repeated re-generations (especially with Oute).
+    "Please note",
+"""It's oftentimes not possible to get all voice lines to validate,
+even after repeated re-generations. Embrace imperfection.
 
 Increasing temperature temporarily can sometimes help."""
 )

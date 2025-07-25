@@ -109,11 +109,11 @@ class VoiceFishSubmenu:
         if isinstance(sound, str):
             ask_continue(sound)
             return
-        whisper_data = SoundUtil.transcribe(sound)
-        if isinstance(whisper_data, str):
-            ask_continue(whisper_data)
+        result = SoundUtil.transcribe(sound)
+        if isinstance(result, str):
+            ask_continue(result)
             return
-        text = TranscribeUtil.get_whisper_data_text(whisper_data)
+        text = TranscribeUtil.get_whisper_data_text(result)
 
         err = state.project.set_fish_voice_and_save(path, text)
         if err:
