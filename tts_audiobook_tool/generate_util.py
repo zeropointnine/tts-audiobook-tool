@@ -278,8 +278,8 @@ class GenerateUtil:
             case TtsType.HIGGS:
                 seed = 1000 if not is_regen else random.randint(1, sys.maxsize) # doesn't actually matter
                 sound = Tts.get_higgs().generate(
-                    voice_path=os.path.join(project.dir_path, project.higgs_voice_file_name),
-                    voice_transcript=project.higgs_voice_transcript,
+                    p_voice_path=os.path.join(project.dir_path, project.higgs_voice_file_name),
+                    p_voice_transcript=project.higgs_voice_transcript,
                     text=text,
                     seed=seed)
 

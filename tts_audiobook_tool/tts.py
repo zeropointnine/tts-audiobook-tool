@@ -6,8 +6,6 @@ import torch
 import whisper
 from whisper.model import Whisper
 
-from tts_audiobook_tool.fish_generator import FishGenerator
-from tts_audiobook_tool.higgs_generator import HiggsGenerator
 from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 
@@ -110,7 +108,8 @@ class Tts:
         return Tts._chatterbox
 
     @staticmethod
-    def get_fish() -> FishGenerator:
+    def get_fish() -> Any:
+        from tts_audiobook_tool.fish_generator import FishGenerator
         if not Tts._fish:
             device = Tts.get_best_torch_device()
             printt(f"Initializing Fish OpenAudio S1-mini TTS model ({device})...")
@@ -119,7 +118,8 @@ class Tts:
         return Tts._fish
 
     @staticmethod
-    def get_higgs() -> HiggsGenerator:
+    def get_higgs() -> Any:
+        from tts_audiobook_tool.higgs_generator import HiggsGenerator
         if not Tts._higgs:
             device = Tts.get_best_torch_device() # TODO
             printt(f"Initializing Higgs V2 TTS model ({device})...")
