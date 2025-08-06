@@ -34,6 +34,7 @@ class Project:
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
+    higgs_temperature: float = -1
 
     generate_range_string: str = ""
 
@@ -137,6 +138,7 @@ class Project:
         # Higgs
         project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")
         project.higgs_voice_transcript = d.get("higgs_voice_text", "")
+        project.higgs_temperature = d.get("higgs_temperature", -1)
 
         return project
 
@@ -157,7 +159,8 @@ class Project:
             "fish_voice_text": self.fish_voice_transcript,
             "fish_temperature": self.fish_temperature,
             "higgs_voice_file_name": self.higgs_voice_file_name,
-            "higgs_voice_text": self.higgs_voice_transcript
+            "higgs_voice_text": self.higgs_voice_transcript,
+            "higgs_temperature": self.higgs_temperature
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)

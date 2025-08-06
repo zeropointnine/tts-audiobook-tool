@@ -276,12 +276,13 @@ class GenerateUtil:
                 sound = Tts.get_fish().generate(text, project.fish_temperature)
 
             case TtsType.HIGGS:
-                seed = 1000 if not is_regen else random.randint(1, sys.maxsize) # doesn't actually matter
+                seed = DEFAULT_SEED if not is_regen else random.randint(1, sys.maxsize)
                 sound = Tts.get_higgs().generate(
                     p_voice_path=os.path.join(project.dir_path, project.higgs_voice_file_name),
                     p_voice_transcript=project.higgs_voice_transcript,
                     text=text,
-                    seed=seed)
+                    seed=seed,
+                    temperature=project.higgs_temperature)
 
             case TtsType.NONE:
                 return "No active TTS model"

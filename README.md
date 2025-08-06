@@ -1,9 +1,9 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports various text-to-speech models which utilize zero shot voice cloning:
-- Higgs Audio
 - Chatterbox TTS
 - Fish OpenAudio S1-mini
+- Higgs Audio V2
 - Oute TTS
 
 The app features a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
@@ -25,7 +25,7 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 - [Online example using Fish OpenAudio S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-s1-mini.abr.m4a)
 - [Online example using Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
 - [Online example using Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
-- [Online example using Higgs Audio V2 (different voice this time)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
+- [Online example using Higgs Audio V2 (a different voice this time, high temperature)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
 
 ### Bonus feature: Enhance existing audiobooks
 
@@ -182,7 +182,7 @@ On the same setup, Fish OpenAudio S1-mini is the fastest of the three by far, ab
 
 **2025-08-06**
 
-Added support for **Higgs Audio V2** (3B base model). This is a "base" implementation. Adding support some of its model-specific features (system prompt, context continuation, etc) is planned.
+Added support for **Higgs Audio V2** (3B base model). Adding support some of its model-specific features (system prompt, context continuation, etc) is planned.
 
 **2025-07-18**
 

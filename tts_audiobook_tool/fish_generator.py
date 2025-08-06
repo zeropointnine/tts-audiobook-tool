@@ -89,7 +89,7 @@ class FishGenerator:
     def generate(self, text: str, temperature: float = -1) -> Sound | str:
 
         if temperature == -1:
-            temperature = FISH_DEFAULT_TEMPERATURE
+            temperature = DEFAULT_TEMPERATURE_FISH
 
         with torch.no_grad(): # !!important
 

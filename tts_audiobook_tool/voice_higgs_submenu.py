@@ -31,9 +31,9 @@ class VoiceHiggsSubmenu:
         s = f"{make_hotkey_string("2")} Clear voice clone"
         printt(s)
 
-        # temperature = state.project.fish_temperature
-        # s = "default" if temperature == -1 else str(temperature)
-        # printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        temperature = state.project.higgs_temperature
+        s = f"default ({DEFAULT_TEMPERATURE_HIGGS})" if temperature == -1 else str(temperature)
+        printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
 
         printt()
 
@@ -49,20 +49,23 @@ class VoiceHiggsSubmenu:
                 printt("Cleared")
                 printt()
                 return False
-            # case "3":
-            #     value = ask(f"Enter temperature (0.0 < value < 2.0): ")
-            #     if not value:
-            #         return False
-            #     try:
-            #         value = float(value)
-            #         if not (0.0 < value < 2.0):
-            #             ask_error("Out of range")
-            #         else:
-            #             state.project.fish_temperature = value
-            #             state.project.save()
-            #     except:
-            #         ask_error("Bad value")
-            #         return False
+            case "3":
+                # TODO not sure about upper bound here (just taking a guess)
+                #      2.0 is actually way too high in practice
+                #      1.0 is perfectly fine on a gen-by-gen basis
+                value = ask(f"Enter temperature (0.0 < value < 2.0): ")
+                if not value:
+                    return False
+                try:
+                    value = float(value)
+                    if not (0.0 < value < 2.0):
+                        ask_error("Out of range")
+                    else:
+                        state.project.higgs_temperature = value
+                        state.project.save()
+                except:
+                    ask_error("Bad value")
+                    return False
             case _:
                 return True
 

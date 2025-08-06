@@ -28,6 +28,7 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.cache_utils import StaticCache
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.constants import *
 
 from loguru import logger
 logger.remove() # TODO verify that i do want to do this; maybe do at end of init?
@@ -60,7 +61,14 @@ class HiggsGenerator:
         )
         # printt("init elapsed", (time.time() - start))
 
-    def generate(self, p_voice_path: str, p_voice_transcript: str, text: str, seed: int) -> Sound | str:
+    def generate(
+            self,
+            p_voice_path: str,
+            p_voice_transcript: str,
+            text: str,
+            temperature: float,
+            seed: int = DEFAULT_SEED
+    ) -> Sound | str:
 
         if p_voice_path:
             voice_path = p_voice_path
@@ -69,8 +77,10 @@ class HiggsGenerator:
             voice_path = None
             voice_transcript = None
 
+        if temperature == -1:
+            temperature = DEFAULT_TEMPERATURE_HIGGS
+
         scene_prompt = text
-        temperature = 1.0
         top_k = 50
         top_p = 0.95
         ras_win_len = 7
@@ -80,7 +90,6 @@ class HiggsGenerator:
         chunk_max_word_num = 200
         chunk_max_num_turns = 1
         generation_chunk_buffer_size = None
-
 
         pattern = re.compile(r"\[(SPEAKER\d+)\]")
         speaker_tags = sorted(set(pattern.findall(text)))

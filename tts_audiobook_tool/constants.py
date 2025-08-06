@@ -33,8 +33,13 @@ APP_SAMPLE_RATE = 44100
 # Samplerate required for whisper input
 WHISPER_SAMPLERATE = 16000
 
-# Default temperature for Fish TTS model, taken from their web demo page
-FISH_DEFAULT_TEMPERATURE = 0.8
+# Fish TTS default temperature, taken from their web demo page
+DEFAULT_TEMPERATURE_FISH = 0.8
+
+# Default temperature for Higgs V2, taken from their README examples
+DEFAULT_TEMPERATURE_HIGGS = 0.3
+
+DEFAULT_SEED = 1000
 
 # App's typical ffmpeg options wrt console output, etc
 FFMPEG_TYPICAL_OPTIONS = [
