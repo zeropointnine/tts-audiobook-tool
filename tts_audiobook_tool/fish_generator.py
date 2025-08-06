@@ -4,7 +4,7 @@ from pathlib import Path
 import time
 import torch
 import torchaudio
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download  # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *

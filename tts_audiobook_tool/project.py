@@ -2,13 +2,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from tts_audiobook_tool.app_types import TtsType
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 
 class Project:
@@ -29,8 +29,11 @@ class Project:
     chatterbox_exaggeration: float = -1
 
     fish_voice_file_name: str = ""
-    fish_voice_text: str = ""
+    fish_voice_transcript: str = ""
     fish_temperature: float = -1
+
+    higgs_voice_file_name: str = ""
+    higgs_voice_transcript: str = ""
 
     generate_range_string: str = ""
 
@@ -128,8 +131,12 @@ class Project:
 
         # Fish
         project.fish_voice_file_name = d.get("fish_voice_file_name", "")
-        project.fish_voice_text = d.get("fish_voice_text", "")
+        project.fish_voice_transcript = d.get("fish_voice_text", "")
         project.fish_temperature = d.get("fish_temperature", -1)
+
+        # Higgs
+        project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")
+        project.higgs_voice_transcript = d.get("higgs_voice_text", "")
 
         return project
 
@@ -147,8 +154,10 @@ class Project:
             "chatterbox_cfg": self.chatterbox_cfg,
             "chatterbox_exaggeration": self.chatterbox_exaggeration,
             "fish_voice_file_name": self.fish_voice_file_name,
-            "fish_voice_text": self.fish_voice_text,
+            "fish_voice_text": self.fish_voice_transcript,
             "fish_temperature": self.fish_temperature,
+            "higgs_voice_file_name": self.higgs_voice_file_name,
+            "higgs_voice_text": self.higgs_voice_transcript
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -220,13 +229,33 @@ class Project:
             except Exception as e:
                 return str(e)
         self.fish_voice_file_name = file_name
-        self.fish_voice_text = text
+        self.fish_voice_transcript = text
         self.save()
         return ""
 
     def clear_fish_voice_and_save(self) -> None:
         self.fish_voice_file_name = ""
-        self.fish_voice_text = ""
+        self.fish_voice_transcript = ""
+        self.save()
+
+    def set_higgs_voice_and_save(self, src_path: str, text: str) -> str:
+        """ Returns error string on fail """
+        source_path = Path(src_path)
+        file_name = source_path.name
+        dest_path = Path(self.dir_path) / file_name
+        if source_path != dest_path:
+            try:
+                shutil.copy(source_path, dest_path)
+            except Exception as e:
+                return str(e)
+        self.higgs_voice_file_name = file_name
+        self.higgs_voice_transcript = text
+        self.save()
+        return ""
+
+    def clear_higgs_voice_and_save(self) -> None:
+        self.higgs_voice_file_name = ""
+        self.higgs_voice_transcript = ""
         self.save()
 
     def get_voice_label(self) -> str:
@@ -250,6 +279,12 @@ class Project:
                 label = Path(self.fish_voice_file_name).stem[:30]
                 label = sanitize_for_filename(label)
                 return label
+            case TtsType.HIGGS:
+                if not self.higgs_voice_file_name:
+                    return "none"
+                label = Path(self.higgs_voice_file_name).stem[:30]
+                label = sanitize_for_filename(label)
+                return label
             case TtsType.NONE:
                 return "none"
             case _:
@@ -271,9 +306,10 @@ class Project:
             case TtsType.FISH:
                 # always true bc does not require voice sample
                 return True
+            case TtsType.HIGGS:
+                # always true bc does not require voice sample # TODO implement/verify
+                return True
             case TtsType.NONE:
-                return False
-            case _:
                 return False
 
     @property

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from enum import Enum, auto
 from typing import NamedTuple
-from tts_audiobook_tool.app_types import Sound, TtsInfo
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.transcribe_util import TranscribeUtil
+from tts_audiobook_tool.tts_info import TtsInfo
 from tts_audiobook_tool.util import *
 
 class ValidateUtil:

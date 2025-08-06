@@ -1,10 +1,11 @@
 import os
+import sys
 import time
 import copy
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound, TtsType
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.project import Project
@@ -15,6 +16,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_sound_segments import *
@@ -68,7 +70,6 @@ class GenerateUtil:
 
         for i, path in sorted(items.items()):
 
-
             text_segment = project.text_segments[i]
 
             printt()
@@ -80,7 +81,7 @@ class GenerateUtil:
                 if path and os.path.exists(path):
                     delete_silently(path)
 
-            opt_sound, validate_result = GenerateUtil.generate_sound_full(project, text_segment)
+            opt_sound, validate_result = GenerateUtil.generate_sound_full(project, text_segment, is_regen=is_regenerate)
 
             s = validate_result.message
             if validate_result.result == ValidateResultType.TRIMMABLE:
@@ -124,9 +125,10 @@ class GenerateUtil:
         printt(f"Elapsed: {duration_string(time.time() - start_time)}")
         printt()
 
-        printt(f"Num lines saved normally: {num_saved_ok}")
-        printt(f"Num lines saved with potential errors: {num_saved_with_error}")
-        printt(f"Num lines failed to generate: {num_failed}")
+        printt(f"Num lines saved normally: {COL_OK}{num_saved_ok}")
+        printt(f"Num lines saved, but flagged with potential errors: {COL_ACCENT}{num_saved_with_error}")
+        if num_failed > 0:
+            printt(f"Num lines failed to generate: {COL_ERROR}{num_failed}")
         printt()
 
         return did_interrupt
@@ -135,7 +137,8 @@ class GenerateUtil:
     def generate_sound_full(
         project: Project,
         text_segment: TextSegment,
-        max_passes: int = 2
+        max_passes: int = 2,
+        is_regen: bool = False
     ) -> tuple[Sound | None, ValidateResult]:
         """
         Prints error feedback only on non-final generation fail
@@ -150,7 +153,7 @@ class GenerateUtil:
             pass_num += 1
 
             # Generate
-            o = GenerateUtil.generate(project, text_segment)
+            o = GenerateUtil.generate(project, text_segment, is_regen)
             if isinstance(o, str):
                 # Failed to generate
                 if pass_num < max_passes:
@@ -239,6 +242,7 @@ class GenerateUtil:
     def generate(
         project: Project,
         text_segment: TextSegment,
+        is_regen: bool=False,
         print_info: bool=True
     ) -> Sound | str:
         """
@@ -264,12 +268,20 @@ class GenerateUtil:
                 if project.fish_voice_file_name:
                     Tts.get_fish().set_voice_clone_using(
                         source_path=os.path.join(project.dir_path, project.fish_voice_file_name),
-                        transcribed_text=project.fish_voice_text
+                        transcribed_text=project.fish_voice_transcript
                     )
                 else:
                     Tts.get_fish().clear_voice_clone()
 
                 sound = Tts.get_fish().generate(text, project.fish_temperature)
+
+            case TtsType.HIGGS:
+                seed = 1000 if not is_regen else random.randint(1, sys.maxsize) # doesn't actually matter
+                sound = Tts.get_higgs().generate(
+                    voice_path=os.path.join(project.dir_path, project.higgs_voice_file_name),
+                    voice_transcript=project.higgs_voice_transcript,
+                    text=text,
+                    seed=seed)
 
             case TtsType.NONE:
                 return "No active TTS model"
@@ -299,6 +311,8 @@ class GenerateUtil:
     ) -> Sound | None:
         """ Returns sound or None on fail """
 
+        from loguru import logger
+        logger.remove()
 
         # First, clone GENERATION_CONFIG from config file
         from outetts.models.config import SamplerConfig # type: ignore

@@ -1,6 +1,7 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports various text-to-speech models which utilize zero shot voice cloning:
+- Higgs Audio
 - Chatterbox TTS
 - Fish OpenAudio S1-mini
 - Oute TTS
@@ -21,8 +22,10 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 **Online examples**, all using the same source text and voice clone sample:
 
 - [Online example using Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.abr.m4a)
-- [Online example using Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
 - [Online example using Fish OpenAudio S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-s1-mini.abr.m4a)
+- [Online example using Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
+- [Online example using Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
+- [Online example using Higgs Audio V2 (different voice this time)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
 
 ### Bonus feature: Enhance existing audiobooks
 
@@ -49,9 +52,7 @@ Clone the repository and cd into it:
     git clone tts-audiobook-tool
     cd tts-audiobook-tool
 
-A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance). Model-specific options will be enabled automatically in the app based on which virtual environment is active.
-
-Chatterbox offers the most problem-free installation and operation at the moment (but with its own cons, too), so if you have an aversion to troubleshooting Python dependencies (and who doesn't?), start there.
+A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance as needed). Model-specific options will be enabled automatically in the app based on which virtual environment is active.
 
 In all cases, the CUDA flavor of pytorch may require an extra install step depending on platform and installed CUDA version, in the usual manner.
 
@@ -73,6 +74,27 @@ Activate the virtual environment:
 Install dependencies:
 
     pip install -r requirements-chatterbox.txt
+
+
+## Install for Higgs Audio V2:
+
+> **ℹ️ Note!**
+> Higgs V2 almost requires 24GB VRAM (yes really)
+
+Initialize a Python v3.12 virtual environment named "venv-higgs". For example:
+
+    python.exe -m venv venv-higgs
+
+Activate the virtual environment:
+
+    venv-higgs\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-higgs.txt
+
+Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the original repo is missing some needed `__init__.py` files at the moment.
+
 
 ## Install for Fish OpenAudio-S1-mini:
 
@@ -158,9 +180,13 @@ On the same setup, Fish OpenAudio S1-mini is the fastest of the three by far, ab
 
 # Updates
 
+**2025-08-06**
+
+Added support for **Higgs Audio V2** (3B base model). This is a "base" implementation. Adding support some of its model-specific features (system prompt, context continuation, etc) is planned.
+
 **2025-07-18**
 
-Added support for Fish OpenAudio S1-mini
+Added support for **Fish OpenAudio S1-mini**
 
 Logic to detect dropped phrases at end of generated audio segments (common occurrence with the Fish model)
 
@@ -168,7 +194,7 @@ Added utility to transcode and concatenate directory of MP3 chapter files to M4A
 
 **2025-07-02**
 
-New feature: Real-time generation and playback (`Options > Real-time generation and playback`)
+New feature: **Real-time generation and playback** (`Options > Real-time generation and playback`)
 
 This serves as a quicker and more "casual" alternative to the regular `Generate audio` UI flow, and allows for more-or-less immediate and uninterrupted audio playback (contingent on system performance, ofc). It employs the same quality control measures except for loudness normalization, and does not save its output.
 

@@ -37,8 +37,6 @@ class AppUtil:
         logging.getLogger("filelock").setLevel(logging.WARNING)
         logging.getLogger('numba').setLevel(logging.WARNING)
         # Used by oute lib
-        from loguru import logger
-        logger.remove()
         import warnings
         warnings.filterwarnings("ignore", module="pyloud")
 
