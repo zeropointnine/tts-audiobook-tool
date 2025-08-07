@@ -7,7 +7,7 @@ import numpy as np
 import threading
 import soundfile
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
@@ -55,10 +55,26 @@ class SoundFileUtil:
 
     @staticmethod
     def debug_save(label: str, sound: Any): # sound = Sound
-        if DEV_SAVE_INTERMEDIATE_FILES:
-            fn = f"{int(time.time()*1000)} {label}.flac"
-            path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-            SoundFileUtil.save_flac(sound, path)
+        if not DEV_SAVE_INTERMEDIATE_FILES:
+            return
+        fn = f"{int(time.time()*1000)} {label}.flac"
+        path = os.path.join(SoundFileUtil.debug_save_dir, fn)
+        SoundFileUtil.save_flac(sound, path)
+
+    @staticmethod
+    def debug_save_result_text(result: ValidationResult, source_text: str, transcribed_text: str):
+        if not DEV_SAVE_INTERMEDIATE_FILES:
+            return
+        fn = f"{int(time.time()*1000)} {type(result).__name__}.txt"
+        path = os.path.join(SoundFileUtil.debug_save_dir, fn)
+        s = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n"
+        s += "source_text:" + "\n" + source_text + "\n\n"
+        s += "transcribed_text:" + "\n" + transcribed_text + "\n"
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(s)
+        except Exception as e:
+            printt(f"Couldnt save debug info: {e}")
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:

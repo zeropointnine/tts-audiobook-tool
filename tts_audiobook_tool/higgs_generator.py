@@ -1,5 +1,3 @@
-import random
-import sys
 import langid
 import jieba
 import os
@@ -11,7 +9,6 @@ import time
 from typing import List
 from typing import Optional
 from dataclasses import asdict
-from loguru import logger
 import torch
 
 from boson_multimodal.data_types import Message, ChatMLSample, AudioContent, TextContent
@@ -29,9 +26,6 @@ from transformers.cache_utils import StaticCache
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
-
-from loguru import logger
-logger.remove() # TODO verify that i do want to do this; maybe do at end of init?
 
 """
 Pared-down logic from higgs-audio lib script `generation.py`
@@ -301,7 +295,6 @@ class HiggsAudioModelClient:
         }
         # Capture CUDA graphs for each KV cache length
         if "cuda" in self._device:
-            logger.info(f"Capturing CUDA graphs for each KV cache length")
             self._model.capture_model(self.kv_caches.values())
 
     def _prepare_kv_caches(self):
@@ -346,8 +339,8 @@ class HiggsAudioModelClient:
             )
             input_tokens.extend(postfix)
 
-            logger.info(f"========= Chunk {idx} Input =========")
-            logger.info(self._tokenizer.decode(input_tokens))
+            # logger.info(f"========= Chunk {idx} Input =========")
+            # logger.info(self._tokenizer.decode(input_tokens))
             context_audio_ids = audio_ids + generated_audio_ids
 
             curr_sample = ChatMLDatasetSample(
@@ -413,8 +406,8 @@ class HiggsAudioModelClient:
                 generated_audio_ids = generated_audio_ids[-generation_chunk_buffer_size:]
                 generation_messages = generation_messages[(-2 * generation_chunk_buffer_size) :]
 
-        logger.info(f"========= Final Text output =========")
-        logger.info(self._tokenizer.decode(outputs[0][0]))
+        # logger.info(f"========= Final Text output =========")
+        # logger.info(self._tokenizer.decode(outputs[0][0]))
         concat_audio_out_ids = torch.concat(audio_out_ids_l, dim=1)
         concat_wv = self._audio_tokenizer.decode(concat_audio_out_ids.unsqueeze(0))[0, 0]
         text_result = self._tokenizer.decode(outputs[0][0])

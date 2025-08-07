@@ -11,6 +11,7 @@ from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
 
@@ -21,7 +22,7 @@ class RealTime:
         """
         """
 
-        SoundFileUtil.debug_save_dir = AppUtil.get_app_temp_dir()
+        SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
 
         # Warm up models
         Tts.warm_up_models()
@@ -59,7 +60,7 @@ class RealTime:
             has_enough_runway = (stream.buffer_duration >= 45.0) # TODO: make dynamic - if estimated gen time < buffer duration * 2 ...
             max_passes = 2 if has_enough_runway else 1
 
-            current_sound, _ = GenerateUtil.generate_sound_full(project, current_text_segment, max_passes=max_passes)
+            current_sound, _ = GenerateUtil.generate_sound_full_flow(project, current_text_segment, max_passes=max_passes)
 
             # TODO: printing similar feedback as with regular gen, or at least for fails
 

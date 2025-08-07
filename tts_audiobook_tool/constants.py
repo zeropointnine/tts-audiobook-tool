@@ -137,3 +137,9 @@ HINT_OUTE_LOUD_NORM = Hint(
     "Tip",
     "Oute generations can have considerable variance in loudness.\nConsider using \"stronger.\""
 )
+
+HINT_NO_VOICE = Hint(
+    "gen_no_voice",
+    "No voice clone defined",
+    "The TTS model will generate random-sounding voices because no voice sample has been set."
+)

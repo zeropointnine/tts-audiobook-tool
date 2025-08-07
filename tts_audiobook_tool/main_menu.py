@@ -74,9 +74,9 @@ class MainMenu:
         # Generate audio
         if state.prefs.project_dir and Tts.get_type() != TtsType.NONE:
             s = f"{make_hotkey_string("G")} Generate audio"
-            if not state.project.has_voice and not state.project.text_segments:
+            if not state.project.can_voice and not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set voice and text)"
-            elif not state.project.has_voice:
+            elif not state.project.can_voice:
                 s2 = f"{COL_DIM} (must first set voice)"
             elif not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set text)"
@@ -111,13 +111,13 @@ class MainMenu:
             case "v":
                 if state.prefs.project_dir:
                     if Tts.get_type() == TtsType.OUTE:
-                        VoiceOuteSubmenu.submenu(state)
+                        VoiceOuteSubmenu.submenu(state.project)
                     elif Tts.get_type() == TtsType.CHATTERBOX:
-                        VoiceChatterboxSubmenu.submenu(state)
+                        VoiceChatterboxSubmenu.submenu(state.project)
                     elif Tts.get_type() == TtsType.FISH:
-                        VoiceFishSubmenu.submenu(state)
+                        VoiceFishSubmenu.submenu(state.project)
                     elif Tts.get_type() == TtsType.HIGGS:
-                        VoiceHiggsSubmenu.submenu(state)
+                        VoiceHiggsSubmenu.submenu(state.project)
             case "t":
                 if not state.prefs.project_dir:
                     return

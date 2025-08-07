@@ -1,6 +1,6 @@
 # Description
 
-This is a generative-AI audiobook creation tool that supports various text-to-speech models which utilize zero shot voice cloning:
+This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
 - Chatterbox TTS
 - Fish OpenAudio S1-mini
 - Higgs Audio V2

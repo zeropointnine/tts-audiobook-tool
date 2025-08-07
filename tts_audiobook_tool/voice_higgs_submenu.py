@@ -1,6 +1,6 @@
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.state import State
 from tts_audiobook_tool.transcribe_util import TranscribeUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -9,43 +9,42 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceHiggsSubmenu:
 
     @staticmethod
-    def submenu(state: State) -> None:
-        """
-        """
+    def submenu(project: Project) -> None:
+
         while True:
-            VoiceHiggsSubmenu._print(state)
+            VoiceHiggsSubmenu._print(project)
             hotkey = ask_hotkey()
-            should_exit = VoiceHiggsSubmenu._handle_hotkey(state, hotkey)
+            should_exit = VoiceHiggsSubmenu._handle_hotkey(project, hotkey)
             if should_exit:
                 return
 
     @staticmethod
-    def _print(state: State) -> None:
+    def _print(project: Project) -> None:
 
         print_heading(f"Voice clone and options")
 
         s = f"{make_hotkey_string("1")} Set voice clone audio clip"
-        s += f" {COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
+        s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
         printt(s)
 
         s = f"{make_hotkey_string("2")} Clear voice clone"
         printt(s)
 
-        temperature = state.project.higgs_temperature
+        temperature = project.higgs_temperature
         s = f"default ({DEFAULT_TEMPERATURE_HIGGS})" if temperature == -1 else str(temperature)
         printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
 
         printt()
 
     @staticmethod
-    def _handle_hotkey(state: State, hotkey: str) -> bool:
+    def _handle_hotkey(project: Project, hotkey: str) -> bool:
 
         match hotkey:
             case "1":
-                VoiceHiggsSubmenu.ask_voice_file(state)
+                VoiceHiggsSubmenu.ask_voice_file(project)
                 return False
             case "2":
-                state.project.clear_higgs_voice_and_save()
+                project.clear_higgs_voice_and_save()
                 printt("Cleared")
                 printt()
                 return False
@@ -61,8 +60,8 @@ class VoiceHiggsSubmenu:
                     if not (0.0 < value < 2.0):
                         ask_error("Out of range")
                     else:
-                        state.project.higgs_temperature = value
-                        state.project.save()
+                        project.higgs_temperature = value
+                        project.save()
                 except:
                     ask_error("Bad value")
                     return False
@@ -72,9 +71,9 @@ class VoiceHiggsSubmenu:
         return False
 
     @staticmethod
-    def ask_voice_file(state: State):
+    def ask_voice_file(project: Project):
 
-        path = VoiceSubmenuShared.ask_voice_file(state.project.dir_path)
+        path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
         if not path:
             return
 
@@ -89,7 +88,7 @@ class VoiceHiggsSubmenu:
             return
         text = TranscribeUtil.get_whisper_data_text(result)
 
-        err = state.project.set_higgs_voice_and_save(path, text)
+        err = project.set_higgs_voice_and_save(path, text)
         if err:
             ask_error(err)
             return

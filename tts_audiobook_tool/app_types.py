@@ -1,4 +1,6 @@
 from __future__ import annotations
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from functools import cache
 from typing import NamedTuple
@@ -25,7 +27,6 @@ class SingletonBase:
 
 
 class Sound(NamedTuple):
-
     data: ndarray
     sr: int
 
@@ -38,6 +39,46 @@ class Hint:
         self.key: str = key
         self.heading: str = heading
         self.text: str = text
+
+# ---
+
+class ValidationResult(ABC):
+    """ Base class for a validation result """
+    pass
+
+    @abstractmethod
+    def get_ui_message(self) -> str:
+        return ""
+
+@dataclass
+class PassResult(ValidationResult):
+    def get_ui_message(self) -> str:
+        return f"Passed validation tests"
+
+@dataclass
+class TrimmableResult(ValidationResult):
+    sub_message: str
+    start_time: float | None
+    end_time: float | None
+    duration: float
+
+    def __post_init__(self):
+        if self.start_time is None and self.end_time is None:
+            raise ValueError("start or end must be a float")
+        if self.end_time == 0.0:
+            raise ValueError("end time must be None or must be greater than zero")
+
+    def get_ui_message(self) -> str:
+        start = f"{self.start_time:.2f}" if self.start_time is not None else "start"
+        end = f"{self.end_time:.2f}" if self.end_time is not None else "end"
+        return f"{self.sub_message} Will trim from {start} to {end} (duration: {self.duration})"
+
+@dataclass
+class FailResult(ValidationResult):
+    message: str
+
+    def get_ui_message(self) -> str:
+        return self.message
 
 # ---
 

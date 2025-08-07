@@ -161,20 +161,25 @@ class AppUtil:
         return text_segments, raw_text
 
     @staticmethod
-    def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_prompt: bool=False) -> None:
+    def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
         """
-        If hint has not yet been shown, shows it.
-        Then either shows a prompt, or shows a 3-second 'animation'
+        If hint has already been shown does nothing.
+        Else, shows hint.
+        Then either asks for confirmation, prompts to press enter, or or shows a 3-second 'animation'
+        Returns True if "should continue"
         """
         if prefs.get_hint(hint.key):
-            return
+            return True
         prefs.set_hint_true(hint.key)
         printt(f"🔔 {COL_ACCENT}{hint.heading}")
         printt(hint.text)
         printt()
 
-        if and_prompt:
+        if and_confirm:
+            return ask_confirm()
+        elif and_prompt:
             ask_continue()
+            return True
         else:
             # Anim
             lines = ["[   ]", "[.  ]", "[.. ]", "[...]"]
@@ -182,6 +187,7 @@ class AppUtil:
                 print(f"{COL_DIM}{line}{Ansi.RESET}", end="\r", flush=True)
                 time.sleep(0.66)
             print(f"{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
+            return True
 
     @staticmethod
     def show_player_hint_if_necessary(prefs: Prefs) -> None:

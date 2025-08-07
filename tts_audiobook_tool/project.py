@@ -264,7 +264,7 @@ class Project:
     def get_voice_label(self) -> str:
         match Tts.get_type():
             case TtsType.OUTE:
-                if self.has_voice:
+                if self.can_voice:
                     label = Path(self.oute_voice_file_name).stem[:30]
                     label = sanitize_for_filename(label)
                     return label
@@ -294,7 +294,7 @@ class Project:
                 return "none"
 
     @property
-    def has_voice(self) -> bool:
+    def can_voice(self) -> bool:
         """
         Returns True if current state allows for outputting a "voice" of any kind.
         """
@@ -317,7 +317,7 @@ class Project:
 
     @property
     def can_generate_audio(self) -> bool:
-        return self.has_voice and len(self.text_segments) > 0
+        return self.can_voice and len(self.text_segments) > 0
 
     @property
     def sound_segments_dir_path(self) -> str:

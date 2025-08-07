@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import util
+import sys
 from typing import Any, cast
 import torch
 import whisper
@@ -63,11 +64,8 @@ class Tts:
     def warm_up_models() -> None:
         """ Instantiates tts and stt models if not already, as a convenience """
 
-        no_tts = (Tts._type == TtsType.OUTE and not Tts._oute) or \
-            (Tts._type == TtsType.CHATTERBOX and not Tts._chatterbox) or \
-            (Tts._type == TtsType.FISH and not Tts._fish)
-        if no_tts and not Tts._whisper:
-            # Going to warm up two models
+        has_tts = Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs
+        if not has_tts or not Tts._whisper:
             print("Warming up models...")
             printt()
 
@@ -77,6 +75,8 @@ class Tts:
             _ = Tts.get_chatterbox()
         if Tts._type == TtsType.FISH and not Tts._fish:
             _ = Tts.get_fish()
+        if Tts._type == TtsType.HIGGS and not Tts._higgs:
+            _ = Tts.get_higgs()
 
         if not Tts._whisper:
             _ = Tts.get_whisper()
@@ -93,7 +93,7 @@ class Tts:
                 from .config_oute_dev import MODEL_CONFIG
             except ImportError:
                 pass
-            # Not catching any exception here (let app crash if incorrect)
+            # Not catching any exception here (let app crash if incorrect):
             Tts._oute = outetts.Interface(config=MODEL_CONFIG)
         return Tts._oute
 
@@ -110,11 +110,18 @@ class Tts:
     @staticmethod
     def get_fish() -> Any:
         from tts_audiobook_tool.fish_generator import FishGenerator
+
         if not Tts._fish:
             device = Tts.get_best_torch_device()
             printt(f"Initializing Fish OpenAudio S1-mini TTS model ({device})...")
             printt()
             Tts._fish = FishGenerator(device)
+
+            # Customize logging/logger levels now that fish is initialized
+            from loguru import logger
+            logger.remove()
+            logger.add(sys.stderr, level="WARNING", filter="fish_speech")
+
         return Tts._fish
 
     @staticmethod

@@ -44,12 +44,16 @@ class GenerateSubmenu:
 
             match hotkey:
                 case "1":
+                    if state.project.can_voice and state.project.get_voice_label() == "none":
+                        should_continue = AppUtil.show_hint_if_necessary(state.prefs, HINT_NO_VOICE, and_confirm=True)
+                        if not should_continue:
+                            continue
                     GenerateSubmenu.do_generate_items(state)
                 case "2":
                     GenerateSubmenu.ask_items(state)
                 case "3":
                     GenerateSubmenu.do_regenerate_items(state)
-                # case "xxx":
+                # case "x":
                 #     state.prefs.play_on_generate = not state.prefs.play_on_generate
                 #     printt(f"Set to: {state.prefs.play_on_generate}")
                 #     printt()

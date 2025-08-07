@@ -26,9 +26,6 @@ class FishGenerator:
         # TODO verify mpc; also mpc + compile? probably not presumably?
         self.device = device
 
-        # Fish gens trigger many torch warnings, so...
-        logging.getLogger("torch").setLevel(logging.ERROR)
-
         # Fish module executes this line upon import
         # `pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)`
         # Must create dummy file to prevent RTE on import
@@ -39,8 +36,7 @@ class FishGenerator:
             open(dummy_path, 'a').close()
 
         from fish_speech.models.dac.inference import load_model as load_dac_model # type: ignore
-
-        from fish_speech.models.text2semantic.inference import init_model as init_t2s_model
+        from fish_speech.models.text2semantic.inference import init_model as init_t2s_model # type: ignore
 
         # Doesn't raise error when token fails and dest directory already has things, fyi
         try:
