@@ -30,6 +30,7 @@ einops==0.8.1
 einx==0.2.2
 executing==2.2.0
 fastapi==0.116.0
+faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 ffmpy==0.6.0
 filelock==3.18.0
@@ -92,7 +93,6 @@ numba==0.61.2
 numpy==1.26.4
 omegaconf==2.3.0
 onnxruntime==1.22.0
-openai-whisper==20250625
 opencc-python-reimplemented==0.1.7
 orjson==3.10.18
 ormsgpack==1.10.0

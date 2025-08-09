@@ -55,26 +55,33 @@ class SoundFileUtil:
 
     @staticmethod
     def debug_save(label: str, sound: Any): # sound = Sound
+
         if not DEV_SAVE_INTERMEDIATE_FILES:
             return
+
         fn = f"{int(time.time()*1000)} {label}.flac"
         path = os.path.join(SoundFileUtil.debug_save_dir, fn)
         SoundFileUtil.save_flac(sound, path)
 
     @staticmethod
     def debug_save_result_info(result: ValidationResult, source_text: str, transcribed_text: str):
+
         if not DEV_SAVE_INTERMEDIATE_FILES:
             return
+
         fn = f"{int(time.time()*1000)} {type(result).__name__}.txt"
         path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-        s = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n"
-        s += "source_text:" + "\n" + source_text + "\n\n"
-        s += "transcribed_text:" + "\n" + transcribed_text + "\n"
-        try:
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(s)
-        except Exception as e:
-            printt(f"Couldnt save debug info: {e}")
+        s = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n\n"
+
+        s += "source text:" + "\n" + source_text + "\n\n"
+        s += "transcribed_text:" + "\n" + transcribed_text + "\n\n"
+        source_text_massaged = massage_for_text_comparison(source_text)
+        s += "source_text, massaged:" + "\n" + source_text_massaged + "\n\n"
+        transcribed_text_massaged = massage_for_text_comparison(transcribed_text)
+        s += "transcribed_text, massaged:" + "\n" + transcribed_text_massaged + "\n\n"
+
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(s)
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:

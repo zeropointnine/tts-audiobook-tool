@@ -4,8 +4,8 @@ from importlib import util
 import sys
 from typing import Any, cast
 import torch
-import whisper
-from whisper.model import Whisper
+
+from faster_whisper import WhisperModel
 
 from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
@@ -17,7 +17,7 @@ class Tts:
 
     # TODO: create tts interface to replace hardcoded logic; this also applies to Project and GenerateUtil ideally
 
-    _whisper: Whisper | None = None
+    _faster_whisper: WhisperModel | None = None
 
     _oute: Any = None
     _chatterbox: Any = None
@@ -65,8 +65,8 @@ class Tts:
         """ Instantiates tts and stt models if not already, as a convenience """
 
         has_tts = Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs
-        if not has_tts or not Tts._whisper:
-            print("Warming up models...")
+        if not has_tts or not Tts._faster_whisper:
+            printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 
         if Tts._type == TtsType.OUTE and not Tts._oute:
@@ -78,13 +78,13 @@ class Tts:
         if Tts._type == TtsType.HIGGS and not Tts._higgs:
             _ = Tts.get_higgs()
 
-        if not Tts._whisper:
+        if not Tts._faster_whisper:
             _ = Tts.get_whisper()
 
     @staticmethod
     def get_oute() -> Any:
         if not Tts._oute:
-            printt("Initializing Oute TTS model...")
+            printt("{Ansi.ITALICS}Initializing Oute TTS model...")
             printt()
             import outetts # type: ignore
             from tts_audiobook_tool.config_oute import MODEL_CONFIG
@@ -101,7 +101,7 @@ class Tts:
     def get_chatterbox() -> Any:
         if not Tts._chatterbox:
             device = Tts.get_best_torch_device()
-            printt(f"Initializing Chatterbox TTS model ({device})...")
+            printt(f"{Ansi.ITALICS}Initializing Chatterbox TTS model ({device})...")
             printt()
             from chatterbox.tts import ChatterboxTTS  # type: ignore
             Tts._chatterbox = ChatterboxTTS.from_pretrained(device=device)
@@ -113,7 +113,7 @@ class Tts:
 
         if not Tts._fish:
             device = Tts.get_best_torch_device()
-            printt(f"Initializing Fish OpenAudio S1-mini TTS model ({device})...")
+            printt(f"{Ansi.ITALICS}Initializing Fish OpenAudio S1-mini TTS model ({device})...")
             printt()
             Tts._fish = FishGenerator(device)
 
@@ -129,7 +129,7 @@ class Tts:
         from tts_audiobook_tool.higgs_generator import HiggsGenerator
         if not Tts._higgs:
             device = Tts.get_best_torch_device() # TODO
-            printt(f"Initializing Higgs V2 TTS model ({device})...")
+            printt(f"{Ansi.ITALICS}Initializing Higgs V2 TTS model ({device})...")
             printt()
             Tts._higgs = HiggsGenerator(device)
         return Tts._higgs
@@ -138,7 +138,7 @@ class Tts:
     def clear_oute() -> None:
         if not Tts._oute:
             return
-        printt("Unloading Oute TTS model...")
+        printt("{Ansi.ITALICS}Unloading Oute TTS model...")
         printt()
         Tts._oute = None
         from tts_audiobook_tool.app_util import AppUtil
@@ -148,20 +148,22 @@ class Tts:
     def clear_fish() -> None:
         if not Tts._fish:
             return
-        printt("Unloading Fish model...")
+        printt("{Ansi.ITALICS}Unloading Fish model...")
         printt()
         Tts._fish = None
         from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram()
 
     @staticmethod
-    def get_whisper() -> Whisper:
-        if Tts._whisper is None:
-            device = "cuda" if torch.cuda.is_available() else "cpu" # todo mps? did i test this earlier?
-            printt(f"Initializing whisper model ({device})...")
+    def get_whisper() -> WhisperModel:
+        if Tts._faster_whisper is None:
+            model = "large-v3"
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            compute_type = "float16" if torch.cuda.is_available() else "int8"
+            printt(f"{Ansi.ITALICS}Initializing whisper model ({model}, {device}, {compute_type})...")
             printt()
-            Tts._whisper = whisper.load_model("turbo", device=device)
-        return Tts._whisper
+            Tts._faster_whisper = WhisperModel(model, device=device, compute_type=compute_type)
+        return Tts._faster_whisper
 
     @staticmethod
     def clear_whisper() -> None:
@@ -169,12 +171,12 @@ class Tts:
         In general, do not hold onto a reference to whisper from outside (prefer using "get_whisper())
         If you do, delete the reference before calling this, or else it will not be GC'ed
         """
-        if Tts._whisper is None:
+        if Tts._faster_whisper is None:
             return
         printt()
-        printt("Unloading whisper...")
+        printt("{Ansi.ITALICS}Unloading whisper...")
         printt()
-        Tts._whisper = None
+        Tts._faster_whisper = None
         from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram()
 

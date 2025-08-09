@@ -27,6 +27,7 @@ docstring_parser==0.17.0
 einops==0.8.1
 einx==0.3.0
 executing==2.2.0
+faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 ffmpy==0.6.1
 filelock==3.18.0
@@ -73,7 +74,6 @@ networkx==3.5
 numba==0.61.2
 numpy==2.2.6
 omegaconf==2.3.0
-openai-whisper==20250625
 packaging==25.0
 pandas==2.3.1
 parso==0.8.4

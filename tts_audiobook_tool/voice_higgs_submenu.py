@@ -5,6 +5,7 @@ from tts_audiobook_tool.transcribe_util import TranscribeUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class VoiceHiggsSubmenu:
 
@@ -82,16 +83,21 @@ class VoiceHiggsSubmenu:
         if isinstance(sound, str):
             ask_continue(sound)
             return
-        result = SoundUtil.transcribe(sound)
+        result = WhisperUtil.transcribe(sound)
         if isinstance(result, str):
             ask_continue(result)
             return
-        text = TranscribeUtil.get_whisper_data_text(result)
+        text = WhisperUtil.get_flat_text(result)
 
         err = project.set_higgs_voice_and_save(path, text)
         if err:
             ask_error(err)
             return
+
+        printt("Saved.\n")
+        printt("Transcribed text from voice file:")
+        printt(text)
+        printt()
 
         if MENU_CLEARS_SCREEN:
             ask_continue("Saved")

@@ -23,6 +23,7 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_sound_segments import *
 from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class GenerateUtil:
 
@@ -157,9 +158,8 @@ class GenerateUtil:
             o = GenerateUtil.generate_single(project, text_segment)
 
             if isinstance(o, str):
-                # Failed to generate
                 err = o
-                printt(f"{COL_ERROR}{err}")
+                printt(f"{err}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
                     continue
@@ -167,32 +167,30 @@ class GenerateUtil:
                     return None, FailResult(err)
             else:
                 sound = o
-
-            # Post process generated audio
             sound = GenerateUtil.post_process(sound)
 
-            # Transcribe generated audio
-            o = SoundUtil.transcribe(sound)
+            # Transcribe
+            o = WhisperUtil.transcribe(sound)
             if isinstance(o, str):
-                # Transcription error (is unlikely)
+                # Transcription error (unlikely)
                 err = o
-                printt(f"{COL_ERROR}{err}")
+                printt(f"{err}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
                     continue
                 else:
                     return None, FailResult(err)
             else:
-                whisper_data = o
+                transcribed_words = o
 
             # Validate
             validate_result = ValidateUtil.validate_item(
-                sound, text_segment.text, whisper_data,Tts.get_type().value
+                sound, text_segment.text, transcribed_words, Tts.get_type().value
             )
 
             should_save_debug_info = isinstance(validate_result, TrimmableResult) or isinstance(validate_result, FailResult)
             if should_save_debug_info:
-                transcribed_text = TranscribeUtil.get_whisper_data_text(whisper_data)
+                transcribed_text = WhisperUtil.get_flat_text(transcribed_words)
                 SoundFileUtil.debug_save_result_info(validate_result, text_segment.text, transcribed_text)
 
             if isinstance(validate_result, PassResult):
@@ -203,7 +201,7 @@ class GenerateUtil:
                 new_sound = SoundUtil.trim(sound, start_time, end_time)
                 return new_sound, validate_result
             else: # is invalid
-                printt(f"{COL_ERROR}{validate_result.get_ui_message()}")
+                printt(f"{validate_result.get_ui_message()}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
                     continue
@@ -246,7 +244,8 @@ class GenerateUtil:
 
         # Trim all silence from ends of audio clip
         sound = SilenceUtil.trim_silence(sound)
-        # SoundFileUtil.debug_save("after trim silence", sound)
+        SoundFileUtil.debug_save("after trim silence", sound)
+        print(f"xxx duration after trim {sound.duration}")
 
         # Prevent 0-byte audio data as a failsafe again
         if len(sound.data) == 0:

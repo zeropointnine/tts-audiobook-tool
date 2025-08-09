@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
-from typing import NamedTuple
+from typing import NamedTuple, Protocol
 
 from numpy import ndarray
 
@@ -34,6 +34,15 @@ class Sound(NamedTuple):
     def duration(self) -> float:
         return len(self.data) / self.sr
 
+class Word(Protocol):
+    """
+    Duck-typed data structure for use with the "Word" objects returned by faster-whisper generate()
+    """
+    start: float
+    end: float
+    word: str
+    probability: float
+
 class Hint:
     def __init__(self, key: str, heading: str, text: str):
         self.key: str = key
@@ -57,7 +66,7 @@ class PassResult(ValidationResult):
 
 @dataclass
 class TrimmableResult(ValidationResult):
-    sub_message: str
+    base_message: str
     start_time: float | None
     end_time: float | None
     duration: float
@@ -69,9 +78,15 @@ class TrimmableResult(ValidationResult):
             raise ValueError("end time must be None or must be greater than zero")
 
     def get_ui_message(self) -> str:
-        start = f"{self.start_time:.2f}" if self.start_time is not None else "start"
-        end = f"{self.end_time:.2f}" if self.end_time is not None else "end"
-        return f"{self.sub_message} Will trim from {start} to {end} (duration: {self.duration})"
+        start = f"{self.start_time:.2f}" if self.start_time is not None else ""
+        end = f"{self.end_time:.2f}" if self.end_time is not None else ""
+        if start and end:
+            message = f"Will remove 0-{start} and {end} to end"
+        elif start:
+            message = f"Will remove 0 to {start}"
+        else: # end
+            message = f"Will remove {end} to end"
+        return self.base_message + ". " + message
 
 @dataclass
 class FailResult(ValidationResult):

@@ -16,47 +16,6 @@ class SoundUtil:
         return Sound(new_data, resample_rate)
 
     @staticmethod
-    def resample_for_whisper(sound: Sound) -> Sound:
-
-        data = sound.data
-        data = np.nan_to_num(sound.data, nan=0.0, posinf=0.0, neginf=0.0)
-        data = np.clip(data, -1.0, 1.0)
-        data = librosa.resample(data, orig_sr=sound.sr, target_sr=WHISPER_SAMPLERATE)
-        return Sound(data, WHISPER_SAMPLERATE)
-
-    @staticmethod
-    def transcribe(sound: Sound) -> dict | str:
-        """
-        Transcribes the audio data.
-        Makes temporary resampled audio if necessary.
-        Returns error string on fail
-        """
-        if sound.sr != WHISPER_SAMPLERATE:
-            temp_sound = SoundUtil.resample_for_whisper(sound)
-        else:
-            temp_sound = sound
-
-        whisper_data = Tts.get_whisper().transcribe(temp_sound.data, word_timestamps=True, language=None)
-
-        # Minor validation
-        if not "text" in whisper_data or not isinstance(whisper_data["text"], str):
-            return "Whisper data missing expected values"
-
-        return whisper_data
-
-    @staticmethod
-    def transcribe_sound_file(path: str) -> dict | str:
-        """ Returns error string on fail """
-        try:
-            whisper_data = Tts.get_whisper().transcribe(path, word_timestamps=True, language=None)
-        except Exception as e:
-            return str(e)
-        # Minor validation
-        if not "text" in whisper_data or not isinstance(whisper_data["text"], str):
-            return "Whisper data missing expected values"
-        return whisper_data
-
-    @staticmethod
     def trim(sound: Sound, start_time: float | None, end_time: float | None) -> Sound:
 
         if start_time is None:

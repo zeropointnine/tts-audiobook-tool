@@ -5,23 +5,25 @@ import ffmpeg
 import numpy as np
 import difflib
 from typing import List, NamedTuple
+from tts_audiobook_tool.app_types import Word
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class SttUtil:
 
     @staticmethod
     def make_timed_text_segments(
         text_segments: List[TextSegment],
-        transcribed_words: List[TranscribedWord],
+        transcribed_words: List[Word],
         print_info: bool=True
     ) -> List[TimedTextSegment]:
         """
-        Aligns TextSegments with TranscribedWords to create TimedTextSegments.
+        Aligns TextSegments with Words to create TimedTextSegments.
         """
         results: List[TimedTextSegment] = []
 
@@ -356,16 +358,16 @@ class SttUtil:
         return best_indices_and_score
 
     @staticmethod
-    def transcribe_to_words(path: str) -> list[TranscribedWord]:
+    def transcribe_to_words(path: str) -> list[Word]:
         """
-        Creates a list of TranscribedWord instances by transcribing the audio at the given file path
+        Creates a list of Word instances by transcribing the audio at the given file path
         """
         list_of_lists = SttUtil._transcribe_stream_with_overlap(path)
         words_list = SttUtil._stitch_transcripts(list_of_lists)
         return words_list
 
     @staticmethod
-    def _transcribe_stream_with_overlap(path: str) -> list[list[TranscribedWord]]:
+    def _transcribe_stream_with_overlap(path: str) -> list[list[Word]]:
         """
         Transcribes audio file of any length using "stream with overlap".
         The resulting data will have overlapping data on each end,
@@ -375,7 +377,7 @@ class SttUtil:
         CHUNK_DURATION = 30
         OVERLAP_DURATION = 5
 
-        list_of_lists: list[list[TranscribedWord]] = []
+        list_of_lists: list[list[Word]] = []
         time_offset = 0.0
 
         duration_str = ""
@@ -396,9 +398,18 @@ class SttUtil:
             s += f"{Ansi.ERASE_REST_OF_LINE}"
             print(s, end="", flush=True)
 
-            whisper_data = Tts.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
-            words = SttUtil.whisper_data_to_word_dicts(whisper_data, time_offset)
-            list_of_lists.append(words)
+            segments, _ = Tts.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
+            transcribed_words = WhisperUtil.get_words_from_segments(segments)
+            updated_words = []
+            for word in transcribed_words:
+                updated_word = SttWord(
+                    start=word.start + time_offset,
+                    end=word.end + time_offset,
+                    word=word.word,
+                    probability=word.probability
+                )
+                updated_words.append(updated_word)
+            list_of_lists.append(updated_words)
 
             time_offset += CHUNK_DURATION - OVERLAP_DURATION
 
@@ -464,34 +475,12 @@ class SttUtil:
         # Ensure the FFmpeg process is terminated
         process.wait()
 
-    @staticmethod
-    def whisper_data_to_word_dicts(item: dict, time_offset: float) -> list[TranscribedWord]:
-        """
-        Assumes the existence of extra field, 'time_offset'
-        """
-
-        result = []
-
-        for segment in item.get("segments", []):
-
-            for whisper_word_dict in segment.get("words", []):
-
-                text = whisper_word_dict["word"]
-                start = float(whisper_word_dict["start"]) + float(time_offset)
-                end = float(whisper_word_dict["end"]) + float(time_offset)
-                probability = float(whisper_word_dict["probability"])
-
-                word = TranscribedWord(text, start, end, probability)
-                result.append(word)
-
-        return result
-
 
     @staticmethod
     def _stitch_transcripts(
-        chunks: List[List[TranscribedWord]],
+        chunks: List[List[Word]],
         time_similarity_threshold: float = 0.01 # e.g., 10ms
-        ) -> List[TranscribedWord]:
+        ) -> List[Word]:
         """
         Stitches together a list of Word lists, handling overlaps between chunks.
 
@@ -511,7 +500,7 @@ class SttUtil:
         Returns:
             A flat list of Word instances representing the stitched transcript.
         """
-        final_words: List[TranscribedWord] = []
+        final_words: List[Word] = []
 
         if not chunks:
             return []
@@ -536,7 +525,7 @@ class SttUtil:
             # - If final_words has >1 item, final_words[-2] is a more reliable reference point from past content.
             # - If final_words has only 1 item, final_words[-1] is the only reference we have.
 
-            ref_word_from_final: TranscribedWord
+            ref_word_from_final: Word
             num_words_to_pop_if_merging: int
 
             if len(final_words) > 1:
@@ -595,25 +584,6 @@ class SttUtil:
 
         return final_words
 
-
-class TranscribedWord(NamedTuple):
-    # The transcribed word
-    word: str
-    # The timestamp of the start of the word in the source audio
-    start: float
-    # The timestamp of the end of the word in the source audio
-    end: float
-    # The transcription model's confidence level in the transcription, more or less
-    probability: float
-
-    def __repr__(self):
-        return f"Word(word='{self.word}', start={self.start:.3f}, end={self.end:.3f} prob={self.probability:.2f})"
-
-    @staticmethod
-    def get_raw_text(words: list[TranscribedWord]) -> str:
-        texts = [word.word for word in words]
-        return "".join(texts)
-
 #---
 
 def normalize_text(text: str) -> str:
@@ -624,3 +594,15 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     text = re.sub(r'\s+', ' ', text).strip()  # Normalize whitespace
     return text
+
+# ---
+
+class SttWord(Word):
+    """
+    Concretized version of "Word", ugh
+    """
+    def __init__(self, start: float, end: float, word: str, probability: float):
+        self.start = start
+        self.end = end
+        self.word = word
+        self.probability = probability
