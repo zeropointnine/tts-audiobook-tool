@@ -361,10 +361,8 @@ class TranscribeUtil:
         whisper_data: dict
     ) -> Tuple[float, float] | None:
         """
-        Detects if "ground truth" text exists as a substring in a Whisper transcription,
-        and returns its start/end timestamps.
-
-        (Ignores case where both are equal)
+        Detects if reference text exists as a substring in a Whisper transcription,
+        and returns its start/end timestamps (but ignores case where both are equal).
 
         The matching is done by normalizing both the ground truth text and segments of the
         transcribed text using the massage_for_comparison function. It looks for an exact

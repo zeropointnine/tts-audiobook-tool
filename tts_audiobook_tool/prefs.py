@@ -135,6 +135,10 @@ class Prefs:
         self._hints[key] = True
         self.save()
 
+    def reset_hints(self) -> None:
+        self._hints = {}
+        self.save()
+
     def save(self) -> None:
         dic = {
             "project_dir": self._project_dir,

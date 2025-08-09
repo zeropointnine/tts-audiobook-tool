@@ -14,7 +14,7 @@ from tts_audiobook_tool.voice_fish_submenu import VoiceFishSubmenu
 from tts_audiobook_tool.voice_higgs_submenu import VoiceHiggsSubmenu
 from tts_audiobook_tool.voice_oute_submenu import VoiceOuteSubmenu
 
-# TODO some import above is triggering unsightly warning from "jieba"...
+# TODO some import above is triggering unsightly warning from "jieba", either directly or transitively
 
 class MainMenu:
     """

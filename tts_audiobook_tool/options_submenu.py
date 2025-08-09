@@ -17,6 +17,7 @@ class OptionsSubmenu:
             printt(f"{make_hotkey_string("2")} Enhance existing audiobook {COL_DIM}(experimental)")
             printt(f"{make_hotkey_string("3")} Transcode and concatenate a directory of MP3 files to AAC/M4A")
             printt(f"{make_hotkey_string("4")} Transcode an app-created FLAC to AAC/M4A, preserving its custom metadata")
+            printt(f"{make_hotkey_string("5")} Reset contextual hints")
             printt()
 
             hotkey = ask_hotkey()
@@ -29,5 +30,9 @@ class OptionsSubmenu:
                     Mp3ConcatTranscodeUtil.ask_mp3_dir()
                 case "4":
                     TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
+                case "5":
+                    state.prefs.reset_hints()
+                    printt("One-time contextual hints have been reset.\nThey will now appear again when relevant.\n")
+                    ask_continue()
                 case _:
                     break

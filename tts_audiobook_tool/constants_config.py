@@ -22,8 +22,8 @@ PREFS_DEFAULT_NORMALIZATION_LEVEL = "default"
 
 # Offset for whisper word end timestamp being consistently too early
 # The amount varies a lot, usually around 0.15, but is always too early.
-# This is ofc very stt model-specific
-WHISPER_END_TIME_OFFSET = 0.40
+# This is ofc very stt-model-specific
+WHISPER_END_TIME_OFFSET = 0.25
 
 WHISPER_START_TIME_OFFSET = -0.1
 

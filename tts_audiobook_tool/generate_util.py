@@ -193,7 +193,7 @@ class GenerateUtil:
             should_save_debug_info = isinstance(validate_result, TrimmableResult) or isinstance(validate_result, FailResult)
             if should_save_debug_info:
                 transcribed_text = TranscribeUtil.get_whisper_data_text(whisper_data)
-                SoundFileUtil.debug_save_result_text(validate_result, text_segment.text, transcribed_text)
+                SoundFileUtil.debug_save_result_info(validate_result, text_segment.text, transcribed_text)
 
             if isinstance(validate_result, PassResult):
                 return sound, validate_result

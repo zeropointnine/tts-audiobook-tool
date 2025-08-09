@@ -62,7 +62,7 @@ class SoundFileUtil:
         SoundFileUtil.save_flac(sound, path)
 
     @staticmethod
-    def debug_save_result_text(result: ValidationResult, source_text: str, transcribed_text: str):
+    def debug_save_result_info(result: ValidationResult, source_text: str, transcribed_text: str):
         if not DEV_SAVE_INTERMEDIATE_FILES:
             return
         fn = f"{int(time.time()*1000)} {type(result).__name__}.txt"
