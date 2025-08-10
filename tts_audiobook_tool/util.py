@@ -203,23 +203,31 @@ def lerp_clamped(
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
 def massage_for_text_comparison(s: str) -> str:
-    # Massages text so that source text and transcribed text can be compared
+    """
+    Massages text so that source text and transcribed text can be compared.
+    Is meant to be applied to both the source text and the transcribed text.
+    """
+
     s = s.lower().strip()
+
     # First replace fancy apost with normal apost
     s = s.replace("’", "'") #
     # Replace all non-alpha-numerics with space, except for apost that is inside a word
     s = re.sub(r"[^a-zA-Z0-9'’]|(?<![a-zA-Z])['’]|['’](?![a-zA-Z])", ' ', s)
+
     # Strip white space from the ends
     s = re.sub(r' +', ' ', s)
     s = s.strip(' ')
-    # Standardize the spelling of numbers from 1-20
-    # (More could be done past 20, but let's not)
+
+    # Standardize the spelling of small numbers
     s = substitute_smol_numbers(s)
+
     return s
 
 def substitute_smol_numbers(text) -> str:
-    """Replace standalone numbers 1-20 with their written equivalents (in lowercase)."""
+    """Replace standalone numbers 0-20 with their written equivalents (in lowercase)."""
     number_map = {
+        '0': 'zero',
         '1': 'one',
         '2': 'two',
         '3': 'three',

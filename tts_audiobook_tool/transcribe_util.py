@@ -327,8 +327,7 @@ class TranscribeUtil:
         Matches first word transcribed word with first reference word etc
         Start time value from whisper is pretty reliable in that it doesn't crop word, etc
 
-        The TTS model can insert noises before first word, especially with 1-2 word prompts.
-        It don't generally insert hallucinated words before first prompt word. # TODO revisit - higgs *does*
+        TTS model can insert non-word noises before first word, especially with 1-2 word prompts.
         """
         reference_words = massage_for_text_comparison(reference_text)
         reference_words = reference_words.split(" ")

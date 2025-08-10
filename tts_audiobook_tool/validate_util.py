@@ -63,7 +63,7 @@ class ValidateUtil:
         if fail_reason:
             return FailResult(fail_reason)
 
-        # Test for excess audio before or after audio-text
+        # Test for excess audio before or after audio-text which is not re
         trim_start_time = TranscribeUtil.get_semantic_match_start_time_trim(
             reference_text, transcribed_words, sound
         )
@@ -72,9 +72,15 @@ class ValidateUtil:
             if trim_start_time == 0:
                 trim_start_time = None
 
-        trim_end_time = TranscribeUtil.get_semantic_match_end_time_trim(
-            reference_text, transcribed_words, sound, include_last_word=tts_specs.semantic_trim_last
-        )
+        # Currently disabled because end-time is so unreliable with current implementation using whisper,
+        # does almost more harm than good.
+        # Although still worth using for 'substring test' maybe.
+
+        # trim_end_time = TranscribeUtil.get_semantic_match_end_time_trim(
+        #     reference_text, transcribed_words, sound, include_last_word=tts_specs.semantic_trim_last
+        # )
+        trim_end_time= None
+
         if trim_end_time is not None:
             trim_end_time = SoundUtil.get_local_minima(sound, trim_end_time)
             if abs(sound.duration - trim_end_time) < 0.05: # ~epsilon

@@ -399,8 +399,12 @@ class GenerateUtil:
         text = text.replace("“", "\"")
         text = text.replace("”", "\"")
 
-        # Limited case where free-standing paragraph is simply a number (eg, chapter headings)
-        text = TextUtil.number_string_to_words(text)
+        # Expand "int words" to prevent TTS model from simply saying a string of digits
+        text = TextUtil.expand_int_words_in_text(text)
+
+        print("xxx preprocessed text:")
+        print(text)
+
         return text
 
 # ---

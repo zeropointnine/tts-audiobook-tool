@@ -1,21 +1,73 @@
+import re
+import string
+
 class TextUtil:
 
+    @staticmethod
+    def expand_int_words_in_text(text: str) -> str:
+        """
+        Expands any "int words" (from 0 to 999) with spelled-out numbers.
+        Eg, "Repeat 28 times." -> "Repeat twenty-eight times."
+        """
+
+        # This regex splits the text by whitespace, keeping the whitespace delimiters.
+        tokens = re.split(r'(\s+)', text)
+
+        expanded_tokens = []
+
+        # Create a regex pattern for leading and trailing punctuation.
+        punct_chars = re.escape(string.punctuation)
+        leading_punct_re = re.compile(r'^([' + punct_chars + r']*)')
+        trailing_punct_re = re.compile(r'([' + punct_chars + r']*)$')
+
+        for token in tokens:
+            if not token:
+                continue
+
+            # Pass through whitespace tokens.
+            if token.isspace():
+                expanded_tokens.append(token)
+                continue
+
+            # Find leading punctuation.
+            leading_match = leading_punct_re.match(token)
+            leading_punct = leading_match.group(1) if leading_match else ''
+
+            # Find trailing punctuation.
+            trailing_match = trailing_punct_re.search(token)
+            trailing_punct = trailing_match.group(1) if trailing_match else ''
+
+            # Extract the core word.
+            start_index = len(leading_punct)
+            end_index = len(token) - len(trailing_punct)
+
+            # Handle cases where token is only punctuation or where matches overlap.
+            if start_index >= end_index:
+                expanded_tokens.append(token)
+                continue
+
+            core_word = token[start_index:end_index]
+
+            # Expand the core word using the other static method.
+            expanded_core = TextUtil._expand_int_word_or_pass_through(core_word)
+
+            # Reconstruct the token with original punctuation.
+            new_token = leading_punct + expanded_core + trailing_punct
+            expanded_tokens.append(new_token)
+
+        return "".join(expanded_tokens)
 
     @staticmethod
-    def number_string_to_words(s: str) -> str:
-        try:
-            n = int(s.strip())
-            return TextUtil.number_to_words(n)
-        except:
-            return s
+    def _expand_int_word_or_pass_through(word: str) -> str:
 
-    @staticmethod
-    def number_to_words(n: int) -> str:
-        """
-        Converts an integer from 0 to 999 into its English word representation if applicable.
-        """
-        if not isinstance(n, int) or not (0 <= n <= 999):
-            return str(n)
+        word = word.strip()
+        is_strict_int = word.isdigit() and (word == '0' or word[0] != '0') # digits only, no leading zeros before other numbers
+        if not is_strict_int:
+            return word
+
+        n = int(word)
+        if not (0 <= n <= 999):
+            return word
 
         if n == 0:
             return "zero"
