@@ -45,6 +45,7 @@ pooch==1.8.2
 pre_commit==4.2.0
 protobuf==6.31.1
 pycparser==2.22
+pyloudnorm==0.1.1
 pysbd==0.3.4
 PyYAML==6.0.2
 regex==2024.11.6

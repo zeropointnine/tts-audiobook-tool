@@ -195,9 +195,6 @@ class SoundUtil:
             printt(f"Couldn't get local minima for target timestamp: {target_timestamp}")
             local_minima = target_timestamp
 
-        printt(f"xxx time before: {target_timestamp}")
-        printt(f"xxx time after: {local_minima}")
-
         return local_minima
 
     @staticmethod

@@ -54,7 +54,7 @@ Clone the repository and cd into it:
 
 A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance as needed). Model-specific options will be enabled automatically in the app based on which virtual environment is active.
 
-In all cases, the CUDA flavor of pytorch may require an extra install step depending on platform and installed CUDA version, in the usual manner.
+In all cases, the CUDA flavor of torch may require an extra install step depending on platform and installed CUDA version, in the usual manner. Just make sure to use the same torch version as specified in the respective `requirements-*.txt` file.
 
 Once the desired virtual environment/s is set up and has been activated, run the app by entering:
 
@@ -179,6 +179,10 @@ On the same setup, Fish OpenAudio S1-mini is the fastest of the three by far, ab
 
 
 # Updates
+
+**2025-08-10**
+
+Migrated from openai-whisper to faster-whisper (faster, less memory).
 
 **2025-08-06**
 

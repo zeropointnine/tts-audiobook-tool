@@ -12,12 +12,11 @@ from tts_audiobook_tool.util import *
 
 class Tts:
     """
-    Static class for accessing the TTS model (and also Whisper)
+    Static class for accessing the TTS model.
+    But also faster-whisper model and whisperx alignment model, too.
     """
 
     # TODO: create tts interface to replace hardcoded logic; this also applies to Project and GenerateUtil ideally
-
-    _faster_whisper: WhisperModel | None = None
 
     _oute: Any = None
     _chatterbox: Any = None
@@ -25,6 +24,12 @@ class Tts:
     _higgs: Any = None
 
     _type: TtsType
+
+    _whisper: WhisperModel | None = None
+
+    _align_model = None
+    _align_meta = None
+    _align_device: str = ""
 
     @staticmethod
     def init_active_model() -> str:
@@ -65,7 +70,7 @@ class Tts:
         """ Instantiates tts and stt models if not already, as a convenience """
 
         has_tts = Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs
-        if not has_tts or not Tts._faster_whisper:
+        if not has_tts or not Tts._whisper or not Tts._align_model:
             printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 
@@ -78,8 +83,12 @@ class Tts:
         if Tts._type == TtsType.HIGGS and not Tts._higgs:
             _ = Tts.get_higgs()
 
-        if not Tts._faster_whisper:
+        if not Tts._whisper:
             _ = Tts.get_whisper()
+
+        # TODO: later
+        if False and not Tts._align_model:
+            _ = Tts.get_align_model_and_meta_and_device()
 
     @staticmethod
     def get_oute() -> Any:
@@ -96,6 +105,16 @@ class Tts:
             # Not catching any exception here (let app crash if incorrect):
             Tts._oute = outetts.Interface(config=MODEL_CONFIG)
         return Tts._oute
+
+    @staticmethod
+    def clear_oute() -> None:
+        if not Tts._oute:
+            return
+        printt("{Ansi.ITALICS}Unloading Oute TTS model...")
+        printt()
+        Tts._oute = None
+        from tts_audiobook_tool.app_util import AppUtil
+        AppUtil.gc_ram_vram()
 
     @staticmethod
     def get_chatterbox() -> Any:
@@ -121,7 +140,6 @@ class Tts:
             from loguru import logger
             logger.remove()
             logger.add(sys.stderr, level="WARNING", filter="fish_speech")
-
         return Tts._fish
 
     @staticmethod
@@ -135,48 +153,41 @@ class Tts:
         return Tts._higgs
 
     @staticmethod
-    def clear_oute() -> None:
-        if not Tts._oute:
-            return
-        printt("{Ansi.ITALICS}Unloading Oute TTS model...")
-        printt()
-        Tts._oute = None
-        from tts_audiobook_tool.app_util import AppUtil
-        AppUtil.gc_ram_vram()
-
-    @staticmethod
-    def clear_fish() -> None:
-        if not Tts._fish:
-            return
-        printt("{Ansi.ITALICS}Unloading Fish model...")
-        printt()
-        Tts._fish = None
-        from tts_audiobook_tool.app_util import AppUtil
-        AppUtil.gc_ram_vram()
-
-    @staticmethod
     def get_whisper() -> WhisperModel:
-        if Tts._faster_whisper is None:
+        if Tts._whisper is None:
             model = "large-v3"
             device = "cuda" if torch.cuda.is_available() else "cpu"
             compute_type = "float16" if torch.cuda.is_available() else "int8"
             printt(f"{Ansi.ITALICS}Initializing whisper model ({model}, {device}, {compute_type})...")
             printt()
-            Tts._faster_whisper = WhisperModel(model, device=device, compute_type=compute_type)
-        return Tts._faster_whisper
+            Tts._whisper = WhisperModel(model, device=device, compute_type=compute_type)
+        return Tts._whisper
 
     @staticmethod
-    def clear_whisper() -> None:
+    def get_align_model_and_meta_and_device() -> tuple[Any, Any, str]: # obnoxious
+        import whisperx # type: ignore
+
+        if not Tts._align_model:
+            Tts._align_device = Tts.get_best_torch_device()
+            printt(f"{Ansi.ITALICS}Initializing align model ({Tts._align_device})...")
+            printt()
+            Tts._align_model, Tts._align_meta = whisperx.load_align_model(language_code="en", device=Tts._align_device)
+        return Tts._align_model, Tts._align_meta, Tts._align_device
+
+    @staticmethod
+    def clear_stt_models() -> None:
         """
         In general, do not hold onto a reference to whisper from outside (prefer using "get_whisper())
         If you do, delete the reference before calling this, or else it will not be GC'ed
         """
-        if Tts._faster_whisper is None:
+        if Tts._whisper is None and Tts._align_model is None:
             return
         printt()
-        printt("{Ansi.ITALICS}Unloading whisper...")
+        printt("{Ansi.ITALICS}Unloading whisper and align model...")
         printt()
-        Tts._faster_whisper = None
+        Tts._whisper = None
+        Tts._align_model = None
+        Tts._align_device = ""
         from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram()
 

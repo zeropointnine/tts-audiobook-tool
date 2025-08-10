@@ -78,7 +78,7 @@ class VoiceOuteSubmenu:
             return
 
         # Outte is about to load its own instance of whisper, so better clear ours first
-        Tts.clear_whisper()
+        Tts.clear_stt_models()
         AppUtil.gc_ram_vram()
 
         interface = Tts.get_oute()

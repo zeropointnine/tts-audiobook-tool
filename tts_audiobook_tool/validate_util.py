@@ -81,7 +81,6 @@ class ValidateUtil:
                 trim_end_time = None
 
         if trim_start_time is not None or trim_end_time is not None:
-            print("xxx", transcribed_words)
             messages = []
             if trim_start_time is not None:
                 messages.append(f"Found excess audio at start")

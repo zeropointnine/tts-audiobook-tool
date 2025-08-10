@@ -83,7 +83,7 @@ class VoiceHiggsSubmenu:
         if isinstance(sound, str):
             ask_continue(sound)
             return
-        result = WhisperUtil.transcribe(sound)
+        result = WhisperUtil.transcribe_to_words(sound)
         if isinstance(result, str):
             ask_continue(result)
             return

@@ -171,9 +171,8 @@ class AppUtil:
         if prefs.get_hint(hint.key):
             return True
         prefs.set_hint_true(hint.key)
-        printt(f"🔔 {COL_ACCENT}{hint.heading}")
-        printt(hint.text)
-        printt()
+
+        AppUtil.print_hint(hint)
 
         if and_confirm:
             return ask_confirm()
@@ -188,6 +187,12 @@ class AppUtil:
                 time.sleep(0.66)
             print(f"{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
             return True
+
+    @staticmethod
+    def print_hint(hint: Hint) -> None:
+        printt(f"🔔 {COL_ACCENT}{hint.heading}")
+        printt(hint.text)
+        printt()
 
     @staticmethod
     def show_player_hint_if_necessary(prefs: Prefs) -> None:

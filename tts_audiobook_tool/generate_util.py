@@ -16,7 +16,6 @@ from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_segment import TextSegment
-from tts_audiobook_tool.transcribe_util import TranscribeUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
@@ -132,9 +131,10 @@ class GenerateUtil:
         printt()
 
         printt(f"Num lines saved normally: {COL_OK}{num_saved_ok}")
-        printt(f"Num lines saved, but flagged with potential errors: {COL_ACCENT}{num_saved_with_error}")
-        if num_failed > 0:
-            printt(f"Num lines failed to generate: {COL_ERROR}{num_failed}")
+        col = COL_ACCENT if num_saved_with_error else ""
+        printt(f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}")
+        col = COL_ERROR if num_failed else ""
+        printt(f"Num lines failed to generate: {col}{num_failed}")
         printt()
 
         return did_interrupt
@@ -155,10 +155,10 @@ class GenerateUtil:
             pass_num += 1
 
             # Generate
-            o = GenerateUtil.generate_single(project, text_segment)
+            result = GenerateUtil.generate_single(project, text_segment)
 
-            if isinstance(o, str):
-                err = o
+            if isinstance(result, str):
+                err = result
                 printt(f"{err}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
@@ -166,22 +166,25 @@ class GenerateUtil:
                 else:
                     return None, FailResult(err)
             else:
-                sound = o
+                sound = result
             sound = GenerateUtil.post_process(sound)
 
             # Transcribe
-            o = WhisperUtil.transcribe(sound)
-            if isinstance(o, str):
+            result = WhisperUtil.transcribe_to_segments(sound)
+            if isinstance(result, str):
                 # Transcription error (unlikely)
-                err = o
+                err = result
                 printt(f"{err}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
                     continue
                 else:
                     return None, FailResult(err)
-            else:
-                transcribed_words = o
+            segments = result
+
+            transcribed_words = WhisperUtil.get_words_from_segments(segments)
+
+#            temp1 = WhisperUtil.make_aligned_words(sound, segments)
 
             # Validate
             validate_result = ValidateUtil.validate_item(
@@ -245,7 +248,6 @@ class GenerateUtil:
         # Trim all silence from ends of audio clip
         sound = SilenceUtil.trim_silence(sound)
         SoundFileUtil.debug_save("after trim silence", sound)
-        print(f"xxx duration after trim {sound.duration}")
 
         # Prevent 0-byte audio data as a failsafe again
         if len(sound.data) == 0:

@@ -1,3 +1,4 @@
+from importlib import util
 from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
@@ -26,6 +27,15 @@ if not FfmpegUtil.is_ffmpeg_available():
     printt("The command 'ffmpeg' must exist on the system path.")
     printt("Please install it first.")
     printt("https://ffmpeg.org/download.html")
+    exit(1)
+
+# Updated dependencies check
+if util.find_spec("faster_whisper") is None:
+    hint = Hint(
+        "none", "The app's dependencies have changed",
+        f"Please update your virtual environment by re-running:\n`pip install -r {Tts.get_type().value.requirements_file_name}`."
+    )
+    AppUtil.print_hint(hint)
     exit(1)
 
 # Print some one-time messages

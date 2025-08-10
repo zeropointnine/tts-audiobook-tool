@@ -43,6 +43,16 @@ class Word(Protocol):
     word: str
     probability: float
 
+class ConcreteWord(Word):
+    """
+    Instantiatable "Word"-compatible object
+    """
+    def __init__(self, start: float, end: float, word: str, probability: float):
+        self.start = start
+        self.end = end
+        self.word = word
+        self.probability = probability
+
 class Hint:
     def __init__(self, key: str, heading: str, text: str):
         self.key: str = key

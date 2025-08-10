@@ -293,7 +293,6 @@ class TranscribeUtil:
                 if num_iterations == 0 and not include_last_word:
                     return None
                 end_time = float(last_word_obj.end)
-                print("xxx sanitycheck", last_word_obj, last_word_obj.end)
                 return end_time
             transcribed_words = transcribed_words[:-1]
             num_iterations += 1

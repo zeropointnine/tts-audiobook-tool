@@ -160,10 +160,10 @@ torch==2.7.1
 torch-stoi==0.2.3
 torchaudio==2.7.1
 torchmetrics==1.7.4
-torchvision==0.22.1
 tqdm==4.67.1
 traitlets==5.14.3
 transformers==4.53.1
+triton-windows<3.4.0 ; sys_platform == 'win32'
 typer==0.16.0
 typing_extensions==4.14.1
 tzdata==2025.2

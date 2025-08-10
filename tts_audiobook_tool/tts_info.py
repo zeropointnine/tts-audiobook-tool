@@ -22,6 +22,9 @@ class TtsInfo(NamedTuple):
     # Model does not respect em-dashes in terms of 'prosody', so replace with some other puncutation which it will
     em_dash_replace: str
 
+    # The requirements.txt file that should be used to install the virtual environment for the tts model
+    requirements_file_name: str
+
 OUTE_SPECS = TtsInfo(
     ui = {
         "proper_name": "Oute TTS",
@@ -34,7 +37,8 @@ OUTE_SPECS = TtsInfo(
     file_tag="oute",
     sample_rate=44100,
     semantic_trim_last=False,
-    em_dash_replace=", " # helps maybe
+    em_dash_replace=", ", # helps maybe
+    requirements_file_name="requirements-oute.txt"
 )
 CHATTERBOX_SPECS = TtsInfo(
     ui = {
@@ -48,7 +52,8 @@ CHATTERBOX_SPECS = TtsInfo(
     file_tag="chatterbox",
     sample_rate=24000,
     semantic_trim_last=True,
-    em_dash_replace=": " # helps
+    em_dash_replace=": ", # helps
+    requirements_file_name="requirements-chatterbox.txt"
 )
 FISH_SPECS = TtsInfo(
     ui = {
@@ -62,7 +67,8 @@ FISH_SPECS = TtsInfo(
     file_tag="s1-mini",
     sample_rate=44100,
     semantic_trim_last=False,
-    em_dash_replace="" # TODO fish does need this; choose punctuation for it
+    em_dash_replace="", # TODO fish does need this; choose punctuation for it
+    requirements_file_name="requirements-fish.txt"
 )
 HIGGS_SPECS = TtsInfo(
     ui = {
@@ -76,12 +82,13 @@ HIGGS_SPECS = TtsInfo(
     file_tag="higgs",
     sample_rate=24000,
     semantic_trim_last=False, # TODO
-    em_dash_replace="" # TODO
+    em_dash_replace="", # TODO
+    requirements_file_name="requirements-higgs.txt"
 )
 
 class TtsType(Enum):
 
-    NONE = TtsInfo({}, "", "none", 0, False, "")
+    NONE = TtsInfo({}, "", "none", 0, False, "", "")
     OUTE = OUTE_SPECS
     CHATTERBOX = CHATTERBOX_SPECS
     FISH = FISH_SPECS

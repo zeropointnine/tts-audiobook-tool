@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Generator, List, NamedTuple
+from typing import Generator, List
 import ffmpeg
 import numpy as np
 import difflib
-from typing import List, NamedTuple
-from tts_audiobook_tool.app_types import Word
+from tts_audiobook_tool.app_types import ConcreteWord, Word
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
@@ -402,7 +401,7 @@ class SttUtil:
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
             updated_words = []
             for word in transcribed_words:
-                updated_word = SttWord(
+                updated_word = ConcreteWord(
                     start=word.start + time_offset,
                     end=word.end + time_offset,
                     word=word.word,
@@ -594,15 +593,3 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     text = re.sub(r'\s+', ' ', text).strip()  # Normalize whitespace
     return text
-
-# ---
-
-class SttWord(Word):
-    """
-    Concretized version of "Word", ugh
-    """
-    def __init__(self, start: float, end: float, word: str, probability: float):
-        self.start = start
-        self.end = end
-        self.word = word
-        self.probability = probability
