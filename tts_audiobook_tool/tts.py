@@ -12,8 +12,7 @@ from tts_audiobook_tool.util import *
 
 class Tts:
     """
-    Static class for accessing the TTS model.
-    But also faster-whisper model and whisperx alignment model, too.
+    Static class for accessing the TTS model, and also whisper model, too.
     """
 
     # TODO: create tts interface to replace hardcoded logic; this also applies to Project and GenerateUtil ideally
@@ -93,7 +92,7 @@ class Tts:
     @staticmethod
     def get_oute() -> Any:
         if not Tts._oute:
-            printt("{Ansi.ITALICS}Initializing Oute TTS model...")
+            printt(f"{Ansi.ITALICS}Initializing Oute TTS model...")
             printt()
             import outetts # type: ignore
             from tts_audiobook_tool.config_oute import MODEL_CONFIG
@@ -105,16 +104,6 @@ class Tts:
             # Not catching any exception here (let app crash if incorrect):
             Tts._oute = outetts.Interface(config=MODEL_CONFIG)
         return Tts._oute
-
-    @staticmethod
-    def clear_oute() -> None:
-        if not Tts._oute:
-            return
-        printt("{Ansi.ITALICS}Unloading Oute TTS model...")
-        printt()
-        Tts._oute = None
-        from tts_audiobook_tool.app_util import AppUtil
-        AppUtil.gc_ram_vram()
 
     @staticmethod
     def get_chatterbox() -> Any:
@@ -187,7 +176,42 @@ class Tts:
         printt()
         Tts._whisper = None
         Tts._align_model = None
+        Tts._align_meta = None
         Tts._align_device = ""
+        from tts_audiobook_tool.app_util import AppUtil
+        AppUtil.gc_ram_vram()
+
+    @staticmethod
+    def clear_all_models() -> None:
+
+        all = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._whisper, Tts._align_model, Tts._align_meta]
+        has = False
+        for item in all:
+            if item:
+                has = True
+                break
+
+        if not has:
+            printt("No models currently loaded")
+            printt()
+
+        else:
+            printt(f"{Ansi.ITALICS}Unloading all models...")
+            printt()
+
+            Tts._oute = None
+            Tts._chatterbox = None
+            if Tts._fish:
+                Tts._fish.kill()
+                Tts._fish = None
+            if Tts._higgs:
+                Tts._higgs.kill()
+            Tts._higgs = None
+            Tts._whisper = None
+            Tts._align_model = None
+            Tts._align_meta = None
+            Tts._align_device = ""
+
         from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram()
 

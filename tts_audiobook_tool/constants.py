@@ -103,7 +103,7 @@ HINT_LONG_PATHS = Hint(
 HINT_OUTE_CONFIG = Hint(
     "oute_config",
     "This appears to be your first time running the application using the Oute TTS model",
-    "As a reminder, you should adjust/experiment with the\nsettings in the file config_oute.py for optimal performance."
+    "As a reminder, you should adjust/experiment with the\nsettings in the file \"config_oute.py\" for optimal performance."
 )
 HINT_LINE_BREAKS = Hint(
     "line_breaks",
@@ -123,6 +123,9 @@ HINT_REAL_TIME = Hint(
     "About",
 f"""This uses the same quality-control steps as the normal "Generate" workflow,
 save for loudness normalization.
+
+Also, so long as there is enough audio in the buffer,
+lines that do not pass validation will be regenerated one time.
 
 To achieve uninterrupted playback, your system must be able to
 do the audio inference faster-than-realtime."""

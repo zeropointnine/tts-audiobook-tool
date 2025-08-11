@@ -58,6 +58,7 @@ natsort==8.4.0
 networkx==3.4.2
 numba==0.61.2
 numpy==2.2.4
+nvidia-ml-py==13.580.65
 outetts==0.4.2
 packaging==24.2
 parso==0.8.4

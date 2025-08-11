@@ -36,6 +36,7 @@ networkx==3.5
 nodeenv==1.9.1
 numba==0.61.2
 numpy==1.26.4
+nvidia-ml-py==13.580.65
 omegaconf==2.3.0
 onnx==1.18.0
 packaging==25.0

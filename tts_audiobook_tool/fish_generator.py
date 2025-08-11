@@ -62,6 +62,13 @@ class FishGenerator:
 
         self._voice_clone: VoiceClone | None = None
 
+    def kill(self) -> None:
+        # Clear all member variables in attempt to clear all resources
+        self.dac_model = None
+        self._voice_clone = None
+        self.t2s_model = None
+        self.decode_one_token = None
+
     def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
         """
         Use empty `path` to remove

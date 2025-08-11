@@ -6,12 +6,16 @@ from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class GenerateSubmenu:
 
     @staticmethod
     def submenu(state: State) -> None:
+
+        _ = Tts.get_whisper()
+
 
         while True:
 

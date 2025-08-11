@@ -55,6 +55,11 @@ class HiggsGenerator:
         )
         # printt("init elapsed", (time.time() - start))
 
+    def kill(self) -> None:
+        self.audio_tokenizer = None
+        self.model_client.kill()
+        self.model_client = None
+
     def generate(
             self,
             p_voice_path: str,
@@ -230,6 +235,14 @@ def _build_system_message_with_audio_prompt(system_message):
 
 
 class HiggsAudioModelClient:
+
+    def kill(self) -> None:
+        # Clear all member variables in attempt to clear all resources
+        self._audio_tokenizer = None
+        self._model = None
+        self._collator = None
+        self._kv_caches = None
+
     def __init__(
         self,
         model_path,

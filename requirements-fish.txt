@@ -91,6 +91,7 @@ natsort==8.4.0
 networkx==3.5
 numba==0.61.2
 numpy==1.26.4
+nvidia-ml-py==13.580.65
 omegaconf==2.3.0
 onnxruntime==1.22.0
 opencc-python-reimplemented==0.1.7

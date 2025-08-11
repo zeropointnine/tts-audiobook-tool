@@ -30,10 +30,15 @@ if not FfmpegUtil.is_ffmpeg_available():
     exit(1)
 
 # Updated dependencies check
-if util.find_spec("faster_whisper") is None:
+new_packages = ["faster_whisper", "pynvml"]
+not_found = [package for package in new_packages if not util.find_spec(package)]
+if not_found:
     hint = Hint(
         "none", "The app's dependencies have changed",
-        f"Please update your virtual environment by re-running:\n`pip install -r {Tts.get_type().value.requirements_file_name}`."
+        f"The following packages were not found: {", ".join(not_found)}\n"
+        "You've may have updated the app from the repository without updating its dependencies.\n"
+        f"Please update your virtual environment by re-running:\n"
+        f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
     )
     AppUtil.print_hint(hint)
     exit(1)

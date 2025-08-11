@@ -401,10 +401,6 @@ class GenerateUtil:
 
         # Expand "int words" to prevent TTS model from simply saying a string of digits
         text = TextUtil.expand_int_words_in_text(text)
-
-        print("xxx preprocessed text:")
-        print(text)
-
         return text
 
 # ---

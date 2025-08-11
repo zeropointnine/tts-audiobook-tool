@@ -73,6 +73,7 @@ natsort==8.4.0
 networkx==3.5
 numba==0.61.2
 numpy==2.2.6
+nvidia-ml-py==13.580.65
 omegaconf==2.3.0
 packaging==25.0
 pandas==2.3.1

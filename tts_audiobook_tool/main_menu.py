@@ -36,7 +36,6 @@ class MainMenu:
             return
         MainMenu._handle_menu_hotkey(hotkey, state)
 
-
     @staticmethod
     def _print_menu(state: State, did_reset: bool):
 
