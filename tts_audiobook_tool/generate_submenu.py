@@ -14,9 +14,6 @@ class GenerateSubmenu:
     @staticmethod
     def submenu(state: State) -> None:
 
-        _ = Tts.get_whisper()
-
-
         while True:
 
             total_segments_generated = state.project.sound_segments.num_generated()
