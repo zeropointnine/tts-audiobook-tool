@@ -54,9 +54,9 @@ Clone the repository and cd into it:
 
 A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance as needed). Model-specific options will be enabled automatically in the app based on which virtual environment is active.
 
-In all cases, the CUDA flavor of torch may require an extra install step depending on platform and installed CUDA version, in the usual manner. Just make sure to use the same torch version as specified in the respective `requirements-*.txt` file.
+In all cases, the CUDA flavor of torch requires an extra install step in the typical manner. First uninstall torch: `pip uninstall torch torchvision torchaudio -y`, and then install the CUDA version of torch in its place (See [Pytorch install page](https://pytorch.org/get-started/locally/)). Using the same version of torch as specified in the respective `requirements-*.txt` file is recommended.
 
-Once the desired virtual environment/s is set up and has been activated, run the app by entering:
+Finally, run the app by entering:
 
     python -m tts_audiobook_tool
 

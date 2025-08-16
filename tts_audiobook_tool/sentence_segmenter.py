@@ -4,7 +4,7 @@ import re
 class SentenceSegmenter:
 
     # comma, semicolon, colon, en-dash, em-dash, open paren, close paren
-    # not including dash (which can just as often be used as a connecting-character-between-words)
+    # not including normal dash (which can just as often be used as a connecting-character-between-words)
     PHRASE_DELIMITERS = r'[(),;:\–\—]'
 
     @staticmethod

@@ -94,9 +94,10 @@ class VoiceHiggsSubmenu:
             ask_error(err)
             return
 
-        printt("Saved.\n")
+        printt("Saved.")
+        printt()
         printt("Transcribed text from voice file:")
-        printt(text)
+        printt(f"{COL_DIM}{Ansi.ITALICS}{text}")
         printt()
 
         if MENU_CLEARS_SCREEN:

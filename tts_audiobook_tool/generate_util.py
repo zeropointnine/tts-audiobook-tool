@@ -429,9 +429,9 @@ def print_cumulative_speed_info(duration_and_elapsed: list[tuple[float, float]],
         elapsed_sum += elapsed
     printt()
     if last_n:
-        s = f"{COL_ACCENT}Cumulative inference speed including overhead (last {last_n} saved sound segments):"
+        s = f"{COL_ACCENT}Cumulative inference speed including overhead (last {last_n} segments):"
     else:
-        s = f"{COL_ACCENT}Cumulative inference speed including overhead (all {len(duration_and_elapsed)} saved sound segments)"
+        s = f"{COL_ACCENT}Cumulative inference speed including overhead (all {len(duration_and_elapsed)} sound segments)"
     printt(s)
     print_speed_info(duration_sum, elapsed_sum)
     printt()

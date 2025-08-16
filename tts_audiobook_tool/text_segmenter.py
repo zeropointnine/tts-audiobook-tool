@@ -70,25 +70,6 @@ class TextSegmenter:
 
         return text_segments
 
-    @staticmethod
-    def segment_text_test_paras(full_text: str, max_words: int, language:str="en") -> list[TextSegment]:
-        """ WIP """
-
-        lst = full_text.split("\n")
-        new_lst = []
-        for item in lst:
-            if item.strip():
-                new_lst.append(item)
-
-        result = []
-        counter = 0
-        for item in new_lst:
-            start = counter
-            counter = counter + len(item)
-            seg = TextSegment(item, start, counter, TextSegmentReason.PARAGRAPH)
-            result.append(seg)
-
-        return result
 
 # ---
 
