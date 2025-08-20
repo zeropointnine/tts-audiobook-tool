@@ -11,9 +11,15 @@ class SoundUtil:
     """
 
     @staticmethod
-    def resample(sound: Sound, resample_rate: int) -> Sound:
-        new_data = librosa.resample(sound.data, orig_sr=sound.sr, target_sr=resample_rate)
-        return Sound(new_data, resample_rate)
+    def resample_if_necessary(sound: Sound, target_sr: int) -> Sound:
+        """
+        Returns new Sound with target sample rate
+        But returns identity if not needed
+        """
+        if sound.sr == target_sr:
+            return sound
+        new_data = librosa.resample(sound.data, orig_sr=sound.sr, target_sr=target_sr)
+        return Sound(new_data, target_sr)
 
     @staticmethod
     def trim(sound: Sound, start_time: float | None, end_time: float | None) -> Sound:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 import json
 import os
-import shutil
+
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts_info import TtsType
@@ -197,6 +200,43 @@ class Project:
             L.e(f"Error saving raw text: {e}") # TODO need to return error
             return ""
 
+    def set_voice_and_save(
+            self,
+            sound: Sound,
+            voice_file_stem: str,
+            text: str,
+            tts_type: TtsType
+    ) -> str:
+        """
+        Saves resampled voice sound file, and updates and saves project properties
+        Returns error string on fail
+        """
+
+        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS]:
+            raise ValueError(f"Bad value for tts_type: {tts_type}")
+
+        # Resample voice sound data to 'native' samplerate of the TTS model
+        target_sr = tts_type.value.sample_rate
+        sound = SoundUtil.resample_if_necessary(sound, target_sr)
+        dest_file_name = voice_file_stem + ".flac"
+        dest_path = Path(self.dir_path) / dest_file_name
+        err = SoundFileUtil.save_flac(sound, str(dest_path))
+        if err:
+            return err
+
+        match tts_type:
+            case TtsType.CHATTERBOX:
+                self.chatterbox_voice_file_name = dest_file_name
+                # Rem, chatterbox does not require voice sound file's transcription
+            case TtsType.FISH:
+                self.fish_voice_file_name = dest_file_name
+                self.fish_voice_transcript = text
+            case TtsType.HIGGS:
+                self.higgs_voice_file_name = dest_file_name
+                self.higgs_voice_transcript = text
+        self.save()
+        return ""
+
     def set_oute_voice_and_save(self, voice_json: dict, dest_file_stem: str) -> None:
         file_name = dest_file_stem + ".json"
         err = save_json(voice_json, os.path.join(self.dir_path, file_name))
@@ -207,58 +247,20 @@ class Project:
         self.oute_voice_json = voice_json
         self.save()
 
-    def set_chatterbox_voice_and_save(self, src_path: str) -> str:
-        """ Returns error string on fail """
-        source_path = Path(src_path)
-        file_name = source_path.name
-        dest_path = Path(self.dir_path) / file_name
-        if source_path != dest_path:
-            try:
-                shutil.copy(source_path, dest_path)
-            except Exception as e:
-                return str(e)
-        self.chatterbox_voice_file_name = file_name
-        self.save()
-        return ""
+    def clear_voice_and_save(self, tts_type: TtsType) -> None:
 
-    def set_fish_voice_and_save(self, src_path: str, text: str) -> str:
-        """ Returns error string on fail """
-        source_path = Path(src_path)
-        file_name = source_path.name
-        dest_path = Path(self.dir_path) / file_name
-        if source_path != dest_path:
-            try:
-                shutil.copy(source_path, dest_path)
-            except Exception as e:
-                return str(e)
-        self.fish_voice_file_name = file_name
-        self.fish_voice_transcript = text
-        self.save()
-        return ""
+        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS]:
+            raise ValueError(f"Bad value for tts_type: {tts_type}")
 
-    def clear_fish_voice_and_save(self) -> None:
-        self.fish_voice_file_name = ""
-        self.fish_voice_transcript = ""
-        self.save()
-
-    def set_higgs_voice_and_save(self, src_path: str, text: str) -> str:
-        """ Returns error string on fail """
-        source_path = Path(src_path)
-        file_name = source_path.name
-        dest_path = Path(self.dir_path) / file_name
-        if source_path != dest_path:
-            try:
-                shutil.copy(source_path, dest_path)
-            except Exception as e:
-                return str(e)
-        self.higgs_voice_file_name = file_name
-        self.higgs_voice_transcript = text
-        self.save()
-        return ""
-
-    def clear_higgs_voice_and_save(self) -> None:
-        self.higgs_voice_file_name = ""
-        self.higgs_voice_transcript = ""
+        match tts_type:
+            case TtsType.CHATTERBOX:
+                self.chatterbox_voice_file_name = ""
+            case TtsType.FISH:
+                self.fish_voice_file_name = ""
+                self.fish_voice_transcript = ""
+            case TtsType.HIGGS:
+                self.higgs_voice_file_name = ""
+                self.higgs_voice_transcript = ""
         self.save()
 
     def get_voice_label(self) -> str:
@@ -310,7 +312,7 @@ class Project:
                 # always true bc does not require voice sample
                 return True
             case TtsType.HIGGS:
-                # always true bc does not require voice sample # TODO implement/verify
+                # always true bc does not require voice sample
                 return True
             case TtsType.NONE:
                 return False

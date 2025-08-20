@@ -54,7 +54,7 @@ class FishGenerator:
                 printt("Will now exit.")
                 exit(1)
 
-        self.dac_model = load_dac_model(DAC_CONFIG_NAME, DAC_CHECKPOINT_PATH, self.device)
+        self.dac_model: Any = load_dac_model(DAC_CONFIG_NAME, DAC_CHECKPOINT_PATH, self.device)
 
         self.t2s_model, self.decode_one_token = init_t2s_model(
             T2S_CHECKPOINT_PATH, self.device, torch.float16, compile=(self.device == "cuda")
@@ -119,7 +119,7 @@ class FishGenerator:
             for response in generate_long(
                 model=self.t2s_model,
                 device=self.device,
-                decode_one_token=self.decode_one_token,
+                decode_one_token=self.decode_one_token,  # type: ignore
                 text=text,
                 prompt_text=prompt_text,
                 prompt_tokens=prompt_tokens,

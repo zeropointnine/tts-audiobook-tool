@@ -1,8 +1,6 @@
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.state import State
-from tts_audiobook_tool.transcribe_util import TranscribeUtil
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -47,7 +45,7 @@ class VoiceFishSubmenu:
                 VoiceFishSubmenu.ask_voice_file(project)
                 return False
             case "2":
-                project.clear_fish_voice_and_save()
+                project.clear_voice_and_save(TtsType.FISH)
                 printt("Cleared")
                 printt()
                 return False
@@ -86,12 +84,15 @@ class VoiceFishSubmenu:
         if isinstance(result, str):
             ask_continue(result)
             return
-        text = WhisperUtil.get_flat_text(result)
+        transcript = WhisperUtil.get_flat_text_high_confidence_only(result)
 
-        err = project.set_fish_voice_and_save(path, text)
+        file_stem = Path(path).stem
+        err = project.set_voice_and_save(sound, file_stem, transcript, TtsType.FISH)
         if err:
             ask_error(err)
             return
 
+        printt("Saved.")
+        printt()
         if MENU_CLEARS_SCREEN:
-            ask_continue("Saved")
+            ask_continue()

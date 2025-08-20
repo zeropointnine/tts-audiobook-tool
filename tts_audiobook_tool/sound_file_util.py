@@ -19,22 +19,20 @@ class SoundFileUtil:
     _stop_playback_event = threading.Event()
     debug_save_dir: str = AppUtil.get_app_temp_dir()
 
-
     @staticmethod
-    def load(path: str, resample_rate: int=0) -> Sound | str:
+    def load(path: str, target_sr: int=0) -> Sound | str:
         """
         Returns data as normalized np32 floats, mono
         """
-
         try:
             data, sr = librosa.load(path)
             sr = int(sr)
         except Exception as e:
             return str(e)
 
-        if resample_rate != 0 and resample_rate != sr:
+        if target_sr != 0 and target_sr != sr:
             data = librosa.resample(data, orig_sr=sr, target_sr=16000)
-            return Sound(data, resample_rate)
+            return Sound(data, target_sr)
         else:
             return Sound(data, sr)
 

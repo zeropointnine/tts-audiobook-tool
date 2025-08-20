@@ -1,7 +1,6 @@
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.transcribe_util import TranscribeUtil
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -45,7 +44,7 @@ class VoiceHiggsSubmenu:
                 VoiceHiggsSubmenu.ask_voice_file(project)
                 return False
             case "2":
-                project.clear_higgs_voice_and_save()
+                project.clear_voice_and_save(TtsType.HIGGS)
                 printt("Cleared")
                 printt()
                 return False
@@ -87,18 +86,14 @@ class VoiceHiggsSubmenu:
         if isinstance(result, str):
             ask_continue(result)
             return
-        text = WhisperUtil.get_flat_text(result)
+        transcript = WhisperUtil.get_flat_text(result)
 
-        err = project.set_higgs_voice_and_save(path, text)
+        err = project.set_voice_and_save(sound, Path(path).stem, transcript, TtsType.HIGGS)
         if err:
             ask_error(err)
             return
 
         printt("Saved.")
         printt()
-        printt("Transcribed text from voice file:")
-        printt(f"{COL_DIM}{Ansi.ITALICS}{text}")
-        printt()
-
         if MENU_CLEARS_SCREEN:
-            ask_continue("Saved")
+            ask_continue()

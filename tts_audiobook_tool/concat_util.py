@@ -160,7 +160,7 @@ class ConcatUtil:
                 return sound_a
 
             sound_a = SoundUtil.add_silence(sound_a, silence_duration)
-            sound_a = SoundUtil.resample(sound_a, APP_SAMPLE_RATE)
+            sound_a = SoundUtil.resample_if_necessary(sound_a, APP_SAMPLE_RATE)
 
             durations.append(sound_a.duration)
 

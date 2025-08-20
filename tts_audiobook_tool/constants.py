@@ -27,10 +27,12 @@ OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 package_dir = os.path.dirname(os.path.abspath(__file__))
 OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
-# App should use single sample rate up until outputting final audio
+# App uses a single sample rate for any sound transformations up until outputting final audio
+# This is useful because a single project can use different models which may have different native
+# output sample rates.
 APP_SAMPLE_RATE = 44100
 
-# Samplerate required for whisper input
+# Samplerate required for whisper sound input
 WHISPER_SAMPLERATE = 16000
 
 # Fish TTS default temperature, taken from their web demo page
