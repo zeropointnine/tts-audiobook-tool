@@ -118,7 +118,7 @@ class WhisperUtil:
     @staticmethod
     def get_flat_text(words: list[Word]) -> str:
         """
-        Returns join()'ed word.words.
+        Returns join'ed word.words.
         Rem, this is well formatted, retaining punctuation and capitalizations.
         """
         text = " ".join( [word.word.strip() for word in words] )
@@ -131,15 +131,9 @@ class WhisperUtil:
         This is used for the voice clone transcription, where it's better to omit words entirely
         when they are not of high-ish confidence, apparently.
         """
-
-        print("xxx before:", WhisperUtil.get_flat_text(words))
-
         MIN_PROBABILITY = 0.75
         words = [word for word in words if word.probability >= MIN_PROBABILITY]
         text = WhisperUtil.get_flat_text(words)
-
-        print("xxx after", text)
-
         return text
 
 
