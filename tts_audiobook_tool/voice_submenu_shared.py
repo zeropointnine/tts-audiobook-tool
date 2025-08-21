@@ -1,11 +1,60 @@
 import os
 
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class VoiceSubmenuShared:
+
+    @staticmethod
+    def ask_and_set_voice_file(project: Project, tts_type: TtsType) -> None:
+        """
+        Asks for voice sound file path.
+        Transcribes text if necessary.
+        Saves to project.
+        Prints feedback on success or fail.
+        """
+
+        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS]:
+            raise ValueError("Unsupported tts type")
+
+        path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
+        if not path:
+            return
+
+        # Load sound
+        result = SoundFileUtil.load(path)
+        if isinstance(result, str):
+            err = result
+            ask_error(err)
+            return
+        sound = result
+
+        if tts_type == TtsType.CHATTERBOX:
+            # Chatterbox voice sound file does not require accompanying transcript
+            transcript = ""
+        else:
+            # Transcribe
+            result = WhisperUtil.transcribe_to_words(sound)
+            if isinstance(result, str):
+                err = result
+                ask_error(err)
+                return
+            transcript = WhisperUtil.get_flat_text_filtered_by_probability(result, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+
+        file_stem = Path(path).stem
+        err = project.set_voice_and_save(sound, file_stem, transcript, tts_type)
+        if err:
+            ask_error(err)
+            return
+
+        printt("Saved.")
+        printt()
+        if MENU_CLEARS_SCREEN:
+            ask_continue()
 
     @staticmethod
     def ask_voice_file(default_dir_path) -> str:

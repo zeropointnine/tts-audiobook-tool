@@ -125,17 +125,18 @@ class WhisperUtil:
         return text
 
     @staticmethod
-    def get_flat_text_high_confidence_only(words: list[Word]) -> str:
+    def get_flat_text_filtered_by_probability(words: list[Word], min_probability: float) -> str:
         """
         Returns joined words, but only the high-confidence ones.
         This is used for the voice clone transcription, where it's better to omit words entirely
         when they are not of high-ish confidence, apparently.
         """
-        MIN_PROBABILITY = 0.75
-        words = [word for word in words if word.probability >= MIN_PROBABILITY]
-        text = WhisperUtil.get_flat_text(words)
+        if min_probability <= 0.0:
+            text = WhisperUtil.get_flat_text(words)
+        else:
+            words = [word for word in words if word.probability >= min_probability]
+            text = WhisperUtil.get_flat_text(words)
         return text
-
 
     # ---
 

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import pickle
+import time
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
@@ -45,6 +46,7 @@ class SttFlow:
             return
 
         # [2] Ask audio file
+        time.sleep(1)
         inp = ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
         if not inp:
             return
@@ -70,7 +72,7 @@ class SttFlow:
             printt("File suffix must be one of the following: {types}")
             return
 
-        # Normalize path / make path idempotent
+        # Normalize path / make idempotent
         source_audio_path = str(Path(source_audio_path).resolve().as_posix())
 
         # Check if already has meta

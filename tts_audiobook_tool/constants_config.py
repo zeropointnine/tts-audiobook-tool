@@ -1,6 +1,6 @@
 """
 Constants - config-like values
-(could potentially go into a config file)
+TODO: externalize to config file
 """
 
 import os
@@ -27,10 +27,12 @@ WHISPER_END_TIME_OFFSET = 0.25
 
 WHISPER_START_TIME_OFFSET = -0.1
 
-PAUSE_DURATION_SENTENCE = 0.9
 PAUSE_DURATION_PARAGRAPH = 1.2
+PAUSE_DURATION_SENTENCE = 0.9
 PAUSE_DURATION_PHRASE = 0.5
 PAUSE_DURATION_WORD = 0.2
 PAUSE_DURATION_UNDEFINED = 1.0
 
 REAL_TIME_BUFFER_MAX_SECONDS = 60 * 5
+
+VOICE_TRANSCRIBE_MIN_PROBABILITY = 0.75 # Use 0.0 to skip probability filtering

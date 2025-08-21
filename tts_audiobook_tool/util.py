@@ -74,8 +74,7 @@ def ask_file_path(
         printt()
         return result
     except Exception as e:
-        pass
-    return ask_path_input(console_message)
+        return ask_path_input(console_message)
 
 def ask_dir_path(
         console_message: str,
@@ -91,13 +90,11 @@ def ask_dir_path(
         printt()
         return result
     except Exception as e:
-        pass
-    return ask_path_input(console_message)
+        return ask_path_input(console_message)
 
 def ask_path_input(message: str="") -> str:
     """
     Get file/directory path, strip outer quotes
-    Could potentially open standard file requestor here
     """
     printt(message)
     inp = ask("")

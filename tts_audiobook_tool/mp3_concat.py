@@ -24,7 +24,11 @@ class Mp3ConcatTranscodeUtil:
         if not mp3_files:
             ask_continue("No mp3 files found in directory")
 
-        printt("Will concatenate and transcode the mp3 files in the following order:")
+        if len(mp3_files) > 1:
+            s = "Will concatenate and transcode the mp3 files in the following order:"
+        else:
+            s = "Will transcode the following mp3 file:"
+        printt(s)
         printt()
         for i, item in enumerate(mp3_files):
             printt(f"[{i+1}] {item}")
@@ -33,7 +37,11 @@ class Mp3ConcatTranscodeUtil:
         if not b:
             return
 
-        printt(f"Concatenating and transcoding mp3 files...")
+        if len(mp3_files) > 1:
+            s = "Transcoding and concatenating mp3 files..."
+        else:
+            s = "Transcoding mp3 file..."
+        printt(s)
         printt()
 
         # m4a file is saved in same dir as mp3 files

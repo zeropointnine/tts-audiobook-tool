@@ -22,7 +22,7 @@ class OptionsSubmenu:
 
             print_heading("Options/Tools:")
             printt(f"{make_hotkey_string("1")} Real-time generation and playback")
-            printt(f"{make_hotkey_string("2")} Enhance existing audiobook {COL_DIM}(experimental)")
+            printt(f"{make_hotkey_string("2")} Enhance existing audiobook file {COL_DIM}(experimental)")
             printt(f"{make_hotkey_string("3")} Transcode and concatenate a directory of MP3 files to AAC/M4A")
             printt(f"{make_hotkey_string("4")} Transcode an app-created FLAC to AAC/M4A, preserving its custom metadata")
             printt(f"{make_hotkey_string("5")} Try to unload models{vram}")

@@ -16,21 +16,21 @@ App entrypoint:
 
 printt()
 
-# TTS model check
+# TTS model check (required)
 err = Tts.init_active_model()
 if err:
     ask_error(err)
     exit(1)
 
-# FFMPEG check
+# FFMPEG check (required)
 if not FfmpegUtil.is_ffmpeg_available():
     printt("The command 'ffmpeg' must exist on the system path.")
     printt("Please install it first.")
     printt("https://ffmpeg.org/download.html")
     exit(1)
 
-# Updated dependencies check
-new_packages = ["faster_whisper", "pynvml"]
+# Updated dependencies check (required)
+new_packages = ["faster_whisper", "pynvml"] # rem, pynvml does not cause issues when installed on non-CUDA system, so yea
 not_found = [package for package in new_packages if not util.find_spec(package)]
 if not_found:
     hint = Hint(
@@ -43,10 +43,14 @@ if not_found:
     AppUtil.print_hint(hint)
     exit(1)
 
-# Print some one-time messages
+# Other one-time messages (which are not blockers)
 prefs = Prefs.load()
+
+if not util.find_spec("tkinter"):
+    AppUtil.show_hint_if_necessary(prefs, HINT_TKINTER, and_prompt=True)
 if not is_long_path_enabled():
     AppUtil.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
+
 if Tts.get_type() == TtsType.OUTE:
     AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_CONFIG, and_prompt=True)
 

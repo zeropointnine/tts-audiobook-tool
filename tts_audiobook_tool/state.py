@@ -35,9 +35,8 @@ class State:
         Return error string on fail
         """
 
-        # Make sure is a legal path
         try:
-            project_dir_path = Path(path).resolve()
+            project_dir_path = Path(path)
         except:
             return "Bad path"
 

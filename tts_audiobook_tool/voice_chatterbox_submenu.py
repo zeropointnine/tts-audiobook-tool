@@ -1,5 +1,4 @@
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -44,7 +43,7 @@ class VoiceChatterboxSubmenu:
 
         match hotkey:
             case "1":
-                VoiceChatterboxSubmenu.ask_voice_file(project)
+                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsType.CHATTERBOX)
                 return False
             case "2":
                 project.clear_voice_and_save(TtsType.CHATTERBOX)
@@ -99,23 +98,3 @@ class VoiceChatterboxSubmenu:
 
         return False
 
-    @staticmethod
-    def ask_voice_file(project: Project):
-        path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
-        if not path:
-            return
-        result = SoundFileUtil.load(path)
-        if isinstance(result, str):
-            err = result
-            return err
-        else:
-            sound = result
-        err = project.set_voice_and_save(sound, Path(path).stem, "", TtsType.CHATTERBOX)
-        if err:
-            ask_error(err)
-            return
-
-        printt("Saved.")
-        printt()
-        if MENU_CLEARS_SCREEN:
-            ask_continue()
