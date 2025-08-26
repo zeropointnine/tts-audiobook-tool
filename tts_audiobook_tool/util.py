@@ -23,6 +23,15 @@ def printt(s: str="") -> None:
     s += Ansi.RESET
     print(s)
 
+def printt_cls(message: str) -> None:
+    """
+    Should be used for showing feedback if menu is about to get re-printed
+    """
+    printt(message)
+    printt()
+    if MENU_CLEARS_SCREEN:
+        ask_continue()
+
 def print_heading(s: str, dont_clear: bool=False) -> None:
     """ """
     if MENU_CLEARS_SCREEN and not dont_clear:
@@ -53,6 +62,23 @@ def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     if extra_line:
         printt()
     return inp
+
+def ask_continue(message_prefix: str="") -> None:
+    message = "Press enter: "
+    if message_prefix:
+        message = f"{message_prefix} {message}"
+    ask(message)
+
+def ask_confirm(message: str="") -> bool:
+    if not message:
+        message = f"Press {make_hotkey_string("Y")} to confirm: "
+    inp = ask_hotkey(message)
+    return inp == "y"
+
+def ask_error(error_message: str) -> None:
+    printt(f"{COL_ERROR}{error_message}")
+    printt()
+    ask_continue()
 
 def ask_hotkey(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     inp = ask(message, lower, extra_line)
@@ -99,23 +125,6 @@ def ask_path_input(message: str="") -> str:
     printt(message)
     inp = ask("")
     return strip_quotes_from_ends(inp)
-
-def ask_confirm(message: str="") -> bool:
-    if not message:
-        message = f"Press {make_hotkey_string("Y")} to confirm: "
-    inp = ask_hotkey(message)
-    return inp == "y"
-
-def ask_continue(message_prefix: str="") -> None:
-    message = "Press enter: "
-    if message_prefix:
-        message = f"{message_prefix} {message}"
-    ask(message)
-
-def ask_error(message_prefix: str) -> None:
-    message = f"{COL_ERROR}{message_prefix}"
-    message += "\nPress enter: "
-    ask(message)
 
 def strip_quotes_from_ends(s: str) -> str:
     if len(s) >= 2:

@@ -132,16 +132,15 @@ class GenerateSubmenu:
             indices = set( [item for item in range(0, num_items)] )
         else:
             indices, warnings = ParseUtil.parse_one_indexed_ranges_string(inp, num_items)
-            if warnings:
-                printt("\n".join(warnings))
-                printt()
-                if MENU_CLEARS_SCREEN:
-                    ask_continue()
-                return
             if not indices:
+                return
+            if warnings:
+                printt_cls("\n".join(warnings))
                 return
 
         s = ParseUtil.make_one_indexed_ranges_string(indices, len(state.project.text_segments))
         state.project.generate_range_string = s
         state.project.save()
+
+        printt_cls(f"Line numbers set: {s}")
 

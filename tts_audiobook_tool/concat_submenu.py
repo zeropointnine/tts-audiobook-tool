@@ -20,36 +20,40 @@ class ConcatSubmenu:
     @staticmethod
     def submenu(state: State) -> None:
 
-        print_heading(f"Concatenate audio segments:")
+        while True:
 
-        infos = ChapterInfo.make_chapter_infos(state.project)
-        if len(infos) > 1:
-            print_chapter_segment_info(infos)
+            print_heading(f"Concatenate audio segments:")
 
-        if not state.project.section_dividers:
-            chapter_dividers_desc = ""
-        else:
-            strings = [str(item+1) for item in state.project.section_dividers] # 1-indexed
-            chapter_dividers_desc = ", ".join(strings)
-            chapter_dividers_desc = f": {COL_ACCENT}{chapter_dividers_desc}{COL_DIM}"
+            infos = ChapterInfo.make_chapter_infos(state.project)
+            if len(infos) > 1:
+                print_chapter_segment_info(infos)
 
-        printt(f"{make_hotkey_string('1')} Create FLAC file")
-        printt(f"{make_hotkey_string('2')} Create AAC/M4A file")
-        printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently {len(state.project.section_dividers)} cut point/s{chapter_dividers_desc})")
-        printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{state.prefs.normalization_type.value.json_value}{COL_DIM})")
-        printt()
+            if not state.project.section_dividers:
+                chapter_dividers_desc = ""
+            else:
+                strings = [str(item+1) for item in state.project.section_dividers] # 1-indexed
+                chapter_dividers_desc = ", ".join(strings)
+                chapter_dividers_desc = f": {COL_ACCENT}{chapter_dividers_desc}{COL_DIM}"
 
-        hotkey = ask_hotkey()
-        if hotkey == "1":
-            ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=False)
-        elif hotkey == "2":
-            ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=True)
-        elif hotkey == "3":
-            ConcatSubmenu.ask_cut_points(state)
-            ConcatSubmenu.submenu(state)
-        elif hotkey == "4":
-            ConcatSubmenu.ask_normalization(state.prefs)
-            ConcatSubmenu.submenu(state)
+            printt(f"{make_hotkey_string('1')} Create FLAC file")
+            printt(f"{make_hotkey_string('2')} Create AAC/M4A file")
+            s = "none" if not state.project.section_dividers else f"{len(state.project.section_dividers)} cut point/s"
+            printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+            s = state.prefs.normalization_type.value.json_value
+            printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+            printt()
+
+            hotkey = ask_hotkey()
+            if hotkey == "1":
+                ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=False)
+            elif hotkey == "2":
+                ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=True)
+            elif hotkey == "3":
+                ConcatSubmenu.ask_cut_points(state)
+            elif hotkey == "4":
+                ConcatSubmenu.ask_normalization(state.prefs)
+            else:
+                break
 
     @staticmethod
     def ask_normalization(prefs: Prefs) -> None:
@@ -97,7 +101,6 @@ class ConcatSubmenu:
         printt("Enter \"1\" for no cut points.")
         printt()
         inp = ask()
-        printt()
         if not inp:
             return
 
@@ -121,6 +124,12 @@ class ConcatSubmenu:
             del zero_indexed_items[0]
         state.project.section_dividers = zero_indexed_items
         state.project.save()
+
+        if not zero_indexed_items:
+            s = "none"
+        else:
+            s = ", ".join( [str(item) for item in zero_indexed_items] )
+        printt_cls(f"Cut points set to: {s}")
 
     @staticmethod
     def ask_chapters_and_make(infos: list[ChapterInfo], state: State, to_aac_not_flac: bool) -> None:

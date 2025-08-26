@@ -70,7 +70,7 @@ class Project:
         """
 
         if not os.path.exists(dir_path):
-            return f"No such directory: {dir_path}"
+            return f"Project directory doesn't exist:\n{dir_path}"
 
         project_dict_path = os.path.join(dir_path, PROJECT_JSON_FILE_NAME)
         try:

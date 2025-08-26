@@ -64,9 +64,11 @@ class ConcatUtil:
         # [1] project name
         file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
         # [2] file number
-        file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
+        if len(ranges) > 1:
+            file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
         # [3] line range
-        file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
+        if len(ranges) > 1:
+            file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
         # [4] num lines missing within that range
         if num_missing > 0:
             file_name += f"[{num_missing} missing]" + " "

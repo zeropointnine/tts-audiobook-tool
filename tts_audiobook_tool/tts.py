@@ -65,11 +65,16 @@ class Tts:
         return Tts._type
 
     @staticmethod
-    def warm_up_models() -> None:
-        """ Instantiates tts and stt models if not already, as a convenience """
+    def has_tts() -> bool:
+        return Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs
 
-        has_tts = Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs
-        if not has_tts or not Tts._whisper or not Tts._align_model:
+    @staticmethod
+    def warm_up_models() -> None:
+        """
+        If not already, instantiates tts and stt models as a convenience, and prints that it is doing so
+        """
+
+        if not Tts.has_tts() or not Tts._whisper:
             printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 

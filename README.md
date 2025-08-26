@@ -169,20 +169,34 @@ Note too that it's possible to utilize different voices and even different model
 
 When prepping reference audio for voice cloning, it's worthwhile to prepare three or more sound samples from a given source (not just one), and then testing each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone from the same source can vary quite a bit (as well as the word error rate!).
 
-### Inference speed, expectations, etc.
+### Inference speeds, expectations
 
-With Oute TTS, I get inference speeds of 80-85% of realtime using `Backend.EXL2` with a GeForce 3080Ti. And about 20% with an M1 MacBook Pro (using llama.cpp as the configured backend).
+Here are my anecdotal inference speeds using the various TTS models:
 
-Chatterbox is considerably faster, about 130% of realtime for me using a GeForce 3080Ti, 25-30% of realtime on M1 Macbook Pro.
+Higgs V2 3B
 
-On the same setup, Fish OpenAudio S1-mini is the fastest of the three by far, about 2-3x faster than Chatterbox.
+- GTX 4090 (CUDA): 200%+ realtime using 15 second voice sample. Longer voice samples slow down inference, possibly inversely proportional to sample duration.
+- GTX 3080Ti: Very much does not fit in VRAM.
 
+Fish OpenAudio S1-mini
+
+- GTX 3080Ti (CUDA): 500-600% realtime
+
+Chatterbox
+
+- GTX 3080Ti (CUDA): ~130% realtime
+- M1 Macbook Pro (MPS): ~25% realtime
+
+Oute
+
+- GTX 3080Ti (CUDA): ~85% realtime (using `outetts.Backend.EXL2`)
+- M1 Macbook Pro (MPS): ~20% realtime (using `outetts.Backend.LLAMACPP`)
 
 # Updates
 
 **2025-08-10**
 
-Migrated from openai-whisper to faster-whisper (faster, less memory).
+Migrated from openai-whisper to faster-whisper (faster, less memory, equivalent accuracy).
 
 **2025-08-06**
 

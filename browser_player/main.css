@@ -262,6 +262,10 @@ body, html {
     background: #00000044;
 }
 
+:root[data-theme="dark"] #uiOverlay {
+    background: #ffffff18;
+}
+
 #uiPanel {
     display: flex;
     flex-direction: column;

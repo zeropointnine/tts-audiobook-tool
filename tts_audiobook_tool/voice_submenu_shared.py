@@ -51,10 +51,7 @@ class VoiceSubmenuShared:
             ask_error(err)
             return
 
-        printt("Saved.")
-        printt()
-        if MENU_CLEARS_SCREEN:
-            ask_continue()
+        printt_cls("Voice file saved.")
 
     @staticmethod
     def ask_voice_file(default_dir_path) -> str:

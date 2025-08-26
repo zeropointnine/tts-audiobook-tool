@@ -66,8 +66,7 @@ class MainMenu:
         # Text
         if state.prefs.project_dir:
             s = f"{make_hotkey_string("T")} Text "
-            if state.project.text_segments:
-                s += f"{COL_DIM}({COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
+            s += f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
             printt(s)
 
         # Generate audio

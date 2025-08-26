@@ -25,10 +25,10 @@ class ProjectSubmenu:
             printt()
             hotkey = ask_hotkey()
             if hotkey == "1":
-                _ = ProjectSubmenu.ask_and_set_new_project(state)
+                ProjectSubmenu.ask_and_set_new_project(state)
                 continue
             elif hotkey == "2":
-                _ = ProjectSubmenu.ask_and_set_existing_project(state)
+                ProjectSubmenu.ask_and_set_existing_project(state)
                 continue
             elif hotkey == "3" and proj_dir:
                 err = DirOpenUtil.open(proj_dir)
@@ -41,7 +41,7 @@ class ProjectSubmenu:
 
 
     @staticmethod
-    def ask_and_set_new_project(state: State) -> bool:
+    def ask_and_set_new_project(state: State) -> None:
         """
         Asks user for directory and creates new project
         Returns True on success
@@ -50,21 +50,23 @@ class ProjectSubmenu:
         s2 = "Select empty directory"
         dir_path = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=False)
         if not dir_path:
-            return False
+            return
         err = state.make_new_project(dir_path)
         if err:
             ask_error(err)
-            return False
+            return
 
         hint_text = HINT_PROJECT_SUBDIRS.text
         hint_text = hint_text.replace("%1", os.path.join(dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR))
         hint_text = hint_text.replace("%2", os.path.join(dir_path, PROJECT_CONCAT_SUBDIR))
         hint = Hint(HINT_PROJECT_SUBDIRS.key, HINT_PROJECT_SUBDIRS.heading, hint_text)
         AppUtil.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
-        return True
+
+        printt_cls("Project directory set.")
+        return
 
     @staticmethod
-    def ask_and_set_existing_project(state: State) -> bool:
+    def ask_and_set_existing_project(state: State) -> None:
         """
         Asks user for directory and if valid, sets state to existing project
         Returns True on success
@@ -73,10 +75,12 @@ class ProjectSubmenu:
         s2 = "Select existing project directory"
         dir = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
         if not dir:
-            return False
+            return
         err = Project.is_valid_project_dir(dir)
         if err:
             ask_error(err)
-            return False
+            return
+
         state.set_existing_project(dir)
-        return True
+        printt_cls("Project directory set.")
+        return

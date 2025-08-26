@@ -88,14 +88,17 @@ class TrimmableResult(ValidationResult):
             raise ValueError("end time must be None or must be greater than zero")
 
     def get_ui_message(self) -> str:
-        start = f"{self.start_time:.2f}" if self.start_time is not None else ""
-        end = f"{self.end_time:.2f}" if self.end_time is not None else ""
-        if start and end:
-            message = f"Will remove 0-{start} and {end} to end"
-        elif start:
-            message = f"Will remove 0 to {start}"
+
+        start_string = f"{self.start_time:.2f}" if self.start_time is not None else ""
+        end_string = f"{self.end_time:.2f}" if self.end_time is not None else ""
+        duration_string = f"{self.duration:.2f}"
+
+        if start_string and end_string:
+            message = f"Will remove 0 to {start_string} and {end_string} to end {duration_string}"
+        elif start_string:
+            message = f"Will remove 0 to {start_string}"
         else: # end
-            message = f"Will remove {end} to end"
+            message = f"Will remove {end_string} to end {duration_string}"
         return self.base_message + ". " + message
 
 @dataclass

@@ -133,8 +133,8 @@ class GenerateUtil:
         printt(f"Num lines saved normally: {COL_OK}{num_saved_ok}")
         col = COL_ACCENT if num_saved_with_error else ""
         printt(f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}")
-        col = COL_ERROR if num_failed else ""
-        printt(f"Num lines failed to generate: {col}{num_failed}")
+        if num_failed:
+            printt(f"Num lines failed to generate: {COL_ERROR}{num_failed}")
         printt()
 
         return did_interrupt
