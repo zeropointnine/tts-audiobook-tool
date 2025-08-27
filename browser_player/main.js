@@ -1,9 +1,7 @@
 window.app = function() {
 
     const DEFAULT_FADE_DELAY = 1000;
-    const SLEEP_DURATION = 1000 * 60 * 15;
-    const DEMO_URL_A = "waves-oute"
-    const DEMO_URL_B = "waves-chatterbox"
+    const SLEEP_MS = (1000 * 60) * 15
 
     const root = document.documentElement;
     const loadFileInput = document.getElementById('loadFileInput');
@@ -45,7 +43,7 @@ window.app = function() {
     let sleepId = -1;
     let sleepEndTime = -1;
     let fadeOutValue = 0.0;
-    let lastSavePositionTime = 0
+    let lastSavePositionTime = 0;
 
     // ****
     init();
@@ -129,6 +127,7 @@ window.app = function() {
         }
 
         uiPanelButton.addEventListener('click', (e) => {
+            collapseOptionsButton();
             if (uiOverlay.style.display !== 'block') {
                 updateUiPanelButtons();
                 uiOverlay.style.display = 'block';
@@ -323,9 +322,9 @@ window.app = function() {
         }
 
         const doLoadLocal = function() {
-            loadFileInput.click();
             event.preventDefault();
             loadLocalButtonLabel.blur();
+            loadFileInput.click();
         };
         if (document.activeElement == loadLocalButtonLabel) {
             if (event.key === "Enter" || event.key === " ") {
@@ -389,6 +388,8 @@ window.app = function() {
             return;
         }
 
+        collapseOptionsButton();
+
         if (clickedSpan == getCurrentSpan()) {
             // Toggle play
             if (player.paused) {
@@ -420,6 +421,7 @@ window.app = function() {
             // Update only when index has changed
             return;
         }
+
         previousIndex = currentIndex;
         const previousSpan = getSpanByIndex(currentIndex);
         currentIndex = i;
@@ -444,6 +446,10 @@ window.app = function() {
     }
 
     // -------------------------------------
+
+    function collapseOptionsButton() {
+        root.setAttribute("data-ui-panel-button-collapse", "true");
+    }
 
     function getSpanByIndex(i) {
         return i >= 0 ? spans[i] : null;
@@ -562,7 +568,7 @@ window.app = function() {
     }
 
     function startSleep() {
-        sleepEndTime = new Date().getTime() + SLEEP_DURATION;
+        sleepEndTime = new Date().getTime() + SLEEP_MS;
 
         clearInterval(sleepId);
         onSleepInterval();
@@ -669,5 +675,4 @@ window.app = function() {
             }
         }
     }
-
 };

@@ -458,7 +458,7 @@ function isTouchDevice() {
 }
 
 function hasPersistentKeyboard() {
-    // hand-wavey
+    // hand-wavey test
     const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
     const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
     return (hasFinePointer && hasHoverSupport);

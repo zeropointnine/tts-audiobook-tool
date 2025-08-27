@@ -244,13 +244,88 @@ body, html {
     fill: var(--color-text-dim);
 }
 
-#uiPanelButton {
+/* ----------------------- */
+
+.expanding-button {
+
     position: fixed;
-    bottom: 0;
-    right: 0;
-    padding: 12px; /* enlarged hit area */
+    bottom: 12px;
+    right: 12px;
+
+    border: none;
+    border-radius: 8px;
+    background-color: var(--color-content-bg);
+    box-shadow: 0 4px 8px var(--color-shadow);
     cursor: pointer;
+
+    display: inline-flex;
+    align-items: center;
+
+    overflow: hidden;
 }
+
+.expanding-button .graphic {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    padding:6px;
+}
+
+#uiPanelButton svg path {
+    fill: var(--color-text-dim);
+}
+
+.expanding-button .label {
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+    color: var(--color-text-dim);
+    white-space: nowrap;
+
+    /* Anim */
+    max-width: 999px;
+    padding-left: 12px;
+    padding-right: 6px;
+    opacity: 1;
+    transition: max-width 0.4s ease-out, padding-left 0.4s ease-out, padding-right 0.4s ease-out, opacity 0.4s ease-out;
+}
+
+:root[data-ui-panel-button-collapse="true"] .expanding-button .label {
+    max-width: 0px;
+    padding-left: 0;
+    padding-right: 0;
+    opacity: 0;
+}
+
+/* ----------------------- */
+
+/* #uiPanelButton {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    cursor: pointer;
+    display: flex;
+    width: auto;
+
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+    color: var(--color-text-dim);
+
+    display: flex;
+}
+#uiPanelButton .label {
+    padding-left: 8px;
+    padding-right: 8px;
+    max-width: 9999px;
+    transition: max-width 0.3s ease;
+}
+:root[data-collapse-ui-panel-button="true"] #uiPanelButton .label {
+    max-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
+} */
 
 #uiOverlay {
     display: none;
@@ -414,4 +489,3 @@ span.highlight {
 .no-transition {
     transition: none !important;
 }
-
