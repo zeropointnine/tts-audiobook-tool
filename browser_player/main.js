@@ -85,6 +85,8 @@ window.app = function() {
             hasPlayedOnce = true;
             root.setAttribute("data-player-status", "play");
             currentIndex = -1; // ensures scroll to current segment
+            collapseOptionsButton()
+            console.log('xxx hello')
         });
 
         player.addEventListener('pause', function() {
