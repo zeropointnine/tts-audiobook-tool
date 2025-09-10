@@ -117,7 +117,7 @@ class NormalizationSpecs(NamedTuple):
     lra: float
     tp: float
 
-NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_value="default", label="Default - ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Tracks with 'ACX standard' basically
+NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_value="default", label="Default - ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Tracks with 'ACX standard'
 NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(json_value="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
 NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(json_value="none", label="Disabled", i=0, lra=0, tp=0)
 
@@ -130,3 +130,10 @@ class NormalizationType(Enum):
     @cache
     def all_json_values() -> set[str]:
          return { item.value.json_value for item in NormalizationType }
+
+    @staticmethod
+    def from_json_value(s: str) -> NormalizationType | None:
+        for item in NormalizationType:
+            if s == item.value.json_value:
+                return item
+        return None

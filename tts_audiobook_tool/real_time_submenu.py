@@ -18,14 +18,14 @@ class RealTimeSubmenu:
 
         print_heading("Real-time generation and playback")
         AppUtil.show_hint_if_necessary(state.prefs, HINT_REAL_TIME)
-        printt(f"{make_hotkey_string("1")} Start")
+        printt(f"{make_hotkey_string('1')} Start")
 
         if RealTimeSubmenu.use_custom_text:
-            s = f"currently: using custom text, {len(RealTimeSubmenu.custom_text_segments)} lines"
+            s = f"currently: custom text, {len(RealTimeSubmenu.custom_text_segments)} lines"
         else:
-            s = "currently: using project text"
-        printt(f"{make_hotkey_string("2")} Text source {COL_DIM}({s})")
-        printt(f"{make_hotkey_string("3")} Start at line number {COL_DIM}(currently: {COL_ACCENT}{RealTimeSubmenu.start_index + 1}{COL_DIM})")
+            s = "currently: project text"
+        printt(f"{make_hotkey_string('2')} Text source {COL_DIM}({s})")
+        printt(f"{make_hotkey_string('3')} Start at line number {COL_DIM}(currently: {COL_ACCENT}{RealTimeSubmenu.start_index + 1}{COL_DIM})")
         printt()
 
         hotkey = ask_hotkey()
@@ -81,9 +81,9 @@ class RealTimeSubmenu:
     def text_submenu(state: State) -> None: # type: ignore
 
         print_heading("Real time - Set text source")
-        printt(f"{make_hotkey_string("1")} Use project text")
-        printt(f"{make_hotkey_string("2")} Temporary text - import from text file")
-        printt(f"{make_hotkey_string("3")} Temporary text - enter/paste text")
+        printt(f"{make_hotkey_string('1')} Use project text")
+        printt(f"{make_hotkey_string('2')} Custom text - from text file")
+        printt(f"{make_hotkey_string('3')} Custom text - manual input")
         printt()
 
         hotkey = ask_hotkey()

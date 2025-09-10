@@ -16,7 +16,9 @@ from tts_audiobook_tool.util import *
 
 class Project:
     """
+    Project settings data-like-class with convenience functions
     """
+
     dir_path: str
 
     text_segments: list[TextSegment] = []
@@ -38,6 +40,10 @@ class Project:
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
     higgs_temperature: float = -1
+
+    vibevoice_voice_file_name: str = ""
+    vibevoice_cfg: float = -1
+    vibevoice_steps: int = -1
 
     generate_range_string: str = ""
 
@@ -143,6 +149,11 @@ class Project:
         project.higgs_voice_transcript = d.get("higgs_voice_text", "")
         project.higgs_temperature = d.get("higgs_temperature", -1)
 
+        # VibeVoice
+        project.vibevoice_voice_file_name = d.get("vibevoice_voice_file_name", "")
+        project.vibevoice_cfg = d.get("vibevoice_cfg", -1)
+        project.vibevoice_steps = d.get("vibevoice_steps", -1)
+
         return project
 
     def save(self) -> None:
@@ -163,7 +174,10 @@ class Project:
             "fish_temperature": self.fish_temperature,
             "higgs_voice_file_name": self.higgs_voice_file_name,
             "higgs_voice_text": self.higgs_voice_transcript,
-            "higgs_temperature": self.higgs_temperature
+            "higgs_temperature": self.higgs_temperature,
+            "vibevoice_voice_file_name": self.vibevoice_voice_file_name,
+            "vibevoice_cfg": self.vibevoice_cfg,
+            "vibevoice_steps": self.vibevoice_steps
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -212,7 +226,7 @@ class Project:
         Returns error string on fail
         """
 
-        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS]:
+        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS, TtsType.VIBEVOICE]:
             raise ValueError(f"Bad value for tts_type: {tts_type}")
 
         # Resample voice sound data to 'native' samplerate of the TTS model
@@ -234,6 +248,8 @@ class Project:
             case TtsType.HIGGS:
                 self.higgs_voice_file_name = dest_file_name
                 self.higgs_voice_transcript = text
+            case TtsType.VIBEVOICE:
+                self.vibevoice_voice_file_name = dest_file_name
         self.save()
         return ""
 
@@ -261,6 +277,8 @@ class Project:
             case TtsType.HIGGS:
                 self.higgs_voice_file_name = ""
                 self.higgs_voice_transcript = ""
+            case TtsType.VIBEVOICE:
+                self.vibevoice_voice_file_name = ""
         self.save()
 
     def get_voice_label(self) -> str:
@@ -290,9 +308,13 @@ class Project:
                 label = Path(self.higgs_voice_file_name).stem[:30]
                 label = sanitize_for_filename(label)
                 return label
+            case TtsType.VIBEVOICE:
+                if not self.vibevoice_voice_file_name:
+                    return "none"
+                label = Path(self.vibevoice_voice_file_name).stem[:30]
+                label = sanitize_for_filename(label)
+                return label
             case TtsType.NONE:
-                return "none"
-            case _:
                 return "none"
 
     @property
@@ -312,6 +334,9 @@ class Project:
                 # always true bc does not require voice sample
                 return True
             case TtsType.HIGGS:
+                # always true bc does not require voice sample
+                return True
+            case TtsType.VIBEVOICE:
                 # always true bc does not require voice sample
                 return True
             case TtsType.NONE:

@@ -22,20 +22,20 @@ class VoiceChatterboxSubmenu:
 
         print_heading(f"Voice clone and options")
 
-        s = f"{make_hotkey_string('1')} Set voice clone audio clip"
+        s = f"{make_hotkey_string('1')} Select voice clone sample"
         s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
         printt(s)
-        s = f"{make_hotkey_string("2")} Clear voice clone"
+        s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
         cb_temp = project.chatterbox_temperature
         s = "default" if cb_temp == -1 else str(cb_temp)
-        printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        printt(f"{make_hotkey_string('3')} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
         cb_ex = project.chatterbox_exaggeration
         s = "default" if cb_ex == -1 else str(cb_ex)
-        printt(f"{make_hotkey_string("4")} Exaggeration {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        printt(f"{make_hotkey_string('4')} Exaggeration {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
         cb_cfg = project.chatterbox_cfg
         s = "default" if cb_cfg == -1 else str(cb_cfg)
-        printt(f"{make_hotkey_string("5")} Cfg/pace {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        printt(f"{make_hotkey_string('5')} Cfg/pace {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
         printt()
 
     @staticmethod

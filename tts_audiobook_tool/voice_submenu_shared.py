@@ -18,7 +18,8 @@ class VoiceSubmenuShared:
         Prints feedback on success or fail.
         """
 
-        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS]:
+        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS, TtsType.VIBEVOICE]:
+            # Rem, we do not save raw voice sound file for Oute
             raise ValueError("Unsupported tts type")
 
         path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
@@ -33,10 +34,8 @@ class VoiceSubmenuShared:
             return
         sound = result
 
-        if tts_type == TtsType.CHATTERBOX:
-            # Chatterbox voice sound file does not require accompanying transcript
-            transcript = ""
-        else:
+        needs_transcript = tts_type in [TtsType.FISH, TtsType.HIGGS]
+        if needs_transcript: #z
             # Transcribe
             result = WhisperUtil.transcribe_to_words(sound)
             if isinstance(result, str):
@@ -44,6 +43,8 @@ class VoiceSubmenuShared:
                 ask_error(err)
                 return
             transcript = WhisperUtil.get_flat_text_filtered_by_probability(result, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+        else:
+            transcript = ""
 
         file_stem = Path(path).stem
         err = project.set_voice_and_save(sound, file_stem, transcript, tts_type)
@@ -51,7 +52,7 @@ class VoiceSubmenuShared:
             ask_error(err)
             return
 
-        printt_cls("Voice file saved.")
+        printt_set("Voice file saved.")
 
     @staticmethod
     def ask_voice_file(default_dir_path) -> str:

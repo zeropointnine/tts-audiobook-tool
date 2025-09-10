@@ -52,7 +52,7 @@ class Mp3ConcatTranscodeUtil:
 
         printt("Finished")
         printt()
-        s = f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open directory: "
+        s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open directory: "
         hotkey = ask_hotkey(s)
         if hotkey == "o":
             err = open_directory_in_gui(dir)
@@ -78,7 +78,8 @@ class Mp3ConcatTranscodeUtil:
             with open(temp_text_file_path, 'w', encoding='utf-8') as f:
                 for filepath in mp3_files:
                     # The 'file' directive requires proper quoting for special chars
-                    f.write(f"file '{filepath.replace("'", "'\\''")}'\n")
+                    s = filepath.replace("'", "'\\''")
+                    f.write(f"file '{s}'\n")
         except Exception as e:
             delete_silently(temp_text_file_path)
             return str(e)

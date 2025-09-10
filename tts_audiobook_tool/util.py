@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import platform
 import subprocess
+import time
 from typing import Any
 
 from tts_audiobook_tool.constants import *
@@ -23,14 +24,18 @@ def printt(s: str="") -> None:
     s += Ansi.RESET
     print(s)
 
-def printt_cls(message: str) -> None:
+def printt_set(message: str) -> None:
     """
-    Should be used for showing feedback if menu is about to get re-printed
+    Should be used for printing feedback after a setting has been changed
+    and submenu is about to be re-printed.
     """
     printt(message)
     printt()
     if MENU_CLEARS_SCREEN:
         ask_continue()
+    else:
+        time.sleep(1.0)
+
 
 def print_heading(s: str, dont_clear: bool=False) -> None:
     """ """
@@ -71,7 +76,7 @@ def ask_continue(message_prefix: str="") -> None:
 
 def ask_confirm(message: str="") -> bool:
     if not message:
-        message = f"Press {make_hotkey_string("Y")} to confirm: "
+        message = f"Press {make_hotkey_string('Y')} to confirm: "
     inp = ask_hotkey(message)
     return inp == "y"
 

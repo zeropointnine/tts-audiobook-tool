@@ -22,16 +22,16 @@ class VoiceFishSubmenu:
 
         print_heading(f"Voice clone and options")
 
-        s = f"{make_hotkey_string("1")} Set voice clone audio clip"
+        s = f"{make_hotkey_string('1')} Select voice clone sample"
         s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
         printt(s)
 
-        s = f"{make_hotkey_string("2")} Clear voice clone"
+        s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
         temperature = project.fish_temperature
         s = "default" if temperature == -1 else str(temperature)
-        printt(f"{make_hotkey_string("3")} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        printt(f"{make_hotkey_string('3')} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
 
         printt()
 

@@ -30,7 +30,7 @@ class VoiceOuteSubmenu:
         printt(f"{make_hotkey_string('3')} Set voice clone to Oute default voice")
         temp = project.oute_temperature
         s = "default" if temp == -1 else str(temp)
-        printt(f"{make_hotkey_string("4")} Temperature (currently: {s})")
+        printt(f"{make_hotkey_string('4')} Temperature (currently: {s})")
         printt()
 
     @staticmethod

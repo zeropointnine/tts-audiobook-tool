@@ -1,6 +1,7 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
+- VibeVoice 1.5B
 - Chatterbox TTS
 - Fish OpenAudio S1-mini
 - Higgs Audio V2
@@ -19,11 +20,12 @@ Plain-vanilla interactive console interface.
 
 The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped github.io url.
 
-**Online examples**, all using the same source text and voice clone sample:
+**Example outputs**, all using the same source text and same 15-second voice clone sample:
 
 - [Online example using Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.abr.m4a)
 - [Online example using Fish OpenAudio S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-s1-mini.abr.m4a)
 - [Online example using Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
+- [Online example using VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b.abr.m4a)
 - [Online example using Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
 - [Online example using Higgs Audio V2 (a different voice this time, high temperature)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
 
@@ -52,20 +54,48 @@ Clone the repository and cd into it:
     git clone tts-audiobook-tool
     cd tts-audiobook-tool
 
-A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance as needed). Model-specific options will be enabled automatically in the app based on which virtual environment is active.
+A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance as needed). Model-specific options will be enabled automatically in the app based on which virtual environment has been enabled.
 
-In all cases, the CUDA flavor of torch requires an extra install step in the typical manner. First uninstall torch: `pip uninstall torch torchvision torchaudio -y`, and then install the CUDA version of torch in its place (See [Pytorch install page](https://pytorch.org/get-started/locally/)). Using the same version of torch as specified in the respective `requirements-*.txt` file is recommended.
+In all cases, the CUDA flavor of torch requires an extra install step in the typical manner: First uninstall torch `pip uninstall torch torchvision torchaudio -y`, and then install the CUDA version of torch in its place (See [Pytorch install page](https://pytorch.org/get-started/locally/)).
 
 Finally, run the app by entering:
 
     python -m tts_audiobook_tool
+
+## Install for VibeVoice
+
+Initialize a Python v3.11 (not 3.12) virtual environment named "venv-vibevoice". For example:
+
+    path\to\python3.11\python.exe -m venv venv-vibevoice
+
+Activate the virtual environment:
+
+    venv-vibevoice\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-vibevoice.txt
+
+Note that because Microsoft has (temporarily?) removed the source code from their github repo, we are currently pulling from a [third-party archived version](https://github.com/shijincai/VibeVoice).
+
+### Additional steps for CUDA:
+
+Uninstall the vanilla version of torch:
+
+    pip uninstall torch
+
+Install torch 2.6 for CUDA v12.6:
+
+    pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+
+Finally, install Flash attention and Triton. The procedure for doing so varies by operating system. On Windows, I'm using wheels with the following filenames: `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl` and `triton-3.0.0-cp311-cp311-win_amd64.whl`
 
 
 ## Install for Chatterbox TTS:
 
 Initialize a Python v3.12 virtual environment named "venv-chatterbox". For example:
 
-    python.exe -m venv venv-chatterbox
+    path\to\python3.12\python.exe -m venv venv-chatterbox
 
 Activate the virtual environment:
 
@@ -79,11 +109,11 @@ Install dependencies:
 ## Install for Higgs Audio V2:
 
 > **ℹ️ Note!**
-> Higgs V2 almost requires 24GB VRAM (yes really)
+> Higgs V2 pretty much requires 24GB VRAM (yes really)
 
 Initialize a Python v3.12 virtual environment named "venv-higgs". For example:
 
-    python.exe -m venv venv-higgs
+    path\to\python3.12\python.exe -m venv venv-higgs
 
 Activate the virtual environment:
 
@@ -100,7 +130,7 @@ Note that the above `requirements` file draws from a personal fork of the `higgs
 
 Initialize a Python v3.12 virtual environment named "venv-fish". For example:
 
-    python.exe -m venv venv-fish
+    path\to\python3.12\python.exe -m venv venv-fish
 
 Activate the virtual environment:
 
@@ -126,7 +156,7 @@ Then, [generate a Hugging Face access token](https://huggingface.co/settings/tok
 
 Initialize a Python v3.12 virtual environment named "venv-oute". For example:
 
-    python.exe -m venv venv-oute
+    path\to\python3.12\python.exe -m venv venv-oute
 
 Activate the virtual environment:
 
@@ -167,32 +197,29 @@ Note too that it's possible to utilize different voices and even different model
 
 ### Voice cloning
 
-When prepping reference audio for voice cloning, it's worthwhile to prepare three or more sound samples from a given source (not just one), and then testing each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone from the same source can vary quite a bit (as well as the word error rate!).
+When prepping reference audio for voice cloning, it's worthwhile to prepare three or so different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone from the same source can vary quite a bit (as well as the word error rate).
 
 ### Inference speeds, expectations
 
-Here are my anecdotal inference speeds using the various TTS models:
+These are my anecdotal inference speeds. For inference, the app adopts each respective model's reference implementation logic as much as possible.
 
-Higgs V2 3B
+| TTS Model | Hardware | Speed | Notes |
+| ----- | -------- | ----- | ----- |
+| VibeVoice 1.5B | GTX 3080 Ti | ~120% realtime | with Flash attention 2 enabled
+| Higgs V2 3B | GTX 4090 | 200+% realtime | inference speed inversely proportional to voice sample duration, FYI
+| Higgs V2 3B | GTX 3080 Ti | N/A | does not fit in 12 GB VRAM
+| Fish OpenAudio S1-mini | GTX 3080 Ti | 500+% realtime | best combination of inference speed and quality output IMO
+| Chatterbox | GTX 3080 Ti | ~130% realtime
+| Chatterbox | Macbook Pro M1 (MPS) | ~20% realtime
+| Oute | GTX 3080 Ti | ~85% realtime | using `outetts.Backend.EXL2`
+| Oute | Macbook Pro M1 (MPS) | ~20% realtime | using `outetts.Backend.LLAMACPP`
 
-- GTX 4090 (CUDA): 200%+ realtime using 15 second voice sample. Longer voice samples slow down inference, possibly inversely proportional to sample duration.
-- GTX 3080Ti: Very much does not fit in VRAM.
 
-Fish OpenAudio S1-mini
+# Update highlights
 
-- GTX 3080Ti (CUDA): 500-600% realtime
+**2025-09-12**
 
-Chatterbox
-
-- GTX 3080Ti (CUDA): ~130% realtime
-- M1 Macbook Pro (MPS): ~25% realtime
-
-Oute
-
-- GTX 3080Ti (CUDA): ~85% realtime (using `outetts.Backend.EXL2`)
-- M1 Macbook Pro (MPS): ~20% realtime (using `outetts.Backend.LLAMACPP`)
-
-# Updates
+Added support for **VibeVoice 1.5B**.
 
 **2025-08-10**
 
@@ -200,7 +227,7 @@ Migrated from openai-whisper to faster-whisper (faster, less memory, equivalent 
 
 **2025-08-06**
 
-Added support for **Higgs Audio V2** (3B base model). Adding support some of its model-specific features (system prompt, context continuation, etc) is planned.
+Added support for **Higgs Audio V2** (3B base model).
 
 **2025-07-18**
 

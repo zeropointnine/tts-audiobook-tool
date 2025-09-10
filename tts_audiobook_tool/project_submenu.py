@@ -15,13 +15,13 @@ class ProjectSubmenu:
 
             proj_dir = state.project.dir_path
 
-            s = f"Project directory {COL_DIM}(currently: {proj_dir or "none"})"
+            s = f"Project directory {COL_DIM}(currently: {COL_ACCENT}{proj_dir or 'none'}{COL_DIM})"
             print_heading(s)
 
-            printt(f"{make_hotkey_string("1")} Create new project")
-            printt(f"{make_hotkey_string("2")} Open existing project")
+            printt(f"{make_hotkey_string('1')} Start a new project")
+            printt(f"{make_hotkey_string('2')} Open an existing project")
             if proj_dir:
-                printt(f"{make_hotkey_string("3")} Open current project directory in UI {COL_DIM}({proj_dir})")
+                printt(f"{make_hotkey_string('3')} View current project directory in OS UI {COL_DIM}({proj_dir})")
             printt()
             hotkey = ask_hotkey()
             if hotkey == "1":
@@ -37,7 +37,6 @@ class ProjectSubmenu:
                 continue
             else:
                 break
-
 
 
     @staticmethod
@@ -62,7 +61,7 @@ class ProjectSubmenu:
         hint = Hint(HINT_PROJECT_SUBDIRS.key, HINT_PROJECT_SUBDIRS.heading, hint_text)
         AppUtil.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
 
-        printt_cls("Project directory set.")
+        printt_set("Project directory set.")
         return
 
     @staticmethod
@@ -82,5 +81,5 @@ class ProjectSubmenu:
             return
 
         state.set_existing_project(dir)
-        printt_cls("Project directory set.")
+        printt_set("Project directory set.")
         return

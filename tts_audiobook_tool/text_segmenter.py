@@ -2,20 +2,21 @@ import pysbd
 
 from tts_audiobook_tool.sentence_segmenter import SentenceSegmenter
 from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
+from tts_audiobook_tool.text_util import TextUtil
 
 class TextSegmenter:
 
     @staticmethod
-    def segment_text(full_text: str, max_words: int, language="en") -> list[TextSegment]:
+    def segment_text(source_text: str, max_words: int, language="en") -> list[TextSegment]:
         """
-        Segments full project text into chunks.
-        Segments by sentence. When sentence is longer than max_words, splits sentence into chunks.
+        Splits source text into "TextSegment" chunks.
+        App's main text segmentation algorithm.
         """
 
         # Pass 1: Segment text into sentences using pysbd
         # Important: "clean=False" preserves leading and trailing whitespace
         segmenter = pysbd.Segmenter(language=language, clean=False, char_span=False)
-        texts = segmenter.segment(full_text)
+        texts = segmenter.segment(source_text)
 
         # Pass 2: pysbd treats everything enclosed in quotes as a single sentence, so split those up
         new_texts = []
@@ -67,9 +68,25 @@ class TextSegmenter:
         # Pass 6 - Filter out items w/o 'vocalizable' content
         # TODO: all text should be retained for display purposes. wd require a lot of reworking tho.
         text_segments = [item for item in text_segments if has_alpha_numeric_char(item.text)]
-
         return text_segments
 
+    @staticmethod
+    def segment_text_paragraphs(full_text: str) -> list[TextSegment]:
+        """
+        Segments source text into paragraphs.
+        Currently unused
+        """
+
+        lines = TextUtil.split_text_into_paragraphs(full_text)
+
+        text_segments = []
+        counter = 0
+        for line in lines:
+            text_segment = TextSegment(line, counter, counter + len(line), TextSegmentReason.PARAGRAPH)
+            counter += len(line)
+            text_segments.append(text_segment)
+
+        return text_segments
 
 # ---
 

@@ -34,7 +34,7 @@ class RealTime:
         # Start loop
 
         print_heading("Starting real-time playback...", dont_clear=True)
-        printt(f"{COL_DIM}Press {make_hotkey_string("Control-C")}{COL_DIM} to interrupt")
+        printt(f"{COL_DIM}Press {make_hotkey_string('Control-C')}{COL_DIM} to interrupt")
         printt()
 
         SigIntHandler().set("generating")

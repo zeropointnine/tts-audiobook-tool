@@ -9,10 +9,6 @@ from tts_audiobook_tool.text_submenu import TextSubmenu
 from tts_audiobook_tool.tts_info import TtsType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu
-from tts_audiobook_tool.voice_fish_submenu import VoiceFishSubmenu
-from tts_audiobook_tool.voice_higgs_submenu import VoiceHiggsSubmenu
-from tts_audiobook_tool.voice_oute_submenu import VoiceOuteSubmenu
 
 # TODO some import above is triggering unsightly warning from "jieba", either directly or transitively
 
@@ -40,7 +36,7 @@ class MainMenu:
     def _print_menu(state: State, did_reset: bool):
 
         # Title
-        s = f"{COL_DIM}(active model: {COL_ACCENT}{Tts.get_type().value.ui["proper_name"]}{COL_DIM})"
+        s = f"{COL_DIM}(active model: {COL_ACCENT}{Tts.get_type().value.ui['proper_name']}{COL_DIM})"
         print_heading(f"{APP_NAME} {s}")
 
         # Dir check
@@ -50,7 +46,7 @@ class MainMenu:
         num_generated = state.project.sound_segments.num_generated()
 
         # Project
-        s = f"{make_hotkey_string("P")} Project directory "
+        s = f"{make_hotkey_string('P')} Project directory "
         if not state.prefs.project_dir:
             s += f"{COL_DIM}(Must set this first)"
         else:
@@ -59,19 +55,19 @@ class MainMenu:
 
         # Voice
         if state.prefs.project_dir and Tts.get_type() != TtsType.NONE:
-            s = f"{make_hotkey_string("V")} Voice clone "
+            s = f"{make_hotkey_string('V')} Voice clone "
             s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
             printt(s)
 
         # Text
         if state.prefs.project_dir:
-            s = f"{make_hotkey_string("T")} Text "
+            s = f"{make_hotkey_string('T')} Text "
             s += f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
             printt(s)
 
         # Generate audio
         if state.prefs.project_dir and Tts.get_type() != TtsType.NONE:
-            s = f"{make_hotkey_string("G")} Generate audio"
+            s = f"{make_hotkey_string('G')} Generate audio"
             if not state.project.can_voice and not state.project.text_segments:
                 s2 = f"{COL_DIM} (must first set voice and text)"
             elif not state.project.can_voice:
@@ -84,22 +80,26 @@ class MainMenu:
 
         # Concat
         if state.prefs.project_dir:
-            s = f"{make_hotkey_string("C")} Concatenate audio segments to create audiobook file"
+            s = f"{make_hotkey_string('C')} Concatenate audio segments to create audiobook file"
             if num_generated == 0:
                 s += f" {COL_DIM}(must first generate audio)"
             printt(s)
 
         # Options
-        printt(f"{make_hotkey_string("O")} Options/Tools")
+        printt(f"{make_hotkey_string('O')} Options/Tools")
 
         # Quit
-        printt(f"{make_hotkey_string("Q")} Quit")
+        printt(f"{make_hotkey_string('Q')} Quit")
 
         printt()
 
 
     @staticmethod
     def _handle_menu_hotkey(hotkey: str, state: State) -> None:
+
+        # Preempt potential directory scan
+        if hotkey == "q":
+            MainMenu.quit()
 
         num_generated = state.project.sound_segments.num_generated()
 
@@ -108,14 +108,22 @@ class MainMenu:
                 ProjectSubmenu.submenu(state)
             case "v":
                 if state.prefs.project_dir:
-                    if Tts.get_type() == TtsType.OUTE:
-                        VoiceOuteSubmenu.submenu(state.project)
-                    elif Tts.get_type() == TtsType.CHATTERBOX:
-                        VoiceChatterboxSubmenu.submenu(state.project)
-                    elif Tts.get_type() == TtsType.FISH:
-                        VoiceFishSubmenu.submenu(state.project)
-                    elif Tts.get_type() == TtsType.HIGGS:
-                        VoiceHiggsSubmenu.submenu(state.project)
+                    match Tts.get_type():
+                        case TtsType.OUTE:
+                            from tts_audiobook_tool.voice_oute_submenu import VoiceOuteSubmenu
+                            VoiceOuteSubmenu.submenu(state.project)
+                        case TtsType.CHATTERBOX:
+                            from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu
+                            VoiceChatterboxSubmenu.submenu(state.project)
+                        case TtsType.FISH:
+                            from tts_audiobook_tool.voice_fish_submenu import VoiceFishSubmenu
+                            VoiceFishSubmenu.submenu(state.project)
+                        case TtsType.HIGGS:
+                            from tts_audiobook_tool.voice_higgs_submenu import VoiceHiggsSubmenu
+                            VoiceHiggsSubmenu.submenu(state.project)
+                        case TtsType.VIBEVOICE:
+                            from tts_audiobook_tool.voice_vibevoice_submenu import VoiceVibeVoiceSubmenu
+                            VoiceVibeVoiceSubmenu.submenu(state.project)
             case "t":
                 if not state.prefs.project_dir:
                     return
@@ -132,8 +140,6 @@ class MainMenu:
                 ConcatSubmenu.submenu(state)
             case "o":
                 OptionsSubmenu.submenu(state)
-            case "q":
-                MainMenu.quit()
 
 
     @staticmethod

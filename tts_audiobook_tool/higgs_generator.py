@@ -27,10 +27,10 @@ from transformers.cache_utils import StaticCache
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 
-"""
-Pared-down logic from higgs-audio lib script `generation.py`
-"""
 class HiggsGenerator:
+    """
+    Pared-down logic from higgs-audio lib script `generation.py`
+    """
 
     def __init__(self, device_code: str):
 
@@ -428,8 +428,8 @@ class HiggsAudioModelClient:
 
 
 def prepare_generation_context(scene_prompt, voice_path, voice_transcript, ref_audio_in_system_message, audio_tokenizer, speaker_tags):
-    """Prepare the context for generation.
-
+    """
+    Prepare the context for generation.
     The context contains the system message, user message, assistant message, and audio prompt if any.
     """
     system_message = None

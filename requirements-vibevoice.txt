@@ -1,0 +1,16 @@
+# An archived fork of VibeVoice before Microsoft nuked the repository in early 9/2025
+git+https://github.com/shijincai/VibeVoice@a8b287e80861672844ed1f45d67f54899a7d8a8b
+
+faster-whisper==1.2.0
+ffmpeg-python==0.2.0
+librosa==0.11.0
+loguru==0.7.3
+mutagen==1.47.0
+natsort==8.4.0
+pyloudnorm==0.1.1
+pynvml==13.0.1
+pysbd==0.3.4
+sounddevice==0.5.2
+soundfile==0.13.1
+watchdog==6.0.0
+xxhash==3.5.0

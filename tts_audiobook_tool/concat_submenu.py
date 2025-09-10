@@ -39,7 +39,7 @@ class ConcatSubmenu:
             printt(f"{make_hotkey_string('2')} Create AAC/M4A file")
             s = "none" if not state.project.section_dividers else f"{len(state.project.section_dividers)} cut point/s"
             printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
-            s = state.prefs.normalization_type.value.json_value
+            s = state.prefs.normalization_type.value.label
             printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
             printt()
 
@@ -77,7 +77,8 @@ class ConcatSubmenu:
         hotkey = ask_hotkey()
         if hotkey in hotkey_to_norm_type:
             norm_type = hotkey_to_norm_type[hotkey].value
-            prefs.set_normalization_type_value(norm_type.json_value)
+            prefs.set_normalization_type_using(norm_type.json_value)
+            printt_set(f"Normalization set to: {norm_type.label}")
             return
         elif hotkey == "":
             return
@@ -129,7 +130,7 @@ class ConcatSubmenu:
             s = "none"
         else:
             s = ", ".join( [str(item) for item in zero_indexed_items] )
-        printt_cls(f"Cut points set to: {s}")
+        printt_set(f"Cut points set to: {s}")
 
     @staticmethod
     def ask_chapters_and_make(infos: list[ChapterInfo], state: State, to_aac_not_flac: bool) -> None:
@@ -241,7 +242,7 @@ class ConcatSubmenu:
 
         AppUtil.show_player_hint_if_necessary(state.prefs)
 
-        hotkey = ask_hotkey(f"Press {make_hotkey_string("Enter")}, or press {make_hotkey_string("O")} to open output directory: ")
+        hotkey = ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory: ")
         if hotkey == "o":
             err = open_directory_in_gui(dest_subdir)
             if err:

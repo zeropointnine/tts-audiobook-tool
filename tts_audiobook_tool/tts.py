@@ -12,7 +12,7 @@ from tts_audiobook_tool.util import *
 
 class Tts:
     """
-    Static class for accessing the TTS model, and also whisper model, too.
+    Static class for accessing the TTS model. And also whisper model.
     """
 
     # TODO: create tts interface to replace hardcoded logic; this also applies to Project and GenerateUtil ideally
@@ -21,6 +21,7 @@ class Tts:
     _chatterbox: Any = None
     _fish: Any = None
     _higgs: Any = None
+    _vibevoice: Any = None
 
     _type: TtsType
 
@@ -66,7 +67,7 @@ class Tts:
 
     @staticmethod
     def has_tts() -> bool:
-        return Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs
+        return Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs or Tts._vibevoice
 
     @staticmethod
     def warm_up_models() -> None:
@@ -78,14 +79,22 @@ class Tts:
             printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 
-        if Tts._type == TtsType.OUTE and not Tts._oute:
-            _ = Tts.get_oute()
-        if Tts._type == TtsType.CHATTERBOX and not Tts._chatterbox:
-            _ = Tts.get_chatterbox()
-        if Tts._type == TtsType.FISH and not Tts._fish:
-            _ = Tts.get_fish()
-        if Tts._type == TtsType.HIGGS and not Tts._higgs:
-            _ = Tts.get_higgs()
+        match Tts._type:
+            case TtsType.OUTE:
+                if not Tts._oute:
+                    _ = Tts.get_oute()
+            case TtsType.CHATTERBOX:
+                if not Tts._chatterbox:
+                    _ = Tts.get_chatterbox()
+            case TtsType.FISH:
+                if not Tts._fish:
+                    _ = Tts.get_fish()
+            case TtsType.HIGGS:
+                if not Tts._higgs:
+                    _ = Tts.get_higgs()
+            case TtsType.VIBEVOICE:
+                if not Tts._vibevoice:
+                    _ = Tts.get_vibevoice()
 
         if not Tts._whisper:
             _ = Tts.get_whisper()
@@ -147,6 +156,16 @@ class Tts:
         return Tts._higgs
 
     @staticmethod
+    def get_vibevoice() -> Any:
+        from tts_audiobook_tool.vibevoice_generator import VibeVoiceGenerator
+        if not Tts._vibevoice:
+            device = Tts.get_best_torch_device() # TODO verify mps
+            printt(f"{Ansi.ITALICS}Initializing VibeVoice TTS model ({device})...") #z
+            printt()
+            Tts._vibevoice = VibeVoiceGenerator(device, max_new_tokens=MAX_TOKENS_VIBE_VOICE)
+        return Tts._vibevoice
+
+    @staticmethod
     def get_whisper() -> WhisperModel:
         if Tts._whisper is None:
             model = "large-v3"
@@ -189,9 +208,9 @@ class Tts:
     @staticmethod
     def clear_all_models() -> None:
 
-        all = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._whisper, Tts._align_model, Tts._align_meta]
+        all_models = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._whisper, Tts._align_model, Tts._align_meta]
         has = False
-        for item in all:
+        for item in all_models:
             if item:
                 has = True
                 break
@@ -208,10 +227,14 @@ class Tts:
             Tts._chatterbox = None
             if Tts._fish:
                 Tts._fish.kill()
-                Tts._fish = None
+            Tts._fish = None
             if Tts._higgs:
                 Tts._higgs.kill()
             Tts._higgs = None
+            if Tts._vibevoice:
+                Tts._vibevoice.kill()
+            Tts._vibevoice = None
+
             Tts._whisper = None
             Tts._align_model = None
             Tts._align_meta = None

@@ -14,6 +14,7 @@ App entrypoint:
 - Prints one-time info messages, depending
 """
 
+AppUtil.init_logging()
 printt()
 
 # TTS model check (required)
@@ -35,7 +36,7 @@ not_found = [package for package in new_packages if not util.find_spec(package)]
 if not_found:
     hint = Hint(
         "none", "The app's dependencies have changed",
-        f"The following packages were not found: {", ".join(not_found)}\n"
+        f"The following packages were not found: {', '.join(not_found)}\n"
         "You've may have updated the app from the repository without updating its dependencies.\n"
         f"Please update your virtual environment by re-running:\n"
         f"`pip install -r {Tts.get_type().value.requirements_file_name}`."

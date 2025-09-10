@@ -37,7 +37,7 @@ class ValidateUtil:
             if end_time == sound.duration:
                 end_time = None
             return TrimmableResult(
-                "Audio contains excess words but reference text exists as substring",
+                "Excess words detected but reference text exists as substring",
                 start_time, end_time, duration=sound.duration
             )
 
@@ -52,7 +52,7 @@ class ValidateUtil:
         # Repeat word count test (tries to detect same issue as above)
         num_over_occurrences = TranscribeUtil.num_bad_over_occurrences(reference_text, transcribed_text)
         if num_over_occurrences:
-            return FailResult(f"Words over-occurrence count: {num_over_occurrences}")
+            return FailResult(f"Word over-occurrence count: {num_over_occurrences}")
 
         # Dropped words at end or beginning
         if TranscribeUtil.is_drop_fail_tail(reference_text, transcribed_text): # TODO pass along more info here for the fail message

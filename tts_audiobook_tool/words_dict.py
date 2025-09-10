@@ -14,7 +14,7 @@ class Dictionary:
         """
         `words.txt` is COCA words list (including word variations)
         https://www.eapfoundation.com/vocab/general/bnccoca
-        Plus contractions.
+        Plus manually added set of English contraction words ("don't", etc)
         """
         this_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(this_dir, "assets", "words.txt")

@@ -25,6 +25,8 @@ class TtsInfo(NamedTuple):
     # The requirements.txt file that should be used to install the virtual environment for the tts model
     requirements_file_name: str
 
+# ---
+
 OUTE_SPECS = TtsInfo(
     ui = {
         "proper_name": "Oute TTS",
@@ -85,6 +87,21 @@ HIGGS_SPECS = TtsInfo(
     em_dash_replace="", # TODO
     requirements_file_name="requirements-higgs.txt"
 )
+VIBEVOICE_SPECS = TtsInfo(
+    ui = {
+        "proper_name": "VibeVoice",
+        "short_name": "Vibe Voice",
+        "voice_path_console": "Enter voice clone audio clip file path (wav, flac, or mp3): ",
+        "voice_path_requestor": "Select voice clone audio clip (wav, flac, or mp3)",
+        "voice_path_suffixes": [".wav", ".flac", ".mp3"]
+    },
+    module_test="vibevoice",
+    file_tag="vibevoice",
+    sample_rate=24000,
+    semantic_trim_last=False, # TODO
+    em_dash_replace="", # TODO
+    requirements_file_name="requirements-vibevoice.txt"
+)
 
 class TtsType(Enum):
 
@@ -93,6 +110,7 @@ class TtsType(Enum):
     CHATTERBOX = CHATTERBOX_SPECS
     FISH = FISH_SPECS
     HIGGS = HIGGS_SPECS
+    VIBEVOICE = VIBEVOICE_SPECS
 
     @staticmethod
     @cache

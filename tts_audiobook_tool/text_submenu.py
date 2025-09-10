@@ -12,8 +12,8 @@ class TextSubmenu:
 
         s = f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
         print_heading(f"Text {s}")
-        printt(f"{make_hotkey_string("1")} Replace text")
-        printt(f"{make_hotkey_string("2")} View text lines")
+        printt(f"{make_hotkey_string('1')} Replace text")
+        printt(f"{make_hotkey_string('2')} View text lines")
         printt()
 
         hotkey = ask()
@@ -38,8 +38,8 @@ class TextSubmenu:
 
         print_heading(heading)
         AppUtil.show_hint_if_necessary(state.prefs, HINT_LINE_BREAKS)
-        printt(f"{make_hotkey_string("1")} Import from text file")
-        printt(f"{make_hotkey_string("2")} Manually enter/paste text")
+        printt(f"{make_hotkey_string('1')} Import from text file")
+        printt(f"{make_hotkey_string('2')} Manually enter/paste text")
         printt()
 
         inp = ask_hotkey()

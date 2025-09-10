@@ -270,7 +270,7 @@ class AppUtil:
     @staticmethod
     def get_vram_usage_nv() -> tuple[float, float] | None:
         """
-        Get VRAM usage from nvidia gpu (device 0)
+        Get VRAM usage from nvidia gpu (device 0) in GB
         """
         try:
             import pynvml

@@ -128,7 +128,7 @@ class WhisperUtil:
     def get_flat_text_filtered_by_probability(words: list[Word], min_probability: float) -> str:
         """
         Returns joined words, but only the high-confidence ones.
-        This is used for the voice clone transcription, where it's better to omit words entirely
+        For use with voice clone transcription, where it's better to omit words entirely
         when they are not of high-ish confidence, apparently.
         """
         if min_probability <= 0.0:

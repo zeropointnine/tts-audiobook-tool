@@ -86,6 +86,9 @@ class GenerateUtil:
 
             opt_sound, validate_result = GenerateUtil.generate_sound_full_flow(project, text_segment)
 
+            if DEV:
+                printt(f"VRAM: {AppUtil.get_vram_usage_nv()}")
+
             if not opt_sound:
                 # Model failed to produce audio
 
@@ -99,7 +102,7 @@ class GenerateUtil:
                     printt(f"{COL_OK}Fixed:{COL_DEFAULT} {validate_result.get_ui_message()}")
 
                 if isinstance(validate_result, FailResult):
-                    printt(f"{COL_ERROR}Max fails reached{COL_DEFAULT}, tagging as failed but will save anyway")
+                    printt(f"{COL_ERROR}Max fails reached{COL_DEFAULT}, tagging as failed, will save anyway")
                     num_saved_with_error += 1
                 else:
                     num_saved_ok += 1
@@ -184,33 +187,33 @@ class GenerateUtil:
 
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
 
-#            temp1 = WhisperUtil.make_aligned_words(sound, segments)
+            # temp1 = WhisperUtil.make_aligned_words(sound, segments)
 
             # Validate
-            validate_result = ValidateUtil.validate_item(
+            validation_result = ValidateUtil.validate_item(
                 sound, text_segment.text, transcribed_words, Tts.get_type().value
             )
 
-            should_save_debug_info = isinstance(validate_result, TrimmableResult) or isinstance(validate_result, FailResult)
+            should_save_debug_info = isinstance(validation_result, TrimmableResult) or isinstance(validation_result, FailResult)
             if should_save_debug_info:
                 transcribed_text = WhisperUtil.get_flat_text(transcribed_words)
-                SoundFileUtil.debug_save_result_info(validate_result, text_segment.text, transcribed_text)
+                SoundFileUtil.debug_save_result_info(validation_result, text_segment.text, transcribed_text)
 
-            if isinstance(validate_result, PassResult):
-                return sound, validate_result
-            elif isinstance(validate_result, TrimmableResult):
-                start_time = validate_result.start_time or 0
-                end_time = validate_result.end_time or sound.duration
+            if isinstance(validation_result, PassResult):
+                return sound, validation_result
+            elif isinstance(validation_result, TrimmableResult):
+                start_time = validation_result.start_time or 0
+                end_time = validation_result.end_time or sound.duration
                 new_sound = SoundUtil.trim(sound, start_time, end_time)
-                return new_sound, validate_result
+                return new_sound, validation_result
             else: # is invalid
-                printt(f"{validate_result.get_ui_message()}")
+                printt(f"{validation_result.get_ui_message()}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
                     continue
                 else:
                     # Returns sound even though identified as invalid
-                    return sound, validate_result
+                    return sound, validation_result
 
     @staticmethod
     def generate_post_process_save(
@@ -262,7 +265,8 @@ class GenerateUtil:
         print_info: bool=True
     ) -> Sound | str:
         """
-        Returns model-generated sound data, in model's native samplerate.
+        Returns model-generated sound data, in model's native samplerate,
+        or error string on model-related fail
         """
 
         start_time = time.time()
@@ -272,13 +276,13 @@ class GenerateUtil:
         match Tts.get_type():
 
             case TtsType.OUTE:
-                sound = GenerateUtil.generate_oute(
+                result = GenerateUtil.generate_oute(
                     text,
                     project.oute_voice_json,
                     project.oute_temperature)
 
             case TtsType.CHATTERBOX:
-                sound = GenerateUtil.generate_chatterbox(text, project)
+                result = GenerateUtil.generate_chatterbox(text, project)
 
             case TtsType.FISH:
                 if project.fish_voice_file_name:
@@ -289,7 +293,7 @@ class GenerateUtil:
                 else:
                     Tts.get_fish().clear_voice_clone()
 
-                sound = Tts.get_fish().generate(text, project.fish_temperature)
+                result = Tts.get_fish().generate(text, project.fish_temperature)
 
             case TtsType.HIGGS:
                 seed = random.randint(1, sys.maxsize)
@@ -297,32 +301,38 @@ class GenerateUtil:
                     voice_path = os.path.join(project.dir_path, project.higgs_voice_file_name)
                 else:
                     voice_path = None
-                sound = Tts.get_higgs().generate(
-                    p_voice_path=voice_path,
+                result = Tts.get_higgs().generate(
+                    p_voice_path=voice_path, # TODO is this loading every gen?
                     p_voice_transcript=project.higgs_voice_transcript,
                     text=text,
                     seed=seed,
                     temperature=project.higgs_temperature)
 
+            case TtsType.VIBEVOICE:
+                voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
+                cfg_scale = DEFAULT_CFG_VIBEVOICE if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+                num_steps = DEFAULT_NUM_STEPS_VIBE_VOICE if project.vibevoice_steps == -1 else project.vibevoice_steps
+                result = Tts.get_vibevoice().generate(voice_path, text, cfg_scale=cfg_scale, num_steps=num_steps)
+
             case TtsType.NONE:
                 return "No active TTS model"
 
-        if isinstance(sound, str):
-            return sound
-        if not sound:
+        if isinstance(result, str):
+            return result
+        if not result:
             return "Model failed"
 
-        num_nans = np.sum(np.isnan(sound.data))
+        num_nans = np.sum(np.isnan(result.data))
         if num_nans > 0:
             return "Model outputted NaN, discarding"
 
         if print_info:
             elapsed = time.time() - start_time or 1.0
-            print_speed_info(sound.duration, elapsed)
+            print_speed_info(result.duration, elapsed)
 
-        SoundFileUtil.debug_save("after gen", sound)
+        SoundFileUtil.debug_save("after gen", result)
 
-        return sound
+        return result
 
     @staticmethod
     def generate_oute(
@@ -389,15 +399,26 @@ class GenerateUtil:
     @staticmethod
     def preprocess_text(text: str) -> str:
         """
-        Transform text right before passing it off to the TTS model for audio generation.
+        Transforms text right before passing it off to the TTS model for audio generation
         """
+
+        text = text.strip()
+
+        # TODO refactor
 
         if Tts.get_type().value.em_dash_replace:
             text = text.replace("—", Tts.get_type().value.em_dash_replace)
 
+        # TODO make this model-specific
         # Replace fancy double-quotes (important for Higgs)
         text = text.replace("“", "\"")
         text = text.replace("”", "\"")
+
+        # Consecutive ellipsis chars
+        text = re.sub(r'…+', '…', text)
+
+        # Consecutive triple-dot chars
+        text = re.sub(r'\.{4,}', '...', text)
 
         # Expand "int words" to prevent TTS model from simply saying a string of digits
         text = TextUtil.expand_int_words_in_text(text)

@@ -43,7 +43,17 @@ DEFAULT_TEMPERATURE_FISH = 0.8
 # (The actual inference code uses a default of 1.0 which is _way_ too high for narration)
 DEFAULT_TEMPERATURE_HIGGS = 0.3
 
+# NB, vibevoice gradio demo default is 1.3 (way too low IMO); and api default is 1.0 even
+DEFAULT_CFG_VIBEVOICE = 3.0
+
 DEFAULT_SEED = 1000
+
+# Setting this shorter than normal b/c hallucinations can oftentimes fill up entire context (!)
+MAX_TOKENS_VIBE_VOICE = 250
+
+# Value is from vibevoice library code
+DEFAULT_NUM_STEPS_VIBE_VOICE = 10
+
 
 # App's typical ffmpeg options wrt console output, etc
 FFMPEG_TYPICAL_OPTIONS = [

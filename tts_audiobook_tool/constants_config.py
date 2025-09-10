@@ -1,6 +1,6 @@
 """
 Constants - config-like values
-TODO: externalize to config file
+TODO: make this a config file proper
 """
 
 import os
@@ -8,7 +8,7 @@ import os
 DEV = os.getenv("TTS_AUDIOBOOK_TOOL_DEV", "").lower() in ("true", "1", "yes") and True
 DEV_SAVE_INTERMEDIATE_FILES = DEV and True
 if DEV:
-    print("\n### DEV ###")
+    print("\n### DEV ###\n")
 
 # Max words per text chunk, applied to the source text.
 MAX_WORDS_PER_SEGMENT = 40
@@ -18,7 +18,6 @@ MAX_WORDS_PER_SEGMENT_STT = 40
 MENU_CLEARS_SCREEN = False
 
 PREFS_DEFAULT_PLAY_ON_GENERATE = False
-PREFS_DEFAULT_NORMALIZATION_LEVEL = "default"
 
 # Offset for whisper word end timestamp being consistently too early
 # The amount varies a lot, usually around 0.15, but is always too early.

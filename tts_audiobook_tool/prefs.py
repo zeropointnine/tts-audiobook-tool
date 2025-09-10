@@ -12,25 +12,20 @@ from tts_audiobook_tool.constants_config import *
 class Prefs:
     """
     User settings that persist to file
-    - project dir
-    - should_normalize
-    - play_on_generate
-    - has-shown-hints dict
-
-    TODO: singleton or smth
+    TODO: singleton
     """
 
     def __init__(
             self,
             project_dir: str = "",
             hints: dict = {},
-            normalization_type: str = PREFS_DEFAULT_NORMALIZATION_LEVEL,
+            normalization_type: NormalizationType = NormalizationType.DEFAULT,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
         self._play_on_generate = play_on_generate
-        self._normalization_type: str = normalization_type
+        self._normalization_type: NormalizationType = normalization_type
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -50,10 +45,10 @@ class Prefs:
             with open(Prefs.get_file_path(), 'r', encoding='utf-8') as f:
                 prefs_dict = json.load(f)
                 if not isinstance(prefs_dict, dict):
-                    L.e(f"Bad type for prefs: {type(prefs_dict)}")
+                    printt(f"Bad type for prefs: {type(prefs_dict)}")
                     return Prefs.new_and_save()
         except Exception as e:
-            L.e(f"Prefs file error: {e}")
+            printt(f"Prefs file error: {e}")
             return Prefs.new_and_save()
 
         dirty = False
@@ -63,19 +58,17 @@ class Prefs:
             project_dir = ""
             dirty = True
 
-        if not "normalization_type" in prefs_dict and "should_normalize" in prefs_dict:
-            # Legacy
-            norm_type = "default" if bool(prefs_dict["should_normalize"]) else "none"
+        if not "normalization_type" in prefs_dict:
+            s = "default"
             dirty = True
         else:
-            if not "normalization_type" in prefs_dict:
-                norm_type = "default"
+            s = prefs_dict["normalization_type"]
+            if not s in NormalizationType.all_json_values():
+                s = "default"
                 dirty = True
-            else:
-                norm_type = prefs_dict["normalization_type"]
-                if not norm_type in NormalizationType.all_json_values():
-                    norm_type = "default"
-                    dirty = True
+        normalization_type = NormalizationType.from_json_value(s)
+        if not normalization_type:
+            normalization_type = NormalizationType.DEFAULT
 
         play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
@@ -86,7 +79,7 @@ class Prefs:
 
         prefs = Prefs(
             project_dir=project_dir,
-            normalization_type=norm_type,
+            normalization_type=normalization_type,
             play_on_generate=play_on_generate,
             hints=hints
         )
@@ -106,16 +99,12 @@ class Prefs:
 
     @property
     def normalization_type(self) -> NormalizationType:
-        if self._normalization_type == "default":
-            return NormalizationType.DEFAULT
-        elif self._normalization_type == "strong":
-            return NormalizationType.STRONGER
-        else:
-            return NormalizationType.DISABLED
+        return self._normalization_type
 
-    def set_normalization_type_value(self, value: str) -> None:
-        if not value in NormalizationType.all_json_values():
-            raise ValueError(f"Bad value: {value}")
+    def set_normalization_type_using(self, json_value: str) -> None:
+        value = NormalizationType.from_json_value(json_value)
+        if not value:
+            value = NormalizationType.DEFAULT
         self._normalization_type = value
         self.save()
 
@@ -143,7 +132,7 @@ class Prefs:
         dic = {
             "project_dir": self._project_dir,
             "hints": self._hints,
-            "normalization_type": self._normalization_type,
+            "normalization_type": self._normalization_type.value.json_value,
             "play_on_generate": self._play_on_generate
         }
         try:
