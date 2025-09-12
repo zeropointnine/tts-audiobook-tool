@@ -35,7 +35,7 @@ class VoiceSubmenuShared:
         sound = result
 
         needs_transcript = tts_type in [TtsType.FISH, TtsType.HIGGS]
-        if needs_transcript: #z
+        if needs_transcript:
             # Transcribe
             result = WhisperUtil.transcribe_to_words(sound)
             if isinstance(result, str):

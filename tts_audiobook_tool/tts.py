@@ -160,7 +160,7 @@ class Tts:
         from tts_audiobook_tool.vibevoice_generator import VibeVoiceGenerator
         if not Tts._vibevoice:
             device = Tts.get_best_torch_device() # TODO verify mps
-            printt(f"{Ansi.ITALICS}Initializing VibeVoice TTS model ({device})...") #z
+            printt(f"{Ansi.ITALICS}Initializing VibeVoice TTS model ({device})...")
             printt()
             Tts._vibevoice = VibeVoiceGenerator(device, max_new_tokens=MAX_TOKENS_VIBE_VOICE)
         return Tts._vibevoice

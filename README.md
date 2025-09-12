@@ -88,8 +88,7 @@ Install torch 2.6 for CUDA v12.6:
 
     pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
-Finally, install Flash attention and Triton. The procedure for doing so varies by operating system. On Windows, I'm using wheels with the following filenames: `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl` and `triton-3.0.0-cp311-cp311-win_amd64.whl`
-
+Finally, install Flash attention and Triton. The procedure for doing so varies by operating system. On Windows, I'm using a wheel with the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl` and installed Triton using `pip install triton-windows==3.2.0.post19`.
 
 ## Install for Chatterbox TTS:
 

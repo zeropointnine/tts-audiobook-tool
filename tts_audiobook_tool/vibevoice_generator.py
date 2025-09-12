@@ -8,9 +8,9 @@ from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_info import VIBEVOICE_SPECS
 from tts_audiobook_tool.util import printt
 
-#z
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+# #z
+# logging.set_verbosity_info()
+# logger = logging.get_logger(__name__)
 
 class VibeVoiceGenerator:
     """
@@ -19,7 +19,7 @@ class VibeVoiceGenerator:
 
     def __init__(self, device_map: str, max_new_tokens: int | None = None):
 
-        self.max_new_tokens = 1000 #z max_new_tokens
+        self.max_new_tokens = max_new_tokens
 
         # Load processor
         model_path = "microsoft/VibeVoice-1.5b"
@@ -33,6 +33,7 @@ class VibeVoiceGenerator:
                 attn_implementation = "flash_attention_2"
             except ImportError as e:
                 printt("\nWarning: Flash attention is not installed. Will fall back to sdpa.\n")
+                # ... note, triton is still required though
         printt()
         printt(f"Attention implementation: {attn_implementation}")
         printt()
