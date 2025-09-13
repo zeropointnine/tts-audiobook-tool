@@ -1,26 +1,25 @@
 import os
 import sys
 import time
-import copy
 
+import librosa
 import numpy as np
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_types import FailResult, TrimmableResult, PassResult, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.project_sound_segments import *
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
@@ -47,8 +46,7 @@ class GenerateUtil:
         Returns True if ended because interrupted
         """
 
-        # not great
-        SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+        SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR) # not great
 
         if indices_to_generate:
             is_regenerate = False
@@ -170,7 +168,6 @@ class GenerateUtil:
                     return None, FailResult(err)
             else:
                 sound = result
-            sound = GenerateUtil.post_process(sound)
 
             # Transcribe
             result = WhisperUtil.transcribe_to_segments(sound)
@@ -216,7 +213,7 @@ class GenerateUtil:
                     return sound, validation_result
 
     @staticmethod
-    def generate_post_process_save(
+    def generate_save_no_validation(
         index: int,
         project: Project
     ) -> tuple[str, str]:
@@ -232,8 +229,6 @@ class GenerateUtil:
         if isinstance(sound, str):
             return "", f"Couldn't generate audio clip: {sound}"
 
-        sound = GenerateUtil.post_process(sound)
-
         flac_path = SoundSegmentUtil.make_segment_file_path(index, project)
         err = SoundFileUtil.save_flac(sound, flac_path)
         if err:
@@ -241,22 +236,6 @@ class GenerateUtil:
         else:
             return flac_path, err
 
-    @staticmethod
-    def post_process(sound: Sound) -> Sound:
-
-        # Prevent 0-byte audio data as a failsafe
-        if len(sound.data) == 0:
-            sound = sound._replace(data=np.array([0], dtype=sound.data.dtype))
-
-        # Trim all silence from ends of audio clip
-        sound = SilenceUtil.trim_silence(sound)
-        SoundFileUtil.debug_save("after trim silence", sound)
-
-        # Prevent 0-byte audio data as a failsafe again
-        if len(sound.data) == 0:
-            sound = sound._replace(data=np.array([0], dtype=sound.data.dtype))
-
-        return sound
 
     @staticmethod
     def generate_single(
@@ -265,163 +244,138 @@ class GenerateUtil:
         print_info: bool=True
     ) -> Sound | str:
         """
+        Core audio generation function.
         Returns model-generated sound data, in model's native samplerate,
-        or error string on model-related fail
+        or error string on model-related fail.
         """
 
         start_time = time.time()
 
-        text = GenerateUtil.preprocess_text(text_segment.text)
+        text = text_segment.text
+        text = GenerateUtil.preprocess_text_common(text)
+        text = Tts.get_tts_model().preprocess_text(text)
 
         match Tts.get_type():
 
-            case TtsType.OUTE:
-                result = GenerateUtil.generate_oute(
+            case TtsModelInfos.OUTE:
+                result = Tts.get_oute().generate(
                     text,
                     project.oute_voice_json,
                     project.oute_temperature)
 
-            case TtsType.CHATTERBOX:
-                result = GenerateUtil.generate_chatterbox(text, project)
+            case TtsModelInfos.CHATTERBOX:
+                if project.chatterbox_voice_file_name:
+                    voice_path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
+                else:
+                    voice_path = ""
+                result = Tts.get_chatterbox().generate(
+                    text=text,
+                    voice_path=voice_path,
+                    exaggeration=project.chatterbox_exaggeration,
+                    cfg=project.chatterbox_cfg,
+                    temperature=project.chatterbox_temperature
+                )
 
-            case TtsType.FISH:
+            case TtsModelInfos.FISH:
                 if project.fish_voice_file_name:
+                    source_path = os.path.join(project.dir_path, project.fish_voice_file_name)
                     Tts.get_fish().set_voice_clone_using(
-                        source_path=os.path.join(project.dir_path, project.fish_voice_file_name),
+                        source_path=source_path,
                         transcribed_text=project.fish_voice_transcript
                     )
                 else:
                     Tts.get_fish().clear_voice_clone()
-
                 result = Tts.get_fish().generate(text, project.fish_temperature)
 
-            case TtsType.HIGGS:
-                seed = random.randint(1, sys.maxsize)
+            case TtsModelInfos.HIGGS:
                 if project.higgs_voice_file_name:
                     voice_path = os.path.join(project.dir_path, project.higgs_voice_file_name)
+                    voice_transcript = project.higgs_voice_transcript
                 else:
-                    voice_path = None
+                    voice_path = ""
+                    voice_transcript = ""
+                if project.higgs_temperature == -1:
+                    temperature = HIGGS_DEFAULT_TEMPERATURE
+                else:
+                    temperature = project.higgs_temperature
                 result = Tts.get_higgs().generate(
                     p_voice_path=voice_path, # TODO is this loading every gen?
-                    p_voice_transcript=project.higgs_voice_transcript,
+                    p_voice_transcript=voice_transcript,
                     text=text,
-                    seed=seed,
-                    temperature=project.higgs_temperature)
+                    seed=random.randint(1, sys.maxsize),
+                    temperature=temperature
+                )
 
-            case TtsType.VIBEVOICE:
+            case TtsModelInfos.VIBEVOICE:
                 voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
-                cfg_scale = DEFAULT_CFG_VIBEVOICE if project.vibevoice_cfg == -1 else project.vibevoice_cfg
-                num_steps = DEFAULT_NUM_STEPS_VIBE_VOICE if project.vibevoice_steps == -1 else project.vibevoice_steps
-                result = Tts.get_vibevoice().generate(voice_path, text, cfg_scale=cfg_scale, num_steps=num_steps)
+                cfg_scale = VIBEVOICE_DEFAULT_CFG if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+                num_steps = VIBEVOICE_DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
-            case TtsType.NONE:
+                result = Tts.get_vibevoice().generate(
+                    text=text,
+                    voice_path=voice_path,
+                    cfg_scale=cfg_scale,
+                    num_steps=num_steps
+                )
+
+            case TtsModelInfos.NONE:
                 return "No active TTS model"
 
         if isinstance(result, str):
             return result
-        if not result:
-            return "Model failed"
 
-        num_nans = np.sum(np.isnan(result.data))
+        sound = result
+        if sound.data.size == 0:
+            return "Model output is empty, discarding"
+
+        num_nans = np.sum(np.isnan(sound.data))
         if num_nans > 0:
             return "Model outputted NaN, discarding"
+
+        SoundFileUtil.debug_save("gen", result)
+
+        # Trim "silence" from ends of audio clip
+        sound = SilenceUtil.trim_silence(sound)
+
+        # Re-check size
+        if sound.data.size == 0:
+            return "Model output is silence, discarding"
+
+        # Do peak normalization
+        normalized_data = SoundUtil.normalize(sound.data, headroom_db=3.0)
+        sound = Sound(normalized_data, sound.sr)
+
+        SoundFileUtil.debug_save("post_process", sound)
 
         if print_info:
             elapsed = time.time() - start_time or 1.0
             print_speed_info(result.duration, elapsed)
 
-        SoundFileUtil.debug_save("after gen", result)
+        return sound
 
-        return result
-
-    @staticmethod
-    def generate_oute(
-        prompt: str,
-        voice: dict,
-        temperature: float = -1
-    ) -> Sound | None:
-        """ Returns sound or None on fail """
-
-        from loguru import logger
-        logger.remove()
-
-        # First, clone GENERATION_CONFIG from config file
-        from outetts.models.config import SamplerConfig # type: ignore
-        from tts_audiobook_tool.config_oute import GENERATION_CONFIG
-        try:
-            from .config_oute_dev import GENERATION_CONFIG
-        except ImportError:
-            pass
-        gen_config = copy.deepcopy(GENERATION_CONFIG)
-
-        gen_config.text = prompt
-        gen_config.speaker = voice
-        if temperature != -1:
-            gen_config.sampler_config = SamplerConfig(temperature)
-
-        try:
-            output = Tts.get_oute().generate(config=gen_config)
-            audio = output.audio.cpu().clone().squeeze().numpy()
-            return Sound(audio, output.sr)
-
-        except Exception as e:
-            printt(f"{COL_ERROR}Oute model error: {e}")
-            return None
 
     @staticmethod
-    def generate_chatterbox(
-        prompt: str,
-        project: Project
-    ) -> Sound | None:
-        """ Returns sound or None on fail """
-        d = {}
-        if project.chatterbox_voice_file_name:
-            # Rem, this is actually optional
-            path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
-            d["audio_prompt_path"] = path
-        if project.chatterbox_exaggeration != -1:
-            d["exaggeration"] = project.chatterbox_exaggeration
-        if project.chatterbox_cfg != -1:
-            d["cfg_weight"] = project.chatterbox_cfg
-        if project.chatterbox_temperature != -1:
-            d["temperature"] = project.chatterbox_temperature
-
-        try:
-            data = Tts.get_chatterbox().generate(prompt, **d)
-            data = data.numpy().squeeze()
-            data = SoundUtil.normalize(data, headroom_db=1.0)
-            return Sound(data, Tts.get_chatterbox().sr)
-
-        except Exception as e:
-            print(f"{COL_ERROR}Chatterbox model error: {e}\a", "error")
-            return None
-
-    @staticmethod
-    def preprocess_text(text: str) -> str:
+    def preprocess_text_common(text: str) -> str:
         """
-        Transforms text right before passing it off to the TTS model for audio generation
+        Transforms text for inference.
+        These should be common to (ie, compatible with) any tts model
         """
 
         text = text.strip()
 
-        # TODO refactor
-
-        if Tts.get_type().value.em_dash_replace:
-            text = text.replace("—", Tts.get_type().value.em_dash_replace)
-
-        # TODO make this model-specific
-        # Replace fancy double-quotes (important for Higgs)
+        # Replace fancy double-quotes (important for Higgs, eg)
         text = text.replace("“", "\"")
         text = text.replace("”", "\"")
 
-        # Consecutive ellipsis chars
+        # Collapse consecutive ellipsis chars
         text = re.sub(r'…+', '…', text)
 
-        # Consecutive triple-dot chars
+        # Collapse consecutive dots to triple-dot
         text = re.sub(r'\.{4,}', '...', text)
 
         # Expand "int words" to prevent TTS model from simply saying a string of digits
         text = TextUtil.expand_int_words_in_text(text)
+
         return text
 
 # ---

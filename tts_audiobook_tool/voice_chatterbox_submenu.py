@@ -1,5 +1,5 @@
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -27,14 +27,14 @@ class VoiceChatterboxSubmenu:
         printt(s)
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
-        cb_temp = project.chatterbox_temperature
-        s = "default" if cb_temp == -1 else str(cb_temp)
+
+        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_temperature, CHATTERBOX_DEFAULT_TEMPERATURE, 1)
         printt(f"{make_hotkey_string('3')} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
-        cb_ex = project.chatterbox_exaggeration
-        s = "default" if cb_ex == -1 else str(cb_ex)
+
+        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_exaggeration, CHATTERBOX_DEFAULT_EXAGGERATION, 1)
         printt(f"{make_hotkey_string('4')} Exaggeration {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
-        cb_cfg = project.chatterbox_cfg
-        s = "default" if cb_cfg == -1 else str(cb_cfg)
+
+        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_cfg, CHATTERBOX_DEFAULT_CFG, 1)
         printt(f"{make_hotkey_string('5')} Cfg/pace {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
         printt()
 
@@ -43,20 +43,20 @@ class VoiceChatterboxSubmenu:
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsType.CHATTERBOX)
+                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.CHATTERBOX)
                 return False
             case "2":
-                project.clear_voice_and_save(TtsType.CHATTERBOX)
+                project.clear_voice_and_save(TtsModelInfos.CHATTERBOX)
                 printt("Cleared")
                 printt()
                 return False
             case "3":
-                value = ask(f"Enter temperature (0.0 < value <= 5.0): ")
+                value = ask(f"Enter temperature (0.0 < value <= 3.0): ")
                 if not value:
                     return False
                 try:
                     value = float(value)
-                    if not (0.0 < value <= 5.0):
+                    if not (0.0 < value <= 3.0):
                         ask_error("Out of range")
                     else:
                         project.chatterbox_temperature = value

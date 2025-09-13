@@ -9,6 +9,8 @@ from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.tts import Tts
 from faster_whisper.transcribe import Segment
 
+from tts_audiobook_tool.util import make_error_string
+
 
 class WhisperUtil:
 
@@ -26,7 +28,7 @@ class WhisperUtil:
         try:
             segments, _ = Tts.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=None)
         except Exception as e:
-            return str(e)
+            return make_error_string(e)
 
         segments = list(segments)
         return segments

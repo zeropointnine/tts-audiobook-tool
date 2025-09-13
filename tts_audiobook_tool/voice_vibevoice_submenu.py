@@ -1,5 +1,5 @@
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -21,25 +21,20 @@ class VoiceVibeVoiceSubmenu:
 
         print_heading(f"Voice clone and options")
 
-        s = f"{make_hotkey_string('1')} Select voice clone sample"
-        s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
+        label = make_currently_string(project.get_voice_label())
+        s = f"{make_hotkey_string('1')} Select voice clone sample {label}"
         printt(s)
 
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
-        cfg = DEFAULT_CFG_VIBEVOICE if project.vibevoice_cfg == -1 else project.vibevoice_cfg
-        s = f"{cfg:.1f}"
-        if cfg == DEFAULT_CFG_VIBEVOICE:
-            s += " (default)"
-        printt(f"{make_hotkey_string('3')} CFG scale {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        s = VoiceSubmenuShared.make_parameter_value_string(project.vibevoice_cfg, VIBEVOICE_DEFAULT_CFG, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('3')} CFG scale {s}")
 
-        steps = DEFAULT_NUM_STEPS_VIBE_VOICE if project.vibevoice_steps == -1 else project.vibevoice_steps
-        s = str(steps)
-        if steps == DEFAULT_NUM_STEPS_VIBE_VOICE:
-            s += " (default)"
-        printt(f"{make_hotkey_string('4')} Steps {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
-
+        s = VoiceSubmenuShared.make_parameter_value_string(project.vibevoice_steps, VIBEVOICE_DEFAULT_NUM_STEPS, 0)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('4')} Steps {s}")
         printt()
 
     @staticmethod
@@ -48,10 +43,10 @@ class VoiceVibeVoiceSubmenu:
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsType.VIBEVOICE)
+                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.VIBEVOICE)
                 return False
             case "2":
-                project.clear_voice_and_save(TtsType.VIBEVOICE)
+                project.clear_voice_and_save(TtsModelInfos.VIBEVOICE)
                 printt("Cleared")
                 printt()
                 return False

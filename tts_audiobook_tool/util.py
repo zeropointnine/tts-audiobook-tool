@@ -34,7 +34,8 @@ def printt_set(message: str) -> None:
     if MENU_CLEARS_SCREEN:
         ask_continue()
     else:
-        time.sleep(1.0)
+        # Just enough of a pause to make noticeable
+        time.sleep(0.5)
 
 
 def print_heading(s: str, dont_clear: bool=False) -> None:
@@ -157,6 +158,12 @@ def make_sibling_random_file_path(source_file_path: str, new_suffix: str="") -> 
     new_path = os.path.join(parent_dir, new_file_name)
     return new_path
 
+def make_error_string(e: Exception) -> str:
+    """
+    Standard way for the app to display exceptions
+    """
+    return f"{type(e).__name__}: {make_error_string(e)}"
+
 def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
     """
     Returns error message on fail, else empty string
@@ -172,6 +179,16 @@ def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
         return f"Couldn't rename {temp_file_path} to {target_file_path}, {e}"
     return ""
 
+def delete_silently(path: str):
+    """ Deletes a file and fails silently """
+    if not os.path.exists(path):
+        return
+    try:
+        os.remove(path)
+    except Exception as e:
+        L.w(f"Couldn't delete temp file {path} {e}")
+        pass # eat
+
 def timestamp_string() -> str:
     current_time = datetime.now()
     return current_time.strftime("%y%m%d_%H%M%S")
@@ -186,18 +203,11 @@ def estimated_wav_seconds(file_path: str) -> float:
         return 0
     return num_bytes / (44_100 * 2)
 
-def delete_silently(path: str):
-    """ Deletes a file and fails silently """
-    if not os.path.exists(path):
-        return
-    try:
-        os.remove(path)
-    except Exception as e:
-        L.w(f"Couldn't delete temp file {path} {e}")
-        pass # eat
-
 def make_hotkey_string(hotkey: str, color: str=COL_ACCENT) -> str:
     return f"[{color}{hotkey}{Ansi.RESET}]"
+
+def make_currently_string(value: str) -> str:
+    return f"{COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
 
 def lerp_clamped(
     value: float,

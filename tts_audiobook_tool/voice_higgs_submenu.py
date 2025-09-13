@@ -1,5 +1,5 @@
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -21,16 +21,16 @@ class VoiceHiggsSubmenu:
 
         print_heading(f"Voice clone and options")
 
-        s = f"{make_hotkey_string('1')} Select voice clone sample"
-        s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
+        label = make_currently_string(project.get_voice_label())
+        s = f"{make_hotkey_string('1')} Select voice clone sample {label}"
         printt(s)
 
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
-        temperature = project.higgs_temperature
-        s = f"default ({DEFAULT_TEMPERATURE_HIGGS})" if temperature == -1 else str(temperature)
-        printt(f"{make_hotkey_string('3')} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        s = VoiceSubmenuShared.make_parameter_value_string(project.higgs_temperature, HIGGS_DEFAULT_TEMPERATURE, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('3')} Temperature {s}")
 
         printt()
 
@@ -39,12 +39,11 @@ class VoiceHiggsSubmenu:
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsType.HIGGS)
+                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.HIGGS)
                 return False
             case "2":
-                project.clear_voice_and_save(TtsType.HIGGS)
-                printt("Cleared")
-                printt()
+                project.clear_voice_and_save(TtsModelInfos.HIGGS)
+                printt_set("Cleared")
                 return False
             case "3":
                 # TODO not sure about upper bound here (just taking a guess)
@@ -60,6 +59,7 @@ class VoiceHiggsSubmenu:
                     else:
                         project.higgs_temperature = value
                         project.save()
+                        printt_set(f"Temperature set: {project.higgs_temperature}")
                 except:
                     ask_error("Bad value")
                     return False

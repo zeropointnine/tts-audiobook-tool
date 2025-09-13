@@ -54,9 +54,9 @@ class SilenceUtil:
     def detect_silences(
         sound: Sound,
         threshold_db_relative_to_peak: float=-30.0, # How many dB below the peak to consider silence
-        min_silence_duration_ms: int=100,       # Minimum duration for a silence segment
-        frame_length_ms: int=30,                # Frame length for RMS calculation
-        hop_length_ms: int=10                   # Hop length for RMS calculation
+        min_silence_duration_ms: int=100, # Minimum duration for a silence segment
+        frame_length_ms: int=30, # Frame length for RMS calculation
+        hop_length_ms: int=10 # Hop length for RMS calculation
     ) -> list[tuple[float, float]]:
         """
         Detects silence in an audio clip based on a relative RMS threshold, returning time ranges.

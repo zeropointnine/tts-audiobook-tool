@@ -11,12 +11,12 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class Project:
     """
-    Project settings data-like-class with convenience functions
+    Project settings data-like class with convenience functions
     """
 
     dir_path: str
@@ -219,15 +219,15 @@ class Project:
             sound: Sound,
             voice_file_stem: str,
             text: str,
-            tts_type: TtsType
+            tts_type: TtsModelInfos
     ) -> str:
         """
         Saves resampled voice sound file, and updates and saves project properties
         Returns error string on fail
         """
 
-        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS, TtsType.VIBEVOICE]:
-            raise ValueError(f"Bad value for tts_type: {tts_type}")
+        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS, TtsModelInfos.VIBEVOICE]:
+            raise ValueError(f"Not applicable for tts_type: {tts_type}")
 
         # Resample voice sound data to 'native' samplerate of the TTS model
         target_sr = tts_type.value.sample_rate
@@ -239,82 +239,82 @@ class Project:
             return err
 
         match tts_type:
-            case TtsType.CHATTERBOX:
+            case TtsModelInfos.CHATTERBOX:
                 self.chatterbox_voice_file_name = dest_file_name
                 # Rem, chatterbox does not require voice sound file's transcription
-            case TtsType.FISH:
+            case TtsModelInfos.FISH:
                 self.fish_voice_file_name = dest_file_name
                 self.fish_voice_transcript = text
-            case TtsType.HIGGS:
+            case TtsModelInfos.HIGGS:
                 self.higgs_voice_file_name = dest_file_name
                 self.higgs_voice_transcript = text
-            case TtsType.VIBEVOICE:
+            case TtsModelInfos.VIBEVOICE:
                 self.vibevoice_voice_file_name = dest_file_name
         self.save()
         return ""
 
-    def set_oute_voice_and_save(self, voice_json: dict, dest_file_stem: str) -> None:
+    def set_oute_voice_and_save(self, voice_dict: dict, dest_file_stem: str) -> None:
         file_name = dest_file_stem + ".json"
-        err = save_json(voice_json, os.path.join(self.dir_path, file_name))
+        err = save_json(voice_dict, os.path.join(self.dir_path, file_name))
         if err:
             ask_error(err)
             return
         self.oute_voice_file_name = file_name
-        self.oute_voice_json = voice_json
+        self.oute_voice_json = voice_dict
         self.save()
 
-    def clear_voice_and_save(self, tts_type: TtsType) -> None:
+    def clear_voice_and_save(self, tts_type: TtsModelInfos) -> None:
 
-        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS]:
+        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS]:
             raise ValueError(f"Bad value for tts_type: {tts_type}")
 
         match tts_type:
-            case TtsType.CHATTERBOX:
+            case TtsModelInfos.CHATTERBOX:
                 self.chatterbox_voice_file_name = ""
-            case TtsType.FISH:
+            case TtsModelInfos.FISH:
                 self.fish_voice_file_name = ""
                 self.fish_voice_transcript = ""
-            case TtsType.HIGGS:
+            case TtsModelInfos.HIGGS:
                 self.higgs_voice_file_name = ""
                 self.higgs_voice_transcript = ""
-            case TtsType.VIBEVOICE:
+            case TtsModelInfos.VIBEVOICE:
                 self.vibevoice_voice_file_name = ""
         self.save()
 
     def get_voice_label(self) -> str:
         match Tts.get_type():
-            case TtsType.OUTE:
+            case TtsModelInfos.OUTE:
                 if self.can_voice:
                     label = Path(self.oute_voice_file_name).stem[:30]
                     label = sanitize_for_filename(label)
                     return label
                 else:
                     return "none" # shouldn't happen
-            case TtsType.CHATTERBOX:
+            case TtsModelInfos.CHATTERBOX:
                 if not self.chatterbox_voice_file_name:
                     return "none"
                 label = Path(self.chatterbox_voice_file_name).stem[:30]
                 label = sanitize_for_filename(label)
                 return label
-            case TtsType.FISH:
+            case TtsModelInfos.FISH:
                 if not self.fish_voice_file_name:
                     return "none"
                 label = Path(self.fish_voice_file_name).stem[:30]
                 label = sanitize_for_filename(label)
                 return label
-            case TtsType.HIGGS:
+            case TtsModelInfos.HIGGS:
                 if not self.higgs_voice_file_name:
                     return "none"
                 label = Path(self.higgs_voice_file_name).stem[:30]
                 label = sanitize_for_filename(label)
                 return label
-            case TtsType.VIBEVOICE:
+            case TtsModelInfos.VIBEVOICE:
                 if not self.vibevoice_voice_file_name:
                     return "none"
                 label = Path(self.vibevoice_voice_file_name).stem[:30]
                 label = sanitize_for_filename(label)
                 return label
-            case TtsType.NONE:
+            case TtsModelInfos.NONE:
                 return "none"
 
     @property
@@ -323,23 +323,23 @@ class Project:
         Returns True if current state allows for outputting a "voice" of any kind.
         """
         match Tts.get_type():
-            case TtsType.OUTE:
+            case TtsModelInfos.OUTE:
                 # must have oute json file
                 # (rem, we default to using Oute's own "official" default voice)
                 return bool(self.oute_voice_json)
-            case TtsType.CHATTERBOX:
+            case TtsModelInfos.CHATTERBOX:
                 # always true bc does not require voice sample
                 return True
-            case TtsType.FISH:
+            case TtsModelInfos.FISH:
                 # always true bc does not require voice sample
                 return True
-            case TtsType.HIGGS:
+            case TtsModelInfos.HIGGS:
                 # always true bc does not require voice sample
                 return True
-            case TtsType.VIBEVOICE:
+            case TtsModelInfos.VIBEVOICE:
                 # always true bc does not require voice sample
                 return True
-            case TtsType.NONE:
+            case TtsModelInfos.NONE:
                 return False
 
     @property

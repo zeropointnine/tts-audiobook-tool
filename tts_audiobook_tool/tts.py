@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from importlib import util
-import sys
-from typing import Any, cast
+from typing import Any
 import torch
 
 from faster_whisper import WhisperModel
 
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -15,15 +15,13 @@ class Tts:
     Static class for accessing the TTS model. And also whisper model.
     """
 
-    # TODO: create tts interface to replace hardcoded logic; this also applies to Project and GenerateUtil ideally
+    _oute: OuteModelProtocol | None = None
+    _chatterbox: ChatterboxModelProtocol | None = None
+    _fish: FishModelProtocol | None = None
+    _higgs: HiggsModelProtocol | None = None
+    _vibevoice: VibeVoiceModelProtocol | None = None
 
-    _oute: Any = None
-    _chatterbox: Any = None
-    _fish: Any = None
-    _higgs: Any = None
-    _vibevoice: Any = None
-
-    _type: TtsType
+    _type: TtsModelInfos
 
     _whisper: WhisperModel | None = None
 
@@ -32,14 +30,14 @@ class Tts:
     _align_device: str = ""
 
     @staticmethod
-    def init_active_model() -> str:
+    def init_model_type() -> str:
         """
         Sets the tts model type by reflecting on the existing modules in the environment.
         Returns error string on fail, else empty string on success
         """
         num_models = 0
         tts_type = None
-        for item in TtsType:
+        for item in TtsModelInfos:
             exists = util.find_spec(item.value.module_test) is not None
             if exists:
                 num_models += 1
@@ -54,119 +52,123 @@ class Tts:
             s += "Please re-install python environment, following the instructions in the README."
             return s
 
-        Tts.set_type(cast(TtsType, tts_type))
+        assert(tts_type is not None)
+        Tts._type = tts_type
         return ""
 
     @staticmethod
-    def set_type(typ: TtsType) -> None:
-        Tts._type = typ
-
-    @staticmethod
-    def get_type() -> TtsType:
+    def get_type() -> TtsModelInfos:
         return Tts._type
 
     @staticmethod
     def has_tts() -> bool:
-        return Tts._oute or Tts._chatterbox or Tts._fish or Tts._higgs or Tts._vibevoice
+        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice]
+        for item in items:
+            if item is not None:
+                return True
+        return False
 
     @staticmethod
     def warm_up_models() -> None:
         """
-        If not already, instantiates tts and stt models as a convenience, and prints that it is doing so
+        Instantiates tts and stt models (if not already), as a convenience,
+        and prints that it is doing so.
         """
 
-        if not Tts.has_tts() or not Tts._whisper:
+        if not Tts.has_tts() and not Tts._whisper:
             printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 
-        match Tts._type:
-            case TtsType.OUTE:
-                if not Tts._oute:
-                    _ = Tts.get_oute()
-            case TtsType.CHATTERBOX:
-                if not Tts._chatterbox:
-                    _ = Tts.get_chatterbox()
-            case TtsType.FISH:
-                if not Tts._fish:
-                    _ = Tts.get_fish()
-            case TtsType.HIGGS:
-                if not Tts._higgs:
-                    _ = Tts.get_higgs()
-            case TtsType.VIBEVOICE:
-                if not Tts._vibevoice:
-                    _ = Tts.get_vibevoice()
-
-        if not Tts._whisper:
-            _ = Tts.get_whisper()
+        _ = Tts.get_tts_model()
+        _ = Tts.get_whisper()
 
         # TODO: later
         if False and not Tts._align_model:
             _ = Tts.get_align_model_and_meta_and_device()
 
     @staticmethod
-    def get_oute() -> Any:
+    def get_tts_model() -> TtsModel:
+
+        match Tts._type:
+            #z
+            case TtsModelInfos.OUTE:
+                return Tts.get_oute()
+            case TtsModelInfos.CHATTERBOX:
+                return Tts.get_chatterbox()
+            case TtsModelInfos.FISH:
+                return Tts.get_fish()
+            case TtsModelInfos.HIGGS:
+                return Tts.get_higgs()
+            case TtsModelInfos.VIBEVOICE:
+                return Tts.get_vibevoice()
+            case _:
+                raise Exception("TODO") #z
+
+    @staticmethod
+    def get_oute() -> OuteModelProtocol:
+
         if not Tts._oute:
             printt(f"{Ansi.ITALICS}Initializing Oute TTS model...")
             printt()
-            import outetts # type: ignore
-            from tts_audiobook_tool.config_oute import MODEL_CONFIG
-            try:
-                # Overwrite with dev version if exists
-                from .config_oute_dev import MODEL_CONFIG
-            except ImportError:
-                pass
-            # Not catching any exception here (let app crash if incorrect):
-            Tts._oute = outetts.Interface(config=MODEL_CONFIG)
+
+            from tts_audiobook_tool.oute_model import OuteModel
+            Tts._oute = OuteModel()
+
         return Tts._oute
 
     @staticmethod
-    def get_chatterbox() -> Any:
+    def get_chatterbox() -> ChatterboxModelProtocol:
+
         if not Tts._chatterbox:
             device = Tts.get_best_torch_device()
             printt(f"{Ansi.ITALICS}Initializing Chatterbox TTS model ({device})...")
             printt()
-            from chatterbox.tts import ChatterboxTTS  # type: ignore
-            Tts._chatterbox = ChatterboxTTS.from_pretrained(device=device)
+            from tts_audiobook_tool.chatterbox_model import ChatterboxModel
+            Tts._chatterbox = ChatterboxModel(device)
+
         return Tts._chatterbox
 
     @staticmethod
-    def get_fish() -> Any:
-        from tts_audiobook_tool.fish_generator import FishGenerator
+    def get_fish() -> FishModelProtocol:
 
         if not Tts._fish:
             device = Tts.get_best_torch_device()
             printt(f"{Ansi.ITALICS}Initializing Fish OpenAudio S1-mini TTS model ({device})...")
             printt()
-            Tts._fish = FishGenerator(device)
+            from tts_audiobook_tool.fish_model import FishModel
+            Tts._fish = FishModel(device)
 
-            # Customize logging/logger levels now that fish is initialized
-            from loguru import logger
-            logger.remove()
-            logger.add(sys.stderr, level="WARNING", filter="fish_speech")
         return Tts._fish
 
     @staticmethod
-    def get_higgs() -> Any:
-        from tts_audiobook_tool.higgs_generator import HiggsGenerator
+    def get_higgs() -> HiggsModelProtocol:
+
         if not Tts._higgs:
-            device = Tts.get_best_torch_device() # TODO
+            device = Tts.get_best_torch_device() # TODO verify mps
             printt(f"{Ansi.ITALICS}Initializing Higgs V2 TTS model ({device})...")
             printt()
-            Tts._higgs = HiggsGenerator(device)
+            from tts_audiobook_tool.higgs_model import HiggsModel
+            Tts._higgs = HiggsModel(device)
+
         return Tts._higgs
 
     @staticmethod
-    def get_vibevoice() -> Any:
-        from tts_audiobook_tool.vibevoice_generator import VibeVoiceGenerator
+    def get_vibevoice() -> VibeVoiceModelProtocol:
+
         if not Tts._vibevoice:
+
             device = Tts.get_best_torch_device() # TODO verify mps
-            printt(f"{Ansi.ITALICS}Initializing VibeVoice TTS model ({device})...")
+            printt(f"{Ansi.ITALICS}Initializing VibeVoice 1.5B TTS model ({device})...")
             printt()
-            Tts._vibevoice = VibeVoiceGenerator(device, max_new_tokens=MAX_TOKENS_VIBE_VOICE)
+
+            from tts_audiobook_tool.vibe_voice_model import VibeVoiceModel
+            Tts._vibevoice = VibeVoiceModel(device, max_new_tokens=VIBEVOICE_MAX_TOKENS)
+
         return Tts._vibevoice
 
     @staticmethod
     def get_whisper() -> WhisperModel:
+
         if Tts._whisper is None:
             model = "large-v3"
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -174,6 +176,7 @@ class Tts:
             printt(f"{Ansi.ITALICS}Initializing whisper model ({model}, {device}, {compute_type})...")
             printt()
             Tts._whisper = WhisperModel(model, device=device, compute_type=compute_type)
+
         return Tts._whisper
 
     @staticmethod
@@ -193,10 +196,11 @@ class Tts:
         In general, do not hold onto a reference to whisper from outside (prefer using "get_whisper())
         If you do, delete the reference before calling this, or else it will not be GC'ed
         """
+
         if Tts._whisper is None and Tts._align_model is None:
             return
         printt()
-        printt("{Ansi.ITALICS}Unloading whisper and align model...")
+        printt(f"{Ansi.ITALICS}Unloading whisper...")
         printt()
         Tts._whisper = None
         Tts._align_model = None
@@ -223,16 +227,15 @@ class Tts:
             printt(f"{Ansi.ITALICS}Unloading all models...")
             printt()
 
+            tts_models: list[TtsModel | None] = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice]
+            for item in tts_models:
+                if item:
+                    item.kill()
+
             Tts._oute = None
             Tts._chatterbox = None
-            if Tts._fish:
-                Tts._fish.kill()
             Tts._fish = None
-            if Tts._higgs:
-                Tts._higgs.kill()
             Tts._higgs = None
-            if Tts._vibevoice:
-                Tts._vibevoice.kill()
             Tts._vibevoice = None
 
             Tts._whisper = None
@@ -245,6 +248,7 @@ class Tts:
 
     @staticmethod
     def get_best_torch_device() -> str:
+
         if torch.cuda.is_available():
             return "cuda"
         elif torch.backends.mps.is_available():

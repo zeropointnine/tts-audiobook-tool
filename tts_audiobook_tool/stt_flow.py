@@ -134,7 +134,7 @@ class SttFlow:
                 with open(source_pickle_path, "rb") as file:
                     words = pickle.load(file)
             except Exception as e:
-                ask_error(str(e))
+                ask_error(make_error_string(e))
                 return False
 
         else:

@@ -3,14 +3,14 @@ from __future__ import annotations
 from tts_audiobook_tool.app_types import FailResult, PassResult, Sound, TrimmableResult, ValidationResult, Word
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.transcribe_util import TranscribeUtil
-from tts_audiobook_tool.tts_info import TtsInfo
+from tts_audiobook_tool.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class ValidateUtil:
 
     @staticmethod
-    def validate_item(sound: Sound, reference_text: str, transcribed_words: list[Word], tts_specs: TtsInfo) -> ValidationResult:
+    def validate_item(sound: Sound, reference_text: str, transcribed_words: list[Word], tts_specs: TtsModelInfo) -> ValidationResult:
 
         # Runs various tests to determine if audio generation seems to be valid.
         # Errs on the conservative side, prioritizes avoiding false positives.

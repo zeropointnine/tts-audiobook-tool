@@ -1,5 +1,5 @@
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -22,17 +22,16 @@ class VoiceFishSubmenu:
 
         print_heading(f"Voice clone and options")
 
-        s = f"{make_hotkey_string('1')} Select voice clone sample"
-        s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
+        label = make_currently_string(project.get_voice_label())
+        s = f"{make_hotkey_string('1')} Select voice clone sample {label}"
         printt(s)
 
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
-        temperature = project.fish_temperature
-        s = "default" if temperature == -1 else str(temperature)
-        printt(f"{make_hotkey_string('3')} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
-
+        s = VoiceSubmenuShared.make_parameter_value_string(project.fish_temperature, FISH_DEFAULT_TEMPERATURE, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('3')} Temperature {s}")
         printt()
 
     @staticmethod
@@ -40,10 +39,10 @@ class VoiceFishSubmenu:
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsType.FISH)
+                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.FISH)
                 return False
             case "2":
-                project.clear_voice_and_save(TtsType.FISH)
+                project.clear_voice_and_save(TtsModelInfos.FISH)
                 printt("Cleared")
                 printt()
                 return False

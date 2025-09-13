@@ -5,7 +5,7 @@ from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -66,7 +66,7 @@ class State:
         self.prefs.project_dir = str( project_dir_path )
         self.project = Project(path)
 
-        if Tts.get_type() == TtsType.OUTE:
+        if Tts.get_type() == TtsModelInfos.OUTE:
             # Set Oute default voice
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):

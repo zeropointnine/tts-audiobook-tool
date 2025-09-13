@@ -3,14 +3,14 @@ import os
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class VoiceSubmenuShared:
 
     @staticmethod
-    def ask_and_set_voice_file(project: Project, tts_type: TtsType) -> None:
+    def ask_and_set_voice_file(project: Project, tts_type: TtsModelInfos) -> None:
         """
         Asks for voice sound file path.
         Transcribes text if necessary.
@@ -18,9 +18,9 @@ class VoiceSubmenuShared:
         Prints feedback on success or fail.
         """
 
-        if not tts_type in [TtsType.CHATTERBOX, TtsType.FISH, TtsType.HIGGS, TtsType.VIBEVOICE]:
+        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS, TtsModelInfos.VIBEVOICE]:
             # Rem, we do not save raw voice sound file for Oute
-            raise ValueError("Unsupported tts type")
+            raise ValueError("Unsupported tts type {tts_type}")
 
         path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
         if not path:
@@ -34,7 +34,7 @@ class VoiceSubmenuShared:
             return
         sound = result
 
-        needs_transcript = tts_type in [TtsType.FISH, TtsType.HIGGS]
+        needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS]
         if needs_transcript:
             # Transcribe
             result = WhisperUtil.transcribe_to_words(sound)
@@ -88,3 +88,15 @@ class VoiceSubmenuShared:
             return ""
 
         return path
+
+    @staticmethod
+    def make_parameter_value_string(value: float | int, default_value: float, num_decimals: int) -> str:
+        if value == -1:
+            value = default_value
+        if num_decimals == 0:
+            s = str(int(value))
+        else:
+            s = f"{value:.{num_decimals}f}"
+        if value == default_value:
+            s += " (default)"
+        return s

@@ -86,7 +86,7 @@ class LoudnessNormalizationUtil:
         try:
             process = subprocess.run(ffmpeg_command, capture_output=True, text=True, encoding='utf-8')
         except Exception as e:
-            return str(e)
+            return make_error_string(e)
         if process.returncode != 0:
             return f"Ffmpeg error - return code {process.returncode}"
 

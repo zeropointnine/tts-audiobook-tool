@@ -23,10 +23,6 @@ FFMPEG_COMMAND = "ffmpeg"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 
-# Oute-specific
-OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
-package_dir = os.path.dirname(os.path.abspath(__file__))
-OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
 # App uses a single sample rate for any sound transformations up until outputting final audio
 # This is useful because a single project can use different models which may have different native
@@ -36,24 +32,39 @@ APP_SAMPLE_RATE = 44100
 # Samplerate required for whisper sound input
 WHISPER_SAMPLERATE = 16000
 
-# Fish TTS default temperature, taken from their web demo page
-DEFAULT_TEMPERATURE_FISH = 0.8
+# ---
 
-# Default temperature for Higgs V2, taken from their README example code
-# (The actual inference code uses a default of 1.0 which is _way_ too high for narration)
-DEFAULT_TEMPERATURE_HIGGS = 0.3
+OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
+package_dir = os.path.dirname(os.path.abspath(__file__))
+OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
-# NB, vibevoice gradio demo default is 1.3 (way too low IMO); and api default is 1.0 even
-DEFAULT_CFG_VIBEVOICE = 3.0
+# From oute library code
+OUTE_DEFAULT_TEMPERATURE = 0.4
 
-DEFAULT_SEED = 1000
+# From chatterbox library code
+CHATTERBOX_DEFAULT_EXAGGERATION = 0.5
+CHATTERBOX_DEFAULT_CFG = 0.5
+CHATTERBOX_DEFAULT_TEMPERATURE = 0.8
 
-# Setting this shorter than normal b/c hallucinations can oftentimes fill up entire context (!)
-MAX_TOKENS_VIBE_VOICE = 250
+# From fish gradio demo
+FISH_DEFAULT_TEMPERATURE = 0.8
 
-# Value is from vibevoice library code
-DEFAULT_NUM_STEPS_VIBE_VOICE = 10
+# From higgs project README example code
+# (Their inference code uses a default of 1.0 which is much too high for narration)
+HIGGS_DEFAULT_TEMPERATURE = 0.3
 
+# Vibevoice default cfg (my opinion)
+# Their gradio demo default is 1.3, which is much too low; library code is 1.0 even
+VIBEVOICE_DEFAULT_CFG = 3.0
+
+# From vibevoice library code
+VIBEVOICE_DEFAULT_NUM_STEPS = 10
+
+# Setting this explicitly low b/c hallucinations can oftentimes expand to fill up the entire context (!)
+# and app does not take advantage of model's long context feature
+VIBEVOICE_MAX_TOKENS = 250
+
+# ---
 
 # App's typical ffmpeg options wrt console output, etc
 FFMPEG_TYPICAL_OPTIONS = [
@@ -117,7 +128,7 @@ HINT_LONG_PATHS = Hint(
 HINT_OUTE_CONFIG = Hint(
     "oute_config",
     "This appears to be your first time running the application using the Oute TTS model",
-    "As a reminder, you should adjust/experiment with the\nsettings in the file \"config_oute.py\" for optimal performance."
+    "As a reminder, you'll want to review and adjust the\nsettings in the file \"config_oute.py\" for optimal performance."
 )
 HINT_TKINTER = Hint(
     "tkinter",

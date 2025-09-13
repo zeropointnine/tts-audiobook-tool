@@ -49,35 +49,15 @@ class SoundUtil:
     @staticmethod
     def normalize(arr: ndarray, headroom_db: float = 0.0) -> np.ndarray:
         """
-        Normalizes a 1D NumPy array to a range of [-1, 1] with optional headroom.
+        Does peak normalization of audio, with specified headroom in dB (use positive number)
         """
-        # Ensure the input is a NumPy array
-        arr = np.asarray(arr)
+        # Convert dB to linear scale
+        if headroom_db < 0:
+            headroom_db = 0
+        headroom_linear = 10 ** (-headroom_db / 20)
 
-        # Find the minimum and maximum values of the array
-        arr_min = np.min(arr)
-        arr_max = np.max(arr)
-
-        # --- Edge Case Handling ---
-        # If all elements are the same, the range is 0.
-        # To avoid division by zero, we return an array of zeros.
-        if arr_min == arr_max:
-            return np.zeros_like(arr)
-
-        # --- Min-Max Scaling Formula ---
-        # 1. Scale to the [0, 1] range: (arr - min) / (max - min)
-        # 2. Scale to the [-1, 1] range: 2 * [scaled_to_0_1] - 1
-        # normalized_arr = 2 * (arr - arr_min) / (arr_max - arr_min) - 1
-
-        divisor = max(arr_max, abs(arr_min)) * 1.0
-        normalized_arr = arr / divisor
-
-        if headroom_db > 0:
-            # Calculate the amplitude scaling factor from dB headroom
-            # A positive headroom_db means the peak amplitude should be reduced.
-            # For example, 3dB headroom means the peak should be 10^(-3/20) of its original value.
-            amplitude_scale_factor = 10**(-headroom_db / 20.0)
-            normalized_arr *= amplitude_scale_factor
+        # Peak normalize to 1.0, then apply headroom
+        normalized_arr = librosa.util.normalize(arr, norm=np.inf) * headroom_linear
 
         return normalized_arr
 

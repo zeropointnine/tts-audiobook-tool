@@ -5,7 +5,6 @@ import re
 import copy
 from numpy import ndarray
 import tqdm
-import time
 from typing import List
 from typing import Optional
 from dataclasses import asdict
@@ -26,15 +25,17 @@ from transformers.cache_utils import StaticCache
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.tts_model import HiggsModelProtocol
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 
-class HiggsGenerator:
+class HiggsModel(HiggsModelProtocol):
     """
     Pared-down logic from higgs-audio lib script `generation.py`
     """
 
     def __init__(self, device_code: str):
 
-        start = time.time()
+        super().__init__(TtsModelInfos.HIGGS.value)
 
         device_id = 0
         if device_code == "cuda":
@@ -57,7 +58,7 @@ class HiggsGenerator:
 
     def kill(self) -> None:
         self.audio_tokenizer = None
-        self.model_client.kill()
+        self.model_client.kill() # type: ignore
         self.model_client = None
 
     def generate(
@@ -65,8 +66,8 @@ class HiggsGenerator:
             p_voice_path: str,
             p_voice_transcript: str,
             text: str,
-            temperature: float,
-            seed: int = DEFAULT_SEED
+            seed: int,
+            temperature: float = HIGGS_DEFAULT_TEMPERATURE
     ) -> Sound | str:
 
         if p_voice_path:
@@ -75,9 +76,6 @@ class HiggsGenerator:
         else:
             voice_path = None
             voice_transcript = None
-
-        if temperature == -1:
-            temperature = DEFAULT_TEMPERATURE_HIGGS
 
         scene_prompt = text
         top_k = 50
@@ -102,11 +100,6 @@ class HiggsGenerator:
             speaker_tags=speaker_tags,
         )
 
-        # printt("messages", messages)
-
-        # TODO need higgs-specific normalize transformation; and where did 'normalize_transcript' go?
-        # text = normalize_transcript(text)
-
         chunked_text = prepare_chunk_text(
             text,
             chunk_method=chunk_method,
@@ -114,13 +107,8 @@ class HiggsGenerator:
             chunk_max_num_turns=chunk_max_num_turns,
         )
 
-        # logger.info("Chunks used for generation:")
-        # for idx, chunk_text in enumerate(chunked_text):
-        #     logger.info(f"Chunk {idx}:")
-        #     logger.info(chunk_text)
-        #     logger.info("-----")
-
         # text_output is the input prompt (not sure if transformed in any way or not)
+        assert(self.model_client is not None)
         sound_data, sr, text_output = self.model_client.generate(
             messages=messages,
             audio_ids=audio_ids,
@@ -291,6 +279,7 @@ class HiggsAudioModelClient:
             self._init_static_kv_cache()
 
     def _init_static_kv_cache(self):
+        assert(self._model is not None)
         cache_config = copy.deepcopy(self._model.config.text_config)
         cache_config.num_hidden_layers = self._model.config.text_config.num_hidden_layers
         if self._model.config.audio_dual_ffn_layers:

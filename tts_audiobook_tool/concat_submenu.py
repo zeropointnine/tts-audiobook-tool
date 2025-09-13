@@ -12,7 +12,7 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class ConcatSubmenu:
@@ -66,7 +66,7 @@ class ConcatSubmenu:
 
         print_heading("Loudness normalization:")
 
-        if Tts.get_type() == TtsType.OUTE:
+        if Tts.get_type() == TtsModelInfos.OUTE:
             AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_LOUD_NORM)
 
         for hotkey, norm_type in hotkey_to_norm_type.items():

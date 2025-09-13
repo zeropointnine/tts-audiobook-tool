@@ -28,9 +28,10 @@ class VoiceOuteSubmenu:
         printt(f"{make_hotkey_string('1')} Set voice clone using audio clip (15s or less)")
         printt(f"{make_hotkey_string('2')} Set voice clone using Oute json file")
         printt(f"{make_hotkey_string('3')} Set voice clone to Oute default voice")
-        temp = project.oute_temperature
-        s = "default" if temp == -1 else str(temp)
-        printt(f"{make_hotkey_string('4')} Temperature (currently: {s})")
+
+        s = VoiceSubmenuShared.make_parameter_value_string(project.oute_temperature, OUTE_DEFAULT_TEMPERATURE, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('4')} Temperature {s}")
         printt()
 
     @staticmethod
@@ -49,6 +50,7 @@ class VoiceOuteSubmenu:
                     ask_error(result)
                     return False
                 project.set_oute_voice_and_save(result, "default")
+                printt_set("Voice clone set.")
                 return False
             case "4":
                 value = ask(f"Enter temperature (0.0 < value <= 2.0): ")
@@ -81,18 +83,22 @@ class VoiceOuteSubmenu:
         Tts.clear_stt_models()
         AppUtil.gc_ram_vram()
 
-        interface = Tts.get_oute()
-        try:
-            voice_json = interface.create_speaker(path)
-            printt()
-        except Exception as e:
-            ask_error(f"Error creating voice: {e}")
+        result = Tts.get_oute().create_speaker(path)
+
+        # Clear lingering oute-created whisper instance
+        AppUtil.gc_ram_vram()
+
+        if isinstance(result, str):
+            error = result
+            ask_error(f"Error creating voice: {error}")
             return
 
-        project.set_oute_voice_and_save(voice_json, Path(path).stem)
+        voice_dict = result
+        project.set_oute_voice_and_save(voice_dict, Path(path).stem)
 
-        # Outte created a whisper instance so force its eviction
-        AppUtil.gc_ram_vram()
+        printt()
+        printt_set("Voice clone set.")
+
 
     @staticmethod
     def ask_load_oute_json(project: Project):
@@ -112,3 +118,4 @@ class VoiceOuteSubmenu:
             return
 
         project.set_oute_voice_and_save(result, Path(path).stem)
+        printt_set("Voice clone set.")

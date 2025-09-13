@@ -18,7 +18,7 @@ Plain-vanilla interactive console interface.
 
 ### Web-based player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped github.io url.
+The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
 **Example outputs**, all using the same source text and same 15-second voice clone sample:
 
@@ -51,12 +51,10 @@ First, [ffmpeg](https://ffmpeg.org/download.html) must be in your system path.
 
 Clone the repository and cd into it:
 
-    git clone tts-audiobook-tool
+    git clone https://github.com/zeropointnine/tts-audiobook-tool
     cd tts-audiobook-tool
 
-A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below (and refer to the respective TTS model's project github pages for further guidance as needed). Model-specific options will be enabled automatically in the app based on which virtual environment has been enabled.
-
-In all cases, the CUDA flavor of torch requires an extra install step in the typical manner: First uninstall torch `pip uninstall torch torchvision torchaudio -y`, and then install the CUDA version of torch in its place (See [Pytorch install page](https://pytorch.org/get-started/locally/)).
+A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below. Model-specific options will be enabled automatically in the app based on which virtual environment has been enabled.
 
 Finally, run the app by entering:
 
@@ -76,7 +74,7 @@ Install dependencies:
 
     pip install -r requirements-vibevoice.txt
 
-Note that because Microsoft has (temporarily?) removed the source code from their github repo, we are currently pulling from a [third-party archived version](https://github.com/shijincai/VibeVoice).
+Note that because Microsoft removed the source code from their project github repo, we are pulling from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
 ### Additional steps for CUDA:
 
@@ -88,7 +86,8 @@ Install torch 2.6 for CUDA v12.6:
 
     pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
-Finally, install Flash attention and Triton. The procedure for doing so varies by operating system. On Windows, I'm using a wheel with the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl` and installed Triton using `pip install triton-windows==3.2.0.post19`.
+Finally, install Flash Attention. The procedure for doing so varies by operating system. On Windows, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
+
 
 ## Install for Chatterbox TTS:
 
@@ -104,6 +103,15 @@ Install dependencies:
 
     pip install -r requirements-chatterbox.txt
 
+### Additional steps for CUDA:
+
+Uninstall the vanilla version of torch:
+
+    pip uninstall torch torchaudio
+
+Install torch 2.6 for CUDA v12.6:
+
+    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
 ## Install for Higgs Audio V2:
 
@@ -122,8 +130,9 @@ Install dependencies:
 
     pip install -r requirements-higgs.txt
 
-Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the original repo is missing some needed `__init__.py` files at the moment.
+Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the repo is missing `__init__.py` files required for module use.
 
+If using CUDA, uninstall the vanilla version of torch that just got installed, and install the CUDA version of torch (latest is fine).
 
 ## Install for Fish OpenAudio-S1-mini:
 
@@ -139,9 +148,7 @@ Install dependencies:
 
     pip install -r requirements-fish.txt
 
-And if using CUDA on Windows, also do:
-
-    pip install triton-windows
+If using CUDA, uninstall the vanilla version of torch that just got installed, and install the [CUDA version of torch v2.7.1](https://pytorch.org/get-started/previous-versions/)
 
 And then, two extra steps:
 
@@ -150,6 +157,8 @@ You have to opt in to gain access to the Fish/OpenAudio model by visiting the Fi
 Then, [generate a Hugging Face access token](https://huggingface.co/settings/tokens) and paste the token at the command line after entering:
 
     huggingface-cli login
+
+When the app runs for the first time and tries to download the models from huggingface, it should now be authorized to do so.
 
 ## Install for Oute TTS:
 
@@ -165,9 +174,11 @@ Install dependencies:
 
     pip install -r requirements-oute.txt
 
+If using CUDA, uninstall the vanilla version of torch that just got installed, and install the [CUDA version of torch v2.6.0](https://pytorch.org/get-started/previous-versions/)
+
 ### Oute TTS model configuration
 
-Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends, model sizes and quantizations. You will need to review and hand-edit the Python file **`config_oute.py`** accordingly.
+Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends, model sizes and quantizations. You will need to review and hand-edit the file **`config_oute.py`** accordingly.
 
 The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. But here are some recommendations based on my own testing...
 
@@ -175,12 +186,10 @@ The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents th
 
 Prefer the *ExLllama2* backend if at all possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires successfully installing into the environment three extra things:
 - exllama2 library (`pip install exllamav2`)
-- [Flash Attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features)
+- [Flash Attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) (note that on Windows, you may need to source a compatible wheel for this)
 - Triton (eg, on Windows, `pip install triton-windows`).
 
-Alternatively, `Backend.HF` is also hardware accelerated but considerably slower.
-
-I couldn't get acceleration going using `Backend.LLAMACPP` but I'm not sure if that's just be me.
+Alternatively, `Backend.HF` is also hardware accelerated but considerably slower. Flash Attention 2 is optional in this case, and also does not speed up inference in practice.
 
 **Mac with Apple silicon:**
 
@@ -210,7 +219,7 @@ These are my anecdotal inference speeds. For inference, the app adopts each resp
 | Fish OpenAudio S1-mini | GTX 3080 Ti | 500+% realtime | best combination of inference speed and quality output IMO
 | Chatterbox | GTX 3080 Ti | ~130% realtime
 | Chatterbox | Macbook Pro M1 (MPS) | ~20% realtime
-| Oute | GTX 3080 Ti | ~85% realtime | using `outetts.Backend.EXL2`
+| Oute | GTX 3080 Ti | ~90% realtime | using `outetts.Backend.EXL2`
 | Oute | Macbook Pro M1 (MPS) | ~20% realtime | using `outetts.Backend.LLAMACPP`
 
 

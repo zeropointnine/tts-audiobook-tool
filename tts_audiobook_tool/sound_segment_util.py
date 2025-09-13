@@ -6,7 +6,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
@@ -84,7 +84,7 @@ class SoundSegmentUtil:
         if not AppUtil.is_app_hash(hash):
             return None
 
-        if tags[2] in TtsType.all_file_tags():
+        if tags[2] in TtsModelInfos.all_file_tags():
             # Must be [index, hash, model, voice, ...]
             model = tags[2]
             if len(tags) < 4:

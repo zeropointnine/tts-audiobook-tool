@@ -1,6 +1,6 @@
 import importlib
-import logging
 from pathlib import Path
+import sys
 import time
 import torch
 import torchaudio
@@ -8,20 +8,24 @@ from huggingface_hub import snapshot_download  # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.tts_model import FishModelProtocol
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
-class FishGenerator:
+class FishModel(FishModelProtocol):
     """
     Fish TTS inference logic
 
     Pieced together from the two main fish inference scripts:
-    "fish_speech/models/dac/inference.py"
-    "fish_speech/models/text2semantic/inference.py"
+    fish_speech/models/dac/inference.py
+    fish_speech/models/text2semantic/inference.py
     See: https://github.com/fishaudio/fish-speech/blob/main/docs/en/inference.md
     """
 
     def __init__(self, device: str):
+
+        super().__init__(info=TtsModelInfos.FISH.value)
 
         # TODO verify mpc; also mpc + compile? probably not presumably?
         self.device = device
@@ -62,17 +66,14 @@ class FishGenerator:
 
         self._voice_clone: VoiceClone | None = None
 
-    def kill(self) -> None:
-        # Clear all member variables in attempt to clear all resources
-        self.dac_model = None
-        self._voice_clone = None
-        self.t2s_model = None
-        self.decode_one_token = None
+        # Now that fish has printed init info, lower log level
+        from loguru import logger
+        logger.remove()
+        logger.add(sys.stderr, level="WARNING", filter="fish_speech")
+
 
     def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
-        """
-        Use empty `path` to remove
-        """
+
         if self._voice_clone and source_path == self._voice_clone.source_path:
             return
 
@@ -89,10 +90,19 @@ class FishGenerator:
     def clear_voice_clone(self) -> None:
         self._voice_clone = None
 
+
+    def kill(self) -> None:
+        # Clear all member variables in attempt to clear all resources
+        self.dac_model = None
+        self._voice_clone = None
+        self.t2s_model = None
+        self.decode_one_token = None
+
+
     def generate(self, text: str, temperature: float = -1) -> Sound | str:
 
         if temperature == -1:
-            temperature = DEFAULT_TEMPERATURE_FISH
+            temperature = FISH_DEFAULT_TEMPERATURE
 
         with torch.no_grad(): # !!important
 
@@ -115,6 +125,10 @@ class FishGenerator:
 
             prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
 
+            # Not currently using these params:
+            # top_p=0.5,
+            # repetition_penalty=1.5
+
             semantic_tokens = None
             for response in generate_long(
                 model=self.t2s_model,
@@ -124,10 +138,6 @@ class FishGenerator:
                 prompt_text=prompt_text,
                 prompt_tokens=prompt_tokens,
                 temperature=temperature
-
-                # TODO: add as options maybe
-                # top_p=0.5,
-                # repetition_penalty=1.5,
             ):
                 if response.action == "sample":
                     if response.codes is None:

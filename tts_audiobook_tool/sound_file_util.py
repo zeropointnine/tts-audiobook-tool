@@ -28,7 +28,7 @@ class SoundFileUtil:
             data, sr = librosa.load(path)
             sr = int(sr)
         except Exception as e:
-            return str(e)
+            return make_error_string(e)
 
         if target_sr != 0 and target_sr != sr:
             data = librosa.resample(data, orig_sr=sr, target_sr=16000)
@@ -120,7 +120,7 @@ class SoundFileUtil:
                     f.write(f"file '{escaped_path}'\n")
         except Exception as e:
             delete_silently(temp_text_path)
-            return str(e)
+            return make_error_string(e)
 
         # [2] Do concat
 

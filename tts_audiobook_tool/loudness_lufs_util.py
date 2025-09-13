@@ -3,6 +3,8 @@ import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
+from tts_audiobook_tool.util import *
+
 
 class LoudnessLufsUtil:
     """
@@ -84,7 +86,7 @@ class LoudnessLufsUtil:
         try:
             audio, sample_rate = sf.read(file_path, dtype='float32')
         except Exception as e:
-            return str(e)
+            return make_error_string(e)
         return LoudnessLufsUtil.calculate_integrated_loudness(audio, sample_rate)
 
     @staticmethod

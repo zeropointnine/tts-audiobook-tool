@@ -82,7 +82,7 @@ class Mp3ConcatTranscodeUtil:
                     f.write(f"file '{s}'\n")
         except Exception as e:
             delete_silently(temp_text_file_path)
-            return str(e)
+            return make_error_string(e)
 
         # Make ffmpeg command
         partial_command = FFMPEG_TYPICAL_OPTIONS[:]

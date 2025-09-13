@@ -4,7 +4,7 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_info import TtsType
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
@@ -18,7 +18,7 @@ AppUtil.init_logging()
 printt()
 
 # TTS model check (required)
-err = Tts.init_active_model()
+err = Tts.init_model_type()
 if err:
     ask_error(err)
     exit(1)
@@ -52,7 +52,7 @@ if not util.find_spec("tkinter"):
 if not is_long_path_enabled():
     AppUtil.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
 
-if Tts.get_type() == TtsType.OUTE:
+if Tts.get_type() == TtsModelInfos.OUTE:
     AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_CONFIG, and_prompt=True)
 
 # Start proper

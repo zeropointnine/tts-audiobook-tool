@@ -1,5 +1,7 @@
-# An archived fork of VibeVoice before Microsoft nuked the repository in early 9/2025
-git+https://github.com/shijincai/VibeVoice@a8b287e80861672844ed1f45d67f54899a7d8a8b
+# Archived fork of VibeVoice (due to removal of vibevoice project's code from github)
+git+https://github.com/vibevoice-community/VibeVoice@d244401c9d761b9f059dff3c6a6411e77a0a5edf
+
+triton-windows==3.3.1.post19; sys_platform == 'win32'
 
 faster-whisper==1.2.0
 ffmpeg-python==0.2.0

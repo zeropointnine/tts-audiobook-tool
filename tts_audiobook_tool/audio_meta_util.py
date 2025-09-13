@@ -7,6 +7,7 @@ from mutagen.flac import FLAC, FLACNoHeaderError, FLACVorbisError
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.util import *
 
 class AudioMetaUtil:
 
@@ -50,7 +51,7 @@ class AudioMetaUtil:
             flac.save()
 
         except (FLACNoHeaderError, FLACVorbisError, IOError, Exception) as e:
-            return str(e)
+            return make_error_string(e)
 
         return "" # success
 
@@ -75,7 +76,7 @@ class AudioMetaUtil:
             utf8_bytes = freeform_tag_list[0]
             string = str(utf8_bytes, encoding='utf-8')
         except (FileNotFoundError, KeyError, UnicodeDecodeError, Exception) as e:
-            return "", str(e)
+            return "", make_error_string(e)
 
         return string, ""
 
@@ -91,7 +92,7 @@ class AudioMetaUtil:
         try:
             utf8_bytes = value.encode('utf-8')
         except UnicodeEncodeError as e:
-            return str(e)
+            return make_error_string(e)
 
         try:
             file_to_modify = dest_path if dest_path else src_path

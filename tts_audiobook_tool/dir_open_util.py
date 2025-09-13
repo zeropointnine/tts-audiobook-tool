@@ -3,6 +3,8 @@ import subprocess
 import platform
 from pathlib import Path
 
+from tts_audiobook_tool.util import *
+
 class DirOpenUtil:
 
     @staticmethod
@@ -52,4 +54,4 @@ class DirOpenUtil:
             return ""
 
         except Exception as e:
-            return str(e)
+            return make_error_string(e)
