@@ -14,20 +14,22 @@ class OptionsSubmenu:
 
         while True:
 
-            result = AppUtil.get_vram_usage_nv()
-            if result:
-                vram = f" {COL_DIM}(VRAM in use: {result[0]:.1f} GB / {result[1]:.1f} GB)"
+            vram_bytes = get_torch_allocated_vram()
+            if vram_bytes == -1:
+                vram_label = ""
             else:
-                vram = ""
+                vram_label = f"{COL_DIM}(currently allocated VRAM: {make_gb_string(vram_bytes)})"
 
             print_heading("Options/Tools:")
             printt(f"{make_hotkey_string('1')} Real-time generation and playback")
             printt(f"{make_hotkey_string('2')} Enhance existing audiobook file {COL_DIM}(experimental)")
             printt(f"{make_hotkey_string('3')} Transcode and concatenate a directory of MP3 files to AAC/M4A")
-            printt(f"{make_hotkey_string('4')} Transcode an app-created FLAC to AAC/M4A, preserving its custom metadata")
-            printt(f"{make_hotkey_string('5')} Try to unload models{vram}")
+            printt(f"{make_hotkey_string('4')} Transcode an app-created FLAC to AAC/M4A, preserving custom metadata")
+            printt(f"{make_hotkey_string('5')} Attempt to unload models {vram_label}")
             printt(f"{make_hotkey_string('6')} Reset contextual hints")
             printt()
+
+            print("xxx", Tts._model_params)
 
             hotkey = ask_hotkey()
             match hotkey:

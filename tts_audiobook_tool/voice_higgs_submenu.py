@@ -1,4 +1,5 @@
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts_model import HiggsProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -19,7 +20,7 @@ class VoiceHiggsSubmenu:
     @staticmethod
     def _print(project: Project) -> None:
 
-        print_heading(f"Voice clone and options")
+        print_heading(f"Voice clone and model settings")
 
         label = make_currently_string(project.get_voice_label())
         s = f"{make_hotkey_string('1')} Select voice clone sample {label}"
@@ -28,7 +29,9 @@ class VoiceHiggsSubmenu:
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.higgs_temperature, HIGGS_DEFAULT_TEMPERATURE, 1)
+        s = VoiceSubmenuShared.make_parameter_value_string(
+            project.higgs_temperature, HiggsProtocol.DEFAULT_TEMPERATURE, 1
+        )
         s = make_currently_string(s)
         printt(f"{make_hotkey_string('3')} Temperature {s}")
 

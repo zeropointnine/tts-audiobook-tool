@@ -47,8 +47,9 @@ if not_found:
 # Other one-time messages (which are not blockers)
 prefs = Prefs.load()
 
-if not util.find_spec("tkinter"):
+if not does_import_test_pass("tkinter"): # To test for tkinter functionality, must do concrete import
     AppUtil.show_hint_if_necessary(prefs, HINT_TKINTER, and_prompt=True)
+
 if not is_long_path_enabled():
     AppUtil.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
 

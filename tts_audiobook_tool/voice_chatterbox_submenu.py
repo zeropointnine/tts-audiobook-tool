@@ -1,4 +1,5 @@
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts_model import ChatterboxProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -20,22 +21,26 @@ class VoiceChatterboxSubmenu:
     @staticmethod
     def _print(project: Project) -> None:
 
-        print_heading(f"Voice clone and options")
+        print_heading(f"Voice clone and model settings")
 
-        s = f"{make_hotkey_string('1')} Select voice clone sample"
-        s += f" {COL_DIM}(currently: {COL_ACCENT}{project.get_voice_label()}{COL_DIM})"
+        s = make_currently_string(project.get_voice_label())
+        s = f"{make_hotkey_string('1')} Select voice clone sample {s}"
         printt(s)
+
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_temperature, CHATTERBOX_DEFAULT_TEMPERATURE, 1)
-        printt(f"{make_hotkey_string('3')} Temperature {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_temperature, ChatterboxProtocol.DEFAULT_TEMPERATURE, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('3')} Temperature {s}")
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_exaggeration, CHATTERBOX_DEFAULT_EXAGGERATION, 1)
-        printt(f"{make_hotkey_string('4')} Exaggeration {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_exaggeration, ChatterboxProtocol.DEFAULT_EXAGGERATION, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('4')} Exaggeration {s}")
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_cfg, CHATTERBOX_DEFAULT_CFG, 1)
-        printt(f"{make_hotkey_string('5')} Cfg/pace {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+        s = VoiceSubmenuShared.make_parameter_value_string(project.chatterbox_cfg, ChatterboxProtocol.DEFAULT_CFG, 1)
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('5')} Cfg/pace {s}")
         printt()
 
     @staticmethod

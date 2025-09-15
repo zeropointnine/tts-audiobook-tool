@@ -116,7 +116,7 @@ Install torch 2.6 for CUDA v12.6:
 ## Install for Higgs Audio V2:
 
 > **ℹ️ Note!**
-> Higgs V2 pretty much requires 24GB VRAM (yes really)
+> Higgs V2 requires CUDA, and 24 GB is almost a necessity (yes really)
 
 Initialize a Python v3.12 virtual environment named "venv-higgs". For example:
 
@@ -132,7 +132,7 @@ Install dependencies:
 
 Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the repo is missing `__init__.py` files required for module use.
 
-If using CUDA, uninstall the vanilla version of torch that just got installed, and install the CUDA version of torch (latest is fine).
+Uninstall the vanilla version of torch that just got installed, and install the CUDA version of torch (latest is fine).
 
 ## Install for Fish OpenAudio-S1-mini:
 
@@ -159,6 +159,8 @@ Then, [generate a Hugging Face access token](https://huggingface.co/settings/tok
     huggingface-cli login
 
 When the app runs for the first time and tries to download the models from huggingface, it should now be authorized to do so.
+
+On Linux and macOS, portaudio must be installed (eg, `brew install portaudio`)
 
 ## Install for Oute TTS:
 
@@ -214,13 +216,15 @@ These are my anecdotal inference speeds. For inference, the app adopts each resp
 | TTS Model | Hardware | Speed | Notes |
 | ----- | -------- | ----- | ----- |
 | VibeVoice 1.5B | GTX 3080 Ti | ~120% realtime | with Flash attention 2 enabled
+| VibeVoice 1.5B | Macbook Pro M1 | ~40% realtime |
 | Higgs V2 3B | GTX 4090 | 200+% realtime | inference speed inversely proportional to voice sample duration, FYI
 | Higgs V2 3B | GTX 3080 Ti | N/A | does not fit in 12 GB VRAM
 | Fish OpenAudio S1-mini | GTX 3080 Ti | 500+% realtime | best combination of inference speed and quality output IMO
+| Fish OpenAudio S1-mini | Macbook Pro M1 | ~15% realtime
 | Chatterbox | GTX 3080 Ti | ~130% realtime
-| Chatterbox | Macbook Pro M1 (MPS) | ~20% realtime
+| Chatterbox | Macbook Pro M1 (MPS) | 20-35% realtime
 | Oute | GTX 3080 Ti | ~90% realtime | using `outetts.Backend.EXL2`
-| Oute | Macbook Pro M1 (MPS) | ~20% realtime | using `outetts.Backend.LLAMACPP`
+| Oute | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
 
 
 # Update highlights

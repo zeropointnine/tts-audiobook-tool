@@ -102,7 +102,7 @@ class FishModel(FishModelProtocol):
     def generate(self, text: str, temperature: float = -1) -> Sound | str:
 
         if temperature == -1:
-            temperature = FISH_DEFAULT_TEMPERATURE
+            temperature = FishModelProtocol.DEFAULT_TEMPERATURE
 
         with torch.no_grad(): # !!important
 

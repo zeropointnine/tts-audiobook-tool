@@ -38,9 +38,10 @@ class ConcatSubmenu:
             printt(f"{make_hotkey_string('1')} Create FLAC file")
             printt(f"{make_hotkey_string('2')} Create AAC/M4A file")
             s = "none" if not state.project.section_dividers else f"{len(state.project.section_dividers)} cut point/s"
-            printt(f"{make_hotkey_string('3')} Define file cut points {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+            printt(f"{make_hotkey_string('3')} Define file cut points {make_currently_string(s)}")
+
             s = state.prefs.normalization_type.value.label
-            printt(f"{make_hotkey_string('4')} Loudness normalization {COL_DIM}(currently: {COL_ACCENT}{s}{COL_DIM})")
+            printt(f"{make_hotkey_string('4')} Loudness normalization {make_currently_string(s)}")
             printt()
 
             hotkey = ask_hotkey()

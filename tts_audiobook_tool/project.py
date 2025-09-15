@@ -19,6 +19,8 @@ class Project:
     Project settings data-like class with convenience functions
     """
 
+    # TODO: encapsulate the serializable values into a NamedTuple and refactor accordingly
+
     dir_path: str
 
     text_segments: list[TextSegment] = []
@@ -42,6 +44,7 @@ class Project:
     higgs_temperature: float = -1
 
     vibevoice_voice_file_name: str = ""
+    vibevoice_model_path: str = ""
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
 
@@ -133,6 +136,8 @@ class Project:
                 project.oute_voice_json = result
 
 
+        # TODO: need validation logic for each of these properties (especially file-related ones)
+
         # Chatterbox
         project.chatterbox_voice_file_name = d.get("chatterbox_voice_file_name", "")
         project.chatterbox_temperature = d.get("chatterbox_temperature", -1)
@@ -151,6 +156,7 @@ class Project:
 
         # VibeVoice
         project.vibevoice_voice_file_name = d.get("vibevoice_voice_file_name", "")
+        project.vibevoice_model_path = d.get("vibevoice_model_path", "")
         project.vibevoice_cfg = d.get("vibevoice_cfg", -1)
         project.vibevoice_steps = d.get("vibevoice_steps", -1)
 
@@ -176,6 +182,7 @@ class Project:
             "higgs_voice_text": self.higgs_voice_transcript,
             "higgs_temperature": self.higgs_temperature,
             "vibevoice_voice_file_name": self.vibevoice_voice_file_name,
+            "vibevoice_model_path": self.vibevoice_model_path,
             "vibevoice_cfg": self.vibevoice_cfg,
             "vibevoice_steps": self.vibevoice_steps
         }

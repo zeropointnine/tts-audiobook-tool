@@ -25,7 +25,7 @@ from transformers.cache_utils import StaticCache
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.tts_model import HiggsModelProtocol
+from tts_audiobook_tool.tts_model import HiggsModelProtocol, HiggsProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 
 class HiggsModel(HiggsModelProtocol):
@@ -54,7 +54,6 @@ class HiggsModel(HiggsModelProtocol):
             max_new_tokens=MAX_NEW_TOKENS,
             use_static_kv_cache=use_static_kv_cache,
         )
-        # printt("init elapsed", (time.time() - start))
 
     def kill(self) -> None:
         self.audio_tokenizer = None
@@ -67,7 +66,7 @@ class HiggsModel(HiggsModelProtocol):
             p_voice_transcript: str,
             text: str,
             seed: int,
-            temperature: float = HIGGS_DEFAULT_TEMPERATURE
+            temperature: float = HiggsProtocol.DEFAULT_TEMPERATURE
     ) -> Sound | str:
 
         if p_voice_path:

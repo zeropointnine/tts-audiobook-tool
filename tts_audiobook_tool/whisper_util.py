@@ -46,59 +46,6 @@ class WhisperUtil:
         words = WhisperUtil.get_words_from_segments(segments)
         return words
 
-    @staticmethod
-    def make_aligned_words(sound: Sound, segments_list: list[Segment]) -> list[Word]:
-        """ TODO: Untested because dependency incompatibility hell. """
-
-        import whisperx # type: ignore
-
-        # Prepare the segments in the format whisperx expects
-        whisper_results = { "segments": [] }
-        for segment in segments_list:
-            segment_dict = {
-                "text": segment.text,
-                "start": segment.start,
-                "end": segment.end,
-                "words": [ { "word": w.word, "start": w.start, "end": w.end } for w in segment.words or [] ]
-            }
-            whisper_results["segments"].append(segment_dict)
-
-        start = time.time()
-        model, meta, device = Tts.get_align_model_and_meta_and_device()
-        result_aligned = whisperx.align(whisper_results["segments"], model, meta, sound.data, device=device)
-        print("xxx", f"elapsed {(time.time() - start):.2f}")
-
-        # --- Before and After Debugging ---
-        print("--- Timestamp Comparison ---")
-        print(f"{'Word':<20} | {'Before (faster-whisper)':<25} | {'After (whisperx)':<25}")
-        print("-" * 75)
-
-        original_words = [word for segment in segments_list for word in segment.words or []]
-        aligned_words_list = [ word_info for segment in result_aligned["segments"] for word_info in segment.get("words", []) ]
-
-        for i in range(min(len(original_words), len(aligned_words_list))):
-            original_word = original_words[i]
-            aligned_word_info = aligned_words_list[i]
-            before_ts = f"{original_word.start:.2f} -> {original_word.end:.2f}"
-            after_ts = f"{aligned_word_info.get('start', 'N/A'):.2f} -> {aligned_word_info.get('end', 'N/A'):.2f}"
-            print(f"{original_word.word:<20} | {before_ts:<25} | {after_ts:<25}")
-
-        # Create a new list of Word objects with updated timings
-        updated_words: list[Word] = []
-        for segment in result_aligned["segments"]:
-            if "words" in segment:
-                for word_info in segment["words"]:
-                    # Create a new Word object with the updated timestamps
-                    updated_word = ConcreteWord(
-                        start=word_info.get('start'),
-                        end=word_info.get('end'),
-                        word=word_info['word'],
-                        probability=0.0 # whisperx does not provide word-level probability in the same way
-                    )
-                    updated_words.append(updated_word)
-
-        return updated_words
-
     # ---
 
     @staticmethod

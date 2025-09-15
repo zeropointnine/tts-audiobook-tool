@@ -3,8 +3,7 @@ from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForCondition
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol
+from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import printt
 
@@ -15,14 +14,20 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
     Mostly copy-pasted from: VibeVoice/demo/inference_from_file.py
     """
 
-    def __init__(self, device_map: str, max_new_tokens: int | None = None):
+    def __init__(
+            self,
+            device_map: str,
+            model_path: str = "",
+            max_new_tokens: int | None = None,
+    ):
 
         super().__init__(TtsModelInfos.VIBEVOICE.value)
 
         self.max_new_tokens = max_new_tokens
 
-        # Load processor
-        model_path = "microsoft/VibeVoice-1.5b"
+        if not model_path:
+            model_path = VibeVoiceProtocol.DEFAULT_MODEL_PATH
+
         self.processor = VibeVoiceProcessor.from_pretrained(model_path)
 
         # Determine attention implementation type
@@ -63,8 +68,8 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             self,
             text: str,
             voice_path: str,
-            cfg_scale: float=VIBEVOICE_DEFAULT_CFG,
-            num_steps: int=VIBEVOICE_DEFAULT_NUM_STEPS,
+            cfg_scale: float=VibeVoiceProtocol.DEFAULT_CFG,
+            num_steps: int=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
     ) -> Sound | str:
         """
         Returns Sound or error string

@@ -15,7 +15,8 @@ class ProjectSubmenu:
 
             proj_dir = state.project.dir_path
 
-            s = f"Project directory {COL_DIM}(currently: {COL_ACCENT}{proj_dir or 'none'}{COL_DIM})"
+            s = make_currently_string(proj_dir or "none")
+            s = f"Project directory {s}"
             print_heading(s)
 
             printt(f"{make_hotkey_string('1')} Start a new project")
@@ -45,7 +46,7 @@ class ProjectSubmenu:
         Asks user for directory and creates new project
         Returns True on success
         """
-        s = "Enter empty directory path for new project:"
+        s = "Enter the path to an empty directory:"
         s2 = "Select empty directory"
         dir_path = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=False)
         if not dir_path:
@@ -55,11 +56,7 @@ class ProjectSubmenu:
             ask_error(err)
             return
 
-        hint_text = HINT_PROJECT_SUBDIRS.text
-        hint_text = hint_text.replace("%1", os.path.join(dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR))
-        hint_text = hint_text.replace("%2", os.path.join(dir_path, PROJECT_CONCAT_SUBDIR))
-        hint = Hint(HINT_PROJECT_SUBDIRS.key, HINT_PROJECT_SUBDIRS.heading, hint_text)
-        AppUtil.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
+        AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
 
         printt_set("Project directory set.")
         return

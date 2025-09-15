@@ -3,6 +3,7 @@ from pathlib import Path
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts_model import OuteProtocol
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
@@ -23,13 +24,15 @@ class VoiceOuteSubmenu:
     @staticmethod
     def _print(project: Project) -> None:
 
-        print_heading(f"Voice clone and options")
+        print_heading(f"Voice clone and model settings")
 
         printt(f"{make_hotkey_string('1')} Set voice clone using audio clip (15s or less)")
         printt(f"{make_hotkey_string('2')} Set voice clone using Oute json file")
         printt(f"{make_hotkey_string('3')} Set voice clone to Oute default voice")
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.oute_temperature, OUTE_DEFAULT_TEMPERATURE, 1)
+        s = VoiceSubmenuShared.make_parameter_value_string(
+            project.oute_temperature, OuteProtocol.DEFAULT_TEMPERATURE, 1
+        )
         s = make_currently_string(s)
         printt(f"{make_hotkey_string('4')} Temperature {s}")
         printt()
@@ -80,7 +83,7 @@ class VoiceOuteSubmenu:
             return
 
         # Outte is about to load its own instance of whisper, so better clear ours first
-        Tts.clear_stt_models()
+        Tts.clear_stt_model()
         AppUtil.gc_ram_vram()
 
         result = Tts.get_oute().create_speaker(path)

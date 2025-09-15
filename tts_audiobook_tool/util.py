@@ -15,6 +15,9 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.l import L
 
+"""
+Various small util functions, both app-specific and general
+"""
 
 def printt(s: str="") -> None:
     """
@@ -162,7 +165,7 @@ def make_error_string(e: Exception) -> str:
     """
     Standard way for the app to display exceptions
     """
-    return f"{type(e).__name__}: {make_error_string(e)}"
+    return f"{type(e).__name__}: {e}"
 
 def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
     """
@@ -206,8 +209,11 @@ def estimated_wav_seconds(file_path: str) -> float:
 def make_hotkey_string(hotkey: str, color: str=COL_ACCENT) -> str:
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
-def make_currently_string(value: str) -> str:
-    return f"{COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
+def make_currently_string(value: str, label: str="currently: ") -> str:
+    return f"{COL_DIM}({label}{COL_ACCENT}{value}{COL_DIM})"
+
+def make_gb_string(bytes: int) -> str:
+    return  f"{bytes / (1024 ** 3):.1f} GB"
 
 def lerp_clamped(
     value: float,
@@ -489,3 +495,27 @@ def save_json(json_object: Any, path: str) -> str:
             return ""
     except Exception as e:
         return f"Error saving json: {e}"
+
+def does_import_test_pass(module_name: str) -> bool:
+    """
+    Imports module to see if it it exists and appears valid.
+    This is more reliable than simply using find_spec() by itself but ofc can induce side-effects.
+    """
+    # First check if the 'spec' exists at all (is 'side-effect free')
+    from importlib.util import find_spec
+    if not find_spec(module_name):
+        return False
+
+    try:
+        __import__(module_name)
+        return True
+    except ImportError:
+        return False
+
+def get_torch_allocated_vram() -> int:
+    """ Returns -1 if no cuda"""
+    import torch
+    if torch.cuda.is_available(): # works for ROCm too, fwiw
+        return torch.cuda.memory_allocated()
+    else:
+        return -1

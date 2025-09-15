@@ -3,10 +3,8 @@ from __future__ import annotations
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.generate_util import GenerateUtil
-from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class GenerateSubmenu:
@@ -32,13 +30,11 @@ class GenerateSubmenu:
             printt(s)
 
             failed_items = state.project.sound_segments.get_sound_segments_with_tag("fail")
-            printt(f"{make_hotkey_string('3')} Regenerate audio segments tagged as having potential errors {COL_DIM}(currently: {COL_DEFAULT}{len(failed_items)}{COL_DIM} file/s)")
-
-            # s = f"{make_hotkey_string('4')} Play audio after each segment is generated "
-            # s += f"{COL_DIM}(currently: {COL_ACCENT}{state.prefs.play_on_generate}{COL_DIM})"
-            # printt(s)
-
+            s = f"{str(len(failed_items))} {'item' if len(failed_items) == 1 else 'items'}"
+            s = make_currently_string(s)
+            printt(f"{make_hotkey_string('3')} Regenerate audio segments tagged as having potential errors {s}")
             printt()
+
             hotkey = ask_hotkey()
             if not hotkey:
                 return
@@ -54,12 +50,6 @@ class GenerateSubmenu:
                     GenerateSubmenu.ask_items(state)
                 case "3":
                     GenerateSubmenu.do_regenerate_items(state)
-                # case "x":
-                #     state.prefs.play_on_generate = not state.prefs.play_on_generate
-                #     printt(f"Set to: {state.prefs.play_on_generate}")
-                #     printt()
-                #     if MENU_CLEARS_SCREEN:
-                #         ask_continue()
                 case _:
                     break
 

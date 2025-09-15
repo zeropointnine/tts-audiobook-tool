@@ -1,4 +1,6 @@
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model import VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -19,7 +21,7 @@ class VoiceVibeVoiceSubmenu:
     @staticmethod
     def _print(project: Project) -> None:
 
-        print_heading(f"Voice clone and options")
+        print_heading(f"Voice clone and model settings")
 
         label = make_currently_string(project.get_voice_label())
         s = f"{make_hotkey_string('1')} Select voice clone sample {label}"
@@ -28,13 +30,21 @@ class VoiceVibeVoiceSubmenu:
         s = f"{make_hotkey_string('2')} Clear voice clone"
         printt(s)
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.vibevoice_cfg, VIBEVOICE_DEFAULT_CFG, 1)
+        s = project.vibevoice_model_path if project.vibevoice_model_path else "none"
         s = make_currently_string(s)
-        printt(f"{make_hotkey_string('3')} CFG scale {s}")
+        printt(f"{make_hotkey_string('3')} VibeVoice custom model path {s}")
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.vibevoice_steps, VIBEVOICE_DEFAULT_NUM_STEPS, 0)
+        s = VoiceSubmenuShared.make_parameter_value_string(
+            project.vibevoice_cfg, VibeVoiceProtocol.DEFAULT_CFG, 1
+        )
         s = make_currently_string(s)
-        printt(f"{make_hotkey_string('4')} Steps {s}")
+        printt(f"{make_hotkey_string('4')} CFG scale {s}")
+
+        s = VoiceSubmenuShared.make_parameter_value_string(
+            project.vibevoice_steps, VibeVoiceProtocol.DEFAULT_NUM_STEPS, 0
+        )
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('5')} Steps {s}")
         printt()
 
     @staticmethod
@@ -51,6 +61,22 @@ class VoiceVibeVoiceSubmenu:
                 printt()
                 return False
             case "3":
+                s = "Select local directory containing VibeVoice model (Hugging Face model repository format)"
+                dir_path = ask_dir_path(s, s)
+                if dir_path and not os.path.exists(dir_path):
+                    ask_continue("No such directory")
+                    return False
+                if dir_path == project.vibevoice_model_path:
+                    return False
+                if project.vibevoice_model_path and not dir_path:
+                    # Treat as "erase"
+                    project.vibevoice_model_path = ""
+                    project.save()
+                    printt_set(f"Set to none; will use default model {VibeVoiceProtocol.DEFAULT_MODEL_NAME}")
+                    return False
+                VoiceVibeVoiceSubmenu._validate_and_set_custom_path(project, dir_path)
+                return False
+            case "4":
                 # Sane legal range (IMO)
                 value = ask(f"Enter cfg (1.3 <= value <= 7.0): ")
                 if not value:
@@ -65,7 +91,7 @@ class VoiceVibeVoiceSubmenu:
                 except:
                     ask_error("Bad value")
                 return False
-            case "4":
+            case "5":
                 # Sane legal range (IMO)
                 value = ask(f"Enter num steps (1 <= value <= 30): ")
                 if not value:
@@ -83,3 +109,30 @@ class VoiceVibeVoiceSubmenu:
 
             case _:
                 return True
+
+    @staticmethod
+    def _validate_and_set_custom_path(project: Project, path: str) -> None:
+
+        Tts.set_model_params( {
+            "vibevoice_model_path": path
+        } )
+
+        # Test out the path
+        try:
+            _ = Tts.get_vibevoice()
+        except (OSError, Exception) as e:
+            # Revert change
+            Tts.set_model_params( {} )
+
+            printt()
+            printt("Directory contents appear to be invalid:")
+            printt(make_error_string(e))
+            printt()
+            ask_continue()
+            return
+
+        # Commit change
+        project.vibevoice_model_path = path
+        project.save()
+        printt()
+        printt_set(f"Custom model path set: {path}")

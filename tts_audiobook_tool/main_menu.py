@@ -50,19 +50,19 @@ class MainMenu:
         if not state.prefs.project_dir:
             s += f"{COL_DIM}(Must set this first)"
         else:
-            s += f"{COL_DIM}(currently: {COL_ACCENT}{state.prefs.project_dir}{COL_DIM})"
+            s += make_currently_string(state.prefs.project_dir)
         printt(s)
 
         # Voice
         if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
-            s = f"{make_hotkey_string('V')} Voice clone "
-            s += f"{COL_DIM}(currently: {COL_ACCENT}{state.project.get_voice_label()}{COL_DIM})"
-            printt(s)
+            s = make_currently_string(state.project.get_voice_label(), label="current voice clone: ")
+            printt(f"{make_hotkey_string('V')} Voice clone and model settings {s}")
 
         # Text
         if state.prefs.project_dir:
             s = f"{make_hotkey_string('T')} Text "
-            s += f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
+            label = f"{len(state.project.text_segments)} {'line' if len(state.project.text_segments) == 1 else 'lines'}"
+            s += make_currently_string(label)
             printt(s)
 
         # Generate audio

@@ -21,11 +21,13 @@ class RealTimeSubmenu:
         printt(f"{make_hotkey_string('1')} Start")
 
         if RealTimeSubmenu.use_custom_text:
-            s = f"currently: custom text, {len(RealTimeSubmenu.custom_text_segments)} lines"
+            s = f"custom text, {len(RealTimeSubmenu.custom_text_segments)} lines"
         else:
-            s = "currently: project text"
-        printt(f"{make_hotkey_string('2')} Text source {COL_DIM}({s})")
-        printt(f"{make_hotkey_string('3')} Start at line number {COL_DIM}(currently: {COL_ACCENT}{RealTimeSubmenu.start_index + 1}{COL_DIM})")
+            s = "project text"
+        s = make_currently_string(s)
+        printt(f"{make_hotkey_string('2')} Text source {COL_DIM} {s}")
+        s = make_currently_string(str(RealTimeSubmenu.start_index + 1))
+        printt(f"{make_hotkey_string('3')} Start at line number {s}")
         printt()
 
         hotkey = ask_hotkey()
@@ -38,7 +40,7 @@ class RealTimeSubmenu:
             else:
                 text_segments = state.project.text_segments
             if not text_segments:
-                ask_continue("No text segments specified")
+                ask_continue("No text segments specified.\n")
                 RealTimeSubmenu.submenu(state)
                 return
             RealTime.start(state.project, text_segments, RealTimeSubmenu.start_index)

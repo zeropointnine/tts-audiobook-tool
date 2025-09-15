@@ -17,6 +17,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model import HiggsModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -128,10 +129,13 @@ class GenerateUtil:
         did_interrupt = SigIntHandler().did_interrupt
         SigIntHandler().clear()
 
+        printt()
         printt(f"Elapsed: {duration_string(time.time() - start_time)}")
         printt()
-
-        printt(f"Num lines saved normally: {COL_OK}{num_saved_ok}")
+        ok = str(num_saved_ok)
+        if num_saved_ok == len(items.items()):
+            ok += " (all)"
+        printt(f"Num lines saved normally: {COL_OK}{ok}")
         col = COL_ACCENT if num_saved_with_error else ""
         printt(f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}")
         if num_failed:
@@ -295,7 +299,7 @@ class GenerateUtil:
                     voice_path = ""
                     voice_transcript = ""
                 if project.higgs_temperature == -1:
-                    temperature = HIGGS_DEFAULT_TEMPERATURE
+                    temperature = HiggsModelProtocol.DEFAULT_TEMPERATURE
                 else:
                     temperature = project.higgs_temperature
                 result = Tts.get_higgs().generate(
@@ -308,8 +312,8 @@ class GenerateUtil:
 
             case TtsModelInfos.VIBEVOICE:
                 voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
-                cfg_scale = VIBEVOICE_DEFAULT_CFG if project.vibevoice_cfg == -1 else project.vibevoice_cfg
-                num_steps = VIBEVOICE_DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
+                cfg_scale = VibeVoiceProtocol.DEFAULT_CFG if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+                num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
                 result = Tts.get_vibevoice().generate(
                     text=text,

@@ -11,8 +11,8 @@ from tts_audiobook_tool.constants import *
 
 class State:
     """
-    Holds app's full state (basically)
-    Viz: project object and app prefs/settings object
+    Holds app's user-related state
+    Viz: current project and prefs
     """
 
     def __init__(self):
@@ -28,6 +28,15 @@ class State:
                 self.project = Project("")
             else:
                 self.project = result
+
+    @property
+    def project(self) -> Project:
+        return self._project
+
+    @project.setter
+    def project(self, project: Project) -> None:
+        self._project = project
+        Tts.set_model_params_using_project(self.project) # nb
 
     def make_new_project(self, path: str) -> str:
         """

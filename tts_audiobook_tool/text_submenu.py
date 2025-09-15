@@ -10,7 +10,9 @@ class TextSubmenu:
     @staticmethod
     def submenu(state: State) -> None:
 
-        s = f"{COL_DIM}(currently: {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines)"
+        s = str(len(state.project.text_segments))
+        s += " line" if len(state.project.text_segments) == 1 else " lines"
+        s = make_currently_string(s)
         print_heading(f"Text {s}")
         printt(f"{make_hotkey_string('1')} Replace text")
         printt(f"{make_hotkey_string('2')} View text lines")

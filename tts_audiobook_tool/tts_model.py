@@ -33,7 +33,10 @@ class TtsModel(ABC):
 
 # ---
 
-class OuteGenerateProtocol(Protocol):
+class OuteProtocol(Protocol):
+
+    DEFAULT_TEMPERATURE = 0.4 # from oute library code
+
     def create_speaker(self, path: str) -> dict | str:
         ...
 
@@ -45,11 +48,16 @@ class OuteGenerateProtocol(Protocol):
     ) -> Sound | str:
         ...
 
-class OuteModelProtocol(TtsModel, OuteGenerateProtocol):
+class OuteModelProtocol(TtsModel, OuteProtocol):
         ...
 
 
-class ChatterboxGenerateProtocol(Protocol):
+class ChatterboxProtocol(Protocol):
+
+    DEFAULT_EXAGGERATION = 0.5 # from chatterbox library code
+    DEFAULT_CFG = 0.5
+    DEFAULT_TEMPERATURE = 0.8
+
     def generate(
             self,
             text: str,
@@ -60,11 +68,14 @@ class ChatterboxGenerateProtocol(Protocol):
     ) -> Sound | str:
         ...
 
-class ChatterboxModelProtocol(TtsModel, ChatterboxGenerateProtocol):
+class ChatterboxModelProtocol(TtsModel, ChatterboxProtocol):
         ...
 
 
-class FishGenerateProtocol(Protocol):
+class FishProtocol(Protocol):
+
+    DEFAULT_TEMPERATURE = 0.8 # from fish gradio demo
+
     def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
         ...
 
@@ -74,11 +85,16 @@ class FishGenerateProtocol(Protocol):
     def generate(self, text: str, temperature: float) -> Sound | str:
         ...
 
-class FishModelProtocol(TtsModel, FishGenerateProtocol):
+class FishModelProtocol(TtsModel, FishProtocol):
     ...
 
 
-class HiggsGenerateProtocol(Protocol):
+class HiggsProtocol(Protocol):
+
+    # from higgs project README example code
+    # (nb, higgs library code uses a default of 1.0 which is much too high for narration)
+    DEFAULT_TEMPERATURE = 0.3
+
     def generate(
             self,
             p_voice_path: str,
@@ -89,11 +105,25 @@ class HiggsGenerateProtocol(Protocol):
     ) -> Sound | str:
         ...
 
-class HiggsModelProtocol(TtsModel, HiggsGenerateProtocol):
+class HiggsModelProtocol(TtsModel, HiggsProtocol):
     ...
 
 
-class VibeVoiceGenerateProtocol(Protocol):
+class VibeVoiceProtocol(Protocol):
+
+    DEFAULT_MODEL_PATH = "microsoft/VibeVoice-1.5b"
+    DEFAULT_MODEL_NAME = "VibeVoice 1.5B"
+
+    # nb, their gradio demo default is 1.3, which is much too low; library code is 1.0 even
+    DEFAULT_CFG = 3.0
+
+    DEFAULT_NUM_STEPS = 10 # from vibevoice library code
+
+    # Setting this explicitly low b/c hallucinations can oftentimes
+    # expand to fill up the entire context (!),
+    # and app opts not to use model's long context feature anyway
+    MAX_TOKENS = 250
+
     def generate(
             self,
             text: str,
@@ -103,5 +133,5 @@ class VibeVoiceGenerateProtocol(Protocol):
     ) -> Sound | str:
         ...
 
-class VibeVoiceModelProtocol(TtsModel, VibeVoiceGenerateProtocol):
+class VibeVoiceModelProtocol(TtsModel, VibeVoiceProtocol):
     ...
