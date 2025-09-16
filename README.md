@@ -229,9 +229,13 @@ These are my anecdotal inference speeds. For inference, the app adopts each resp
 
 # Update highlights
 
+**2025-09-15**
+
+Added support for VibeVoice alternate models (ie, large/7B model)
+
 **2025-09-12**
 
-Added support for **VibeVoice 1.5B**.
+Added support for **VibeVoice**.
 
 **2025-08-10**
 
