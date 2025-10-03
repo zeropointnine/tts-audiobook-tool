@@ -61,20 +61,14 @@ class VoiceVibeVoiceSubmenu:
                 printt()
                 return False
             case "3":
-                s = "Select local directory containing VibeVoice model (Hugging Face model repository format)"
+                s = "Select custom local directory containing VibeVoice model (Hugging Face model repository format)"
                 dir_path = ask_dir_path(s, s)
+                if dir_path == project.vibevoice_model_path:
+                    return False
                 if dir_path and not os.path.exists(dir_path):
                     ask_continue("No such directory")
                     return False
-                if dir_path == project.vibevoice_model_path:
-                    return False
-                if project.vibevoice_model_path and not dir_path:
-                    # Treat as "erase"
-                    project.vibevoice_model_path = ""
-                    project.save()
-                    printt_set(f"Set to none; will use default model {VibeVoiceProtocol.DEFAULT_MODEL_NAME}")
-                    return False
-                VoiceVibeVoiceSubmenu._validate_and_set_custom_path(project, dir_path)
+                VoiceVibeVoiceSubmenu._apply_model_path_and_validate(project, dir_path)
                 return False
             case "4":
                 # Sane legal range (IMO)
@@ -111,28 +105,38 @@ class VoiceVibeVoiceSubmenu:
                 return True
 
     @staticmethod
-    def _validate_and_set_custom_path(project: Project, path: str) -> None:
+    def _apply_model_path_and_validate(project: Project, path: str) -> None:
 
-        Tts.set_model_params( {
-            "vibevoice_model_path": path
-        } )
+        project.vibevoice_model_path = path
+        project.save()
 
-        # Test out the path
+        Tts.set_model_params_using_project(project)
+
+        if not path:
+            # No need to validate
+            printt_set(f"Set to none; will use default model {VibeVoiceProtocol.DEFAULT_MODEL_NAME}")
+            return
+
+        # Validate by attempting to instantiate model with new settings
+
+        # Model should have been cleared, but just in case:
+        model = Tts.get_tts_model_if_exists()
+        if model:
+            Tts.clear_tts_model()
+
         try:
             _ = Tts.get_vibevoice()
+            printt_set(f"\nCustom model path set: {path}")
+
         except (OSError, Exception) as e:
             # Revert change
-            Tts.set_model_params( {} )
+            project.vibevoice_model_path = ""
+            project.save()
+            Tts.set_model_params_using_project(project)
 
             printt()
-            printt("Directory contents appear to be invalid:")
+            printt("Contents at model path {path} appear to be invalid:")
             printt(make_error_string(e))
             printt()
             ask_continue()
-            return
 
-        # Commit change
-        project.vibevoice_model_path = path
-        project.save()
-        printt()
-        printt_set(f"Custom model path set: {path}")

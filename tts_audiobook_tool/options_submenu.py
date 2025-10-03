@@ -29,8 +29,6 @@ class OptionsSubmenu:
             printt(f"{make_hotkey_string('6')} Reset contextual hints")
             printt()
 
-            print("xxx", Tts._model_params)
-
             hotkey = ask_hotkey()
             match hotkey:
                 case "1":

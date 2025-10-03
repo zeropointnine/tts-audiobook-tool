@@ -118,11 +118,13 @@ HINT_LINE_BREAKS = Hint(
 )
 HINT_REGEN = Hint(
     "regenerate",
-    "Please note",
-"""It's oftentimes not possible to get all voice lines to validate,
-even after repeated re-generations. Embrace imperfection.
+    "A note about regenerating lines",
+"""The validation algorithm is tuned to be on the conservative side,
+which means lines tagged as having potential errors usually *do* have errors,
+but false positives are also possible.
 
-Increasing temperature temporarily can sometimes help."""
+Additionally, some lines with errors may not be easily correct,
+even after multiple attempts."""
 )
 HINT_REAL_TIME = Hint(
     "real_time",
