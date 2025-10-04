@@ -1,4 +1,4 @@
-from chatterbox.tts import ChatterboxTTS
+from chatterbox.tts import ChatterboxTTS # type: ignore
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.tts_model import ChatterboxModelProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -38,8 +38,10 @@ class ChatterboxModel(ChatterboxModelProtocol):
 
         try:
             data = self._chatterbox.generate(text, **dic)
-            data = data.numpy().squeeze()
-            return Sound(data, self.info.sample_rate)
-
         except Exception as e:
             return make_error_string(e)
+
+        data = data.numpy().squeeze()
+
+        return Sound(data, self.info.sample_rate)
+

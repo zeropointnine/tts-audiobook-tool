@@ -124,6 +124,9 @@ class MainMenu:
                         case TtsModelInfos.VIBEVOICE:
                             from tts_audiobook_tool.voice_vibevoice_submenu import VoiceVibeVoiceSubmenu
                             VoiceVibeVoiceSubmenu.submenu(state.project)
+                        case TtsModelInfos.INDEXTTS2:
+                            from tts_audiobook_tool.voice_indextts2_submenu import VoiceIndexTts2Submenu
+                            VoiceIndexTts2Submenu.submenu(state.project)
             case "t":
                 if not state.prefs.project_dir:
                     return

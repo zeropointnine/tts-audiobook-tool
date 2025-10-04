@@ -257,17 +257,19 @@ class GenerateUtil:
 
         text = text_segment.text
         text = GenerateUtil.preprocess_text_common(text)
-        text = Tts.get_tts_model().preprocess_text(text)
+        text = Tts.get_instance().preprocess_text(text)
 
         match Tts.get_type():
 
             case TtsModelInfos.OUTE:
+
                 result = Tts.get_oute().generate(
                     text,
                     project.oute_voice_json,
                     project.oute_temperature)
 
             case TtsModelInfos.CHATTERBOX:
+
                 if project.chatterbox_voice_file_name:
                     voice_path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
                 else:
@@ -281,6 +283,7 @@ class GenerateUtil:
                 )
 
             case TtsModelInfos.FISH:
+
                 if project.fish_voice_file_name:
                     source_path = os.path.join(project.dir_path, project.fish_voice_file_name)
                     Tts.get_fish().set_voice_clone_using(
@@ -292,6 +295,7 @@ class GenerateUtil:
                 result = Tts.get_fish().generate(text, project.fish_temperature)
 
             case TtsModelInfos.HIGGS:
+
                 if project.higgs_voice_file_name:
                     voice_path = os.path.join(project.dir_path, project.higgs_voice_file_name)
                     voice_transcript = project.higgs_voice_transcript
@@ -311,6 +315,7 @@ class GenerateUtil:
                 )
 
             case TtsModelInfos.VIBEVOICE:
+
                 voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
                 cfg_scale = VibeVoiceProtocol.DEFAULT_CFG if project.vibevoice_cfg == -1 else project.vibevoice_cfg
                 num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
@@ -320,6 +325,23 @@ class GenerateUtil:
                     voice_path=voice_path,
                     cfg_scale=cfg_scale,
                     num_steps=num_steps
+                )
+
+            case TtsModelInfos.INDEXTTS2:
+
+                voice_path = os.path.join(project.dir_path, project.indextts2_voice_file_name)
+
+                if project.indextts2_emo_voice_file_name:
+                    emo_voice_path = os.path.join(project.dir_path, project.indextts2_emo_voice_file_name)
+                else:
+                    emo_voice_path = ""
+
+                result = Tts.get_indextts2().generate(
+                    text=text,
+                    voice_path=voice_path,
+                    temperature=project.indextts2_temperature,
+                    emo_voice_path=emo_voice_path,
+                    emo_voice_alpha=project.indextts2_emo_voice_alpha
                 )
 
             case TtsModelInfos.NONE:

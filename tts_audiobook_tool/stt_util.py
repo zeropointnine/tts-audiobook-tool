@@ -6,6 +6,7 @@ import numpy as np
 import difflib
 from tts_audiobook_tool.app_types import ConcreteWord, Word
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.constants import *
@@ -397,7 +398,7 @@ class SttUtil:
             s += f"{Ansi.ERASE_REST_OF_LINE}"
             print(s, end="", flush=True)
 
-            segments, _ = Tts.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
+            segments, _ = Stt.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
             updated_words = []
             for word in transcribed_words:

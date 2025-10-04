@@ -1,6 +1,6 @@
 import torch
-from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
-from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
+from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol

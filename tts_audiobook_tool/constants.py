@@ -132,11 +132,11 @@ HINT_REAL_TIME = Hint(
 f"""This uses the same quality-control steps as the normal "Generate" workflow,
 save for loudness normalization.
 
-To achieve uninterrupted playback, your system must be able to
-do the audio inference faster-than-realtime.
+So long as enough audio has accumulated in the buffer,
+lines that do not pass validation will be regenerated one time.
 
-Also, so long as there is enough audio in the buffer,
-lines that do not pass validation will be regenerated one time."""
+To achieve uninterrupted playback, your system must be able to
+do the audio inference faster-than-realtime."""
 )
 HINT_MULTIPLE_MP3S = Hint(
     "multiple_mp3s",
@@ -153,4 +153,14 @@ HINT_NO_VOICE = Hint(
     "gen_no_voice",
     "No voice clone defined",
     "The TTS model will generate random-sounding voices because no voice sample has been set."
+)
+
+HINT_TRANSCRIPTION = Hint(
+    "transcription",
+    "Note",
+    """The app uses the transcription model to check the generated audio for errors.
+Because it is used concurrently with the text-to-speech model,
+it adds 2-3 GB to VRAM memory requirements.
+
+This is a per-project setting which defaults to \"large-v3\""""
 )

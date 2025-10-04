@@ -1,10 +1,11 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
+- IndexTTS2
 - VibeVoice 1.5B
-- Chatterbox TTS
-- Fish OpenAudio S1-mini
 - Higgs Audio V2
+- Fish OpenAudio S1-mini
+- Chatterbox TTS
 - Oute TTS
 
 The app features a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
@@ -20,14 +21,19 @@ Plain-vanilla interactive console interface.
 
 The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
-**Example outputs**, all using the same source text and same 15-second voice clone sample:
+**Some example outputs**, all using the same source text and same 15-second voice clone sample:
 
-- [Online example using Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.abr.m4a)
-- [Online example using Fish OpenAudio S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-s1-mini.abr.m4a)
-- [Online example using Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
-- [Online example using VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b.abr.m4a)
-- [Online example using Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
-- [Online example using Higgs Audio V2 (a different voice this time, high temperature)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
+- [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2.abr.m4a)
+- [IndexTTS2 (with added emotional guidance voice sample)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2-plus-emo.abr.m4a)
+
+
+
+- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b.abr.m4a)
+- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
+- [Higgs Audio V2 (a different voice this time, and at high temperature)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
+- [Fish OpenAudio S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-s1-mini.abr.m4a)
+- [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
+- [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.abr.m4a)
 
 ### Bonus feature: Enhance existing audiobooks
 
@@ -60,9 +66,36 @@ Finally, run the app by entering:
 
     python -m tts_audiobook_tool
 
+## Install for IndexTTS2
+
+Initialize a **Python v3.11** virtual environment named "venv-indextts2". For example:
+
+    path\to\python3.11\python.exe -m venv venv-indextts2
+
+Activate the virtual environment:
+
+    venv-indextts2\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-indextts2.txt
+
+### Additional steps for CUDA:
+
+Uninstall the vanilla version of torch:
+
+    pip uninstall torch torchaudio
+
+Install torch 2.8 for CUDA v12.8:
+
+    pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+> **ℹ️ Note:**
+> To run the app using IndexTTS2 comfortably within 12GB of VRAM, set FP16 to True and set the whisper model to v3-large-turbo.
+
 ## Install for VibeVoice
 
-Initialize a Python v3.11 (not 3.12) virtual environment named "venv-vibevoice". For example:
+Initialize a **Python v3.11** virtual environment named "venv-vibevoice". For example:
 
     path\to\python3.11\python.exe -m venv venv-vibevoice
 
@@ -74,7 +107,7 @@ Install dependencies:
 
     pip install -r requirements-vibevoice.txt
 
-Note that because Microsoft removed the source code from their project github repo, we are pulling from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
+Note that because Microsoft removed the source code from their project github repo, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
 ### Additional steps for CUDA:
 
@@ -89,36 +122,12 @@ Install torch 2.6 for CUDA v12.6:
 Finally, install Flash Attention. The procedure for doing so varies by operating system. On Windows, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
 
 
-## Install for Chatterbox TTS:
-
-Initialize a Python v3.12 virtual environment named "venv-chatterbox". For example:
-
-    path\to\python3.12\python.exe -m venv venv-chatterbox
-
-Activate the virtual environment:
-
-    venv-chatterbox\Scripts\activate.bat
-
-Install dependencies:
-
-    pip install -r requirements-chatterbox.txt
-
-### Additional steps for CUDA:
-
-Uninstall the vanilla version of torch:
-
-    pip uninstall torch torchaudio
-
-Install torch 2.6 for CUDA v12.6:
-
-    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-
 ## Install for Higgs Audio V2:
 
 > **ℹ️ Note!**
 > Higgs V2 requires CUDA, and 24 GB is almost a necessity (yes really)
 
-Initialize a Python v3.12 virtual environment named "venv-higgs". For example:
+Initialize a **Python v3.12** virtual environment named "venv-higgs". For example:
 
     path\to\python3.12\python.exe -m venv venv-higgs
 
@@ -148,8 +157,6 @@ Install dependencies:
 
     pip install -r requirements-fish.txt
 
-If using CUDA, uninstall the vanilla version of torch that just got installed, and install the [CUDA version of torch v2.7.1](https://pytorch.org/get-started/previous-versions/)
-
 And then, two extra steps:
 
 You have to opt in to gain access to the Fish/OpenAudio model by visiting the FishAudio [Hugging Face page](https://huggingface.co/fishaudio/openaudio-s1-mini), using a logged-in HF account.
@@ -161,6 +168,34 @@ Then, [generate a Hugging Face access token](https://huggingface.co/settings/tok
 When the app runs for the first time and tries to download the models from huggingface, it should now be authorized to do so.
 
 On Linux and macOS, portaudio must be installed (eg, `brew install portaudio`)
+
+### Additional steps for CUDA:
+
+Uninstall the vanilla version of torch that just got installed, and install the [CUDA version of torch v2.7.1](https://pytorch.org/get-started/previous-versions/)
+
+## Install for Chatterbox TTS:
+
+Initialize a Python v3.12 virtual environment named "venv-chatterbox". For example:
+
+    path\to\python3.12\python.exe -m venv venv-chatterbox
+
+Activate the virtual environment:
+
+    venv-chatterbox\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-chatterbox.txt
+
+### Additional steps for CUDA:
+
+Uninstall the vanilla version of torch:
+
+    pip uninstall torch torchaudio
+
+Install torch 2.6 for CUDA v12.6:
+
+    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
 ## Install for Oute TTS:
 
@@ -211,10 +246,12 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 ### Inference speeds, expectations
 
-These are my anecdotal inference speeds. For inference, the app adopts each respective model's reference implementation logic as much as possible.
+These are my anecdotal inference speeds (running Windows unless otherwise noted). The app adopts each respective model's reference inference implementation logic as much as possible.
 
 | TTS Model | Hardware | Speed | Notes |
 | ----- | -------- | ----- | ----- |
+| IndexTTS2 | GTX 4090 | ~150% realtime |
+| IndexTTS2 | GTX 3080 Ti | ~85% realtime | using FP16
 | VibeVoice 1.5B | GTX 3080 Ti | ~120% realtime | with Flash attention 2 enabled
 | VibeVoice 1.5B | Macbook Pro M1 | ~40% realtime |
 | Higgs V2 3B | GTX 4090 | 200+% realtime | inference speed inversely proportional to voice sample duration, FYI
@@ -228,6 +265,12 @@ These are my anecdotal inference speeds. For inference, the app adopts each resp
 
 
 # Update highlights
+
+**2025-10-03**
+
+Added support for **IndexTTS2**, including secondary voice reference sample guiding emotion.
+
+Added option to specify Whisper model (large-v3 or large-v3-turbo)
 
 **2025-09-15**
 

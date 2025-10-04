@@ -137,3 +137,10 @@ class NormalizationType(Enum):
             if s == item.value.json_value:
                 return item
         return None
+
+# ---
+
+class SttVariant(str, Enum):
+    LARGE_V3 = "large-v3"
+    LARGE_V3_TURBO = "large-v3-turbo"
+

@@ -1,4 +1,4 @@
-import langid
+import langid # type: ignore
 import jieba
 import os
 import re
@@ -10,16 +10,16 @@ from typing import Optional
 from dataclasses import asdict
 import torch
 
-from boson_multimodal.data_types import Message, ChatMLSample, AudioContent, TextContent
+from boson_multimodal.data_types import Message, ChatMLSample, AudioContent, TextContent # type: ignore
 
-from boson_multimodal.model.higgs_audio import HiggsAudioModel
-from boson_multimodal.data_collator.higgs_audio_collator import HiggsAudioSampleCollator
-from boson_multimodal.audio_processing.higgs_audio_tokenizer import load_higgs_audio_tokenizer
-from boson_multimodal.dataset.chatml_dataset import (
+from boson_multimodal.model.higgs_audio import HiggsAudioModel # type: ignore
+from boson_multimodal.data_collator.higgs_audio_collator import HiggsAudioSampleCollator # type: ignore
+from boson_multimodal.audio_processing.higgs_audio_tokenizer import load_higgs_audio_tokenizer # type: ignore
+from boson_multimodal.dataset.chatml_dataset import ( # type: ignore
     ChatMLDatasetSample,
     prepare_chatml_sample,
 )
-from boson_multimodal.model.higgs_audio.utils import revert_delay_pattern
+from boson_multimodal.model.higgs_audio.utils import revert_delay_pattern # type: ignore
 from transformers import AutoConfig, AutoTokenizer
 from transformers.cache_utils import StaticCache
 

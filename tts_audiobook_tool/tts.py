@@ -3,15 +3,14 @@ from __future__ import annotations
 from importlib import util
 import torch
 
-from faster_whisper import WhisperModel
-
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
 class Tts:
     """
-    Static class for accessing the TTS model. And also whisper model.
+    Static class for accessing the TTS model.
     """
 
     _oute: OuteModelProtocol | None = None
@@ -19,8 +18,7 @@ class Tts:
     _fish: FishModelProtocol | None = None
     _higgs: HiggsModelProtocol | None = None
     _vibevoice: VibeVoiceModelProtocol | None = None
-
-    _whisper: WhisperModel | None = None
+    _indextts2: IndexTts2ModelProtocol | None = None
 
     _type: TtsModelInfos
 
@@ -61,24 +59,34 @@ class Tts:
 
     @staticmethod
     def set_model_params_using_project(project) -> None:
+
+        from tts_audiobook_tool.project import Project
+        assert(isinstance(project, Project))
+
         model_params = { }
-        if project.vibevoice_model_path:
-            model_params["vibevoice_model_path"] = project.vibevoice_model_path
+        model_params["vibevoice_model_path"] = project.vibevoice_model_path
+        model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
+
         Tts.set_model_params(model_params)
 
     @staticmethod
     def set_model_params(new_params: dict) -> None:
+        """
+        Sets any customizable values required for the instantiation of the the TTS model
+        Changed model param values trigger a re-instantiation as needed
+        """
         old_params = Tts._model_params
         Tts._model_params = new_params
 
         invalidate = False
         invalidate |= new_params.get("vibevoice_model_path", "") != old_params.get("vibevoice_model_path", "")
+        invalidate |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         if invalidate:
             Tts.clear_tts_model()
 
     @staticmethod
-    def has_tts() -> bool:
-        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice]
+    def has_instance() -> bool:
+        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2]
         for item in items:
             if item is not None:
                 return True
@@ -91,50 +99,52 @@ class Tts:
         and prints that it is doing so.
         """
 
-        has_both = Tts.has_tts() and Tts._whisper
+        has_both = Tts.has_instance() and Stt._whisper
         if has_both:
             return
 
-        has_neither = not Tts.has_tts() and not Tts._whisper
+        has_neither = not Tts.has_instance() and not Stt._whisper
         if has_neither:
             printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 
-        _ = Tts.get_tts_model()
+        _ = Tts.get_instance()
 
         if has_neither:
             printt() # yes rly
 
-        _ = Tts.get_whisper()
+        _ = Stt.get_whisper()
 
 
     @staticmethod
-    def get_tts_model() -> TtsModel:
-        match Tts._type:
-            case TtsModelInfos.OUTE:
-                return Tts.get_oute()
-            case TtsModelInfos.CHATTERBOX:
-                return Tts.get_chatterbox()
-            case TtsModelInfos.FISH:
-                return Tts.get_fish()
-            case TtsModelInfos.HIGGS:
-                return Tts.get_higgs()
-            case TtsModelInfos.VIBEVOICE:
-                return Tts.get_vibevoice()
-            case _:
-                # TODO: Revisit
-                raise Exception("No tts model type set")
+    def get_instance() -> TtsModel:
+
+        MAP: dict[TtsModelInfo, Callable] = {
+            TtsModelInfos.OUTE: Tts.get_oute,
+            TtsModelInfos.CHATTERBOX: Tts.get_chatterbox,
+            TtsModelInfos.FISH: Tts._fish,
+            TtsModelInfos.HIGGS: Tts.get_higgs,
+            TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
+            TtsModelInfos.INDEXTTS2: Tts.get_indextts2
+        }
+        factory_function = MAP.get(Tts._type, None)
+        if not factory_function:
+            raise Exception(f"Lookup failed for {Tts._type}")
+
+        instance = factory_function()
+        return instance
 
     @staticmethod
-    def get_tts_model_if_exists() -> TtsModel | None:
-        map = {
+    def get_instance_if_exists() -> TtsModel | None:
+        MAP = {
             TtsModelInfos.OUTE: Tts._oute,
             TtsModelInfos.CHATTERBOX: Tts._chatterbox,
             TtsModelInfos.FISH: Tts._fish,
             TtsModelInfos.HIGGS: Tts._higgs,
             TtsModelInfos.VIBEVOICE: Tts._vibevoice,
+            TtsModelInfos.INDEXTTS2: Tts._indextts2
         }
-        return map[ Tts._type ]
+        return MAP.get(Tts._type, None)
 
     @staticmethod
     def get_oute() -> OuteModelProtocol:
@@ -205,35 +215,26 @@ class Tts:
         return Tts._vibevoice
 
     @staticmethod
-    def get_whisper() -> WhisperModel:
+    def get_indextts2() -> IndexTts2ModelProtocol:
 
-        if Tts._whisper is None:
-            model = "large-v3"
+        if not Tts._indextts2:
+
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            compute_type = "float16" if torch.cuda.is_available() else "int8"
-            printt(f"{Ansi.ITALICS}Initializing whisper model ({model}, {device}, {compute_type})...")
+            use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
+
+            printt(f"{Ansi.ITALICS}Initializing IndexTTS2 model ({device}, use_fp16: {use_fp16})")
             printt()
-            Tts._whisper = WhisperModel(model, device=device, compute_type=compute_type)
 
-        return Tts._whisper
+            from tts_audiobook_tool.indextts2_model import IndexTts2Model
+            Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
 
-    @staticmethod
-    def has_whisper() -> bool:
-        return Tts._whisper is not None
+        return Tts._indextts2
 
-    @staticmethod
-    def clear_stt_model() -> None:
-
-        if Tts._whisper:
-            Tts._whisper = None
-
-            from tts_audiobook_tool.app_util import AppUtil
-            AppUtil.gc_ram_vram()
 
     @staticmethod
     def clear_tts_model() -> None:
 
-        model = Tts.get_tts_model_if_exists()
+        model = Tts.get_instance_if_exists()
         if model:
             model.kill()
 
@@ -242,6 +243,7 @@ class Tts:
             Tts._fish = None
             Tts._higgs = None
             Tts._vibevoice = None
+            Tts._indextts2 = None
 
             from tts_audiobook_tool.app_util import AppUtil
             AppUtil.gc_ram_vram()
@@ -251,7 +253,7 @@ class Tts:
 
         vram_before = get_torch_allocated_vram()
 
-        Tts.clear_stt_model()
+        Stt.clear_stt_model()
         Tts.clear_tts_model()
 
         # And for good measure

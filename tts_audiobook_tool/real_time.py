@@ -34,7 +34,7 @@ class RealTime:
         # Start loop
 
         print_heading("Starting real-time playback...", dont_clear=True)
-        printt(f"{COL_DIM}Press control-C to interrupt")
+        printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
         SigIntHandler().set("generating")
@@ -103,8 +103,9 @@ class RealTime:
             last_text_segment = current_text_segment
             last_sound = current_sound
 
-        if not did_interrupt:
-            ask_continue("\n")
+        # Prompt gives opportunity for remaining buffer data to play through before killing stream, if desired
+        print()
+        ask_continue()
 
         SigIntHandler().clear()
 

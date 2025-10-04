@@ -1,0 +1,23 @@
+# ################
+# Use Python v3.11
+# ################
+
+# Most recent commit of IndexTTS2
+git+https://github.com/index-tts/index-tts@db5b39bb6ad903c219b2dd33d60b0f0bdaede664
+ninja
+
+# App dependencies
+faster-whisper==1.2.0
+ffmpeg-python==0.2.0
+hf_xet
+librosa
+loguru==0.7.3
+mutagen==1.47.0
+natsort==8.4.0
+pyloudnorm==0.1.1
+pynvml==13.0.1
+pysbd==0.3.4
+sounddevice==0.5.2
+soundfile==0.13.1
+watchdog==6.0.0
+xxhash==3.5.0

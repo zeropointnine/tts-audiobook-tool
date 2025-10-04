@@ -2,8 +2,9 @@ from __future__ import annotations
 import json
 import os
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.indextts2_model import IndexTts2Model
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -18,8 +19,6 @@ class Project:
     """
     Project settings data-like class with convenience functions
     """
-
-    # TODO: encapsulate the serializable values into a NamedTuple and refactor accordingly
 
     dir_path: str
 
@@ -48,7 +47,14 @@ class Project:
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
 
+    indextts2_voice_file_name: str = ""
+    indextts2_emo_voice_file_name: str = ""
+    indextts2_emo_voice_alpha: float = -1
+    indextts2_temperature: float = -1
+    indextts2_use_fp16: bool = IndexTts2Model.DEFAULT_USE_FP16
+
     generate_range_string: str = ""
+    stt_variant: SttVariant = list(SttVariant)[0]
 
 
     def __init__(self, dir_path: str):
@@ -115,6 +121,16 @@ class Project:
         # Generate range string
         project.generate_range_string = d.get("generate_range", "")
 
+        # STT variant
+        s = d.get("stt_variant", "")
+        if not s:
+            project.stt_variant = list(SttVariant)[0]
+        else:
+            try:
+                project.stt_variant = SttVariant(s)
+            except:
+                project.stt_variant = list(SttVariant)[0]
+
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
@@ -160,6 +176,13 @@ class Project:
         project.vibevoice_cfg = d.get("vibevoice_cfg", -1)
         project.vibevoice_steps = d.get("vibevoice_steps", -1)
 
+        # IndexTTS2
+        project.indextts2_voice_file_name = d.get("indextts2_voice_file_name", "")
+        project.indextts2_emo_voice_file_name = d.get("indextts2_emo_voice_file_name", "")
+        project.indextts2_emo_voice_alpha = d.get("indextts2_emo_voice_alpha", -1)
+        project.indextts2_temperature = d.get("indextts2_temperature", -1)
+        project.indextts2_use_fp16 = d.get("indextts2_use_fp16", IndexTts2Model.DEFAULT_USE_FP16)
+
         return project
 
     def save(self) -> None:
@@ -169,22 +192,34 @@ class Project:
             "text_segments": TextSegment.list_to_dict_list(self.text_segments),
             "chapter_indices": self.section_dividers,
             "generate_range": self.generate_range_string,
+            "stt_variant": self.stt_variant.value,
+
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
+
             "chatterbox_voice_file_name": self.chatterbox_voice_file_name,
             "chatterbox_temperature": self.chatterbox_temperature,
             "chatterbox_cfg": self.chatterbox_cfg,
             "chatterbox_exaggeration": self.chatterbox_exaggeration,
+
             "fish_voice_file_name": self.fish_voice_file_name,
             "fish_voice_text": self.fish_voice_transcript,
             "fish_temperature": self.fish_temperature,
+
             "higgs_voice_file_name": self.higgs_voice_file_name,
             "higgs_voice_text": self.higgs_voice_transcript,
             "higgs_temperature": self.higgs_temperature,
+
             "vibevoice_voice_file_name": self.vibevoice_voice_file_name,
             "vibevoice_model_path": self.vibevoice_model_path,
             "vibevoice_cfg": self.vibevoice_cfg,
-            "vibevoice_steps": self.vibevoice_steps
+            "vibevoice_steps": self.vibevoice_steps,
+
+            "indextts2_voice_file_name": self.indextts2_voice_file_name,
+            "indextts2_emo_voice_file_name": self.indextts2_emo_voice_file_name,
+            "indextts2_emo_voice_alpha": self.indextts2_emo_voice_alpha,
+            "indextts2_temperature": self.indextts2_temperature,
+            "indextts2_use_fp16": self.indextts2_use_fp16
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -226,17 +261,15 @@ class Project:
             sound: Sound,
             voice_file_stem: str,
             text: str,
-            tts_type: TtsModelInfos
+            tts_type: TtsModelInfos,
+            is_secondary: bool=False
     ) -> str:
         """
         Saves resampled voice sound file, and updates and saves project properties
         Returns error string on fail
         """
 
-        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS, TtsModelInfos.VIBEVOICE]:
-            raise ValueError(f"Not applicable for tts_type: {tts_type}")
-
-        # Resample voice sound data to 'native' samplerate of the TTS model
+        # Resample voice sound data to model's native samplerate
         target_sr = tts_type.value.sample_rate
         sound = SoundUtil.resample_if_necessary(sound, target_sr)
         dest_file_name = voice_file_stem + ".flac"
@@ -257,6 +290,14 @@ class Project:
                 self.higgs_voice_transcript = text
             case TtsModelInfos.VIBEVOICE:
                 self.vibevoice_voice_file_name = dest_file_name
+            case TtsModelInfos.INDEXTTS2:
+                if not is_secondary:
+                    self.indextts2_voice_file_name = dest_file_name
+                else:
+                    self.indextts2_emo_voice_file_name = dest_file_name
+            case _:
+                raise Exception(f"Unsupported tts type {tts_type}")
+
         self.save()
         return ""
 
@@ -270,11 +311,7 @@ class Project:
         self.oute_voice_json = voice_dict
         self.save()
 
-    def clear_voice_and_save(self, tts_type: TtsModelInfos) -> None:
-
-        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS]:
-            raise ValueError(f"Bad value for tts_type: {tts_type}")
-
+    def clear_voice_and_save(self, tts_type: TtsModelInfos, is_secondary: bool=False) -> None:
         match tts_type:
             case TtsModelInfos.CHATTERBOX:
                 self.chatterbox_voice_file_name = ""
@@ -286,41 +323,60 @@ class Project:
                 self.higgs_voice_transcript = ""
             case TtsModelInfos.VIBEVOICE:
                 self.vibevoice_voice_file_name = ""
+            case TtsModelInfos.INDEXTTS2:
+                if not is_secondary:
+                    self.indextts2_voice_file_name = ""
+                else:
+                    self.indextts2_emo_voice_file_name = ""
+            case _:
+                raise ValueError(f"Unsupported tts_type: {tts_type}")
         self.save()
 
-    def get_voice_label(self) -> str:
+    def get_voice_label(self, is_secondary: bool=False) -> str:
+
+        def make_label(file_name: str) -> str:
+            label = Path(file_name).stem[:30]
+            label = sanitize_for_filename(label)
+            return label
+
         match Tts.get_type():
             case TtsModelInfos.OUTE:
                 if self.can_voice:
-                    label = Path(self.oute_voice_file_name).stem[:30]
-                    label = sanitize_for_filename(label)
-                    return label
+                    return make_label(self.oute_voice_file_name)
                 else:
                     return "none" # shouldn't happen
             case TtsModelInfos.CHATTERBOX:
                 if not self.chatterbox_voice_file_name:
                     return "none"
-                label = Path(self.chatterbox_voice_file_name).stem[:30]
-                label = sanitize_for_filename(label)
-                return label
+                else:
+                    return make_label(self.oute_voice_file_name)
             case TtsModelInfos.FISH:
                 if not self.fish_voice_file_name:
                     return "none"
-                label = Path(self.fish_voice_file_name).stem[:30]
-                label = sanitize_for_filename(label)
-                return label
+                else:
+                    return make_label(self.fish_voice_file_name)
             case TtsModelInfos.HIGGS:
                 if not self.higgs_voice_file_name:
                     return "none"
-                label = Path(self.higgs_voice_file_name).stem[:30]
-                label = sanitize_for_filename(label)
-                return label
+                else:
+                    return make_label(self.higgs_voice_file_name)
             case TtsModelInfos.VIBEVOICE:
                 if not self.vibevoice_voice_file_name:
                     return "none"
-                label = Path(self.vibevoice_voice_file_name).stem[:30]
-                label = sanitize_for_filename(label)
-                return label
+                else:
+                    return make_label(self.vibevoice_voice_file_name)
+            case TtsModelInfos.INDEXTTS2:
+                if not is_secondary:
+                    if not self.indextts2_voice_file_name:
+                        return "none"
+                    else:
+                        return make_label(self.indextts2_voice_file_name)
+                else:
+                    if not self.indextts2_emo_voice_file_name:
+                        return "none"
+                    else:
+                        return make_label(self.indextts2_emo_voice_file_name)
+
             case TtsModelInfos.NONE:
                 return "none"
 
@@ -332,7 +388,6 @@ class Project:
         match Tts.get_type():
             case TtsModelInfos.OUTE:
                 # must have oute json file
-                # (rem, we default to using Oute's own "official" default voice)
                 return bool(self.oute_voice_json)
             case TtsModelInfos.CHATTERBOX:
                 # always true bc does not require voice sample
@@ -346,6 +401,9 @@ class Project:
             case TtsModelInfos.VIBEVOICE:
                 # always true bc does not require voice sample
                 return True
+            case TtsModelInfos.INDEXTTS2:
+                # this model requires a voice sample
+                return bool(self.indextts2_voice_file_name)
             case TtsModelInfos.NONE:
                 return False
 

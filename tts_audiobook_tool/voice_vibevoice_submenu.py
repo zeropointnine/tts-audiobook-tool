@@ -57,7 +57,7 @@ class VoiceVibeVoiceSubmenu:
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.VIBEVOICE)
-                printt("Cleared")
+                printt_set("Cleared")
                 printt()
                 return False
             case "3":
@@ -120,7 +120,7 @@ class VoiceVibeVoiceSubmenu:
         # Validate by attempting to instantiate model with new settings
 
         # Model should have been cleared, but just in case:
-        model = Tts.get_tts_model_if_exists()
+        model = Tts.get_instance_if_exists()
         if model:
             Tts.clear_tts_model()
 

@@ -4,8 +4,9 @@ from typing import Iterable, TYPE_CHECKING # type: ignore
 import librosa
 import numpy as np
 
-from tts_audiobook_tool.app_types import ConcreteWord, Sound, Word
+from tts_audiobook_tool.app_types import Sound, Word
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from faster_whisper.transcribe import Segment
 
@@ -26,7 +27,7 @@ class WhisperUtil:
             sound = WhisperUtil.resample_sound_for_whisper(sound)
 
         try:
-            segments, _ = Tts.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=None)
+            segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=None)
         except Exception as e:
             return make_error_string(e)
 

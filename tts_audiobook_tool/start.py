@@ -1,3 +1,6 @@
+# Must be imported first or else HF_HUB_CACHE ends up containing a relative path (no idea)
+from huggingface_hub import constants
+
 from importlib import util
 from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
@@ -7,10 +10,9 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
-
 """
 App entrypoint:
-- Does prerequisite checks which when failed exits the app
+- Does prerequisite checks and exits on fail
 - Prints one-time info messages, depending
 """
 

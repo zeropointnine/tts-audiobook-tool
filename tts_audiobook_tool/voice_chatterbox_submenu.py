@@ -52,7 +52,7 @@ class VoiceChatterboxSubmenu:
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.CHATTERBOX)
-                printt("Cleared")
+                printt_set("Cleared")
                 printt()
                 return False
             case "3":

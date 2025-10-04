@@ -1,7 +1,7 @@
 import torch
-import outetts
-from outetts.models.config import GenerationConfig
-from outetts.models.info import GenerationType
+import outetts # type: ignore
+from outetts.models.config import GenerationConfig # type: ignore
+from outetts.models.info import GenerationType # type: ignore
 
 """
 Refer to the Oute TTS project page for more on configuration options, etc.
@@ -53,4 +53,3 @@ MODEL_CONFIG_EXAMPLE_MANUAL_HF_WITH_FLASH_ATTN = outetts.ModelConfig(
     device="cuda",
     dtype=torch.bfloat16
 )
-

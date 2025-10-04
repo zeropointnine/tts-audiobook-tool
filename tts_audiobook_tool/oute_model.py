@@ -1,5 +1,5 @@
 import copy
-import outetts
+import outetts # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.tts_model import OuteModelProtocol
@@ -51,7 +51,7 @@ class OuteModel(OuteModelProtocol):
         """
 
         # First, clone GENERATION_CONFIG from config file
-        from outetts.models.config import SamplerConfig
+        from outetts.models.config import SamplerConfig # type: ignore
         from tts_audiobook_tool.config_oute import GENERATION_CONFIG
         try:
             from .config_oute_dev import GENERATION_CONFIG

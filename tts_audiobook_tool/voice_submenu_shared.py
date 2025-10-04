@@ -10,7 +10,11 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class VoiceSubmenuShared:
 
     @staticmethod
-    def ask_and_set_voice_file(project: Project, tts_type: TtsModelInfos) -> None:
+    def ask_and_set_voice_file(
+            project: Project,
+            tts_type: TtsModelInfos,
+            is_secondary: bool=False
+    ) -> None:
         """
         Asks for voice sound file path.
         Transcribes text if necessary.
@@ -18,9 +22,10 @@ class VoiceSubmenuShared:
         Prints feedback on success or fail.
         """
 
-        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS, TtsModelInfos.VIBEVOICE]:
+        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS,
+                TtsModelInfos.VIBEVOICE, TtsModelInfos.INDEXTTS2]:
             # Rem, we do not save raw voice sound file for Oute
-            raise ValueError("Unsupported tts type {tts_type}")
+            raise ValueError(f"Unsupported tts type {tts_type}")
 
         path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
         if not path:
@@ -37,6 +42,8 @@ class VoiceSubmenuShared:
         needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS]
         if needs_transcript:
             # Transcribe
+            printt("Transcribing...")
+            printt()
             result = WhisperUtil.transcribe_to_words(sound)
             if isinstance(result, str):
                 err = result
@@ -47,12 +54,12 @@ class VoiceSubmenuShared:
             transcript = ""
 
         file_stem = Path(path).stem
-        err = project.set_voice_and_save(sound, file_stem, transcript, tts_type)
+        err = project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
         if err:
             ask_error(err)
             return
 
-        printt_set("Voice file saved.")
+        printt_set("Voice file saved")
 
     @staticmethod
     def ask_voice_file(default_dir_path) -> str:
@@ -90,7 +97,16 @@ class VoiceSubmenuShared:
         return path
 
     @staticmethod
-    def make_parameter_value_string(value: float | int, default_value: float, num_decimals: int) -> str:
+    def make_parameter_value_string(value: float | int | bool, default_value: float | int | bool, num_decimals: int=0) -> str:
+
+        DEFAULT_LABEL = " (default)"
+
+        if isinstance(value, bool):
+            s = str(value)
+            if value == default_value:
+                s += DEFAULT_LABEL
+            return s
+
         if value == -1:
             value = default_value
         if num_decimals == 0:
@@ -98,5 +114,5 @@ class VoiceSubmenuShared:
         else:
             s = f"{value:.{num_decimals}f}"
         if value == default_value:
-            s += " (default)"
+            s += DEFAULT_LABEL
         return s

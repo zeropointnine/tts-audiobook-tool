@@ -4,6 +4,7 @@ from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -36,7 +37,11 @@ class State:
     @project.setter
     def project(self, project: Project) -> None:
         self._project = project
-        Tts.set_model_params_using_project(self.project) # nb
+
+        # Sync global values :/
+        Tts.set_model_params_using_project(self.project)
+        Stt.set_variant_using_project(self.project)
+
 
     def make_new_project(self, path: str) -> str:
         """

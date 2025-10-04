@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from tts_audiobook_tool.oute_util import OuteUtil
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import OuteProtocol
@@ -82,8 +83,8 @@ class VoiceOuteSubmenu:
         if not path:
             return
 
-        # Outte is about to load its own instance of whisper, so better clear ours first
-        Tts.clear_stt_model()
+        # Outte is about to create its own instance of whisper, so better clear ours first
+        Stt.clear_stt_model()
         AppUtil.gc_ram_vram()
 
         result = Tts.get_oute().create_speaker(path)

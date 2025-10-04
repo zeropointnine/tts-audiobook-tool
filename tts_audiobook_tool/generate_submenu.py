@@ -66,7 +66,7 @@ class GenerateSubmenu:
 
         s = f"Generating {len(selected_indices_not_generated)} audio segment/s..."
         print_heading(s, dont_clear=True)
-        printt(f"{COL_DIM}Press control-c to interrupt")
+        printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
         did_interrupt = GenerateUtil.generate_items_to_files(
@@ -93,7 +93,7 @@ class GenerateSubmenu:
             return
 
         print_heading(f"Regenerating {len(failed_items)} audio segment/s...", dont_clear=True)
-        printt(f"{COL_DIM}Press control-c to interrupt")
+        printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
         will_hint = not state.prefs.get_hint("regenerate")

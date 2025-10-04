@@ -7,6 +7,7 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.stt_util import SttUtil
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter
@@ -145,7 +146,7 @@ class SttFlow:
             printt()
 
             # Warm up
-            _ = Tts.get_whisper()
+            _ = Stt.get_whisper()
 
             words = SttUtil.transcribe_to_words(str(source_audio_path))
             printt("\a")
