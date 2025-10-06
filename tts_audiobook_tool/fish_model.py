@@ -4,7 +4,8 @@ import sys
 import time
 import torch
 import torchaudio
-from huggingface_hub import snapshot_download  # type: ignore
+import huggingface_hub
+from huggingface_hub.errors import GatedRepoError
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
@@ -30,9 +31,10 @@ class FishModel(FishModelProtocol):
         # TODO verify mpc; also mpc + compile? probably not presumably?
         self.device = device
 
+        # ------------------------------------------------------------------------------------------
         # Fish module executes this line upon import
         # `pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)`
-        # Must create dummy file to prevent RTE on import
+        # Must create dummy file before import to prevent RTE
         module_name = "fish_speech.models.dac.inference"
         spec = importlib.util.find_spec(module_name) # type: ignore
         dummy_path = Path(spec.origin).parent / ".project-root"
@@ -41,27 +43,45 @@ class FishModel(FishModelProtocol):
 
         from fish_speech.models.dac.inference import load_model as load_dac_model # type: ignore
         from fish_speech.models.text2semantic.inference import init_model as init_t2s_model # type: ignore
+        # ------------------------------------------------------------------------------------------
 
-        # Doesn't raise error when token fails and dest directory already has things, fyi
+        # Download model to default hf cache location
         try:
-            snapshot_download(repo_id=HF_REPO_ID, local_dir=HF_DOWNLOAD_DIR)
+            REPO_ID = "fishaudio/openaudio-s1-mini"
+
+            model_dir = huggingface_hub.snapshot_download(
+                repo_id=REPO_ID,
+                cache_dir=huggingface_hub.constants.HF_HUB_CACHE,
+                local_files_only=False
+            )
+
+        except (FileNotFoundError, GatedRepoError) as e:
+            printt()
+            printt(f"{COL_ERROR}{e}")
+            printt()
+            printt("Make sure you have done the following:")
+            printt()
+            printt("[1] Visit https://huggingface.co/fishaudio/openaudio-s1-mini")
+            printt("    and authorize access using a logged-in Hugging Face account.")
+            printt("[2] Run `hf auth login` and enter valid Hugging Face access token.")
+            printt()
+            printt("Will now exit.")
+            exit(1)
         except Exception as e:
-            if isinstance(e, FileNotFoundError):
-                printt()
-                printt()
-                printt(f"{COL_ERROR}{e}")
-                printt()
-                printt("Make sure you have done the following:")
-                printt("[1] Visit https://huggingface.co/fishaudio/openaudio-s1-mini and authorize access using a logged-in Hugging Face account.")
-                printt("[2] Run `huggingface-cli login` and enter a Hugging Face access token.")
-                printt()
-                printt("Will now exit.")
-                exit(1)
+            printt()
+            printt(f"Fatal error: {type(e)}")
+            printt()
+            printt(f"{e}")
+            printt()
+            printt("Will now exit.")
+            exit(1)
 
-        self.dac_model: Any = load_dac_model(DAC_CONFIG_NAME, DAC_CHECKPOINT_PATH, self.device)
+        dac_path = os.path.join(model_dir, "codec.pth")
+        self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, self.device)
 
+        t2s_path = model_dir #z "checkpoints/openaudio-s1-mini"
         self.t2s_model, self.decode_one_token = init_t2s_model(
-            T2S_CHECKPOINT_PATH, self.device, torch.float16, compile=(self.device == "cuda")
+            t2s_path, self.device, torch.float16, compile=(self.device == "cuda")
         )
 
         self._voice_clone: VoiceClone | None = None
@@ -181,15 +201,3 @@ class VoiceClone:
 
         # Gets set on first generation
         self.prompt_tokens: Any = None
-
-# ---
-
-HF_REPO_ID = "fishaudio/openaudio-s1-mini"
-
-# Model files get placed in the project dir, which is regrettable.
-# They cannot simply go into the default hf download dir for reasons.
-HF_DOWNLOAD_DIR = Path("./checkpoints/openaudio-s1-mini")
-
-DAC_CONFIG_NAME = "modded_dac_vq"
-DAC_CHECKPOINT_PATH = "checkpoints/openaudio-s1-mini/codec.pth"
-T2S_CHECKPOINT_PATH = "checkpoints/openaudio-s1-mini"

@@ -145,7 +145,7 @@ Uninstall the vanilla version of torch that just got installed, and install the 
 
 ## Install for Fish OpenAudio-S1-mini:
 
-Initialize a Python v3.12 virtual environment named "venv-fish". For example:
+Initialize a **Python v3.12** virtual environment named "venv-fish". For example:
 
     path\to\python3.12\python.exe -m venv venv-fish
 
@@ -159,11 +159,11 @@ Install dependencies:
 
 And then, two extra steps:
 
-You have to opt in to gain access to the Fish/OpenAudio model by visiting the FishAudio [Hugging Face page](https://huggingface.co/fishaudio/openaudio-s1-mini), using a logged-in HF account.
+You have to opt in to gain access to the Fish/OpenAudio model by visiting the [FishAudio Hugging Face page](https://huggingface.co/fishaudio/openaudio-s1-mini), using a logged-in Hugging Face account.
 
 Then, [generate a Hugging Face access token](https://huggingface.co/settings/tokens) and paste the token at the command line after entering:
 
-    huggingface-cli login
+    hf auth login
 
 When the app runs for the first time and tries to download the models from huggingface, it should now be authorized to do so.
 
@@ -175,7 +175,7 @@ Uninstall the vanilla version of torch that just got installed, and install the 
 
 ## Install for Chatterbox TTS:
 
-Initialize a Python v3.12 virtual environment named "venv-chatterbox". For example:
+Initialize a **Python v3.12** virtual environment named "venv-chatterbox". For example:
 
     path\to\python3.12\python.exe -m venv venv-chatterbox
 
@@ -199,7 +199,7 @@ Install torch 2.6 for CUDA v12.6:
 
 ## Install for Oute TTS:
 
-Initialize a Python v3.12 virtual environment named "venv-oute". For example:
+Initialize a **Python v3.12** virtual environment named "venv-oute". For example:
 
     path\to\python3.12\python.exe -m venv venv-oute
 

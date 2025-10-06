@@ -4,7 +4,6 @@ import os
 
 from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.indextts2_model import IndexTts2Model
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -12,6 +11,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.tts_model import IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -51,7 +51,7 @@ class Project:
     indextts2_emo_voice_file_name: str = ""
     indextts2_emo_voice_alpha: float = -1
     indextts2_temperature: float = -1
-    indextts2_use_fp16: bool = IndexTts2Model.DEFAULT_USE_FP16
+    indextts2_use_fp16: bool = IndexTts2Protocol.DEFAULT_USE_FP16
 
     generate_range_string: str = ""
     stt_variant: SttVariant = list(SttVariant)[0]
@@ -185,7 +185,7 @@ class Project:
         project.indextts2_emo_voice_file_name = d.get("indextts2_emo_voice_file_name", "")
         project.indextts2_emo_voice_alpha = d.get("indextts2_emo_voice_alpha", -1)
         project.indextts2_temperature = d.get("indextts2_temperature", -1)
-        project.indextts2_use_fp16 = d.get("indextts2_use_fp16", IndexTts2Model.DEFAULT_USE_FP16)
+        project.indextts2_use_fp16 = d.get("indextts2_use_fp16", IndexTts2Protocol.DEFAULT_USE_FP16)
 
         return project
 

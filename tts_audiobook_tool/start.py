@@ -1,5 +1,9 @@
-# Must be imported first or else HF_HUB_CACHE ends up containing a relative path (no idea)
+# --------------------------------------------------------------------------------------------------
+# Must be imported first or else HF_HUB_CACHE can result in returning a relative path (!)
+import os
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 from huggingface_hub import constants
+# --------------------------------------------------------------------------------------------------
 
 from importlib import util
 from tts_audiobook_tool.app import App

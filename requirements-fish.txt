@@ -1,7 +1,9 @@
-# More recent version of fish-speech than what's currently registered in pypi
-git+https://github.com/fishaudio/fish-speech@54458f7cd5d9a0bcfff56f7d4854fa08b421bef6#egg=fish-speech
+#################
+# Use Python 3.12
+#################
 
 # Fish dependencies
+git+https://github.com/fishaudio/fish-speech@49374e0e95938d03ecbe7b3550e4f120104aaf82#egg=fish-speech
 numpy<=1.26.4
 transformers>=4.45.2
 datasets==2.18.0
