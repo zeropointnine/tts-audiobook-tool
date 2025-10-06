@@ -63,6 +63,7 @@ class Hint:
 
 class ValidationResult(ABC):
     """ Base class for a validation result """
+    dummy = False # allows subclass to be positional-argument-friendly
     pass
 
     @abstractmethod

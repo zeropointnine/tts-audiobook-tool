@@ -8,8 +8,8 @@ librosa==0.11.0
 loguru==0.7.3
 mutagen==1.47.0
 natsort==8.4.0
+nvidia-ml-py
 pyloudnorm==0.1.1
-pynvml==13.0.1
 pysbd==0.3.4
 sounddevice==0.5.2
 soundfile==0.13.1

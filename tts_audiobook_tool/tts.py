@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from importlib import util
+from typing import Callable
 import torch
 
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
@@ -119,10 +120,10 @@ class Tts:
     @staticmethod
     def get_instance() -> TtsModel:
 
-        MAP: dict[TtsModelInfo, Callable] = {
+        MAP: dict[TtsModelInfos, Callable] = {
             TtsModelInfos.OUTE: Tts.get_oute,
             TtsModelInfos.CHATTERBOX: Tts.get_chatterbox,
-            TtsModelInfos.FISH: Tts._fish,
+            TtsModelInfos.FISH: Tts.get_fish,
             TtsModelInfos.HIGGS: Tts.get_higgs,
             TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
             TtsModelInfos.INDEXTTS2: Tts.get_indextts2

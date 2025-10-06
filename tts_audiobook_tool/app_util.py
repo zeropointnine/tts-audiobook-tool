@@ -267,25 +267,24 @@ class AppUtil:
         new_path = path.with_stem(new_stem)
         return str(new_path)
 
-    @staticmethod
-    def get_vram_usage_nv() -> tuple[float, float] | None:
-        """
-        Get VRAM usage from nvidia gpu (device 0) in GB
-        """
-        try:
-            import pynvml
+@staticmethod
+def get_vram_usage_nv() -> tuple[float, float] | None:
+    """
+    Get VRAM usage from NVIDIA GPU (device 0) in GB.
+    Requires nvidia-ml-py (pip install nvidia-ml-py).
+    """
+    try:
+        import nvidia_ml_py3 as nvml # type: ignore
 
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        nvml.nvmlInit()
+        handle = nvml.nvmlDeviceGetHandleByIndex(0)
+        info = nvml.nvmlDeviceGetMemoryInfo(handle)
 
-            total_gb = info.total / (1024**3) # type: ignore
-            used_gb = info.used / (1024**3) # type: ignore
+        total_gb = info.total / (1024 ** 3)
+        used_gb = info.used / (1024 ** 3)
 
-            # Shutdown NVML
-            pynvml.nvmlShutdown()
+        nvml.nvmlShutdown()
+        return used_gb, total_gb
 
-            return used_gb, total_gb
-
-        except Exception as e:
-            return None
+    except Exception:
+        return None

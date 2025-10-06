@@ -33,7 +33,7 @@ if not FfmpegUtil.is_ffmpeg_available():
     exit(1)
 
 # Updated dependencies check (required)
-new_packages = ["faster_whisper", "pynvml"] # rem, pynvml does not cause issues when installed on non-CUDA system, so yea
+new_packages = ["faster_whisper"]
 not_found = [package for package in new_packages if not util.find_spec(package)]
 if not_found:
     hint = Hint(

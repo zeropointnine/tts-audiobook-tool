@@ -66,8 +66,6 @@ class IndexTts2Model(IndexTts2ModelProtocol):
             temperature = IndexTts2Model.DEFAULT_TEMPERATURE
         if emo_voice_alpha == -1:
             emo_voice_alpha = IndexTts2Model.DEFAULT_EMO_VOICE_ALPHA
-        if not emo_voice_path:
-            emo_voice_path = None
 
         try:
             # FYI, infer() caches loaded voice sample/s internally
@@ -75,7 +73,7 @@ class IndexTts2Model(IndexTts2ModelProtocol):
                 spk_audio_prompt=voice_path,
                 text=text,
                 temperature=temperature,
-                emo_audio_prompt=emo_voice_path,
+                emo_audio_prompt=emo_voice_path or None,
                 emo_alpha=emo_voice_alpha,
                 max_text_tokens_per_segment=MAX_TOKENS_PER_SEGMENT,
                 output_path=None,
