@@ -62,19 +62,21 @@ class VoiceSubmenuShared:
         printt_set("Voice file saved")
 
     @staticmethod
-    def ask_voice_file(default_dir_path) -> str:
+    def ask_voice_file(default_dir_path: str) -> str:
         """
         Asks for voice file path.
-        Shows error prompt if necessary.
+        Validates file and shows error prompt if necessary.
         Returns path or empty string.
         """
 
         ui = Tts.get_type().value.ui
-        valid_suffixes = ui["voice_path_suffixes"]
+        console_message = ui.get("voice_path_console", "")
+        requestor_title = ui.get("voice_path_requestor", "")
 
         path = ask_file_path(
-             console_message=ui.get("voice_path_console", ""),
-             requestor_title=ui.get("voice_path_requestor", ""),
+             console_message=console_message,
+             requestor_title=requestor_title,
+             filetypes=[("WAV", "*.wav"), ("FLAC", "*.flac"), ("MP3", "*.mp3")], #z verify this works out
              initialdir=default_dir_path
         )
         if not path:
@@ -82,11 +84,6 @@ class VoiceSubmenuShared:
 
         if not os.path.exists(path):
             ask_error(f"File not found: {path}")
-            return ""
-
-        suffix = Path(path).suffix
-        if not suffix in valid_suffixes:
-            ask_error(f"Invalid suffix: {suffix}. Must be {valid_suffixes}")
             return ""
 
         err = SoundFileUtil.is_valid_sound_file(path)

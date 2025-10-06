@@ -258,26 +258,32 @@ class Project:
 
     def set_voice_and_save(
             self,
-            sound: Sound,
+            source_sound: Sound,
             voice_file_stem: str,
             text: str,
             tts_type: TtsModelInfos,
             is_secondary: bool=False
     ) -> str:
         """
-        Saves resampled voice sound file, and updates and saves project properties
+        Saves resampled/peak-normalized voice sound file, and updates and saves project properties
         Returns error string on fail
         """
 
-        # Resample voice sound data to model's native samplerate
+        # Resample to model's native samplerate
         target_sr = tts_type.value.sample_rate
-        sound = SoundUtil.resample_if_necessary(sound, target_sr)
-        dest_file_name = voice_file_stem + ".flac"
+        sound = SoundUtil.resample_if_necessary(source_sound, target_sr)
+        # Peak normalization
+        sound = Sound( SoundUtil.normalize(sound.data), sound.sr )
+
+        # Add "_modelname" to filename
+        dest_file_name = f"{voice_file_stem}_{tts_type.value.file_tag}.flac"
         dest_path = Path(self.dir_path) / dest_file_name
+        # Save flac file to project dir
         err = SoundFileUtil.save_flac(sound, str(dest_path))
         if err:
             return err
 
+        # Update the correct voice file name property of project, and save
         match tts_type:
             case TtsModelInfos.CHATTERBOX:
                 self.chatterbox_voice_file_name = dest_file_name
@@ -335,7 +341,10 @@ class Project:
     def get_voice_label(self, is_secondary: bool=False) -> str:
 
         def make_label(file_name: str) -> str:
-            label = Path(file_name).stem[:30]
+            label = Path(file_name).stem
+            # Strip "_model" from end of file stem
+            label = label.removesuffix("_" + Tts.get_type().value.file_tag)
+            label = label[:30]
             label = sanitize_for_filename(label)
             return label
 

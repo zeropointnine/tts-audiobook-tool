@@ -41,9 +41,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "Oute TTS",
             "short_name": "Oute",
-            "voice_path_console": "Enter voice clone audio clip file path (up to 15s) (wav, flac, mp3): ", # no m4a
-            "voice_path_requestor": "Select voice clone audio clip (up to 15s) (wav, flac, mp3)",
-            "voice_path_suffixes": [".wav", ".flac", ".mp3"]
+            "voice_path_console": "Enter voice clone audio clip file path (up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (up to 15s)"
         },
         substitutions=[ ("—", ", "), ("─", ", ") ]
     )
@@ -57,9 +56,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "Chatterbox TTS",
             "short_name": "Chatterbox",
-            "voice_path_console": "Enter voice clone audio clip (wav, flac, m4a or mp3): ",
-            "voice_path_requestor": "Select voice clone audio clip (wav, flac, m4a or mp3)",
-            "voice_path_suffixes": [".wav", ".flac", ".m4a", ".mp3"]
+            "voice_path_console": "Enter voice clone audio clip: ",
+            "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[ ("—", ", "), ("─", ", ") ]
     )
@@ -73,9 +71,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "Fish S1-mini",
             "short_name": "S1-mini",
-            "voice_path_console": "Enter voice clone audio clip file path (up to 10s) (wav, flac, mp3): ", # no m4a
-            "voice_path_requestor": "Select voice clone audio clip (up to 10s) (wav, flac, mp3)",
-            "voice_path_suffixes": [".wav", ".flac", ".mp3"]
+            "voice_path_console": "Enter voice clone audio clip file path (up to 10s): ",
+            "voice_path_requestor": "Select voice clone audio clip (up to 10s)"
         },
         substitutions=[ ("—", ", "), ("─", ", ") ] # Em dash does not reliably induce caesura
     )
@@ -89,9 +86,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "Higgs Audio V2",
             "short_name": "higgs",
-            "voice_path_console": "Enter voice clone audio clip file path (around 15 seconds recommended) (wav, flac, mp3): ", # TODO m4a?
-            "voice_path_requestor": "Select voice clone audio clip (wav, flac, mp3)",
-            "voice_path_suffixes": [".wav", ".flac", ".mp3"]
+            "voice_path_console": "Enter voice clone audio clip file path (~15 seconds recommended): ",
+            "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[ ("—", ", "), ("─", ", ") ]
     )
@@ -105,9 +101,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "VibeVoice",
             "short_name": "Vibe Voice",
-            "voice_path_console": "Enter voice clone audio clip file path (wav, flac, mp3): ",
-            "voice_path_requestor": "Select voice clone audio clip (wav, flac, mp3)",
-            "voice_path_suffixes": [".wav", ".flac", ".mp3"]
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[
             ("’", "'"), # fancy apost causes rest of word to not be spoken
@@ -125,9 +120,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "IndexTTS2",
             "short_name": "IndexTTS2",
-            "voice_path_console": "Enter voice clone audio clip file path (under 60 seconds recommended) (wav, flac, mp3): ",
-            "voice_path_requestor": "Select voice clone audio clip (wav, flac, mp3)",
-            "voice_path_suffixes": [".wav", ".flac", ".mp3"]
+            "voice_path_console": "Enter voice clone audio clip file path (under 60 seconds recommended): ",
+            "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[
             #z test triple-dot and elipsis char
