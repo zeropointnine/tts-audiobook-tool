@@ -44,7 +44,10 @@ class TtsModelInfos(Enum):
             "voice_path_console": "Enter voice clone audio clip file path (up to 15s): ",
             "voice_path_requestor": "Select voice clone audio clip (up to 15s)"
         },
-        substitutions=[ ("—", ", "), ("─", ", ") ]
+        substitutions=[
+            # fyi u2500 = "box drawing light horizontal". have seen it in the wild used as an em-dash.
+            ("\u2014", ", "), ("\u2500", ", ")
+        ]
     )
 
     CHATTERBOX = TtsModelInfo(
@@ -59,7 +62,9 @@ class TtsModelInfos(Enum):
             "voice_path_console": "Enter voice clone audio clip: ",
             "voice_path_requestor": "Select voice clone audio clip"
         },
-        substitutions=[ ("—", ", "), ("─", ", ") ]
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ")
+        ]
     )
 
     FISH = TtsModelInfo(
@@ -74,7 +79,9 @@ class TtsModelInfos(Enum):
             "voice_path_console": "Enter voice clone audio clip file path (up to 10s): ",
             "voice_path_requestor": "Select voice clone audio clip (up to 10s)"
         },
-        substitutions=[ ("—", ", "), ("─", ", ") ] # Em dash does not reliably induce caesura
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
+        ]
     )
 
     HIGGS = TtsModelInfo(
@@ -89,7 +96,9 @@ class TtsModelInfos(Enum):
             "voice_path_console": "Enter voice clone audio clip file path (~15 seconds recommended): ",
             "voice_path_requestor": "Select voice clone audio clip"
         },
-        substitutions=[ ("—", ", "), ("─", ", ") ]
+        substitutions=[ (
+            "\u2014", ", "), ("\u2500", ", ")
+        ]
     )
 
     VIBEVOICE = TtsModelInfo(
@@ -105,8 +114,8 @@ class TtsModelInfos(Enum):
             "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[
-            ("’", "'"), # fancy apost causes rest of word to not be spoken
-            ("—", ", "), ("─", ", "), (";", ","), # em-dash and semicolon oftentimes don't create caesuras
+            ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
+            ("\u2019", "'"), # fancy apostrophe causes rest of word to not be spoken
             ("…", ","), ("...", ",") # ellipsis can wreck gen badly
         ],
     )
@@ -124,8 +133,8 @@ class TtsModelInfos(Enum):
             "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[
-            #z test triple-dot and elipsis char
-            ("—", ", "), ("─", ", ") # em-dash oftentimes don't create caesura
+            ("\u2014", ", "), ("\u2500", ", "), # em-dash oftentimes doesn't create caesura
+            ("\u2013", ", ") # en-dash oftentimes generates random syllable
         ],
     )
 

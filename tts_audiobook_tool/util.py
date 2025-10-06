@@ -75,7 +75,7 @@ def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
 def ask_continue(message_prefix: str="") -> None:
     message = "Press enter: "
     if message_prefix:
-        message = f"{message_prefix} {message}"
+        message = f"{message_prefix}\n{message}"
     ask(message)
 
 def ask_confirm(message: str="") -> bool:
@@ -484,6 +484,9 @@ def get_string_printable_len(string: str) -> int:
     clean_string = ansi_escape_pattern.sub('', string)
 
     return len(clean_string)
+
+def make_noun(singular: str, plural: str, quantity: int) -> str:
+    return singular if quantity == 1 else plural
 
 def save_json(json_object: Any, path: str) -> str:
     """

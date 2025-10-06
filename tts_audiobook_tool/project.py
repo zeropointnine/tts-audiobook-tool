@@ -118,8 +118,12 @@ class Project:
             else:
                 project.section_dividers = lst
 
-        # Generate range string
-        project.generate_range_string = d.get("generate_range", "")
+        # Generate-range string
+        # TODO: should validate and set to empty if invalid
+        s = d.get("generate_range", "")
+        if s == "all" or s == "a":
+            s = ""
+        project.generate_range_string = s
 
         # STT variant
         s = d.get("stt_variant", "")
@@ -429,7 +433,7 @@ class Project:
     def get_indices_to_generate(self) -> set[int]:
         """
         Returns the set of indices to be generated,
-        derived from the user-inputted and human readable "generate_range_string"
+        derived from the (human readable) "generate_range_string"
         """
         range_string = self.generate_range_string
         is_all = not range_string or range_string == "all" or range_string == "a"

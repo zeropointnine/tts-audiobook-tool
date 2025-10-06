@@ -11,7 +11,6 @@ from tts_audiobook_tool.constants import *
 class ProjectSoundSegments:
     """
     Keeps catalog of the project's sound segment files
-
     List is cached, gets invalidated using directory watcher
     """
 
@@ -55,16 +54,22 @@ class ProjectSoundSegments:
 
     def get_sound_segments_with_tag(self, tag: str) -> dict[int, str]:
         """
-        "tag"
-            is a so-called "bracket tag"
-            (app nomenclature for strings like "[fail]" inserted in filename)
+        "tag" / so-called "bracket tag" is app nomenclature for strings like "[fail]" inserted in filename
         """
         tag = tag.lstrip("[")
         tag = tag.rstrip("]")
         tag = f"[{tag}]"
-
         result = { index: path for index, path in self._sound_segments.items() if tag in path }
         return result
+
+    def get_failed_in_generate_range(self) -> dict[int, str]:
+        all_failed = self.get_sound_segments_with_tag("fail")
+        all_indices = self.project.get_indices_to_generate()
+        subset: dict[int, str] = {}
+        for index in all_indices:
+            if index in all_failed:
+                subset[index] = all_failed[index]
+        return subset
 
 # ---
 

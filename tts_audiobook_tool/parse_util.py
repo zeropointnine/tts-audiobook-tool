@@ -37,7 +37,7 @@ class ParseUtil:
     @staticmethod
     def make_one_indexed_ranges_string(zero_indexed_ints: set[int], max_one_indexed: int) -> str:
         """
-        Returns a string of one-indexed values in this format: "1, 3-5, 7-10"
+        Returns a string of one-indexed values in this format: "1, 3-5, 7-10". Or just "all".
         """
         if not zero_indexed_ints:
             return "none"

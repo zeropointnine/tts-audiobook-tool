@@ -118,12 +118,13 @@ HINT_LINE_BREAKS = Hint(
 )
 HINT_REGEN = Hint(
     "regenerate",
-    "A note about regenerating lines",
-"""The validation algorithm is tuned to be on the conservative side,
+    "A note about regenerating lines...",
+"""
+The validation algorithm is tuned to be on the conservative side,
 which means lines tagged as having potential errors usually *do* have errors,
 but false positives are also possible.
 
-Additionally, some lines with errors may not be easily correct,
+Additionally, some lines with errors may not be easily correctable,
 even after multiple attempts."""
 )
 HINT_REAL_TIME = Hint(

@@ -86,7 +86,7 @@ class GenerateUtil:
             opt_sound, validate_result = GenerateUtil.generate_sound_full_flow(project, text_segment)
 
             if DEV:
-                printt(f"VRAM: {AppUtil.get_vram_usage_nv()}")
+                printt(f"VRAM: {AppUtil.get_vram_usage_nv()}") # type: ignore # linter false positive ugh
 
             if not opt_sound:
                 # Model failed to produce audio
