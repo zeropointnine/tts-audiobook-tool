@@ -11,7 +11,7 @@ This is a generative-AI audiobook creation tool that supports a growing list of 
 The app features a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
 
 - Rational segmentation of long text at paragraph/sentence/phrase boundaries, as needed
-- Detection and correction of inference errors and hallucinations using speech-to-text comparison to the source text
+- Detection and correction of many inference errors and hallucinations using speech-to-text comparison to the source text
 - Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
 - Industry standard loudness normalization (EBU R 128)
 

@@ -66,7 +66,7 @@
 }
 [data-text-size="small"] {
     @media (max-width: 600px) {
-        --text-size: 14px;
+        --text-size: 12px;
     }
 }
 
@@ -244,6 +244,21 @@ body, html {
     fill: var(--color-text-dim);
 }
 
+.chromeless-button {
+    width: 30px;
+    height: 30px;
+    padding:6px;
+    border-radius:8px;
+    cursor: pointer;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.chromeless-button svg path {
+    fill: var(--color-text-dim);
+}
+
 /* ----------------------- */
 
 .expanding-button {
@@ -299,34 +314,6 @@ body, html {
 
 /* ----------------------- */
 
-/* #uiPanelButton {
-    position: fixed;
-    bottom: 12px;
-    right: 12px;
-    cursor: pointer;
-    display: flex;
-    width: auto;
-
-    font-size: 18px;
-    font-family: sans-serif;
-    font-weight: bold;
-    color: var(--color-text-dim);
-
-    display: flex;
-}
-#uiPanelButton .label {
-    padding-left: 8px;
-    padding-right: 8px;
-    max-width: 9999px;
-    transition: max-width 0.3s ease;
-}
-:root[data-collapse-ui-panel-button="true"] #uiPanelButton .label {
-    max-width: 0;
-    padding-left: 0;
-    padding-right: 0;
-    overflow: hidden;
-} */
-
 #uiOverlay {
     display: none;
     position: fixed;
@@ -334,11 +321,17 @@ body, html {
     height: 100%;
     top: 0;
     left: 0;
-    background: #00000044;
+    background: #00000066;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+
+#uiOverlay.show {
+    opacity: 1;
 }
 
 :root[data-theme="dark"] #uiOverlay {
-    background: #ffffff18;
+    background: #00000088;
 }
 
 #uiPanel {
@@ -354,6 +347,33 @@ body, html {
     background: var(--color-bg);
     box-shadow: 0 4px 8px var(--color-shadow);
 
+}
+
+/* ------------------- */
+
+#toast {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) translateY(90%);
+    padding: 12px 18px 18px 18px;
+
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+    text-align: center;
+    color: var(--color-text-dim);
+
+    background: var(--color-bg);
+    border-top-left-radius:8px;
+    border-top-right-radius:8px;
+    box-shadow: 0 4px 8px var(--color-shadow);
+
+    transition: transform 0.3s ease;
+}
+
+#toast.visible {
+    transform: translateX(-50%) translateY(0%);
 }
 
 /* ------------------- */
@@ -403,7 +423,6 @@ body, html {
 
 span {
     background-color: transparent;
-    /* transition: background-color 0.3s ease, color 0.3s ease; */
 }
 span.highlight {
     background-color: var(--color-segment-highlight);

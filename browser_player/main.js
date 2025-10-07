@@ -17,7 +17,8 @@ window.app = function() {
 
     const uiPanelButton = document.getElementById('uiPanelButton');
     const uiOverlay = document.getElementById("uiOverlay");
-    const uiPanel = document.getElementById("uiPanel")
+    const uiPanel = document.getElementById("uiPanel");
+    const toast = document.getElementById("toast");
 
     const scrollTopButton = document.getElementById('scrollTopButton')
     const textSizeButton = document.getElementById('textSizeButton')
@@ -44,6 +45,7 @@ window.app = function() {
     let sleepEndTime = -1;
     let fadeOutValue = 0.0;
     let lastSavePositionTime = 0;
+    let toastTimeoutId = -1
 
     // ****
     init();
@@ -80,6 +82,17 @@ window.app = function() {
                 loadFlacOrMp4(file);
             }
         });
+
+        // Force <label> to un-focus post-file-requestor, ffs
+        loadFileInput.addEventListener('click', () => {
+            const onFocusBack = () => {
+                window.removeEventListener('focus', onFocusBack);
+                setTimeout(() => {
+                    loadLocalButtonLabel.blur()
+                }, 1)
+              };
+              window.addEventListener('focus', onFocusBack);
+        })
 
         player.addEventListener('play', function() {
             hasPlayedOnce = true;
@@ -129,11 +142,10 @@ window.app = function() {
 
         uiPanelButton.addEventListener('click', (e) => {
             collapseOptionsButton();
-            if (uiOverlay.style.display !== 'block') {
-                updateUiPanelButtons();
-                uiOverlay.style.display = 'block';
+            if (isUiPanelVisible()) {
+                showUiPanel();
             } else {
-                uiOverlay.style.display = 'none';
+                hideUiPanel();
             }
         });
 
@@ -161,7 +173,7 @@ window.app = function() {
 
         uiOverlay.addEventListener("click", (e) => {
             e.stopPropagation();
-            uiOverlay.style.display = "none";
+            hideUiPanel()
         });
 
         uiPanel.addEventListener("click", (e) => {
@@ -171,7 +183,9 @@ window.app = function() {
         // Scroll to top
         scrollTopButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.scrollTo(0, 0);
+            hideUiPanel();
+            // window.scrollTo(0, 0);
+            window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
         });
 
         // Text size
@@ -312,11 +326,40 @@ window.app = function() {
         // rem, segment colors button does not multiple children
     }
 
+    function showUiPanel() {
+        updateUiPanelButtons();
+        uiOverlay.style.display = 'block';
+        // Force a reflow to ensure display change is applied before opacity transition
+        uiOverlay.offsetHeight;
+        uiOverlay.classList.add('show');
+    }
+
+    function hideUiPanel() {
+        uiOverlay.classList.remove('show');
+        // Wait for transition to complete before hiding
+        setTimeout(() => {
+            uiOverlay.style.display = 'none';
+        }, 300); // Match the CSS transition duration
+    }
+
+    function isUiPanelVisible() {
+        return (uiOverlay.style.display !== 'block');
+    }
+
+    function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("visible");
+        clearTimeout(toastTimeoutId);
+        toastTimeoutId = setTimeout(hideToast, 2500);
+    }
+
+    function hideToast() {
+        toast.classList.remove("visible");
+    }
+
     // --------------------------------------
 
     function onKeyDown(event) {
-
-        // console.log(event.target.tagName)
 
         if (event.target.tagName == "INPUT") {
             return;
@@ -324,8 +367,8 @@ window.app = function() {
 
         const doLoadLocal = function() {
             event.preventDefault();
-            loadLocalButtonLabel.blur();
             loadFileInput.click();
+            loadLocalButtonLabel.blur();
         };
         if (document.activeElement == loadLocalButtonLabel) {
             if (event.key === "Enter" || event.key === " ") {
@@ -342,7 +385,7 @@ window.app = function() {
             return;
         }
 
-        // Hotkeys that are active while audio is loaded
+        // Hotkeys that are active only while audio is loaded
         switch (event.key) {
             case "Escape":
                 if (player.paused) {
@@ -432,18 +475,20 @@ window.app = function() {
 
         // Highlight active and scroll-to
         if (currentIndex >= 0) {
+
             getCurrentSpan().classList.add('highlight');
-            getCurrentSpan().scrollIntoView({
-                behavior: 'smooth',
-                block: 'center', // 'start', 'center', 'end', or 'nearest'
-                inline: 'nearest' // 'start', 'center', 'end', or 'nearest'
-            });
+
+            if (!(document.activeElement instanceof HTMLInputElement)) {
+                getCurrentSpan().scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center', // 'start', 'center', 'end', or 'nearest'
+                    inline: 'nearest' // 'start', 'center', 'end', or 'nearest'
+                });
+            }
+
             localStorage.setItem("fileId_" + fileId, player.currentTime);
             lastSavePositionTime = Date.now()
         }
-
-        // Save currentTime
-        localStorage.setItem("fileId_" + fileId, player.currentTime);
     }
 
     // -------------------------------------
@@ -569,6 +614,8 @@ window.app = function() {
     }
 
     function startSleep() {
+        showToast("Sleep mode: Will auto-pause in 15 minutes");
+
         sleepEndTime = new Date().getTime() + SLEEP_MS;
 
         clearInterval(sleepId);
@@ -577,6 +624,8 @@ window.app = function() {
     }
 
     function clearSleep() {
+        showToast("Sleep mode cancelled");
+
         root.setAttribute("data-sleep", "");
         clearInterval(sleepId);
         updateUiPanelButtons();
