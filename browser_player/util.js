@@ -1,37 +1,18 @@
 /**
  * Reads and decodes the custom tts-audiobook-tool metadata from a FLAC or MP4 file
- * Returns metadata object or an error string
+ * Returns parsed hash object from the metadata, or an error string
  */
-async function loadAppMetadata(fileOrUrl) {
+async function loadAppMetadata(file, url) {
 
     FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
     MP4_MEAN = "tts-audiobook-tool"
     MP4_TAG = "audiobook-data"
 
-    let file = null; // Blob/File object
-    let isFlac = false;
+    const isFlac = url ? url.toLowerCase().endsWith("flac") : file.name.toLowerCase().endsWith("flac");
 
-    if (typeof fileOrUrl === 'string') {
-        url = fileOrUrl; // Note, url must include scheme
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                return `HTTP error, status ${response.status}`;
-            }
-            file = await response.blob();
-        } catch (error) {
-            return "Error fetching URL:" + error;
-        }
-        isFlac = fileOrUrl.toLowerCase().endsWith("flac");
-    } else if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
-        file = fileOrUrl;
-        isFlac = file.name.toLowerCase().endsWith("flac");
-    } else {
-        return "Invalid input: expected File, Blob, or URL string.";
-    }
-
-    if (!file) {
-        return null;
+    if (url) {
+        // Create File-like adapter
+        file = new RemoteFileLike(url)
     }
 
     // Read "abr" metadata (json string)
@@ -40,7 +21,7 @@ async function loadAppMetadata(fileOrUrl) {
         if (isFlac) {
             tagValue = await findCustomFlacTag(file, FLAC_FIELD);
         } else {
-            // Assume is mp4/m4a
+            // Will assume is mp4/m4a
             tagValue = await findCustomMp4Tag(file, MP4_MEAN, MP4_TAG);
         }
     } catch (error) {
@@ -51,7 +32,7 @@ async function loadAppMetadata(fileOrUrl) {
         // There's no explicit close() method for File objects in the browser.
     }
     if (!tagValue) {
-        return "File as no ABR metadata";
+        return "File has no ABR metadata";
     }
 
     // Parse json, validate
@@ -99,6 +80,9 @@ async function loadAppMetadata(fileOrUrl) {
     return result
 }
 
+/**
+ * Returns value or null, or throws error.
+ */
 async function findCustomMp4Tag(file, targetMean, targetTagName) {
 
     const textDecoder = new TextDecoder('utf-8');
@@ -110,16 +94,16 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
         let effectiveLength = length;
 
         if (offset >= file.size) {
-            // console.debug(`readChunk: Attempt to read at or beyond EOF. Offset: ${offset}, File size: ${file.size}`);
-            return null; // Or throw new Error, depending on desired strictness
+            console.debug(`readChunk: Attempt to read at or beyond EOF. Offset: ${offset}, File size: ${file.size}`);
+            return null; // Or throw error, depending on desired strictness
         }
 
         if (end > file.size) {
             effectiveLength = file.size - offset;
-            // console.debug(`readChunk: Adjusted read length to EOF. Original: ${length}, Effective: ${effectiveLength}`);
+            console.debug(`readChunk: Adjusted read length to EOF. Original: ${length}, Effective: ${effectiveLength}`);
         }
         if (effectiveLength <= 0) {
-            // console.debug(`readChunk: Effective length is zero or negative. Offset: ${offset}, File size: ${file.size}`);
+            console.debug(`readChunk: Effective length is zero or negative. Offset: ${offset}, File size: ${file.size}`);
             return null;
         }
 
@@ -132,12 +116,12 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
         let offset = currentOffset;
         while (offset < maxOffset && offset < file.size) {
             if (offset + 8 > file.size) { // Need at least 8 bytes for size and type
-                // console.debug(`parseAtoms: Not enough data for atom header at offset ${offset}. Path: ${path.join('/')}`);
+                console.debug(`parseAtoms: Not enough data for atom header at offset ${offset}. Path: ${path.join('/')}`);
                 break;
             }
             const headerView = await readChunk(offset, 8);
             if (!headerView || headerView.byteLength < 8) {
-                // console.debug(`parseAtoms: Failed to read atom header or insufficient data at offset ${offset}. Path: ${path.join('/')}`);
+                console.debug(`parseAtoms: Failed to read atom header or insufficient data at offset ${offset}. Path: ${path.join('/')}`);
                 break;
             }
 
@@ -171,8 +155,7 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
             }
 
             if (atomSize < 8 && atomSize !==0 && atomSize !==1) { // Minimum size for type and size fields
-                console.error(`Invalid atom size ${atomSize} for type ${atomType} at offset ${offset}. Path: ${path.join('/')}`);
-                return null; // Critical error, stop parsing this branch
+                throw new Error(`Invalid atom size ${atomSize} for type ${atomType} at offset ${offset}. Path: ${path.join('/')}`);
             }
             if (atomDataOffset + atomDataSize > file.size) {
                 console.warn(`Atom ${atomType} at offset ${offset} with size ${atomSize} extends beyond file size ${file.size}. Truncating. Path: ${path.join('/')}`);
@@ -225,7 +208,7 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
 
         while (subOffset < dashContentDataView.byteLength) {
             if (subOffset + 8 > dashContentDataView.byteLength) {
-                // console.debug(`----: Not enough data for sub-atom header at offset ${subOffset}. Path: ${path.join('/')}`);
+                console.debug(`----: Not enough data for sub-atom header at offset ${subOffset}. Path: ${path.join('/')}`);
                 break;
             }
             const subAtomSize = dashContentDataView.getUint32(subOffset, false);
@@ -235,8 +218,7 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
             // console.debug(`---- Sub-atom: Type=${subAtomType}, Size=${subAtomSize}, Offset=${subOffset}. Path: ${path.join('/')}`);
 
             if (subAtomSize < 8) {
-                console.error(`----: Invalid sub-atom size ${subAtomSize} for type ${subAtomType} at offset ${subOffset}. Path: ${path.join('/')}`);
-                return null;
+                throw new Error(`Invalid sub-atom size ${subAtomSize} for type ${subAtomType} at offset ${subOffset}. Path: ${path.join('/')}`);
             }
 
             const subAtomDataOffset = subOffset + 8;
@@ -281,10 +263,10 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
                         dataPayload = textDecoder.decode(dataSlice);
                         // console.debug(`---- Found data (UTF-8): '${dataPayload.substring(0,100)}...'. Path: ${path.join('/')}`);
                     } else {
-                        // console.debug(`---- Data atom is not UTF-8 (type ${dataIndicator >> 24}), skipping. Path: ${path.join('/')}`);
+                        console.debug(`---- Data atom is not UTF-8 (type ${dataIndicator >> 24}), skipping. Path: ${path.join('/')}`);
                     }
                 } else {
-                    // console.debug(`---- Data atom too short for content. Length: ${subAtomDataLength}. Path: ${path.join('/')}`);
+                    console.debug(`---- Data atom too short for content. Length: ${subAtomDataLength}. Path: ${path.join('/')}`);
                 }
             }
             subOffset += subAtomSize;
@@ -301,6 +283,12 @@ async function findCustomMp4Tag(file, targetMean, targetTagName) {
     return await parseAtoms(0, file.size);
 }
 
+/**
+ * Using the given file handle,
+ * returns a FLAC file's metadata value for the given tag name,
+ * or null if error or not found.
+ *
+ */
 async function findCustomFlacTag(file, tagName) {
 
     let offset = 0;
@@ -316,52 +304,65 @@ async function findCustomFlacTag(file, tagName) {
         return new DataView(arrayBuffer);
     }
 
-    // 1. Check for "fLaC" marker (4 bytes)
+    // Confirm "fLaC" marker (4 bytes)
+
     let dataView = await readChunk(offset, 4);
     const marker = textDecoder.decode(dataView.buffer);
     if (marker !== "fLaC") {
-        throw new Error("Not a valid FLAC file (missing 'fLaC' marker).");
+        throw new Error("Missing 'fLaC' marker");
     }
     offset += 4;
-    // console.log("Found 'fLaC' marker.");
 
-    // 2. Loop through metadata blocks
+    // Loop through metadata blocks
+
     let isLastMetadataBlock = false;
+
     while (!isLastMetadataBlock) {
+
         if (offset + 4 > file.size) {
-            throw new Error("Unexpected end of file while reading metadata block header.");
+            throw new Error("Unexpected end of file while reading metadata block header");
         }
+
         // Read metadata block header (4 bytes)
         dataView = await readChunk(offset, 4);
         offset += 4;
 
         const headerByte1 = dataView.getUint8(0);
         isLastMetadataBlock = (headerByte1 & 0x80) !== 0; // MSB
-        const blockType = headerByte1 & 0x7F;       // 7 LSBs
+        const blockType = headerByte1 & 0x7F; // 7 LSBs
 
-        // Length is 3 bytes, Big Endian
+        // Three bytes, big-endian
         const blockLength = (dataView.getUint8(1) << 16) | (dataView.getUint8(2) << 8) | dataView.getUint8(3);
 
         // console.log(`Metadata Block: Type=${blockType}, Length=${blockLength}, IsLast=${isLastMetadataBlock}`);
 
         if (blockType === 4) { // VORBIS_COMMENT block
+
             // console.log("Found VORBIS_COMMENT block. Parsing...");
+
             if (offset + blockLength > file.size) {
                 throw new Error("VORBIS_COMMENT block length exceeds file size.");
             }
+
             const vorbisCommentDataView = await readChunk(offset, blockLength);
             const foundValue = parseVorbisCommentBlock(vorbisCommentDataView, tagName, textDecoder);
+
             if (foundValue !== null) {
-                return foundValue; // Tag found, return its value
+                // Tag found, return its value
+                return foundValue;
             }
-            // If not found in this block, continue (though typically there's only one VORBIS_COMMENT block)
+
+            // If not found in this block, continue
+            // (though typically there's only one VORBIS_COMMENT block)
         }
 
-        offset += blockLength; // Move to the next block
+        // Move to the next block
+        offset += blockLength;
 
         if (offset > file.size && !isLastMetadataBlock) {
              throw new Error("File ended prematurely before last metadata block flag.");
         }
+
          if (offset === file.size && !isLastMetadataBlock) {
             // This can happen if the last block exactly fills the file
             // but isn't marked as last, or if audio data is missing.
@@ -371,7 +372,8 @@ async function findCustomFlacTag(file, tagName) {
         }
     }
 
-    return null; // Target tag not found after checking all relevant blocks
+    // Target tag not found after checking all relevant blocks
+    return null;
 }
 
 function parseVorbisCommentBlock(dataView, targetTagName, textDecoder) {
@@ -462,4 +464,72 @@ function hasPersistentKeyboard() {
     const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
     const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
     return (hasFinePointer && hasHoverSupport);
+}
+
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * Adapter to use urls like Files.
+ *
+ * For compatibility reasons, it has a "size" property, but is spurious (returns max int).
+ * This is done to prevent triggering elevated CORS-related requirements
+ * (which happens when you make a header request for file size).
+ * It is the responsibility of the client to take account of this limitation, basically.
+ */
+class RemoteFileLike {
+
+    constructor(url) {
+        this.url  = url;
+        this.size = Number.MAX_SAFE_INTEGER;
+    }
+
+    slice(start = 0, end = this.size) {
+        return new RemoteBlob(this, start, end);
+    }
+
+    async readRange(start, end) {
+        // end === Infinity or > real length → turn into open-range request
+        const rangeVal = end === Infinity || end === this.size
+            ? `bytes=${start}-`
+            : `bytes=${start}-${end - 1}`;
+
+        const res = await fetch(this.url, {headers: {Range: rangeVal}});
+        if (!res.ok) {
+            // 416 can happen when start is past EOF; treat as empty
+            if (res.status === 416) return new ArrayBuffer(0);
+            throw new Error(`Range request failed: ${res.status}`);
+        }
+        return res.arrayBuffer();
+    }
+}
+
+/**
+ * RemoteFileLike helper class
+ */
+class RemoteBlob {
+    constructor(remote, start, end) {
+        this.remote = remote;
+        this.start  = Math.max(0, start);
+        this.end    = end;
+    }
+
+    async arrayBuffer() {
+        return this.remote.readRange(this.start, this.end);
+    }
+
+    async text() {
+        const ab = await this.arrayBuffer();
+        return new TextDecoder().decode(ab);
+    }
+
+    async* stream(chunk = 64 * 1024) {
+        let offset = this.start;
+        while (true) {
+            const next = offset + chunk;
+            const buf  = await this.remote.readRange(offset, next);
+            if (buf.byteLength === 0) break;   // EOF
+            yield new Uint8Array(buf);
+            offset += buf.byteLength;
+        }
+    }
 }

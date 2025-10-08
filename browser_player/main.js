@@ -8,17 +8,19 @@ window.app = function() {
     const loadLastHolder = document.getElementById("loadLast")
     const sleepTimeLeft = document.getElementById('sleepTimeLeft');
     const fileNameDiv = document.getElementById('fileName')
-    const helpHolder = document.getElementById("helpHolder");
     const playerHolder = document.getElementById('playerHolder');
-    const player = document.getElementById('player');
+    const audio = document.getElementById('player');
     const textHolder = document.getElementById('textHolder');
     const loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
     const loadUrlInput = document.getElementById('loadUrlInput');
+    const helpHolder = document.getElementById("helpHolder");
+    const githubButton = document.getElementById("githubCorner");
 
     const uiPanelButton = document.getElementById('uiPanelButton');
     const uiOverlay = document.getElementById("uiOverlay");
     const uiPanel = document.getElementById("uiPanel");
     const toast = document.getElementById("toast");
+    const loadingOverlay = document.getElementById("loadingOverlay")
 
     const scrollTopButton = document.getElementById('scrollTopButton')
     const textSizeButton = document.getElementById('textSizeButton')
@@ -26,11 +28,17 @@ window.app = function() {
     const segmentColorsButton = document.getElementById('segmentColorsButton')
     const sleepButton = document.getElementById("sleepButton");
 
-    let fileId = null;
+    let file = null;
+    let url = null;
+
+    let fileId = null; // id used to track the loaded resource
+
+    let isCheckingZombie = false;
+
     let timedTextSegments = [];
     let spans = []; // cached text segment spans array
 
-    let isStarted = false;
+    let isStarted = false; // is audiobook populated and audio loaded
     let hasPlayedOnce = false; // has audio playback happened at least once
     let isPlayerHover = false;
     let isPlayerFocused = false;
@@ -39,12 +47,11 @@ window.app = function() {
     let previousIndex = -1;
     let directSelections = []
 
-    let intervalId = -1;
+    let loopIntervalId = -1;
     let fadeOutId = -1;
     let sleepId = -1;
     let sleepEndTime = -1;
     let fadeOutValue = 0.0;
-    let lastSavePositionTime = 0;
     let toastTimeoutId = -1
 
     // ****
@@ -67,7 +74,7 @@ window.app = function() {
                 const url = loadUrlInput.value.trim()
                 if (url) {
                     loadUrlInput.blur();
-                    loadFlacOrMp4(url);
+                    loadAudioFileOrUrl(null, url);
                 }
             }
         });
@@ -79,7 +86,8 @@ window.app = function() {
         loadFileInput.addEventListener('change', async () => {
             const file = loadFileInput.files[0];
             if (file) {
-                loadFlacOrMp4(file);
+                // The user has selected a local file
+                loadAudioFileOrUrl(file, null);
             }
         });
 
@@ -94,15 +102,20 @@ window.app = function() {
               window.addEventListener('focus', onFocusBack);
         })
 
-        player.addEventListener('play', function() {
+        audio.addEventListener('play', function() {
             hasPlayedOnce = true;
             root.setAttribute("data-player-status", "play");
             currentIndex = -1; // ensures scroll to current segment
-            collapseOptionsButton()
+            collapseOptionsButton();
         });
 
-        player.addEventListener('pause', function() {
+        audio.addEventListener('pause', function() {
             root.setAttribute("data-player-status", "pause");
+        });
+
+        audio.addEventListener('error', function(e) {
+            // error = e.target.error
+            // console.log("Audio error:", error.code, error.message)
         });
 
         playerHolder.addEventListener('mouseenter', () => {
@@ -115,7 +128,7 @@ window.app = function() {
             onPlayerIxChange();
         });
 
-        // Focus and blur detection (bubbles)
+        // Focus in/out detection (bubbles)
         playerHolder.addEventListener('focusin', () => {
             isPlayerFocused = true;
             onPlayerIxChange();
@@ -133,11 +146,22 @@ window.app = function() {
 
         document.addEventListener("keydown", onKeyDown);
 
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                // Browser tab has gone from not-visible to visible
+                // If it's a local file, audio is paused, and is past 0s, check for 'zombie state'
+                const should = (!isCheckingZombie && !audio.ended && audio.paused && audio.currentTime > 0)
+                if (should) {
+                    checkZombieState();
+                }
+            }
+        });
+
         // Load file from queryparam "url"
         const urlParams = new URLSearchParams(window.location.search);
         const url = urlParams.get('url');
         if (url) {
-            loadFlacOrMp4(url);
+            loadAudioFileOrUrl(null, url);
         }
 
         uiPanelButton.addEventListener('click', (e) => {
@@ -184,14 +208,13 @@ window.app = function() {
         scrollTopButton.addEventListener('click', (e) => {
             e.stopPropagation();
             hideUiPanel();
-            // window.scrollTo(0, 0);
             window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
         });
 
         // Text size
         textSizeButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            cycleRootAttribute("data-text-size", ["medium", "small"]);
+            cycleRootAttribute("data-book-text-size", ["medium", "small"]);
             updateUiPanelButtons()
         });
 
@@ -219,50 +242,61 @@ window.app = function() {
                 clearSleep()
             }
             updateUiPanelButtons()
+            hideUiPanel()
         });
     }
 
-    async function loadFlacOrMp4(fileOrUrl) {
-        clear();
-        result = await loadAppMetadata(fileOrUrl);
-        if (!result || typeof result === 'string') {
-            errorMessage = result || "No tts-audiobook-tool metadata found"
+    /**
+     * pFile and pUrl are mutually exclusive
+     */
+    async function loadAudioFileOrUrl(pFile, pUrl) {
+
+        if (pUrl) {
+            showLoadingOverlay();
+        } else {
+            // No need if local file bc fast enough
+        }
+
+        const appMetadata = await loadAppMetadata(pFile, pUrl);
+
+        if (pUrl) {
+            hideLoadingOverlay();
+        }
+
+        if (!appMetadata || typeof appMetadata === 'string') {
+            errorMessage = appMetadata || "No tts-audiobook-tool metadata found";
             alert(errorMessage);
             return;
         }
-        start(fileOrUrl, result["text_segments"]);
+
+        start(pFile, pUrl, appMetadata["text_segments"]);
     }
 
-    function clear() {
-        isStarted = false;
-        playerHolder.style.display = "none";
-        fileNameDiv.style.display = "none"
-        textHolder.style.display = "none";
-        clearInterval(intervalId)
-        player.src = null;
-        currentIndex = -1;
-        previousIndex = -1
-        spans = [];
-        root.setAttribute("data-player-status", "none");
-    }
+    /**
+     * pFile and pUrl are mutually exclusive
+     */
+    function start(pFile, pUrl, pTimedTextSegments) {
 
-    function start(fileOrUrl, pTimedTextSegments) {
-
-        let file = null;
-        let url = null;
-        if (typeof fileOrUrl === "string") {
-            url = fileOrUrl;
-            fileId = url;
-        } else {
-            file = fileOrUrl;
-            fileId = file.name;
-        }
-
+        file = pFile;
+        url = pUrl;
+        fileId = file ? file.name : url
         timedTextSegments = pTimedTextSegments
 
         localStorage.setItem("last_file_id", fileId);
 
-        document.getElementById("githubCorner").style.display = "none";
+        currentIndex = -1;
+        previousIndex = -1
+
+        audio.src = "";
+        audio.load(); // aborts any pending activity
+        playerHolder.style.display = "none";
+        fileNameDiv.style.display = "none"
+        textHolder.style.display = "none";
+        root.setAttribute("data-player-status", "none");
+        githubButton.style.display = "block";
+        loadingOverlay.style.display = 'none';
+
+        githubButton.style.display = "none";
         loadLastHolder.style.display = "none";
         helpHolder.style.display = "none";
         fileNameDiv.style.display = "block"
@@ -276,14 +310,14 @@ window.app = function() {
             showPlayerAndFade();
         }
 
-        player.src = file ? URL.createObjectURL(file) : url
-        playerPlay();
+        audio.src = url || URL.createObjectURL(file)
+        playerPlay(true);
 
         time = localStorage.getItem("fileId_" + fileId)
         if (time) {
             time = parseFloat(time);
             if (time) {
-                player.currentTime = time;
+                audio.currentTime = time;
             }
         }
 
@@ -291,7 +325,7 @@ window.app = function() {
             document.activeElement.blur();
         }
 
-        intervalId = setInterval(loop, 50);
+        loopIntervalId = setInterval(loop, 50);
         isStarted = true;
     }
 
@@ -320,7 +354,7 @@ window.app = function() {
     }
 
     function updateUiPanelButtons() {
-        setButtonChildVisible(textSizeButton, root.getAttribute("data-text-size"));
+        setButtonChildVisible(textSizeButton, root.getAttribute("data-book-text-size"));
         setButtonChildVisible(themeButton, root.getAttribute("data-theme"));
         setButtonChildVisible(sleepButton, root.getAttribute("data-sleep"));
         // rem, segment colors button does not multiple children
@@ -339,7 +373,7 @@ window.app = function() {
         // Wait for transition to complete before hiding
         setTimeout(() => {
             uiOverlay.style.display = 'none';
-        }, 300); // Match the CSS transition duration
+        }, 300); // Should match the CSS transition duration
     }
 
     function isUiPanelVisible() {
@@ -357,6 +391,19 @@ window.app = function() {
         toast.classList.remove("visible");
     }
 
+    function showLoadingOverlay() {
+        loadingOverlay.style.display = 'flex';
+        loadingOverlay.offsetHeight; // Force reflow
+        loadingOverlay.classList.add('show');
+    }
+
+    function hideLoadingOverlay() {
+        loadingOverlay.classList.remove('show');
+        // Wait for transition to complete before hiding
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+        }, 300); // Should match the CSS transition duration
+    }
     // --------------------------------------
 
     function onKeyDown(event) {
@@ -388,10 +435,10 @@ window.app = function() {
         // Hotkeys that are active only while audio is loaded
         switch (event.key) {
             case "Escape":
-                if (player.paused) {
+                if (audio.paused) {
                     playerPlay();
                 } else {
-                    player.pause();
+                    audio.pause();
                 }
                 event.preventDefault();
                 break;
@@ -408,10 +455,10 @@ window.app = function() {
                 }
                 break;
             case "[":
-                player.currentTime -= 60;
+                audio.currentTime -= 60;
                 break;
             case "]":
-                player.currentTime += 60;
+                audio.currentTime += 60;
                 break;
         }
     }
@@ -436,10 +483,10 @@ window.app = function() {
 
         if (clickedSpan == getCurrentSpan()) {
             // Toggle play
-            if (player.paused) {
+            if (audio.paused) {
                 playerPlay();
             } else {
-                player.pause()
+                audio.pause()
             }
         } else {
             seekBySegmentIndex(segmentIndex, true);
@@ -454,13 +501,11 @@ window.app = function() {
 
     function loop() {
 
-        // Save currentTime every 10 seconds
-        if (Date.now() - lastSavePositionTime > 10000) {
-            localStorage.setItem("fileId_" + fileId, player.currentTime);
-            lastSavePositionTime = Date.now()
+        if (isCheckingZombie) {
+            return;
         }
 
-        const i = getSegmentIndexBySeconds(player.currentTime);
+        const i = getSegmentIndexBySeconds(audio.currentTime);
         if (i == currentIndex) {
             // Update only when index has changed
             return;
@@ -486,12 +531,18 @@ window.app = function() {
                 });
             }
 
-            localStorage.setItem("fileId_" + fileId, player.currentTime);
-            lastSavePositionTime = Date.now()
+            if (!audio.ended) {
+                storePosition();
+            }
         }
     }
 
     // -------------------------------------
+
+    function storePosition(value) {
+        value = value || audio.currentTime;
+        localStorage.setItem("fileId_" + fileId, audio.currentTime);
+    }
 
     function collapseOptionsButton() {
         root.setAttribute("data-ui-panel-button-collapse", "true");
@@ -561,8 +612,8 @@ window.app = function() {
         getCurrentSpan()?.classList.remove('highlight');
 
         targetTime = timedTextSegments[i]["time_start"];
-        player.currentTime = targetTime;
-        if (player.paused && andPlay) {
+        audio.currentTime = targetTime;
+        if (audio.paused && andPlay) {
             playerPlay();
         }
     }
@@ -570,14 +621,18 @@ window.app = function() {
     // --------------------------------------
     // Player show/hide logic etc
 
-    async function playerPlay() {
+    async function playerPlay(isFirstTime) {
         try {
-            await player.play();
+            await audio.play();
             if (!getPlayerActive()) {
                 showPlayerAndFade();
             }
         } catch (error) {
-            console.error("Playback failed:", error);
+            if (isFirstTime && error.name == "NotAllowedError") {
+                showToast("Press Play to start");
+            } else {
+                console.error("play error - code:", error.code, "name:", error.name, "message:", error.message)
+            }
         }
     }
 
@@ -598,10 +653,10 @@ window.app = function() {
             duration = DEFAULT_FADE_DELAY;
         }
 
-        playerHolder.classList.add('no-transition');
+        playerHolder.classList.add('noTransition');
         playerHolder.style.opacity = '1.0';
         void playerHolder.offsetHeight; // force reflow
-        playerHolder.classList.remove('no-transition');
+        playerHolder.classList.remove('noTransition');
 
         clearTimeout(fadeOutId);
         fadeOutId = setTimeout(() => {
@@ -634,7 +689,7 @@ window.app = function() {
     function onSleepInterval() {
         const ms = sleepEndTime - new Date().getTime();
         if (ms <= 0) {
-            player.pause();
+            audio.pause();
             clearSleep();
             return;
         }
@@ -724,5 +779,65 @@ window.app = function() {
                 break;
             }
         }
+    }
+
+    /**
+     * Checks if <audio> is in a 'zombie state'
+     * (no longer has a 'handle' on the data but reports no issues)
+     */
+    function checkZombieState() {
+
+        // Resume playback briefly and see if it jumps to an "ended" state (yes rly)
+
+        isCheckingZombie = true;
+        let timeoutId = 0;
+        const originalVolume = audio.volume;
+        const originalCurrentTime = audio.currentTime;
+        audio.volume = 0.0;
+        audio.play();
+
+        const cleanUp = () => {
+            isCheckingZombie = false;
+            audio.removeEventListener("ended", onEnded);
+            clearTimeout(timeoutId);
+            audio.pause();
+            audio.volume = originalVolume;
+
+        };
+
+        const onEnded = () => {
+
+            if (file) {
+
+                // Unrecoverable. Requires user intervention (ie, click on <input type="file">)
+                s = "The browser has dropped the handle to the local audio file.\n\n";
+                s += "This can occur when the mobile browser tab is put into the background while the audio is paused, unfortunately.\n\n";
+                s += "Please load the file again to resume.";
+                alert(s);
+                cleanUp();
+                window.location.reload();
+
+            } else {
+
+                // Is url
+                // Note: I've not been able to induce zombie state while using a url,
+                // but have gotten reports that it does happen on iOS.
+
+                // TODO: untested. verify:
+                console.log("restoring connection; unverified");
+                cleanUp();
+                audio.url = url;
+                audio.load(); // for good measure
+                audio.currentTime = originalCurrentTime;
+            }
+        };
+
+        const onTimeout = () => {
+            console.log("ok");
+            cleanUp();
+        };
+
+        audio.addEventListener("ended", onEnded,{ once: true } );
+        timeoutId = setTimeout(onTimeout, 1000);
     }
 };

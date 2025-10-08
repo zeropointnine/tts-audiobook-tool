@@ -52,22 +52,86 @@
     --color-segment-hover: #60306066;
 }
 
-[data-text-size="medium"] {
+[data-book-text-size="medium"] {
     --text-size: 24px;
 }
-[data-text-size="medium"] {
+[data-book-text-size="medium"] {
     @media (max-width: 600px) {
         --text-size: 18px;
     }
 }
 
-[data-text-size="small"] {
+[data-book-text-size="small"] {
     --text-size: 18px;
 }
-[data-text-size="small"] {
+[data-book-text-size="small"] {
     @media (max-width: 600px) {
-        --text-size: 12px;
+        --text-size: 14px;
     }
+}
+
+/* ------------------------------------------------ */
+
+.titleText {
+    font-size: 24px;
+    font-family: sans-serif;
+    font-weight: bold;
+}
+@media (max-width: 600px) {
+    .titleText {
+        font-size: 18px;
+    }
+}
+
+.iconButton {
+    width: 30px;
+    height: 30px;
+    padding:6px;
+    border-radius:8px;
+    background-color: var(--color-content-bg);
+    box-shadow: 0 4px 8px var(--color-shadow);
+    cursor: pointer;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.iconButton svg path {
+    fill: var(--color-text-dim);
+}
+
+.chromelessButton {
+    width: 30px;
+    height: 30px;
+    padding:6px;
+    border-radius:8px;
+    cursor: pointer;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.chromelessButton svg path {
+    fill: var(--color-text-dim);
+}
+
+.buttonText {
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+}
+@media (max-width: 600px) {
+    .titleText {
+        font-size: 18px;
+    }
+}
+
+.noTransition {
+    transition: none !important;
+}
+
+.noPointerEvents {
+    pointer-events: none;
 }
 
 /* ------------------------------------------------ */
@@ -103,9 +167,6 @@ body, html {
     max-width: 800px;
     margin-left:auto;
     margin-right:auto;
-    font-size: 18px;
-    font-family: sans-serif;
-    font-weight: bold;
     text-align: center;
 }
 
@@ -120,6 +181,11 @@ body, html {
     justify-content: center;
     align-items: center;
     gap: 24px;
+}
+@media (max-width: 600px) {
+    .loadButtonsLine {
+        gap: 12px;
+    }
 }
 
 .loadButton {
@@ -167,17 +233,22 @@ body, html {
     font-size: 16px;
     font-family: sans-serif;
     font-weight: normal;
-    font-style: italic;
     color: var(--color-text-dim);
 }
 #loadLastId {
     margin-top:4px;
 }
+@media (max-width: 600px) {
+    #loadLast {
+        font-size: 12px;
+    }
+}
+
 
 /* --------------------------------------- */
 
 #noSleepInfo {
-    height:48px;
+    height:24px;
 }
 [data-sleep="on"] #noSleepInfo  {
     display: none;
@@ -218,55 +289,32 @@ body, html {
     font-weight: bold;
     color: var(--color-text-dim);
     text-align: center;
+    overflow-wrap: break-word;
+    word-break: break-word; /* Safari fallback */
 }
 @media (max-width: 600px) {
     #fileName {
-        margin-top: 16px;
-        margin-bottom: 16px;
+        font-size: 12px;
+        /* margin-top: 16px;
+        margin-bottom: 16px; */
     }
-}
-
-/* square button */
-.button {
-    width: 30px;
-    height: 30px;
-    padding:6px;
-    border-radius:8px;
-    background-color: var(--color-content-bg);
-    box-shadow: 0 4px 8px var(--color-shadow);
-    cursor: pointer;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-.button svg path {
-    fill: var(--color-text-dim);
-}
-
-.chromeless-button {
-    width: 30px;
-    height: 30px;
-    padding:6px;
-    border-radius:8px;
-    cursor: pointer;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-.chromeless-button svg path {
-    fill: var(--color-text-dim);
 }
 
 /* ----------------------- */
 
-.expanding-button {
-
+#uiPanelButtonHolder {
     position: fixed;
-    bottom: 12px;
+    bottom: 0;
+    bottom: env(safe-area-inset-bottom, 0); /* mobile */
     right: 12px;
+    padding-bottom: 12px;
+}
 
+#uiPanelButton svg path {
+    fill: var(--color-text-dim);
+}
+
+.expandingButton {
     border: none;
     border-radius: 8px;
     background-color: var(--color-content-bg);
@@ -279,21 +327,14 @@ body, html {
     overflow: hidden;
 }
 
-.expanding-button .graphic {
+.expandingButton .graphic {
     flex-shrink: 0;
     width: 30px;
     height: 30px;
     padding:6px;
 }
 
-#uiPanelButton svg path {
-    fill: var(--color-text-dim);
-}
-
-.expanding-button .label {
-    font-size: 18px;
-    font-family: sans-serif;
-    font-weight: bold;
+.expandingButton .label {
     color: var(--color-text-dim);
     white-space: nowrap;
 
@@ -305,7 +346,7 @@ body, html {
     transition: max-width 0.4s ease-out, padding-left 0.4s ease-out, padding-right 0.4s ease-out, opacity 0.4s ease-out;
 }
 
-:root[data-ui-panel-button-collapse="true"] .expanding-button .label {
+:root[data-ui-panel-button-collapse="true"] .expandingButton .label {
     max-width: 0px;
     padding-left: 0;
     padding-right: 0;
@@ -348,32 +389,71 @@ body, html {
     box-shadow: 0 4px 8px var(--color-shadow);
 
 }
+@media (max-width: 600px) {
+    #uiPanel {
+        gap: 6px;
+        padding: 6px;
+        box-shadow: 0 3px 6px var(--color-shadow);
+    }
+}
+
 
 /* ------------------- */
 
-#toast {
+#toastHolder {
     position: fixed;
     bottom: 0;
-    left: 50%;
-    transform: translateX(-50%) translateY(90%);
-    padding: 12px 18px 18px 18px;
+    bottom: env(safe-area-inset-bottom, 0); /* mobile */
+    width: 100%;
+    display: flex;
+    justify-content: center; /* horizontal center */
+    pointer-events: none;
+}
 
-    font-size: 18px;
-    font-family: sans-serif;
-    font-weight: bold;
+#toast {
+    opacity: 0;
+    padding: 12px 18px 12px 18px;
+    margin: 0 12px 12px 12px;
     text-align: center;
     color: var(--color-text-dim);
-
     background: var(--color-bg);
-    border-top-left-radius:8px;
-    border-top-right-radius:8px;
+    border-radius:8px;
     box-shadow: 0 4px 8px var(--color-shadow);
 
-    transition: transform 0.3s ease;
+    transition: opacity 0.3s ease;
 }
 
 #toast.visible {
-    transform: translateX(-50%) translateY(0%);
+    opacity: 1;
+}
+
+/* ------------------- */
+
+#loadingOverlay {
+    display: none; /* flex */
+    align-items: center;
+    justify-content: center;
+
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background: #00000088;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+
+#loadingOverlay.show {
+    opacity: 1;
+}
+
+#loadingPrompt {
+    background: var(--color-bg);
+    color: var(--color-text);
+    padding: 24px 48px 24px 48px;
+    border-radius:8px;
+    box-shadow: 0 4px 8px var(--color-shadow);
 }
 
 /* ------------------- */
@@ -501,10 +581,4 @@ span.highlight {
 }
 #githubCorner svg {
     fill: var(--color-text-dim);
-}
-
-/* ------------------- */
-
-.no-transition {
-    transition: none !important;
 }
