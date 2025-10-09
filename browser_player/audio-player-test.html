@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Player Test</title>
+    <link rel="stylesheet" href="audio-player.css">
+</head>
+<body>
+
+    <h1>Audio Player Test</h1>
+
+    <audio src="waves-higgs.abr.m4a"></audio>
+
+    <div id="player-container"></div>
+
+    <script src="audio-player.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const audioPlayer = new AudioPlayer({
+                audioElement: document.querySelector('audio'),
+                container: document.querySelector('#player-container')
+            });
+        });
+    </script>
+
+</body>
+</html>

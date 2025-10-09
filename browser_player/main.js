@@ -9,7 +9,7 @@ window.app = function() {
     const sleepTimeLeft = document.getElementById('sleepTimeLeft');
     const fileNameDiv = document.getElementById('fileName')
     const playerHolder = document.getElementById('playerHolder');
-    const audio = document.getElementById('player');
+    const audio = document.getElementById('audio');
     const textHolder = document.getElementById('textHolder');
     const loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
     const loadUrlInput = document.getElementById('loadUrlInput');
@@ -27,6 +27,8 @@ window.app = function() {
     const themeButton = document.getElementById('themeButton');
     const segmentColorsButton = document.getElementById('segmentColorsButton')
     const sleepButton = document.getElementById("sleepButton");
+
+    let player = null;
 
     let file = null;
     let url = null;
@@ -60,6 +62,8 @@ window.app = function() {
 
     function init() {
 
+        player = new AudioPlayer({ audioElement: audio, container: playerHolder });
+
         if (hasPersistentKeyboard()) {
             helpHolder.style.display = "block";
         }
@@ -68,6 +72,8 @@ window.app = function() {
             // Disable player fadeout
             fadeOutValue = 1.0;
         }
+        // xxx
+        fadeOutValue = 1.0;
 
         loadUrlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -311,7 +317,7 @@ window.app = function() {
         }
 
         audio.src = url || URL.createObjectURL(file)
-        playerPlay(true);
+        playerPlay();
 
         time = localStorage.getItem("fileId_" + fileId)
         if (time) {
@@ -621,17 +627,17 @@ window.app = function() {
     // --------------------------------------
     // Player show/hide logic etc
 
-    async function playerPlay(isFirstTime) {
+    async function playerPlay() {
         try {
             await audio.play();
             if (!getPlayerActive()) {
                 showPlayerAndFade();
             }
         } catch (error) {
-            if (isFirstTime && error.name == "NotAllowedError") {
-                showToast("Press Play to start");
+            if (error.name == "NotAllowedError") {
+                showToast("Click Play to start");
             } else {
-                console.error("play error - code:", error.code, "name:", error.name, "message:", error.message)
+                console.error("playerPlay error - code:", error.code, "name:", error.name, "message:", error.message)
             }
         }
     }
@@ -794,6 +800,8 @@ window.app = function() {
         const originalVolume = audio.volume;
         const originalCurrentTime = audio.currentTime;
         audio.volume = 0.0;
+
+        // Minor FYI: Will fail if source is url and has not yet been user-activated
         audio.play();
 
         const cleanUp = () => {
@@ -802,7 +810,6 @@ window.app = function() {
             clearTimeout(timeoutId);
             audio.pause();
             audio.volume = originalVolume;
-
         };
 
         const onEnded = () => {
@@ -833,7 +840,7 @@ window.app = function() {
         };
 
         const onTimeout = () => {
-            console.log("ok");
+            // success
             cleanUp();
         };
 
