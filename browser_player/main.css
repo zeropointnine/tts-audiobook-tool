@@ -1,3 +1,27 @@
+/* Shared */
+
+.noTransition {
+    transition: none !important;
+}
+
+.noPointerEvents {
+    pointer-events: none;
+}
+
+.bodyNoScroll {
+    overflow: hidden;
+}
+
+.buttonText {
+    font-size: 18px;
+    font-family: sans-serif;
+    font-weight: bold;
+}
+@media (max-width: 600px) {
+    .titleText {
+        font-size: 18px;
+    }
+}
 
 .titleText {
     font-size: 24px;
@@ -42,25 +66,6 @@
     fill: var(--color-text-dim);
 }
 
-.buttonText {
-    font-size: 18px;
-    font-family: sans-serif;
-    font-weight: bold;
-}
-@media (max-width: 600px) {
-    .titleText {
-        font-size: 18px;
-    }
-}
-
-.noTransition {
-    transition: none !important;
-}
-
-.noPointerEvents {
-    pointer-events: none;
-}
-
 /* ------------------------------------------------ */
 
 body, html {
@@ -86,7 +91,7 @@ body, html {
 }
 
 .loadHolder {
-    margin-top:64px; /* clear player */
+    padding-top:42px; /* clear player + extra */
     padding-left: 18px;
     padding-right: 18px;
     width: calc(100% - 36px);
@@ -170,7 +175,6 @@ body, html {
     }
 }
 
-
 /* --------------------------------------- */
 
 #noSleepInfo {
@@ -185,8 +189,8 @@ body, html {
 }
 [data-sleep="on"] #sleepInfo {
     width:100%;
-    margin-top:24px;
-    margin-bottom:24px;
+    margin-top:14px;
+    margin-bottom:14px;
     font-size:16px;
     font-weight: bold;
     color: var(--color-text-dim);
@@ -221,8 +225,6 @@ body, html {
 @media (max-width: 600px) {
     #fileName {
         font-size: 12px;
-        /* margin-top: 16px;
-        margin-bottom: 16px; */
     }
 }
 
@@ -284,21 +286,30 @@ body, html {
 #uiOverlay {
     display: none;
     position: fixed;
-    width: 100%;
-    height: 100%;
     top: 0;
     left: 0;
+    right: 0;
+    bottom: 0;
+
+    width: 100vw;
+
+    /* Dynamic viewport height re: mobile */
+    height: calc(100dvh + 10px); /* 10px because firefox mobile display bug */
+
+    @supports not (height: 100dvh) {
+        height: 100vh; /* Back compat */
+    }
+
     background: #00000066;
     opacity: 0;
     transition: opacity 0.3s ease-in-out;
 }
+:root[data-theme="dark"] #uiOverlay {
+    background: #00000088;
+}
 
 #uiOverlay.show {
     opacity: 1;
-}
-
-:root[data-theme="dark"] #uiOverlay {
-    background: #00000088;
 }
 
 #uiPanel {
@@ -307,7 +318,7 @@ body, html {
     gap: 16px;
 
     position: absolute;
-    bottom: 64px;
+    bottom: 74px; /* 64px + 10px for unwelcome adjustment above */
     right: 12px;
     padding: 12px;
     border-radius:8px;

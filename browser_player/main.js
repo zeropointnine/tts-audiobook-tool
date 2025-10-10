@@ -72,8 +72,6 @@ window.app = function() {
             // Disable player fadeout
             fadeOutValue = 1.0;
         }
-        // xxx
-        fadeOutValue = 1.0;
 
         loadUrlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -369,9 +367,9 @@ window.app = function() {
     function showUiPanel() {
         updateUiPanelButtons();
         uiOverlay.style.display = 'block';
-        // Force a reflow to ensure display change is applied before opacity transition
-        uiOverlay.offsetHeight;
+        uiOverlay.offsetHeight; // Force reflow
         uiOverlay.classList.add('show');
+        document.body.classList.add('bodyNoScroll'); // Prevent background scrolling
     }
 
     function hideUiPanel() {
@@ -379,7 +377,8 @@ window.app = function() {
         // Wait for transition to complete before hiding
         setTimeout(() => {
             uiOverlay.style.display = 'none';
-        }, 300); // Should match the CSS transition duration
+            document.body.classList.remove('bodyNoScroll');
+        }, 300);
     }
 
     function isUiPanelVisible() {

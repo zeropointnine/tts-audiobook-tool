@@ -123,21 +123,25 @@ class AudioPlayer {
 
     _updateVolumeControls() {
 
-        const barWidth = this.volumeSlider.offsetWidth;
-        const thumbWidth = this.volumeSliderThumb.offsetWidth;
-
-        if (barWidth == 0) {
-            setTimeout(() => { this._updateVolumeControls(); }, 100);
-            return;
-        }
-
+        // Icon
         if (this.audio.muted || this.audio.volume === 0) {
             this.volumeBtn.classList.add('muted');
             this.volumeBtn.classList.remove('unmuted');
-            this.volumeSliderThumb.style.left = '0px';
         } else {
             this.volumeBtn.classList.remove('muted');
             this.volumeBtn.classList.add('unmuted');
+        }
+
+        // Thumb pos
+        const barWidth = this.volumeSlider.offsetWidth;
+        const thumbWidth = this.volumeSliderThumb.offsetWidth;
+        if (barWidth == 0) {
+            setTimeout(() => { this._updateVolumeControls(); }, 100); // yes well
+            return;
+        }
+        if (this.audio.muted || this.audio.volume === 0) {
+            this.volumeSliderThumb.style.left = '0px';
+        } else {
             const thumbLeft = this.audio.volume * (barWidth - thumbWidth);
             this.volumeSliderThumb.style.left = `${thumbLeft}px`;
         }
