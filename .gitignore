@@ -1,7 +1,7 @@
+node_modules/
 __pycache__/
 venv*/
 .vscode/
 checkpoints/
-pyrightconfig.json
-config_oute_dev.py
 test*.py
+config_oute_dev.py

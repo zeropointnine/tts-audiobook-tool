@@ -1,0 +1,21 @@
+{
+
+    "typeCheckingMode": "standard",
+
+    "reportUnusedImport": false,
+
+    "diagnosticSeverityOverrides": {
+        "reportUnusedImport": "information"
+    },
+
+    "exclude": [
+        "node_modules/**",
+        "**/venv*/**",
+        "boson_multimodal/**",
+        "tts_audiobook_tool/higgs_generator.py",
+        "tts_audiobook_tool/test_higgs.py"
+    ],
+    "ignore": [
+        "**/venv*/**"
+    ]
+}

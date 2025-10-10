@@ -4,9 +4,9 @@
  */
 async function loadAppMetadata(file, url) {
 
-    FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
-    MP4_MEAN = "tts-audiobook-tool"
-    MP4_TAG = "audiobook-data"
+    const FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
+    const MP4_MEAN = "tts-audiobook-tool"
+    const MP4_TAG = "audiobook-data"
 
     const isFlac = url ? url.toLowerCase().endsWith("flac") : file.name.toLowerCase().endsWith("flac");
 
@@ -36,6 +36,7 @@ async function loadAppMetadata(file, url) {
     }
 
     // Parse json, validate
+    let o;
     try {
         o = JSON.parse(tagValue)
     } catch (e) {
@@ -73,7 +74,7 @@ async function loadAppMetadata(file, url) {
         rawText = "";
     }
 
-    result = {
+    const result = {
         "raw_text": rawText,
         "text_segments": timedTextSegments
     }
@@ -423,48 +424,6 @@ function parseVorbisCommentBlock(dataView, targetTagName, textDecoder) {
     return null; // Target tag not found in this block
 }
 
-function escapeHtml(unsafe) {
-    return unsafe
-         .replace(/&/g, "&amp;")
-         .replace(/</g, "&lt;")
-         .replace(/>/g, "&gt;")
-         .replace(/"/g, "&quot;")
-         .replace(/'/g, "&#39;")
-}
-
-function splitWhitespace(str) {
-    // Match leading whitespace, content, and trailing whitespace
-    str = str || "";
-    const match = str.match(/^(\s*)(.*?)(\s*)$/);
-    return {
-      before: match[1],
-      content: match[2],
-      after: match[3]
-    };
-}
-
-function msToString(milliseconds) {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    if (minutes > 0) {
-        return `${minutes}m${seconds}s`;
-    } else {
-        return `${seconds}s`;
-    }
-}
-
-function isTouchDevice() {
-    // hand-wavey
-    return !matchMedia('(pointer:fine)').matches
-}
-
-function hasPersistentKeyboard() {
-    // hand-wavey test
-    const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
-    const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
-    return (hasFinePointer && hasHoverSupport);
-}
 
 // -------------------------------------------------------------------------------------------------
 

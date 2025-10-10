@@ -63,7 +63,7 @@
     height: 10px;
     background-color: var(--color-content-bg);
     padding:12px 0;
-    background-clip: content-box; /* restrict to non-padded area */
+    background-clip: content-box; /* restricts bg col to non-padded area */
     margin-left: 4px;
     margin-right: 6px;
     position: relative;
@@ -75,7 +75,7 @@
     height: 10px;
     background-color: var(--color-text-dim);
     padding:12px 0;
-    background-clip: content-box; /* restrict to non-padded area */
+    background-clip: content-box;
     position: absolute;
     top: 0;
     left: 0; /* set programmatically */
@@ -157,8 +157,10 @@
 
 .volume-slider {
     width: 80px;
-    height: 8px;
+    height: 10px;
     background-color: var(--color-content-bg);
+    background-clip: content-box;
+    padding:12px 0;
     position: relative;
     cursor: pointer;
     margin-right: 12px;
@@ -170,12 +172,14 @@
 }
 
 .volume-slider-thumb {
-    width: 8px;
-    height: 8px;
+    width: 15px;
+    height: 10px;
     background-color: var(--color-text-dim);
+    padding:12px 0;
+    background-clip: content-box;
     position: absolute;
     top: 0;
-    left: 0; /* This will be overridden by JS */
+    left: 0; /* set programmatically */
 }
 @media (max-width: 600px) {
     .volume-slider-thumb {

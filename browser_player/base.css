@@ -1,6 +1,9 @@
 :root {
     /* Default css variable values */
 
+    /* Text size (large) */
+    --book-text-size: 32px;
+
     /* Color theme (light mode) */
     --color-bg: #f0f0f0;
     --color-content-bg: #ffffff;
@@ -12,9 +15,6 @@
     /* Highlight colors (orange) */
     --color-segment-highlight: #ffaa4488;
     --color-segment-hover: #ffaa4433;
-
-    /* Text size (large) */
-    --book-text-size: 32px;
 }
 :root {
     @media (max-width: 600px) {

@@ -1,6 +1,7 @@
+"use strict";
+
 window.app = function() {
 
-    const DEFAULT_FADE_DELAY = 1000;
     const SLEEP_MS = (1000 * 60) * 15
 
     const root = document.documentElement;
@@ -8,7 +9,8 @@ window.app = function() {
     const loadLastHolder = document.getElementById("loadLast")
     const sleepTimeLeft = document.getElementById('sleepTimeLeft');
     const fileNameDiv = document.getElementById('fileName')
-    const playerHolder = document.getElementById('playerHolder');
+    const playerOverlay = document.getElementById('playerOverlay'); // always visible
+    const playerHolder = document.getElementById('playerHolder'); // animates in and out
     const audio = document.getElementById('audio');
     const textHolder = document.getElementById('textHolder');
     const loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
@@ -29,7 +31,6 @@ window.app = function() {
     const sleepButton = document.getElementById("sleepButton");
 
     let player = null;
-
     let file = null;
     let url = null;
 
@@ -38,23 +39,23 @@ window.app = function() {
     let isCheckingZombie = false;
 
     let timedTextSegments = [];
-    let spans = []; // cached text segment spans array
+    let spans = []; // cached text segment span refs
 
     let isStarted = false; // is audiobook populated and audio loaded
     let hasPlayedOnce = false; // has audio playback happened at least once
     let isPlayerHover = false;
     let isPlayerFocused = false;
+    let isToastPinned = false;
 
     let currentIndex = -1; // segment index whose time range encloses the player's currentTime
     let previousIndex = -1;
     let directSelections = []
 
-    let loopIntervalId = -1;
-    let fadeOutId = -1;
+    let playerHideDelayId = -1;
+    let toastHideDelayId = -1
     let sleepId = -1;
     let sleepEndTime = -1;
-    let fadeOutValue = 0.0;
-    let toastTimeoutId = -1
+    let loopIntervalId = -1;
 
     // ****
     init();
@@ -66,11 +67,6 @@ window.app = function() {
 
         if (hasPersistentKeyboard()) {
             helpHolder.style.display = "block";
-        }
-
-        if (isTouchDevice()) {
-            // Disable player fadeout
-            fadeOutValue = 1.0;
         }
 
         loadUrlInput.addEventListener('keydown', (event) => {
@@ -110,7 +106,6 @@ window.app = function() {
             hasPlayedOnce = true;
             root.setAttribute("data-player-status", "play");
             currentIndex = -1; // ensures scroll to current segment
-            collapseOptionsButton();
         });
 
         audio.addEventListener('pause', function() {
@@ -122,29 +117,14 @@ window.app = function() {
             // console.log("Audio error:", error.code, error.message)
         });
 
-        playerHolder.addEventListener('mouseenter', () => {
-            isPlayerHover = true;
-            onPlayerIxChange();
-        });
-
-        playerHolder.addEventListener('mouseleave', () => {
-            isPlayerHover = false;
-            onPlayerIxChange();
-        });
-
-        // Focus in/out detection (bubbles)
-        playerHolder.addEventListener('focusin', () => {
-            isPlayerFocused = true;
-            onPlayerIxChange();
-        });
-        playerHolder.addEventListener('focusout', () => {
-            setTimeout(() => { // nb, required
-            if (!playerHolder.contains(document.activeElement)) {
-                isPlayerFocused = false;
-                onPlayerIxChange();
+        player.playPauseBtn.addEventListener('click', function(e) {
+            console.log('hello', this);
+            if (isToastPinned) {
+                hideToast();
             }
-            }, 0);
         });
+
+        initPlayerOverlayEvents();
 
         textHolder.addEventListener('click', onTextClick);
 
@@ -170,14 +150,14 @@ window.app = function() {
 
         uiPanelButton.addEventListener('click', (e) => {
             collapseOptionsButton();
-            if (isUiPanelVisible()) {
+            if (!isElementShowing(uiOverlay)) {
                 showUiPanel();
             } else {
                 hideUiPanel();
             }
         });
 
-        lastFileId = localStorage.getItem("last_file_id")
+        const lastFileId = localStorage.getItem("last_file_id")
         if (lastFileId) {
             document.getElementById("loadLastId").textContent = lastFileId;
             loadLastHolder.style.display = "block";
@@ -190,7 +170,7 @@ window.app = function() {
     function initRootAttributesFromLocalStorage() {
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-            value = localStorage[key]
+            const value = localStorage[key]
             if (key.startsWith("data-")) {
                 root.setAttribute(key, value)
             }
@@ -239,7 +219,7 @@ window.app = function() {
         // Sleep
         sleepButton.addEventListener("click", (e) => {
             e.stopPropagation();
-            value = cycleRootAttribute("data-sleep", ["on"], false);
+            const value = cycleRootAttribute("data-sleep", ["on"], false);
             if (value == "on") {
                 startSleep();
             } else {
@@ -256,19 +236,19 @@ window.app = function() {
     async function loadAudioFileOrUrl(pFile, pUrl) {
 
         if (pUrl) {
-            showLoadingOverlay();
+            showElement(loadingOverlay, true);
         } else {
-            // No need if local file bc fast enough
+            // Not rly necessary for local file
         }
 
         const appMetadata = await loadAppMetadata(pFile, pUrl);
 
         if (pUrl) {
-            hideLoadingOverlay();
+            hideElement(loadingOverlay);
         }
 
         if (!appMetadata || typeof appMetadata === 'string') {
-            errorMessage = appMetadata || "No tts-audiobook-tool metadata found";
+            const errorMessage = appMetadata || "No tts-audiobook-tool metadata found";
             alert(errorMessage);
             return;
         }
@@ -293,7 +273,7 @@ window.app = function() {
 
         audio.src = "";
         audio.load(); // aborts any pending activity
-        playerHolder.style.display = "none";
+        hidePlayer();
         fileNameDiv.style.display = "none"
         textHolder.style.display = "none";
         root.setAttribute("data-player-status", "none");
@@ -308,16 +288,18 @@ window.app = function() {
 
         populateText()
 
-        playerHolder.style.display = "block";
-        // Don't auto-hide player on first audio load
+
         if (hasPlayedOnce) {
-            showPlayerAndFade();
+            showAndHidePlayer();
+        } else {
+            // Don't auto-hide player on first audio load
+            showPlayer();
         }
 
         audio.src = url || URL.createObjectURL(file)
         playerPlay();
 
-        time = localStorage.getItem("fileId_" + fileId)
+        let time = localStorage.getItem("fileId_" + fileId)
         if (time) {
             time = parseFloat(time);
             if (time) {
@@ -329,6 +311,11 @@ window.app = function() {
             document.activeElement.blur();
         }
 
+        if (isTouchDevice()) {
+            // On touch device, player is always showing
+            playerHolder.classList.add("showing");
+        }
+
         loopIntervalId = setInterval(loop, 50);
         isStarted = true;
     }
@@ -337,7 +324,7 @@ window.app = function() {
 
         let contentHtml = '';
         timedTextSegments.forEach((segment, i) => {
-            o = splitWhitespace(segment.text)
+            const o = splitWhitespace(segment.text)
             if (o["before"]) {
                 contentHtml += escapeHtml( o["before"] );
             }
@@ -366,49 +353,33 @@ window.app = function() {
 
     function showUiPanel() {
         updateUiPanelButtons();
-        uiOverlay.style.display = 'block';
-        uiOverlay.offsetHeight; // Force reflow
-        uiOverlay.classList.add('show');
         document.body.classList.add('bodyNoScroll'); // Prevent background scrolling
+        showElement(uiOverlay)
     }
 
     function hideUiPanel() {
-        uiOverlay.classList.remove('show');
-        // Wait for transition to complete before hiding
-        setTimeout(() => {
-            uiOverlay.style.display = 'none';
-            document.body.classList.remove('bodyNoScroll');
-        }, 300);
+        document.body.classList.remove('bodyNoScroll');
+        hideElement(uiOverlay);
     }
 
-    function isUiPanelVisible() {
-        return (uiOverlay.style.display !== 'block');
-    }
-
-    function showToast(message) {
+    /**
+     * Show toast and hides it after a delay
+     */
+    function showToast(message, isPinned=false) {
         toast.textContent = message;
-        toast.classList.add("visible");
-        clearTimeout(toastTimeoutId);
-        toastTimeoutId = setTimeout(hideToast, 2500);
+        showElement(toast);
+        isToastPinned = isPinned;
+        clearTimeout(toastHideDelayId);
+        if (!isToastPinned) {
+            toastHideDelayId = setTimeout(() => { hideToast(); }, 2500);
+        }
     }
 
     function hideToast() {
-        toast.classList.remove("visible");
+        isToastPinned = false;
+        hideElement(toast);
     }
 
-    function showLoadingOverlay() {
-        loadingOverlay.style.display = 'flex';
-        loadingOverlay.offsetHeight; // Force reflow
-        loadingOverlay.classList.add('show');
-    }
-
-    function hideLoadingOverlay() {
-        loadingOverlay.classList.remove('show');
-        // Wait for transition to complete before hiding
-        setTimeout(() => {
-            loadingOverlay.style.display = 'none';
-        }, 300); // Should match the CSS transition duration
-    }
     // --------------------------------------
 
     function onKeyDown(event) {
@@ -455,7 +426,7 @@ window.app = function() {
                 break;
             case "`":
                 if (directSelections.length > 0) {
-                    index = directSelections.pop();
+                    const index = directSelections.pop();
                     seekBySegmentIndex(index);
                 }
                 break;
@@ -472,7 +443,7 @@ window.app = function() {
 
         const clickedSpan = event.target;
 
-        isSegment = (clickedSpan.tagName === 'SPAN' && clickedSpan.id.startsWith('segment-'));
+        const isSegment = (clickedSpan.tagName === 'SPAN' && clickedSpan.id.startsWith('segment-'));
         if (!isSegment) {
             return;
         }
@@ -484,8 +455,6 @@ window.app = function() {
             return;
         }
 
-        collapseOptionsButton();
-
         if (clickedSpan == getCurrentSpan()) {
             // Toggle play
             if (audio.paused) {
@@ -495,7 +464,7 @@ window.app = function() {
             }
         } else {
             seekBySegmentIndex(segmentIndex, true);
-            showPlayerAndFade();
+            showAndHidePlayer();
 
             const isSameAsLast = (directSelections.at(-1) !== undefined) && (directSelections.at(-1) == segmentIndex)
             if (!isSameAsLast) {
@@ -546,7 +515,7 @@ window.app = function() {
 
     function storePosition(value) {
         value = value || audio.currentTime;
-        localStorage.setItem("fileId_" + fileId, audio.currentTime);
+        localStorage.setItem("fileId_" + fileId, value);
     }
 
     function collapseOptionsButton() {
@@ -564,7 +533,7 @@ window.app = function() {
     function getSegmentIndexBySeconds(seconds) {
         // TODO: should have "startFromIndex" and fans out from there
         for (let i = 0; i < timedTextSegments.length; i++) {
-            segment = timedTextSegments[i];
+            const segment = timedTextSegments[i];
             if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
                 return i
             }
@@ -585,8 +554,8 @@ window.app = function() {
             if (i >= timedTextSegments.length) {
                 return;
             }
-            segment = timedTextSegments[i]
-            has_time = (segment["time_end"] > 0);
+            const segment = timedTextSegments[i]
+            const has_time = (segment["time_end"] > 0);
             if (has_time) {
                 seekBySegmentIndex(i);
                 return;
@@ -604,8 +573,8 @@ window.app = function() {
             if (i < 0) {
                 break;
             }
-            segment = timedTextSegments[i]
-            has_time = (segment["time_end"] > 0);
+            const segment = timedTextSegments[i]
+            const has_time = (segment["time_end"] > 0);
             if (has_time) {
                 seekBySegmentIndex(i);
                 break;
@@ -616,65 +585,33 @@ window.app = function() {
     function seekBySegmentIndex(i, andPlay) {
         getCurrentSpan()?.classList.remove('highlight');
 
-        targetTime = timedTextSegments[i]["time_start"];
+        const targetTime = timedTextSegments[i]["time_start"];
         audio.currentTime = targetTime;
         if (audio.paused && andPlay) {
             playerPlay();
         }
     }
 
-    // --------------------------------------
-    // Player show/hide logic etc
-
     async function playerPlay() {
         try {
             await audio.play();
             if (!getPlayerActive()) {
-                showPlayerAndFade();
+                showAndHidePlayer();
+            }
+            if (isToastPinned) {
+                hideToast();
             }
         } catch (error) {
             if (error.name == "NotAllowedError") {
-                showToast("Click Play to start");
+                showToast("Click Play to start", true);
             } else {
                 console.error("playerPlay error - code:", error.code, "name:", error.name, "message:", error.message)
             }
         }
     }
 
-    function onPlayerIxChange() {
-        // Should be called when:
-        // Mouse has either entered or left player holder area
-        // Focus has entered or left thhe player holder and children
-        if (getPlayerActive()) {
-            clearTimeout(fadeOutId);
-            playerHolder.style.opacity = '1.0';
-        } else {
-            showPlayerAndFade(0);
-        }
-    }
-
-    function showPlayerAndFade(duration) {
-        if (isNaN(duration)) {
-            duration = DEFAULT_FADE_DELAY;
-        }
-
-        playerHolder.classList.add('noTransition');
-        playerHolder.style.opacity = '1.0';
-        void playerHolder.offsetHeight; // force reflow
-        playerHolder.classList.remove('noTransition');
-
-        clearTimeout(fadeOutId);
-        fadeOutId = setTimeout(() => {
-            playerHolder.style.opacity = fadeOutValue;
-        }, duration);
-    }
-
-    function getPlayerActive() {
-        return isPlayerFocused || isPlayerHover;
-    }
-
     function startSleep() {
-        showToast("Sleep mode: Will auto-pause in 15 minutes");
+        showToast("Sleep timer: Will auto-pause in 15 minutes");
 
         sleepEndTime = new Date().getTime() + SLEEP_MS;
 
@@ -683,8 +620,9 @@ window.app = function() {
         sleepId = setInterval(onSleepInterval, 1000);
     }
 
-    function clearSleep() {
-        showToast("Sleep mode cancelled");
+    function clearSleep(isFinishedMessage=false) {
+        const message = isFinishedMessage ? "Sleep timer finished" : "Sleep timer cancelled";
+        showToast(message);
 
         root.setAttribute("data-sleep", "");
         clearInterval(sleepId);
@@ -695,7 +633,7 @@ window.app = function() {
         const ms = sleepEndTime - new Date().getTime();
         if (ms <= 0) {
             audio.pause();
-            clearSleep();
+            clearSleep(true);
             return;
         }
         sleepTimeLeft.textContent = msToString(ms);
@@ -756,7 +694,7 @@ window.app = function() {
      * Returns the value which was set, if any
      */
     function setRootAttributeFromLocalStorage(dataAttribute) {
-        value = localStorage.getItem(dataAttribute)
+        const value = localStorage.getItem(dataAttribute)
         if (value) {
             root.setAttribute(dataAttribute, value)
             return value;
@@ -775,7 +713,7 @@ window.app = function() {
 
         for (const child of holder.children) {
 
-            value = child.dataset["value"]
+            const value = child.dataset["value"]
 
             let isMatch = (value === targetValue);
             isMatch |= (!value || value == "default") && (!targetValue || targetValue == "default");
@@ -816,7 +754,7 @@ window.app = function() {
             if (file) {
 
                 // Unrecoverable. Requires user intervention (ie, click on <input type="file">)
-                s = "The browser has dropped the handle to the local audio file.\n\n";
+                let s = "The browser has dropped the handle to the local audio file.\n\n";
                 s += "This can occur when the mobile browser tab is put into the background while the audio is paused, unfortunately.\n\n";
                 s += "Please load the file again to resume.";
                 alert(s);
@@ -845,5 +783,156 @@ window.app = function() {
 
         audio.addEventListener("ended", onEnded,{ once: true } );
         timeoutId = setTimeout(onTimeout, 1000);
+    }
+
+    // --------------------------------------
+    // Player show/hide logic
+
+    function initPlayerOverlayEvents() {
+        playerOverlay.addEventListener('mouseenter', () => {
+            isPlayerHover = true;
+            onPlayerIxChange();
+        });
+
+        playerOverlay.addEventListener('mouseleave', () => {
+            isPlayerHover = false;
+            onPlayerIxChange();
+        });
+
+        // Focus in/out detection (bubbles)
+        // TODO: new player doesn't support focus atm. revisit.
+        playerOverlay.addEventListener('focusin', () => {
+            isPlayerFocused = true;
+            onPlayerIxChange();
+        });
+        playerOverlay.addEventListener('focusout', () => {
+            setTimeout(() => { // nb, required
+            if (!playerOverlay.contains(document.activeElement)) {
+                isPlayerFocused = false;
+                onPlayerIxChange();
+            }
+            }, 0);
+        });
+    }
+
+    function onPlayerIxChange() {
+        // Should be called when:
+        // Mouse has either entered or left player holder area
+        // Focus has entered or left thhe player holder and children
+        if (getPlayerActive()) {
+            clearTimeout(playerHideDelayId);
+            showPlayer();
+        } else {
+            showAndHidePlayer(0);
+        }
+    }
+
+    function showAndHidePlayer(hideDelay=1000) {
+        if (isTouchDevice()) {
+            return;
+        }
+        showPlayer();
+        playerHideDelayId = setTimeout(() => { hidePlayer(); }, hideDelay);
+    }
+
+    function showPlayer() {
+        if (isTouchDevice()) {
+            return;
+        }
+        clearTimeout(playerHideDelayId);
+        showElement(playerHolder);
+    }
+
+    function hidePlayer() {
+        if (isTouchDevice()) {
+            return;
+        }
+        clearTimeout(playerHideDelayId);
+        hideElement(playerHolder, false);
+    }
+
+    function getPlayerActive() {
+        return isPlayerFocused || isPlayerHover;
+    }
+
+    // --------------------------------------
+    // 'Utility' functions
+    // TODO: move to dedicated script after implementing script concat
+
+    function isTouchDevice() {
+        // hand-wavey
+        return !matchMedia('(pointer:fine)').matches
+    }
+
+    function hasPersistentKeyboard() {
+        // hand-wavey test
+        const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+        const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
+        return (hasFinePointer && hasHoverSupport);
+    }
+
+    function escapeHtml(unsafe) {
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#39;")
+    }
+
+    function splitWhitespace(str) {
+        // Match leading whitespace, content, and trailing whitespace
+        str = str || "";
+        const match = str.match(/^(\s*)(.*?)(\s*)$/);
+        return {
+          before: match[1],
+          content: match[2],
+          after: match[3]
+        };
+    }
+
+    function msToString(milliseconds) {
+        const totalSeconds = Math.floor(milliseconds / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        if (minutes > 0) {
+            return `${minutes}m${seconds}s`;
+        } else {
+            return `${seconds}s`;
+        }
+    }
+
+    // ---
+
+    /**
+     * Animates-in an element.
+     * Assumes the existence of a css transition on the element, and a "showing" css class.
+     * param isFlex - applies display:flex, else display:block
+     */
+    function showElement(element, isFlex) {
+        element.removeEventListener('transitionend', onHideElementDisplayNone);
+        element.style.display = isFlex ? "flex" : "block";
+        element.offsetHeight; // Force reflow
+        element.classList.add("showing");
+    }
+
+    /**
+     * Animates-out an element.
+     * param now - skips transition
+     */
+    function hideElement(element, shouldDisplayNone=true, now=false) {
+        element.removeEventListener('transitionend', onHideElementDisplayNone);
+        if (shouldDisplayNone) {
+            element.addEventListener('transitionend', onHideElementDisplayNone, { once: true } );
+        }
+        element.classList.remove("showing");
+    }
+
+    function onHideElementDisplayNone(e) {
+        e.currentTarget.style.display = "none";
+    }
+
+    function isElementShowing(element) {
+        return element.classList.contains("showing");
     }
 };

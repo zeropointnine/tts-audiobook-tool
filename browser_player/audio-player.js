@@ -2,7 +2,8 @@ class AudioPlayer {
 
     /**
      * Takes in a pre-existing <audio> element and an empty container.
-     * The controls get programmatically constructed and added to the container.
+     * The controls get programmatically  added to the container.
+     * Assumes css definitions found in "audio-player.css"
      *
      * The class requires no "api", as it were.
      */
