@@ -385,7 +385,7 @@ body, html {
 
 #toast.showing {
     display: block;
-    transform: translateY(10px); /* s/b 0, ofc */
+    transform: translateY(10px); /* shd rly be 0, ofc */
 }
 
 /* ------------------- */

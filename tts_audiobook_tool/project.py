@@ -17,7 +17,7 @@ from tts_audiobook_tool.util import *
 
 class Project:
     """
-    Project settings data-like class with convenience functions
+    Project settings data-like class, with convenience functions
     """
 
     dir_path: str
@@ -47,11 +47,12 @@ class Project:
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
 
-    indextts2_voice_file_name: str = ""
-    indextts2_emo_voice_file_name: str = ""
-    indextts2_emo_voice_alpha: float = -1
     indextts2_temperature: float = -1
     indextts2_use_fp16: bool = IndexTts2Protocol.DEFAULT_USE_FP16
+    indextts2_voice_file_name: str = ""
+    indextts2_emo_alpha: float = -1
+    indextts2_emo_voice_file_name: str = ""
+    indextts2_emo_vector: list[float] = [] # should have either 0 or 8 elements
 
     generate_range_string: str = ""
     stt_variant: SttVariant = list(SttVariant)[0]
@@ -182,10 +183,17 @@ class Project:
 
         # IndexTTS2
         project.indextts2_voice_file_name = d.get("indextts2_voice_file_name", "")
-        project.indextts2_emo_voice_file_name = d.get("indextts2_emo_voice_file_name", "")
-        project.indextts2_emo_voice_alpha = d.get("indextts2_emo_voice_alpha", -1)
         project.indextts2_temperature = d.get("indextts2_temperature", -1)
         project.indextts2_use_fp16 = d.get("indextts2_use_fp16", IndexTts2Protocol.DEFAULT_USE_FP16)
+        project.indextts2_emo_alpha = d.get("indextts2_emo_alpha", -1)
+        if project.indextts2_emo_alpha == -1 and d.get("indextts2_emo_voice_alpha", -1) >= 0:
+            project.indextts2_emo_alpha = d.get("indextts2_emo_voice_alpha", -1) # legacy support
+        project.indextts2_emo_voice_file_name = d.get("indextts2_emo_voice_file_name", "")
+
+        o = d.get("indextts2_emo_vector", [])
+        if not isinstance(o, list):
+            o = []
+        project.indextts2_emo_vector = o
 
         return project
 
@@ -220,8 +228,9 @@ class Project:
             "vibevoice_steps": self.vibevoice_steps,
 
             "indextts2_voice_file_name": self.indextts2_voice_file_name,
+            "indextts2_temperature": self.indextts2_temperature,
             "indextts2_emo_voice_file_name": self.indextts2_emo_voice_file_name,
-            "indextts2_emo_voice_alpha": self.indextts2_emo_voice_alpha,
+            "indextts2_emo_vector": self.indextts2_emo_vector,
             "indextts2_temperature": self.indextts2_temperature,
             "indextts2_use_fp16": self.indextts2_use_fp16
         }
@@ -461,3 +470,40 @@ class Project:
             return ""
 
         return f"{project_dir} does not appear to be a project directory"
+
+    @staticmethod
+    def parse_emo_vector_string(string: str) -> list[float] | str:
+        """
+        Returns error string on parse fail
+        Returns empty list to represent list of all zeroes
+        """
+
+        string = string.strip()
+        if not string:
+            return []
+        if string.lower() == "none":
+            return []
+
+        strings = string.split(",")
+        if len(strings) != 8:
+            return "Requires 8 comma-delimited numbers between 0-1"
+
+        floats = []
+        for string in strings:
+            try:
+                flt = float(string)
+            except:
+                return f"Bad value: {string} - must be a number between 0-1"
+            if not (0 <= flt <= 1):
+                return f"Out of range: {flt} - must be between 0-1"
+            floats.append(flt)
+        return floats
+
+    def emo_vector_to_string(self) -> str:
+        if not self.indextts2_emo_vector or sum(self.indextts2_emo_vector) == 0:
+            return "none"
+        strings = []
+        for item in self.indextts2_emo_vector:
+            string = f"{item:.1f}".replace(".0", "") # either one or no decimal point
+            strings.append(string)
+        return ",".join(strings)

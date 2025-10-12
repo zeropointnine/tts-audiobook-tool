@@ -79,7 +79,7 @@ class VoiceOuteSubmenu:
 
         from tts_audiobook_tool.app_util import AppUtil
 
-        path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
+        path = VoiceSubmenuShared.ask_voice_file(project.dir_path, Tts.get_type())
         if not path:
             return
 

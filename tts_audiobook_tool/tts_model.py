@@ -148,8 +148,9 @@ class IndexTts2Protocol(Protocol):
             text: str,
             voice_path: str,
             temperature: float,
+            emo_alpha: float,
             emo_voice_path: str,
-            emo_voice_alpha: float
+            emo_vector: list[float]
     ) -> Sound | str:
         ...
 

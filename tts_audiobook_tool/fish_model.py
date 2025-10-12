@@ -79,7 +79,7 @@ class FishModel(FishModelProtocol):
         dac_path = os.path.join(model_dir, "codec.pth")
         self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, self.device)
 
-        t2s_path = model_dir #z "checkpoints/openaudio-s1-mini"
+        t2s_path = model_dir
         self.t2s_model, self.decode_one_token = init_t2s_model(
             t2s_path, self.device, torch.float16, compile=(self.device == "cuda")
         )

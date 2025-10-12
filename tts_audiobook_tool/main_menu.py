@@ -48,32 +48,41 @@ class MainMenu:
         # Project
         s = f"{make_hotkey_string('P')} Project directory "
         if not state.prefs.project_dir:
-            s += f"{COL_DIM}(Must set this first)"
+            s += f"{COL_ERROR}(required){COL_DEFAULT}"
+
         else:
             s += make_currently_string(state.prefs.project_dir)
         printt(s)
 
         # Voice
         if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
-            s = make_currently_string(state.project.get_voice_label(), label="current voice clone: ")
-            printt(f"{make_hotkey_string('V')} Voice clone and model settings {s}")
+            voice_label = state.project.get_voice_label()
+            if not state.project.can_voice:
+                current = f"{COL_ERROR}(required){COL_DEFAULT} "
+            else:
+                current = make_currently_string(voice_label, label="current voice clone: ")
+            printt(f"{make_hotkey_string('V')} Voice clone and model settings {current}")
 
         # Text
         if state.prefs.project_dir:
-            s = f"{make_hotkey_string('T')} Text "
-            label = f"{len(state.project.text_segments)} {'line' if len(state.project.text_segments) == 1 else 'lines'}"
-            s += make_currently_string(label)
+            if state.project.text_segments:
+                lines = "line" if len(state.project.text_segments) == 1 else "lines"
+                value = f"{len(state.project.text_segments)} {lines}"
+                current = make_currently_string(value)
+            else:
+                current = f"{COL_ERROR}(required){COL_DEFAULT}"
+            s = f"{make_hotkey_string('T')} Text {current}"
             printt(s)
 
         # Generate audio
         if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
             s = f"{make_hotkey_string('G')} Generate audio"
             if not state.project.can_voice and not state.project.text_segments:
-                s2 = f"{COL_DIM} (must first set voice and text)"
+                s2 = f"{COL_ERROR} (requires text and voice sample)"
             elif not state.project.can_voice:
-                s2 = f"{COL_DIM} (must first set voice)"
+                s2 = f"{COL_ERROR} (requires voice sample)"
             elif not state.project.text_segments:
-                s2 = f"{COL_DIM} (must first set text)"
+                s2 = f"{COL_ERROR} (requires text)"
             else:
                 s2 = f" {COL_DIM}({COL_ACCENT}{num_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
             printt(s + s2)
@@ -82,7 +91,7 @@ class MainMenu:
         if state.prefs.project_dir:
             s = f"{make_hotkey_string('C')} Concatenate audio segments to create audiobook file"
             if num_generated == 0:
-                s += f" {COL_DIM}(must first generate audio)"
+                s += f" {COL_ERROR}(must first generate audio)"
             printt(s)
 
         # Options

@@ -298,7 +298,7 @@ Added utility to transcode and concatenate directory of MP3 chapter files to M4A
 
 **2025-07-02**
 
-New feature: **Real-time generation and playback** (`Options > Real-time generation and playback`)
+New feature: **Real-time playback** (`Options > Real-time playback`)
 
 This serves as a quicker and more "casual" alternative to the regular `Generate audio` UI flow, and allows for more-or-less immediate and uninterrupted audio playback (contingent on system performance, ofc). It employs the same quality control measures except for loudness normalization, and does not save its output.
 

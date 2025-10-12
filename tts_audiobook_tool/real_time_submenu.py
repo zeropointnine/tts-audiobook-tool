@@ -16,7 +16,7 @@ class RealTimeSubmenu:
 
         # TODO add start-at option here, which should invalidate when text is replace
 
-        print_heading("Real-time generation and playback")
+        print_heading("Real-time playback")
         AppUtil.show_hint_if_necessary(state.prefs, HINT_REAL_TIME)
         printt(f"{make_hotkey_string('1')} Start")
 

@@ -340,8 +340,9 @@ class GenerateUtil:
                     text=text,
                     voice_path=voice_path,
                     temperature=project.indextts2_temperature,
+                    emo_alpha=project.indextts2_emo_alpha,
                     emo_voice_path=emo_voice_path,
-                    emo_voice_alpha=project.indextts2_emo_voice_alpha
+                    emo_vector=project.indextts2_emo_vector
                 )
 
             case TtsModelInfos.NONE:

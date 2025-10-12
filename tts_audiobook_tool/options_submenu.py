@@ -24,7 +24,7 @@ class OptionsSubmenu:
                 vram_label = f"{COL_DIM}(currently allocated VRAM: {make_gb_string(vram_bytes)})"
 
             print_heading("Options/Tools:")
-            printt(f"{make_hotkey_string('1')} Real-time generation and playback")
+            printt(f"{make_hotkey_string('1')} Real-time playback")
             printt(f"{make_hotkey_string('2')} Enhance existing audiobook file {COL_DIM}(experimental)")
             printt(f"{make_hotkey_string('3')} Transcode and concatenate a directory of MP3 files to AAC/M4A")
             printt(f"{make_hotkey_string('4')} Transcode an app-created FLAC to AAC/M4A, preserving custom metadata")

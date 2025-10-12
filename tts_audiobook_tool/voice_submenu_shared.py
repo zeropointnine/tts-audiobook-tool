@@ -13,7 +13,8 @@ class VoiceSubmenuShared:
     def ask_and_set_voice_file(
             project: Project,
             tts_type: TtsModelInfos,
-            is_secondary: bool=False
+            is_secondary: bool=False,
+            message_override: str=""
     ) -> None:
         """
         Asks for voice sound file path.
@@ -27,7 +28,7 @@ class VoiceSubmenuShared:
             # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type {tts_type}")
 
-        path = VoiceSubmenuShared.ask_voice_file(project.dir_path)
+        path = VoiceSubmenuShared.ask_voice_file(project.dir_path, tts_type, message_override)
         if not path:
             return
 
@@ -62,21 +63,25 @@ class VoiceSubmenuShared:
         printt_set("Voice file saved")
 
     @staticmethod
-    def ask_voice_file(default_dir_path: str) -> str:
+    def ask_voice_file(default_dir_path: str, tts_type: TtsModelInfos, message_override: str="") -> str:
         """
         Asks for voice file path.
         Validates file and shows error prompt if necessary.
         Returns path or empty string.
         """
 
-        ui = Tts.get_type().value.ui
-        console_message = ui.get("voice_path_console", "")
-        requestor_title = ui.get("voice_path_requestor", "")
+        if message_override:
+            console_message = message_override
+            requestor_title = message_override
+        else:
+            ui = tts_type.value.ui
+            console_message = ui.get("voice_path_console", "")
+            requestor_title = ui.get("voice_path_requestor", "")
 
         path = ask_file_path(
              console_message=console_message,
              requestor_title=requestor_title,
-             filetypes=[("WAV", "*.wav"), ("FLAC", "*.flac"), ("MP3", "*.mp3")], #z verify this works out
+             filetypes=[("WAV", "*.wav"), ("FLAC", "*.flac"), ("MP3", "*.mp3")], # TODO: on windows file requestor, this results in file type dropdown, may be more harm than good
              initialdir=default_dir_path
         )
         if not path:

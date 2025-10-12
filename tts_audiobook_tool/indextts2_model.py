@@ -52,8 +52,9 @@ class IndexTts2Model(IndexTts2ModelProtocol):
             text: str,
             voice_path: str,
             temperature: float,
+            emo_alpha: float,
             emo_voice_path: str,
-            emo_voice_alpha: float
+            emo_vector: list[float]
     ) -> Sound | str:
         """
         Returns generated audio or error string
@@ -64,8 +65,19 @@ class IndexTts2Model(IndexTts2ModelProtocol):
 
         if temperature == -1:
             temperature = IndexTts2Model.DEFAULT_TEMPERATURE
-        if emo_voice_alpha == -1:
-            emo_voice_alpha = IndexTts2Model.DEFAULT_EMO_VOICE_ALPHA
+        if emo_alpha == -1:
+            emo_alpha = IndexTts2Model.DEFAULT_EMO_VOICE_ALPHA
+        if emo_vector and len(emo_vector) != 8:
+            raise Exception("emo_vector should be empty or have length of 8")
+
+        if False:
+            print()
+            print("voice path", voice_path)
+            print("temperature", temperature)
+            print("emo alpha", emo_alpha)
+            print("emo voice path", emo_voice_path)
+            print("emo vector", emo_vector)
+            print()
 
         try:
             # FYI, infer() caches loaded voice sample/s internally
@@ -73,11 +85,12 @@ class IndexTts2Model(IndexTts2ModelProtocol):
                 spk_audio_prompt=voice_path,
                 text=text,
                 temperature=temperature,
+                emo_alpha=emo_alpha,
                 emo_audio_prompt=emo_voice_path or None,
-                emo_alpha=emo_voice_alpha,
+                emo_vector=emo_vector or None,
                 max_text_tokens_per_segment=MAX_TOKENS_PER_SEGMENT,
                 output_path=None,
-                verbose=False
+                verbose=False,
             )
         except Exception as e:
             return make_error_string(e)
