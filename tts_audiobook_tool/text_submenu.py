@@ -74,6 +74,9 @@ class TextSubmenu:
         # Commit
         state.project.set_text_segments_and_save(text_segments, raw_text=raw_text)
 
+        if not state.real_time.custom_text_segments:
+            state.real_time.line_range = None
+
 # ---
 
 def print_project_text(state: State) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tts_audiobook_tool.app_types import RealTimeSubmenuState
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
@@ -13,11 +14,20 @@ from tts_audiobook_tool.constants import *
 class State:
     """
     Holds app's user-related state
-    Viz: current project and prefs
+    Most importantly, `project` and `prefs`
     """
 
+    # prefs: Prefs
+    # _project: Project
+
+    # real_time: RealTimeSubmenuState # does not persist
+
+
     def __init__(self):
+
         self.prefs = Prefs.load()
+
+        self.real_time = RealTimeSubmenuState()
 
         if not self.prefs.project_dir:
             self.project = Project("")
@@ -41,6 +51,8 @@ class State:
         # Sync global values :/
         Tts.set_model_params_using_project(self.project)
         Stt.set_variant_using_project(self.project)
+        if not self.real_time.custom_text_segments:
+            self.real_time.line_range = None
 
 
     def make_new_project(self, path: str) -> str:
@@ -105,3 +117,4 @@ class State:
     def reset(self):
         self.prefs = Prefs.new_and_save()
         self.project = Project("")
+        self.real_time = RealTimeSubmenuState()

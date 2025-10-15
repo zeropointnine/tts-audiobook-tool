@@ -15,17 +15,20 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
 
-class RealTime:
+class RealTimeUtil:
 
     @staticmethod
-    def start(project: Project, text_segments: list[TextSegment], line_range: tuple[int, int]) -> None:
+    def start(project: Project, text_segments: list[TextSegment], line_range: tuple[int, int] | None) -> None:
         """
         param line_range - one-indexed range
         """
 
-        if line_range[0] == 0 and line_range[1] == 0:
-            line_range = (0, len(text_segments) - 1)
+        if not line_range:
+            line_range = (1, len(text_segments))
+
         start_index, end_index = line_range
+        start_index -= 1
+        end_index -= 1
 
         SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
 

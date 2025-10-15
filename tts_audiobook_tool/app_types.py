@@ -145,3 +145,10 @@ class SttVariant(str, Enum):
     LARGE_V3 = "large-v3"
     LARGE_V3_TURBO = "large-v3-turbo"
 
+# ---
+
+class RealTimeSubmenuState:
+    """ Values related to the real-time playback feature """
+    from tts_audiobook_tool.text_segment import TextSegment
+    custom_text_segments: list[TextSegment] = []
+    line_range: tuple[int, int] | None = None

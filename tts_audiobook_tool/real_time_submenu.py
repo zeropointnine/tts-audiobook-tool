@@ -1,16 +1,11 @@
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.real_time import RealTime
+from tts_audiobook_tool.real_time_util import RealTimeUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.util import *
 
 
 class RealTimeSubmenu:
-
-    use_custom_text = False
-    custom_text_segments: list[TextSegment] = []
-    line_range: tuple[int, int] = (0, 0)
 
     @staticmethod
     def submenu(state: State):
@@ -21,18 +16,19 @@ class RealTimeSubmenu:
             AppUtil.show_hint_if_necessary(state.prefs, HINT_REAL_TIME)
             printt(f"{make_hotkey_string('1')} Start")
 
-            if RealTimeSubmenu.use_custom_text:
-                value = f"custom text, {len(RealTimeSubmenu.custom_text_segments)} lines"
+            if state.real_time.custom_text_segments:
+                value = f"custom text, {len(state.real_time.custom_text_segments)} lines"
             else:
                 value = "project text"
             current = make_currently_string(value)
             printt(f"{make_hotkey_string('2')} Text source {COL_DIM} {current}")
 
-            line_range = RealTimeSubmenu.line_range
-            if line_range[0] == 0 and line_range[1] == 0:
-                value = "all"
+            line_range = state.real_time.line_range
+            if line_range:
+                value = f"{line_range[0]}-{line_range[1]}"
             else:
-                value = f"{RealTimeSubmenu.line_range[0]}-{RealTimeSubmenu.line_range[1]}"
+                value = "all"
+
             printt(f"{make_hotkey_string('3')} Select line range {make_currently_string(value)}")
             printt()
 
@@ -42,14 +38,14 @@ class RealTimeSubmenu:
 
             match hotkey:
                 case "1":
-                    if RealTimeSubmenu.use_custom_text:
-                        text_segments = RealTimeSubmenu.custom_text_segments
+                    if state.real_time.custom_text_segments:
+                        text_segments = state.real_time.custom_text_segments
                     else:
                         text_segments = state.project.text_segments
                     if not text_segments:
                         ask_continue("No text segments specified.\n")
                         continue
-                    RealTime.start(state.project, text_segments, line_range)
+                    RealTimeUtil.start(state.project, text_segments, line_range)
                 case "2":
                     RealTimeSubmenu.text_submenu(state)
                 case "3":
@@ -60,8 +56,8 @@ class RealTimeSubmenu:
     @staticmethod
     def ask_line_range(state: State) -> None:
 
-        if RealTimeSubmenu.use_custom_text:
-            text_segments = RealTimeSubmenu.custom_text_segments
+        if state.real_time.custom_text_segments:
+            text_segments = state.real_time.custom_text_segments
         else:
             text_segments = state.project.text_segments
         length = len(text_segments)
@@ -76,8 +72,9 @@ class RealTimeSubmenu:
             ask_error(result)
             return
 
-        RealTimeSubmenu.line_range = result
+        state.real_time.line_range = result
 
+        # Print feedback
         is_all = (result[0] == 0 and result[1] == 0) or (result[0] == 1 and result[1] == len(text_segments))
         if is_all:
             value = f"1-{len(text_segments)} (all)"
@@ -98,24 +95,19 @@ class RealTimeSubmenu:
         printt()
 
         hotkey = ask_hotkey()
-        if not hotkey:
-            return
 
-        if hotkey == "1" and RealTimeSubmenu.use_custom_text:
-            if not RealTimeSubmenu.use_custom_text:
-                return
-            RealTimeSubmenu.use_custom_text = False
-            RealTimeSubmenu.custom_text_segments = state.project.text_segments
-            RealTimeSubmenu.line_range = (0, 0)
-        elif hotkey == "2":
-            text_segments, _ = AppUtil.get_text_segments_from_ask_text_file()
+        if hotkey == "1":
+            if state.real_time.custom_text_segments:
+                state.real_time.custom_text_segments = []
+                state.real_time.line_range = None
+            printt_set("Text source set to: project")
+
+        elif hotkey == "2" or hotkey == "3":
+            if hotkey == "2":
+                text_segments, _ = AppUtil.get_text_segments_from_ask_text_file()
+            else:
+                text_segments, _ = AppUtil.get_text_segments_from_ask_std_in()
             if text_segments:
-                RealTimeSubmenu.use_custom_text = True
-                RealTimeSubmenu.custom_text_segments = text_segments
-                RealTimeSubmenu.line_range = (0, 0)
-        elif hotkey == "3":
-            text_segments, _ = AppUtil.get_text_segments_from_ask_std_in()
-            if text_segments:
-                RealTimeSubmenu.use_custom_text = True
-                RealTimeSubmenu.custom_text_segments = text_segments
-                RealTimeSubmenu.line_range = (0, 0)
+                state.real_time.custom_text_segments = text_segments
+                state.real_time.line_range = None
+                printt_set(f"Text source set to: custom, {len(text_segments)} lines")
