@@ -449,7 +449,7 @@ class Project:
         if is_all:
             result = set(range(len(self.text_segments)))
         else:
-            result, _ = ParseUtil.parse_one_indexed_ranges_string(range_string, len(self.text_segments))
+            result, _ = ParseUtil.parse_ranges_string(range_string, len(self.text_segments))
         return result
 
     @staticmethod

@@ -149,7 +149,7 @@ class ConcatSubmenu:
             if inp == "all" or inp == "a":
                 chapter_indices = chapter_indices.copy()
             else:
-                input_indices, warnings = ParseUtil.parse_one_indexed_ranges_string(inp, len(state.project.text_segments))
+                input_indices, warnings = ParseUtil.parse_ranges_string(inp, len(state.project.text_segments))
                 if warnings:
                     for warning in warnings:
                         printt(warning)

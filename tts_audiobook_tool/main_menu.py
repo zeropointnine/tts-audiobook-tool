@@ -91,7 +91,7 @@ class MainMenu:
         if state.prefs.project_dir:
             s = f"{make_hotkey_string('C')} Concatenate audio segments to create audiobook file"
             if num_generated == 0:
-                s += f" {COL_ERROR}(must first generate audio)"
+                s += f" {COL_ERROR}(requires generated audio)"
             printt(s)
 
         # Options

@@ -135,14 +135,14 @@ class GenerateSubmenu:
         if inp == "all" or inp == "a":
             indices = set( [item for item in range(0, num_items)] )
         else:
-            indices, warnings = ParseUtil.parse_one_indexed_ranges_string(inp, num_items)
+            indices, warnings = ParseUtil.parse_ranges_string(inp, num_items)
             if not indices:
                 return
             if warnings:
                 printt_set("\n".join(warnings))
                 return
 
-        s = ParseUtil.make_one_indexed_ranges_string(indices, len(state.project.text_segments))
+        s = ParseUtil.make_ranges_string(indices, len(state.project.text_segments))
         state.project.generate_range_string = "" if s == "all" else s
         state.project.save()
 

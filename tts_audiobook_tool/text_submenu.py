@@ -91,6 +91,6 @@ def print_project_text(state: State) -> None:
         printt(f"{s1} {s2}  {text.strip()}")
     printt()
 
-    s = ParseUtil.make_one_indexed_ranges_string(set(indices), len(texts))
+    s = ParseUtil.make_ranges_string(set(indices), len(texts))
     printt(f"Generated segments: {s}")
     printt()

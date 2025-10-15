@@ -18,18 +18,19 @@ from tts_audiobook_tool.util import *
 class RealTime:
 
     @staticmethod
-    def start(project: Project, text_segments: list[TextSegment], start_index: int) -> None:
+    def start(project: Project, text_segments: list[TextSegment], line_range: tuple[int, int]) -> None:
         """
+        param line_range - one-indexed range
         """
+
+        if line_range[0] == 0 and line_range[1] == 0:
+            line_range = (0, len(text_segments) - 1)
+        start_index, end_index = line_range
 
         SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
 
         # Warm up models
         Tts.warm_up_models()
-
-        # Start stream
-        stream = SoundDeviceStream(Tts.get_type().value.sample_rate)
-        stream.start()
 
         # Start loop
 
@@ -39,14 +40,13 @@ class RealTime:
 
         SigIntHandler().set("generating")
 
-        end_index = len(text_segments) - 1
-
         last_text_segment: TextSegment | None = None
         current_text_segment: TextSegment | None = None
 
         last_sound: Sound | None = None
         current_sound: Sound | None = None
 
+        stream = None
         did_interrupt = False
 
         for i in range(start_index, end_index + 1):
@@ -57,7 +57,7 @@ class RealTime:
 
             current_text_segment = text_segments[i]
 
-            has_enough_runway = (stream.buffer_duration >= 45.0) # TODO: make dynamic - if estimated gen time < buffer duration * 2 ...
+            has_enough_runway = (stream and stream.buffer_duration >= 60.0) # TODO: make dynamic - if estimated gen time < buffer duration * 2 ...
             max_passes = 2 if has_enough_runway else 1
 
             current_sound, _ = GenerateUtil.generate_sound_full_flow(project, current_text_segment, max_passes=max_passes)
@@ -74,6 +74,11 @@ class RealTime:
                         pause_duration = 1
                     else:
                         pause_duration = last_text_segment.reason.pause_duration
+
+                if not stream:
+                    # Start stream lazy
+                    stream = SoundDeviceStream(Tts.get_type().value.sample_rate)
+                    stream.start()
 
                 # Add pause
                 if pause_duration:
@@ -103,11 +108,17 @@ class RealTime:
             last_text_segment = current_text_segment
             last_sound = current_sound
 
-        # Prompt gives opportunity for remaining buffer data to play through before killing stream, if desired
-        print()
-        ask_continue()
+        if not stream:
+            print()
+            return
+
+        if stream.buffer_duration > 0:
+            # Gives opportunity for remaining buffer data to play through before killing stream
+            print()
+            ask_continue()
 
         SigIntHandler().clear()
 
-        stream.shut_down()
+        if stream:
+            stream.shut_down()
         printt()
