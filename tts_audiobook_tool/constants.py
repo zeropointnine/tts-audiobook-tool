@@ -133,11 +133,11 @@ HINT_REAL_TIME = Hint(
 f"""This uses the same quality-control steps as the normal "Generate" workflow,
 save for loudness normalization.
 
-So long as enough audio has accumulated in the buffer,
-lines that do not pass validation will be regenerated one time.
-
 To achieve uninterrupted playback, your system must be able to
-do the audio inference faster-than-realtime."""
+do the audio inference faster-than-realtime.
+
+When enough audio has accumulated in the buffer, lines that do not pass
+the validation check get retried one time."""
 )
 HINT_MULTIPLE_MP3S = Hint(
     "multiple_mp3s",
@@ -165,3 +165,17 @@ it adds 2-3 GB to VRAM memory requirements.
 
 This is a per-project setting which defaults to \"large-v3\""""
 )
+
+HINT_SPEED_UP = Hint(
+    "speed_up",
+    "Note",
+    """Use this feature to create a sped-up (or slowed-down) copy of a voice clone sample.
+This can be useful for modulating the speed of narration of the generated audio."""
+)
+
+HINT_INDEX_SAMPLE_LEN = Hint(
+    "index_sample_len",
+    "Note",
+    """IndexTTS2 ignores voice sample reference data past the 15 second mark"""
+)
+

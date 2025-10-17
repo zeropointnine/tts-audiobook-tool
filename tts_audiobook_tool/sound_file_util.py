@@ -228,16 +228,29 @@ class SoundFileUtil:
         SoundFileUtil._current_playback_thread = new_thread
 
     @staticmethod
+    def stop_sound_async() -> bool:
+        """
+        Stops a sound that is playing using `play_sound_async()`.
+        Returns True if there was a sound to be stopped.
+        """
+
+        # Signal previous thread to stop if it exists and is alive
+        if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
+            SoundFileUtil._stop_playback_event.set() # Set the event to signal stopping
+            SoundFileUtil._current_playback_thread.join(timeout=0.5) # Wait a short time for it to stop
+            return True
+        else:
+            return False
+
+
+    @staticmethod
     def play_sound_async(sound: Sound):
         """
         Plays in-memory sound data asynchronously.
         A new playback will cancel the previous one.
         Eats exceptions and prints them.
         """
-        # Signal previous thread to stop if it exists and is alive
-        if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
-            SoundFileUtil._stop_playback_event.set() # Set the event to signal stopping
-            SoundFileUtil._current_playback_thread.join(timeout=0.5) # Wait a short time for it to stop
+        SoundFileUtil.stop_sound_async()
 
         # Clear the event for the new playback
         SoundFileUtil._stop_playback_event.clear()

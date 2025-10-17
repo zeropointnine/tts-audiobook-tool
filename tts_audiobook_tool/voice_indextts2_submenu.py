@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import IndexTts2Protocol
@@ -10,13 +11,13 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceIndexTts2Submenu:
 
     @staticmethod
-    def submenu(project: Project) -> None:
+    def submenu(project: Project, prefs: Prefs) -> None:
         """
         """
         while True:
             VoiceIndexTts2Submenu._print(project)
             hotkey = ask_hotkey()
-            should_exit = VoiceIndexTts2Submenu._handle_hotkey(project, hotkey)
+            should_exit = VoiceIndexTts2Submenu._handle_hotkey(project, prefs, hotkey)
             if should_exit:
                 return
 
@@ -64,10 +65,11 @@ class VoiceIndexTts2Submenu:
         printt()
 
     @staticmethod
-    def _handle_hotkey(project: Project, hotkey: str) -> bool:
+    def _handle_hotkey(project: Project, prefs: Prefs, hotkey: str) -> bool:
 
         match hotkey:
             case "1":
+                AppUtil.show_hint_if_necessary(prefs, HINT_INDEX_SAMPLE_LEN)
                 VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.INDEXTTS2)
                 return False
             case "2":
@@ -90,6 +92,7 @@ class VoiceIndexTts2Submenu:
                     return False
             case "4":
                 # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
+                AppUtil.show_hint_if_necessary(prefs, HINT_INDEX_SAMPLE_LEN)
                 VoiceSubmenuShared.ask_and_set_voice_file(
                     project,
                     TtsModelInfos.INDEXTTS2,

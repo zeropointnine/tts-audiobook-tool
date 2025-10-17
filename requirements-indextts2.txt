@@ -7,6 +7,7 @@ git+https://github.com/index-tts/index-tts@db5b39bb6ad903c219b2dd33d60b0f0bdaede
 ninja
 
 # App dependencies
+audiotsm==0.1.2
 faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 hf_xet

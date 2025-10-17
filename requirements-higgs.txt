@@ -23,6 +23,7 @@ jieba
 accelerate>=0.26.0
 
 # App dependencies
+audiotsm==0.1.2
 faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 librosa==0.11.0

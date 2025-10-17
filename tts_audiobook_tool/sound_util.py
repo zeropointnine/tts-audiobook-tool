@@ -4,7 +4,7 @@ from numpy import ndarray
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.util import printt
+from tts_audiobook_tool.util import make_error_string, printt
 
 class SoundUtil:
     """
@@ -95,6 +95,39 @@ class SoundUtil:
         new_data = np.concatenate([sound.data, silence])
         new_sound = Sound(new_data, sound.sr)
         return new_sound
+
+    @staticmethod
+    def speed_up_audio(sound: Sound, multiplier: float) -> Sound | str:
+        """
+        Uses wsola algorithm to speed up (or slow down) audio.
+        Sounds quite good for voice clone reference clip use case.
+        If error, returns error string.
+        """
+
+        from audiotsm import wsola
+        from audiotsm.io.array import ArrayReader, ArrayWriter
+
+        y, sr = sound.data, sound.sr
+
+        try:
+
+            # Set up the reader and writer
+            reader = ArrayReader(y.reshape(1, -1)) # audiotsm expects a 2D array
+            writer = ArrayWriter(channels=1)
+
+            # The WSOLA processor
+            # The frame_length and synthesis_hop parameters can be tuned, but defaults are often good.
+            tsm = wsola(channels=1, speed=multiplier)
+
+            # Process the audio
+            tsm.run(reader, writer)
+            y_fast = writer.data.flatten() # Get the processed audio back as a 1D array
+
+            # Save the output
+            return Sound(y_fast, sr)
+
+        except Exception as e:
+            return make_error_string(e)
 
     @staticmethod
     def find_local_minima(
@@ -256,3 +289,4 @@ class SoundUtil:
         # Save
         img.save(dest_path_png)
         print(f"Waveform visualization saved to: {dest_path_png}")
+
