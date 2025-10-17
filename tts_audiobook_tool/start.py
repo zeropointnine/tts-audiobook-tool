@@ -37,13 +37,13 @@ if not FfmpegUtil.is_ffmpeg_available():
     exit(1)
 
 # Updated dependencies check (required)
-new_packages = ["faster_whisper"]
+new_packages = ["faster_whisper", "audiotsm"]
 not_found = [package for package in new_packages if not util.find_spec(package)]
 if not_found:
     hint = Hint(
         "none", "The app's dependencies have changed",
         f"The following packages were not found: {', '.join(not_found)}\n"
-        "You've may have updated the app from the repository without updating its dependencies.\n"
+        "You may have updated the app from the repository without updating its dependencies.\n\n"
         f"Please update your virtual environment by re-running:\n"
         f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
     )
