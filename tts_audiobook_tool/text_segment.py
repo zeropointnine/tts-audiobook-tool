@@ -3,6 +3,7 @@ from enum import Enum
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 
 class TextSegment:
@@ -74,20 +75,24 @@ class TextSegmentReason(Enum):
     Reason for the text segment being segmented
     Value is used in teh json
     """
-    UNDEFINED = ("undefined", PAUSE_DURATION_SENTENCE) # for back-compat
-
-    # Segment is the start of a paragraph
-    # (and also by our definition is the start of a sentence too)
-    PARAGRAPH = ("p", PAUSE_DURATION_PARAGRAPH)
-
-    # Segment is a start of a sentence
-    SENTENCE = ("s",PAUSE_DURATION_SENTENCE)
+    # Segment is inside a sentence, at a random word
+    WORD = ("w", PAUSE_DURATION_WORD)
 
     # Segment is inside a sentence, at phrase boundary
     PHRASE = ("is", PAUSE_DURATION_PHRASE) # json value "is" is for legacy reasons
 
-    # Segment is inside a sentence, at a random word
-    WORD = ("w", PAUSE_DURATION_WORD)
+    # Segment is a start of a sentence
+    SENTENCE = ("s",PAUSE_DURATION_SENTENCE)
+
+    # Segment is the start of a paragraph (1 or 2 line breaks)
+    # (and by definition is the start of a sentence too)
+    PARAGRAPH = ("p", PAUSE_DURATION_PARAGRAPH)
+
+    # Segment is start of a section (more than 2 line breaks)
+    # (and by definition is the start of a paragraph and a sentence too)
+    SECTION = ("x", PAUSE_DURATION_SECTION)
+
+    UNDEFINED = ("undefined", PAUSE_DURATION_SENTENCE) # for back-compat and as fallback
 
     @property
     def json_value(self) -> str:

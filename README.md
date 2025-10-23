@@ -15,7 +15,7 @@ The app features a number of quality control measures designed to mitigate the i
 - Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
 - Industry standard loudness normalization (EBU R 128)
 
-Plain-vanilla interactive console interface.
+Plain-vanilla text interface.
 
 ### Web-based player:
 
@@ -25,9 +25,6 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2.abr.m4a)
 - [IndexTTS2 (with added emotional guidance voice sample)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2-plus-emo.abr.m4a)
-
-
-
 - [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
 - [Higgs Audio V2 (a different voice this time, and at high temperature)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a)
@@ -266,9 +263,15 @@ These are my anecdotal inference speeds (running Windows unless otherwise noted)
 
 # Update highlights
 
+**2025-10-23**
+
+Added option to insert a "page turn" sound effect at section breaks (default is on; must replace text to enable on pre-existing projects)
+
+Rearranged some menu items
+
 **2025-10-03**
 
-Added support for **IndexTTS2**, including secondary voice reference sample guiding emotion.
+Added support for **IndexTTS2**, including secondary voice reference sample guiding emotion and "emotion vectors".
 
 Added option to specify Whisper model (large-v3 or large-v3-turbo)
 

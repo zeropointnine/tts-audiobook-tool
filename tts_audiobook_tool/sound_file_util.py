@@ -7,7 +7,7 @@ import numpy as np
 import threading
 import soundfile
 
-from tts_audiobook_tool.app_types import Sound, ValidationResult
+from tts_audiobook_tool.app_types import FailResult, Sound, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
@@ -31,7 +31,7 @@ class SoundFileUtil:
             return make_error_string(e)
 
         if target_sr != 0 and target_sr != sr:
-            data = librosa.resample(data, orig_sr=sr, target_sr=16000)
+            data = librosa.resample(data, orig_sr=sr, target_sr=target_sr)
             return Sound(data, target_sr)
         else:
             return Sound(data, sr)
@@ -67,19 +67,22 @@ class SoundFileUtil:
         if not DEV_SAVE_INTERMEDIATE_FILES:
             return
 
-        fn = f"{int(time.time()*1000)} {type(result).__name__}.txt"
+        s = type(result).__name__
+        if isinstance(result, FailResult):
+            s = "[fail] " + s
+        fn = f"{int(time.time()*1000)} {s}.txt"
         path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-        s = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n\n"
 
-        s += "source text:" + "\n" + source_text + "\n\n"
-        s += "transcribed_text:" + "\n" + transcribed_text + "\n\n"
+        text = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n\n"
+        text += "source text:" + "\n" + source_text + "\n\n"
+        text += "transcribed_text:" + "\n" + transcribed_text + "\n\n"
         source_text_massaged = massage_for_text_comparison(source_text)
-        s += "source_text, massaged:" + "\n" + source_text_massaged + "\n\n"
+        text += "source_text, massaged:" + "\n" + source_text_massaged + "\n\n"
         transcribed_text_massaged = massage_for_text_comparison(transcribed_text)
-        s += "transcribed_text, massaged:" + "\n" + transcribed_text_massaged + "\n\n"
+        text += "transcribed_text, massaged:" + "\n" + transcribed_text_massaged + "\n\n"
 
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(s)
+            f.write(text)
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:

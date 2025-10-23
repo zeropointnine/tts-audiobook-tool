@@ -12,6 +12,9 @@ class Mp3ConcatTranscodeUtil:
 
         dir = ask_dir_path("Enter directory of MP3 files:", "Select directory with MP3 files")
 
+        if not dir:
+            return
+
         if not os.path.exists(dir):
             ask_continue("No such directory")
             return

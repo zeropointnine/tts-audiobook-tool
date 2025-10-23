@@ -45,7 +45,11 @@ class RealTimeSubmenu:
                     if not text_segments:
                         ask_continue("No text segments specified.\n")
                         continue
-                    RealTimeUtil.start(state.project, text_segments, line_range)
+                    RealTimeUtil.start(
+                        state.project, text_segments,
+                        line_range,
+                        use_section_sound_effect=state.prefs.section_sound_effect
+                    )
                 case "2":
                     RealTimeSubmenu.text_submenu(state)
                 case "3":

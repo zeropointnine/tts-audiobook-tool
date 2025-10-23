@@ -188,8 +188,6 @@ class GenerateUtil:
 
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
 
-            # temp1 = WhisperUtil.make_aligned_words(sound, segments)
-
             # Validate
             validation_result = ValidateUtil.validate_item(
                 sound, text_segment.text, transcribed_words, Tts.get_type().value

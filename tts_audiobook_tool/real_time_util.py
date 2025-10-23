@@ -9,7 +9,7 @@ from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
@@ -18,7 +18,13 @@ from tts_audiobook_tool.util import *
 class RealTimeUtil:
 
     @staticmethod
-    def start(project: Project, text_segments: list[TextSegment], line_range: tuple[int, int] | None) -> None:
+    def start(
+            project: Project,
+            text_segments: list[TextSegment],
+            line_range: tuple[int, int] | None,
+            use_section_sound_effect: bool
+        ) -> None:
+
         """
         param line_range - one-indexed range
         """
@@ -69,30 +75,47 @@ class RealTimeUtil:
 
             if current_sound:
 
-                # Calc pause duration
-                if not last_text_segment:
-                    pause_duration = 0
-                else:
-                    if not last_sound:
-                        pause_duration = 1
-                    else:
-                        pause_duration = last_text_segment.reason.pause_duration
-
+                # Start stream lazy
                 if not stream:
-                    # Start stream lazy
                     stream = SoundDeviceStream(Tts.get_type().value.sample_rate)
                     stream.start()
 
-                # Add pause
-                if pause_duration:
-                    silence = np.zeros(int(current_sound.sr * pause_duration), dtype=current_sound.data.dtype)
-                    stream.add_data(silence)
+                # Prepend sound effect or silence or none
+                prepend_data = None
 
-                # Add sound
+                if i > start_index:
+
+                    if use_section_sound_effect and current_text_segment.reason == TextSegmentReason.SECTION:
+                        path = SECTION_SOUND_EFFECT_PATH
+
+                        result = SoundFileUtil.load(path, current_sound.sr)
+                        if isinstance(result, str):
+                            printt(f"Error loading {path}")
+                        else:
+                            prepend_data = result.data
+
+                    if prepend_data is None:
+                        if not last_text_segment:
+                            silence_duration = 0
+                        else:
+                            if not last_sound:
+                                silence_duration = 1
+                            else:
+                                silence_duration = last_text_segment.reason.pause_duration
+                        if silence_duration:
+                            prepend_data = np.zeros(int(current_sound.sr * silence_duration), dtype=current_sound.data.dtype)
+
+                # Add to stream
+                if prepend_data is not None:
+                    stream.add_data(prepend_data)
                 stream.add_data(current_sound.data)
 
+                total_duration = current_sound.duration
+                if prepend_data is not None:
+                    total_duration += len(prepend_data) / current_sound.sr
+
                 # Print buffer duration
-                value = stream.buffer_duration - current_sound.duration - pause_duration
+                value = stream.buffer_duration - total_duration
                 if value <= 0.0:
                     value = +0.0
                 s = f"{COL_ERROR}" if value < 0.1 else f"{COL_OK}"
@@ -101,10 +124,10 @@ class RealTimeUtil:
 
                 SoundFileUtil.debug_save("realtime", current_sound)
 
-                # Prevent growing the buffer beyond threshold
+                # Sleep to prevent growing buffer beyond threshold
                 if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS:
-                    sleep_duration = int(current_sound.duration + pause_duration)
-                    print(f"Sleeping for {int(sleep_duration)}s")
+                    sleep_duration = int(total_duration)
+                    print(f"Sleeping for {sleep_duration}s")
                     for i in range(0, sleep_duration):
                         time.sleep(1) # hah
 

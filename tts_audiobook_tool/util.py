@@ -206,7 +206,9 @@ def estimated_wav_seconds(file_path: str) -> float:
         return 0
     return num_bytes / (44_100 * 2)
 
-def make_hotkey_string(hotkey: str, color: str=COL_ACCENT) -> str:
+def make_hotkey_string(hotkey: str, color: str="") -> str:
+    if not color:
+        color = COL_ACCENT
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
 def make_currently_string(value: str, label: str="currently: ") -> str:

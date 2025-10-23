@@ -1,8 +1,9 @@
 import librosa
 import numpy as np
 from numpy import ndarray
+import numpy
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import make_error_string, printt
 
@@ -13,8 +14,7 @@ class SoundUtil:
     @staticmethod
     def resample_if_necessary(sound: Sound, target_sr: int) -> Sound:
         """
-        Returns new Sound with target sample rate
-        But returns identity if not needed
+        Returns new Sound with target sample rate (or identity if unnecessary)
         """
         if sound.sr == target_sr:
             return sound
@@ -97,10 +97,30 @@ class SoundUtil:
         return new_sound
 
     @staticmethod
+    def append_sound_using_path(base_sound: Sound, appended_sound_path: str) -> Sound:
+        """
+        Concatenates a Sound using the specified file path to `base_sound`.
+        Resamples the loaded sound to match the base sound.
+        On error, prints feedback and simply returns the base_sound.
+        """
+
+        result = appended_sound = SoundFileUtil.load(appended_sound_path)
+        if isinstance(result, str):
+            printt(f"Couldn't load sound {appended_sound_path} {result}")
+            return base_sound
+
+        appended_sound = result
+        appended_sound = SoundUtil.resample_if_necessary(appended_sound, base_sound.sr)
+
+        new_data = numpy.concatenate((base_sound.data, appended_sound.data))
+        return Sound(new_data, base_sound.sr)
+
+
+    @staticmethod
     def speed_up_audio(sound: Sound, multiplier: float) -> Sound | str:
         """
         Uses wsola algorithm to speed up (or slow down) audio.
-        Sounds quite good for voice clone reference clip use case.
+        Sounds quite good for voice clone reference clip use case (when sped up).
         If error, returns error string.
         """
 

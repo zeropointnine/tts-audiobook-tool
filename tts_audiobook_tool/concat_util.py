@@ -85,7 +85,11 @@ class ConcatUtil:
 
         # Concat
         durations = ConcatUtil.concatenate_files_plus_silence(
-            dest_path, segments_and_paths, print_progress=True, to_aac_not_flac=to_aac_not_flac
+            dest_path,
+            segments_and_paths,
+            print_progress=True,
+            section_sound_effect=state.prefs.section_sound_effect,
+            to_aac_not_flac=to_aac_not_flac
         )
         if isinstance(durations, str):
             return "", durations
@@ -109,6 +113,7 @@ class ConcatUtil:
     def concatenate_files_plus_silence(
         dest_path: str,
         segments_and_paths: list[ tuple[TextSegment, str] ],
+        section_sound_effect: bool,
         print_progress: bool,
         to_aac_not_flac: bool
     ) -> list[float] | str:
@@ -148,21 +153,36 @@ class ConcatUtil:
 
             if not path_b:
                 # Gap in the sequence, use some default silence padding value
-                silence_duration = 1.0
+                appended_silence_duration = TextSegmentReason.UNDEFINED.pause_duration
             else:
-                silence_duration = segment_b.reason.pause_duration
+                appended_silence_duration = segment_b.reason.pause_duration
+
+            if segment_b.reason == TextSegmentReason.SECTION and section_sound_effect:
+                appended_sound_effect_path = SECTION_SOUND_EFFECT_PATH
+                appended_silence_duration = 0
+            else:
+                appended_sound_effect_path = ""
+
+            is_last = i == len(segments_and_paths) - 2
+            if is_last:
+                appended_silence_duration = 0
 
             if print_progress:
                 s = f"{time_stamp(total_duration, with_tenth=False)} {Path(path_a).stem[:80]} ..."
                 print("\x1b[1G" + s, end="\033[K", flush=True)
 
-            sound_a =SoundFileUtil.load(path_a)
+            sound_a = SoundFileUtil.load(path_a)
             if isinstance(sound_a, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
                 return sound_a
 
-            sound_a = SoundUtil.add_silence(sound_a, silence_duration)
             sound_a = SoundUtil.resample_if_necessary(sound_a, APP_SAMPLE_RATE)
+
+            # Append sound effect or silence or not
+            if appended_sound_effect_path:
+                sound_a = SoundUtil.append_sound_using_path(sound_a, appended_sound_effect_path)
+            elif appended_silence_duration:
+                sound_a = SoundUtil.add_silence(sound_a, appended_silence_duration)
 
             durations.append(sound_a.duration)
 

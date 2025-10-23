@@ -12,7 +12,6 @@ from tts_audiobook_tool.constants_config import *
 class Prefs:
     """
     User settings that persist to file
-    TODO: singleton
     """
 
     def __init__(
@@ -20,12 +19,15 @@ class Prefs:
             project_dir: str = "",
             hints: dict = {},
             normalization_type: NormalizationType = NormalizationType.DEFAULT,
-            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
+            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
+            section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
-        self._play_on_generate = play_on_generate
         self._normalization_type: NormalizationType = normalization_type
+        self._play_on_generate = play_on_generate
+        self._section_sound_effect = section_sound_effect
+
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -75,12 +77,18 @@ class Prefs:
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
+        section_sound_effect = prefs_dict.get("section_sound_effect", PREFS_DEFAULT_SECTION_SOUND_EFFECT)
+        if not isinstance(section_sound_effect, bool):
+            section_sound_effect = PREFS_DEFAULT_SECTION_SOUND_EFFECT
+            dirty = True
+
         hints = prefs_dict.get("hints", None) or {}
 
         prefs = Prefs(
             project_dir=project_dir,
             normalization_type=normalization_type,
             play_on_generate=play_on_generate,
+            section_sound_effect=section_sound_effect,
             hints=hints
         )
 
@@ -117,6 +125,15 @@ class Prefs:
         self._play_on_generate = value
         self.save()
 
+    @property
+    def section_sound_effect(self) -> bool:
+        return self._section_sound_effect
+
+    @section_sound_effect.setter
+    def section_sound_effect(self, value: bool):
+        self._section_sound_effect = value
+        self.save()
+
     def get_hint(self, key: str) -> bool:
         return bool(self._hints.get(key, False))
 
@@ -133,7 +150,8 @@ class Prefs:
             "project_dir": self._project_dir,
             "hints": self._hints,
             "normalization_type": self._normalization_type.value.json_value,
-            "play_on_generate": self._play_on_generate
+            "play_on_generate": self._play_on_generate,
+            "section_sound_effect": self._section_sound_effect
         }
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:

@@ -82,18 +82,18 @@ class TextSubmenu:
 def print_project_text(state: State) -> None:
 
     indices = state.project.sound_segments.sound_segments.keys()
-    texts = [item.text for item in state.project.text_segments]
+    text_segments = state.project.text_segments
 
-    print_heading(f"Text segments ({COL_DEFAULT}{len(texts)}{COL_ACCENT}):")
+    print_heading(f"Text segments ({COL_DEFAULT}{len(text_segments)}{COL_ACCENT}):")
 
-    max_width = len(str(len(texts)))
+    max_width = len(str(len(text_segments)))
 
-    for i, text in enumerate(texts):
+    for i, text_segment in enumerate(text_segments):
         s1 = make_hotkey_string( str(i+1).rjust(max_width) )
         s2 = make_hotkey_string("y" if i in indices else "n")
-        printt(f"{s1} {s2}  {text.strip()}")
+        printt(f"{s1} {s2}  {text_segment.text.strip()}")
     printt()
 
-    s = ParseUtil.make_ranges_string(set(indices), len(texts))
+    s = ParseUtil.make_ranges_string(set(indices), len(text_segments))
     printt(f"Generated segments: {s}")
     printt()

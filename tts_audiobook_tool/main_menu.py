@@ -1,8 +1,10 @@
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
+from tts_audiobook_tool.real_time_submenu import RealTimeSubmenu
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.options_submenu import OptionsSubmenu
 from tts_audiobook_tool.generate_submenu import GenerateSubmenu
 from tts_audiobook_tool.project_submenu import ProjectSubmenu
+from tts_audiobook_tool.tools_submenu import ToolsSubmenu
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.text_submenu import TextSubmenu
@@ -76,7 +78,7 @@ class MainMenu:
 
         # Generate audio
         if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
-            s = f"{make_hotkey_string('G')} Generate audio"
+            s = f"{make_hotkey_string('G')} Generate audiobook audio"
             if not state.project.can_voice and not state.project.text_segments:
                 s2 = f"{COL_ERROR} (requires text and voice sample)"
             elif not state.project.can_voice:
@@ -89,13 +91,29 @@ class MainMenu:
 
         # Concat
         if state.prefs.project_dir:
-            s = f"{make_hotkey_string('C')} Concatenate audio segments to create audiobook file"
+            s = f"{make_hotkey_string('C')} Concatenate audiobook lines to create audiobook file"
             if num_generated == 0:
                 s += f" {COL_ERROR}(requires generated audio)"
             printt(s)
 
+        # Realtime
+        if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
+            s = f"{make_hotkey_string('R')} Generate realtime audio"
+            if not state.project.can_voice and not state.project.text_segments:
+                s2 = f"{COL_ERROR} (requires text and voice sample)"
+            elif not state.project.can_voice:
+                s2 = f"{COL_ERROR} (requires voice sample)"
+            elif not state.project.text_segments:
+                s2 = f"{COL_ERROR} (requires text)"
+            else:
+                s2 = ""
+            printt(s + s2)
+
+        # Tools
+        printt(f"{make_hotkey_string('Z')} Tools")
+
         # Options
-        printt(f"{make_hotkey_string('O')} Options/Tools")
+        printt(f"{make_hotkey_string('O')} Options")
 
         # Quit
         printt(f"{make_hotkey_string('Q')} Quit")
@@ -150,6 +168,12 @@ class MainMenu:
                 if not state.prefs.project_dir or num_generated == 0:
                     return
                 ConcatSubmenu.submenu(state)
+            case "r":
+                if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE \
+                        and state.project.can_voice and state.project.text_segments:
+                    RealTimeSubmenu.submenu(state)
+            case "z":
+                ToolsSubmenu.submenu(state)
             case "o":
                 OptionsSubmenu.submenu(state)
 

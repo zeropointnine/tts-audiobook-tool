@@ -59,8 +59,11 @@ class TextSegmenter:
         for i in range(1, len(text_segments)):
             segment_a = text_segments[i - 1]
             segment_b = text_segments[i]
-            if has_trailing_line_break(segment_a.text):
+            count = num_trailing_line_breaks(segment_a.text)
+            if 1 <= count <= 2:
                 segment_b.reason = TextSegmentReason.PARAGRAPH
+            elif count > 2:
+                segment_b.reason = TextSegmentReason.SECTION
 
         # Pass 5 - merge short segments
         text_segments = merge_short_segments_all(text_segments, max_words)
@@ -182,12 +185,14 @@ def merge_short_segments(segments: list[TextSegment], max_words: int) -> list[Te
 
 
 def make_paragraph_lists(segments: list[TextSegment]) -> list[list[TextSegment]]:
-
+    """
+    Groups text segments by paragraph/section
+    """
     paragraphs = []
 
     paragraph = []
     for i, segment in enumerate(segments):
-        if segment.reason == TextSegmentReason.PARAGRAPH:
+        if segment.reason in [TextSegmentReason.PARAGRAPH, TextSegmentReason.SECTION]:
             paragraphs.append(paragraph)
             paragraph = []
         paragraph.append(segment)
@@ -268,9 +273,9 @@ def has_quote_char(s: str) -> bool:
             return True
     return False
 
-def has_trailing_line_break(s: str) -> bool:
+def num_trailing_line_breaks(s: str) -> int:
     trailing_whitespace = s[len(s.rstrip()):]
-    return "\n" in trailing_whitespace
+    return trailing_whitespace.count("\n")
 
 def word_count(text: str) -> int:
     """Counts words in a string. Strips leading/trailing whitespace and splits."""
