@@ -90,7 +90,7 @@ class IndexTts2Model(IndexTts2ModelProtocol):
                 emo_vector=emo_vector or None,
                 max_text_tokens_per_segment=MAX_TOKENS_PER_SEGMENT,
                 output_path=None,
-                verbose=False,
+                verbose=False
             )
         except Exception as e:
             return make_error_string(e)
@@ -117,5 +117,7 @@ class IndexTts2Model(IndexTts2ModelProtocol):
 REPO_ID = "IndexTeam/IndexTTS-2"
 
 # Upper bound of recommended range as per project gradio demo
-# (App ofc always segments the text well within this range but yea)
+# App ofc always segments the text well within this range but yea
+# FYI, WER is outstanding when limited to app's default word limit,
+# but increasingly starts dropping phrases as num tokens increases.
 MAX_TOKENS_PER_SEGMENT = 200

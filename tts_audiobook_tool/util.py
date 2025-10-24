@@ -27,13 +27,14 @@ def printt(s: str="") -> None:
     s += Ansi.RESET
     print(s)
 
-def printt_set(message: str) -> None:
+def printt_set(message: str, color_code=COL_DIM, extra_line=True) -> None:
     """
     Should be used for printing feedback after a setting has been changed
     and submenu is about to be re-printed.
     """
-    printt(message)
-    printt()
+    printt(color_code + message)
+    if extra_line:
+        printt()
     if MENU_CLEARS_SCREEN:
         ask_continue()
     else:
@@ -211,8 +212,8 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
         color = COL_ACCENT
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
-def make_currently_string(value: str, label: str="currently: ") -> str:
-    return f"{COL_DIM}({label}{COL_ACCENT}{value}{COL_DIM})"
+def make_currently_string(value: str, label: str="currently: ", color_code=COL_ACCENT) -> str:
+    return f"{COL_DIM}({label}{color_code}{value}{COL_DIM})"
 
 def make_gb_string(bytes: int) -> str:
     """ Returns gigabyte string with either one or zero decimal places"""

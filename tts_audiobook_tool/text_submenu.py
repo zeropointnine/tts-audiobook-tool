@@ -10,30 +10,31 @@ class TextSubmenu:
     @staticmethod
     def submenu(state: State) -> None:
 
-        s = str(len(state.project.text_segments))
-        s += " line" if len(state.project.text_segments) == 1 else " lines"
-        s = make_currently_string(s)
-        print_heading(f"Text {s}")
-        printt(f"{make_hotkey_string('1')} Replace text")
-        printt(f"{make_hotkey_string('2')} View text lines")
-        printt()
+        while True:
 
-        hotkey = ask()
+            s = str(len(state.project.text_segments))
+            s += " line" if len(state.project.text_segments) == 1 else " lines"
+            s = make_currently_string(s)
+            print_heading(f"Text {s}")
+            printt(f"{make_hotkey_string('1')} Replace text")
+            printt(f"{make_hotkey_string('2')} View text lines")
+            printt()
 
-        if hotkey == "1":
-            num_files = state.project.sound_segments.num_generated()
-            if num_files == 0:
-                TextSubmenu.set_text_submenu(state, "Replace text:")
-            else:
-                s = f"Replacing text will invalidate all ({num_files}) previously generated sound segment files for this project.\nAre you sure? "
-                if ask_hotkey(s):
+            hotkey = ask()
+
+            if hotkey == "1":
+                num_files = state.project.sound_segments.num_generated()
+                if num_files == 0:
                     TextSubmenu.set_text_submenu(state, "Replace text:")
                 else:
-                    TextSubmenu.submenu(state)
-        elif hotkey == "2":
-            print_project_text(state)
-            ask("Press enter: ")
-            TextSubmenu.submenu(state)
+                    s = f"Replacing text will invalidate all ({num_files}) previously generated sound segment files for this project.\nAre you sure? "
+                    if ask_hotkey(s):
+                        TextSubmenu.set_text_submenu(state, "Replace text:")
+            elif hotkey == "2":
+                print_project_text(state)
+                ask("Press enter: ")
+            else:
+                return
 
     @staticmethod
     def set_text_submenu(state: State, heading: str) -> None:
@@ -45,13 +46,17 @@ class TextSubmenu:
         printt()
 
         inp = ask_hotkey()
+        if inp not in ["1", "2"]:
+            return
+
         if inp == "1":
             text_segments, raw_text = AppUtil.get_text_segments_from_ask_text_file()
-            TextSubmenu._finish_set_text(state, text_segments, raw_text)
-        elif inp == "2":
+        else: # == "2"
             text_segments, raw_text = AppUtil.get_text_segments_from_ask_std_in()
-            TextSubmenu._finish_set_text(state, text_segments, raw_text)
-        TextSubmenu.submenu(state)
+        if not text_segments:
+            return
+
+        TextSubmenu._finish_set_text(state, text_segments, raw_text)
 
     @staticmethod
     def _finish_set_text(state: State, text_segments: list[TextSegment], raw_text: str) -> None:
@@ -59,11 +64,11 @@ class TextSubmenu:
         # Print text segments
         strings = [item.text for item in text_segments]
         AppUtil.print_text_segment_text(strings)
-        printt("... is how the text will be segmented for inference.\n")
+        printt(f"{COL_DIM}... is how the text will be segmented for inference.")
+        printt()
 
-        # Ask for confirmation
-        b = ask_confirm()
-        if not b:
+        # Confirm
+        if not ask_confirm():
             return
 
         # Delete now-outdated gens

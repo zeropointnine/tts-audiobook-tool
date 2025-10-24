@@ -62,7 +62,10 @@ class MainMenu:
             if not state.project.can_voice:
                 current = f"{COL_ERROR}(required){COL_DEFAULT} "
             else:
-                current = make_currently_string(voice_label, label="current voice clone: ")
+                if voice_label != "none":
+                    current = make_currently_string(voice_label, label="current voice clone: ")
+                else:
+                    current = make_currently_string(voice_label, label="current voice clone: ", color_code=COL_ERROR)
             printt(f"{make_hotkey_string('V')} Voice clone and model settings {current}")
 
         # Text
@@ -180,5 +183,5 @@ class MainMenu:
 
     @staticmethod
     def quit():
-        printt("State saved. Exiting.")
+        printt_set("State saved. Exiting.", extra_line=False)
         exit(0)

@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import time
 import torch
-import torchaudio
+import torchaudio # type: ignore
 import huggingface_hub
 from huggingface_hub.errors import GatedRepoError
 
