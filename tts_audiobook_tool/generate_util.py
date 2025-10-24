@@ -2,10 +2,9 @@ import os
 import sys
 import time
 
-import librosa
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import SkippedResult, Sound, SttVariant
 from tts_audiobook_tool.app_types import FailResult, TrimmableResult, PassResult, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
@@ -30,7 +29,8 @@ class GenerateUtil:
     def generate_items_to_files(
             project: Project,
             indices_to_generate: set[int],
-            items_to_regenerate: dict[int, str]
+            items_to_regenerate: dict[int, str],
+            stt_variant: SttVariant
     ) -> bool:
         """
         Subroutine for doing a series of audio generations
@@ -83,20 +83,19 @@ class GenerateUtil:
                 if path and os.path.exists(path):
                     delete_silently(path)
 
-            opt_sound, validate_result = GenerateUtil.generate_sound_full_flow(project, text_segment)
-
-            if DEV:
-                printt(f"VRAM: {AppUtil.get_vram_usage_nv()}") # type: ignore # linter false positive ugh
+            opt_sound, validate_result = GenerateUtil.generate_sound_full_flow(
+                project=project,
+                text_segment=text_segment,
+                stt_variant=stt_variant
+            )
 
             if not opt_sound:
                 # Model failed to produce audio
-
                 printt(f"{COL_ERROR}Skipped item")
                 num_failed += 1
 
             else:
                 # Model generated sound data, will save
-
                 if isinstance(validate_result, TrimmableResult):
                     printt(f"{COL_OK}Fixed:{COL_DEFAULT} {validate_result.get_ui_message()}")
 
@@ -135,9 +134,10 @@ class GenerateUtil:
         ok = str(num_saved_ok)
         if num_saved_ok == len(items.items()):
             ok += " (all)"
-        printt(f"Num lines saved normally: {COL_OK}{ok}")
+        printt(f"Num lines saved: {COL_OK}{ok}")
         col = COL_ACCENT if num_saved_with_error else ""
-        printt(f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}")
+        if num_saved_with_error:
+            printt(f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}")
         if num_failed:
             printt(f"Num lines failed to generate: {COL_ERROR}{num_failed}")
         printt()
@@ -148,11 +148,14 @@ class GenerateUtil:
     def generate_sound_full_flow(
         project: Project,
         text_segment: TextSegment,
-        max_passes: int = 2
+        stt_variant: SttVariant,
+        max_passes: int = 2,
     ) -> tuple[Sound | None, ValidationResult]:
         """
         Full program flow for generating sound for a text segment, including retries
-        Prints error feedback only on non-final generation fail
+        Prints error feedback only on non-final generation fail.
+
+        param stt_variant - if DISABLED, validation step is skipped
         """
 
         pass_num = 0
@@ -170,11 +173,14 @@ class GenerateUtil:
                     continue
                 else:
                     return None, FailResult(err)
-            else:
-                sound = result
+
+            sound = result
+
+            if stt_variant == SttVariant.DISABLED:
+                return (sound, SkippedResult())
 
             # Transcribe
-            result = WhisperUtil.transcribe_to_segments(sound)
+            result = WhisperUtil.transcribe_to_segments(sound=sound, stt_variant=stt_variant)
             if isinstance(result, str):
                 # Transcription error (unlikely)
                 err = result

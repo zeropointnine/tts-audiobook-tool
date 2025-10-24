@@ -50,7 +50,7 @@ if not_found:
     AppUtil.print_hint(hint)
     exit(1)
 
-# Other one-time messages (which are not blockers)
+# Show other one-time startup messages (which are not blockers)
 prefs = Prefs.load()
 
 if not does_import_test_pass("tkinter"): # To test for tkinter functionality, must do concrete import
@@ -61,6 +61,9 @@ if not is_long_path_enabled():
 
 if Tts.get_type() == TtsModelInfos.OUTE:
     AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_CONFIG, and_prompt=True)
+elif Tts.get_type() == TtsModelInfos.INDEXTTS2:
+    AppUtil.show_hint_if_necessary(prefs, HINT_INDEXTTS2, and_prompt=True)
+
 
 # Start proper
 printt()

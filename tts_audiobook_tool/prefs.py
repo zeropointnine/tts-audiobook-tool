@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_types import NormalizationType
+from tts_audiobook_tool.app_types import NormalizationType, SttVariant
 from tts_audiobook_tool.l import L
 
 from tts_audiobook_tool.util import *
@@ -11,22 +11,24 @@ from tts_audiobook_tool.constants_config import *
 
 class Prefs:
     """
-    User settings that persist to file
+    User-configurable app settings that persist to file
     """
 
     def __init__(
             self,
             project_dir: str = "",
-            hints: dict = {},
+            hints: dict[str, bool] = {},
+            stt_variant: SttVariant = list(SttVariant)[0],
             normalization_type: NormalizationType = NormalizationType.DEFAULT,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT
+            use_section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
+        self._stt_variant = stt_variant
         self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
-        self._section_sound_effect = section_sound_effect
+        self._use_section_sound_effect = use_section_sound_effect
 
 
     @staticmethod
@@ -55,11 +57,29 @@ class Prefs:
 
         dirty = False
 
+        # Project dir
         project_dir = prefs_dict.get("project_dir", "")
         if not isinstance(project_dir, str):
             project_dir = ""
             dirty = True
 
+        # Hints
+        hints = prefs_dict.get("hints", None) or {}
+
+        # Speech-to-text variant
+        s = prefs_dict.get("stt_variant", "")
+        if not s:
+            stt_variant = list(SttVariant)[0]
+            dirty = True
+        else:
+            result = SttVariant.get_by_id(s)
+            if result is not None:
+                stt_variant = result
+                dirty = True
+            else:
+                stt_variant = list(SttVariant)[0]
+
+        # Normalization type
         if not "normalization_type" in prefs_dict:
             s = "default"
             dirty = True
@@ -72,23 +92,25 @@ class Prefs:
         if not normalization_type:
             normalization_type = NormalizationType.DEFAULT
 
+        # Play on generate
         play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
-        section_sound_effect = prefs_dict.get("section_sound_effect", PREFS_DEFAULT_SECTION_SOUND_EFFECT)
+        # Section sound effect
+        section_sound_effect = prefs_dict.get("use_section_sound_effect", PREFS_DEFAULT_SECTION_SOUND_EFFECT)
         if not isinstance(section_sound_effect, bool):
             section_sound_effect = PREFS_DEFAULT_SECTION_SOUND_EFFECT
             dirty = True
 
-        hints = prefs_dict.get("hints", None) or {}
-
+        # Make prefs instance
         prefs = Prefs(
             project_dir=project_dir,
             normalization_type=normalization_type,
+            stt_variant=stt_variant,
             play_on_generate=play_on_generate,
-            section_sound_effect=section_sound_effect,
+            use_section_sound_effect=section_sound_effect,
             hints=hints
         )
 
@@ -126,12 +148,12 @@ class Prefs:
         self.save()
 
     @property
-    def section_sound_effect(self) -> bool:
-        return self._section_sound_effect
+    def use_section_sound_effect(self) -> bool:
+        return self._use_section_sound_effect
 
-    @section_sound_effect.setter
-    def section_sound_effect(self, value: bool):
-        self._section_sound_effect = value
+    @use_section_sound_effect.setter
+    def use_section_sound_effect(self, value: bool):
+        self._use_section_sound_effect = value
         self.save()
 
     def get_hint(self, key: str) -> bool:
@@ -145,13 +167,28 @@ class Prefs:
         self._hints = {}
         self.save()
 
+    @property
+    def stt_variant(self) -> SttVariant:
+        return self._stt_variant
+
+    @stt_variant.setter
+    def stt_variant(self, value: SttVariant) -> None:
+        self._stt_variant = value
+        self.save()
+
+    @property
+    def is_validation_disabled(self) -> bool:
+        # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
+        return (self._stt_variant == SttVariant.DISABLED)
+
     def save(self) -> None:
         dic = {
             "project_dir": self._project_dir,
             "hints": self._hints,
+            "stt_variant": self._stt_variant.id,
             "normalization_type": self._normalization_type.value.json_value,
             "play_on_generate": self._play_on_generate,
-            "section_sound_effect": self._section_sound_effect
+            "use_section_sound_effect": self._use_section_sound_effect
         }
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:

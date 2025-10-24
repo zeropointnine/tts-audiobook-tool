@@ -109,6 +109,12 @@ class FailResult(ValidationResult):
     def get_ui_message(self) -> str:
         return self.message
 
+@dataclass
+class SkippedResult(ValidationResult):
+    def get_ui_message(self) -> str:
+        return f"Validation skipped"
+
+
 # ---
 
 class NormalizationSpecs(NamedTuple):
@@ -141,9 +147,26 @@ class NormalizationType(Enum):
 
 # ---
 
-class SttVariant(str, Enum):
-    LARGE_V3 = "large-v3"
-    LARGE_V3_TURBO = "large-v3-turbo"
+class SttVariant(tuple[str, str], Enum):
+
+    LARGE_V3 = ("large-v3", "best accuracy, default") # default
+    LARGE_V3_TURBO = ("large-v3-turbo", "slightly lower accuracy, but uses slightly less memory and faster")
+    DISABLED = ("disabled", "skips validation step when generating audio, adds no extra memory")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def description(self) -> str:
+        return self.value[1]
+
+    @staticmethod
+    def get_by_id(id: str) -> SttVariant | None:
+        for item in list(SttVariant):
+            if id == item.id:
+                return item
+        return None
 
 # ---
 

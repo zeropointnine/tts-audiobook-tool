@@ -1,8 +1,9 @@
 import os
 
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.state import State
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
@@ -11,7 +12,7 @@ class VoiceSubmenuShared:
 
     @staticmethod
     def ask_and_set_voice_file(
-            project: Project,
+            state: State,
             tts_type: TtsModelInfos,
             is_secondary: bool=False,
             message_override: str=""
@@ -23,12 +24,17 @@ class VoiceSubmenuShared:
         Prints feedback on success or fail.
         """
 
-        if not tts_type in [TtsModelInfos.CHATTERBOX, TtsModelInfos.FISH, TtsModelInfos.HIGGS,
-                TtsModelInfos.VIBEVOICE, TtsModelInfos.INDEXTTS2]:
+        if not tts_type in [
+            TtsModelInfos.CHATTERBOX,
+            TtsModelInfos.FISH,
+            TtsModelInfos.HIGGS,
+            TtsModelInfos.VIBEVOICE,
+            TtsModelInfos.INDEXTTS2
+        ]:
             # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type {tts_type}")
 
-        path = VoiceSubmenuShared.ask_voice_file(project.dir_path, tts_type, message_override)
+        path = VoiceSubmenuShared.ask_voice_file(state.project.dir_path, tts_type, message_override)
         if not path:
             return
 
@@ -41,21 +47,35 @@ class VoiceSubmenuShared:
         sound = result
 
         needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS]
+
         if needs_transcript:
-            # Transcribe
+
             printt("Transcribing...")
             printt()
-            result = WhisperUtil.transcribe_to_words(sound)
+
+            if state.prefs.stt_variant == SttVariant.DISABLED:
+                stt_variant = SttVariant.LARGE_V3
+            else:
+                stt_variant = state.prefs.stt_variant
+
+            result = WhisperUtil.transcribe_to_segments(sound, stt_variant)
+
+            if state.prefs.stt_variant == SttVariant.DISABLED:
+                Stt.clear_stt_model()
+
             if isinstance(result, str):
                 err = result
                 ask_error(err)
                 return
-            transcript = WhisperUtil.get_flat_text_filtered_by_probability(result, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+
+            words = WhisperUtil.get_words_from_segments(result)
+            transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+
         else:
             transcript = ""
 
         file_stem = Path(path).stem
-        err = project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
+        err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
         if err:
             ask_error(err)
             return

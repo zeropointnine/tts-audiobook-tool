@@ -3,6 +3,7 @@ from pathlib import Path
 import pickle
 import time
 from tts_audiobook_tool.app_metadata import AppMetadata
+from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.prefs import Prefs
@@ -13,7 +14,6 @@ from tts_audiobook_tool.timed_text_segment import TimedTextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.constants_config import *
 
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class SttFlow:
@@ -100,6 +100,7 @@ class SttFlow:
 
         # [5] Start
         ok = SttFlow.make(
+            prefs,
             raw_text,
             source_audio_path=source_audio_path,
             source_audio_hash=source_audio_hash,
@@ -110,6 +111,7 @@ class SttFlow:
 
     @staticmethod
     def make(
+            prefs: Prefs,
             raw_text: str,
             source_audio_path: str,
             source_audio_hash: str,
@@ -145,13 +147,19 @@ class SttFlow:
             printt("Transcribing audio...")
             printt()
 
+            # Always use best whisper model
+            Stt.set_variant(SttVariant.LARGE_V3)
+
             # Warm up
             _ = Stt.get_whisper()
 
             words = SttUtil.transcribe_to_words(str(source_audio_path))
             printt("\a")
 
-            # Save to pickle
+            # Restore variant / clean up model if necessary
+            Stt.set_variant(prefs.stt_variant)
+
+            # Save transcription data to pickle
             pickle_path = make_transcription_pickle_file_path(source_audio_hash)
             try:
                 with open(pickle_path, "wb") as file:
@@ -198,7 +206,7 @@ class SttFlow:
             ask_confirm()
             return True
 
-        b = ask_confirm("View discontinuity info? ")
+        b = ask_confirm("View discontinuity info summary? ")
         if b:
             print_discontinuity_info(timed_text_segments)
             ask_continue()
@@ -225,7 +233,7 @@ def print_discontinuity_info(timed_text_segments: list[TimedTextSegment]):
        start_time = timed_text_segments[start - 1].time_end if start > 0 else 0
        end_time = timed_text_segments[end + 1].time_start if end + 1 < len(timed_text_segments) else start_time
        duration = end_time - start_time # TODO unconfirmed
-       printt(f"{start}-{end} ({end - start + 1}) duration: {duration_string(duration)}")
+       printt(f"Lines {start}-{end} ({end - start + 1}) duration: {duration_string(duration)}")
 
        first_text = timed_text_segments[start].text.strip()
        last_text = timed_text_segments[end].text.strip()

@@ -1,13 +1,11 @@
-import time
 from typing import Iterable, TYPE_CHECKING # type: ignore
 
 import librosa
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound, Word
+from tts_audiobook_tool.app_types import Sound, SttVariant, Word
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts import Tts
 from faster_whisper.transcribe import Segment
 
 from tts_audiobook_tool.util import make_error_string
@@ -16,15 +14,17 @@ from tts_audiobook_tool.util import make_error_string
 class WhisperUtil:
 
     @staticmethod
-    def transcribe_to_segments(sound: Sound) -> list[Segment] | str:
+    def transcribe_to_segments(sound: Sound, stt_variant: SttVariant) -> list[Segment] | str:
         """
         Simple wrapper around whisper `transcribe()`.
-        Returns the segments generator or error string on fail.
+        Returns list of Segments or error string on fail.
 
         Makes temporary resampled audio if necessary.
         """
         if sound.sr != WHISPER_SAMPLERATE:
             sound = WhisperUtil.resample_sound_for_whisper(sound)
+
+        Stt.set_variant(stt_variant)
 
         try:
             segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=None)
@@ -33,19 +33,6 @@ class WhisperUtil:
 
         segments = list(segments)
         return segments
-
-    @staticmethod
-    def transcribe_to_words(sound: Sound) -> list[Word] | str:
-        """
-        Returns flattened list of Words
-        """
-        result = WhisperUtil.transcribe_to_segments(sound)
-        if isinstance(result, str):
-            return result
-        segments = result
-
-        words = WhisperUtil.get_words_from_segments(segments)
-        return words
 
     # ---
 

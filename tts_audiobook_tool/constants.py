@@ -33,7 +33,7 @@ STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 # output sample rates.
 APP_SAMPLE_RATE = 44100
 
-# Samplerate required for whisper sound input
+# Samplerate required for whisper audio input
 WHISPER_SAMPLERATE = 16000
 
 OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
@@ -105,6 +105,13 @@ HINT_OUTE_CONFIG = Hint(
     "This appears to be your first time running the application using the Oute TTS model",
     "As a reminder, you'll want to review and adjust the\nsettings in the file \"config_oute.py\" for optimal performance."
 )
+HINT_INDEXTTS2 = Hint(
+    "indextts2",
+    "This appears to be your first time running the application using the IndexTTS2 model",
+    """We recommend disabling transcription validation for this model
+(Options > Whisper transcription model > Disabled),
+as IndexTTS2 voice generations are accurate enough to make this extra step unnecessary."""
+)
 HINT_TKINTER = Hint(
     "tkinter",
     "tkinter not installed",
@@ -165,11 +172,9 @@ HINT_NO_VOICE = Hint(
 HINT_TRANSCRIPTION = Hint(
     "transcription",
     "Note",
-    """The app uses the transcription model to check the generated audio for errors.
+    """The Whisper transcription model to check the generated audio for errors.
 Because it is used concurrently with the text-to-speech model,
-it adds 2-3 GB to VRAM memory requirements.
-
-This is a per-project setting which defaults to \"large-v3\""""
+it adds 2-3 GB to VRAM memory requirements."""
 )
 
 HINT_SPEED_UP = Hint(

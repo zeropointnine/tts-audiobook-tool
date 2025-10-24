@@ -1,6 +1,6 @@
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -11,13 +11,13 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceIndexTts2Submenu:
 
     @staticmethod
-    def submenu(project: Project, prefs: Prefs) -> None:
+    def submenu(state: State) -> None:
         """
         """
         while True:
-            VoiceIndexTts2Submenu._print(project)
+            VoiceIndexTts2Submenu._print(state.project)
             hotkey = ask_hotkey()
-            should_exit = VoiceIndexTts2Submenu._handle_hotkey(project, prefs, hotkey)
+            should_exit = VoiceIndexTts2Submenu._handle_hotkey(state, hotkey)
             if should_exit:
                 return
 
@@ -65,12 +65,14 @@ class VoiceIndexTts2Submenu:
         printt()
 
     @staticmethod
-    def _handle_hotkey(project: Project, prefs: Prefs, hotkey: str) -> bool:
+    def _handle_hotkey(state: State, hotkey: str) -> bool:
+
+        project = state.project
 
         match hotkey:
             case "1":
-                AppUtil.show_hint_if_necessary(prefs, HINT_INDEX_SAMPLE_LEN)
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.INDEXTTS2)
+                AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
+                VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.INDEXTTS2)
@@ -92,10 +94,10 @@ class VoiceIndexTts2Submenu:
                     return False
             case "4":
                 # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
-                AppUtil.show_hint_if_necessary(prefs, HINT_INDEX_SAMPLE_LEN)
+                AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
                 VoiceSubmenuShared.ask_and_set_voice_file(
-                    project,
-                    TtsModelInfos.INDEXTTS2,
+                    state=state,
+                    tts_type=TtsModelInfos.INDEXTTS2,
                     is_secondary=True,
                     message_override="Enter emotion reference audio clip file path:"
                 )

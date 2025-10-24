@@ -77,6 +77,8 @@ class TextSubmenu:
         if not state.real_time.custom_text_segments:
             state.real_time.line_range = None
 
+        printt_set("Project text has been set")
+
 # ---
 
 def print_project_text(state: State) -> None:

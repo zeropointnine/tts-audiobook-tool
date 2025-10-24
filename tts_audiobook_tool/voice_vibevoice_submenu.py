@@ -1,4 +1,5 @@
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -9,12 +10,12 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceVibeVoiceSubmenu:
 
     @staticmethod
-    def submenu(project: Project) -> None:
+    def submenu(state: State) -> None:
 
         while True:
-            VoiceVibeVoiceSubmenu._print(project)
+            VoiceVibeVoiceSubmenu._print(state.project)
             hotkey = ask_hotkey()
-            should_exit = VoiceVibeVoiceSubmenu._handle_hotkey(project, hotkey)
+            should_exit = VoiceVibeVoiceSubmenu._handle_hotkey(state, hotkey)
             if should_exit:
                 return
 
@@ -48,12 +49,14 @@ class VoiceVibeVoiceSubmenu:
         printt()
 
     @staticmethod
-    def _handle_hotkey(project: Project, hotkey: str) -> bool:
+    def _handle_hotkey(state: State, hotkey: str) -> bool:
         """ Returns true if should exit submenu """
+
+        project = state.project
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.VIBEVOICE)
+                VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.VIBEVOICE)

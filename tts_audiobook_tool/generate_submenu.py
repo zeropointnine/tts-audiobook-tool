@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.generate_util import GenerateUtil
@@ -78,6 +79,9 @@ class GenerateSubmenu:
             return
 
         s = f"Generating {len(selected_indices_not_generated)} audio segment/s..."
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
+
         print_heading(s, dont_clear=True)
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
@@ -85,7 +89,8 @@ class GenerateSubmenu:
         did_interrupt = GenerateUtil.generate_items_to_files(
             project=state.project,
             indices_to_generate=selected_indices_not_generated,
-            items_to_regenerate={}
+            items_to_regenerate={},
+            stt_variant=state.prefs.stt_variant
         )
 
         if did_interrupt:
@@ -120,7 +125,8 @@ class GenerateSubmenu:
         _ = GenerateUtil.generate_items_to_files(
             project=state.project,
             indices_to_generate=set(), # rem, ignored
-            items_to_regenerate=failed_items
+            items_to_regenerate=failed_items,
+            stt_variant=state.prefs.stt_variant
         )
 
         ask_continue()

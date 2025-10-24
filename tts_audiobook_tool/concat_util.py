@@ -88,7 +88,7 @@ class ConcatUtil:
             dest_path,
             segments_and_paths,
             print_progress=True,
-            section_sound_effect=state.prefs.section_sound_effect,
+            use_section_sound_effect=state.prefs.use_section_sound_effect,
             to_aac_not_flac=to_aac_not_flac
         )
         if isinstance(durations, str):
@@ -113,7 +113,7 @@ class ConcatUtil:
     def concatenate_files_plus_silence(
         dest_path: str,
         segments_and_paths: list[ tuple[TextSegment, str] ],
-        section_sound_effect: bool,
+        use_section_sound_effect: bool,
         print_progress: bool,
         to_aac_not_flac: bool
     ) -> list[float] | str:
@@ -157,7 +157,7 @@ class ConcatUtil:
             else:
                 appended_silence_duration = segment_b.reason.pause_duration
 
-            if segment_b.reason == TextSegmentReason.SECTION and section_sound_effect:
+            if segment_b.reason == TextSegmentReason.SECTION and use_section_sound_effect:
                 appended_sound_effect_path = SECTION_SOUND_EFFECT_PATH
                 appended_silence_duration = 0
             else:

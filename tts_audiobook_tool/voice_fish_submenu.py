@@ -1,4 +1,4 @@
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import FishProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -8,18 +8,20 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceFishSubmenu:
 
     @staticmethod
-    def submenu(project: Project) -> None:
+    def submenu(state: State) -> None:
         """
         """
         while True:
-            VoiceFishSubmenu._print(project)
+            VoiceFishSubmenu._print(state)
             hotkey = ask_hotkey()
-            should_exit = VoiceFishSubmenu._handle_hotkey(project, hotkey)
+            should_exit = VoiceFishSubmenu._handle_hotkey(state, hotkey)
             if should_exit:
                 return
 
     @staticmethod
-    def _print(project: Project) -> None:
+    def _print(state: State) -> None:
+
+        project = state.project
 
         print_heading(f"Voice clone and model settings")
 
@@ -36,11 +38,13 @@ class VoiceFishSubmenu:
         printt()
 
     @staticmethod
-    def _handle_hotkey(project: Project, hotkey: str) -> bool:
+    def _handle_hotkey(state: State, hotkey: str) -> bool:
+
+        project = state.project
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.FISH)
+                VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.FISH)
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.FISH)

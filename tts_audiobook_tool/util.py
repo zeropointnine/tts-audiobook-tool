@@ -215,7 +215,12 @@ def make_currently_string(value: str, label: str="currently: ") -> str:
     return f"{COL_DIM}({label}{COL_ACCENT}{value}{COL_DIM})"
 
 def make_gb_string(bytes: int) -> str:
-    return  f"{bytes / (1024 ** 3):.1f} GB"
+    """ Returns gigabyte string with either one or zero decimal places"""
+    gb = bytes / (1024 ** 3)
+    gb = int(gb * 10) / 10
+    if gb % 1 == 0:
+        gb = int(gb)
+    return str(gb) + " GB"
 
 def lerp_clamped(
     value: float,
@@ -518,9 +523,11 @@ def does_import_test_pass(module_name: str) -> bool:
         return False
 
 def get_torch_allocated_vram() -> int:
-    """ Returns -1 if no cuda"""
+    """
+    Returns -1 if no cuda
+    Rem: faster-whisper does NOT allocate vram using torch
+    """
     import torch
-    if torch.cuda.is_available(): # works for ROCm too, fwiw
-        return torch.cuda.memory_allocated()
-    else:
+    if not torch.cuda.is_available():
         return -1
+    return torch.cuda.memory_allocated()

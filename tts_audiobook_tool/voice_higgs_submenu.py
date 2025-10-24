@@ -1,4 +1,5 @@
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import HiggsProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -8,12 +9,12 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceHiggsSubmenu:
 
     @staticmethod
-    def submenu(project: Project) -> None:
+    def submenu(state: State) -> None:
 
         while True:
-            VoiceHiggsSubmenu._print(project)
+            VoiceHiggsSubmenu._print(state.project)
             hotkey = ask_hotkey()
-            should_exit = VoiceHiggsSubmenu._handle_hotkey(project, hotkey)
+            should_exit = VoiceHiggsSubmenu._handle_hotkey(state, hotkey)
             if should_exit:
                 return
 
@@ -38,18 +39,20 @@ class VoiceHiggsSubmenu:
         printt()
 
     @staticmethod
-    def _handle_hotkey(project: Project, hotkey: str) -> bool:
+    def _handle_hotkey(state: State, hotkey: str) -> bool:
+
+        project = state.project
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.HIGGS)
+                VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.HIGGS)
                 printt_set("Cleared")
                 return False
             case "3":
-                # TODO not sure about upper bound here (just taking a guess)
+                # TODO not sure about model's recommended upper bound here
                 #      2.0 is actually way too high in practice
                 #      1.0 is perfectly fine on a gen-by-gen basis
                 value = ask(f"Enter temperature (0.0 < value < 2.0): ")

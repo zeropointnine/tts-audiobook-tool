@@ -43,9 +43,9 @@ Select `Options` > `Enhance existing audiobook`, and select your source audioboo
 1. Assign a working project directory.
 2. Select a short reference audio clip for the voice clone.
 3. Select the source text. 3b. Optionally define file split points.
-4. Start inferencing, and ... be prepared to do some waiting.
+4. Start inferencing, and ... be prepared to wait.
 5. Concatenate the generated audio segments to create the final FLAC or M4A file/s.
-6. Optionally use the aforementioned web player/reader to play/read your audiobook.
+6. Optionally use the aforementioned web player/reader to play and read your audiobook.
 
 
 # Installation
@@ -65,7 +65,7 @@ Finally, run the app by entering:
 
 ## Install for IndexTTS2
 
-Initialize a **Python v3.11** virtual environment named "venv-indextts2". For example:
+Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
 
     path\to\python3.11\python.exe -m venv venv-indextts2
 
@@ -88,11 +88,11 @@ Install torch 2.8 for CUDA v12.8:
     pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 > **ℹ️ Note:**
-> To run the app using IndexTTS2 comfortably within 12GB of VRAM, set FP16 to True and set the whisper model to v3-large-turbo.
+> To run the app using IndexTTS2 comfortably within 12GB of VRAM, consider setting FP16 to True
 
 ## Install for VibeVoice
 
-Initialize a **Python v3.11** virtual environment named "venv-vibevoice". For example:
+Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
 
     path\to\python3.11\python.exe -m venv venv-vibevoice
 
@@ -104,7 +104,7 @@ Install dependencies:
 
     pip install -r requirements-vibevoice.txt
 
-Note that because Microsoft removed the source code from their project github repo, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
+Note that because Microsoft famously removed the source code from their project github repo, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
 ### Additional steps for CUDA:
 
@@ -124,7 +124,7 @@ Finally, install Flash Attention. The procedure for doing so varies by operating
 > **ℹ️ Note!**
 > Higgs V2 requires CUDA, and 24 GB is almost a necessity (yes really)
 
-Initialize a **Python v3.12** virtual environment named "venv-higgs". For example:
+Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
 
     path\to\python3.12\python.exe -m venv venv-higgs
 
@@ -136,7 +136,7 @@ Install dependencies:
 
     pip install -r requirements-higgs.txt
 
-Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the repo is missing `__init__.py` files required for module use.
+Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
 
 Uninstall the vanilla version of torch that just got installed, and install the CUDA version of torch (latest is fine).
 
@@ -216,7 +216,7 @@ Running the app optimally with Oute TTS requires extra steps due to the way the 
 
 The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. But here are some recommendations based on my own testing...
 
-**Nvidia (CUDA) cards:**
+**Nvidia cards (CUDA):**
 
 Prefer the *ExLllama2* backend if at all possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires successfully installing into the environment three extra things:
 - exllama2 library (`pip install exllamav2`)
@@ -245,23 +245,29 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 These are my anecdotal inference speeds (running Windows unless otherwise noted). The app adopts each respective model's reference inference implementation logic as much as possible.
 
-| TTS Model | Hardware | Speed | Notes |
-| ----- | -------- | ----- | ----- |
-| IndexTTS2 | GTX 4090 | ~150% realtime |
-| IndexTTS2 | GTX 3080 Ti | ~85% realtime | using FP16
-| VibeVoice 1.5B | GTX 3080 Ti | ~120% realtime | with Flash attention 2 enabled
-| VibeVoice 1.5B | Macbook Pro M1 | ~40% realtime |
-| Higgs V2 3B | GTX 4090 | 200+% realtime | inference speed inversely proportional to voice sample duration, FYI
-| Higgs V2 3B | GTX 3080 Ti | N/A | does not fit in 12 GB VRAM
-| Fish OpenAudio S1-mini | GTX 3080 Ti | 500+% realtime | best combination of inference speed and quality output IMO
-| Fish OpenAudio S1-mini | Macbook Pro M1 | ~15% realtime
-| Chatterbox | GTX 3080 Ti | ~130% realtime
-| Chatterbox | Macbook Pro M1 (MPS) | 20-35% realtime
-| Oute | GTX 3080 Ti | ~90% realtime | using `outetts.Backend.EXL2`
-| Oute | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
+| TTS Model               | Hardware             | Speed | Notes |
+| ----------------------- | -------------------- | ----- | ----- |
+| IndexTTS2               | GTX 4090             | ~150% realtime |
+|                         | GTX 3080 Ti          | ~90% realtime |
+| VibeVoice 1.5B          | GTX 3080 Ti          | ~120% realtime | with Flash attention 2 enabled
+|                         | Macbook Pro M1       | ~40% realtime |
+| Higgs V2 3B             | GTX 4090             | 200+% realtime | inference speed inversely proportional to voice sample duration, FYI
+|                         | GTX 3080 Ti          | N/A | does not fit in 12 GB VRAM
+| Fish OpenAudio S1-mini  | GTX 3080 Ti          | 500+% realtime | best combination of inference speed and quality output IMO
+|                         | Macbook Pro M1 (MPS) | ~15% realtime
+| Chatterbox              | GTX 3080 Ti          | ~130% realtime
+|                         | Macbook Pro M1 (MPS) | 20-35% realtime
+| Oute                    | GTX 3080 Ti          | ~90% realtime | using `outetts.Backend.EXL2`
+|                         | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
 
 
 # Update highlights
+
+**2025-10-24**
+
+Added option to disable transcription validation (`Options` > `Whisper model type` > `Disabled`). This is only advisable when using IndexTTS2, which generates the least number of inference errors of any of the supported models to date.
+
+FYI, Whisper model type is now an app-wide preference setting rather than a per-project setting.
 
 **2025-10-23**
 
@@ -315,7 +321,7 @@ Better detection of undesired repeating phrases (Oute especially)
 
 Better detection and fix for spooky Chatterbox noises at the end of prompts
 
-Short 1-2 word sentences now get grouped with adjacent sentences to minimize Chatterbox and Oute's issues with short prompts
+Short 1-2 word sentences now get grouped with adjacent sentences to mitigate Chatterbox and Oute's issues with short prompts
 
 Streamlined handling of audio data throughout
 

@@ -12,16 +12,17 @@ class OptionsSubmenu:
 
         while True:
 
-            vram_bytes = get_torch_allocated_vram()
-            if vram_bytes == -1:
+            result = AppUtil.get_nv_vram()
+            if result is None:
                 vram_label = ""
             else:
-                vram_label = f"{COL_DIM}(currently allocated VRAM: {make_gb_string(vram_bytes)})"
+                used, total = result
+                vram_label = f"{COL_DIM}(system VRAM: {make_gb_string(used)}/{make_gb_string(total)})"
 
             print_heading("Options:")
-            value = make_currently_string(state.project.stt_variant.value)
+            value = make_currently_string(state.prefs.stt_variant.id)
             printt(f"{make_hotkey_string('1')} Whisper transcription model {value}")
-            value = make_currently_string(str(state.prefs.section_sound_effect))
+            value = make_currently_string(str(state.prefs.use_section_sound_effect))
             printt(f"{make_hotkey_string('2')} Use page turn sound effect at section breaks {value}")
             printt(f"{make_hotkey_string('3')} Attempt to unload models {vram_label}")
             printt(f"{make_hotkey_string('4')} Reset contextual hints")
@@ -33,11 +34,16 @@ class OptionsSubmenu:
                     OptionsSubmenu.ask_transcription_model(state)
                 case "2":
                     AppUtil.show_hint_if_necessary(state.prefs, HINT_SECTION_SOUND_EFFECT)
-                    state.prefs.section_sound_effect = not state.prefs.section_sound_effect
-                    printt_set(f"Section break sound effect has been toggled to: {state.prefs.section_sound_effect}")
+                    state.prefs.use_section_sound_effect = not state.prefs.use_section_sound_effect
+                    printt_set(f"Section break sound effect has been toggled to: {state.prefs.use_section_sound_effect}")
                 case "3":
-                    Tts.clear_all_models()
-                    printt_set("Finished")
+                    result = Tts.clear_all_models()
+                    if result:
+                        message = f"VRAM usage before: {make_gb_string(result[0])}\n"
+                        message += f"VRAM usage after: {make_gb_string(result[1])}"
+                    else:
+                        message = "OK"
+                    printt_set(message)
                 case "4":
                     state.prefs.reset_hints()
                     printt("One-time contextual hints have been reset.\nThey will now appear again when relevant.\n")
@@ -50,27 +56,23 @@ class OptionsSubmenu:
 
         while True:
 
-            print_heading(f"Select Whisper transcription model {make_currently_string(state.project.stt_variant.value)}")
+            value = make_currently_string(state.prefs.stt_variant.value[0])
+            print_heading(f"Select Whisper transcription model {value}")
+            for i, item in enumerate(SttVariant):
+                hotkey_string = make_hotkey_string(f"{i+1}")
+                printt(f"{hotkey_string} {item.id} {COL_DIM}({item.description})")
             printt()
             AppUtil.show_hint_if_necessary(state.prefs, HINT_TRANSCRIPTION)
-            printt(f"{make_hotkey_string('1')} large-v3 {COL_DIM}(best accuracy, default)")
-            printt(f"{make_hotkey_string('2')} large-v3-turbo {COL_DIM}(slightly less memory, faster)")
-            printt()
 
             hotkey = ask_hotkey()
-            if not hotkey:
+            if not hotkey or not hotkey.isdigit():
                 break
-
-            value = None
-            match hotkey:
-                case "1":
-                    value = SttVariant.LARGE_V3
-                case "2":
-                    value = SttVariant.LARGE_V3_TURBO
-
+            index = int(hotkey) - 1
+            if index < 0 or index >= len(SttVariant):
+                break
             if value:
-                state.project.stt_variant = value
-                state.project.save()
-                Stt.set_variant_using_project(state.project)
-                printt_set(f"Whisper transcription model set to: {state.project.stt_variant.value}")
+                stt_items = list(SttVariant)
+                state.prefs.stt_variant = stt_items[index]
+                Stt.set_variant(state.prefs.stt_variant)
+                printt_set(f"Whisper transcription model set to: {state.prefs.stt_variant.id}")
                 break

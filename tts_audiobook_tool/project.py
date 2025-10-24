@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import os
 
-from tts_audiobook_tool.app_types import Sound, SttVariant
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
@@ -55,7 +55,6 @@ class Project:
     indextts2_emo_vector: list[float] = [] # should have either 0 or 8 elements
 
     generate_range_string: str = ""
-    stt_variant: SttVariant = list(SttVariant)[0]
 
 
     def __init__(self, dir_path: str):
@@ -126,16 +125,6 @@ class Project:
             s = ""
         project.generate_range_string = s
 
-        # STT variant
-        s = d.get("stt_variant", "")
-        if not s:
-            project.stt_variant = list(SttVariant)[0]
-        else:
-            try:
-                project.stt_variant = SttVariant(s)
-            except:
-                project.stt_variant = list(SttVariant)[0]
-
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
@@ -204,7 +193,6 @@ class Project:
             "text_segments": TextSegment.list_to_dict_list(self.text_segments),
             "chapter_indices": self.section_dividers,
             "generate_range": self.generate_range_string,
-            "stt_variant": self.stt_variant.value,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,

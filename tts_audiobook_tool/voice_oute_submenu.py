@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from tts_audiobook_tool.oute_util import OuteUtil
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.project import Project
@@ -12,18 +13,18 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceOuteSubmenu:
 
     @staticmethod
-    def submenu(project: Project) -> None:
+    def submenu(state: State) -> None:
         """
         """
         while True:
-            VoiceOuteSubmenu._print(project)
+            VoiceOuteSubmenu._print(state)
             hotkey = ask_hotkey()
-            should_exit = VoiceOuteSubmenu._handle_hotkey(project, hotkey)
+            should_exit = VoiceOuteSubmenu._handle_hotkey(state.project, hotkey)
             if should_exit:
                 return
 
     @staticmethod
-    def _print(project: Project) -> None:
+    def _print(state: State) -> None:
 
         print_heading(f"Voice clone and model settings")
 
@@ -32,7 +33,7 @@ class VoiceOuteSubmenu:
         printt(f"{make_hotkey_string('3')} Set voice clone to Oute default voice")
 
         s = VoiceSubmenuShared.make_parameter_value_string(
-            project.oute_temperature, OuteProtocol.DEFAULT_TEMPERATURE, 1
+            state.project.oute_temperature, OuteProtocol.DEFAULT_TEMPERATURE, 1
         )
         s = make_currently_string(s)
         printt(f"{make_hotkey_string('4')} Temperature {s}")

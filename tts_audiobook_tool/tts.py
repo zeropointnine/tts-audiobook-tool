@@ -4,8 +4,9 @@ from importlib import util
 from typing import Callable
 import torch
 
+from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
@@ -96,25 +97,32 @@ class Tts:
     @staticmethod
     def warm_up_models() -> None:
         """
-        Initializes tts and stt models (if not already), as a convenience,
+        Instantiates tts model and stt model - if not already - as a convenience,
         and prints that it is doing so.
         """
 
-        has_both = Tts.has_instance() and Stt._whisper
-        if has_both:
+        should_instantiate_tts = not Tts.has_instance()
+        should_instantiate_whisper = (Stt.get_variant() != SttVariant.DISABLED) and not Stt._whisper
+
+        should_neither = (not should_instantiate_whisper and not should_instantiate_whisper)
+        if should_neither:
             return
 
-        has_neither = not Tts.has_instance() and not Stt._whisper
-        if has_neither:
+        should_both = (should_instantiate_tts and should_instantiate_whisper)
+
+        if should_both:
             printt(f"{Ansi.ITALICS}Warming up models...")
             printt()
 
-        _ = Tts.get_instance()
+        if should_instantiate_tts:
+            _ = Tts.get_instance()
 
-        if has_neither:
+        if should_both:
             printt() # yes rly
 
-        _ = Stt.get_whisper()
+        if should_instantiate_whisper:
+            _ = Stt.get_whisper()
+
 
 
     @staticmethod
@@ -250,23 +258,23 @@ class Tts:
             AppUtil.gc_ram_vram()
 
     @staticmethod
-    def clear_all_models() -> None:
+    def clear_all_models() -> tuple[int, int] | None:
+        """ Returns before/after VRAM usage if is nvidia, else None """
 
-        vram_before = get_torch_allocated_vram()
+        from tts_audiobook_tool.app_util import AppUtil
+
+        vram_before = AppUtil.get_nv_vram()
 
         Stt.clear_stt_model()
         Tts.clear_tts_model()
+        AppUtil.gc_ram_vram() # for good measure
 
-        # And for good measure
-        from tts_audiobook_tool.app_util import AppUtil
-        AppUtil.gc_ram_vram()
+        vram_after = AppUtil.get_nv_vram()
 
-        vram_after = get_torch_allocated_vram()
-
-        if vram_before > -1:
-            printt(f"Allocated VRAM before: {make_gb_string(vram_before)}")
-            printt(f"Allocated VRAM after: {make_gb_string(vram_after)}")
-            printt()
+        if vram_before and vram_after:
+            return vram_before[0], vram_after[0]
+        else:
+            return None
 
     @staticmethod
     def get_best_torch_device() -> str:

@@ -17,10 +17,8 @@ class State:
     Most importantly, `project` and `prefs`
     """
 
-    # prefs: Prefs
-    # _project: Project
-
-    # real_time: RealTimeSubmenuState # does not persist
+    _prefs: Prefs
+    _project: Project
 
 
     def __init__(self):
@@ -40,19 +38,32 @@ class State:
             else:
                 self.project = result
 
+
     @property
     def project(self) -> Project:
         return self._project
 
     @project.setter
-    def project(self, project: Project) -> None:
-        self._project = project
+    def project(self, value: Project) -> None:
+        self._project = value
 
-        # Sync global values :/
+        # Sync static values
         Tts.set_model_params_using_project(self.project)
-        Stt.set_variant_using_project(self.project)
         if not self.real_time.custom_text_segments:
             self.real_time.line_range = None
+
+
+    @property
+    def prefs(self) -> Prefs:
+        return self._prefs
+
+    @prefs.setter
+    def prefs(self, value: Prefs) -> None:
+        self._prefs = value
+
+        # Sync static values
+        Stt.set_variant(self.prefs.stt_variant)
+
 
 
     def make_new_project(self, path: str) -> str:
@@ -118,3 +129,4 @@ class State:
         self.prefs = Prefs.new_and_save()
         self.project = Project("")
         self.real_time = RealTimeSubmenuState()
+

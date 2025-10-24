@@ -247,7 +247,7 @@ class AppUtil:
 
     @staticmethod
     def is_app_hash(hash: str) -> bool:
-        """ hash must be a 16-character hex string (case insensitive) """
+        """ The app uses 16-character hex string for hash values """
         return len(hash) == 16 and all(c in '0123456789abcdefABCDEF' for c in hash)
 
     @staticmethod
@@ -268,23 +268,17 @@ class AppUtil:
         return str(new_path)
 
     @staticmethod
-    def get_vram_usage_nv() -> tuple[float, float] | None:
+    def get_nv_vram() -> tuple[int, int] | None:
         """
-        Get VRAM usage from NVIDIA GPU (device 0) in GB.
-        Requires nvidia-ml-py (pip install nvidia-ml-py).
+        Returns VRAM bytes used, bytes total from NVIDIA GPU (device 0), or None if no nvidia gpu
+        Requires nvidia-ml-py (pip install nvidia-ml-py)
         """
         try:
-            import nvidia_ml_py3 as nvml # type: ignore
-
-            nvml.nvmlInit()
-            handle = nvml.nvmlDeviceGetHandleByIndex(0)
-            info = nvml.nvmlDeviceGetMemoryInfo(handle)
-
-            total_gb = info.total / (1024 ** 3)
-            used_gb = info.used / (1024 ** 3)
-
-            nvml.nvmlShutdown()
-            return used_gb, total_gb
-
-        except Exception:
+            import pynvml
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            pynvml.nvmlShutdown()
+            return int(info.used), int(info.total)
+        except Exception as e:
             return None

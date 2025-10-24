@@ -1,4 +1,5 @@
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import ChatterboxProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -8,13 +9,13 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceChatterboxSubmenu:
 
     @staticmethod
-    def submenu(project: Project) -> None:
+    def submenu(state: State) -> None:
         """
         """
         while True:
-            VoiceChatterboxSubmenu._print(project)
+            VoiceChatterboxSubmenu._print(state.project)
             hotkey = ask_hotkey()
-            should_exit = VoiceChatterboxSubmenu._handle_hotkey(project, hotkey)
+            should_exit = VoiceChatterboxSubmenu._handle_hotkey(state, hotkey)
             if should_exit:
                 return
 
@@ -44,11 +45,13 @@ class VoiceChatterboxSubmenu:
         printt()
 
     @staticmethod
-    def _handle_hotkey(project: Project, hotkey: str) -> bool:
+    def _handle_hotkey(state: State, hotkey: str) -> bool:
+
+        project = state.project
 
         match hotkey:
             case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(project, TtsModelInfos.CHATTERBOX)
+                VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
                 return False
             case "2":
                 project.clear_voice_and_save(TtsModelInfos.CHATTERBOX)

@@ -138,22 +138,22 @@ class MainMenu:
                     match Tts.get_type():
                         case TtsModelInfos.OUTE:
                             from tts_audiobook_tool.voice_oute_submenu import VoiceOuteSubmenu
-                            VoiceOuteSubmenu.submenu(state.project)
+                            VoiceOuteSubmenu.submenu(state)
                         case TtsModelInfos.CHATTERBOX:
                             from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu
-                            VoiceChatterboxSubmenu.submenu(state.project)
+                            VoiceChatterboxSubmenu.submenu(state)
                         case TtsModelInfos.FISH:
                             from tts_audiobook_tool.voice_fish_submenu import VoiceFishSubmenu
-                            VoiceFishSubmenu.submenu(state.project)
+                            VoiceFishSubmenu.submenu(state)
                         case TtsModelInfos.HIGGS:
                             from tts_audiobook_tool.voice_higgs_submenu import VoiceHiggsSubmenu
-                            VoiceHiggsSubmenu.submenu(state.project)
+                            VoiceHiggsSubmenu.submenu(state)
                         case TtsModelInfos.VIBEVOICE:
                             from tts_audiobook_tool.voice_vibevoice_submenu import VoiceVibeVoiceSubmenu
-                            VoiceVibeVoiceSubmenu.submenu(state.project)
+                            VoiceVibeVoiceSubmenu.submenu(state)
                         case TtsModelInfos.INDEXTTS2:
                             from tts_audiobook_tool.voice_indextts2_submenu import VoiceIndexTts2Submenu
-                            VoiceIndexTts2Submenu.submenu(state.project, state.prefs)
+                            VoiceIndexTts2Submenu.submenu(state)
             case "t":
                 if not state.prefs.project_dir:
                     return

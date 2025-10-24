@@ -1,11 +1,10 @@
 import time
 
 import numpy as np
-from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool.generate_util import GenerateUtil
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -19,15 +18,15 @@ class RealTimeUtil:
 
     @staticmethod
     def start(
-            project: Project,
+            state: State,
             text_segments: list[TextSegment],
-            line_range: tuple[int, int] | None,
-            use_section_sound_effect: bool
+            line_range: tuple[int, int] | None
         ) -> None:
+        """
+        line_range is one-indexed
+        """
 
-        """
-        param line_range - one-indexed range
-        """
+        project = state.project
 
         if not line_range:
             line_range = (1, len(text_segments))
@@ -41,11 +40,14 @@ class RealTimeUtil:
         # Warm up models
         Tts.warm_up_models()
 
-        # Start loop
-
-        print_heading("Starting real-time playback...", dont_clear=True)
+        s = "Starting real-time playback..."
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
+        print_heading(s, dont_clear=True)
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
+
+        # Start loop
 
         SigIntHandler().set("generating")
 
@@ -69,7 +71,12 @@ class RealTimeUtil:
             has_enough_runway = (stream and stream.buffer_duration >= 60.0) # TODO: make dynamic - if estimated gen time < buffer duration * 2 ...
             max_passes = 2 if has_enough_runway else 1
 
-            current_sound, _ = GenerateUtil.generate_sound_full_flow(project, current_text_segment, max_passes=max_passes)
+            current_sound, _ = GenerateUtil.generate_sound_full_flow(
+                project=project,
+                text_segment=current_text_segment,
+                stt_variant=state.prefs.stt_variant,
+                max_passes=max_passes
+            )
 
             # TODO: printing similar feedback as with regular gen, or at least for fails
 
@@ -85,7 +92,7 @@ class RealTimeUtil:
 
                 if i > start_index:
 
-                    if use_section_sound_effect and current_text_segment.reason == TextSegmentReason.SECTION:
+                    if state.prefs.use_section_sound_effect and current_text_segment.reason == TextSegmentReason.SECTION:
                         path = SECTION_SOUND_EFFECT_PATH
 
                         result = SoundFileUtil.load(path, current_sound.sr)
