@@ -54,7 +54,7 @@ class SigIntHandler(SingletonBase):
             case "concatenating":
                 feedback = "Control-C pressed, will stop"
         if feedback:
-            printt() # Clear any 3p lib's use of "\r"
+            printt() # Clear any 3p lib's use of "\r" in their print() statements
             printt(COL_ERROR + "*" * len(feedback))
             printt(feedback)
             printt(COL_ERROR + "*" * len(feedback))

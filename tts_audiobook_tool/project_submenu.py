@@ -1,7 +1,7 @@
-from pathlib import Path
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -9,40 +9,50 @@ from tts_audiobook_tool.state import State
 class ProjectSubmenu:
 
     @staticmethod
-    def submenu(state:State) -> None:
+    def menu(state:State) -> None:
 
-        while True:
+        # 1
+        def on_new(_, __) -> bool:
+            did = ProjectSubmenu.ask_and_set_new_project(state)
+            if did:
+                printt_set(f"Project directory set: {state.project.dir_path}")
+                return True
+            return False
 
-            proj_dir = state.project.dir_path
+        # 2
+        def on_existing(_, __) -> bool:
+            did = ProjectSubmenu.ask_and_set_existing_project(state)
+            if did:
+                printt_set(f"Project directory set: {state.project.dir_path}")
+                return True
+            return False
 
-            s = make_currently_string(proj_dir or "none")
-            print_heading(f"Project directory {s}")
+        # 3
+        def make_view_label(_) -> str:
+            return f"View current project directory in OS UI {COL_DIM}({state.project.dir_path})"
 
-            printt(f"{make_hotkey_string('1')} Start a new project")
-            printt(f"{make_hotkey_string('2')} Open an existing project")
-            if proj_dir:
-                printt(f"{make_hotkey_string('3')} View current project directory in OS UI {COL_DIM}({proj_dir})")
-            printt()
-            hotkey = ask_hotkey()
-            if hotkey == "1":
-                did = ProjectSubmenu.ask_and_set_new_project(state)
-                if did:
-                    return
-                else:
-                    continue
-            elif hotkey == "2":
-                did = ProjectSubmenu.ask_and_set_existing_project(state)
-                if did:
-                    return
-                else:
-                    continue
-            elif hotkey == "3" and proj_dir:
-                err = DirOpenUtil.open(proj_dir)
-                if err:
-                    ask_error(err)
-                continue
-            else:
-                break
+        def on_view(_, __) -> None:
+            err = DirOpenUtil.open(state.project.dir_path)
+            if err:
+                ask_error(err)
+
+        # Menu
+        def make_heading(_) -> str:
+            s = make_currently_string(state.project.dir_path or "none")
+            return f"Project directory {s}"
+
+        def items_maker(_) -> list[MenuItem]:
+            items = [
+                MenuItem("New project", on_new),
+                MenuItem("Open existing project", on_existing)
+            ]
+            if state.project.dir_path:
+                items.append(
+                    MenuItem(make_view_label, on_view)
+                )
+            return items
+
+        MenuUtil.menu(state, make_heading, items_maker)
 
 
     @staticmethod
@@ -62,8 +72,6 @@ class ProjectSubmenu:
             return False
 
         AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
-
-        printt_set(f"Project directory set: {state.project.dir_path}")
         return True
 
     @staticmethod
@@ -83,5 +91,4 @@ class ProjectSubmenu:
             return False
 
         state.set_existing_project(dir)
-        printt_set(f"Project directory set: {state.project.dir_path}")
         return True

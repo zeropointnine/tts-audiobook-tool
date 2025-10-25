@@ -43,12 +43,12 @@ class Tts:
                 tts_type = item
         if num_models == 0:
             s = "None of the supported TTS models are currently installed.\n"
-            s += "Please follow the install instructions in project repo's README."
+            s += "Please follow the install instructions in the project repo's README."
             return s
         elif num_models > 1:
             s = "More than one of the supported TTS model libraries is currently installed.\n"
             s = "This is not recommended.\n"
-            s += "Please re-install python environment, following the instructions in project repo's README."
+            s += "Please re-install python environment, following the instructions in the project repo's README."
             return s
 
         assert(tts_type is not None)

@@ -67,5 +67,4 @@ elif Tts.get_type() == TtsModelInfos.INDEXTTS2:
 
 # Start proper
 printt()
-app = App()
-app.loop()
+_ = App()

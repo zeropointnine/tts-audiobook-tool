@@ -64,9 +64,13 @@ class AppUtil:
 
     @staticmethod
     def print_text_segment_text(raw_texts: list[str]) -> None:
-        print_heading(f"Text segments ({COL_DEFAULT}{len(raw_texts)}{COL_ACCENT}):")
+
+        printt(f"{COL_ACCENT}Text segments ({COL_DEFAULT}{len(raw_texts)}{COL_ACCENT}):")
+        printt()
+
         for i, raw_text in enumerate(raw_texts):
             printt(f"{make_hotkey_string(str(i+1))} {raw_text.strip()}")
+
         printt()
 
     @staticmethod

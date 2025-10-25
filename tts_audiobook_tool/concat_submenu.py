@@ -8,6 +8,7 @@ from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
@@ -18,48 +19,43 @@ from tts_audiobook_tool.util import *
 class ConcatSubmenu:
 
     @staticmethod
-    def submenu(state: State) -> None:
+    def menu(state: State) -> None:
 
-        while True:
-
-            print_heading(f"Concatenate audio segments:")
-
+        # 1, 2
+        def on_create(_, data):
             infos = ChapterInfo.make_chapter_infos(state.project)
-            if len(infos) > 1:
-                print_chapter_segment_info(infos)
+            ConcatSubmenu.ask_chapters_and_make(infos, state, aac_not_flac=data)
 
-            if not state.project.section_dividers:
-                chapter_dividers_desc = ""
-            else:
-                strings = [str(item+1) for item in state.project.section_dividers] # 1-indexed
-                chapter_dividers_desc = ", ".join(strings)
-                chapter_dividers_desc = f": {COL_ACCENT}{chapter_dividers_desc}{COL_DIM}"
+        flac_item = MenuItem("Create FLAC file", on_create, data=False)
+        aac_item = MenuItem("Create AAC/M4A file",on_create, data=True)
 
-            printt(f"{make_hotkey_string('1')} Create FLAC file")
-            printt(f"{make_hotkey_string('2')} Create AAC/M4A file")
-
+        # 3
+        def make_cuts_label(_) -> str:
             qty = len(state.project.section_dividers)
             if state.project.section_dividers:
                 value = f"{qty} cut {make_noun('point', 'points', qty)}"
             else:
                 value = "none"
-            printt(f"{make_hotkey_string('3')} Define file cut points {make_currently_string(value)}")
+            return f"Define file cut points {make_currently_string(value)}"
 
+        cuts_item = MenuItem(
+            make_cuts_label,
+            lambda _, __: ConcatSubmenu.ask_cut_points(state)
+        )
+
+        # 4
+        def make_norm_label(_) -> str:
             value = state.prefs.normalization_type.value.label
-            printt(f"{make_hotkey_string('4')} Loudness normalization {make_currently_string(value)}")
-            printt()
+            return f"Loudness normalization {make_currently_string(value)}"
 
-            hotkey = ask_hotkey()
-            if hotkey == "1":
-                ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=False)
-            elif hotkey == "2":
-                ConcatSubmenu.ask_chapters_and_make(infos, state, to_aac_not_flac=True)
-            elif hotkey == "3":
-                ConcatSubmenu.ask_cut_points(state)
-            elif hotkey == "4":
-                ConcatSubmenu.ask_normalization(state.prefs)
-            else:
-                break
+        norm_item = MenuItem(
+            make_norm_label,
+            lambda _, __: ConcatSubmenu.ask_normalization(state.prefs)
+        )
+
+        # Menu
+        items = [flac_item, aac_item, cuts_item, norm_item]
+        MenuUtil.menu(state, "Concatenate audio segments:", items)
 
     @staticmethod
     def ask_normalization(prefs: Prefs) -> None:
@@ -135,11 +131,11 @@ class ConcatSubmenu:
         if not zero_indexed_items:
             s = "none"
         else:
-            s = ", ".join( [str(item) for item in zero_indexed_items] )
+            s = ", ".join( [str(item + 1) for item in zero_indexed_items] )
         printt_set(f"Cut points set to: {s}")
 
     @staticmethod
-    def ask_chapters_and_make(infos: list[ChapterInfo], state: State, to_aac_not_flac: bool) -> None:
+    def ask_chapters_and_make(infos: list[ChapterInfo], state: State, aac_not_flac: bool) -> None:
 
         # Chapter indices that have any files
         chapter_indices = []
@@ -184,7 +180,7 @@ class ConcatSubmenu:
         if not b:
             return
 
-        ConcatSubmenu.make_chapter_files(state, chapter_indices, to_aac_not_flac)
+        ConcatSubmenu.make_chapter_files(state, chapter_indices, aac_not_flac)
 
     @staticmethod
     def make_chapter_files(state: State, chapter_indices: list[int], to_aac_not_flac: bool) -> None:

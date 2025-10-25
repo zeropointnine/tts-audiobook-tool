@@ -9,8 +9,7 @@ from tts_audiobook_tool.words_dict import Dictionary
 
 class App:
     """
-    Main app class.
-    Runs a loop that prints menu, responds to menu selection.
+    Main app class
     """
 
     def __init__(self):
@@ -21,12 +20,4 @@ class App:
 
         self.state = State()
 
-    def loop(self):
-        while True:
-            # Dir check # TODO refactor this out
-            did_reset = False
-            if self.state.prefs.project_dir and not os.path.exists(self.state.prefs.project_dir):
-                self.state.reset()
-                did_reset = True
-
-            MainMenu.menu(self.state, did_reset=did_reset)
+        MainMenu.menu_loop(self.state)

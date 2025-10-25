@@ -1,6 +1,8 @@
 import os
 
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -9,6 +11,15 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class VoiceSubmenuShared:
+
+    MENU_HEADING = "Voice clone and model settings"
+
+    @staticmethod
+    def make_select_voice_label(state: State) -> str:
+        voice_label = state.project.get_voice_label()
+        color_code = COL_ERROR if voice_label == "none" else COL_ACCENT
+        currently = make_currently_string(voice_label, color_code=color_code)
+        return f"Select voice clone sample {currently}"
 
     @staticmethod
     def ask_and_set_voice_file(
@@ -24,6 +35,7 @@ class VoiceSubmenuShared:
         Prints feedback on success or fail.
         """
 
+        # Rem, we do not save raw voice sound file for Oute
         if not tts_type in [
             TtsModelInfos.CHATTERBOX,
             TtsModelInfos.FISH,
@@ -31,7 +43,6 @@ class VoiceSubmenuShared:
             TtsModelInfos.VIBEVOICE,
             TtsModelInfos.INDEXTTS2
         ]:
-            # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type {tts_type}")
 
         path = VoiceSubmenuShared.ask_voice_file(state.project.dir_path, tts_type, message_override)
@@ -47,7 +58,6 @@ class VoiceSubmenuShared:
         sound = result
 
         needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS]
-
         if needs_transcript:
 
             printt("Transcribing...")
@@ -119,7 +129,48 @@ class VoiceSubmenuShared:
         return path
 
     @staticmethod
-    def make_parameter_value_string(value: float | int | bool, default_value: float | int | bool, num_decimals: int=0) -> str:
+    def ask_number(
+        project: Project,
+        prompt: str,
+        lb: float,
+        ub: float,
+        project_attr_name: str,
+        success_prefix: str,
+        is_int: bool=False
+    ) -> None:
+
+        if not hasattr(project, project_attr_name):
+            raise ValueError(f"No such attribute {project_attr_name}")
+
+        if is_int:
+            lb = int(lb)
+            ub = int(ub)
+
+        value = ask(prompt.strip() + " ")
+        if not value:
+            return
+        try:
+            # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
+            value = float(value)
+        except Exception as e:
+            printt_set("Bad value", color_code=COL_ERROR)
+            return
+        if is_int:
+            value = int(value)
+        if not (lb <= value <= ub):
+            printt_set("Out of range", color_code=COL_ERROR)
+            return
+
+        setattr(project, project_attr_name, value)
+        project.save()
+        printt_set(f"{success_prefix.strip()} {value}")
+
+    @staticmethod
+    def make_parameter_value_string(
+        value: float | int | bool,
+        default_value: float | int | bool,
+        num_decimals: int=0
+    ) -> str:
 
         DEFAULT_LABEL = " (default)"
 

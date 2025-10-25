@@ -4,6 +4,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -11,61 +12,83 @@ from tts_audiobook_tool.util import *
 class GenerateSubmenu:
 
     @staticmethod
-    def submenu(state: State) -> None:
+    def menu(state: State) -> None:
 
-        while True:
+        # 1
+        def on_gen(_, __) -> None:
+            if state.project.can_voice and state.project.get_voice_label() == "none":
+                should_continue = AppUtil.show_hint_if_necessary(state.prefs, HINT_NO_VOICE, and_confirm=True)
+                if not should_continue:
+                    return
+            GenerateSubmenu.do_generate_items(state)
 
-            GenerateSubmenu._print_submenu(state)
+        gen_item = MenuItem("Generate audio segments", on_gen)
 
-            hotkey = ask_hotkey()
-            if not hotkey:
-                return
+        # 2
+        def make_range_label(_) -> str:
+            if not state.project.generate_range_string:
+                range_label = f"{COL_DIM}(currently set to generate {COL_ACCENT}all{COL_DIM} lines)"
+            else:
+                range_label = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string}{COL_DIM})"
 
-            match hotkey:
-                case "1":
-                    if state.project.can_voice and state.project.get_voice_label() == "none":
-                        should_continue = AppUtil.show_hint_if_necessary(state.prefs, HINT_NO_VOICE, and_confirm=True)
-                        if not should_continue:
-                            continue
-                    GenerateSubmenu.do_generate_items(state)
-                case "2":
-                    GenerateSubmenu.ask_item_range(state)
-                case "3":
-                    GenerateSubmenu.do_regenerate_items(state)
-                case _:
-                    break
+            if not state.project.generate_range_string:
+                complete_label = ""
+            else:
+                selected_indices = state.project.get_indices_to_generate()
+                all_generated_indices = state.project.sound_segments.sound_segments.keys()
+                selected_indices_not_generated = selected_indices - all_generated_indices
+                num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
+                complete_label = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
 
-    @staticmethod
-    def _print_submenu(state: State) -> None:
+            return f"Specify range {range_label} {complete_label}"
 
-        total_segments_generated = state.project.sound_segments.num_generated()
-        num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} total lines complete)"
-        print_heading(f"Generate audio {num_complete_label}")
+        range_item = MenuItem(make_range_label, lambda _, __: GenerateSubmenu.ask_item_range(state))
 
-        printt(f"{make_hotkey_string('1')} Generate audio")
+        # 3
+        def make_regen_label(_) -> str:
+            failed_items = state.project.sound_segments.get_failed_in_generate_range()
+            failed_items_label = f"{str(len(failed_items))} {make_noun('item', 'items', len(failed_items))}"
+            qualifier = " in specified range" if state.project.generate_range_string else ""
+            regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
+            return f"Regenerate segments tagged with potential errors {regenerate_label}"
 
-        if not state.project.generate_range_string:
-            range_label = f"{COL_DIM}(currently set to generate {COL_ACCENT}all{COL_DIM} lines)"
-        else:
-            range_label = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string}{COL_DIM})"
+        regen_item = MenuItem(make_regen_label, lambda _, __: GenerateSubmenu.do_regenerate_items(state))
 
-        if not state.project.generate_range_string:
-            complete_label = ""
-        else:
-            selected_indices = state.project.get_indices_to_generate()
-            all_generated_indices = state.project.sound_segments.sound_segments.keys()
-            selected_indices_not_generated = selected_indices - all_generated_indices
-            num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
-            complete_label = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
+        # Menu
+        def heading_maker(_) -> str:
+            total_segments_generated = state.project.sound_segments.num_generated()
+            num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} total lines complete)"
+            return f"Generate audio {num_complete_label}"
 
-        printt(f"{make_hotkey_string('2')} Specify range {range_label} {complete_label}")
+        items = [gen_item, range_item, regen_item]
+        MenuUtil.menu(state, heading_maker, items)
 
-        failed_items = state.project.sound_segments.get_failed_in_generate_range()
-        failed_items_label = f"{str(len(failed_items))} {make_noun('item', 'items', len(failed_items))}"
-        qualifier = " in specified range" if state.project.generate_range_string else ""
-        regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
-        printt(f"{make_hotkey_string('3')} Regenerate segments tagged with potential errors {regenerate_label}")
-        printt()
+
+    # @staticmethod
+    # def _print_submenu(state: State) -> None:
+
+    #     if not state.project.generate_range_string:
+    #         range_label = f"{COL_DIM}(currently set to generate {COL_ACCENT}all{COL_DIM} lines)"
+    #     else:
+    #         range_label = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string}{COL_DIM})"
+
+    #     if not state.project.generate_range_string:
+    #         complete_label = ""
+    #     else:
+    #         selected_indices = state.project.get_indices_to_generate()
+    #         all_generated_indices = state.project.sound_segments.sound_segments.keys()
+    #         selected_indices_not_generated = selected_indices - all_generated_indices
+    #         num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
+    #         complete_label = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
+
+    #     printt(f"{make_hotkey_string('2')} Specify range {range_label} {complete_label}")
+
+    #     failed_items = state.project.sound_segments.get_failed_in_generate_range()
+    #     failed_items_label = f"{str(len(failed_items))} {make_noun('item', 'items', len(failed_items))}"
+    #     qualifier = " in specified range" if state.project.generate_range_string else ""
+    #     regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
+    #     printt(f"{make_hotkey_string('3')} Regenerate segments tagged with potential errors {regenerate_label}")
+    #     printt()
 
     @staticmethod
     def do_generate_items(state: State) -> None:
@@ -99,7 +122,7 @@ class GenerateSubmenu:
             s = f"Press enter or {make_hotkey_string('C')} to concatenate files now: \a"
             hotkey = ask_hotkey(s)
             if hotkey == "c":
-                ConcatSubmenu.submenu(state)
+                ConcatSubmenu.menu(state)
         return
 
     @staticmethod

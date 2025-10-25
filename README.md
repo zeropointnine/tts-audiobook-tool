@@ -138,7 +138,7 @@ Install dependencies:
 
 Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
 
-Uninstall the vanilla version of torch that just got installed, and install the CUDA version of torch (latest is fine).
+Uninstall the vanilla version of torch that just got installed, and install the CUDA version in its place (latest is fine).
 
 ## Install for Fish OpenAudio-S1-mini:
 

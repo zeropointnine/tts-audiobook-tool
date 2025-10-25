@@ -359,7 +359,7 @@ class Project:
                 if not self.chatterbox_voice_file_name:
                     return "none"
                 else:
-                    return make_label(self.oute_voice_file_name)
+                    return make_label(self.chatterbox_voice_file_name)
             case TtsModelInfos.FISH:
                 if not self.fish_voice_file_name:
                     return "none"
@@ -386,7 +386,6 @@ class Project:
                         return "none"
                     else:
                         return make_label(self.indextts2_emo_voice_file_name)
-
             case TtsModelInfos.NONE:
                 return "none"
 

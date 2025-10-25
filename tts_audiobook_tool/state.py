@@ -126,7 +126,7 @@ class State:
             self.project = result
 
     def reset(self):
-        self.prefs = Prefs.new_and_save()
+        self.prefs.project_dir = ""
         self.project = Project("")
         self.real_time = RealTimeSubmenuState()
 

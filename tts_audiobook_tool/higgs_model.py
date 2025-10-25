@@ -1,5 +1,5 @@
 import langid # type: ignore
-import jieba
+import jieba # type: ignore
 import os
 import re
 import copy
@@ -20,7 +20,7 @@ from boson_multimodal.dataset.chatml_dataset import ( # type: ignore
     prepare_chatml_sample,
 )
 from boson_multimodal.model.higgs_audio.utils import revert_delay_pattern # type: ignore
-from transformers import AutoConfig, AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer # type: ignore
 from transformers.cache_utils import StaticCache
 
 from tts_audiobook_tool.app_types import Sound
@@ -299,7 +299,7 @@ class HiggsAudioModelClient:
             self._model.capture_model(self.kv_caches.values())
 
     def _prepare_kv_caches(self):
-        for kv_cache in self.kv_caches.values():
+        for kv_cache in self.kv_caches.values(): # type: ignore
             kv_cache.reset()
 
     @torch.inference_mode()
@@ -361,7 +361,7 @@ class HiggsAudioModelClient:
                 audio_speaker_indices=None,
             )
 
-            batch_data = self._collator([curr_sample])
+            batch_data = self._collator([curr_sample]) # type: ignore
             batch = asdict(batch_data)
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
@@ -371,7 +371,7 @@ class HiggsAudioModelClient:
                 self._prepare_kv_caches()
 
             # Generate audio
-            outputs = self._model.generate(
+            outputs = self._model.generate( # type: ignore
                 **batch,
                 max_new_tokens=self._max_new_tokens,
                 use_cache=True,
@@ -392,7 +392,7 @@ class HiggsAudioModelClient:
                 audio_out_ids = ele
                 if self._config.use_delay_pattern:
                     audio_out_ids = revert_delay_pattern(audio_out_ids)
-                step_audio_out_ids_l.append(audio_out_ids.clip(0, self._audio_tokenizer.codebook_size - 1)[:, 1:-1])
+                step_audio_out_ids_l.append(audio_out_ids.clip(0, self._audio_tokenizer.codebook_size - 1)[:, 1:-1]) # type: ignore
             audio_out_ids = torch.concat(step_audio_out_ids_l, dim=1)
             audio_out_ids_l.append(audio_out_ids)
             generated_audio_ids.append(audio_out_ids)
@@ -410,8 +410,8 @@ class HiggsAudioModelClient:
         # logger.info(f"========= Final Text output =========")
         # logger.info(self._tokenizer.decode(outputs[0][0]))
         concat_audio_out_ids = torch.concat(audio_out_ids_l, dim=1)
-        concat_wv = self._audio_tokenizer.decode(concat_audio_out_ids.unsqueeze(0))[0, 0]
-        text_result = self._tokenizer.decode(outputs[0][0])
+        concat_wv = self._audio_tokenizer.decode(concat_audio_out_ids.unsqueeze(0))[0, 0] # type: ignore
+        text_result = self._tokenizer.decode(outputs[0][0]) # type: ignore
         return concat_wv, sr, text_result
 
 

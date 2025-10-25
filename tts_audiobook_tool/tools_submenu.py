@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.mp3_concat import Mp3ConcatTranscodeUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
@@ -10,30 +11,31 @@ from tts_audiobook_tool.util import *
 class ToolsSubmenu:
 
     @staticmethod
-    def submenu(state: State) -> None:
+    def menu(state: State) -> None:
 
-        while True:
+        enhance_item = MenuItem(
+            f"Enhance existing audiobook file {COL_DIM}(experimental)",
+            lambda _, __: SttFlow.ask_and_make(state.prefs)
+        )
 
-            print_heading("Tools:")
-            printt(f"{make_hotkey_string('1')} Enhance existing audiobook file {COL_DIM}(experimental)")
-            printt(f"{make_hotkey_string('2')} Transcode and concatenate a directory of MP3 files to AAC/M4A")
-            printt(f"{make_hotkey_string('3')} Transcode an app-created FLAC to AAC/M4A, preserving custom metadata")
-            printt(f"{make_hotkey_string('4')} Speed up voice sample")
-            printt()
+        mp3s_item = MenuItem(
+            "Transcode and concatenate a directory of MP3 files to AAC/M4A",
+            lambda _, __: Mp3ConcatTranscodeUtil.ask_mp3_dir()
+        )
 
-            hotkey = ask_hotkey()
-            match hotkey:
-                case "1":
-                    SttFlow.ask_and_make(state.prefs)
-                case "2":
-                    Mp3ConcatTranscodeUtil.ask_mp3_dir()
-                case "3":
-                    TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
-                case "4":
-                    AppUtil.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
-                    ToolsSubmenu.ask_save_speed_up_audio()
-                case _:
-                    break
+        transcode_item = MenuItem(
+            "Transcode an app-created FLAC to AAC/M4A, preserving custom metadata",
+            lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
+        )
+
+        def speed_handler(_, __):
+            AppUtil.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
+            ToolsSubmenu.ask_save_speed_up_audio()
+
+        speed_item = MenuItem("Speed up voice sample", speed_handler)
+
+        items = [enhance_item, mp3s_item, transcode_item, speed_item]
+        MenuUtil.menu(state, "Tools:", items)
 
     @staticmethod
     def ask_save_speed_up_audio() -> None:
@@ -89,5 +91,3 @@ class ToolsSubmenu:
         printt(f"Saved new file to: {new_path}")
         ask_continue()
         cleanup()
-
-

@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.real_time_util import RealTimeUtil
 from tts_audiobook_tool.state import State
@@ -8,54 +9,51 @@ from tts_audiobook_tool.util import *
 class RealTimeSubmenu:
 
     @staticmethod
-    def submenu(state: State):
+    def menu(state: State):
 
-        while True:
+        # 1
+        def on_start(_, __) -> None:
+            if state.real_time.custom_text_segments:
+                text_segments = state.real_time.custom_text_segments
+            else:
+                text_segments = state.project.text_segments
+            if not text_segments:
+                printt_set("No text segments specified")
+                return
+            RealTimeUtil.start(
+                state=state,
+                text_segments=text_segments,
+                line_range=state.real_time.line_range
+            )
 
-            print_heading("Real-time playback")
-            AppUtil.show_hint_if_necessary(state.prefs, HINT_REAL_TIME)
-            printt(f"{make_hotkey_string('1')} Start")
+        start_item = MenuItem("Start", on_start)
 
+        # 2
+        def make_text_label(_) -> str:
             if state.real_time.custom_text_segments:
                 value = f"custom text, {len(state.real_time.custom_text_segments)} lines"
             else:
                 value = "project text"
             current = make_currently_string(value)
-            printt(f"{make_hotkey_string('2')} Text source {COL_DIM} {current}")
+            return f"Text source {current}"
 
+        text_item = MenuItem(make_text_label, lambda _, __: RealTimeSubmenu.text_menu(state))
+
+        # 3
+        def make_range_label(_) -> str:
             line_range = state.real_time.line_range
             if line_range:
                 value = f"{line_range[0]}-{line_range[1]}"
             else:
                 value = "all"
+            return f"Select line range {make_currently_string(value)}"
 
-            printt(f"{make_hotkey_string('3')} Select line range {make_currently_string(value)}")
-            printt()
+        range_item = MenuItem(make_range_label, lambda _, __: RealTimeSubmenu.ask_line_range(state))
 
-            hotkey = ask_hotkey()
-            if not hotkey:
-                break
+        # Menu
+        items = [start_item, text_item, range_item]
+        MenuUtil.menu(state, "Real-time playback", items, hint=HINT_REAL_TIME)
 
-            match hotkey:
-                case "1":
-                    if state.real_time.custom_text_segments:
-                        text_segments = state.real_time.custom_text_segments
-                    else:
-                        text_segments = state.project.text_segments
-                    if not text_segments:
-                        ask_continue("No text segments specified.\n")
-                        continue
-                    RealTimeUtil.start(
-                        state=state,
-                        text_segments=text_segments,
-                        line_range=line_range
-                    )
-                case "2":
-                    RealTimeSubmenu.text_submenu(state)
-                case "3":
-                    RealTimeSubmenu.ask_line_range(state)
-                case _:
-                    break
 
     @staticmethod
     def ask_line_range(state: State) -> None:
@@ -90,24 +88,20 @@ class RealTimeSubmenu:
 
 
     @staticmethod
-    def text_submenu(state: State) -> None: # type: ignore
+    def text_menu(state: State) -> None: # type: ignore
 
-        print_heading("Real time - Set text source")
-        printt(f"{make_hotkey_string('1')} Use project text")
-        printt(f"{make_hotkey_string('2')} Custom text - from text file")
-        printt(f"{make_hotkey_string('3')} Custom text - manual input")
-        printt()
-
-        hotkey = ask_hotkey()
-
-        if hotkey == "1":
+        # 1
+        def on_project(_, __) -> None:
             if state.real_time.custom_text_segments:
                 state.real_time.custom_text_segments = []
                 state.real_time.line_range = None
             printt_set("Text source set to: project")
 
-        elif hotkey == "2" or hotkey == "3":
-            if hotkey == "2":
+        project_item = MenuItem("Use project text", on_project)
+
+        # 2, 3
+        def on_custom(_, data) -> None:
+            if data == "file":
                 text_segments, _ = AppUtil.get_text_segments_from_ask_text_file()
             else:
                 text_segments, _ = AppUtil.get_text_segments_from_ask_std_in()
@@ -115,3 +109,10 @@ class RealTimeSubmenu:
                 state.real_time.custom_text_segments = text_segments
                 state.real_time.line_range = None
                 printt_set(f"Text source set to: custom, {len(text_segments)} lines")
+
+        custom_file_item = MenuItem("Custom text - from text file", on_custom, data="file")
+        custom_manual_item = MenuItem("Custom text - manual input", on_custom, data="manual")
+
+        # Menu
+        items = [project_item, custom_file_item, custom_manual_item]
+        MenuUtil.menu(state, "Real-time - Set text source", items, hint=HINT_REAL_TIME)

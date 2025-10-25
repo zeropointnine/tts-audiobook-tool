@@ -1,3 +1,5 @@
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import FishProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -8,64 +10,43 @@ from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 class VoiceFishSubmenu:
 
     @staticmethod
-    def submenu(state: State) -> None:
+    def menu(state: State) -> None:
         """
         """
-        while True:
-            VoiceFishSubmenu._print(state)
-            hotkey = ask_hotkey()
-            should_exit = VoiceFishSubmenu._handle_hotkey(state, hotkey)
-            if should_exit:
-                return
-
-    @staticmethod
-    def _print(state: State) -> None:
 
         project = state.project
 
-        print_heading(f"Voice clone and model settings")
+        def on_clear_voice(_, __) -> None:
+            project.clear_voice_and_save(TtsModelInfos.FISH)
+            printt_set("Cleared")
 
-        label = make_currently_string(project.get_voice_label())
-        s = f"{make_hotkey_string('1')} Select voice clone sample {label}"
-        printt(s)
+        def make_temperature_label(_) -> str:
+            value = VoiceSubmenuShared.make_parameter_value_string(
+                project.fish_temperature, FishProtocol.DEFAULT_TEMPERATURE, 1
+            )
+            return f"Temperature {make_currently_string(value)}"
 
-        s = f"{make_hotkey_string('2')} Clear voice clone"
-        printt(s)
+        def on_temperature(_, __) -> None:
+            VoiceSubmenuShared.ask_number(
+                project,
+                "Enter temperature (0.01 to 2.0):",
+                0.01, 2.0, # sane range IMO
+                "fish_temperature",
+                "Temperature set to:"
+            )
 
-        s = VoiceSubmenuShared.make_parameter_value_string(project.fish_temperature, FishProtocol.DEFAULT_TEMPERATURE, 1)
-        s = make_currently_string(s)
-        printt(f"{make_hotkey_string('3')} Temperature {s}")
-        printt()
-
-    @staticmethod
-    def _handle_hotkey(state: State, hotkey: str) -> bool:
-
-        project = state.project
-
-        match hotkey:
-            case "1":
-                VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.FISH)
-                return False
-            case "2":
-                project.clear_voice_and_save(TtsModelInfos.FISH)
-                printt_set("Cleared")
-                printt()
-                return False
-            case "3":
-                value = ask(f"Enter temperature (0.0 < value < 2.0): ")
-                if not value:
-                    return False
-                try:
-                    value = float(value)
-                    if not (0.0 < value < 2.0):
-                        ask_error("Out of range")
-                    else:
-                        project.fish_temperature = value
-                        project.save()
-                except:
-                    ask_error("Bad value")
-                    return False
-            case _:
-                return True
-
-        return False
+        items = [
+            MenuItem(
+                VoiceSubmenuShared.make_select_voice_label,
+                lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.FISH)
+            ),
+            MenuItem(
+                "Clear voice clone sample",
+                on_clear_voice
+            ),
+            MenuItem(
+                make_temperature_label,
+                on_temperature
+            )
+        ]
+        MenuUtil.menu(state, VoiceSubmenuShared.MENU_HEADING, items)

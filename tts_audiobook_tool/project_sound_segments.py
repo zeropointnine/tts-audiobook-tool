@@ -10,8 +10,8 @@ from tts_audiobook_tool.constants import *
 
 class ProjectSoundSegments:
     """
-    Keeps catalog of the project's sound segment files
-    List is cached, gets invalidated using directory watcher
+    Keeps cached catalog of the project's sound segment files
+    List gets invalidated and refreshed using directory watcher
     """
 
     def __init__(self, project: Project):
@@ -19,13 +19,17 @@ class ProjectSoundSegments:
         self._sound_segments: dict[int, str] = {}
         self._dirty = True
 
-        event_handler = DirHandler(self.on_dir_change) # TODO does not work under WSL without extra stuffs
+        event_handler = DirHandler(self.on_dir_change)
         observer = Observer()
 
         if project.dir_path:
             dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
             observer.schedule(event_handler, dir, recursive=False)
             observer.start()
+
+    def force_invalidate(self) -> None:
+        # TODO: add logic "if am at some important point like GenSubMenu etc, and is WSL or MacOS, call this"
+        self._dirty = True
 
     def on_dir_change(self):
         self._dirty = True
