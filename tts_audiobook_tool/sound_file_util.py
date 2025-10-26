@@ -245,7 +245,6 @@ class SoundFileUtil:
         else:
             return False
 
-
     @staticmethod
     def play_sound_async(sound: Sound):
         """

@@ -1,3 +1,4 @@
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -14,10 +15,6 @@ class VoiceVibeVoiceSubmenu:
     def menu(state: State) -> None:
 
         project = state.project
-
-        def on_clear_voice(_, __) -> None:
-            project.clear_voice_and_save(TtsModelInfos.VIBEVOICE)
-            printt_set("Cleared")
 
         def make_model_path_label(_) -> str:
             value = project.vibevoice_model_path if project.vibevoice_model_path else "none"
@@ -59,10 +56,7 @@ class VoiceVibeVoiceSubmenu:
                 VoiceSubmenuShared.make_select_voice_label,
                 lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
             ),
-            MenuItem(
-                "Clear voice clone sample",
-                on_clear_voice
-            ),
+            VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE),
             MenuItem(
                 make_model_path_label,
                 lambda _, __: ask_model_path(state.project)
@@ -76,20 +70,20 @@ class VoiceVibeVoiceSubmenu:
                 on_steps
             ),
         ]
-        MenuUtil.menu(state, VoiceSubmenuShared.MENU_HEADING, items)
+        VoiceSubmenuShared.show_voice_menu(state, items)
 
 # ---
 
 def ask_model_path(project: Project) -> None: # type: ignore
     s = "Select local directory containing VibeVoice model (Hugging Face model repository format):"
-    dir_path = ask_dir_path(s, s)
+    dir_path = AskUtil.ask_dir_path(s, s)
     if not dir_path:
         return
     if dir_path == project.vibevoice_model_path:
-        printt_set("Already set")
+        print_feedback("Already set")
         return
     if dir_path and not os.path.exists(dir_path):
-        printt_set("No such directory", color_code=COL_ERROR)
+        print_feedback("No such directory", color_code=COL_ERROR)
         return
     apply_model_path_and_validate(project, dir_path)
 
@@ -102,7 +96,7 @@ def apply_model_path_and_validate(project: Project, path: str) -> None: # type: 
 
     if not path:
         # No need to validate
-        printt_set(f"Set to none; will use default model {VibeVoiceProtocol.DEFAULT_MODEL_NAME}")
+        print_feedback(f"Set to none; will use default model {VibeVoiceProtocol.DEFAULT_MODEL_NAME}")
         return
 
     # Validate by attempting to instantiate model with new settings
@@ -114,7 +108,7 @@ def apply_model_path_and_validate(project: Project, path: str) -> None: # type: 
 
     try:
         _ = Tts.get_vibevoice()
-        printt_set(f"\nCustom model path set: {path}")
+        print_feedback(f"\nCustom model path set: {path}")
 
     except (OSError, Exception) as e:
         # Revert change
@@ -125,4 +119,4 @@ def apply_model_path_and_validate(project: Project, path: str) -> None: # type: 
         printt(f"{COL_ERROR}Contents at model path {path} appear to be invalid:")
         printt(f"{COL_ERROR}{make_error_string(e)}")
         printt()
-        ask_continue()
+        AskUtil.ask_enter_to_continue()

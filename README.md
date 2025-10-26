@@ -245,19 +245,19 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 These are my anecdotal inference speeds (running Windows unless otherwise noted). The app adopts each respective model's reference inference implementation logic as much as possible.
 
-| TTS Model               | Hardware             | Speed | Notes |
-| ----------------------- | -------------------- | ----- | ----- |
-| IndexTTS2               | GTX 4090             | ~150% realtime |
-|                         | GTX 3080 Ti          | ~90% realtime |
-| VibeVoice 1.5B          | GTX 3080 Ti          | ~120% realtime | with Flash attention 2 enabled
-|                         | Macbook Pro M1       | ~40% realtime |
-| Higgs V2 3B             | GTX 4090             | 200+% realtime | inference speed inversely proportional to voice sample duration, FYI
-|                         | GTX 3080 Ti          | N/A | does not fit in 12 GB VRAM
-| Fish OpenAudio S1-mini  | GTX 3080 Ti          | 500+% realtime | best combination of inference speed and quality output IMO
-|                         | Macbook Pro M1 (MPS) | ~15% realtime
-| Chatterbox              | GTX 3080 Ti          | ~130% realtime
-|                         | Macbook Pro M1 (MPS) | 20-35% realtime
-| Oute                    | GTX 3080 Ti          | ~90% realtime | using `outetts.Backend.EXL2`
+| TTS Model               | Hardware             | Speed           | Notes |
+| ----------------------- | -------------------- | --------------- | ----- |
+| IndexTTS2               | GTX 4090             | ~150% realtime  | has the lowest word error rate and least quirks, IMO
+|                         | GTX 3080 Ti          | ~90% realtime   |
+| VibeVoice 1.5B          | GTX 3080 Ti          | ~120% realtime  | with Flash attention 2 enabled
+|                         | Macbook Pro M1       | ~40% realtime   |
+| Higgs V2 3B             | GTX 4090             | 200+% realtime  | inference speed inversely proportional to voice sample duration, FYI
+|                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
+| Fish OpenAudio S1-mini  | GTX 3080 Ti          | 500+% realtime  | best combination of inference speed and quality output IMO
+|                         | Macbook Pro M1 (MPS) | ~15% realtime   |
+| Chatterbox              | GTX 3080 Ti          | ~130% realtime  |
+|                         | Macbook Pro M1 (MPS) | 20-35% realtime |
+| Oute                    | GTX 3080 Ti          | ~90% realtime   | using `outetts.Backend.EXL2`
 |                         | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
 
 

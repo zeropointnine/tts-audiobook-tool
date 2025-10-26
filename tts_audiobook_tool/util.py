@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import platform
 import subprocess
+import sys
 import time
 from typing import Any
 
@@ -22,12 +23,12 @@ Various small util functions, both app-specific and general
 def printt(s: str="") -> None:
     """
     App-standard way of printing to the console.
-    (Doesn't do anything extra or different at the moment)
+    (Doesn't do much extra or different at the moment)
     """
     s += Ansi.RESET
     print(s)
 
-def printt_set(message: str, color_code=COL_DIM, extra_line=True) -> None:
+def print_feedback(message: str, color_code=COL_DIM, extra_line=True) -> None:
     """
     Should be used for printing feedback after a setting has been changed
     and submenu is about to be re-printed.
@@ -36,7 +37,8 @@ def printt_set(message: str, color_code=COL_DIM, extra_line=True) -> None:
     if extra_line:
         printt()
     if MENU_CLEARS_SCREEN:
-        ask_continue()
+        from tts_audiobook_tool.ask_util import AskUtil
+        AskUtil.ask_enter_to_continue()
     else:
         # Just enough of a pause to make noticeable
         time.sleep(0.5)
@@ -51,90 +53,6 @@ def print_heading(s: str, dont_clear: bool=False) -> None:
     printt("-" * length)
     printt(f"{COL_ACCENT}{s}")
     printt("-" * length)
-
-def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
-    """
-    App-standard way of getting user input.
-    Prints extra line after the input by default.
-    """
-
-    if not DEV:
-        clear_input_buffer()
-
-    message = f"{message}{COL_INPUT}"
-    try:
-        inp = input(message).strip()
-    except (ValueError, EOFError) as e:
-        return ""
-    if lower:
-        inp = inp.lower()
-    print(Ansi.RESET, end="")
-    if extra_line:
-        printt()
-    return inp
-
-def ask_continue(message_prefix: str="") -> None:
-    message = "Press enter: "
-    if message_prefix:
-        message = f"{message_prefix}\n{message}"
-    ask(message)
-
-def ask_confirm(message: str="") -> bool:
-    if not message:
-        message = f"Press {make_hotkey_string('Y')} to confirm: "
-    inp = ask_hotkey(message)
-    return inp == "y"
-
-def ask_error(error_message: str) -> None:
-    printt(f"{COL_ERROR}{error_message}")
-    printt()
-    ask_continue()
-
-def ask_hotkey(message: str="", lower: bool=True, extra_line: bool=True) -> str:
-    inp = ask(message, lower, extra_line)
-    if inp:
-        inp = inp[0]
-    return inp
-
-def ask_file_path(
-        console_message: str,
-        requestor_title: str,
-        filetypes: list[tuple[str, str]] = [],
-        initialdir: str=""
-) -> str:
-    try:
-        from tkinter import filedialog
-        printt(console_message)
-        result = filedialog.askopenfilename(title=requestor_title, filetypes=filetypes, initialdir=initialdir)
-        printt(result)
-        printt()
-        return result
-    except Exception as e:
-        return ask_path_input(console_message)
-
-def ask_dir_path(
-        console_message: str,
-        ui_title: str,
-        initialdir: str = "",
-        mustexist: bool = True,
-) -> str:
-    try:
-        from tkinter import filedialog
-        printt(console_message)
-        result = filedialog.askdirectory(title=ui_title, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows
-        printt(result)
-        printt()
-        return result
-    except Exception as e:
-        return ask_path_input(console_message)
-
-def ask_path_input(message: str="") -> str:
-    """
-    Get file/directory path, strip outer quotes
-    """
-    printt(message)
-    inp = ask("")
-    return strip_quotes_from_ends(inp)
 
 def strip_quotes_from_ends(s: str) -> str:
     if len(s) >= 2:

@@ -129,7 +129,7 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "IndexTTS2",
             "short_name": "IndexTTS2",
-            "voice_path_console": "Enter voice clone audio clip file path (under 60 seconds recommended): ",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
             "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[

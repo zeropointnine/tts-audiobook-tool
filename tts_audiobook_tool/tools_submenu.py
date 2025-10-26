@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.mp3_concat import Mp3ConcatTranscodeUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -43,12 +44,12 @@ class ToolsSubmenu:
         def cleanup():
             SoundFileUtil.stop_sound_async()
 
-        path = ask_file_path("Enter sound clip:", "Select sound clip")
+        path = AskUtil.ask_file_path("Enter sound clip:", "Select sound clip")
         if not path:
             return
         result = SoundFileUtil.load(path)
         if isinstance(result, str):
-            ask_error(result)
+            AskUtil.ask_error(result)
             return
         sound = result
 
@@ -58,18 +59,18 @@ class ToolsSubmenu:
         printt()
         s ="Enter new speed as a percentage (range: 50-200) (50 = half as fast, 200 = twice as fast)"
         printt(s)
-        inp = ask()
+        inp = AskUtil.ask()
         if not inp:
             cleanup()
             return
         if not inp.isdigit():
-            ask_error("Bad value")
+            AskUtil.ask_error("Bad value")
         percent = float(inp)
         if not (50 <= percent <= 200):
-            ask_error("Out of range")
+            AskUtil.ask_error("Out of range")
         result = SoundUtil.speed_up_audio(sound, percent / 100)
         if isinstance(result, str):
-            ask_error(result)
+            AskUtil.ask_error(result)
             cleanup()
             return
         new_sound = result
@@ -80,7 +81,7 @@ class ToolsSubmenu:
 
         err = SoundFileUtil.save_flac(new_sound, new_path)
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             cleanup()
             return
 
@@ -89,5 +90,5 @@ class ToolsSubmenu:
 
         printt()
         printt(f"Saved new file to: {new_path}")
-        ask_continue()
+        AskUtil.ask_enter_to_continue()
         cleanup()

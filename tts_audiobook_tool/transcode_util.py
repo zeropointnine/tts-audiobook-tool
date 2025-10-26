@@ -1,3 +1,4 @@
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.state import State
@@ -11,20 +12,20 @@ class TranscodeUtil:
     @staticmethod
     def ask_transcode_abr_flac_to_aac(state: State) -> None:
 
-        path = ask("Enter FLAC file path or directory of FLAC files: ")
+        path = AskUtil.ask("Enter FLAC file path or directory of FLAC files: ")
         if not path:
             return
         if not os.path.exists(path):
-            ask_continue("No such file or directory.")
+            AskUtil.ask_enter_to_continue("No such file or directory.")
             return
 
         if os.path.isfile(path):
             if not path.lower().endswith(".flac"):
-                ask_continue("Must have \".flac\" file suffix.")
+                AskUtil.ask_enter_to_continue("Must have \".flac\" file suffix.")
                 return
             m4a_path = Path(path).with_stem(".m4a")
             if m4a_path.exists():
-                ask_continue("M4A file already exists with that file stem.")
+                AskUtil.ask_enter_to_continue("M4A file already exists with that file stem.")
                 return
             dir_flac_paths = [path]
         else:
@@ -34,7 +35,7 @@ class TranscodeUtil:
                 if file_path.lower().endswith(".flac"):
                     dir_flac_paths.append(file_path)
             if not dir_flac_paths:
-                ask_continue("No FLAC files in directory.")
+                AskUtil.ask_enter_to_continue("No FLAC files in directory.")
                 return
 
         warnings = []
@@ -55,13 +56,13 @@ class TranscodeUtil:
             printt()
 
         if not flac_paths:
-            ask("No files to transcode. Press enter: ")
+            AskUtil.ask_enter_to_continue("No files to transcode.")
             return
 
         printt("Will transcode the following files:")
         printt("\n".join(flac_paths))
         printt()
-        if not ask_confirm():
+        if not AskUtil.ask_confirm():
             return
 
         for flac_path in flac_paths:
@@ -79,7 +80,7 @@ class TranscodeUtil:
             printt(s)
             printt()
 
-        ask("Press enter to continue: ")
+        AskUtil.ask("Press enter to continue: ")
 
 
     @staticmethod

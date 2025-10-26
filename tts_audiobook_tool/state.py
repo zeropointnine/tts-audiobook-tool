@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tts_audiobook_tool.app_types import RealTimeSubmenuState
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
@@ -32,7 +33,7 @@ class State:
         else:
             result = Project.load_using_dir_path(self.prefs.project_dir)
             if isinstance(result, str):
-                ask_error(result)
+                AskUtil.ask_error(result)
                 self.prefs.project_dir = ""
                 self.project = Project("")
             else:
@@ -120,7 +121,7 @@ class State:
         self.prefs.project_dir = path
         result = Project.load_using_dir_path(path)
         if isinstance(result, str):
-            ask_error(result)
+            AskUtil.ask_error(result)
             self.project = Project("")
         else:
             self.project = result

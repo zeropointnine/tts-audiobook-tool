@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.state import State
@@ -37,10 +38,10 @@ class VoiceOuteSubmenu:
         def on_default(_, __) -> None:
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
-                ask_error(result)
+                AskUtil.ask_error(result)
                 return
             project.set_oute_voice_and_save(result, "default")
-            printt_set("Voice clone set.")
+            print_feedback("Voice clone set.")
 
         items = [
             MenuItem(
@@ -60,7 +61,7 @@ class VoiceOuteSubmenu:
                 on_temperature
             )
         ]
-        MenuUtil.menu(state, VoiceSubmenuShared.MENU_HEADING, items)
+        VoiceSubmenuShared.show_voice_menu(state, items)
 
 # ---
 
@@ -83,19 +84,19 @@ def ask_create_oute_voice(project: Project) -> None:
 
     if isinstance(result, str):
         error = result
-        ask_error(f"Error creating voice: {error}")
+        AskUtil.ask_error(f"Error creating voice: {error}")
         return
 
     voice_dict = result
     project.set_oute_voice_and_save(voice_dict, Path(path).stem)
 
     printt()
-    printt_set("Voice clone set")
+    print_feedback("Voice clone set")
 
 
 def ask_load_oute_json(project: Project):
 
-    path = ask_file_path(
+    path = AskUtil.ask_file_path(
         "Enter file path of voice json file: ",
         "Select Oute voice json file",
         [("JSON files", "*.json"), ("All files", "*.*")],
@@ -106,8 +107,8 @@ def ask_load_oute_json(project: Project):
 
     result = OuteUtil.load_oute_voice_json(path)
     if isinstance(result, str):
-        ask_error(result)
+        AskUtil.ask_error(result)
         return
 
     project.set_oute_voice_and_save(result, Path(path).stem)
-    printt_set("Voice clone set.")
+    print_feedback("Voice clone set.")

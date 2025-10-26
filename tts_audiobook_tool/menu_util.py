@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Callable, NamedTuple, Set
 
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -10,7 +11,7 @@ class MenuItem:
     def __init__(
             self,
             label: StringOrMaker,
-            handler: Callable[[State, str], Any],
+            handler: Callable[[State, Any], Any],
             data: Any = None,
             hotkey: str = ""
     ):
@@ -32,8 +33,6 @@ MenuItemListOrMaker = Callable[[State], list[MenuItem]] | list[MenuItem]
 
 class MenuUtil:
 
-    # TODO: where and how to trigger hint action
-
     is_first_submenu = True
 
     @staticmethod
@@ -43,11 +42,20 @@ class MenuUtil:
         menu_items: MenuItemListOrMaker,
         is_submenu: bool = True,
         hint: Hint | None = None,
-        one_shot: bool = False
+        one_shot: bool = False,
+        on_exit: Callable | None = None
     ):
         """
-        Prints a menu of items, waits for input, and executes mapped callback
-        If one_shot is False, repeats until unrecognized key is entered or enter is pressed
+        Prints a menu of items, waits for input, and executes mapped callback.
+
+        When readchar is enabled, it blocks until recognized hotkey is pressed.
+        Otherwise, it repeats until unrecognized key is entered or enter is pressed
+
+        param one_shot:
+            If True, exits after executing mapped callback function
+
+        param on_exit
+            If exists, gets called when menu exits (ie, when app goes back to previous menu)
         """
 
         while True:
@@ -103,22 +111,42 @@ class MenuUtil:
                 printt(f"{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
                 printt()
 
-            # Prompt
-            hotkey = ask_hotkey()
-            if not hotkey:
-                return
+            while True:
+                # Prompt
+                hotkey = AskUtil.ask_hotkey()
 
-            # Handle hotkey
-            selected_item = None
-            for item in items:
-                if item.hotkey == hotkey:
-                    selected_item = item
+                if AskUtil.is_readchar:
+                    should_return = hotkey in ["\r", "\x08", "\x1b"] and is_submenu # enter, backspace, escape
+                else: # can't readchar
+                    should_return = not hotkey
+                if should_return:
+                    if on_exit:
+                        on_exit()
+                    return
+
+                # Handle hotkey
+                selected_item = None
+                for item in items:
+                    if item.hotkey == hotkey:
+                        selected_item = item
+                        break
+
+                if selected_item:
                     break
-            if not selected_item:
-                return
+                else:
+                    if AskUtil.is_readchar:
+                        continue # wait for next hotkey
+                    else:
+                        return
+
+            # Execute mapped callback function
             should_return = selected_item.handler(state, selected_item.data)
             if should_return is True:
+                if on_exit:
+                    on_exit()
                 return
 
             if one_shot:
+                if on_exit:
+                    on_exit()
                 return

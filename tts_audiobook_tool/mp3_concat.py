@@ -1,6 +1,7 @@
 import os
 
 import natsort
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -10,13 +11,13 @@ class Mp3ConcatTranscodeUtil:
     @staticmethod
     def ask_mp3_dir():
 
-        dir = ask_dir_path("Enter directory of MP3 files:", "Select directory with MP3 files")
+        dir = AskUtil.ask_dir_path("Enter directory of MP3 files:", "Select directory with MP3 files")
 
         if not dir:
             return
 
         if not os.path.exists(dir):
-            ask_continue("No such directory")
+            AskUtil.ask_enter_to_continue("No such directory")
             return
 
         dir = os.path.abspath(dir)
@@ -25,7 +26,8 @@ class Mp3ConcatTranscodeUtil:
         mp3_files = natsort.natsorted(mp3_files, alg=natsort.ns.IGNORECASE)
 
         if not mp3_files:
-            ask_continue("No mp3 files found in directory")
+            print_feedback("No mp3 files found in directory")
+            return
 
         if len(mp3_files) > 1:
             s = "Will concatenate and transcode the mp3 files in the following order:"
@@ -36,7 +38,7 @@ class Mp3ConcatTranscodeUtil:
         for i, item in enumerate(mp3_files):
             printt(f"[{i+1}] {item}")
         printt()
-        b = ask_confirm()
+        b = AskUtil.ask_confirm()
         if not b:
             return
 
@@ -50,17 +52,17 @@ class Mp3ConcatTranscodeUtil:
         # m4a file is saved in same dir as mp3 files
         err = Mp3ConcatTranscodeUtil.concatenate_mp3s(mp3_files, dir, "transcoded.m4a")
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return
 
         printt("Finished")
         printt()
         s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open directory: "
-        hotkey = ask_hotkey(s)
+        hotkey = AskUtil.ask_hotkey(s)
         if hotkey == "o":
             err = open_directory_in_gui(dir)
             if err:
-                ask_error(err)
+                AskUtil.ask_error(err)
 
     @staticmethod
     def concatenate_mp3s(mp3_files: list[str], destination_dir: str, destination_filename: str) -> str:

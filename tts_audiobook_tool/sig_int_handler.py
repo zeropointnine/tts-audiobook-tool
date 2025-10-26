@@ -50,7 +50,7 @@ class SigIntHandler(SingletonBase):
         feedback = ""
         match self._mode:
             case "generating":
-                feedback = "Control-C pressed, will stop after current generation job is complete"
+                feedback = "Control-C pressed, will stop after current generation is complete"
             case "concatenating":
                 feedback = "Control-C pressed, will stop"
         if feedback:

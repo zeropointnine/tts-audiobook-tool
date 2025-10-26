@@ -15,22 +15,9 @@ class OptionsSubmenu:
             value = make_currently_string(state.prefs.stt_variant.id)
             return f"Whisper transcription model {value}"
 
-        whisper_item = MenuItem(
-            make_whisper_label,
-            lambda _, __: OptionsSubmenu.transcription_model_submenu(state)
-        )
-
         def make_section_break_label(_) -> str:
             value = make_currently_string(str(state.prefs.use_section_sound_effect))
-            return f"Use page turn sound effect at section breaks {value}"
-
-        def on_section_break(_, __) -> None:
-            AppUtil.show_hint_if_necessary(state.prefs, HINT_SECTION_SOUND_EFFECT)
-            state.prefs.use_section_sound_effect = not state.prefs.use_section_sound_effect
-            printt_set(f"Section break sound effect has been toggled to: {state.prefs.use_section_sound_effect}")
-
-        section_break_item = MenuItem(make_section_break_label, on_section_break)
-
+            return f"Insert page turn sound effect at section breaks {value}"
 
         def make_unload_label(_) -> str:
             result = AppUtil.get_nv_vram()
@@ -48,21 +35,26 @@ class OptionsSubmenu:
                 message += f"VRAM usage after: {make_gb_string(result[1])}"
             else:
                 message = "OK"
-            printt_set(message)
-
-        unload_item = MenuItem(make_unload_label, on_unload)
-
+            print_feedback(message)
 
         def on_hints(_, __) -> None:
             state.prefs.reset_hints()
             s = "One-time contextual hints have been reset.\n"
             s += "They will now appear again when relevant."
-            printt_set(s)
+            print_feedback(s)
 
-        hints_item = MenuItem("Reset contextual hints", on_hints)
-
-
-        items = [ whisper_item, section_break_item, unload_item, hints_item ]
+        items = [
+            MenuItem(
+                make_whisper_label,
+                lambda _, __: OptionsSubmenu.transcription_model_submenu(state)
+            ),
+            MenuItem(
+                make_section_break_label,
+                lambda _, __: OptionsSubmenu.section_break_menu(state)
+            ),
+            MenuItem(make_unload_label, on_unload),
+            MenuItem("Reset contextual hints", on_hints)
+        ]
         MenuUtil.menu(state, "Options:", items)
 
 
@@ -73,12 +65,13 @@ class OptionsSubmenu:
             value = make_currently_string(state.prefs.stt_variant.value[0])
             return f"Select Whisper transcription model {value}"
 
-        def handler(_, data: Any) -> None:
+        def handler(_, data: Any) -> bool:
             if not data or not isinstance(data, SttVariant):
-                return
+                return False
             state.prefs.stt_variant = data
             Stt.set_variant(state.prefs.stt_variant) # sync global value
-            printt_set(f"Whisper transcription model set to: {state.prefs.stt_variant.id}")
+            print_feedback(f"Whisper transcription model set to: {state.prefs.stt_variant.id}")
+            return True
 
         menu_items = []
         for i, stt_variant in enumerate(SttVariant):
@@ -87,3 +80,23 @@ class OptionsSubmenu:
             menu_items.append(menu_item)
 
         MenuUtil.menu(state, make_heading, menu_items)
+
+    @staticmethod
+    def section_break_menu(state: State) -> None:
+
+        def on_item(_, b: bool) -> bool:
+            state.prefs.use_section_sound_effect = b
+            print_feedback(f"Section break sound effect has been set to: {state.prefs.use_section_sound_effect}")
+            return True
+
+        items = [
+            MenuItem("True", on_item, data=True),
+            MenuItem("False", on_item, data=False)
+        ]
+        MenuUtil.menu(
+            state,
+            "Insert page turn sound effect at section breaks",
+            items,
+            hint=HINT_SECTION_SOUND_EFFECT,
+            one_shot=True
+        )

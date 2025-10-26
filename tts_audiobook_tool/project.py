@@ -3,6 +3,7 @@ import json
 import os
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
@@ -133,7 +134,7 @@ class Project:
             # Pre-existing project has no oute voice set, so set it Oute default
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
-                ask_error(result) # not ideal
+                AskUtil.ask_error(result) # not ideal
             else:
                 project.set_oute_voice_and_save(result, "default")
         else:
@@ -312,7 +313,7 @@ class Project:
         file_name = dest_file_stem + ".json"
         err = save_json(voice_dict, os.path.join(self.dir_path, file_name))
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return
         self.oute_voice_file_name = file_name
         self.oute_voice_json = voice_dict

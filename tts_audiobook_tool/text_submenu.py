@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
@@ -42,7 +43,7 @@ def on_ask_replace(state: State, _) -> None:
 
     s = f"Replacing text will invalidate all ({num_files}) previously generated sound segment files for this project.\n"
     s += "Are you sure? "
-    if ask_hotkey(s):
+    if AskUtil.ask_confirm(s):
         TextSubmenu.set_text_menu(state)
 
 def on_set_text(state, typ: str) -> bool:
@@ -65,7 +66,7 @@ def finish_set_text(state: State, text_segments: list[TextSegment], raw_text: st
     printt()
 
     # Confirm
-    if not ask_confirm():
+    if not AskUtil.ask_confirm():
         return False
 
     # Delete now-outdated gens
@@ -79,7 +80,7 @@ def finish_set_text(state: State, text_segments: list[TextSegment], raw_text: st
     if not state.real_time.custom_text_segments:
         state.real_time.line_range = None
 
-    printt_set("Project text has been set")
+    print_feedback("Project text has been set")
     return True
 
 def print_project_text(state: State) -> None:
@@ -100,4 +101,4 @@ def print_project_text(state: State) -> None:
 
     printt(f"{COL_DIM}Num generated audio segments: {COL_ACCENT}{len(indices)} {COL_DIM}/ {COL_ACCENT}{len(text_segments)}")
     printt()
-    ask("Press enter: ")
+    AskUtil.ask_enter_to_continue()

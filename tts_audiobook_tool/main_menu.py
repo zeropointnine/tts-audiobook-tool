@@ -1,7 +1,7 @@
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.real_time_submenu import RealTimeSubmenu
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.options_submenu import OptionsSubmenu
 from tts_audiobook_tool.generate_submenu import GenerateSubmenu
 from tts_audiobook_tool.project_submenu import ProjectSubmenu
@@ -128,6 +128,7 @@ def make_text_label(state: State) -> str:
 
 def on_text(state: State, __) -> None:
     if not state.prefs.project_dir:
+        print_feedback("Requires project")
         return
     if not state.project.text_segments:
         TextSubmenu.set_text_menu(state)
@@ -148,8 +149,13 @@ def make_gen_label(state: State) -> str:
     return "Generate audiobook audio " + s
 
 def on_gen(state: State, __) -> None:
-    if state.project.can_generate_audio:
-        GenerateSubmenu.menu(state)
+    if not state.project.can_voice:
+        print_feedback("Requires voice clone sample")
+        return
+    if len(state.project.text_segments) == 0:
+        print_feedback("Requires text")
+        return
+    GenerateSubmenu.menu(state)
 
 # Concat
 def make_concat_label(state: State) -> str:
@@ -178,11 +184,15 @@ def make_realtime_label(state: State) -> str:
     return "Generate realtime audio " + s
 
 def on_realtime(state: State, __) -> None:
-    if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE \
-            and state.project.can_voice and state.project.text_segments:
-        RealTimeSubmenu.menu(state)
+    if not state.project.text_segments:
+        print_feedback("Requires text")
+        return
+    if not state.project.can_voice:
+        print_feedback("Requires voice clone sample")
+        return
+    RealTimeSubmenu.menu(state)
 
 # Quit
 def on_quit(_, __):
-    printt_set("State saved. Exiting.", extra_line=False)
+    print_feedback("State saved.", extra_line=False)
     exit(0)

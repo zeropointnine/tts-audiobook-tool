@@ -2,6 +2,7 @@ import os
 
 from tts_audiobook_tool.app_types import NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.l import L # type: ignore
@@ -21,15 +22,10 @@ class ConcatSubmenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        # 1, 2
-        def on_create(_, data):
+        def on_start(_, data):
             infos = ChapterInfo.make_chapter_infos(state.project)
             ConcatSubmenu.ask_chapters_and_make(infos, state, aac_not_flac=data)
 
-        flac_item = MenuItem("Create FLAC file", on_create, data=False)
-        aac_item = MenuItem("Create AAC/M4A file",on_create, data=True)
-
-        # 3
         def make_cuts_label(_) -> str:
             qty = len(state.project.section_dividers)
             if state.project.section_dividers:
@@ -38,23 +34,16 @@ class ConcatSubmenu:
                 value = "none"
             return f"Define file cut points {make_currently_string(value)}"
 
-        cuts_item = MenuItem(
-            make_cuts_label,
-            lambda _, __: ConcatSubmenu.ask_cut_points(state)
-        )
-
-        # 4
         def make_norm_label(_) -> str:
             value = state.prefs.normalization_type.value.label
             return f"Loudness normalization {make_currently_string(value)}"
 
-        norm_item = MenuItem(
-            make_norm_label,
-            lambda _, __: ConcatSubmenu.ask_normalization(state.prefs)
-        )
-
-        # Menu
-        items = [flac_item, aac_item, cuts_item, norm_item]
+        items = [
+            MenuItem("Create FLAC file", on_start, data=False),
+            MenuItem("Create AAC/M4A file",on_start, data=True),
+            MenuItem(make_cuts_label, lambda _, __: ConcatSubmenu.ask_cut_points(state)),
+            MenuItem(make_norm_label, lambda _, __: ConcatSubmenu.ask_normalization(state.prefs))
+        ]
         MenuUtil.menu(state, "Concatenate audio segments:", items)
 
     @staticmethod
@@ -76,11 +65,11 @@ class ConcatSubmenu:
             printt(f"{s} {norm_type.value.label}")
         printt()
 
-        hotkey = ask_hotkey()
+        hotkey = AskUtil.ask_hotkey()
         if hotkey in hotkey_to_norm_type:
             norm_type = hotkey_to_norm_type[hotkey].value
             prefs.set_normalization_type_using(norm_type.json_value)
-            printt_set(f"Normalization set to: {norm_type.label}")
+            print_feedback(f"Normalization set to: {norm_type.label}")
             return
         elif hotkey == "":
             return
@@ -103,7 +92,7 @@ class ConcatSubmenu:
         printt("three audio files will be created spanning lines 1-100, 101-200, and 201-400.")
         printt("Enter \"1\" for no cut points.")
         printt()
-        inp = ask()
+        inp = AskUtil.ask()
         if not inp:
             return
 
@@ -114,13 +103,13 @@ class ConcatSubmenu:
                 index = int(string_item)
                 one_indexed_items.append(index)
             except:
-                ask_error(f"Parse error: {string_item}")
+                AskUtil.ask_error(f"Parse error: {string_item}")
                 return
         one_indexed_items = list(set(one_indexed_items))
         one_indexed_items.sort()
         for item in one_indexed_items:
             if item < 1 or item > len(state.project.text_segments):
-                ask_error(f"Index out of range: {item}")
+                AskUtil.ask_error(f"Index out of range: {item}")
                 return
         zero_indexed_items = [item - 1 for item in one_indexed_items]
         if 0 in zero_indexed_items:
@@ -132,7 +121,7 @@ class ConcatSubmenu:
             s = "none"
         else:
             s = ", ".join( [str(item + 1) for item in zero_indexed_items] )
-        printt_set(f"Cut points set to: {s}")
+        print_feedback(f"Cut points set to: {s}")
 
     @staticmethod
     def ask_chapters_and_make(infos: list[ChapterInfo], state: State, aac_not_flac: bool) -> None:
@@ -146,7 +135,7 @@ class ConcatSubmenu:
         if len(chapter_indices) > 1:
             printt("Enter file numbers for which you want to combine audio segments")
             printt("(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
-            inp = ask()
+            inp = AskUtil.ask()
             if inp == "all" or inp == "a":
                 chapter_indices = chapter_indices.copy()
             else:
@@ -161,7 +150,7 @@ class ConcatSubmenu:
                 chapter_indices = [item for item in input_indices if item in chapter_indices]
 
                 if not chapter_indices:
-                    ask("No valid chapters numbers entered. Press enter: ")
+                    AskUtil.ask_enter_to_continue("No valid chapters numbers entered.")
                     return
 
         else:
@@ -176,7 +165,7 @@ class ConcatSubmenu:
         string = ", ".join(strings)
         printt(string)
         printt()
-        b = ask_confirm()
+        b = AskUtil.ask_confirm()
         if not b:
             return
 
@@ -191,7 +180,7 @@ class ConcatSubmenu:
         try:
             os.makedirs(dest_subdir, exist_ok=True)
         except:
-            ask_error(f"Couldn't make directory {dest_subdir}")
+            AskUtil.ask_error(f"Couldn't make directory {dest_subdir}")
             return
 
         for i, chapter_index in enumerate(chapter_indices):
@@ -214,7 +203,7 @@ class ConcatSubmenu:
             )
             if err:
                 printt()
-                ask_error(err)
+                AskUtil.ask_error(err)
                 return
 
             # Normalize
@@ -229,7 +218,7 @@ class ConcatSubmenu:
                     path, state.prefs.normalization_type.value, norm_path
                 )
                 if err:
-                    ask_error(err)
+                    AskUtil.ask_error(err)
                     return
                 if not DEV_SAVE_INTERMEDIATE_FILES:
                     delete_silently(source_path)
@@ -244,11 +233,11 @@ class ConcatSubmenu:
 
         AppUtil.show_player_hint_if_necessary(state.prefs)
 
-        hotkey = ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory: ")
+        hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory: ")
         if hotkey == "o":
             err = open_directory_in_gui(dest_subdir)
             if err:
-                ask_error(err)
+                AskUtil.ask_error(err)
 
 # ---
 

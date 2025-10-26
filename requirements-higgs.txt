@@ -33,6 +33,7 @@ natsort==8.4.0
 nvidia-ml-py
 pyloudnorm==0.1.1
 pysbd==0.3.4
+readchar==4.2.1
 sounddevice==0.5.2
 soundfile==0.13.1
 watchdog==6.0.0

@@ -1,6 +1,8 @@
 import os
 
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -12,7 +14,14 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class VoiceSubmenuShared:
 
-    MENU_HEADING = "Voice clone and model settings"
+    @staticmethod
+    def show_voice_menu(state: State, items: list[MenuItem]) -> None:
+        MenuUtil.menu(
+            state=state,
+            heading="Voice clone and model settings",
+            menu_items=items,
+            on_exit=lambda: SoundFileUtil.stop_sound_async()
+        )
 
     @staticmethod
     def make_select_voice_label(state: State) -> str:
@@ -53,9 +62,13 @@ class VoiceSubmenuShared:
         result = SoundFileUtil.load(path)
         if isinstance(result, str):
             err = result
-            ask_error(err)
+            AskUtil.ask_error(err)
             return
         sound = result
+
+        printt(f"{COL_DIM}Playing selected sound sample...")
+        printt()
+        SoundFileUtil.play_sound_async(sound)
 
         needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS]
         if needs_transcript:
@@ -75,7 +88,7 @@ class VoiceSubmenuShared:
 
             if isinstance(result, str):
                 err = result
-                ask_error(err)
+                AskUtil.ask_error(err)
                 return
 
             words = WhisperUtil.get_words_from_segments(result)
@@ -87,10 +100,12 @@ class VoiceSubmenuShared:
         file_stem = Path(path).stem
         err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return
 
-        printt_set("Voice file saved")
+        print_feedback("Voice file saved")
+
+        AppUtil.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
 
     @staticmethod
     def ask_voice_file(default_dir_path: str, tts_type: TtsModelInfos, message_override: str="") -> str:
@@ -108,25 +123,34 @@ class VoiceSubmenuShared:
             console_message = ui.get("voice_path_console", "")
             requestor_title = ui.get("voice_path_requestor", "")
 
-        path = ask_file_path(
+        path = AskUtil.ask_file_path(
              console_message=console_message,
              requestor_title=requestor_title,
-             filetypes=[("WAV", "*.wav"), ("FLAC", "*.flac"), ("MP3", "*.mp3")], # TODO: on windows file requestor, this results in file type dropdown, may be more harm than good
+             filetypes=FILE_REQUESTOR_SOUND_TYPES,
              initialdir=default_dir_path
         )
         if not path:
             return ""
 
         if not os.path.exists(path):
-            ask_error(f"File not found: {path}")
+            AskUtil.ask_error(f"File not found: {path}")
             return ""
 
         err = SoundFileUtil.is_valid_sound_file(path)
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return ""
 
         return path
+
+    @staticmethod
+    def make_clear_voice_item(state: State, info_item: TtsModelInfos) -> MenuItem:
+
+        def on_clear_voice(_, info_item: TtsModelInfos) -> None:
+            state.project.clear_voice_and_save(info_item, is_secondary=False)
+            print_feedback("Cleared")
+
+        return MenuItem("Clear voice clone sample", on_clear_voice, data=info_item)
 
     @staticmethod
     def ask_number(
@@ -146,24 +170,24 @@ class VoiceSubmenuShared:
             lb = int(lb)
             ub = int(ub)
 
-        value = ask(prompt.strip() + " ")
+        value = AskUtil.ask(prompt.strip() + " ")
         if not value:
             return
         try:
             # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
             value = float(value)
         except Exception as e:
-            printt_set("Bad value", color_code=COL_ERROR)
+            print_feedback("Bad value", color_code=COL_ERROR)
             return
         if is_int:
             value = int(value)
         if not (lb <= value <= ub):
-            printt_set("Out of range", color_code=COL_ERROR)
+            print_feedback("Out of range", color_code=COL_ERROR)
             return
 
         setattr(project, project_attr_name, value)
         project.save()
-        printt_set(f"{success_prefix.strip()} {value}")
+        print_feedback(f"{success_prefix.strip()} {value}")
 
     @staticmethod
     def make_parameter_value_string(

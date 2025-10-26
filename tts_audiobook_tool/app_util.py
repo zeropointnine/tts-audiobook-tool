@@ -9,6 +9,7 @@ import time
 import torch
 import xxhash
 
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.prefs import Prefs
@@ -115,18 +116,18 @@ class AppUtil:
         Asks user for path to text file and returns list of TextSegments and raw text.
         Shows feedback except when text segments are returned
         """
-        path = ask_file_path("Enter text file path: ", "Select text file")
+        path = AskUtil.ask_file_path("Enter text file path: ", "Select text file")
         if not path:
             return [], ""
         if not os.path.exists(path):
-            ask_error("No such file")
+            AskUtil.ask_error("No such file")
             return [], ""
 
         try:
             with open(path, 'r', encoding='utf-8') as file:
                 raw_text = file.read()
         except Exception as e:
-            ask_error(f"Error: {e}")
+            AskUtil.ask_error(f"Error: {e}")
             return [], ""
 
         print("Segmenting text... ", end="", flush=True)
@@ -134,7 +135,7 @@ class AppUtil:
         print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
         if not text_segments:
-            ask_continue("No text segments.")
+            AskUtil.ask_enter_to_continue("No text segments.")
             return [], raw_text
 
         return text_segments, raw_text
@@ -159,7 +160,7 @@ class AppUtil:
         text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
 
         if not text_segments:
-            ask_continue("No text segments.")
+            AskUtil.ask_enter_to_continue("No text segments.")
             return [], raw_text
 
         return text_segments, raw_text
@@ -179,9 +180,9 @@ class AppUtil:
         AppUtil.print_hint(hint)
 
         if and_confirm:
-            return ask_confirm()
+            return AskUtil.ask_confirm()
         elif and_prompt:
-            ask_continue()
+            AskUtil.ask_enter_to_continue()
             return True
         else:
             # Anim

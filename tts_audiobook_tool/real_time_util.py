@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 from tts_audiobook_tool.app_types import Sound, SttVariant
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.state import State
@@ -148,7 +149,7 @@ class RealTimeUtil:
         if stream.buffer_duration > 0:
             # Gives opportunity for remaining buffer data to play through before killing stream
             print()
-            ask_continue()
+            AskUtil.ask_enter_to_continue()
 
         SigIntHandler().clear()
 

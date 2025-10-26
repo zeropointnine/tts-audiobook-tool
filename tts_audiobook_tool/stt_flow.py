@@ -5,6 +5,7 @@ import time
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -27,11 +28,11 @@ class SttFlow:
         # TODO add more ui description here
 
         # [1] Ask text file
-        inp = ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
+        inp = AskUtil.ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
         if not inp:
             return
         if not os.path.exists(inp):
-            ask_continue(f"File doesn't exist.")
+            AskUtil.ask_enter_to_continue(f"File doesn't exist.")
             return
         source_text_path = Path(inp)
 
@@ -39,16 +40,16 @@ class SttFlow:
             with open(source_text_path, "r", encoding="utf-8") as file:
                 raw_text = file.read()
         except Exception as e:
-            ask_error(f"Error: {e}")
+            AskUtil.ask_error(f"Error: {e}")
             return
 
         if not raw_text:
-            ask_continue("File has no content.")
+            AskUtil.ask_enter_to_continue("File has no content.")
             return
 
         # [2] Ask audio file
         time.sleep(1)
-        inp = ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
+        inp = AskUtil.ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
         if not inp:
             return
         if not os.path.exists(inp):
@@ -59,12 +60,12 @@ class SttFlow:
         # Optional transcode step
         if Path(source_audio_path).suffix == ".mp3":
             AppUtil.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
-            b = ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
+            b = AskUtil.ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
             if not b:
                 return
             path, err = SoundFileUtil.transcode_to_aac(source_audio_path)
             if err:
-                ask_error(err)
+                AskUtil.ask_error(err)
                 return
             source_audio_path = path
 
@@ -79,14 +80,14 @@ class SttFlow:
         # Check if already has meta
         meta = AppMetadata.load_from_file(source_audio_path)
         if meta is not None:
-            b = ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
+            b = AskUtil.ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
             if not b:
                 return
 
         # [3] Calc hash
         source_audio_hash, err = AppUtil.calc_hash_file(source_audio_path)
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return
 
         # [4] Check if already has transcription pickle file
@@ -94,7 +95,7 @@ class SttFlow:
         if not os.path.exists(transcription_pickle_path):
             transcription_pickle_path = ""
         else:
-            b = ask_confirm("You've previously transcribed this file. Use saved transcription data? ")
+            b = AskUtil.ask_confirm("You've previously transcribed this file. Use saved transcription data? ")
             if not b:
                 transcription_pickle_path = ""
 
@@ -137,7 +138,7 @@ class SttFlow:
                 with open(source_pickle_path, "rb") as file:
                     words = pickle.load(file)
             except Exception as e:
-                ask_error(make_error_string(e))
+                AskUtil.ask_error(make_error_string(e))
                 return False
 
         else:
@@ -187,7 +188,7 @@ class SttFlow:
         printt()
 
         if dest_path.lower().endswith(".flac"):
-            ask("TODO: ") # TODO
+            AskUtil.ask("TODO: ") # TODO
             return False
         else:
             meta = AppMetadata(raw_text, timed_text_segments)
@@ -203,13 +204,13 @@ class SttFlow:
 
         discon_ranges = TimedTextSegment.get_discontinuities(timed_text_segments)
         if not discon_ranges:
-            ask_confirm()
+            AskUtil.ask_confirm()
             return True
 
-        b = ask_confirm("View discontinuity info summary? ")
+        b = AskUtil.ask_confirm("View discontinuity info summary? ")
         if b:
             print_discontinuity_info(timed_text_segments)
-            ask_continue()
+            AskUtil.ask_enter_to_continue()
         return True
 
 # ---

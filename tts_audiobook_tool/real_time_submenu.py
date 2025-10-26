@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.real_time_util import RealTimeUtil
@@ -18,8 +19,12 @@ class RealTimeSubmenu:
             else:
                 text_segments = state.project.text_segments
             if not text_segments:
-                printt_set("No text segments specified")
+                print_feedback("No text segments specified")
                 return
+            if AskUtil.is_readchar:
+                b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+                if not b:
+                    return
             RealTimeUtil.start(
                 state=state,
                 text_segments=text_segments,
@@ -66,12 +71,12 @@ class RealTimeSubmenu:
 
         s = "Enter line range (eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
         printt(s)
-        inp = ask()
+        inp = AskUtil.ask()
         if not inp:
             return
         result = ParseUtil.parse_range_string_normal(inp, length)
         if isinstance(result, str):
-            ask_error(result)
+            AskUtil.ask_error(result)
             return
 
         state.real_time.line_range = result
@@ -84,7 +89,7 @@ class RealTimeSubmenu:
             value = f"{result[0]}-{result[1]}"
             if result[1] == len(text_segments):
                 value += " (end)"
-        printt_set(f"Line range set to: {value}")
+        print_feedback(f"Line range set to: {value}")
 
 
     @staticmethod
@@ -95,7 +100,7 @@ class RealTimeSubmenu:
             if state.real_time.custom_text_segments:
                 state.real_time.custom_text_segments = []
                 state.real_time.line_range = None
-            printt_set("Text source set to: project")
+            print_feedback("Text source set to: project")
 
         project_item = MenuItem("Use project text", on_project)
 
@@ -108,7 +113,7 @@ class RealTimeSubmenu:
             if text_segments:
                 state.real_time.custom_text_segments = text_segments
                 state.real_time.line_range = None
-                printt_set(f"Text source set to: custom, {len(text_segments)} lines")
+                print_feedback(f"Text source set to: custom, {len(text_segments)} lines")
 
         custom_file_item = MenuItem("Custom text - from text file", on_custom, data="file")
         custom_manual_item = MenuItem("Custom text - manual input", on_custom, data="manual")

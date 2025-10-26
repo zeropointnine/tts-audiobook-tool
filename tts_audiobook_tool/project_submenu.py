@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
@@ -15,7 +16,7 @@ class ProjectSubmenu:
         def on_new(_, __) -> bool:
             did = ProjectSubmenu.ask_and_set_new_project(state)
             if did:
-                printt_set(f"Project directory set: {state.project.dir_path}")
+                print_feedback(f"Project directory set: {state.project.dir_path}")
                 return True
             return False
 
@@ -23,7 +24,8 @@ class ProjectSubmenu:
         def on_existing(_, __) -> bool:
             did = ProjectSubmenu.ask_and_set_existing_project(state)
             if did:
-                printt_set(f"Project directory set: {state.project.dir_path}")
+                print_feedback(f"Project directory set: {state.project.dir_path}")
+                AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
                 return True
             return False
 
@@ -34,7 +36,7 @@ class ProjectSubmenu:
         def on_view(_, __) -> None:
             err = DirOpenUtil.open(state.project.dir_path)
             if err:
-                ask_error(err)
+                AskUtil.ask_error(err)
 
         # Menu
         def make_heading(_) -> str:
@@ -63,15 +65,13 @@ class ProjectSubmenu:
         """
         s = "Enter the path to an empty directory:"
         s2 = "Select empty directory"
-        dir_path = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=False)
+        dir_path = AskUtil.ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=False)
         if not dir_path:
             return False
         err = state.make_new_project(dir_path)
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return False
-
-        AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
         return True
 
     @staticmethod
@@ -82,12 +82,12 @@ class ProjectSubmenu:
         """
         s = "Enter existing project directory path:"
         s2 = "Select existing project directory"
-        dir = ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
+        dir = AskUtil.ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
         if not dir:
             return False
         err = Project.is_valid_project_dir(dir)
         if err:
-            ask_error(err)
+            AskUtil.ask_error(err)
             return False
 
         state.set_existing_project(dir)
