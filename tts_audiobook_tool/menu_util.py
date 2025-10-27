@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Callable, NamedTuple, Set
+import inspect
+from typing import Callable
 
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
@@ -11,7 +12,7 @@ class MenuItem:
     def __init__(
             self,
             label: StringOrMaker,
-            handler: Callable[[State, Any], Any],
+            handler: MenuHandler,
             data: Any = None,
             hotkey: str = ""
     ):
@@ -26,10 +27,23 @@ class MenuItem:
         # The hotkey that will trigger the handler
         self.hotkey = hotkey
 
+# ---
 
-StringOrMaker = Callable[[State], str] | str
+# Type aliases
+
+# A function that returns a string
+StringMaker = Callable[[State], str]
+
+# A string or a function that returns a string
+StringOrMaker = StringMaker | str
+
+# A list of MenuItems or a function that returns a list of MenuItems
 MenuItemListOrMaker = Callable[[State], list[MenuItem]] | list[MenuItem]
 
+# Callback function for when an item is selected
+MenuHandler = Callable[[State, MenuItem], Any]
+
+# ---
 
 class MenuUtil:
 
@@ -39,10 +53,11 @@ class MenuUtil:
     def menu(
         state: State,
         heading: StringOrMaker,
-        menu_items: MenuItemListOrMaker,
+        items: MenuItemListOrMaker,
         is_submenu: bool = True,
         hint: Hint | None = None,
         one_shot: bool = False,
+        subheading: StringOrMaker | None = None,
         on_exit: Callable | None = None
     ):
         """
@@ -55,16 +70,16 @@ class MenuUtil:
             If True, exits after executing mapped callback function
 
         param on_exit
-            If exists, gets called when menu exits (ie, when app goes back to previous menu)
+            Gets called when menu exits (ie, when app goes *back* to previous menu)
         """
 
         while True:
 
             # Initialize items
-            if isinstance(menu_items, list):
-                items = menu_items
+            if isinstance(items, list):
+                items = items
             else:
-                items = menu_items(state)
+                items = items(state)
 
             is_all_hotkeys = all(item.hotkey for item in items)
             is_no_hotkeys = all(not item.hotkey for item in items)
@@ -91,7 +106,16 @@ class MenuUtil:
                 s = heading(state)
             print_heading(s)
 
-            # Print hint if necessary
+            # Print optional subheading
+            if subheading:
+                if isinstance(subheading, str):
+                    s = subheading
+                else:
+                    s = subheading(state)
+                if s:
+                    printt(s)
+
+            # Print optional hint
             if hint:
                 AppUtil.show_hint_if_necessary(state.prefs, hint)
 
@@ -141,7 +165,7 @@ class MenuUtil:
                         return
 
             # Execute mapped callback function
-            should_return = selected_item.handler(state, selected_item.data)
+            should_return = selected_item.handler(state, selected_item)
             if should_return is True:
                 if on_exit:
                     on_exit()

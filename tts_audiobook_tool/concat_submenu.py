@@ -14,7 +14,7 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class ConcatSubmenu:
@@ -29,68 +29,58 @@ class ConcatSubmenu:
         def make_cuts_label(_) -> str:
             qty = len(state.project.section_dividers)
             if state.project.section_dividers:
-                value = f"{qty} cut {make_noun('point', 'points', qty)}"
+                s = make_currently_string(f"{qty} cut {make_noun('point', 'points', qty)}")
             else:
-                value = "none"
-            return f"Define file cut points {make_currently_string(value)}"
+                s = f"{COL_DIM}(optional)"
+            return f"Define chapter cut points {s}"
 
         def make_norm_label(_) -> str:
             value = state.prefs.normalization_type.value.label
             return f"Loudness normalization {make_currently_string(value)}"
 
         items = [
-            MenuItem("Create FLAC file", on_start, data=False),
-            MenuItem("Create AAC/M4A file",on_start, data=True),
+            MenuItem("Create as FLAC file", on_start, data=False),
+            MenuItem("Create as AAC/M4A file",on_start, data=True),
             MenuItem(make_cuts_label, lambda _, __: ConcatSubmenu.ask_cut_points(state)),
-            MenuItem(make_norm_label, lambda _, __: ConcatSubmenu.ask_normalization(state.prefs))
+            MenuItem(make_norm_label, lambda _, __: ConcatSubmenu.normalization_menu(state))
         ]
-        MenuUtil.menu(state, "Concatenate audio segments:", items)
+        MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
 
     @staticmethod
-    def ask_normalization(prefs: Prefs) -> None:
+    def normalization_menu(state: State) -> None:
 
-        hotkey_to_norm_type: dict[str, NormalizationType] = {}
-        hotkey = "1"
-        for item in NormalizationType:
-            hotkey_to_norm_type[hotkey] = item
-            hotkey = chr(ord(hotkey) + 1)
+        def on_select(_, item: MenuItem) -> None:
+            info: NormalizationType = item.data
+            state.prefs.set_normalization_type_using(info.value.json_value)
+            print_feedback(f"Normalization set to: {info.value.label}")
 
-        print_heading("Loudness normalization:")
+        menu_items = []
+        for typ in list(NormalizationType):
+            menu_items.append( MenuItem(typ.value.label, on_select, data=typ) )
 
-        if Tts.get_type() == TtsModelInfos.OUTE:
-            AppUtil.show_hint_if_necessary(prefs, HINT_OUTE_LOUD_NORM)
-
-        for hotkey, norm_type in hotkey_to_norm_type.items():
-            s = f"{make_hotkey_string(hotkey)}"
-            printt(f"{s} {norm_type.value.label}")
-        printt()
-
-        hotkey = AskUtil.ask_hotkey()
-        if hotkey in hotkey_to_norm_type:
-            norm_type = hotkey_to_norm_type[hotkey].value
-            prefs.set_normalization_type_using(norm_type.json_value)
-            print_feedback(f"Normalization set to: {norm_type.label}")
-            return
-        elif hotkey == "":
-            return
-        else:
-            ConcatSubmenu.ask_normalization(prefs)
+        MenuUtil.menu(
+            state=state,
+            heading="Loudness normalization:",
+            items=menu_items,
+            hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None,
+            one_shot=True
+        )
 
     @staticmethod
     def ask_cut_points(state: State) -> None:
 
-        print_heading("Combine > File cut points:")
+        print_heading("Chapter file cut points:")
 
         num_text_segments = len(state.project.text_segments)
 
         section_dividers = state.project.section_dividers
         if section_dividers:
-            print_concat_info(section_dividers, num_text_segments)
+            print_cut_points(section_dividers, num_text_segments)
 
-        printt("Enter the line numbers where new files will begin.")
-        printt("For example, if there are 400 lines of text and you enter \"101, 201\",")
-        printt("three audio files will be created spanning lines 1-100, 101-200, and 201-400.")
-        printt("Enter \"1\" for no cut points.")
+        printt("Enter the line numbers where new chapter files will begin.")
+        printt(f"{COL_DIM}For example, if there are 400 lines of text and you enter \"101, 201\",")
+        printt(f"{COL_DIM}three audio files will be created spanning lines 1-100, 101-200, and 201-400.")
+        printt(f"{COL_DIM}Enter \"{COL_DEFAULT}1{COL_DIM}\" for no cut points.")
         printt()
         inp = AskUtil.ask()
         if not inp:
@@ -121,20 +111,20 @@ class ConcatSubmenu:
             s = "none"
         else:
             s = ", ".join( [str(item + 1) for item in zero_indexed_items] )
-        print_feedback(f"Cut points set to: {s}")
+        print_feedback(f"Cut points set:", s)
 
     @staticmethod
     def ask_chapters_and_make(infos: list[ChapterInfo], state: State, aac_not_flac: bool) -> None:
 
-        # Chapter indices that have any files
+        # Chapter indices that have any generated files
         chapter_indices = []
         for i, info in enumerate(infos):
             if info.num_files_exist > 0:
                 chapter_indices.append(i)
 
         if len(chapter_indices) > 1:
-            printt("Enter file numbers for which you want to combine audio segments")
-            printt("(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
+            printt("Enter chapter file numbers to create:")
+            printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
             inp = AskUtil.ask()
             if inp == "all" or inp == "a":
                 chapter_indices = chapter_indices.copy()
@@ -153,18 +143,13 @@ class ConcatSubmenu:
                     AskUtil.ask_enter_to_continue("No valid chapters numbers entered.")
                     return
 
-        else:
-            chapter_indices = [0]
-
-        printt(f"Will concatenate audio segments to create the following chapter file/s:")
-        strings = []
-        for chapter_index in chapter_indices:
-            info = infos[chapter_index]
-            s = f"{chapter_index+1} (lines {info.segment_index_start+1}-{info.segment_index_end+1})"
-            strings.append(s)
-        string = ", ".join(strings)
-        printt(string)
+        s = f"Will create the following {'AAC' if aac_not_flac else 'FLAC'} {make_noun('file', 'files', len(chapter_indices))}:"
+        printt(s)
+        strings = make_chapter_info_strings(infos, chapter_indices)
+        s ="\n".join( ("    " + item) for item in strings)
+        printt(s)
         printt()
+
         b = AskUtil.ask_confirm()
         if not b:
             return
@@ -186,7 +171,7 @@ class ConcatSubmenu:
         for i, chapter_index in enumerate(chapter_indices):
 
             if len(chapter_indices) > 1:
-                s = f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
+                s = f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
             else:
                 s = ""
             print_heading(f"Creating concatenated audio file{s}...", dont_clear=True)
@@ -234,6 +219,7 @@ class ConcatSubmenu:
         AppUtil.show_player_hint_if_necessary(state.prefs)
 
         hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory: ")
+        printt()
         if hotkey == "o":
             err = open_directory_in_gui(dest_subdir)
             if err:
@@ -241,7 +227,7 @@ class ConcatSubmenu:
 
 # ---
 
-def print_concat_info(section_dividers: list[int], num_items: int) -> None:
+def print_cut_points(section_dividers: list[int], num_items: int) -> None:
     section_index_strings = [str(index+1) for index in section_dividers]
     section_indices_string = ", ".join(section_index_strings)
     ranges = make_section_ranges(section_dividers, num_items)
@@ -250,15 +236,24 @@ def print_concat_info(section_dividers: list[int], num_items: int) -> None:
     printt(f"Current cut points: {section_indices_string} {COL_DIM}({ranges_string})")
     printt()
 
+def make_chapter_info_subheading(state: State) -> str:
+    infos = ChapterInfo.make_chapter_infos(state.project)
+    if len(infos) == 1:
+        return ""
+    strings = make_chapter_info_strings( infos, list(range(len(infos))) )
+    string = "\n".join(strings)
+    string += "\n" # extra line
+    return string
 
-def print_chapter_segment_info(infos: list[ChapterInfo]) -> None:
-    for i, info in enumerate(infos):
-        if info.num_files_missing == 0:
-            desc = "all lines generated"
-        else:
-            desc = f"{info.num_files_exist} of {info.num_segments} lines generated"
-        s = f"File {i+1}: lines {info.segment_index_start + 1}-{info.segment_index_end + 1}"
-        if desc:
-            s += f" {COL_DIM}({desc})"
-        printt(s)
-    printt()
+def make_chapter_info_strings(infos: list[ChapterInfo], indices: list[int]) -> list[str]:
+    lst = []
+    for index in indices:
+        s = make_chapter_info_string(infos[index], index)
+        lst.append(s)
+    return lst
+
+def make_chapter_info_string(info: ChapterInfo, index: int) -> str:
+    s = f"{COL_DEFAULT}Chapter file {index+1}:{COL_DIM} line {info.segment_index_start + 1} to {info.segment_index_end + 1} "
+    s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
+    return s
+

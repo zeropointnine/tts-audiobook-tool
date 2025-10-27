@@ -5,11 +5,20 @@ from tts_audiobook_tool.util import *
 
 
 class ChapterInfo:
-    def __init__(self, chapter_index: int, segment_index_start: int, segment_index_end: int, segment_index_to_path: dict[int, str]):
+    def __init__(
+            self,
+            chapter_index: int,
+            segment_index_start: int,
+            segment_index_end: int,
+            segment_index_to_path: dict[int, str]
+    ):
         self.chapter_index = chapter_index
         self.segment_index_start = segment_index_start
         self.segment_index_end = segment_index_end
         self.segment_index_to_path = segment_index_to_path
+
+    def __str__(self) -> str:
+        return f"<ChapterInfo - index {self.chapter_index} start {self.segment_index_start} end {self.segment_index_end} num exist {self.num_files_exist} num missing {self.num_files_missing}>"
 
     @property
     def num_segments(self) -> int:

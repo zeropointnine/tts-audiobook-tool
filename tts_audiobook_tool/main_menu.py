@@ -128,7 +128,7 @@ def make_text_label(state: State) -> str:
 
 def on_text(state: State, __) -> None:
     if not state.prefs.project_dir:
-        print_feedback("Requires project")
+        print_feedback("Requires project", is_error=True)
         return
     if not state.project.text_segments:
         TextSubmenu.set_text_menu(state)
@@ -150,10 +150,10 @@ def make_gen_label(state: State) -> str:
 
 def on_gen(state: State, __) -> None:
     if not state.project.can_voice:
-        print_feedback("Requires voice clone sample")
+        print_feedback("Requires voice clone sample", is_error=True)
         return
     if len(state.project.text_segments) == 0:
-        print_feedback("Requires text")
+        print_feedback("Requires text", is_error=True)
         return
     GenerateSubmenu.menu(state)
 
@@ -185,10 +185,10 @@ def make_realtime_label(state: State) -> str:
 
 def on_realtime(state: State, __) -> None:
     if not state.project.text_segments:
-        print_feedback("Requires text")
+        print_feedback("Requires text", is_error=True)
         return
     if not state.project.can_voice:
-        print_feedback("Requires voice clone sample")
+        print_feedback("Requires voice clone sample", is_error=True)
         return
     RealTimeSubmenu.menu(state)
 

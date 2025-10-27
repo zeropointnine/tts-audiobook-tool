@@ -41,7 +41,7 @@ class VoiceOuteSubmenu:
                 AskUtil.ask_error(result)
                 return
             project.set_oute_voice_and_save(result, "default")
-            print_feedback("Voice clone set.")
+            print_feedback("Voice clone set")
 
         items = [
             MenuItem(
@@ -111,4 +111,4 @@ def ask_load_oute_json(project: Project):
         return
 
     project.set_oute_voice_and_save(result, Path(path).stem)
-    print_feedback("Voice clone set.")
+    print_feedback("Voice clone set")

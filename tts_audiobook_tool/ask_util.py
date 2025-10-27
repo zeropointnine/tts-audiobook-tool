@@ -81,7 +81,7 @@ class AskUtil:
             return AskUtil.ask_hotkey_vanilla(message, lower)
 
         if message:
-            printt(message)
+            printt(message.strip() + " ", end="") # cursor is positioned to right of message
 
         if not DEV:
             clear_input_buffer()
@@ -97,6 +97,9 @@ class AskUtil:
 
         if False:
             print("Hotkey: ", repr(s)) # print escaped string
+
+        if message:
+            printt()
 
         if lower:
             s = s.lower()

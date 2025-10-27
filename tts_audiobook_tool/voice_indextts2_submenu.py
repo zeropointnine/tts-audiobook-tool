@@ -2,8 +2,8 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -116,10 +116,12 @@ class VoiceIndexTts2Submenu:
     @staticmethod
     def fp16_menu(state: State) -> None:
 
-        def on_item(_, b: bool) -> bool:
-            state.project.indextts2_use_fp16 = b
-            state.project.save()
-            print_feedback(f"FP16 set to: {state.project.indextts2_use_fp16}")
+        def on_item(_, item: MenuItem) -> bool:
+            if state.project.indextts2_use_fp16 != item.data:
+                state.project.indextts2_use_fp16 = item.data
+                state.project.save()
+                Tts.set_model_params_using_project(state.project) # sync to global
+            print_feedback(f"FP16 set to:", str(state.project.indextts2_use_fp16))
             return True
 
         items = [
@@ -128,7 +130,7 @@ class VoiceIndexTts2Submenu:
         ]
         MenuUtil.menu(
             state,
-            "Insert page turn sound effect at section breaks",
+            "FP16",
             items,
             hint=HINT_SECTION_SOUND_EFFECT,
             one_shot=True
@@ -154,4 +156,4 @@ def ask_vector(project: Project) -> None:
     else:
         project.indextts2_emo_vector = result
         project.save()
-        print_feedback(f"Emotion vector saved: {project.emo_vector_to_string()}")
+        print_feedback("Emotion vector saved:", project.emo_vector_to_string())

@@ -89,7 +89,7 @@ class RealTimeSubmenu:
             value = f"{result[0]}-{result[1]}"
             if result[1] == len(text_segments):
                 value += " (end)"
-        print_feedback(f"Line range set to: {value}")
+        print_feedback("Line range set:", value)
 
 
     @staticmethod
@@ -100,20 +100,20 @@ class RealTimeSubmenu:
             if state.real_time.custom_text_segments:
                 state.real_time.custom_text_segments = []
                 state.real_time.line_range = None
-            print_feedback("Text source set to: project")
+            print_feedback("Text source set to", "project")
 
         project_item = MenuItem("Use project text", on_project)
 
         # 2, 3
-        def on_custom(_, data) -> None:
-            if data == "file":
+        def on_custom(_, item: MenuItem) -> None:
+            if item.data == "file":
                 text_segments, _ = AppUtil.get_text_segments_from_ask_text_file()
             else:
                 text_segments, _ = AppUtil.get_text_segments_from_ask_std_in()
             if text_segments:
                 state.real_time.custom_text_segments = text_segments
                 state.real_time.line_range = None
-                print_feedback(f"Text source set to: custom, {len(text_segments)} lines")
+                print_feedback("Text source set to: custom", f"{len(text_segments)} lines")
 
         custom_file_item = MenuItem("Custom text - from text file", on_custom, data="file")
         custom_manual_item = MenuItem("Custom text - manual input", on_custom, data="manual")

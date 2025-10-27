@@ -46,7 +46,7 @@ class OptionsSubmenu:
         items = [
             MenuItem(
                 make_whisper_label,
-                lambda _, __: OptionsSubmenu.transcription_model_submenu(state)
+                lambda _, __: OptionsSubmenu.transcription_model_menu(state)
             ),
             MenuItem(
                 make_section_break_label,
@@ -59,18 +59,18 @@ class OptionsSubmenu:
 
 
     @staticmethod
-    def transcription_model_submenu(state: State) -> None:
+    def transcription_model_menu(state: State) -> None:
 
         def make_heading(_) -> str:
             value = make_currently_string(state.prefs.stt_variant.value[0])
             return f"Select Whisper transcription model {value}"
 
-        def handler(_, data: Any) -> bool:
-            if not data or not isinstance(data, SttVariant):
+        def handler(_, item: MenuItem) -> bool:
+            if not item.data or not isinstance(item.data, SttVariant):
                 return False
-            state.prefs.stt_variant = data
+            state.prefs.stt_variant = item.data
             Stt.set_variant(state.prefs.stt_variant) # sync global value
-            print_feedback(f"Whisper transcription model set to: {state.prefs.stt_variant.id}")
+            print_feedback(f"Whisper transcription model set to:", state.prefs.stt_variant.id)
             return True
 
         menu_items = []
@@ -84,9 +84,12 @@ class OptionsSubmenu:
     @staticmethod
     def section_break_menu(state: State) -> None:
 
-        def on_item(_, b: bool) -> bool:
-            state.prefs.use_section_sound_effect = b
-            print_feedback(f"Section break sound effect has been set to: {state.prefs.use_section_sound_effect}")
+        def on_item(_, item: MenuItem) -> bool:
+            state.prefs.use_section_sound_effect = item.data
+            print_feedback(
+                "Section break sound effect has been set to:",
+                str(state.prefs.use_section_sound_effect)
+            )
             return True
 
         items = [

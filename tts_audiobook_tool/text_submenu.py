@@ -25,7 +25,6 @@ class TextSubmenu:
 
     @staticmethod
     def set_text_menu(state: State) -> None:
-
         items = [
             MenuItem("Import from text file", on_set_text, data="import"),
             MenuItem("Manually enter/paste text", on_set_text, data="manual")
@@ -46,10 +45,10 @@ def on_ask_replace(state: State, _) -> None:
     if AskUtil.ask_confirm(s):
         TextSubmenu.set_text_menu(state)
 
-def on_set_text(state, typ: str) -> bool:
-    if typ == "import":
+def on_set_text(state, item: MenuItem) -> bool:
+    if item.data == "import":
         text_segments, raw_text = AppUtil.get_text_segments_from_ask_text_file()
-    elif typ == "manual":
+    elif item.data == "manual":
         text_segments, raw_text = AppUtil.get_text_segments_from_ask_std_in()
     else:
         return False

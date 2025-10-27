@@ -83,7 +83,7 @@ def ask_model_path(project: Project) -> None: # type: ignore
         print_feedback("Already set")
         return
     if dir_path and not os.path.exists(dir_path):
-        print_feedback("No such directory", color_code=COL_ERROR)
+        print_feedback("No such directory", is_error=True)
         return
     apply_model_path_and_validate(project, dir_path)
 
@@ -108,7 +108,7 @@ def apply_model_path_and_validate(project: Project, path: str) -> None: # type: 
 
     try:
         _ = Tts.get_vibevoice()
-        print_feedback(f"\nCustom model path set: {path}")
+        print_feedback("\nCustom model path set:", path)
 
     except (OSError, Exception) as e:
         # Revert change

@@ -16,7 +16,7 @@ class ProjectSubmenu:
         def on_new(_, __) -> bool:
             did = ProjectSubmenu.ask_and_set_new_project(state)
             if did:
-                print_feedback(f"Project directory set: {state.project.dir_path}")
+                print_feedback("Project directory set:", state.project.dir_path)
                 return True
             return False
 
@@ -24,7 +24,7 @@ class ProjectSubmenu:
         def on_existing(_, __) -> bool:
             did = ProjectSubmenu.ask_and_set_existing_project(state)
             if did:
-                print_feedback(f"Project directory set: {state.project.dir_path}")
+                print_feedback("Project directory set:", state.project.dir_path)
                 AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
                 return True
             return False

@@ -19,7 +19,7 @@ class VoiceSubmenuShared:
         MenuUtil.menu(
             state=state,
             heading="Voice clone and model settings",
-            menu_items=items,
+            items=items,
             on_exit=lambda: SoundFileUtil.stop_sound_async()
         )
 
@@ -146,7 +146,8 @@ class VoiceSubmenuShared:
     @staticmethod
     def make_clear_voice_item(state: State, info_item: TtsModelInfos) -> MenuItem:
 
-        def on_clear_voice(_, info_item: TtsModelInfos) -> None:
+        def on_clear_voice(_, item: MenuItem) -> None:
+            info_item: TtsModelInfos = item.data
             state.project.clear_voice_and_save(info_item, is_secondary=False)
             print_feedback("Cleared")
 
@@ -177,17 +178,17 @@ class VoiceSubmenuShared:
             # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
             value = float(value)
         except Exception as e:
-            print_feedback("Bad value", color_code=COL_ERROR)
+            print_feedback("Bad value", is_error=True)
             return
         if is_int:
             value = int(value)
         if not (lb <= value <= ub):
-            print_feedback("Out of range", color_code=COL_ERROR)
+            print_feedback("Out of range", is_error=True)
             return
 
         setattr(project, project_attr_name, value)
         project.save()
-        print_feedback(f"{success_prefix.strip()} {value}")
+        print_feedback(success_prefix, str(value))
 
     @staticmethod
     def make_parameter_value_string(

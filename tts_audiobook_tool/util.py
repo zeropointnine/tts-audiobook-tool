@@ -20,20 +20,25 @@ from tts_audiobook_tool.l import L
 Various small util functions, both app-specific and general
 """
 
-def printt(s: str="") -> None:
+def printt(s: str="", end=None) -> None:
     """
     App-standard way of printing to the console.
     (Doesn't do much extra or different at the moment)
     """
     s += Ansi.RESET
-    print(s)
+    print(s, end=end, flush=not bool(end))
 
-def print_feedback(message: str, color_code=COL_DIM, extra_line=True) -> None:
+def print_feedback(message: str, ending: str="", is_error=False, extra_line=True) -> None:
     """
-    Should be used for printing feedback after a setting has been changed
+    Should be used for printing feedback after an action is taken (eg a setting has been changed),
     and submenu is about to be re-printed.
     """
-    printt(color_code + message)
+    col = COL_ERROR if is_error else COL_DIM
+    s = Ansi.ITALICS +  col + message
+    if ending:
+        s = s.strip() + " " + Ansi.RESET + ending
+    printt(s)
+
     if extra_line:
         printt()
     if MENU_CLEARS_SCREEN:

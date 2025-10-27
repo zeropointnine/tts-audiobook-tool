@@ -92,8 +92,9 @@ class GenerateSubmenu:
         if did_interrupt:
             AskUtil.ask_enter_to_continue()
         else:
-            s = f"Press enter or {make_hotkey_string('C')} to concatenate files now: \a"
+            s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
             hotkey = AskUtil.ask_hotkey(s)
+            printt() # TODO revisit
             if hotkey == "c":
                 ConcatSubmenu.menu(state)
         return
