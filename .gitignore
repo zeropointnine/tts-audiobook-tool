@@ -3,5 +3,8 @@ __pycache__/
 venv*/
 .vscode/
 checkpoints/
+.python-version
+.DS_Store
+
 test*.py
 config_oute_dev.py

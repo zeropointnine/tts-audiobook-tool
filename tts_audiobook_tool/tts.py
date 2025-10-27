@@ -228,7 +228,7 @@ class Tts:
 
         if not Tts._indextts2:
 
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = Tts.get_best_torch_device() # "mps" does not seem to make a difference fyi
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
 
             printt(f"{Ansi.ITALICS}Initializing IndexTTS2 model ({device}, use_fp16: {use_fp16})")

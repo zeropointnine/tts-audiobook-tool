@@ -386,11 +386,11 @@ def clear_input_buffer() -> None:
         # Windows
         import msvcrt
         while msvcrt.kbhit(): # type: ignore
-            msvcrt.getch()
+            msvcrt.getch() # type: ignore
     except ImportError:
         # Linux/macos
         import termios
-        termios.tcflush(sys.stdin, termios.TCIOFLUSH) # type: ignore
+        termios.tcflush(sys.stdin, termios.TCIFLUSH) # type: ignore
 
 def get_string_printable_len(string: str) -> int:
     """

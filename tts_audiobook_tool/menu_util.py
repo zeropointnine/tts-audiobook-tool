@@ -116,7 +116,8 @@ class MenuUtil:
                 hotkey = AskUtil.ask_hotkey()
 
                 if AskUtil.is_readchar:
-                    should_return = hotkey in ["\r", "\x08", "\x1b"] and is_submenu # enter, backspace, escape
+                    # enter (windows), enter (mac), backspace, escape
+                    should_return = hotkey in ["\r", "\n", "\x08", "\x1b"] and is_submenu
                 else: # can't readchar
                     should_return = not hotkey
                 if should_return:
