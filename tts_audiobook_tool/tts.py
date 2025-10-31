@@ -43,7 +43,8 @@ class Tts:
                 tts_type = item
         if num_models == 0:
             s = "None of the supported TTS models are currently installed.\n"
-            s += "Please follow the install instructions in the project repo's README."
+            s = "Make sure your virtual environment is activated.\n"
+            s += "Otherwise, follow the install instructions in the project repo's README."
             return s
         elif num_models > 1:
             s = "More than one of the supported TTS model libraries is currently installed.\n"

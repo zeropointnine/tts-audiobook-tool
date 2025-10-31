@@ -28,13 +28,16 @@ def printt(s: str="", end=None) -> None:
     s += Ansi.RESET
     print(s, end=end, flush=not bool(end))
 
-def print_feedback(message: str, ending: str="", is_error=False, extra_line=True) -> None:
+def print_feedback(message: str, ending: str="", is_error=False, no_preformat=False,extra_line=True) -> None:
     """
     Should be used for printing feedback after an action is taken (eg a setting has been changed),
     and submenu is about to be re-printed.
     """
-    col = COL_ERROR if is_error else COL_DIM
-    s = Ansi.ITALICS +  col + message
+    if no_preformat:
+        s = ""
+    else:
+        col = COL_ERROR if is_error else COL_DIM
+        s = Ansi.ITALICS +  col + message
     if ending:
         s = s.strip() + " " + Ansi.RESET + ending
     printt(s)

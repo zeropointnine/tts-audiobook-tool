@@ -31,7 +31,7 @@ class ProjectSubmenu:
 
         # 3
         def make_view_label(_) -> str:
-            return f"View current project directory in OS UI {COL_DIM}({state.project.dir_path})"
+            return f"Show directory in OS UI {COL_DIM}({state.project.dir_path})"
 
         def on_view(_, __) -> None:
             err = DirOpenUtil.open(state.project.dir_path)

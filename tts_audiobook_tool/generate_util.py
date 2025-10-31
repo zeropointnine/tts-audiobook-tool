@@ -42,7 +42,7 @@ class GenerateUtil:
             "Regenerate" here simply means that the currently existing, failed file
             for the given index will be deleted first.
 
-        Prints feedback at end of each item
+        Prints feedback at end of each item, and summary at end of loop.
 
         Returns True if ended because interrupted
         """
@@ -128,19 +128,22 @@ class GenerateUtil:
         did_interrupt = SigIntHandler().did_interrupt
         SigIntHandler().clear()
 
-        printt()
-        printt(f"Elapsed: {duration_string(time.time() - start_time)}")
-        printt()
+        # Print summary
+        s = "\n"
+        if did_interrupt:
+            s += "Interrupted. "
+        s += f"Elapsed: {duration_string(time.time() - start_time)}\n"
+        s += "\n"
         ok = str(num_saved_ok)
         if num_saved_ok == len(items.items()):
             ok += " (all)"
-        printt(f"Num lines saved: {COL_OK}{ok}")
+        s += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_saved_with_error else ""
         if num_saved_with_error:
-            printt(f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}")
+            s += f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_error}{COL_DEFAULT}\n"
         if num_failed:
-            printt(f"Num lines failed to generate: {COL_ERROR}{num_failed}")
-        printt()
+            s += f"Num lines failed to generate: {COL_ERROR}{num_failed}{COL_DEFAULT}"
+        print(s)
 
         return did_interrupt
 
