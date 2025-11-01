@@ -29,9 +29,10 @@ class Ansi:
 
     RESET = "\033[0m"
 
-    CLEAR_SCREEN_HOME: str = "\033[2J\033[H"
-    SCREEN_HOME: str = "\x1b[1;1H"
     LINE_HOME: str = "\x1b[1G"
+    SCREEN_HOME: str = "\x1b[1;1H"
+    CLEAR_SCREEN_HOME: str = "\033[2J\033[H"
+    CLEAR_SCREEN_AND_SCROLLBACK = "\033[2J\033[3J\033[H"
 
     ERASE_REST_OF_LINE: str = "\033[K"
 

@@ -28,7 +28,13 @@ def printt(s: str="", end=None) -> None:
     s += Ansi.RESET
     print(s, end=end, flush=not bool(end))
 
-def print_feedback(message: str, ending: str="", is_error=False, no_preformat=False,extra_line=True) -> None:
+def print_feedback(
+        message: str,
+        ending: str="",
+        is_error=False,
+        no_preformat=False,
+        extra_line=True
+) -> None:
     """
     Should be used for printing feedback after an action is taken (eg a setting has been changed),
     and submenu is about to be re-printed.
@@ -52,15 +58,22 @@ def print_feedback(message: str, ending: str="", is_error=False, no_preformat=Fa
         time.sleep(0.5)
 
 
-def print_heading(s: str, dont_clear: bool=False) -> None:
+def print_heading(s: str, dont_clear: bool=False, non_menu: bool=False) -> None:
     """ """
     if MENU_CLEARS_SCREEN and not dont_clear:
         os.system('cls' if os.name == 'nt' else 'clear')
 
+    if non_menu:
+        color_a = COL_DIM
+        color_b = COL_DEFAULT
+    else:
+        color_a = COL_DEFAULT
+        color_b = COL_ACCENT
+
     length = get_string_printable_len(s)
-    printt("-" * length)
-    printt(f"{COL_ACCENT}{s}")
-    printt("-" * length)
+    printt(color_a  +  ("-" * length))
+    printt(f"{color_b}{s}")
+    printt(color_a  +  ("-" * length))
 
 def strip_quotes_from_ends(s: str) -> str:
     if len(s) >= 2:
@@ -311,17 +324,24 @@ def get_package_dir() -> str | None:
         return None
     return os.path.dirname(os.path.abspath(package.__file__))
 
-def get_unique_file_path(file_path: str) -> str:
+def make_unique_file_path(file_path: str) -> str:
     """
-    Generates a unique file path by adding incrementing numbers to stem if needed.
+    Creates a unique file path by adding "-1", "-2", "-3", etc to stem if needed.
     """
-    file_path = re.sub(r'-\d+$', '', file_path)
+    if not os.path.exists(file_path):
+        return file_path
+
     path = Path(file_path)
+    suffix = path.suffix
+    base_stem = re.sub(r'-\d+$', '', path.stem) # verify
     counter = 1
-    while path.exists():
-        path = path.with_stem(f"{path.stem}-{str(counter)}")
-        counter = 1
-    return str(path)
+
+    while True:
+        fn =  base_stem + "-" + str(counter) + suffix
+        new_path = path.with_name(fn)
+        if not os.path.exists(new_path):
+            return str(new_path)
+        counter += 1
 
 def is_long_path_enabled():
 

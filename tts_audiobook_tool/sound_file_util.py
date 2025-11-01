@@ -161,7 +161,7 @@ class SoundFileUtil:
             return "", "Is already an mp4/m4a file"
 
         dest_file_path = str(path.with_suffix(".m4a"))
-        dest_file_path = get_unique_file_path(dest_file_path)
+        dest_file_path = make_unique_file_path(dest_file_path)
 
         partial_command = FFMPEG_TYPICAL_OPTIONS[:]
         partial_command.extend(["-i", source_file_path])

@@ -219,7 +219,7 @@ class AppUtil:
         return xxhash.xxh3_64(string).hexdigest()
 
     @staticmethod
-    def calc_hash_file(path: str, with_progress: bool=False) -> tuple[str, str]:
+    def calc_hash_file(path: str, print_progress_text: str="") -> tuple[str, str]:
         """ Returns hash and error string, mutually exclusive"""
 
         if not os.path.exists(path):
@@ -228,6 +228,9 @@ class AppUtil:
             return "", f"Is not a file: {path}"
         if not os.access(path, os.R_OK):
             return "",  f"No read permission for file: {path}"
+
+        if print_progress_text:
+            print_progress_text = print_progress_text.strip()
 
         hasher = xxhash.xxh64()
         file_size = os.path.getsize(path)
@@ -241,12 +244,14 @@ class AppUtil:
                         break
                     hasher.update(chunk)
                     processed += len(chunk)
-                    print(f"\rHashing file: {processed/file_size:.1%}", end='')
+                    if print_progress_text:
+                        print(f"\r{print_progress_text} {processed/file_size:.1%} ", end='')
 
         except Exception as e:
             return "", f"Error while hashing file: {e}"
 
-        print("\r", end = "")  # Clear progress text
+        if print_progress_text:
+            print("\r", end = "")  # Clear progress text
 
         return hasher.hexdigest(), ""
 

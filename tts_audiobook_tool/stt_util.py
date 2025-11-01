@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import Generator, List
+from typing import Generator, List, NamedTuple
 import ffmpeg
 import numpy as np
 import difflib
+import math
 from tts_audiobook_tool.app_types import ConcreteWord, Word
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.timed_text_segment import TimedTextSegment
@@ -21,357 +22,245 @@ class SttUtil:
         text_segments: List[TextSegment],
         transcribed_words: List[Word],
         print_info: bool=True
-    ) -> List[TimedTextSegment]:
+    ) -> tuple[ List[TimedTextSegment], bool ]:
         """
-        Aligns TextSegments with Words to create TimedTextSegments.
+        Force-alignment algorithm
+        Takes in source text list of TextSegments and list of transcribed Words
+        to create list of TimedTextSegments.
+
+        Returns list and if did interrupt
         """
-        results: List[TimedTextSegment] = []
+
+        result: List[TimedTextSegment] = []
 
         if not text_segments:
-            return []
-        if not transcribed_words: # If no transcript, all segments get 0 time
+            return [], False
+        if not transcribed_words:
+            # If no transcript, all segments get 0 time
             for seg in text_segments:
-                results.append(TimedTextSegment(
+                result.append(TimedTextSegment(
                     seg.text, seg.index_start, seg.index_end, 0.0, 0.0
                 ))
-            return results
+            return result, False
 
+        if DEBUG:
+            # Clear screen and scrollback, print the lists
+            print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK)
+            print("\nsource text:\n")
+            for i, item in enumerate(text_segments):
+                print(i, item.text.strip())
+            s = ""
+            for item in transcribed_words:
+                s += item.word + " "
+            s = normalize_text(s)
+            print(f"\ntranscribed text:\n{s}\n")
 
-        # Minimum SequenceMatcher ratio to consider a match
-        MIN_MATCH_RATIO = 0.6
+        SigIntHandler().set("thinking")
 
-        # Max words from transcript to check for one segment. Dynamic based on segment length.
-        # Example: if segment has 10 words, look ahead up to (10*1.5 + 10) = 25 transcribed words.
-        # This helps balance accuracy with performance.
-        MAX_LOOKAHEAD_FACTOR = 1.5
+        debug_start_time = time.time()
 
-        # Increased for potentially more ASR noise
-        MAX_LOOKAHEAD_CONSTANT = 20
-
-        # Ensure we at least look at a few words for very short segments
-        MIN_LOOKAHEAD = 5
-
-        # Whisper can emit pure hallucinations for a given segment of audio,
-        # so must have a value which accounts for the amount of text that can
-        # hallucinated in whisper transcription chunk
-        # We're currently using 30-second chunks
-
-        # Max number of transcribed words to "skip" at the current position to find a match for the current text_segment.
-        MAX_SKIPPABLE_TRANSCRIPT_WORDS_PER_SEGMENT = 75 # 30
-
+        max_skip_words = MAX_SKIP_WORDS_BASE
+        current_skip_span = 0 # for debugging
 
         # Pointer for transcribed_words
-        current_trans_idx = 0
+        cursor = 0
 
-        for segment_idx, segment in enumerate(text_segments):
 
-            if print_info and results:
-                printt(results[-1].pretty_string(segment_idx-1))
+        for segment_index, segment in enumerate(text_segments):
 
-            norm_segment_text = normalize_text(segment.text)
+            if SigIntHandler().did_interrupt:
+                SigIntHandler().clear()
+                return [], True
 
-            if not norm_segment_text: # Empty segment text after normalization
-                results.append(TimedTextSegment(
+            segment_text_normed = normalize_text(segment.text)
+            segment_num_words = len(segment_text_normed.split())
+
+            if not segment_text_normed: # Empty segment text after normalization
+                result.append(TimedTextSegment(
                     segment.text, segment.index_start, segment.index_end, 0.0, 0.0
                 ))
                 continue
 
-            segment_words_count = len(norm_segment_text.split())
+            best_match: MatchInfo | None = None
 
-            # Stores (start_trans_idx, end_trans_idx_inclusive, ratio) for the best match found for this segment
-            # across all attempted start offsets in transcribed_words.
-            overall_best_match_for_segment = None
+            # Outer loop slides the transcribed word starting index
+            # from `cursor` to some number of words to the right
 
-            # Determine how far we can try to shift the start of the search in transcribed_words.
-            # We search from current_trans_idx up to current_trans_idx + MAX_SKIPPABLE_TRANSCRIPT_WORDS_PER_SEGMENT.
-            # The loop iterates over the offset from current_trans_idx.
-            max_offset = MAX_SKIPPABLE_TRANSCRIPT_WORDS_PER_SEGMENT
+            trans_index_start_min = cursor
+            trans_index_start_max = cursor + max_skip_words
+            trans_index_start_max = min(trans_index_start_max, len(transcribed_words))
 
-            # Ensure we don't try to start searches beyond the end of transcribed_words
-            # The number of possible start points to check.
-            num_potential_starts = min(
-                max_offset + 1, # +1 because we check offset 0 up to max_offset
-                len(transcribed_words) - current_trans_idx # Don't go past available words
-            )
-            if num_potential_starts < 0: # current_trans_idx might be >= len(transcribed_words)
-                num_potential_starts = 0
+            for trans_index_start in range(trans_index_start_min, trans_index_start_max):
 
-            for start_offset in range(num_potential_starts):
-                actual_search_start_trans_idx = current_trans_idx + start_offset
+                phrase_length_min = int(segment_num_words * 0.75) or 1
+                extra = int(segment_num_words * 0.25)
+                extra = max(extra, 2)
+                phrase_length_max = segment_num_words + extra
 
-                if actual_search_start_trans_idx >= len(transcribed_words): # Should be caught by num_potential_starts logic, but defensive
-                    break
+                # Inner loop slides the transcribed word ending index
+                # in a range relatively close to the source text segment word length
 
-                # --- Inner logic to find best match for this segment starting at actual_search_start_trans_idx ---
-                best_ratio_for_this_start_point = 0.0
-                match_info_for_this_start_point = None # (start_idx, end_idx_inclusive, ratio)
+                trans_index_end_min = trans_index_start + phrase_length_min
+                trans_index_end_max = trans_index_start + phrase_length_max
+                trans_index_end_max = min(trans_index_end_max, len(transcribed_words))
 
-                dynamic_lookahead_limit = int(segment_words_count * MAX_LOOKAHEAD_FACTOR) + MAX_LOOKAHEAD_CONSTANT
-                if dynamic_lookahead_limit < MIN_LOOKAHEAD:
-                    dynamic_lookahead_limit = MIN_LOOKAHEAD
+                for trans_index_end in range(trans_index_end_min, trans_index_end_max):
 
-                for k in range(1, dynamic_lookahead_limit + 1):
-                    potential_trans_end_exclusive = actual_search_start_trans_idx + k
-                    if potential_trans_end_exclusive > len(transcribed_words):
-                        break
-
-                    current_trans_word_objects = transcribed_words[actual_search_start_trans_idx : potential_trans_end_exclusive]
-                    if not current_trans_word_objects: continue
-
-                    norm_current_trans_text = " ".join(
-                        normalize_text(tw.word) for tw in current_trans_word_objects
+                    trans_words = transcribed_words[trans_index_start : trans_index_end]
+                    if not trans_words:
+                        continue
+                    trans_text_normed = " ".join(
+                        normalize_text(item.word) for item in trans_words
                     )
-                    if not norm_current_trans_text: continue
+                    if not trans_text_normed:
+                        continue
 
-                    matcher = difflib.SequenceMatcher(None, norm_segment_text, norm_current_trans_text)
-                    ratio = matcher.ratio()
+                    # Prepend previous word to respective text chunk
+                    # to help prevent false positives on short text segments
+                    # Note, this may prevent correct "free-standing" matches from passing,
+                    # but still, should do more good than harm
+                    modded_segment_text_normed = segment_text_normed
+                    modded_trans_text_normed = trans_text_normed
 
-                    if ratio > best_ratio_for_this_start_point:
-                        best_ratio_for_this_start_point = ratio
-                        match_info_for_this_start_point = (
-                            actual_search_start_trans_idx,
-                            potential_trans_end_exclusive - 1,
-                            ratio
+                    if cursor > 0 and trans_index_start > 0:
+                        previous_segment = text_segments[segment_index - 1]
+                        previous_segment_word = normalize_text(previous_segment.text).split(" ")[-1]
+                        previous_segment_word = normalize_text(previous_segment_word)
+
+                        previous_trans_word = transcribed_words[cursor - 1].word
+                        previous_trans_word = normalize_text(previous_trans_word)
+
+                        if previous_segment_word and previous_trans_word:
+                            modded_segment_text_normed = previous_segment_word + " " + segment_text_normed
+                            modded_trans_text_normed = previous_trans_word + " " + trans_text_normed
+
+                    matcher = difflib.SequenceMatcher(None, modded_segment_text_normed, modded_trans_text_normed)
+                    score = matcher.ratio()
+
+                    if not best_match or score > best_match.score:
+
+                        # A better match has been found
+                        best_match = MatchInfo(
+                            trans_index_start=trans_index_start,
+                            trans_index_end=trans_index_end,
+                            trans_text=trans_text_normed,
+                            score=score
                         )
-                # --- End of inner logic ---
+                        current_skip_span = trans_index_start - trans_index_start_min
 
-                if match_info_for_this_start_point:
-                    current_ratio = match_info_for_this_start_point[2]
-                    if overall_best_match_for_segment is None or \
-                       current_ratio > overall_best_match_for_segment[2]:
-                        overall_best_match_for_segment = match_info_for_this_start_point
-                    # If ratios are identical, the loop order (smaller start_offset first) implicitly prefers earlier matches.
 
-                # Optimization: If a very good match is found, no need to slide further for this segment.
-                if overall_best_match_for_segment and overall_best_match_for_segment[2] > 0.95:
-                    break # Break from the start_offset loop
+            def print_result(is_success: bool): # yes rly
+                printt(f"line {segment_index + 1}/{len(text_segments)}")
+                printt(f"{COL_DIM}    source text: {pretty_truncate(segment_text_normed, 50)}")
+                if best_match:
+                    printt(f"{COL_DIM}    transcribed: {pretty_truncate(best_match.trans_text, 50)}")
+                s = f"{COL_DIM}    score: {best_match.score if best_match else 0}"
+                if is_success:
+                    s += f" - {COL_OK}OK"
+                else:
+                    s += f" - {COL_ERROR}Failed"
+                printt(s)
+                printt()
 
-            # After checking all potential start_offsets for the current segment:
-            if overall_best_match_for_segment and overall_best_match_for_segment[2] >= MIN_MATCH_RATIO:
-                match_start_idx, match_end_idx_inclusive, _ = overall_best_match_for_segment
-                start_time = transcribed_words[match_start_idx].start
-                end_time = transcribed_words[match_end_idx_inclusive].end
 
-                # Sanity check for timestamps (should hold if transcribed_words are valid)
-                if end_time < start_time:
-                    # This can happen if a single transcribed word has end < start (bad data)
-                    # or if the match is very short and ASR timestamps are noisy.
-                    # Defaulting to 0,0 if this occurs, or could use start_time for both.
-                    # For now, let's trust the input timestamps unless this is a problem.
-                    # If it's a single word match, end_time might just be slightly off.
-                    # A robust way: if end_time < start_time, use start_time for end_time for single word.
-                    # If multiple words, this is a bigger issue.
-                    # Given monotonic assumption, this should mostly occur for single word segments where tw.end < tw.start
-                    if match_start_idx == match_end_idx_inclusive and transcribed_words[match_start_idx].end < transcribed_words[match_start_idx].start:
-                        end_time = start_time # Make it a zero-duration event at start
-                    # else if multiple words, this is a more serious data issue. For now, proceed.
-                    # Or default to 0,0. Let's be slightly more conservative:
-                    # If end_time is genuinely less than start_time, indicates a problem.
-                    # We'll set to 0,0 as per the "no good match" fallback.
-                    # However, the problem implies timestamps are monotonically increasing for *successive items*.
-                    # And for a single item, end >= start.
-                    # Let's assume good ASR data, so end_time >= start_time.
+            if best_match and best_match.score >= MIN_MATCH_RATIO:
 
-                results.append(TimedTextSegment(
-                    segment.text, segment.index_start, segment.index_end,
-                    start_time, end_time # Assuming end_time >= start_time after potential correction below
+                # Add successful result
+                start_time = transcribed_words[best_match.trans_index_start].start
+                # Setting end-time to the start of last word + 1
+                # rather than the end-time of the last word.
+                # This is cleaner due to the very inaccurate end-time reported by whisper but yea
+                if best_match.trans_index_end < len(transcribed_words):
+                    end_time = transcribed_words[best_match.trans_index_end].start
+                else:
+                    end_time = transcribed_words[best_match.trans_index_end - 1].end
+                result.append(
+                    TimedTextSegment(
+                        segment.text,
+                        segment.index_start,
+                        segment.index_end,
+                        start_time,
+                        end_time
                 ))
-                # Advance current_trans_idx to after the consumed words for the next segment
-                current_trans_idx = match_end_idx_inclusive + 1
+
+                if print_info:
+                    print_result(True)
+
+                # Advance cursor
+                cursor = best_match.trans_index_end # rem, "trans_index_end" is EX-clusive
+
+                # Reset max-skip-words
+                max_skip_words = MAX_SKIP_WORDS_BASE
+
+                if DEBUG:
+                    print(f"had to skip {current_skip_span} words")
+                    print(f"cursor is now: [{cursor+1}] {print_upcoming_words(transcribed_words, cursor)}")
+                    print()
+
             else:
-                # No good match found for this segment, even after trying to skip some transcript words
-                results.append(TimedTextSegment(
-                    segment.text, segment.index_start, segment.index_end,
-                    0.0, 0.0
-                ))
-                # IMPORTANT: current_trans_idx is NOT advanced.
-                # The next text_segment will try to match from the same current_trans_idx.
-                # This allows skipping over text_segments that don't align well with the current
-                # part of the transcript, or if the transcript has gaps.
 
-            # Ensure we don't get stuck if current_trans_idx reaches the end
-            if current_trans_idx >= len(transcribed_words):
-                # Fill remaining text_segments with 0.0 times
-                for remaining_segment_idx in range(segment_idx + 1, len(text_segments)):
-                    remaining_seg = text_segments[remaining_segment_idx]
-                    results.append(TimedTextSegment(
+                # No good match found for this segment
+                # Add 'empty' result, do NOT advance cursor
+                result.append(
+                    TimedTextSegment(segment.text, segment.index_start, segment.index_end, 0.0, 0.0)
+                )
+
+                if print_info:
+                    print_result(False)
+
+                # Idea here is to ensure the advancing source text segments can't "outrun" the
+                # transcribed text. Could slow search loop to a crawl under worst circumstances.
+                # May need to revisit.
+                max_skip_words += len( segment.text.split(" ") )
+
+                if DEBUG:
+                    print(f"max_skip_words has increased to: {max_skip_words}")
+                    print(f"cursor stays at: [{cursor+1}] {print_upcoming_words(transcribed_words, cursor)}")
+                    print()
+
+            # ---
+
+            if cursor >= len(transcribed_words) - 1:
+                # Reached end of transcription
+                # Add remaining text_segments with zeroed timestamps
+                for remaining_segment_index in range(segment_index + 1, len(text_segments)):
+                    remaining_seg = text_segments[remaining_segment_index]
+                    result.append(TimedTextSegment(
                         remaining_seg.text, remaining_seg.index_start, remaining_seg.index_end, 0.0, 0.0
                     ))
-                break # All transcribed words have been processed (or attempted)
+                break
 
-        return results
+        if DEBUG:
+            elapsed_sec = (time.time() - debug_start_time)
+            printt(f"\nElapsed: {elapsed_sec}\n")
 
+            for i, item in enumerate(result):
+                printt(f"{i}  {item.pretty_string}")
+            printt()
 
-    @staticmethod
-    def make_timed_text_segments_2(chunks: list[str], min_shared_words: int = 5, debug: bool = False) -> str:
-        """
-        Intelligently stitches together a list of overlapping text chunks.
-
-        Args:
-            chunks: A list of strings, where each string is a text chunk.
-            min_shared_words: The minimum number of words an overlap must have to be considered for stitching.
-            debug: If True, prints detailed step-by-step information.
-
-        Returns:
-            A single string with the chunks stitched together.
-        """
-        if not chunks:
-            return ""
-
-        # Normalize chunks: split into words, then filter out empty word lists from empty/whitespace chunks
-        processed_chunks_words = []
-        for i, chunk_text in enumerate(chunks):
-            if not chunk_text or not chunk_text.strip():
-                if debug: print(f"Chunk {i} is empty or whitespace-only, skipping.")
-                continue
-            processed_chunks_words.append(chunk_text.split())
-
-        if not processed_chunks_words:
-            return ""
-        if len(processed_chunks_words) == 1:
-            return " ".join(processed_chunks_words[0])
-
-        stitched_words = list(processed_chunks_words[0]) # Start with the first valid chunk's words
-
-        for i in range(1, len(processed_chunks_words)):
-            current_chunk_words = processed_chunks_words[i]
-
-            if debug:
-                print(f"\n>>> Processing chunk {i+1}/{len(processed_chunks_words)} (original index may vary due to empty chunk filtering) >>>")
-                # print(f"  Stitched so far (ends): '...' + '{' '.join(stitched_words[-20:])}'")
-                # print(f"  Current chunk (starts): '{' '.join(current_chunk_words[:20])}' + '...'")
-
-            stitch_info = SttUtil._find_best_stitch_indices(stitched_words, current_chunk_words, debug=debug)
-
-            if stitch_info['size'] >= min_shared_words:
-                # Perform the stitch: words1[:a] + words2[b:]
-                # This means we take words from 'stitched_words' up to index 'a' (exclusive),
-                # and then append words from 'current_chunk_words' starting from index 'b' (inclusive).
-                # The common part words1[a:a+size] is effectively replaced by words2[b:b+size].
-
-                prefix_from_stitched = stitched_words[:stitch_info['a']]
-                suffix_from_current = current_chunk_words[stitch_info['b']:]
-
-                stitched_words = prefix_from_stitched + suffix_from_current
-                if debug:
-                    print(f"  Stitched: Kept {stitch_info['a']} words from previous, took from word {stitch_info['b']} of current.")
-                    # print(f"    New stitched end: '...' + '{' '.join(stitched_words[-20:])}'")
-            else:
-                if debug:
-                    print(f"  Overlap too short (size {stitch_info['size']} < {min_shared_words}) or no good match. Appending full chunk.")
-                # Fallback: If no good overlap, just append the whole current chunk.
-                # This might result in duplicated text if min_shared_words is too high
-                # or if overlap is very messy.
-                stitched_words.extend(current_chunk_words)
-
-        return " ".join(stitched_words)
+        SigIntHandler().clear()
+        return result, False
 
     @staticmethod
-    def _find_best_stitch_indices(words1: list[str], words2: list[str], debug: bool = False):
-        """
-        Finds the best way to stitch words2 after words1 by identifying a common sequence.
-
-        The method identifies a common block (words1[a:a+size] == words2[b:b+size])
-        and suggests stitching as words1[:a] + words2[b:].
-
-        Returns a dictionary: {'a': index in words1 where common block starts,
-                            'b': index in words2 where common block starts,
-                            'size': length of the common block,
-                            'score': quality score of this stitch}
-        """
-        if not words1 or not words2: # Should not happen if called correctly
-            return {'a': len(words1), 'b': 0, 'size': 0, 'score': -float('inf')}
-
-        matcher = difflib.SequenceMatcher(None, words1, words2, autojunk=False)
-
-        # Initialize with a default that implies no stitching (append full words2)
-        # and a very low score.
-        best_indices_and_score = {
-            'a': len(words1),
-            'b': 0,
-            'size': 0,
-            'score': -float('inf')
-        }
-
-        if debug:
-            print(f"\n--- Finding stitch for w1 (ends '...' + '{' '.join(words1[-15:])}') and w2 (starts '{' '.join(words2[:15])}' + '...') ---")
-
-        # get_matching_blocks() returns tuples (i, j, n)
-        # where words1[i:i+n] == words2[j:j+n]
-        # The last block is a dummy (len(words1), len(words2), 0).
-        for block in matcher.get_matching_blocks():
-            a, b, size = block.a, block.b, block.size
-
-            if size == 0: # No match or end of useful blocks
-                continue
-
-            # tail1_len: Words in words1 *after* the common block. Should be small.
-            tail1_len = len(words1) - (a + size)
-
-            # head2_len: Words in words2 *before* the common block. Should be small.
-            head2_len = b
-
-            # Score: Higher is better.
-            # Prioritize long matches (size).
-            # Penalize if the match is not at the very end of words1 (tail1_len > 0).
-            # Penalize if the match is not at the very start of words2 (head2_len > 0).
-            # Weighting size more heavily can make it prefer substantial overlaps
-            # even if they aren't perfectly flush at the ends.
-            current_score = (size * 2) - tail1_len - head2_len
-            # A simpler score: current_score = size - tail1_len - head2_len
-
-            if debug:
-                matched_w1_text = ' '.join(words1[a : a + size])
-                print(f"  Block: a={a}, b={b}, size={size}. Match: '{matched_w1_text[:50]}...'")
-                print(f"         tail1_len={tail1_len}, head2_len={head2_len}, Calculated Score={current_score}")
-
-            # Update if this block gives a better score.
-            # Tie-breaking: if scores are equal, prefer larger 'size'.
-            # If still equal, prefer smaller 'b' (match starts earlier in words2).
-            # If still equal, prefer larger 'a' (match uses later part of words1).
-            if current_score > best_indices_and_score['score']:
-                best_indices_and_score = {'a': a, 'b': b, 'size': size, 'score': current_score}
-                if debug: print(f"    New best (score): {best_indices_and_score}")
-            elif current_score == best_indices_and_score['score']:
-                if size > best_indices_and_score['size']:
-                    best_indices_and_score = {'a': a, 'b': b, 'size': size, 'score': current_score}
-                    if debug: print(f"    New best (same score, better size): {best_indices_and_score}")
-                elif size == best_indices_and_score['size']:
-                    if b < best_indices_and_score['b']:
-                        best_indices_and_score = {'a': a, 'b': b, 'size': size, 'score': current_score}
-                        if debug: print(f"    New best (same score & size, better b): {best_indices_and_score}")
-                    elif b == best_indices_and_score['b'] and a > best_indices_and_score['a']:
-                        best_indices_and_score = {'a': a, 'b': b, 'size': size, 'score': current_score}
-                        if debug: print(f"    New best (same score, size, b; better a): {best_indices_and_score}")
-
-        if debug and best_indices_and_score['size'] > 0:
-            print(f"--- Best stitch chosen: a={best_indices_and_score['a']}, b={best_indices_and_score['b']}, size={best_indices_and_score['size']}, score={best_indices_and_score['score']}")
-            if best_indices_and_score['a'] < len(words1) : # to avoid index out of bounds if a = len(words1)
-                print(f"    Keep from w1 (ends): '...' + '{' '.join(words1[max(0, best_indices_and_score['a']-10):best_indices_and_score['a']])}'")
-            else:
-                print(f"    Keep from w1: All of w1")
-
-            print(f"    Overlap in w1: '{' '.join(words1[best_indices_and_score['a'] : best_indices_and_score['a'] + best_indices_and_score['size']])[:100]}...'")
-            print(f"    Overlap in w2: '{' '.join(words2[best_indices_and_score['b'] : best_indices_and_score['b'] + best_indices_and_score['size']])[:100]}...'")
-            print(f"    Append from w2 (starts): '{' '.join(words2[best_indices_and_score['b']:best_indices_and_score['b']+10])}' + '...'")
-
-        return best_indices_and_score
-
-    @staticmethod
-    def transcribe_to_words(path: str) -> list[Word]:
+    def transcribe_to_words(path: str) -> list[Word] | None:
         """
         Creates a list of Word instances by transcribing the audio at the given file path
+        Returns None if interrupted
         """
         list_of_lists = SttUtil._transcribe_stream_with_overlap(path)
+        if list_of_lists is None: # got interrupted
+            return None
         words_list = SttUtil._stitch_transcripts(list_of_lists)
         return words_list
 
     @staticmethod
-    def _transcribe_stream_with_overlap(path: str) -> list[list[Word]]:
+    def _transcribe_stream_with_overlap(path: str) -> list[list[Word]] | None:
         """
         Transcribes audio file of any length using "stream with overlap".
         The resulting data will have overlapping data on each end,
         which will need to be reconciled/merged.
+
+        Returns None if interrupted
         """
 
         CHUNK_DURATION = 30
@@ -385,6 +274,9 @@ class SttUtil:
         if value:
             duration_str = duration_string(value)
 
+        did_interrupt = False
+        SigIntHandler().set("transcribing")
+
         for i, chunk in enumerate(
             SttUtil._stream_audio_with_overlap(
                 file_path=path,
@@ -392,6 +284,10 @@ class SttUtil:
                 overlap_duration=OVERLAP_DURATION
             )
         ):
+            if SigIntHandler().did_interrupt:
+                did_interrupt = True
+                break
+
             s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
             if duration_str:
                 s += f" / {duration_str}"
@@ -413,10 +309,15 @@ class SttUtil:
 
             time_offset += CHUNK_DURATION - OVERLAP_DURATION
 
+        SigIntHandler().clear()
+
         print() # clear status printout
         print()
 
-        return list_of_lists
+        if did_interrupt:
+            return None
+        else:
+            return list_of_lists
 
     @staticmethod
     def _stream_audio_with_overlap(
@@ -500,12 +401,13 @@ class SttUtil:
         Returns:
             A flat list of Word instances representing the stitched transcript.
         """
+
         final_words: List[Word] = []
 
         if not chunks:
             return []
 
-        for chunk_idx, word_list in enumerate(chunks):
+        for chunk_index, word_list in enumerate(chunks):
             if not word_list:  # Skip empty chunks
                 continue
 
@@ -546,21 +448,21 @@ class SttUtil:
             # Determine where to start searching in current_words_in_chunk.
             # Ideally, skip its first (unreliable) word to find a more reliable start.
             # If current_words_in_chunk has only 1 word, we must consider it.
-            start_search_idx_in_current_chunk: int = 0
+            start_search_index_in_current_chunk: int = 0
             if len(word_list) > 1:
-                start_search_idx_in_current_chunk = 1 # Try to start from the second word.
+                start_search_index_in_current_chunk = 1 # Try to start from the second word.
 
             found_merge_point: bool = False
             # This will be the index in current_words_in_chunk from which to append.
-            actual_start_idx_for_append_in_currently: int = -1
+            actual_start_index_for_append_in_currently: int = -1
 
-            for i in range(start_search_idx_in_current_chunk, len(word_list)):
+            for i in range(start_search_index_in_current_chunk, len(word_list)):
                 candidate_word = word_list[i]
                 # We are looking for the first word in the "reliable" part of current_words_in_chunk
                 # (i.e., skipping its first word if possible) that starts clearly *after* the
                 # "reliable" part of the previous content in final_words.
                 if candidate_word.start > ref_time + time_similarity_threshold:
-                    actual_start_idx_for_append_in_current = i
+                    actual_start_index_for_append_in_currently = i
                     found_merge_point = True
                     break
 
@@ -573,7 +475,8 @@ class SttUtil:
                         final_words.pop()
 
                 # Add the new words from current_words_in_chunk, starting from the identified merge point.
-                final_words.extend(word_list[actual_start_idx_for_append_in_currently:])
+                lst = word_list[actual_start_index_for_append_in_currently:]
+                final_words.extend(lst)
             else:
                 # No suitable merge point found in the "reliable" part of current_words_in_chunk.
                 # This implies current_words_in_chunk doesn't significantly or reliably extend
@@ -584,7 +487,13 @@ class SttUtil:
 
         return final_words
 
-#---
+# ---
+
+class MatchInfo(NamedTuple):
+    trans_index_start: int
+    trans_index_end: int # rem, is exclusive
+    trans_text: str # used for debugging
+    score: float
 
 def normalize_text(text: str) -> str:
     """Converts text to lowercase, removes punctuation, and normalizes whitespace."""
@@ -594,3 +503,59 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     text = re.sub(r'\s+', ' ', text).strip()  # Normalize whitespace
     return text
+
+def are_same_first_last_words(text1: str, text2: str) -> bool:
+    """
+    Quick 'shorthand' test for force-alignment result,,
+    used to id potential issues for debugging purposes
+    """
+    a = text1.split(" ")
+    b = text2.split(" ")
+    if len(a) == 0 and len(b) == 0:
+        return True
+    if len(a) == 0 or len(b) == 0:
+        return False
+    first_a = a[0].strip()
+    first_b = b[0].strip()
+    last_a = a[-1].strip()
+    last_b = b[-1].strip()
+    return (first_a == first_b) and (last_a == last_b)
+
+def pretty_truncate(text: str, width: int) -> str:
+    if len(text) <= width:
+        return f"{COL_DEFAULT}{text}"
+    width -= 3 # bc triple-dots
+    a_len = math.ceil(width / 2)
+    b_len = math.floor(width / 2)
+    a = text[:a_len]
+    b = text[-b_len:]
+    return f"{COL_DEFAULT}{a}{COL_DIM}...{COL_DEFAULT}{b}"
+
+def word_list_to_string(lst: list[Word]) -> str:
+    l = [item.word.strip() for item in lst]
+    return " ".join(l)
+
+def print_upcoming_words(transcribed_words: list[Word], index: int) -> str:
+    """ used for debugging"""
+    end_index = index + 8
+    end_index = min(end_index, len(transcribed_words))
+    s = ""
+    for i in range(index, end_index):
+        s += transcribed_words[i].word + " "
+    s = normalize_text(s)
+    return s
+
+# ---
+
+# Minimum SequenceMatcher ratio to consider a match:
+# Higher values mean less false positives on short chunks,
+# especially in extraneous text at the beginning of the text file (eg publisher info),
+# but will miss more real matches on short chunks.
+MIN_MATCH_RATIO = 0.7
+
+# Max number of transcribed words to "skip" at the current position
+# to find a match for the current text_segment.
+# Should be at least as long as source text word length per segment
+MAX_SKIP_WORDS_BASE = 45
+
+DEBUG = DEV and True

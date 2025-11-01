@@ -218,3 +218,11 @@ HINT_SECTION_SOUND_EFFECT = Hint(
     """When True, this inserts a page turn sound effect when more than
 two consecutive blank lines  are encountered in the text. """
 )
+
+HINT_STT_ENHANCE = Hint(
+    "stt_enahance",
+    "Text preparation...",
+    """It's recommended to first remove any large chunks
+from the source text  that do not occur in the audio.
+Common examples are: Publisher information, table of contents, etc"""
+)

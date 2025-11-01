@@ -103,21 +103,30 @@ class AppMetadata(NamedTuple):
         return result
 
     @staticmethod
-    def save_to_flac(app_meta: AppMetadata, path: str) -> str:
+    def save_to_flac(app_meta: AppMetadata, src_path: str, dest_path: str="") -> str:
         """
         Returns error string on fail
         """
         string = app_meta.to_json_string()
-        error = AudioMetaUtil.set_flac_custom_metadata_field(path, APP_META_FLAC_FIELD, string)
+        error = AudioMetaUtil.set_flac_custom_metadata_field(
+            src_path=src_path,
+            field_name=APP_META_FLAC_FIELD,
+            value=string,
+            dest_path=dest_path
+        )
         return error
 
     @staticmethod
-    def save_to_mp4(app_meta: AppMetadata, src_audio_path: str,  dest_path: str="") -> str:
+    def save_to_mp4(app_meta: AppMetadata, src_path: str,  dest_path: str="") -> str:
         """
         Returns error string on fail
         """
         string = app_meta.to_json_string()
         error = AudioMetaUtil.set_mp4_metadata_tag(
-            src_audio_path, APP_META_MP4_MEAN, APP_META_MP4_TAG, string, dest_path
+            src_path=src_path,
+            mean=APP_META_MP4_MEAN,
+            tag=APP_META_MP4_TAG,
+            value=string,
+            dest_path=dest_path
         )
         return error

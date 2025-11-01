@@ -478,15 +478,15 @@ window.app = function() {
         if (isCheckingZombie) {
             return;
         }
-
         const i = getSegmentIndexBySeconds(audio.currentTime);
         if (i == currentIndex) {
-            // Update only when index has changed
             return;
         }
 
+        // Index has changed:
+
         previousIndex = currentIndex;
-        const previousSpan = getSpanByIndex(currentIndex);
+        const previousSpan = getSpanByIndex(previousIndex);
         currentIndex = i;
 
         // Unhighlight previous
@@ -494,9 +494,7 @@ window.app = function() {
 
         // Highlight active and scroll-to
         if (currentIndex >= 0) {
-
             getCurrentSpan().classList.add('highlight');
-
             if (!(document.activeElement instanceof HTMLInputElement)) {
                 getCurrentSpan().scrollIntoView({
                     behavior: 'smooth',
@@ -504,7 +502,6 @@ window.app = function() {
                     inline: 'nearest' // 'start', 'center', 'end', or 'nearest'
                 });
             }
-
             if (!audio.ended) {
                 storePosition();
             }
@@ -584,7 +581,6 @@ window.app = function() {
 
     function seekBySegmentIndex(i, andPlay) {
         getCurrentSpan()?.classList.remove('highlight');
-
         const targetTime = timedTextSegments[i]["time_start"];
         audio.currentTime = targetTime;
         if (audio.paused && andPlay) {

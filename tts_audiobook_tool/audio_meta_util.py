@@ -29,17 +29,28 @@ class AudioMetaUtil:
 
     # TODO: add optional dest file path, matching mp4 version
     @staticmethod
-    def set_flac_custom_metadata_field(flac_path: str, field_name: str, value: str) -> str:
+    def set_flac_custom_metadata_field(
+            src_path: str,
+            field_name: str,
+            value: str,
+            dest_path: str = ""
+    ) -> str:
         """
-        Adds string metadata to a FLAC file
+        Adds string metadata to pre-existing or copied FLAC file
         Returns error message on fail
         """
 
         # Normalize field name to uppercase (FLAC standard)
         field_name = field_name.upper()
 
+        file_to_modify = dest_path if dest_path else src_path
+        if dest_path and src_path != dest_path:
+            try:
+                shutil.copy2(src_path, dest_path)
+            except Exception as e:
+                return make_error_string(e)
         try:
-            flac = FLAC(flac_path)
+            flac = FLAC(file_to_modify)
 
             if field_name in flac:
                 del flac[field_name]

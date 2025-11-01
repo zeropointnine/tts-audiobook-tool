@@ -18,17 +18,22 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.util import *
 
 class SttFlow:
-
-    # TODO show reminder message once. use same message for both places.
-    # TODO delete temp files
+    """
+    Speech-to-text enchance-an-audiobook "user flow"
+    """
 
     @staticmethod
     def ask_and_make(prefs: Prefs) -> None:
 
-        # TODO add more ui description here
+        print_heading("Enhance existing audiobook")
+
+        AppUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE)
 
         # [1] Ask text file
-        inp = AskUtil.ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
+        if DEV and False:
+            inp = r"exc.txt"
+        else:
+            inp = AskUtil.ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
         if not inp:
             return
         if not os.path.exists(inp):
@@ -47,9 +52,14 @@ class SttFlow:
             AskUtil.ask_enter_to_continue("File has no content.")
             return
 
-        # [2] Ask audio file
         time.sleep(1)
-        inp = AskUtil.ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
+
+        # [2] Ask audio file
+        if DEV and False:
+            inp = r"exc.flac"
+        else:
+            inp = AskUtil.ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
+
         if not inp:
             return
         if not os.path.exists(inp):
@@ -69,23 +79,29 @@ class SttFlow:
                 return
             source_audio_path = path
 
+        # Make normalized, 'idempotent' path
+        source_audio_path = str(Path(source_audio_path).resolve().as_posix())
+
         types = [".flac", ".mp4", ".m4a", ".m4b"]
         if not Path(source_audio_path).suffix in types:
             printt("File suffix must be one of the following: {types}")
             return
 
-        # Normalize path / make idempotent
-        source_audio_path = str(Path(source_audio_path).resolve().as_posix())
-
         # Check if already has meta
         meta = AppMetadata.load_from_file(source_audio_path)
         if meta is not None:
-            b = AskUtil.ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
+            if DEV and False:
+                b = True
+            else:
+                b = AskUtil.ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
             if not b:
                 return
 
         # [3] Calc hash
-        source_audio_hash, err = AppUtil.calc_hash_file(source_audio_path)
+        source_audio_hash, err = AppUtil.calc_hash_file(
+            source_audio_path,
+            print_progress_text="Calculating audio file hash:"
+        )
         if err:
             AskUtil.ask_error(err)
             return
@@ -95,7 +111,10 @@ class SttFlow:
         if not os.path.exists(transcription_pickle_path):
             transcription_pickle_path = ""
         else:
-            b = AskUtil.ask_confirm("You've previously transcribed this file. Use saved transcription data? ")
+            if DEV and False:
+                b = True
+            else:
+                b = AskUtil.ask_confirm("You've previously transcribed this file. Use saved transcription data? ")
             if not b:
                 transcription_pickle_path = ""
 
@@ -143,9 +162,7 @@ class SttFlow:
 
         else:
 
-            # TODO: control-c skips to next step wc is wrong
-
-            printt("Transcribing audio...")
+            print_heading(f"Transcribing audio... {COL_DIM}(This may take some time)", dont_clear=True, non_menu=True)
             printt()
 
             # Always use best whisper model
@@ -155,6 +172,11 @@ class SttFlow:
             _ = Stt.get_whisper()
 
             words = SttUtil.transcribe_to_words(str(source_audio_path))
+            if words is None: # interrupted
+                printt("")
+                print_feedback("Interrupted")
+                return False
+
             printt("\a")
 
             # Restore variant / clean up model if necessary
@@ -170,10 +192,13 @@ class SttFlow:
 
         # [3] "Merge" source text and transcribed text data
 
-        # TODO: rly needs to be cancellable
-        printt("Merging data...")
-        printt()
-        timed_text_segments = SttUtil.make_timed_text_segments(text_segments, words)
+        print_heading("Merging data...", dont_clear=True, non_menu=True)
+
+        timed_text_segments, did_interrupt = SttUtil.make_timed_text_segments(text_segments, words)
+
+        if did_interrupt:
+            print_feedback("Interrupted")
+            return False
 
         # with open("temp_timed_segments.pickle", "wb") as file: # TODO: meh?
         #     pickle.dump(timed_text_segments, file)
@@ -182,32 +207,28 @@ class SttFlow:
 
         dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.m4a"
         dest_path = str( Path(source_audio_path).with_name(dest_name) )
-        dest_path = get_unique_file_path(dest_path)
-        printt(f"\nSaving audio file with metadata")
-        printt(f"{dest_path}")
+        dest_path = make_unique_file_path(dest_path)
+        printt(f"\nSaving audio file with added custom metadata")
         printt()
 
+        meta = AppMetadata(raw_text, timed_text_segments)
         if dest_path.lower().endswith(".flac"):
-            AskUtil.ask("TODO: ") # TODO
-            return False
+            err = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))
         else:
-            meta = AppMetadata(raw_text, timed_text_segments)
             err = AppMetadata.save_to_mp4(meta, str(source_audio_path), str(dest_path))
-            if err:
-                printt(f"Error creating audio file: {err}")
-                return False
+        if err:
+            printt(f"Error: {err}")
+            return False
 
-            printt(f"Saved")
-            printt()
+        printt(f"{COL_ACCENT}Saved {dest_path}")
+        printt()
 
         # [4b] Review "discontinuity info"
 
-        discon_ranges = TimedTextSegment.get_discontinuities(timed_text_segments)
-        if not discon_ranges:
-            AskUtil.ask_confirm()
-            return True
-
-        b = AskUtil.ask_confirm("View discontinuity info summary? ")
+        if DEV and False:
+            b = True
+        else:
+            b = AskUtil.ask_confirm("View discontinuity info summary? ")
         if b:
             print_discontinuity_info(timed_text_segments)
             AskUtil.ask_enter_to_continue()
@@ -221,23 +242,28 @@ def make_transcription_pickle_file_path(hash: str) -> str:
 
 def print_discontinuity_info(timed_text_segments: list[TimedTextSegment]):
 
+    print_heading("Unmatched text segments:", dont_clear=True, non_menu=True)
+    printt()
+
     discon_ranges = TimedTextSegment.get_discontinuities(timed_text_segments)
     if not discon_ranges:
-        printt("No discontinuity issues found")
+        printt("No items found")
         printt()
         return
 
-    printt("Unmatched, contiguous text segments:")
-    printt()
     for start, end in discon_ranges:
-       # TODO length in time
-       start_time = timed_text_segments[start - 1].time_end if start > 0 else 0
-       end_time = timed_text_segments[end + 1].time_start if end + 1 < len(timed_text_segments) else start_time
-       duration = end_time - start_time # TODO unconfirmed
-       printt(f"Lines {start}-{end} ({end - start + 1}) duration: {duration_string(duration)}")
 
-       first_text = timed_text_segments[start].text.strip()
-       last_text = timed_text_segments[end].text.strip()
-       printt(f"    {ellipsize(first_text, 50)}")
-       printt(f"    {ellipsize(last_text, 50)}")
-       printt()
+        num_consecutive = end - start + 1
+
+        if num_consecutive == 1:
+            printt(f"Line {start}")
+            text = timed_text_segments[start].text.strip()
+            printt(f"    {COL_DIM}Line:{COL_DEFAULT} {ellipsize(text, 50)}")
+            printt()
+        else:
+            printt(f"Lines {start} to {end} ({COL_ERROR}{num_consecutive} lines{COL_DEFAULT})")
+            first_text = timed_text_segments[start].text.strip()
+            last_text = timed_text_segments[end].text.strip()
+            printt(f"    {COL_DIM}First line:{COL_DEFAULT} {ellipsize(first_text, 50)}")
+            printt(f"    {COL_DIM}Last line:{COL_DEFAULT} {ellipsize(last_text, 50)}")
+            printt()

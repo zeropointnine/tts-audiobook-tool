@@ -15,6 +15,23 @@ class TimedTextSegment:
         self.time_start = time_start
         self.time_end = time_end
 
+    @property
+    def pretty_string(self, index: int=-1, use_error_color: bool=True) -> str:
+        if index >= 0:
+            s1 = f"[{str(index).rjust(5)}] "
+        else:
+            s1 = ""
+        s2 = f"{str(self.index_start).rjust(5)}-{str(self.index_end).ljust(5)}  "
+        if use_error_color and self.time_start == 0 and self.time_end == 0:
+            color = COL_ERROR
+        else:
+            color = COL_DEFAULT
+        s3 = f"{color}{time_stamp(self.time_start)}-{time_stamp(self.time_end)}{COL_DEFAULT}  "
+        s4 = ellipsize(self.text.strip(), 50)
+        return f"{s1}{s2}{s3}{s4}"
+
+    # ---
+
     @staticmethod
     def make_using(text_segment: TextSegment, time_start: float, time_end: float) -> TimedTextSegment:
         return TimedTextSegment(
@@ -55,19 +72,6 @@ class TimedTextSegment:
                 return f"Error with dict {json.dumps(d)} - {e}"
         return result
 
-    def pretty_string(self, index: int=-1, use_error_color: bool=True) -> str:
-        if index >= 0:
-            s1 = f"[{str(index).rjust(5)}] "
-        else:
-            s1 = ""
-        s2 = f"{str(self.index_start).rjust(5)}-{str(self.index_end).ljust(5)}  "
-        if use_error_color and self.time_start == 0 and self.time_end == 0:
-            s3 = f"{COL_ERROR}{time_stamp(self.time_start)}-{time_stamp(self.time_end)}{Ansi.RESET}  "
-        else:
-            s3 = f"{time_stamp(self.time_start)}-{time_stamp(self.time_end)}  "
-        s4 = ellipsize(self.text.strip(), 50)
-        return f"{s1}{s2}{s3}{s4}"
-
     @staticmethod
     def make_list_using(text_segments: list[TextSegment], durations: list[float]) -> list[TimedTextSegment]:
 
@@ -94,10 +98,11 @@ class TimedTextSegment:
         return timed_text_segments
 
     @staticmethod
-    def get_discontinuities(items: list[TimedTextSegment]) -> list[tuple[int, int]]:
+    def get_discontinuities(items: list[TimedTextSegment], filter_num_consecutive:int=1) -> list[tuple[int, int]]:
         """
-        Returns a list of index ranges where 2 or more consecutive items have a time_start and time_end of 0
-        (making the assumption that just one zeroed item is 'non-verbal', formatting-related text)
+        Returns a list of index ranges where consecutive items have a time_start and time_end of 0
+        (* making the assumption that just one zeroed item is 'non-verbal', formatting-related text)
+        TODO: brittle assumption!
         """
         discontinuities = []
         current_discontinuity_start = -1
@@ -111,13 +116,13 @@ class TimedTextSegment:
             else:
                 if current_discontinuity_start != -1:
                     # End of a discontinuity sequence
-                    if i - current_discontinuity_start >= 2:
+                    if i - current_discontinuity_start >= filter_num_consecutive:
                         discontinuities.append((current_discontinuity_start, i - 1))
                     current_discontinuity_start = -1
 
-        # Check for a discontinuity sequence at the end of the list
+        # Test last
         if current_discontinuity_start != -1:
-            if len(items) - current_discontinuity_start >= 2:
+            if len(items) - current_discontinuity_start >= filter_num_consecutive:
                 discontinuities.append((current_discontinuity_start, len(items) - 1))
 
         return discontinuities
