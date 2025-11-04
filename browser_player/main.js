@@ -48,7 +48,6 @@ window.app = function() {
     let isToastPinned = false;
 
     let currentIndex = -1; // segment index whose time range encloses the player's currentTime
-    let previousIndex = -1;
     let directSelections = []
 
     let playerHideDelayId = -1;
@@ -103,12 +102,18 @@ window.app = function() {
         })
 
         audio.addEventListener('play', function() {
+            if (isCheckingZombie) {
+                return;
+            }
             hasPlayedOnce = true;
             root.setAttribute("data-player-status", "play");
             currentIndex = -1; // ensures scroll to current segment
         });
 
         audio.addEventListener('pause', function() {
+            if (isCheckingZombie) {
+                return;
+            }
             root.setAttribute("data-player-status", "pause");
         });
 
@@ -133,8 +138,8 @@ window.app = function() {
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 // Browser tab has gone from not-visible to visible
-                // If it's a local file, audio is paused, and is past 0s, check for 'zombie state'
-                const should = (!isCheckingZombie && !audio.ended && audio.paused && audio.currentTime > 0)
+                // Note, checking zombie only when is-touch-device
+                const should = (!isCheckingZombie && isTouchDevice() && audio.duration > 0 && audio.paused && !audio.ended);
                 if (should) {
                     checkZombieState();
                 }
@@ -269,7 +274,6 @@ window.app = function() {
         localStorage.setItem("last_file_id", fileId);
 
         currentIndex = -1;
-        previousIndex = -1
 
         audio.src = "";
         audio.load(); // aborts any pending activity
@@ -478,18 +482,20 @@ window.app = function() {
         if (isCheckingZombie) {
             return;
         }
-        const i = getSegmentIndexBySeconds(audio.currentTime);
-        if (i == currentIndex) {
+        const realTimeIndex = getSegmentIndexBySeconds(audio.currentTime);
+        if (realTimeIndex == -1) {
+            return; // TODO: revisit
+        }
+        if (realTimeIndex == currentIndex) {
             return;
         }
 
         // Index has changed:
 
-        previousIndex = currentIndex;
-        const previousSpan = getSpanByIndex(previousIndex);
-        currentIndex = i;
+        const previousSpan = getSpanByIndex(currentIndex);
+        currentIndex = realTimeIndex;
 
-        // Unhighlight previous
+        // Unhighlight previous, if any
         previousSpan?.classList.remove('highlight');
 
         // Highlight active and scroll-to
@@ -528,25 +534,41 @@ window.app = function() {
     }
 
     function getSegmentIndexBySeconds(seconds) {
-        // TODO: should have "startFromIndex" and fans out from there
-        for (let i = 0; i < timedTextSegments.length; i++) {
-            const segment = timedTextSegments[i];
-            if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
-                return i
+        // Starts search from current index and fans out (optimization)
+
+        let delta = 1;
+
+        while (true) {
+
+            const indexInc = currentIndex + delta
+            const indexDec = currentIndex - delta;
+            const oob = (indexInc >= timedTextSegments.length && indexDec < 0)
+            if (oob) {
+                return -1;
             }
+
+            if (indexDec >= 0) {
+                const segment = timedTextSegments[indexDec];
+                if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
+                    return indexDec
+                }
+            }
+            if (indexInc < timedTextSegments.length) {
+                const segment = timedTextSegments[indexInc];
+                if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
+                    return indexInc
+                }
+            }
+
+            delta += 1;
         }
-        return -1
     }
 
     /**
      * Seeks to the next segment that has a starting time
      */
     function seekNextSegment() {
-        let index = currentIndex;
-        if (index == -1) {
-            index = previousIndex;
-        }
-
+        let index = currentIndex; // rem, index can be -1
         for (let i = index + 1; i <= index + 100; i++) {
             if (i >= timedTextSegments.length) {
                 return;
@@ -561,20 +583,18 @@ window.app = function() {
     }
 
     function seekPreviousSegment() {
-        let index = currentIndex;
-        if (index == -1) {
-            index = previousIndex + 1; // nb +1
+        if (currentIndex <= 0) {
+            return
         }
-
-        for (let i = index - 1; i >= index - 100; i--) {
+        for (let i = currentIndex - 1; i >= currentIndex - 100; i--) {
             if (i < 0) {
-                break;
+                return;
             }
             const segment = timedTextSegments[i]
             const has_time = (segment["time_end"] > 0);
             if (has_time) {
                 seekBySegmentIndex(i);
-                break;
+                return;
             }
         }
     }
@@ -721,64 +741,79 @@ window.app = function() {
     }
 
     /**
-     * Checks if <audio> is in a 'zombie state'
-     * (no longer has a 'handle' on the data but reports no issues)
+     * Checks if <audio> is in a 'zombie state' (ie, if it no longer has a 'handle' on the data)
+     * Only way to verify is to observe its behavior after resuming playback.
      */
     function checkZombieState() {
 
-        // Resume playback briefly and see if it jumps to an "ended" state (yes rly)
+        if (audio.duration == 0) {
+            return
+        }
 
         isCheckingZombie = true;
         let timeoutId = 0;
-        const originalVolume = audio.volume;
         const originalCurrentTime = audio.currentTime;
-        audio.volume = 0.0;
-
-        // Minor FYI: Will fail if source is url and has not yet been user-activated
-        audio.play();
+        const originalVolume = audio.volume;
+        let timeUpdateCount = 0;
 
         const cleanUp = () => {
-            isCheckingZombie = false;
+            audio.removeEventListener("timeupdate", onTimeUpdate);
             audio.removeEventListener("ended", onEnded);
             clearTimeout(timeoutId);
+
+            isCheckingZombie = false;
             audio.pause();
             audio.volume = originalVolume;
         };
 
-        const onEnded = () => {
+        const doFailed = () => {
+
+            cleanUp();
 
             if (file) {
-
-                // Unrecoverable. Requires user intervention (ie, click on <input type="file">)
+                // Unrecoverable because reloading local file requires user intervention
                 let s = "The browser has dropped the handle to the local audio file.\n\n";
                 s += "This can occur when the mobile browser tab is put into the background while the audio is paused, unfortunately.\n\n";
                 s += "Please load the file again to resume.";
                 alert(s);
-                cleanUp();
                 window.location.reload();
 
             } else {
-
                 // Is url
-                // Note: I've not been able to induce zombie state while using a url,
-                // but have gotten reports that it does happen on iOS.
-
-                // TODO: untested. verify:
-                console.log("restoring connection; unverified");
-                cleanUp();
+                // TODO: untested (have not been able to replicate but have gotten reports that it does happen on iOS)
                 audio.url = url;
                 audio.load(); // for good measure
                 audio.currentTime = originalCurrentTime;
             }
         };
 
+        const onEnded = () => {
+            doFailed();
+        }
+
+        const onTimeUpdate = () => {
+            if (audio.currentTime >= audio.duration) {
+                doFailed();
+                return;
+            }
+            timeUpdateCount += 1;
+            if (timeUpdateCount >= 3) {
+                // Calling it good
+                // (It's possible only one occurrence is necessary, but yea)
+                cleanUp();
+            }
+        };
+
         const onTimeout = () => {
-            // success
+            // Failsafe. It's also possible browser needed more time to resume, but let's not
             cleanUp();
         };
 
-        audio.addEventListener("ended", onEnded,{ once: true } );
+        audio.addEventListener("timeupdate", onTimeUpdate);
+        audio.addEventListener("ended", onEnded, { once: true } );
         timeoutId = setTimeout(onTimeout, 1000);
+        audio.volume = 0.0;
+        audio.play(); // Minor FYI: Will fail if source is url and has not yet been user-activated
     }
 
     // --------------------------------------
