@@ -5,32 +5,39 @@ window.app = function() {
     const SLEEP_MS = (1000 * 60) * 15
 
     const root = document.documentElement;
-    const loadFileInput = document.getElementById('loadFileInput');
+    const main = document.getElementById("main") // main document flow div
+    const loadFileInput = document.getElementById("loadFileInput");
     const loadLastHolder = document.getElementById("loadLast")
-    const sleepTimeLeft = document.getElementById('sleepTimeLeft');
-    const fileNameDiv = document.getElementById('fileName')
-    const playerOverlay = document.getElementById('playerOverlay'); // always visible
-    const playerHolder = document.getElementById('playerHolder'); // animates in and out
-    const audio = document.getElementById('audio');
-    const textHolder = document.getElementById('textHolder');
+    const sleepTimeLeft = document.getElementById("sleepTimeLeft");
+    const fileNameDiv = document.getElementById("fileName")
+    const playerOverlay = document.getElementById("playerOverlay"); // always visible
+    const playerHolder = document.getElementById("playerHolder"); // animates in and out
+    const audio = document.getElementById("audio");
+    const textHolder = document.getElementById("textHolder");
     const loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
-    const loadUrlInput = document.getElementById('loadUrlInput');
+    const loadUrlInput = document.getElementById("loadUrlInput");
     const helpHolder = document.getElementById("helpHolder");
+    const helpTemplate = document.getElementById("helpTemplate");
     const githubButton = document.getElementById("githubCorner");
 
-    const uiPanelButton = document.getElementById('uiPanelButton');
-    const uiOverlay = document.getElementById("uiOverlay");
-    const uiPanel = document.getElementById("uiPanel");
+    const menuButton = document.getElementById("menuButton");
+    const scrim = document.getElementById("scrim");
+    const menuPanel = document.getElementById("menuPanel");
+
+    const scrollTopButton = document.getElementById("scrollTopButton")
+    const textSizeButton = document.getElementById("textSizeButton")
+    const themeButton = document.getElementById("themeButton");
+    const segmentColorsButton = document.getElementById("segmentColorsButton")
+    const sleepButton = document.getElementById("sleepButton");
+
+    const bookmarkPanel = document.getElementById("bookmarkPanel");
+    const bookmarkButton = document.getElementById("bookmarkButton");
+
     const toast = document.getElementById("toast");
     const loadingOverlay = document.getElementById("loadingOverlay")
 
-    const scrollTopButton = document.getElementById('scrollTopButton')
-    const textSizeButton = document.getElementById('textSizeButton')
-    const themeButton = document.getElementById('themeButton');
-    const segmentColorsButton = document.getElementById('segmentColorsButton')
-    const sleepButton = document.getElementById("sleepButton");
-
     let player = null;
+    let bookmarks = null;
     let file = null;
     let url = null;
 
@@ -38,14 +45,13 @@ window.app = function() {
 
     let isCheckingZombie = false;
 
-    let timedTextSegments = [];
+    let textSegments = [];
     let spans = []; // cached text segment span refs
 
     let isStarted = false; // is audiobook populated and audio loaded
     let hasPlayedOnce = false; // has audio playback happened at least once
-    let isPlayerHover = false;
-    let isPlayerFocused = false;
-    let isToastPinned = false;
+    let hasAdvancedOnce = false; // has audio playback advanced one segment at least once
+    let isToastPlayPrompt = false;
 
     let currentIndex = -1; // segment index whose time range encloses the player's currentTime
     let directSelections = []
@@ -55,6 +61,10 @@ window.app = function() {
     let sleepId = -1;
     let sleepEndTime = -1;
     let loopIntervalId = -1;
+    let isInPlayer = false;
+
+    const mousePosition = { x: 0, y: 0};
+    let activeElement = null;
 
     // ****
     init();
@@ -62,11 +72,19 @@ window.app = function() {
 
     function init() {
 
+        // eslint-disable-next-line
         player = new AudioPlayer({ audioElement: audio, container: playerHolder });
+        // eslint-disable-next-line
+        bookmarks = new BookmarkController(bookmarkPanel);
 
         if (hasPersistentKeyboard()) {
-            helpHolder.style.display = "block";
+            addHelp();
         }
+
+        window.addEventListener('mousemove', (event) => {
+            mousePosition.x = event.clientX;
+            mousePosition.y = event.clientY;
+        });
 
         loadUrlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -106,6 +124,10 @@ window.app = function() {
                 return;
             }
             hasPlayedOnce = true;
+            if (isToastPlayPrompt) {
+                isToastPlayPrompt = false;
+                hideToast();
+            }
             root.setAttribute("data-player-status", "play");
             currentIndex = -1; // ensures scroll to current segment
         });
@@ -122,14 +144,8 @@ window.app = function() {
             // console.log("Audio error:", error.code, error.message)
         });
 
-        player.playPauseBtn.addEventListener('click', function(e) {
-            console.log('hello', this);
-            if (isToastPinned) {
-                hideToast();
-            }
-        });
-
-        initPlayerOverlayEvents();
+        document.addEventListener("bookmarkSelect", (e) => { onBookmarkSelect(e); });
+        document.addEventListener("bookmarkAdded", () => { saveBookmarks(); });
 
         textHolder.addEventListener('click', onTextClick);
 
@@ -148,19 +164,10 @@ window.app = function() {
 
         // Load file from queryparam "url"
         const urlParams = new URLSearchParams(window.location.search);
-        const url = urlParams.get('url');
+        const url = urlParams.get("url");
         if (url) {
             loadAudioFileOrUrl(null, url);
         }
-
-        uiPanelButton.addEventListener('click', (e) => {
-            collapseOptionsButton();
-            if (!isElementShowing(uiOverlay)) {
-                showUiPanel();
-            } else {
-                hideUiPanel();
-            }
-        });
 
         const lastFileId = localStorage.getItem("last_file_id")
         if (lastFileId) {
@@ -169,7 +176,10 @@ window.app = function() {
         }
 
         initRootAttributesFromLocalStorage();
-        initUiPanelButtons();
+
+        initClickListeners();
+
+        loopIntervalId = setInterval(loop, 50);
     }
 
     function initRootAttributesFromLocalStorage() {
@@ -182,46 +192,49 @@ window.app = function() {
         });
     }
 
-    function initUiPanelButtons() {
+    function initClickListeners() {
 
-        uiOverlay.addEventListener("click", (e) => {
+        scrim.addEventListener("click", (e) => {
             e.stopPropagation();
-            hideUiPanel()
+            hideScrimAndRelated();
         });
 
-        uiPanel.addEventListener("click", (e) => {
-            e.stopPropagation()
+        // eat. // TODO: is this still necessary?
+        menuPanel.addEventListener("click", (e) => { e.stopPropagation(); });
+        bookmarkPanel.addEventListener("click", (e) => { e.stopPropagation() });
+
+        menuButton.addEventListener('click', (e) => {
+            collapseOptionsButton();
+            if (!isElementShowing(menuPanel)) {
+                showMenuPanel();
+            } else {
+                hideScrimAndRelated();
+            }
         });
 
-        // Scroll to top
+        bookmarkButton.addEventListener('click', (e) => { toggleBookmarkPanel(); });
+
+        // Menu buttons
         scrollTopButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            hideUiPanel();
+            hideScrimAndRelated();
             window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
         });
-
-        // Text size
         textSizeButton.addEventListener('click', (e) => {
             e.stopPropagation();
             cycleRootAttribute("data-book-text-size", ["medium", "small"]);
-            updateUiPanelButtons()
+            updateMenuButtons()
         });
-
-        // Color theme
         themeButton.addEventListener('click', (e) => {
             e.stopPropagation();
             cycleRootAttribute("data-theme", ["dark"])
-            updateUiPanelButtons()
+            updateMenuButtons()
         });
-
-        // Segment colors
         segmentColorsButton.addEventListener('click', (e) => {
             e.stopPropagation();
             cycleRootAttribute("data-segment-colors", ["blue", "red"])
-            updateUiPanelButtons()
+            updateMenuButtons()
         });
-
-        // Sleep
         sleepButton.addEventListener("click", (e) => {
             e.stopPropagation();
             const value = cycleRootAttribute("data-sleep", ["on"], false);
@@ -230,8 +243,15 @@ window.app = function() {
             } else {
                 clearSleep()
             }
-            updateUiPanelButtons()
-            hideUiPanel()
+            updateMenuButtons();
+            hideScrimAndRelated();
+        });
+
+        toast.addEventListener("click", () => {
+            if (isToastPlayPrompt) {
+                audio.play();
+            }
+            hideElement(toast);
         });
     }
 
@@ -241,11 +261,10 @@ window.app = function() {
     async function loadAudioFileOrUrl(pFile, pUrl) {
 
         if (pUrl) {
-            showElement(loadingOverlay, true);
-        } else {
-            // Not rly necessary for local file
+            showElement(loadingOverlay, "flex");
         }
 
+        // eslint-disable-next-line
         const appMetadata = await loadAppMetadata(pFile, pUrl);
 
         if (pUrl) {
@@ -269,7 +288,7 @@ window.app = function() {
         file = pFile;
         url = pUrl;
         fileId = file ? file.name : url
-        timedTextSegments = pTimedTextSegments
+        textSegments = pTimedTextSegments
 
         localStorage.setItem("last_file_id", fileId);
 
@@ -282,16 +301,19 @@ window.app = function() {
         textHolder.style.display = "none";
         root.setAttribute("data-player-status", "none");
         githubButton.style.display = "block";
-        loadingOverlay.style.display = 'none';
 
         githubButton.style.display = "none";
         loadLastHolder.style.display = "none";
-        helpHolder.style.display = "none";
+        removeHelp();
         fileNameDiv.style.display = "block"
         fileNameDiv.textContent = file ? file.name : url
 
-        populateText()
+        populateText();
 
+        showElement(bookmarkButton);
+
+        const arr = loadBookmarks();
+        bookmarks.init(textSegments, arr);
 
         if (hasPlayedOnce) {
             showAndHidePlayer();
@@ -320,14 +342,13 @@ window.app = function() {
             playerHolder.classList.add("showing");
         }
 
-        loopIntervalId = setInterval(loop, 50);
         isStarted = true;
     }
 
     function populateText() {
 
         let contentHtml = '';
-        timedTextSegments.forEach((segment, i) => {
+        textSegments.forEach((segment, i) => {
             const o = splitWhitespace(segment.text)
             if (o["before"]) {
                 contentHtml += escapeHtml( o["before"] );
@@ -343,44 +364,81 @@ window.app = function() {
 
         // Cache span references
         spans = [];
-        for (let i = 0; i < timedTextSegments.length; i++) {
+        for (let i = 0; i < textSegments.length; i++) {
             spans[i] = document.getElementById("segment-" + i);
         }
     }
 
-    function updateUiPanelButtons() {
+    function updateMenuButtons() {
         setButtonChildVisible(textSizeButton, root.getAttribute("data-book-text-size"));
         setButtonChildVisible(themeButton, root.getAttribute("data-theme"));
         setButtonChildVisible(sleepButton, root.getAttribute("data-sleep"));
         // rem, segment colors button does not multiple children
     }
 
-    function showUiPanel() {
-        updateUiPanelButtons();
-        document.body.classList.add('bodyNoScroll'); // Prevent background scrolling
-        showElement(uiOverlay)
+    // --------------------------------------
+
+    function showScrim() {
+        showElement(scrim);
+        // We're going into a 'modal' ux state, so
+        main.setAttribute("inert", "");
+        playerHolder.setAttribute("inert", "");
     }
 
-    function hideUiPanel() {
-        document.body.classList.remove('bodyNoScroll');
-        hideElement(uiOverlay);
+    function hideScrimAndRelated() {
+        // Hides scrim and any open panels
+        document.body.classList.remove("bodyNoScroll");
+        hideElement(scrim);
+        hideElement(menuPanel);
+        hideElement(bookmarkPanel);
+        main.removeAttribute("inert");
+        playerHolder.removeAttribute("inert");
+    }
+
+    function showMenuPanel() {
+        updateMenuButtons();
+        document.body.classList.add("bodyNoScroll"); // Prevent background scrolling
+        showScrim();
+        hideElement(bookmarkPanel);
+        showElement(menuPanel, "flex");
+    }
+
+    function toggleBookmarkPanel() {
+        if (!isElementShowing(bookmarkPanel)) {
+            showBookmarkPanel();
+        } else {
+            hideScrimAndRelated();
+        }
+    }
+
+    function showBookmarkPanel() {
+        if (currentIndex == -1) {
+            return
+        }
+        document.body.classList.add("bodyNoScroll");
+        bookmarks.updateAddButton(currentIndex);
+        showScrim();
+        hideElement(menuPanel);
+        showElement(bookmarkPanel)
     }
 
     /**
-     * Show toast and hides it after a delay
+     * Shows toast and hides it after a delay
      */
-    function showToast(message, isPinned=false) {
-        toast.textContent = message;
-        showElement(toast);
-        isToastPinned = isPinned;
+    function showToast(message, isPlayPrompt=false) {
         clearTimeout(toastHideDelayId);
-        if (!isToastPinned) {
+        isToastPlayPrompt = isPlayPrompt;
+        toast.textContent = message;
+
+        showElement(toast);
+        if (!isPlayPrompt) {
             toastHideDelayId = setTimeout(() => { hideToast(); }, 2500);
         }
     }
 
     function hideToast() {
-        isToastPinned = false;
+        clearTimeout(toastHideDelayId);
+        isToastPlayPrompt = false;
         hideElement(toast);
     }
 
@@ -389,6 +447,11 @@ window.app = function() {
     function onKeyDown(event) {
 
         if (event.target.tagName == "INPUT") {
+            return;
+        }
+
+        if (event.key == "Escape" && isElementShowing(scrim)) {
+            hideScrimAndRelated();
             return;
         }
 
@@ -440,6 +503,8 @@ window.app = function() {
             case "]":
                 audio.currentTime += 60;
                 break;
+            case "b":
+                toggleBookmarkPanel();
         }
     }
 
@@ -447,13 +512,13 @@ window.app = function() {
 
         const clickedSpan = event.target;
 
-        const isSegment = (clickedSpan.tagName === 'SPAN' && clickedSpan.id.startsWith('segment-'));
+        const isSegment = (clickedSpan.tagName === 'SPAN' && clickedSpan.id.startsWith("segment-"));
         if (!isSegment) {
             return;
         }
 
-        const segmentIndex = parseInt(clickedSpan.id.split('-')[1]);
-        const segment = timedTextSegments[segmentIndex];
+        const segmentIndex = parseInt(clickedSpan.id.split("-")[1]);
+        const segment = textSegments[segmentIndex];
 
         if (segment["time_start"] == 0 && segment["time_end"] == 0) {
             return;
@@ -477,11 +542,24 @@ window.app = function() {
         }
     }
 
+    function onBookmarkSelect(e) {
+        const s = e.detail.index;
+        const index = parseInt(s);
+        seekBySegmentIndex(index);
+        audio.play();
+        hideScrimAndRelated();
+    }
+
     function loop() {
+        // Checks if audio position has crossed text segment boundaries
+        // Also checks for mouse-over-playerOverlay
 
         if (isCheckingZombie) {
             return;
         }
+
+        updatePlayerVisibility();
+
         const realTimeIndex = getSegmentIndexBySeconds(audio.currentTime);
         if (realTimeIndex == -1) {
             return; // TODO: revisit
@@ -492,15 +570,23 @@ window.app = function() {
 
         // Index has changed:
 
+        if (realTimeIndex - currentIndex == 1) {
+            // Has advanced by one text segment, probably due to normal playback
+            if (!hasAdvancedOnce) {
+                hasAdvancedOnce = true;
+                collapseOptionsButton();
+            }
+        }
+
         const previousSpan = getSpanByIndex(currentIndex);
         currentIndex = realTimeIndex;
 
         // Unhighlight previous, if any
-        previousSpan?.classList.remove('highlight');
+        previousSpan?.classList.remove("highlight");
 
         // Highlight active and scroll-to
         if (currentIndex >= 0) {
-            getCurrentSpan().classList.add('highlight');
+            getCurrentSpan().classList.add("highlight");
             if (!(document.activeElement instanceof HTMLInputElement)) {
                 getCurrentSpan().scrollIntoView({
                     behavior: 'smooth',
@@ -542,19 +628,19 @@ window.app = function() {
 
             const indexInc = currentIndex + delta
             const indexDec = currentIndex - delta;
-            const oob = (indexInc >= timedTextSegments.length && indexDec < 0)
+            const oob = (indexInc >= textSegments.length && indexDec < 0)
             if (oob) {
                 return -1;
             }
 
             if (indexDec >= 0) {
-                const segment = timedTextSegments[indexDec];
+                const segment = textSegments[indexDec];
                 if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
                     return indexDec
                 }
             }
-            if (indexInc < timedTextSegments.length) {
-                const segment = timedTextSegments[indexInc];
+            if (indexInc < textSegments.length) {
+                const segment = textSegments[indexInc];
                 if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
                     return indexInc
                 }
@@ -570,10 +656,10 @@ window.app = function() {
     function seekNextSegment() {
         let index = currentIndex; // rem, index can be -1
         for (let i = index + 1; i <= index + 100; i++) {
-            if (i >= timedTextSegments.length) {
+            if (i >= textSegments.length) {
                 return;
             }
-            const segment = timedTextSegments[i]
+            const segment = textSegments[i]
             const has_time = (segment["time_end"] > 0);
             if (has_time) {
                 seekBySegmentIndex(i);
@@ -590,7 +676,7 @@ window.app = function() {
             if (i < 0) {
                 return;
             }
-            const segment = timedTextSegments[i]
+            const segment = textSegments[i]
             const has_time = (segment["time_end"] > 0);
             if (has_time) {
                 seekBySegmentIndex(i);
@@ -600,8 +686,8 @@ window.app = function() {
     }
 
     function seekBySegmentIndex(i, andPlay) {
-        getCurrentSpan()?.classList.remove('highlight');
-        const targetTime = timedTextSegments[i]["time_start"];
+        getCurrentSpan()?.classList.remove("highlight");
+        const targetTime = textSegments[i]["time_start"];
         audio.currentTime = targetTime;
         if (audio.paused && andPlay) {
             playerPlay();
@@ -611,11 +697,8 @@ window.app = function() {
     async function playerPlay() {
         try {
             await audio.play();
-            if (!getPlayerActive()) {
+            if (isInPlayer) {
                 showAndHidePlayer();
-            }
-            if (isToastPinned) {
-                hideToast();
             }
         } catch (error) {
             if (error.name == "NotAllowedError") {
@@ -642,7 +725,7 @@ window.app = function() {
 
         root.setAttribute("data-sleep", "");
         clearInterval(sleepId);
-        updateUiPanelButtons();
+        updateMenuButtons();
     }
 
     function onSleepInterval() {
@@ -653,6 +736,38 @@ window.app = function() {
             return;
         }
         sleepTimeLeft.textContent = msToString(ms);
+    }
+
+    function loadBookmarks() {
+        if (!fileId) {
+            return [];
+        }
+        const key = `bookmarks_fileId_${fileId}`;
+        const value = localStorage.getItem(key);
+        if (!value) {
+            return [];
+        }
+        let arr = [];
+        try {
+            arr = JSON.parse(value);
+        } catch (exc) {
+            console.log("json exception:", value)
+            return [];
+        }
+        if (!Array.isArray(arr)) {
+            console.log("not an array:", arr)
+            return [];
+        }
+        return arr;
+    }
+
+    function saveBookmarks() {
+        if (!fileId) {
+            return;
+        }
+        const key = `bookmarks_fileId_${fileId}`;
+        const value = JSON.stringify(bookmarks.indices);
+        localStorage.setItem(key, value);
     }
 
     // ----------------------------------------
@@ -819,38 +934,22 @@ window.app = function() {
     // --------------------------------------
     // Player show/hide logic
 
-    function initPlayerOverlayEvents() {
-        playerOverlay.addEventListener('mouseenter', () => {
-            isPlayerHover = true;
-            onPlayerIxChange();
-        });
+    function updatePlayerVisibility() {
 
-        playerOverlay.addEventListener('mouseleave', () => {
-            isPlayerHover = false;
-            onPlayerIxChange();
-        });
+        if (isTouchDevice()) {
+            return;
+        }
+        if (!isStarted) {
+            return;
+        }
 
-        // Focus in/out detection (bubbles)
-        // TODO: new player doesn't support focus atm. revisit.
-        playerOverlay.addEventListener('focusin', () => {
-            isPlayerFocused = true;
-            onPlayerIxChange();
-        });
-        playerOverlay.addEventListener('focusout', () => {
-            setTimeout(() => { // nb, required
-            if (!playerOverlay.contains(document.activeElement)) {
-                isPlayerFocused = false;
-                onPlayerIxChange();
-            }
-            }, 0);
-        });
-    }
+        const wasInPlayer = isInPlayer;
+        isInPlayer = isMouseOverElement(playerOverlay); // TODO && focus
+        if (isInPlayer == wasInPlayer) {
+            return
+        }
 
-    function onPlayerIxChange() {
-        // Should be called when:
-        // Mouse has either entered or left player holder area
-        // Focus has entered or left thhe player holder and children
-        if (getPlayerActive()) {
+        if (isInPlayer) {
             clearTimeout(playerHideDelayId);
             showPlayer();
         } else {
@@ -859,9 +958,6 @@ window.app = function() {
     }
 
     function showAndHidePlayer(hideDelay=1000) {
-        if (isTouchDevice()) {
-            return;
-        }
         showPlayer();
         playerHideDelayId = setTimeout(() => { hidePlayer(); }, hideDelay);
     }
@@ -882,8 +978,13 @@ window.app = function() {
         hideElement(playerHolder, false);
     }
 
-    function getPlayerActive() {
-        return isPlayerFocused || isPlayerHover;
+    function addHelp() {
+        const help = helpTemplate.content.cloneNode(true);
+        helpHolder.appendChild(help);
+    }
+
+    function removeHelp() {
+        helpHolder.innerHTML = "";
     }
 
     // --------------------------------------
@@ -891,14 +992,14 @@ window.app = function() {
     // TODO: move to dedicated script after implementing script concat
 
     function isTouchDevice() {
-        // hand-wavey
-        return !matchMedia('(pointer:fine)').matches
+        // hand-wavey test
+        return !matchMedia("(pointer:fine)").matches
     }
 
     function hasPersistentKeyboard() {
         // hand-wavey test
-        const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
-        const hasHoverSupport = window.matchMedia('(hover: hover)').matches;
+        const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
+        const hasHoverSupport = window.matchMedia("(hover: hover)").matches;
         return (hasFinePointer && hasHoverSupport);
     }
 
@@ -940,9 +1041,9 @@ window.app = function() {
      * Assumes the existence of a css transition on the element, and a "showing" css class.
      * param isFlex - applies display:flex, else display:block
      */
-    function showElement(element, isFlex) {
+    function showElement(element, displayValue = "block") {
         element.removeEventListener('transitionend', onHideElementDisplayNone);
-        element.style.display = isFlex ? "flex" : "block";
+        element.style.display = displayValue;
         element.offsetHeight; // Force reflow
         element.classList.add("showing");
     }
@@ -966,4 +1067,9 @@ window.app = function() {
     function isElementShowing(element) {
         return element.classList.contains("showing");
     }
+
+    function isMouseOverElement(element) {
+        const els = document.elementsFromPoint(mousePosition.x, mousePosition.y);
+        return (els.indexOf(element) > -1);
+      }
 };

@@ -12,21 +12,30 @@
     overflow: hidden;
 }
 
+.disabled {
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .buttonText {
     font-size: 18px;
     font-family: sans-serif;
     font-weight: bold;
 }
-@media (max-width: 600px) {
-    .titleText {
-        font-size: 18px;
-    }
+
+.bigTitleText {
+    font-size: 24px;
+    font-family: sans-serif;
+    font-weight: bold;
+    color: var(--color-text-dim);
 }
 
 .titleText {
     font-size: 24px;
     font-family: sans-serif;
     font-weight: bold;
+    color: var(--color-text-dim);
 }
 @media (max-width: 600px) {
     .titleText {
@@ -35,8 +44,8 @@
 }
 
 .iconButton {
-    width: 30px;
-    height: 30px;
+    width: 42px;
+    height: 42px;
     padding:6px;
     border-radius:8px;
     background-color: var(--color-content-bg);
@@ -52,8 +61,8 @@
 }
 
 .chromelessButton {
-    width: 30px;
-    height: 30px;
+    width: 42px;
+    height: 42px;
     padding:6px;
     border-radius:8px;
     cursor: pointer;
@@ -66,16 +75,88 @@
     fill: var(--color-text-dim);
 }
 
+.expandingButton {
+    border: none;
+    border-radius: 8px;
+    background-color: var(--color-content-bg);
+    box-shadow: 0 4px 8px var(--color-shadow);
+    cursor: pointer;
+
+    display: inline-flex;
+    align-items: center;
+
+    overflow: hidden;
+}
+
+.expandingButton .graphic {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    padding:6px;
+}
+
+.expandingButton .label {
+    color: var(--color-text-dim);
+    white-space: nowrap;
+
+    /* Anim */
+    max-width: 100px;
+    padding-left: 12px;
+    padding-right: 6px;
+    opacity: 1;
+    transition: all 0.3s linear;
+}
+
+:root[data-ui-panel-button-collapse="true"] .expandingButton .label {
+    max-width: 0px;
+    padding-left: 0;
+    padding-right: 0;
+    opacity: 0;
+}
+
+.fixedHolder {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    width: 100vw;
+
+    /* Dynamic viewport height re: mobile */
+    height: calc(100dvh);
+
+    @supports not (height: 100dvh) {
+        height: 100vh; /* Back compat */
+    }
+
+    pointer-events: none;
+}
+
 /* ------------------------------------------------ */
 
 html {
     -webkit-tap-highlight-color: transparent; /* Chrome, Safari, Edge */
+
+    /* reserve space for scrollbar to prevent layout shifts (windows chrome desktop, etc) */
+    /* color does not match bg post-scrim, revisit or not, ugh*/
+    /* scrollbar-gutter: stable;  */
 }
-body, html {
+
+html {
+    box-sizing: border-box;
+  }
+*, *::before, *::after {
+    box-sizing: inherit;
+}
+
+html, body {
     margin: 0;
     padding: 0;
     background-color: var(--color-bg);
 }
+
+/* --------------------------------------------- */
 
 #playerOverlay {
     position: fixed;
@@ -98,7 +179,7 @@ body, html {
 }
 
 .loadHolder {
-    padding-top:42px; /* clear player + extra */
+    padding-top:62px; /* clear player + extra */
     padding-left: 18px;
     padding-right: 18px;
     width: calc(100% - 36px);
@@ -109,9 +190,17 @@ body, html {
 }
 
 .loadPrompt {
+    font-size: 16px;
+    font-family: sans-serif;
+
     color: var(--color-text-dim);
-    margin-top:28px;
-    margin-bottom: 18px;
+    margin-top:18px;
+    margin-bottom: 12px;
+}
+@media (max-width: 600px) {
+    .loadPrompt {
+        font-size: 14px;
+    }
 }
 
 .loadButtonsLine {
@@ -167,7 +256,7 @@ body, html {
 
 #loadLast {
     display: none;
-    margin-top:18px;
+    margin-top:32px;
     font-size: 16px;
     font-family: sans-serif;
     font-weight: normal;
@@ -185,7 +274,7 @@ body, html {
 /* --------------------------------------- */
 
 #noSleepInfo {
-    height:24px;
+    height:36px;
 }
 [data-sleep="on"] #noSleepInfo  {
     display: none;
@@ -217,9 +306,8 @@ body, html {
 
 
 #fileName {
-    padding-left: 18px;
-    padding-right: 18px;
-    width: calc(100% - 36px);
+    margin-left: 36px;
+    width: calc(100% - 72px);
     margin-bottom: 16px;
     font-family: sans-serif;
     font-size: 14px;
@@ -232,64 +320,15 @@ body, html {
 @media (max-width: 600px) {
     #fileName {
         font-size: 12px;
+        margin-left: 18px;
+        width: calc(100% - 36px);
     }
 }
 
 /* -------------------------------------- */
 /* ui panel button, ui overlay, ui panel  */
 
-#uiPanelButtonHolder {
-    position: fixed;
-    bottom: 0;
-    bottom: env(safe-area-inset-bottom, 0); /* mobile */
-    right: 12px;
-    padding-bottom: 12px;
-}
-
-#uiPanelButton svg path {
-    fill: var(--color-text-dim);
-}
-
-.expandingButton {
-    border: none;
-    border-radius: 8px;
-    background-color: var(--color-content-bg);
-    box-shadow: 0 4px 8px var(--color-shadow);
-    cursor: pointer;
-
-    display: inline-flex;
-    align-items: center;
-
-    overflow: hidden;
-}
-
-.expandingButton .graphic {
-    flex-shrink: 0;
-    width: 30px;
-    height: 30px;
-    padding:6px;
-}
-
-.expandingButton .label {
-    color: var(--color-text-dim);
-    white-space: nowrap;
-
-    /* Anim */
-    max-width: 100px;
-    padding-left: 12px;
-    padding-right: 6px;
-    opacity: 1;
-    transition: all 0.3s linear;
-}
-
-:root[data-ui-panel-button-collapse="true"] .expandingButton .label {
-    max-width: 0px;
-    padding-left: 0;
-    padding-right: 0;
-    opacity: 0;
-}
-
-#uiOverlay {
+#scrim {
     display: none;
     position: fixed;
     top: 0;
@@ -300,7 +339,7 @@ body, html {
     width: 100vw;
 
     /* Dynamic viewport height re: mobile */
-    height: calc(100dvh + 10px); /* 10px because firefox mobile display bug */
+    height: calc(100dvh);
 
     @supports not (height: 100dvh) {
         height: 100vh; /* Back compat */
@@ -310,82 +349,200 @@ body, html {
     opacity: 0;
     transition: opacity 0.3s ease-out;
 }
-:root[data-theme="dark"] #uiOverlay {
+:root[data-theme="dark"] #scrim {
     background: #00000088;
 }
-
-#uiOverlay.showing {
+#scrim.showing {
     opacity: 1;
 }
 
-#uiPanel {
+.bottomButtonsColumn {
+    pointer-events: auto;
+
+    position: absolute;
+    bottom: 12px;
+    right: 0;
+
     display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+#bookmarkButton {
+    display: none; /* inline block */
+    margin-right:12px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+#bookmarkButton.showing {
+    opacity: 1;
+}
+#bookmarkButton svg path {
+    fill: var(--color-text-dim);
+}
+
+#menuButton {
+    margin-right:12px;
+}
+#menuButton svg path {
+    fill: var(--color-text-dim);
+}
+
+#menuPanel {
+    pointer-events: auto;
+
+    display: none; /* flex */
     flex-direction: column;
     gap: 16px;
 
-    position: absolute;
-    bottom: 74px; /* 64px + 10px for unwelcome adjustment above */
-    right: 12px;
     padding: 12px;
-    border-radius:8px;
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
     background: var(--color-bg);
     box-shadow: 0 4px 8px var(--color-shadow);
 
     /* rem, default state is not-showing*/
     transform: translateX(calc(100% + 12px));
     transition: transform 0.3s ease-out;
-
 }
-@media (max-width: 600px) {
-    #uiPanel {
-        gap: 6px;
-        padding: 6px;
-        box-shadow: 0 3px 6px var(--color-shadow);
-    }
-}
-
-#uiOverlay.showing #uiPanel {
+#menuPanel.showing {
     transform: translateX(0);
 }
 
+/* ------------------- */
+
+#bookmarkPanel {
+    pointer-events: auto;
+
+    display: none; /* flex */
+    flex-direction: column;
+    width: 66%;
+    max-width:500px;
+    height: 100%;
+    padding:18px;
+    background: var(--color-content-bg);
+    color: var(--color-text-dim);
+    overflow: auto;
+
+    transform: translateX(calc(-100%));
+    transition: transform 0.3s ease-out;
+}
+@media (max-width: 600px) {
+    #bookmarkPanel {
+        width: 75%;
+    }
+}
+#bookmarkPanel.showing {
+    transform: translateX(0);
+}
+
+.bookmarkTitle {
+    flex: 0 0 auto;
+    margin-bottom:18px;
+}
+
+#bookmarkAddButton {
+    flex: 0 0 auto;
+    margin-bottom:16px;
+}
+#bookmarkDesc {
+    font-style: italic;
+    font-size: 14px; /* TODO: make text size variables small medium large */
+    font-weight: normal;
+    font-family: serif;
+    color: var(--color-text-dim);
+    margin-top:8px;
+
+    white-space: nowrap;
+    overflow-x: hidden;
+    text-overflow: ellipsis;
+}
+
+#bookmarkList {
+    flex: 1; /* grow to fill remaining space */
+    width: 100%;
+}
+
+.bookmarkItem {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+.bookmarkItemText {
+    flex: 1;
+
+    font-family: serif;
+    font-size: 18px; /* TODO: make text size variables - small medium large */
+    color: var(--color-text-dim);
+    padding:10px 0 10px 0;
+    cursor:pointer;
+
+    white-space: nowrap;
+    overflow-x: hidden;
+    text-overflow: ellipsis;
+}
+.bookmarkItemText {
+    @media (max-width: 600px) {
+        --book-text-size: 14px;
+    }
+}
+
+.bookmarkItemLocation {
+    flex: 0 0 auto;
+
+    font-family: sans-serif;
+    font-size: 14px;
+    color: var(--color-text-dim);
+    opacity: 0.66;
+}
+@media (max-width: 600px) {
+    .bookmarkItemLocation {
+        font-size: 12px;
+    }
+}
+.bookmarkItemDelete {
+    flex: 0 0 auto;
+
+    width:42px;
+    height:42px;
+    padding: 6px;
+    cursor:pointer;
+}
+.bookmarkItemDelete svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--color-text-dim);
+}
 
 /* ------------------- */
 
-#toastHolder {
-    position: fixed;
-    bottom: 0;
-    bottom: env(safe-area-inset-bottom, 0); /* mobile */
-    width: 100%;
-    display: flex;
-    justify-content: center; /* horizontal center */
-}
-
 #toast {
-    padding: 12px 18px 28px 18px; /* extra 10px on bottom, same firefox mobile drawing issue */
+    position:absolute;
+    bottom:0;
 
-    min-width: 250px;
-    margin: 0 12px;
-    text-align: center;
+    left:0px;
+    right:0px;
+    height: 54px;
+    padding: 18px;
+
     color:  var(--color-text-dim);
     background: var(--color-bg);
-    border-top-left-radius:8px;
-    border-top-right-radius:8px;
-    box-shadow: 0 4px 8px var(--color-shadow);
+    text-align: center;
 
-    transform: translateY(calc(100% + 10px));
+    pointer-events: auto; /* blocks */
+    cursor: pointer;
+
+    transform: translateY(calc(100%));
     display: none;
     transition: transform 0.3s ease;
-}
-@media (max-width: 600px) {
-    #toast {
-        width: 100%;
-        min-width: 0;
-    }
 }
 
 #toast.showing {
     display: block;
-    transform: translateY(10px); /* shd rly be 0, ofc */
+    transform: translateY(00px);
+    /* shd rly be 0, ofc */
 }
 
 /* ------------------- */
@@ -405,12 +562,11 @@ body, html {
     opacity: 0;
     transition: opacity 0.3s ease-out;
 }
-
 #loadingOverlay.showing {
     opacity: 1;
 }
 
-#loadingPrompt {
+.loadingPrompt {
     background: var(--color-bg);
     color: var(--color-text);
     padding: 24px 48px 24px 48px;
@@ -453,7 +609,6 @@ body, html {
     word-break: break-word;
 
     max-width: 100%;
-    box-sizing: border-box;
 }
 @media (max-width: 600px) {
     #textHolder {
@@ -505,7 +660,10 @@ span.highlight {
 /* ------------------- */
 
 #helpHolder {
-    display: none;
+    display: flex;
+    justify-content: center;
+}
+#helpHolder table {
     font-size: 16px;
     font-family: sans-serif;
     color: var(--color-text-dim);
@@ -514,7 +672,7 @@ span.highlight {
     padding-bottom: 36px;
 }
 @media (max-width: 600px) {
-    #helpHolder {
+    #helpHolder table {
         padding: 18px;
     }
 }
