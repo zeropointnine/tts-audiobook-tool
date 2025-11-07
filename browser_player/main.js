@@ -196,7 +196,7 @@ window.app = function() {
 
         scrim.addEventListener("click", (e) => {
             e.stopPropagation();
-            hideScrimAndRelated();
+            hideScrimAndPanels();
         });
 
         // eat. // TODO: is this still necessary?
@@ -208,7 +208,7 @@ window.app = function() {
             if (!isElementShowing(menuPanel)) {
                 showMenuPanel();
             } else {
-                hideScrimAndRelated();
+                hideScrimAndPanels();
             }
         });
 
@@ -217,7 +217,7 @@ window.app = function() {
         // Menu buttons
         scrollTopButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            hideScrimAndRelated();
+            hideScrimAndPanels();
             window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
         });
         textSizeButton.addEventListener('click', (e) => {
@@ -244,7 +244,7 @@ window.app = function() {
                 clearSleep()
             }
             updateMenuButtons();
-            hideScrimAndRelated();
+            hideScrimAndPanels();
         });
 
         toast.addEventListener("click", () => {
@@ -379,20 +379,35 @@ window.app = function() {
     // --------------------------------------
 
     function showScrim() {
-        showElement(scrim);
-        // We're going into a 'modal' ux state, so
-        main.setAttribute("inert", "");
+
+        // We're going into a 'modal' ux state, so make things inert  (un-tab-able, etc)
         playerHolder.setAttribute("inert", "");
+        main.setAttribute("inert", "");
+
+        // Wait for cpu-heavy update to finish before triggering animation
+        // TODO: refactor out "inert" and target concerned elements directly
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => { // yes, twice
+                showElement(scrim);
+            });
+        });
     }
 
-    function hideScrimAndRelated() {
+    function hideScrimAndPanels() {
         // Hides scrim and any open panels
+
         document.body.classList.remove("bodyNoScroll");
-        hideElement(scrim);
-        hideElement(menuPanel);
-        hideElement(bookmarkPanel);
         main.removeAttribute("inert");
         playerHolder.removeAttribute("inert");
+
+        // Wait for cpu-heavy update to finish before triggering animation
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => { // yes, twice
+                hideElement(scrim);
+                hideElement(menuPanel);
+                hideElement(bookmarkPanel);
+            });
+        });
     }
 
     function showMenuPanel() {
@@ -407,7 +422,7 @@ window.app = function() {
         if (!isElementShowing(bookmarkPanel)) {
             showBookmarkPanel();
         } else {
-            hideScrimAndRelated();
+            hideScrimAndPanels();
         }
     }
 
@@ -451,7 +466,7 @@ window.app = function() {
         }
 
         if (event.key == "Escape" && isElementShowing(scrim)) {
-            hideScrimAndRelated();
+            hideScrimAndPanels();
             return;
         }
 
@@ -547,7 +562,7 @@ window.app = function() {
         const index = parseInt(s);
         seekBySegmentIndex(index);
         audio.play();
-        hideScrimAndRelated();
+        hideScrimAndPanels();
     }
 
     function loop() {
@@ -1050,7 +1065,6 @@ window.app = function() {
 
     /**
      * Animates-out an element.
-     * param now - skips transition
      */
     function hideElement(element, shouldDisplayNone=true, now=false) {
         element.removeEventListener('transitionend', onHideElementDisplayNone);

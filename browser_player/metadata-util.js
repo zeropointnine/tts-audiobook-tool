@@ -63,7 +63,7 @@ async function loadAppMetadata(file, url) {
         for (let i = 0; i < binaryStr.length; i++) {
             bytes[i] = binaryStr.charCodeAt(i);
         }
-        // Decompress
+        // eslint-disable-next-line
         const decompressed = pako.inflate(bytes); // zlib decompression
         rawText = new TextDecoder('utf-8').decode(decompressed);
         if (!rawText) {

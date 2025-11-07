@@ -398,6 +398,7 @@ html, body {
 
     padding: 12px;
     border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
     border-bottom-left-radius: 8px;
     background: var(--color-bg);
     box-shadow: 0 4px 8px var(--color-shadow);
