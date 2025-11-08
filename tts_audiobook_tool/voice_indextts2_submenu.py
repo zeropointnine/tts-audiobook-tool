@@ -142,7 +142,7 @@ def ask_vector(project: Project) -> None:
 
     printt("Enter emotion vector:")
     printt()
-    s = "This is a list of eight numbers between 0-1 corresponding to:\n"
+    s = "This should be a list of eight numbers between 0-1 corresponding to:\n"
     s += "happy, angry, sad, afraid, disgusted, melancholic, surprised, calm\n"
     s += f'{COL_DIM}Eg: "0, 0.8, 0, 0, 0.2, 0, 0, 0" = very angry, slightly disgusted{COL_DEFAULT}'
     printt(s)
@@ -156,4 +156,4 @@ def ask_vector(project: Project) -> None:
     else:
         project.indextts2_emo_vector = result
         project.save()
-        print_feedback("Emotion vector saved:", project.emo_vector_to_string())
+        print_feedback("Emotion vector set:", project.emo_vector_to_string())

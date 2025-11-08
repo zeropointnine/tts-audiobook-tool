@@ -5,13 +5,12 @@ window.app = function() {
     const SLEEP_MS = (1000 * 60) * 15
 
     const root = document.documentElement;
-    const main = document.getElementById("main") // main document flow div
     const loadFileInput = document.getElementById("loadFileInput");
     const loadLastHolder = document.getElementById("loadLast")
     const sleepTimeLeft = document.getElementById("sleepTimeLeft");
     const fileNameDiv = document.getElementById("fileName")
     const playerOverlay = document.getElementById("playerOverlay"); // always visible
-    const playerHolder = document.getElementById("playerHolder"); // animates in and out
+    const playerHolder = document.getElementById("playerHolder"); // animates in and out (translateY)
     const audio = document.getElementById("audio");
     const textHolder = document.getElementById("textHolder");
     const loadLocalButtonLabel = document.getElementById("loadLocalButtonLabel");
@@ -20,19 +19,17 @@ window.app = function() {
     const helpTemplate = document.getElementById("helpTemplate");
     const githubButton = document.getElementById("githubCorner");
 
+    // Overlay-related UI elements
     const menuButton = document.getElementById("menuButton");
     const scrim = document.getElementById("scrim");
     const menuPanel = document.getElementById("menuPanel");
-
     const scrollTopButton = document.getElementById("scrollTopButton")
     const textSizeButton = document.getElementById("textSizeButton")
     const themeButton = document.getElementById("themeButton");
     const segmentColorsButton = document.getElementById("segmentColorsButton")
     const sleepButton = document.getElementById("sleepButton");
-
     const bookmarkPanel = document.getElementById("bookmarkPanel");
     const bookmarkButton = document.getElementById("bookmarkButton");
-
     const toast = document.getElementById("toast");
     const loadingOverlay = document.getElementById("loadingOverlay")
 
@@ -49,22 +46,19 @@ window.app = function() {
     let spans = []; // cached text segment span refs
 
     let isStarted = false; // is audiobook populated and audio loaded
-    let hasPlayedOnce = false; // has audio playback happened at least once
     let hasAdvancedOnce = false; // has audio playback advanced one segment at least once
     let isToastPlayPrompt = false;
 
     let currentIndex = -1; // segment index whose time range encloses the player's currentTime
     let directSelections = []
 
-    let playerHideDelayId = -1;
     let toastHideDelayId = -1
     let sleepId = -1;
     let sleepEndTime = -1;
     let loopIntervalId = -1;
     let isInPlayer = false;
-
-    const mousePosition = { x: 0, y: 0};
-    let activeElement = null;
+    let useSectionDividers = false;
+    const mousePosition = { x: -1, y: -1};
 
     // ****
     init();
@@ -123,7 +117,6 @@ window.app = function() {
             if (isCheckingZombie) {
                 return;
             }
-            hasPlayedOnce = true;
             if (isToastPlayPrompt) {
                 isToastPlayPrompt = false;
                 hideToast();
@@ -154,7 +147,7 @@ window.app = function() {
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 // Browser tab has gone from not-visible to visible
-                // Note, checking zombie only when is-touch-device
+                // Note, checking zombie only when is-touch-device (ie, mobile, ie, aggressively kills file handle)
                 const should = (!isCheckingZombie && isTouchDevice() && audio.duration > 0 && audio.paused && !audio.ended);
                 if (should) {
                     checkZombieState();
@@ -162,17 +155,30 @@ window.app = function() {
             }
         });
 
-        // Load file from queryparam "url"
-        const urlParams = new URLSearchParams(window.location.search);
-        const url = urlParams.get("url");
-        if (url) {
-            loadAudioFileOrUrl(null, url);
+        if (isTouchDevice()) {
+            player.removePinButton();
         }
 
         const lastFileId = localStorage.getItem("last_file_id")
         if (lastFileId) {
             document.getElementById("loadLastId").textContent = lastFileId;
             loadLastHolder.style.display = "block";
+        }
+
+        useSectionDividers = (localStorage.getItem("pref_dividers") === "1");
+        if (navigator.userAgent == "Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0") {
+            useSectionDividers = true; // yes rly // TODO pls don't
+        }
+
+        const s = localStorage.getItem("pref_player_pinned");
+        const isPinned = (s === "1") || !s; // default is pinned
+        player.setPinned(isPinned);
+
+        // Load file from queryparam "url" if any
+        const urlParams = new URLSearchParams(window.location.search);
+        const url = urlParams.get("url");
+        if (url) {
+            loadAudioFileOrUrl(null, url);
         }
 
         initRootAttributesFromLocalStorage();
@@ -193,6 +199,15 @@ window.app = function() {
     }
 
     function initClickListeners() {
+
+        player.pinBtn.addEventListener("click", (e) => {
+            const b = !player.isPinned();
+            player.setPinned(b);
+            localStorage.setItem("pref_player_pinned", b ? "1" : "0");
+            if (!b) {
+                hidePlayer();
+            }
+        });
 
         scrim.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -260,6 +275,13 @@ window.app = function() {
      */
     async function loadAudioFileOrUrl(pFile, pUrl) {
 
+        hidePlayer();
+
+        if (isToastPlayPrompt) {
+            isToastPlayPrompt = false;
+            hideToast();
+        }
+
         if (pUrl) {
             showElement(loadingOverlay, "flex");
         }
@@ -293,53 +315,42 @@ window.app = function() {
         localStorage.setItem("last_file_id", fileId);
 
         currentIndex = -1;
+        isToastPlayPrompt = false;
 
-        audio.src = "";
-        audio.load(); // aborts any pending activity
-        hidePlayer();
         fileNameDiv.style.display = "none"
         textHolder.style.display = "none";
         root.setAttribute("data-player-status", "none");
-        githubButton.style.display = "block";
-
         githubButton.style.display = "none";
         loadLastHolder.style.display = "none";
         removeHelp();
         fileNameDiv.style.display = "block"
         fileNameDiv.textContent = file ? file.name : url
+        showElement(bookmarkButton);
+        if (isTouchDevice() || player.isPinned()) {
+            showPlayer();
+        }
+        if (document.activeElement && document.activeElement.blur) {
+            document.activeElement.blur();
+        }
 
         populateText();
-
-        showElement(bookmarkButton);
 
         const arr = loadBookmarks();
         bookmarks.init(textSegments, arr);
 
-        if (hasPlayedOnce) {
-            showAndHidePlayer();
-        } else {
-            // Don't auto-hide player on first audio load
-            showPlayer();
-        }
-
+        // Play
+        audio.src = "";
+        audio.load(); // ... src="" + load() aborts any pending activity
         audio.src = url || URL.createObjectURL(file)
         playerPlay();
 
+        // Seek to stored position if exists
         let time = localStorage.getItem("fileId_" + fileId)
         if (time) {
             time = parseFloat(time);
             if (time) {
                 audio.currentTime = time;
             }
-        }
-
-        if (document.activeElement && document.activeElement.blur) {
-            document.activeElement.blur();
-        }
-
-        if (isTouchDevice()) {
-            // On touch device, player is always showing
-            playerHolder.classList.add("showing");
         }
 
         isStarted = true;
@@ -349,13 +360,29 @@ window.app = function() {
 
         let contentHtml = '';
         textSegments.forEach((segment, i) => {
+
             const o = splitWhitespace(segment.text)
+
             if (o["before"]) {
                 contentHtml += escapeHtml( o["before"] );
             }
+
             contentHtml += `<span id="segment-${i}">${ escapeHtml( o["content"] ) }</span>`;
+
             if (o["after"]) {
-                contentHtml += escapeHtml( o["after"] );
+
+                if (useSectionDividers) {
+                    const numLfs = o["after"].split('\n').length - 1;
+                    if (numLfs >= 3) {
+                        // Two+ blank lines - treat as 'section break'
+                        // TODO: add the "segment reason" field to the metadata rather than inferring this
+                        contentHtml += "<br>&nbsp;<hr><br>";
+                    } else {
+                        contentHtml += escapeHtml( o["after"] );
+                    }
+                    } else {
+                    contentHtml += escapeHtml( o["after"] );
+                }
             }
         });
 
@@ -379,35 +406,20 @@ window.app = function() {
     // --------------------------------------
 
     function showScrim() {
-
-        // We're going into a 'modal' ux state, so make things inert  (un-tab-able, etc)
-        playerHolder.setAttribute("inert", "");
-        main.setAttribute("inert", "");
-
-        // Wait for cpu-heavy update to finish before triggering animation
-        // TODO: refactor out "inert" and target concerned elements directly
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => { // yes, twice
-                showElement(scrim);
-            });
-        });
+        document.body.classList.add("bodyNoScroll");
+        loadLocalButtonLabel.setAttribute("inert", "");
+        player.makeButtonsInert(true);
+        showElement(scrim);
     }
 
     function hideScrimAndPanels() {
-        // Hides scrim and any open panels
-
+        // TODO: re-enable them
         document.body.classList.remove("bodyNoScroll");
-        main.removeAttribute("inert");
-        playerHolder.removeAttribute("inert");
-
-        // Wait for cpu-heavy update to finish before triggering animation
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => { // yes, twice
-                hideElement(scrim);
-                hideElement(menuPanel);
-                hideElement(bookmarkPanel);
-            });
-        });
+        loadLocalButtonLabel.removeAttribute("inert");
+        player.makeButtonsInert(false);
+        hideElement(scrim);
+        hideElement(menuPanel);
+        hideElement(bookmarkPanel);
     }
 
     function showMenuPanel() {
@@ -548,7 +560,6 @@ window.app = function() {
             }
         } else {
             seekBySegmentIndex(segmentIndex, true);
-            showAndHidePlayer();
 
             const isSameAsLast = (directSelections.at(-1) !== undefined) && (directSelections.at(-1) == segmentIndex)
             if (!isSameAsLast) {
@@ -712,12 +723,9 @@ window.app = function() {
     async function playerPlay() {
         try {
             await audio.play();
-            if (isInPlayer) {
-                showAndHidePlayer();
-            }
         } catch (error) {
             if (error.name == "NotAllowedError") {
-                showToast("Click Play to start", true);
+                showToast("Click to play audio", true);
             } else {
                 console.error("playerPlay error - code:", error.code, "name:", error.name, "message:", error.message)
             }
@@ -951,10 +959,7 @@ window.app = function() {
 
     function updatePlayerVisibility() {
 
-        if (isTouchDevice()) {
-            return;
-        }
-        if (!isStarted) {
+        if (isTouchDevice() ||  player.isPinned()) {
             return;
         }
 
@@ -965,31 +970,17 @@ window.app = function() {
         }
 
         if (isInPlayer) {
-            clearTimeout(playerHideDelayId);
             showPlayer();
         } else {
-            showAndHidePlayer(0);
+            hidePlayer();
         }
-    }
-
-    function showAndHidePlayer(hideDelay=1000) {
-        showPlayer();
-        playerHideDelayId = setTimeout(() => { hidePlayer(); }, hideDelay);
     }
 
     function showPlayer() {
-        if (isTouchDevice()) {
-            return;
-        }
-        clearTimeout(playerHideDelayId);
         showElement(playerHolder);
     }
 
     function hidePlayer() {
-        if (isTouchDevice()) {
-            return;
-        }
-        clearTimeout(playerHideDelayId);
         hideElement(playerHolder, false);
     }
 

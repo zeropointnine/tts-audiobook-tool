@@ -2,10 +2,10 @@ class AudioPlayer {
 
     /**
      * Takes in a pre-existing <audio> element and an empty container.
-     * The controls get programmatically  added to the container.
-     * Assumes css definitions found in "audio-player.css"
+     * The controls get programmatically added to the container.
+     * Assumes css definitions as found in "audio-player.css"
      *
-     * The class requires no "api", as it were.
+     * The class requires very little no "api", as it were.
      */
     constructor({ audioElement, container }) {
 
@@ -17,8 +17,39 @@ class AudioPlayer {
         this._bindEvents();
 
         // Initial state
+
+        this._isPinned = false;
+
         this._updatePlayPauseButton();
         this._updateVolumeControls();
+        this._updatePinButton();
+    }
+
+    isPinned() {
+        return this._isPinned;
+    }
+
+    setPinned(b) {
+        // Sets the icon type
+        // (not the actual show/hide behavior, which this class does not address)
+        this._isPinned = b;
+        this._updatePinButton();
+    }
+
+    removePinButton() {
+        this.pinBtn.remove();
+    }
+
+    makeButtonsInert(b) {
+        if (b) {
+            this.playPauseBtn.setAttribute("inert", "");
+            this.volumeBtn.setAttribute("inert", "");
+            this.pinBtn.setAttribute("inert", "");
+        } else {
+            this.playPauseBtn.removeAttribute("inert");
+            this.volumeBtn.removeAttribute("inert");
+            this.pinBtn.removeAttribute("inert");
+        }
     }
 
     _createUi() {
@@ -57,11 +88,15 @@ class AudioPlayer {
         this.volumeControls.appendChild(this.volumeBtn);
         this.volumeControls.appendChild(this.volumeSlider);
 
+        this.pinBtn = document.createElement('button');
+        this.pinBtn.className = 'pin-btn';
+
         this.playerElement.appendChild(this.playPauseBtn);
         this.playerElement.appendChild(this.progressBar);
         this.playerElement.appendChild(this.timeDisplay);
         this.playerElement.appendChild(this.timeTotal);
         this.playerElement.appendChild(this.volumeControls);
+        this.playerElement.appendChild(this.pinBtn);
 
         this.container.appendChild(this.playerElement);
     }
@@ -145,6 +180,16 @@ class AudioPlayer {
         } else {
             const thumbLeft = this.audio.volume * (barWidth - thumbWidth);
             this.volumeSliderThumb.style.left = `${thumbLeft}px`;
+        }
+    }
+
+    _updatePinButton() {
+        if (this._isPinned) {
+            this.pinBtn.classList.remove('unpinned');
+            this.pinBtn.classList.add('pinned');
+        } else {
+            this.pinBtn.classList.remove('pinned');
+            this.pinBtn.classList.add('unpinned');
         }
     }
 

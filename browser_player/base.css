@@ -9,6 +9,7 @@
     --color-content-bg: #ffffff;
     --color-text: #333333;
     --color-text-dim: #33333394;
+    --color-text-dimmer: #33333348;
     --color-shadow: rgba(0,0,0, 0.1);
     --color-button-bg: #888888;
 
@@ -46,6 +47,7 @@
     --color-content-bg: #222222;
     --color-text: #d8d8d8;
     --color-text-dim: #d8d8d888;
+    --color-text-dimmer: #d8d8d844;
     --color-shadow: rgba(0, 0, 0, 0.33);
 
     --color-segment-highlight: #ffaa4466;
