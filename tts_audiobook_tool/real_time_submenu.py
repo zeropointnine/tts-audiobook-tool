@@ -4,6 +4,8 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.real_time_util import RealTimeUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
@@ -25,6 +27,10 @@ class RealTimeSubmenu:
                 b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
                 if not b:
                     return
+
+            if Tts.get_type() == TtsModelInfos.FISH:
+                AppUtil.show_hint_if_necessary(state.prefs, HINT_FISH_FIRST)
+
             RealTimeUtil.start(
                 state=state,
                 text_segments=text_segments,

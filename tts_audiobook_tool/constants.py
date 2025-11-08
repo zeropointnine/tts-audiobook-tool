@@ -159,9 +159,7 @@ When enough audio has accumulated in the buffer, lines that do not pass
 the validation check get retried one time.
 
 To achieve uninterrupted playback, your system must be able to
-do the audio inference faster-than-realtime.
-
-"""
+do the audio inference faster-than-realtime."""
 )
 
 HINT_MULTIPLE_MP3S = Hint(
@@ -174,6 +172,13 @@ HINT_OUTE_LOUD_NORM = Hint(
     "oute_loud_norm",
     "Tip",
     "Oute generations can have considerable variance in loudness.\nConsider using \"stronger.\""
+)
+
+HINT_FISH_FIRST = Hint(
+    "fish_first",
+    "Please note...",
+    """On the very first inference, the Fish model may go through a compilation step
+which may take 1-2 minutes without any feedback shown."""
 )
 
 HINT_NO_VOICE = Hint(
