@@ -114,7 +114,7 @@ class SttFlow:
             if DEV and False:
                 b = True
             else:
-                b = AskUtil.ask_confirm("You've previously transcribed this file. Use saved transcription data? ")
+                b = AskUtil.ask_confirm("You've previously transcribed this audio file. Use saved transcription data? ")
             if not b:
                 transcription_pickle_path = ""
 

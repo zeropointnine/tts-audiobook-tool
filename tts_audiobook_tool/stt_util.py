@@ -65,7 +65,6 @@ class SttUtil:
         # Pointer for transcribed_words
         cursor = 0
 
-
         for segment_index, segment in enumerate(text_segments):
 
             if SigIntHandler().did_interrupt:
@@ -194,7 +193,7 @@ class SttUtil:
 
                 if DEBUG:
                     print(f"had to skip {current_skip_span} words")
-                    print(f"cursor is now: [{cursor+1}] {print_upcoming_words(transcribed_words, cursor)}")
+                    print(f"cursor is now: [{cursor+1}] {make_words_string(transcribed_words, cursor)}")
                     print()
 
             else:
@@ -205,17 +204,20 @@ class SttUtil:
                     TimedTextSegment(segment.text, segment.index_start, segment.index_end, 0.0, 0.0)
                 )
 
+                # Ensure the always-advancing source text segments can't "outrun" the transcribed text.
+                # If transcription includes a chunk of text not found in the source text (up to a point...),
+                # the cursor should eventually "catch up" after a few misses.
+                was_max_skip = max_skip_words
+                max_skip_words += len( segment.text.split(" ") ) * 2
+                max_skip_words = min(max_skip_words, MAX_SKIP_WORDS_LIMIT) # Prevent pathologically slow inner-loop
+
                 if print_info:
                     print_result(False)
 
-                # Idea here is to ensure the advancing source text segments can't "outrun" the
-                # transcribed text. Could slow search loop to a crawl under worst circumstances.
-                # May need to revisit.
-                max_skip_words += len( segment.text.split(" ") )
-
                 if DEBUG:
+                    print(f"scanned transcript in this range: {make_words_string(transcribed_words, cursor, was_max_skip)}")
+                    print(f"cursor stays at: [{cursor+1}] ")
                     print(f"max_skip_words has increased to: {max_skip_words}")
-                    print(f"cursor stays at: [{cursor+1}] {print_upcoming_words(transcribed_words, cursor)}")
                     print()
 
             # ---
@@ -535,9 +537,9 @@ def word_list_to_string(lst: list[Word]) -> str:
     l = [item.word.strip() for item in lst]
     return " ".join(l)
 
-def print_upcoming_words(transcribed_words: list[Word], index: int) -> str:
+def make_words_string(transcribed_words: list[Word], index: int, length: int=8) -> str:
     """ used for debugging"""
-    end_index = index + 8
+    end_index = index + length
     end_index = min(end_index, len(transcribed_words))
     s = ""
     for i in range(index, end_index):
@@ -557,5 +559,6 @@ MIN_MATCH_RATIO = 0.7
 # to find a match for the current text_segment.
 # Should be at least as long as source text word length per segment
 MAX_SKIP_WORDS_BASE = 45
+MAX_SKIP_WORDS_LIMIT = 250
 
 DEBUG = DEV and True

@@ -144,16 +144,20 @@ def ask_vector(project: Project) -> None:
     printt()
     s = "This should be a list of eight numbers between 0-1 corresponding to:\n"
     s += "happy, angry, sad, afraid, disgusted, melancholic, surprised, calm\n"
-    s += f'{COL_DIM}Eg: "0, 0.8, 0, 0, 0.2, 0, 0, 0" = very angry, slightly disgusted{COL_DEFAULT}'
+    s += f'{COL_DIM}Eg: "0, 0.8, 0, 0, 0.2, 0, 0, 0" = very angry, slightly disgusted{COL_DEFAULT}\n'
+    s += f'{COL_DIM}Enter \"none\" to remove{COL_DEFAULT}'
     printt(s)
     printt()
     inp = AskUtil.ask("")
     if not inp:
         return
-    result = Project.parse_emo_vector_string(inp)
-    if isinstance(result, str):
-        AskUtil.ask_error(result)
+    if inp == "none":
+        value = []
     else:
-        project.indextts2_emo_vector = result
-        project.save()
-        print_feedback("Emotion vector set:", project.emo_vector_to_string())
+        value = Project.parse_emo_vector_string(inp)
+        if isinstance(value, str):
+            AskUtil.ask_error(value)
+            return
+    project.indextts2_emo_vector = value
+    project.save()
+    print_feedback("Emotion vector set:", project.emo_vector_to_string())

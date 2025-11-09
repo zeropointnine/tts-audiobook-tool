@@ -53,7 +53,7 @@ class Project:
     indextts2_voice_file_name: str = ""
     indextts2_emo_alpha: float = -1
     indextts2_emo_voice_file_name: str = ""
-    indextts2_emo_vector: list[float] = [] # should have either 0 or 8 elements
+    indextts2_emo_vector: list[float] = [] # use either 0 or 8 elements
 
     generate_range_string: str = ""
 

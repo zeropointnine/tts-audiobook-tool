@@ -113,8 +113,8 @@ HINT_INDEXTTS2 = Hint(
     "indextts2",
     "This appears to be your first time running the application using the IndexTTS2 model",
     """We recommend disabling transcription validation for this model
-(Options > Whisper transcription model > Disabled),
-as IndexTTS2 voice generations are accurate enough to make this extra step unnecessary."""
+as IndexTTS2 voice generations are accurate enough to make this extra step unnecessary.
+(Options > Whisper transcription model > Disabled)"""
 )
 
 HINT_TKINTER = Hint(
@@ -228,6 +228,6 @@ HINT_STT_ENHANCE = Hint(
     "stt_enahance",
     "Text preparation...",
     """It's recommended to first remove any large chunks
-from the source text  that do not occur in the audio.
-Common examples are: Publisher information, table of contents, etc"""
+from the source text that do not occur in the audio narration.
+Common examples are: publisher information, table of contents, etc"""
 )
