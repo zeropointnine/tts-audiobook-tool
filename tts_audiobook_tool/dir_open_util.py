@@ -29,7 +29,7 @@ class DirOpenUtil:
             if system == "Windows":
                 # Two methods for Windows
                 try:
-                    os.startfile(abs_path)
+                    os.startfile(abs_path) # type: ignore
                 except:
                     subprocess.Popen(['explorer', abs_path])
 

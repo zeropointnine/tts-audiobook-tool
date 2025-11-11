@@ -352,8 +352,8 @@ def is_long_path_enabled():
 
     import winreg
     try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
-            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key: # type: ignore
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled") # type: ignore
             return bool(value)
     except FileNotFoundError:
         return False  # Key doesn't exist (older Windows)
@@ -389,7 +389,7 @@ def open_directory_in_gui(path) -> str:
     system = platform.system()
     try:
         if system == "Windows":
-            os.startfile(path)
+            os.startfile(path) # type: ignore
         elif system == "Darwin":  # macOS
             subprocess.run(["open", path])
         else:  # Linux and others

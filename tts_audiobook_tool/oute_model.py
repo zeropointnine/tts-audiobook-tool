@@ -18,7 +18,7 @@ class OuteModel(OuteModelProtocol):
         from tts_audiobook_tool.config_oute import MODEL_CONFIG # let app crash on error
         try:
             # Overwrite with dev version if exists
-            from .config_oute_dev import MODEL_CONFIG
+            from .config_oute_dev import MODEL_CONFIG # type: ignore
         except ImportError:
             pass
         self._interface = outetts.Interface(config=MODEL_CONFIG)
@@ -54,7 +54,7 @@ class OuteModel(OuteModelProtocol):
         from outetts.models.config import SamplerConfig # type: ignore
         from tts_audiobook_tool.config_oute import GENERATION_CONFIG
         try:
-            from .config_oute_dev import GENERATION_CONFIG
+            from .config_oute_dev import GENERATION_CONFIG # type: ignore
         except ImportError:
             pass
         gen_config = copy.deepcopy(GENERATION_CONFIG)
