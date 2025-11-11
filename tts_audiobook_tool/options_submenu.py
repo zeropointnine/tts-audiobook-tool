@@ -90,16 +90,7 @@ class OptionsSubmenu:
     def transcription_model_config_menu(state: State) -> None:
 
         def on_item(_, item: MenuItem) -> bool:
-
             stt_config: SttConfig = item.data
-
-            if platform.system() == "Linux" and stt_config.device == "cuda":
-                AppUtil.print_hint(Hint("", f"{COL_ERROR}Disallowed", "Can't use CUDA for the Whisper device on Linux at the moment\ndue to issues with faster-whisper library and cuDNN"))
-                AskUtil.ask_enter_to_continue()
-                state.prefs.stt_config = SttConfig.CPU_INT8FLOAT32
-                Stt.set_config(state.prefs.stt_config)
-                return True
-
             if state.prefs.stt_config != stt_config:
                 state.prefs.stt_config= stt_config
                 Stt.set_config(state.prefs.stt_config) # sync static value

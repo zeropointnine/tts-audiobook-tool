@@ -266,7 +266,7 @@ These are my anecdotal inference speeds (running Windows unless otherwise noted)
 
 **2025-11-11**
 
-Added option to keep the Whisper model on the CPU. Note that this is now the default setting.
+Added option to keep the Whisper model on the CPU.
 
 **2025-11-05**
 

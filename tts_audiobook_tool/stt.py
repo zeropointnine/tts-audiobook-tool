@@ -55,9 +55,19 @@ class Stt:
             device = dq.device
             compute_type = dq.compute_type
 
-            print_model_init(f"Initializing whisper model ({model}, {device}, {compute_type})...")
+            if device == "cpu":
+                try:
+                    import psutil
+                    cpu_threads = psutil.cpu_count(logical=False) or 0
+                except:
+                    cpu_threads = 0 # ie, fall back to default (4)
+            else:
+                cpu_threads = 0
+            cpu_threads_string = f", {cpu_threads} threads" if cpu_threads else ""
+
+            print_model_init(f"Initializing faster-whisper model ({model}, {device}, {compute_type}{cpu_threads_string})...")
             printt()
-            Stt._whisper = WhisperModel(model, device=device, compute_type=compute_type)
+            Stt._whisper = WhisperModel(model, device=device, compute_type=compute_type, cpu_threads=cpu_threads)
 
         return Stt._whisper
 

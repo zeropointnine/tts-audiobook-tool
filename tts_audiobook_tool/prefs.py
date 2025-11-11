@@ -27,7 +27,7 @@ class Prefs:
         self._project_dir = project_dir
         self._hints = hints
         self._stt_variant = stt_variant
-        self._stt_config = stt_config if stt_config else list(SttConfig)[0]
+        self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
         self._use_section_sound_effect = use_section_sound_effect
@@ -80,11 +80,11 @@ class Prefs:
             else:
                 stt_variant = list(SttVariant)[0]
 
-        # STT device + quantization
+        # STT config (device + quantization)
         s = prefs_dict.get("stt_config", "")
         stt_config = SttConfig.get_by_json_id(s)
         if not stt_config:
-            stt_config = list(SttConfig)[0]
+            stt_config = SttConfig.get_default()
             dirty = True
 
         # Normalization type

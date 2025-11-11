@@ -18,14 +18,11 @@ class GenerateSubmenu:
     def menu(state: State) -> None:
 
         def on_start(_, __) -> None:
-            if state.project.can_voice and state.project.get_voice_label() == "none":
-                AppUtil.show_hint_if_necessary(state.prefs, HINT_NO_VOICE)
             if AskUtil.is_readchar:
                 b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
                 if not b:
                     return
-            if Tts.get_type() == TtsModelInfos.FISH:
-                AppUtil.show_hint_if_necessary(state.prefs, HINT_FISH_FIRST)
+            AppUtil.show_inference_hints(state.prefs, state.project)
             GenerateSubmenu.do_generate_items(state)
 
         def make_range_label(_) -> str:

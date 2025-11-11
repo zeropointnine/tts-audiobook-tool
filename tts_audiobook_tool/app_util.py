@@ -9,12 +9,15 @@ import time
 import torch
 import xxhash
 
+from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.text_segmenter import TextSegmenter
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class AppUtil:
@@ -292,3 +295,20 @@ class AppUtil:
             return int(info.used), int(info.total)
         except Exception as e:
             return None
+
+    @staticmethod
+    def show_inference_hints(prefs: Prefs, p_project) -> None:
+        """ Shows one-time hints related to doing inference """
+
+        from tts_audiobook_tool.project import Project
+        project: Project = p_project
+
+        if Tts.get_type() == TtsModelInfos.FISH:
+            AppUtil.show_hint_if_necessary(prefs, HINT_FISH_FIRST)
+
+        if project.can_voice and project.get_voice_label() == "none":
+            AppUtil.show_hint_if_necessary(prefs, HINT_NO_VOICE)
+
+        if platform.system() == "Linux" and torch.cuda.is_available() \
+                and prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
+            AppUtil.show_hint_if_necessary(prefs, HINT_STT_LINUX_CUDA_FASTER_WHISPER_1, and_prompt=True)

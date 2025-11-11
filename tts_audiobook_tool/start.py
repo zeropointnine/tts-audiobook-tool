@@ -40,7 +40,7 @@ def main() -> None:
         exit(1)
 
     # Updated dependencies check (required)
-    new_packages = ["faster_whisper", "audiotsm", "readchar"]
+    new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil"]
     not_found = [package for package in new_packages if not util.find_spec(package)]
     if not_found:
         hint = Hint(

@@ -3,9 +3,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
+import platform
 from typing import NamedTuple, Protocol
 
 from numpy import ndarray
+import torch
 
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.constants_config import *
@@ -201,6 +203,16 @@ class SttConfig(tuple[str, str, str], Enum):
             if json_id == item.json_id:
                 return item
         return None
+
+    @staticmethod
+    def get_default() -> SttConfig:
+        if torch.cuda.is_available():
+            if platform.system() == "Linux":
+                return SttConfig.CUDA_FLOAT16 # TODO: change this to CPU if can't resolve compatibility issue
+            else:
+                return SttConfig.CUDA_FLOAT16
+        else:
+            return SttConfig.CPU_INT8FLOAT32
 
 # ---
 
