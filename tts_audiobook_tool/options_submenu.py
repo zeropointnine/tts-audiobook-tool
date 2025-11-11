@@ -1,5 +1,6 @@
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -13,7 +14,7 @@ class OptionsSubmenu:
 
         def make_whisper_label(_) -> str:
             value = make_currently_string(state.prefs.stt_variant.id)
-            return f"Whisper transcription model {value}"
+            return f"Whisper model type {value}"
 
         def make_section_break_label(_) -> str:
             value = make_currently_string(str(state.prefs.use_section_sound_effect))
@@ -49,6 +50,10 @@ class OptionsSubmenu:
                 lambda _, __: OptionsSubmenu.transcription_model_menu(state)
             ),
             MenuItem(
+                make_whisper_config_label,
+                lambda _, __: OptionsSubmenu.transcription_model_config_menu(state)
+            ),
+            MenuItem(
                 make_section_break_label,
                 lambda _, __: OptionsSubmenu.section_break_menu(state)
             ),
@@ -63,14 +68,14 @@ class OptionsSubmenu:
 
         def make_heading(_) -> str:
             value = make_currently_string(state.prefs.stt_variant.value[0])
-            return f"Select Whisper transcription model {value}"
+            return f"Select Whisper model type {value}"
 
         def handler(_, item: MenuItem) -> bool:
             if not item.data or not isinstance(item.data, SttVariant):
                 return False
             state.prefs.stt_variant = item.data
-            Stt.set_variant(state.prefs.stt_variant) # sync global value
-            print_feedback(f"Whisper transcription model set to:", state.prefs.stt_variant.id)
+            Stt.set_variant(state.prefs.stt_variant) # sync static value
+            print_feedback(f"Set to:", state.prefs.stt_variant.id)
             return True
 
         menu_items = []
@@ -80,6 +85,37 @@ class OptionsSubmenu:
             menu_items.append(menu_item)
 
         MenuUtil.menu(state, make_heading, menu_items)
+
+    @staticmethod
+    def transcription_model_config_menu(state: State) -> None:
+
+        def on_item(_, item: MenuItem) -> bool:
+
+            stt_config: SttConfig = item.data
+
+            if platform.system() == "Linux" and stt_config.device == "cuda":
+                AppUtil.print_hint(Hint("", f"{COL_ERROR}Disallowed", "Can't use CUDA for the Whisper device on Linux at the moment\ndue to issues with faster-whisper library and cuDNN"))
+                AskUtil.ask_enter_to_continue()
+                state.prefs.stt_config = SttConfig.CPU_INT8FLOAT32
+                Stt.set_config(state.prefs.stt_config)
+                return True
+
+            if state.prefs.stt_config != stt_config:
+                state.prefs.stt_config= stt_config
+                Stt.set_config(state.prefs.stt_config) # sync static value
+            print_feedback(f"Set to:", str(state.prefs.stt_config.description))
+            return True
+
+        items = []
+        for dq in list(SttConfig):
+            items.append( MenuItem(dq.description, on_item, data=dq) )
+
+        MenuUtil.menu(
+            state,
+            make_whisper_config_label(state),
+            items,
+            one_shot=True
+        )
 
     @staticmethod
     def section_break_menu(state: State) -> None:
@@ -103,3 +139,9 @@ class OptionsSubmenu:
             hint=HINT_SECTION_SOUND_EFFECT,
             one_shot=True
         )
+
+# ---
+
+def make_whisper_config_label(state: State) -> str:
+    value = make_currently_string(state.prefs.stt_config.description)
+    return f"Whisper config {value}"

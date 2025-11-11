@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 import platform
 import subprocess
-import sys
 import time
 from typing import Any
 
@@ -74,6 +73,9 @@ def print_heading(s: str, dont_clear: bool=False, non_menu: bool=False) -> None:
     printt(color_a  +  ("-" * length))
     printt(f"{color_b}{s}")
     printt(color_a  +  ("-" * length))
+
+def print_model_init(s: str) -> None:
+    printt(f"{Ansi.ITALICS}{COL_DIM}{s}")
 
 def strip_quotes_from_ends(s: str) -> str:
     if len(s) >= 2:

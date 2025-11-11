@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_types import NormalizationType, SttVariant
+from tts_audiobook_tool.app_types import NormalizationType, SttConfig, SttVariant
 from tts_audiobook_tool.l import L
 
 from tts_audiobook_tool.util import *
@@ -19,6 +19,7 @@ class Prefs:
             project_dir: str = "",
             hints: dict[str, bool] = {},
             stt_variant: SttVariant = list(SttVariant)[0],
+            stt_config: SttConfig | None = None,
             normalization_type: NormalizationType = NormalizationType.DEFAULT,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
             use_section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT
@@ -26,10 +27,10 @@ class Prefs:
         self._project_dir = project_dir
         self._hints = hints
         self._stt_variant = stt_variant
+        self._stt_config = stt_config if stt_config else list(SttConfig)[0]
         self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
         self._use_section_sound_effect = use_section_sound_effect
-
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -79,6 +80,13 @@ class Prefs:
             else:
                 stt_variant = list(SttVariant)[0]
 
+        # STT device + quantization
+        s = prefs_dict.get("stt_config", "")
+        stt_config = SttConfig.get_by_json_id(s)
+        if not stt_config:
+            stt_config = list(SttConfig)[0]
+            dirty = True
+
         # Normalization type
         if not "normalization_type" in prefs_dict:
             s = "default"
@@ -109,6 +117,7 @@ class Prefs:
             project_dir=project_dir,
             normalization_type=normalization_type,
             stt_variant=stt_variant,
+            stt_config=stt_config,
             play_on_generate=play_on_generate,
             use_section_sound_effect=section_sound_effect,
             hints=hints
@@ -177,6 +186,15 @@ class Prefs:
         self.save()
 
     @property
+    def stt_config(self) -> SttConfig:
+        return self._stt_config
+
+    @stt_config.setter
+    def stt_config(self, value: SttConfig) -> None:
+        self._stt_config = value
+        self.save()
+
+    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
@@ -186,6 +204,7 @@ class Prefs:
             "project_dir": self._project_dir,
             "hints": self._hints,
             "stt_variant": self._stt_variant.id,
+            "stt_config": self._stt_config.json_id,
             "normalization_type": self._normalization_type.value.json_value,
             "play_on_generate": self._play_on_generate,
             "use_section_sound_effect": self._use_section_sound_effect

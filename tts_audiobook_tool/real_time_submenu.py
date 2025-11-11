@@ -31,6 +31,9 @@ class RealTimeSubmenu:
             if Tts.get_type() == TtsModelInfos.FISH:
                 AppUtil.show_hint_if_necessary(state.prefs, HINT_FISH_FIRST)
 
+            if state.project.can_voice and state.project.get_voice_label() == "none":
+                AppUtil.show_hint_if_necessary(state.prefs, HINT_NO_VOICE)
+
             RealTimeUtil.start(
                 state=state,
                 text_segments=text_segments,

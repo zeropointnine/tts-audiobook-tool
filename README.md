@@ -85,7 +85,7 @@ Uninstall the vanilla version of torch:
 
 Install torch 2.8 for CUDA v12.8:
 
-    pip3 install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+    pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 
 > **ℹ️ Note:**
 > To run the app using IndexTTS2 comfortably within 12GB of VRAM, consider setting FP16 to True
@@ -123,6 +123,8 @@ Finally, install Flash Attention. The procedure for doing so varies by operating
 
 > **ℹ️ Note!**
 > Higgs V2 requires CUDA, and 24 GB is almost a necessity (yes really)
+
+On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install portaudio`)
 
 Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
 
@@ -163,8 +165,6 @@ Then, [generate a Hugging Face access token](https://huggingface.co/settings/tok
     hf auth login
 
 When the app runs for the first time and tries to download the models from huggingface, it should now be authorized to do so.
-
-On Linux and macOS, portaudio must be installed (eg, `brew install portaudio`)
 
 ### Additional steps for CUDA:
 
@@ -264,9 +264,17 @@ These are my anecdotal inference speeds (running Windows unless otherwise noted)
 
 # Update highlights
 
+**2025-11-11**
+
+Added option to keep the Whisper model on the CPU. Note that this is now the default setting.
+
+**2025-11-05**
+
+Player/reader: Added bookmarks feature, ability to pin the audio player widget in desktop mode, plus.
+
 **2025-10-24**
 
-Added option to disable transcription validation (`Options` > `Whisper model type` > `Disabled`). This is only advisable when using IndexTTS2, which generates the least number of inference errors of any of the supported models to date.
+Added option to disable transcription validation (`Options` > `Whisper model type` > `Disabled`). When increased accuracy is important, this is only advisable when using IndexTTS2, which generates the least number of inference errors of any of the supported models to date.
 
 FYI, Whisper model type is now an app-wide preference setting rather than a per-project setting.
 

@@ -81,7 +81,9 @@ class VoiceSubmenuShared:
             else:
                 stt_variant = state.prefs.stt_variant
 
-            result = WhisperUtil.transcribe_to_segments(sound, stt_variant)
+            result = WhisperUtil.transcribe_to_segments(
+                sound, stt_variant, state.prefs.stt_config
+            )
 
             if state.prefs.stt_variant == SttVariant.DISABLED:
                 Stt.clear_stt_model()

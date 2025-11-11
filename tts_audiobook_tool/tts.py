@@ -112,7 +112,7 @@ class Tts:
         should_both = (should_instantiate_tts and should_instantiate_whisper)
 
         if should_both:
-            printt(f"{Ansi.ITALICS}Warming up models...")
+            print_model_init("Warming up models...")
             printt()
 
         if should_instantiate_tts:
@@ -160,7 +160,7 @@ class Tts:
     def get_oute() -> OuteModelProtocol:
 
         if not Tts._oute:
-            printt(f"{Ansi.ITALICS}Initializing Oute TTS model...")
+            print_model_init("Initializing Oute TTS model...")
             printt()
 
             from tts_audiobook_tool.oute_model import OuteModel
@@ -173,7 +173,7 @@ class Tts:
 
         if not Tts._chatterbox:
             device = Tts.get_best_torch_device()
-            printt(f"{Ansi.ITALICS}Initializing Chatterbox TTS model ({device})...")
+            print_model_init("Initializing Chatterbox TTS model ({device})...")
             printt()
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(device)
@@ -185,7 +185,7 @@ class Tts:
 
         if not Tts._fish:
             device = Tts.get_best_torch_device()
-            printt(f"{Ansi.ITALICS}Initializing Fish OpenAudio S1-mini TTS model ({device})...")
+            print_model_init("Initializing Fish OpenAudio S1-mini TTS model ({device})...")
             printt()
             from tts_audiobook_tool.fish_model import FishModel
             Tts._fish = FishModel(device)
@@ -197,7 +197,7 @@ class Tts:
 
         if not Tts._higgs:
             device = Tts.get_best_torch_device()
-            printt(f"{Ansi.ITALICS}Initializing Higgs V2 TTS model ({device})...")
+            print_model_init("Initializing Higgs V2 TTS model ({device})...")
             printt()
             from tts_audiobook_tool.higgs_model import HiggsModel
             Tts._higgs = HiggsModel(device)
@@ -212,7 +212,7 @@ class Tts:
             device = Tts.get_best_torch_device()
             model_path = Tts._model_params.get("vibevoice_model_path", "")
             name = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
-            printt(f"{Ansi.ITALICS}Initializing VibeVoice TTS model ({name}) ({device})...")
+            print_model_init("Initializing VibeVoice TTS model ({name}) ({device})...")
             printt()
 
             from tts_audiobook_tool.vibe_voice_model import VibeVoiceModel
@@ -232,7 +232,7 @@ class Tts:
             device = Tts.get_best_torch_device() # "mps" does not seem to make a difference fyi
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
 
-            printt(f"{Ansi.ITALICS}Initializing IndexTTS2 model ({device}, use_fp16: {use_fp16})")
+            print_model_init("Initializing IndexTTS2 model ({device}, use_fp16: {use_fp16})")
             printt()
 
             from tts_audiobook_tool.indextts2_model import IndexTts2Model

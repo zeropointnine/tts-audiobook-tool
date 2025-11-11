@@ -132,7 +132,6 @@ class VoiceIndexTts2Submenu:
             state,
             "FP16",
             items,
-            hint=HINT_SECTION_SOUND_EFFECT,
             one_shot=True
         )
 

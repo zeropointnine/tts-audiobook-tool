@@ -23,7 +23,7 @@ class TtsModel(ABC):
 
     def preprocess_text(self, text: str) -> str:
         """
-        Applies text transformations from `self.info.substitutions`
+        Applies text transformations from `self.info.substitutions` (usually single character punctuation)
         to address any model-specific idiosyncrasies, etc.
         Concrete class may want to override-and-super with extra logic.
         """

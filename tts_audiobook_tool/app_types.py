@@ -7,6 +7,7 @@ from typing import NamedTuple, Protocol
 
 from numpy import ndarray
 
+from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.constants_config import *
 
 """
@@ -36,7 +37,7 @@ class Sound(NamedTuple):
 
 class Word(Protocol):
     """
-    Duck-typed data structure for use with the "Word" objects returned by faster-whisper generate()
+    Duck-typed data structure for use with the `Word` objects returned by faster-whisper `generate()`
     """
     start: float
     end: float
@@ -165,6 +166,39 @@ class SttVariant(tuple[str, str], Enum):
     def get_by_id(id: str) -> SttVariant | None:
         for item in list(SttVariant):
             if id == item.id:
+                return item
+        return None
+
+# ---
+
+class SttConfig(tuple[str, str, str], Enum):
+    """
+    Supported combinations of device + compute_type for the faster-whisper model
+    """
+
+    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU (int8_float32)") # default
+    CUDA_FLOAT16 = ("cuda", "float16", f"CUDA (float16) {Ansi.hex('666666')}(falls back to cpu if no cuda)") # fyi, can't import COL_DIM
+
+    @property
+    def device(self) -> str:
+        return self.value[0]
+
+    @property
+    def compute_type(self) -> str:
+        return self.value[1]
+
+    @property
+    def description(self) -> str:
+        return self.value[2]
+
+    @property
+    def json_id(self) -> str:
+        return self.device + "_" + self.compute_type
+
+    @staticmethod
+    def get_by_json_id(json_id: str) -> SttConfig | None:
+        for item in list(SttConfig):
+            if json_id == item.json_id:
                 return item
         return None
 

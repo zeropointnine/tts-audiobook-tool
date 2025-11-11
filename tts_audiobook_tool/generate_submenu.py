@@ -88,7 +88,8 @@ class GenerateSubmenu:
             project=state.project,
             indices_to_generate=selected_indices_not_generated,
             items_to_regenerate={},
-            stt_variant=state.prefs.stt_variant
+            stt_variant=state.prefs.stt_variant,
+            stt_config=state.prefs.stt_config
         )
 
         if did_interrupt:
@@ -125,7 +126,8 @@ class GenerateSubmenu:
             project=state.project,
             indices_to_generate=set(), # rem, ignored
             items_to_regenerate=failed_items,
-            stt_variant=state.prefs.stt_variant
+            stt_variant=state.prefs.stt_variant,
+            stt_config=state.prefs.stt_config
         )
 
         AskUtil.ask_enter_to_continue()

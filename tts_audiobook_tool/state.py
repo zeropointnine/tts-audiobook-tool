@@ -64,8 +64,7 @@ class State:
 
         # Sync static values
         Stt.set_variant(self.prefs.stt_variant)
-
-
+        Stt.set_config(self.prefs.stt_config)
 
     def make_new_project(self, path: str) -> str:
         """

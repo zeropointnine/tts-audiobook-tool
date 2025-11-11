@@ -1,7 +1,7 @@
 from faster_whisper import WhisperModel
 import torch
 
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.util import *
 
 
@@ -12,6 +12,7 @@ class Stt:
 
     _whisper: WhisperModel | None = None
     _variant = list(SttVariant)[0]
+    _config = SttConfig.CUDA_FLOAT16
 
     @staticmethod
     def get_variant() -> SttVariant:
@@ -21,8 +22,18 @@ class Stt:
     def set_variant(value: SttVariant) -> None:
         if value != Stt._variant:
             Stt._variant = value
-            # Because the variant has changed, clear the current model.
-            # The new variant will be lazy init'ed as needed.
+            # Clear model, will get lazy re-inited as needed
+            Stt.clear_stt_model()
+
+    @staticmethod
+    def get_config() -> SttConfig:
+        return Stt._config
+
+    @staticmethod
+    def set_config(value: SttConfig) -> None:
+        if value != Stt._config:
+            # Clear model, will get lazy re-inited as needed
+            Stt._config = value
             Stt.clear_stt_model()
 
     @staticmethod
@@ -32,13 +43,19 @@ class Stt:
         """
 
         if Stt._variant == SttVariant.DISABLED:
-            raise ValueError("Bad variant")
+            raise ValueError(f"Bad variant: {Stt._variant}")
 
         if Stt._whisper is None:
+
             model = Stt._variant.id
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            compute_type = "float16" if torch.cuda.is_available() else "int8"
-            printt(f"{Ansi.ITALICS}Initializing whisper model ({model}, {device}, {compute_type})...")
+
+            dq = Stt._config
+            if dq.device == "cuda" and not torch.cuda.is_available():
+                dq = SttConfig.CPU_INT8FLOAT32 # fallback
+            device = dq.device
+            compute_type = dq.compute_type
+
+            print_model_init(f"Initializing whisper model ({model}, {device}, {compute_type})...")
             printt()
             Stt._whisper = WhisperModel(model, device=device, compute_type=compute_type)
 
@@ -54,5 +71,3 @@ class Stt:
             Stt._whisper = None
             from tts_audiobook_tool.app_util import AppUtil
             AppUtil.gc_ram_vram()
-
-

@@ -1,3 +1,4 @@
+import string
 import pysbd
 
 from tts_audiobook_tool.sentence_segmenter import SentenceSegmenter
@@ -7,7 +8,7 @@ from tts_audiobook_tool.text_util import TextUtil
 class TextSegmenter:
 
     @staticmethod
-    def segment_text(source_text: str, max_words: int, language="en") -> list[TextSegment]:
+    def segment_text(source_text: str, max_words: int, pysbd_language="en") -> list[TextSegment]:
         """
         Splits source text into "TextSegment" chunks.
         App's main text segmentation algorithm.
@@ -15,13 +16,13 @@ class TextSegmenter:
 
         # Pass 1: Segment text into sentences using pysbd
         # Important: "clean=False" preserves leading and trailing whitespace
-        segmenter = pysbd.Segmenter(language=language, clean=False, char_span=False)
+        segmenter = pysbd.Segmenter(language=pysbd_language, clean=False, char_span=False)
         texts = segmenter.segment(source_text)
 
         # Pass 2: pysbd treats everything enclosed in quotes as a single sentence, so split those up
         new_texts = []
         for text in texts:
-            if starts_and_ends_with_quote(text):
+            if is_sentence_quotation(text):
                 lst = segment_quote_text(text, segmenter)
                 new_texts.extend(lst)
             else:
@@ -68,9 +69,15 @@ class TextSegmenter:
         # Pass 5 - merge short segments
         text_segments = merge_short_segments_all(text_segments, max_words)
 
-        # Pass 6 - Filter out items w/o 'vocalizable' content
-        # TODO: all text should be retained for display purposes. wd require a lot of reworking tho.
-        text_segments = [item for item in text_segments if has_alpha_numeric_char(item.text)]
+        # Pass 6 - Filter out items that are "non-vocalizable"
+        # TODO: all text should be retained for display purposes, may require a lot of reworking tho.
+        filtered = []
+        for i, item in enumerate(text_segments):
+            b = is_all_punctuation_whitespace(item.text)
+            if not b:
+                filtered.append(item)
+        text_segments = filtered
+
         return text_segments
 
     @staticmethod
@@ -210,13 +217,34 @@ def segment_quote_text(text: str, segmenter) -> list[str]:
     """
     before, content, after = split_string_parts(text)
     segments = segmenter.segment(content)
+    if not segments:
+        return [text]
+
     segments[0] = before + segments[0]
     segments[-1] = segments[-1] + after
     return segments
 
-def starts_and_ends_with_quote(s: str) -> bool:
-    start, _, end = split_string_parts(s)
-    return has_quote_char(start) and has_quote_char(end)
+def is_sentence_quotation(pysbd_segmented_string: str) -> bool:
+    """
+    Given a pysbd-segmented string, does it appear to be a "quotation sentence"
+    (ie, a candidate for further segmentation).
+    Tested on english only for now.
+    """
+
+    def has_start_quote_char(chunk: str) -> bool:
+        for quote_char in "\"“": # normal-double-quote and fancy-starting-double-quote
+            if quote_char in chunk:
+                return True
+        return False
+
+    def has_end_quote_char(chunk: str) -> bool:
+        for quote_char in "\"”": # normal-double-quote and fancy-ending-double-quote
+            if quote_char in chunk:
+                return True
+        return False
+
+    start, _, end = split_string_parts(pysbd_segmented_string)
+    return has_start_quote_char(start) and has_end_quote_char(end)
 
 def split_string_parts(text: str) -> tuple[str, str, str]:
     """
@@ -267,12 +295,6 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
 
     return (before, content, after)
 
-def has_quote_char(s: str) -> bool:
-    for char in QUOTATION_CHARS:
-        if char in s:
-            return True
-    return False
-
 def num_trailing_line_breaks(s: str) -> int:
     trailing_whitespace = s[len(s.rstrip()):]
     return trailing_whitespace.count("\n")
@@ -281,10 +303,8 @@ def word_count(text: str) -> int:
     """Counts words in a string. Strips leading/trailing whitespace and splits."""
     return len(text.strip().split())
 
-def has_alpha_numeric_char(s: str) -> bool:
-    return any(c.isalnum() for c in s)
+def is_all_punctuation_whitespace(s: str) -> bool:
+    punc_and_white = set(string.whitespace + string.punctuation)
+    return all(char in punc_and_white for char in s)
 
 
-QUOTATION_CHARS = "\"'‘’“”"
-
-#  ' ), the closing single quote ( ' )

@@ -59,7 +59,7 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "Chatterbox TTS",
             "short_name": "Chatterbox",
-            "voice_path_console": "Enter voice clone audio clip: ",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
             "voice_path_requestor": "Select voice clone audio clip"
         },
         substitutions=[

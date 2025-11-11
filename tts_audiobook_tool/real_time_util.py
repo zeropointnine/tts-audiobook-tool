@@ -76,6 +76,7 @@ class RealTimeUtil:
                 project=project,
                 text_segment=current_text_segment,
                 stt_variant=state.prefs.stt_variant,
+                stt_config=state.prefs.stt_config,
                 max_passes=max_passes
             )
 

@@ -112,8 +112,8 @@ HINT_OUTE_CONFIG = Hint(
 HINT_INDEXTTS2 = Hint(
     "indextts2",
     "This appears to be your first time running the application using the IndexTTS2 model",
-    """We recommend disabling transcription validation for this model
-as IndexTTS2 voice generations are accurate enough to make this extra step unnecessary.
+    """We recommend disabling transcription validation for this model,
+as IndexTTS2 is accurate enough to make this extra step unnecessary.
 (Options > Whisper transcription model > Disabled)"""
 )
 
@@ -153,13 +153,13 @@ HINT_REAL_TIME = Hint(
     "real_time",
     "About",
 f"""This uses the same quality-control steps as the normal "Generate" workflow,
-save for loudness normalization.
-
-When enough audio has accumulated in the buffer, lines that do not pass
-the validation check get retried one time.
+aside from loudness normalization.
 
 To achieve uninterrupted playback, your system must be able to
-do the audio inference faster-than-realtime."""
+do the audio inference faster-than-realtime.
+
+Note that lines get validated and potentially re-generated only when there is
+enough buffered audio to allow for uninterrupted playback."""
 )
 
 HINT_MULTIPLE_MP3S = Hint(

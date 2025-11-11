@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import SkippedResult, Sound, SttVariant
+from tts_audiobook_tool.app_types import SkippedResult, Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_types import FailResult, TrimmableResult, PassResult, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
@@ -30,7 +30,8 @@ class GenerateUtil:
             project: Project,
             indices_to_generate: set[int],
             items_to_regenerate: dict[int, str],
-            stt_variant: SttVariant
+            stt_variant: SttVariant,
+            stt_config: SttConfig
     ) -> bool:
         """
         Subroutine for doing a series of audio generations
@@ -86,7 +87,8 @@ class GenerateUtil:
             opt_sound, validate_result = GenerateUtil.generate_sound_full_flow(
                 project=project,
                 text_segment=text_segment,
-                stt_variant=stt_variant
+                stt_variant=stt_variant,
+                stt_config=stt_config
             )
 
             if not opt_sound:
@@ -152,6 +154,7 @@ class GenerateUtil:
         project: Project,
         text_segment: TextSegment,
         stt_variant: SttVariant,
+        stt_config: SttConfig,
         max_passes: int = 2,
     ) -> tuple[Sound | None, ValidationResult]:
         """
@@ -183,7 +186,7 @@ class GenerateUtil:
                 return (sound, SkippedResult())
 
             # Transcribe
-            result = WhisperUtil.transcribe_to_segments(sound=sound, stt_variant=stt_variant)
+            result = WhisperUtil.transcribe_to_segments(sound, stt_variant, stt_config)
             if isinstance(result, str):
                 # Transcription error (unlikely)
                 err = result
