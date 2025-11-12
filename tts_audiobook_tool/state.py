@@ -73,9 +73,15 @@ class State:
         """
 
         try:
-            project_dir_path = Path(path)
+            project_dir_path = Path(path).expanduser()
         except:
             return "Bad path"
+        
+        if not project_dir_path.is_absolute():
+            if os.name == "posix":
+                return "Please use either an absolute path or a relative path that starts with \"~\""
+            else: # ie, Windows
+                return "Please use absolute path"
 
         if project_dir_path.exists():
             # If exists, make sure dir is empty
@@ -84,9 +90,9 @@ class State:
         else:
             # Make project dir
             try:
-                os.makedirs(project_dir_path, exist_ok=True)
-            except:
-                return "Error creating directory"
+                os.mkdir(project_dir_path) # note, not "make_dirs()"
+            except Exception as e:
+                return f"Error creating directory: {e}"
 
         # Make subdirs
         try:
@@ -100,8 +106,8 @@ class State:
             return f"Error creating subdirectory"
 
         # Make project instance
-        self.prefs.project_dir = str( project_dir_path )
-        self.project = Project(path)
+        self.prefs.project_dir = str(project_dir_path)
+        self.project = Project( str(project_dir_path) )
 
         if Tts.get_type() == TtsModelInfos.OUTE:
             # Set Oute default voice

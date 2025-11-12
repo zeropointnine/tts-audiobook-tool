@@ -157,3 +157,51 @@ class AskUtil:
         printt(message)
         inp = AskUtil.ask("")
         return strip_quotes_from_ends(inp)
+    
+    @staticmethod
+    def is_shell_gui_gtk_based() -> bool:
+        desktop_env = get_desktop_environment()
+        is_gtk = is_gtk_based(desktop_env)
+        return is_gtk
+
+# ---
+
+def get_desktop_environment():
+    """
+    Checks standard environment variables to determine the desktop environment.
+    Returns a string like 'GNOME', 'Cinnamon', 'KDE', etc., or None if not found.
+    """
+    # Modern standard: XDG_CURRENT_DESKTOP
+    # This is the most reliable variable.
+    desktop = os.environ.get('XDG_CURRENT_DESKTOP')
+    if desktop:
+        return desktop
+
+    # Fallback for older systems or different display managers
+    desktop = os.environ.get('DESKTOP_SESSION')
+    if desktop:
+        return desktop
+    
+    # Another common fallback
+    desktop = os.environ.get('GDMSESSION')
+    if desktop:
+        return desktop
+
+    return None
+
+def is_gtk_based(desktop_string):
+    """
+    Checks if a desktop environment string corresponds to a GTK-based DE.
+    Cinnamon, MATE, and XFCE are all GTK-based.
+    """
+    if not desktop_string:
+        return False
+    
+    # List of common GTK desktop identifiers (case-insensitive)
+    gtk_desktops = ['gnome', 'cinnamon', 'mate', 'xfce', 'budgie', 'pantheon']
+    
+    for de in gtk_desktops:
+        if de in desktop_string.lower():
+            return True
+            
+    return False

@@ -46,7 +46,7 @@ def main() -> None:
         hint = Hint(
             "none",
             "The app's dependencies have changed",
-            f"The following packages were not found: {', '.join(not_found)}\n"
+            f"The following packages were not found: {COL_ERROR}{', '.join(not_found)}\n"
             "You may have updated the app from the repository without updating its dependencies.\n\n"
             "Install the missing packages or update your virtual environment by re-running:\n"
             f"`pip install -r {Tts.get_type().value.requirements_file_name}`."

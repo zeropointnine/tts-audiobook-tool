@@ -63,11 +63,22 @@ class ProjectSubmenu:
         Asks user for directory and creates new project
         Returns True on success
         """
-        s = "Enter the path to an empty directory:"
-        s2 = "Select empty directory"
-        dir_path = AskUtil.ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=False)
+        console_message = "Enter the path to an empty directory:"
+        ui_title = "Select empty directory"
+
+        # FYI: GTK-based folder requestor dialog has no "new folder" functionality
+        # but there are no good alternatives IMO, so 
+
+        dir_path = AskUtil.ask_dir_path(
+            console_message=console_message, 
+            ui_title=ui_title, 
+            initialdir=state.project.dir_path, 
+            mustexist=False
+        )
+
         if not dir_path:
             return False
+        
         err = state.make_new_project(dir_path)
         if err:
             AskUtil.ask_error(err)
