@@ -46,7 +46,7 @@ class VoiceVibeVoiceSubmenu:
                 project,
                 "Enter num steps (1-30):",
                 1, 30, # Sane range IMO
-                "vibevoice_cfg",
+                "vibevoice_steps",
                 "Num steps set to:",
                 is_int=True
             )

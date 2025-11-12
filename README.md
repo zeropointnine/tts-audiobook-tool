@@ -250,7 +250,7 @@ These are my anecdotal inference speeds (running Windows unless otherwise noted;
 | IndexTTS2               | GTX 4090             | ~150% realtime  | has the lowest word error rate and least quirks, IMO
 |                         | GTX 3080 Ti          | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
-| VibeVoice 1.5B          | GTX 3080 Ti          | ~120% realtime  | with Flash attention 2 enabled
+| VibeVoice 1.5B          | GTX 3080 Ti          | ~120% realtime  | default steps, Flash attention 2 enabled
 |                         | Macbook Pro M1       | ~40% realtime   |
 | Higgs V2 3B             | GTX 4090             | 200+% realtime  | inference speed inversely proportional to voice sample duration, FYI
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
