@@ -34,7 +34,7 @@ class GenerateUtil:
             stt_config: SttConfig
     ) -> bool:
         """
-        Subroutine for doing a series of audio generations
+        Subroutine for doing a series of audio generations to files
 
         :param indices_to_generate:
 
@@ -63,21 +63,21 @@ class GenerateUtil:
 
         SigIntHandler().set("generating")
         start_time = time.time()
-        count = 0
         num_saved_ok = 0
         num_saved_with_error = 0
         num_failed = 0
+        saved_elapsed: list[float] = [] # history of end-to-end time taken to create sound files
 
+        count = 0
         saved_start_time = time.time()
-        saved_duration_and_elapsed: list[ tuple[float, float] ] = []
 
-        for i, path in sorted(items.items()):
+        for segment_index, path in sorted(items.items()):
 
-            text_segment = project.text_segments[i]
+            text_segment = project.text_segments[segment_index]
 
             printt()
             print_item_heading(
-                is_regenerate, text_segment.text, i, count, len(items)
+                is_regenerate, text_segment.text, segment_index, count, len(items)
             )
 
             if is_regenerate: # First, delete original
@@ -97,35 +97,47 @@ class GenerateUtil:
                 num_failed += 1
 
             else:
-                # Model generated sound data, will save
-                if isinstance(validate_result, TrimmableResult):
-                    printt(f"{COL_OK}Fixed:{COL_DEFAULT} {validate_result.get_ui_message()}")
+                # Model successfully generated audio
 
-                if isinstance(validate_result, FailResult):
-                    printt(f"{COL_ERROR}Max fails reached{COL_DEFAULT}, tagging as failed, will save anyway")
-                    num_saved_with_error += 1
-                else:
+                # Print ValidationResult info
+                s = "Speech-to-text validation: "
+                if isinstance(validate_result, SkippedResult):
                     num_saved_ok += 1
+                    s += "Skipped (Whisper disabled)"
+                if isinstance(validate_result, PassResult):
+                    num_saved_ok += 1
+                    s += "Passed"
+                elif isinstance(validate_result, TrimmableResult):
+                    num_saved_ok += 1
+                    s += f"{COL_OK}Fixed{COL_DEFAULT} - {validate_result.get_ui_message()}"
+                elif isinstance(validate_result, FailResult):
+                    num_saved_with_error += 1
+                    s += f"{COL_ERROR}Max fails reached{COL_DEFAULT}, tagging as failed, will save anyway"
+                else: # shouldn't get here
+                    num_saved_ok += 1
+                printt(s)
 
                 # Save file
-                path = SoundSegmentUtil.make_segment_file_path(i, project)
+                path = SoundSegmentUtil.make_segment_file_path(segment_index, project)
                 if isinstance(validate_result, FailResult):
                     path = AppUtil.insert_bracket_tag_file_path(path, "fail")
-
                 err = SoundFileUtil.save_flac(opt_sound, path)
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {path}")
                 else:
                     printt(f"Saved file: {path}")
-                    saved_duration_and_elapsed.append( (opt_sound.duration, time.time() - saved_start_time) )
+
+                    # Update meta-timing info and print out
+                    saved_elapsed.append(time.time() - saved_start_time)
                     saved_start_time = time.time()
-                    if len(saved_duration_and_elapsed) % 100 == 0:
-                        print_cumulative_speed_info(saved_duration_and_elapsed, 100)
+                    print_eta(saved_elapsed, len(items) - count + 1)
 
             count += 1
 
             if SigIntHandler().did_interrupt:
                 break
+
+        # ---
 
         did_interrupt = SigIntHandler().did_interrupt
         SigIntHandler().clear()
@@ -158,7 +170,9 @@ class GenerateUtil:
         max_passes: int = 2,
     ) -> tuple[Sound | None, ValidationResult]:
         """
-        Full program flow for generating sound for a text segment, including retries
+        Full program flow for generating sound for a single text segment, including retries.
+
+        Prints inference speed info after any successful gen.
         Prints error feedback only on non-final generation fail.
 
         param stt_variant - if DISABLED, validation step is skipped
@@ -168,19 +182,31 @@ class GenerateUtil:
         while True:
             pass_num += 1
 
+            start_time = time.time()
+
+            # Dim color during inference printouts
+            print(COL_DIM, end="", flush=True)
+
             # Generate
             result = GenerateUtil.generate_single(project, text_segment)
+
+            # Print blank line after any inference printouts, plus restore print color
+            printt()
 
             if isinstance(result, str):
                 err = result
                 printt(f"{err}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
+                    printt()
                     continue
                 else:
                     return None, FailResult(err)
 
             sound = result
+
+            elapsed = time.time() - start_time or 1.0
+            print_speed_info(result.duration, elapsed)
 
             if stt_variant == SttVariant.DISABLED:
                 return (sound, SkippedResult())
@@ -193,6 +219,7 @@ class GenerateUtil:
                 printt(f"{err}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
+                    printt()
                     continue
                 else:
                     return None, FailResult(err)
@@ -221,49 +248,19 @@ class GenerateUtil:
                 printt(f"{validation_result.get_ui_message()}")
                 if pass_num < max_passes:
                     printt(f"{COL_ERROR}Will retry")
+                    printt()
                     continue
                 else:
                     # Returns sound even though identified as invalid
                     return sound, validation_result
 
     @staticmethod
-    def generate_save_no_validation(
-        index: int,
-        project: Project
-    ) -> tuple[str, str]:
-        """
-        Generates, does post process step and saves
-        Ie, skips error detect / error fix steps.
-
-        Returns saved file path, error string
-        """
-
-        text_segment = project.text_segments[index]
-        sound = GenerateUtil.generate_single(project, text_segment)
-        if isinstance(sound, str):
-            return "", f"Couldn't generate audio clip: {sound}"
-
-        flac_path = SoundSegmentUtil.make_segment_file_path(index, project)
-        err = SoundFileUtil.save_flac(sound, flac_path)
-        if err:
-            return "", err
-        else:
-            return flac_path, err
-
-
-    @staticmethod
-    def generate_single(
-        project: Project,
-        text_segment: TextSegment,
-        print_info: bool=True
-    ) -> Sound | str:
+    def generate_single(project: Project, text_segment: TextSegment) -> Sound | str:
         """
         Core audio generation function.
-        Returns model-generated sound data, in model's native samplerate,
+        Returns model-generated sound data (in model's native samplerate),
         or error string on model-related fail.
         """
-
-        start_time = time.time()
 
         text = text_segment.text
         text = GenerateUtil.preprocess_text_common(text)
@@ -384,10 +381,6 @@ class GenerateUtil:
 
         SoundFileUtil.debug_save("post_process", sound)
 
-        if print_info:
-            elapsed = time.time() - start_time or 1.0
-            print_speed_info(result.duration, elapsed)
-
         return sound
 
 
@@ -431,19 +424,21 @@ def print_speed_info(sound_duration: float, elapsed: float) -> None:
     s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
     printt(s)
 
-def print_cumulative_speed_info(duration_and_elapsed: list[tuple[float, float]], last_n=0) -> None:
-    if last_n:
-        duration_and_elapsed = duration_and_elapsed[-last_n:]
-    duration_sum = 0
-    elapsed_sum = 0
-    for duration, elapsed in duration_and_elapsed:
-        duration_sum += duration
-        elapsed_sum += elapsed
-    printt()
-    if last_n:
-        s = f"{COL_ACCENT}Cumulative inference speed including overhead (last {last_n} segments):"
-    else:
-        s = f"{COL_ACCENT}Cumulative inference speed including overhead (all {len(duration_and_elapsed)} sound segments)"
-    printt(s)
-    print_speed_info(duration_sum, elapsed_sum)
-    printt()
+def print_eta(saved_elapsed: list[float], num_left) -> None:
+
+    MIN_SAMPLES = 5
+    if len(saved_elapsed) < MIN_SAMPLES or num_left <= 0:
+        return
+
+    MAX_SAMPLES = 50
+    i_start = len(saved_elapsed) - MAX_SAMPLES
+    i_start = max(i_start, 0)
+    i_end = len(saved_elapsed)
+    sum = 0
+    for i in range(i_start, i_end):
+        elapsed = saved_elapsed[i]
+        sum += elapsed
+    num_samples = i_end - i_start
+    avg = sum / num_samples
+    eta = num_left * avg
+    printt(f"Est. time remaining: {duration_string(eta)}")

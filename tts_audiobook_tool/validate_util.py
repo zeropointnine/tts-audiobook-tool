@@ -47,7 +47,7 @@ class ValidateUtil:
             s = next(iter(repeats))
             if len(repeats) > 1:
                 s += ", ..."
-            return FailResult(f"Repeated word/phrase: {s}")
+            return FailResult(f"Repeated word or phrase: {s}")
 
         # Repeat word count test (tries to detect same issue as above)
         num_over_occurrences = TranscribeUtil.num_bad_over_occurrences(reference_text, transcribed_text)

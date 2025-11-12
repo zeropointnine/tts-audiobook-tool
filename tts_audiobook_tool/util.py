@@ -276,7 +276,7 @@ def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tup
     return ranges
 
 def duration_string(seconds: float, include_tenth: bool=False) -> str:
-    """ eg, 5h0m0s """
+    """ Returns, eg, 5h0m0s """
     if seconds < 60:
         if include_tenth:
             return f"{seconds:.1f}s"
