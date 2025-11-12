@@ -162,7 +162,7 @@ def make_gb_string(bytes: int) -> str:
     gb = int(gb * 10) / 10
     if gb % 1 == 0:
         gb = int(gb)
-    return str(gb) + " GB"
+    return str(gb) + "GB"
 
 def lerp_clamped(
     value: float,

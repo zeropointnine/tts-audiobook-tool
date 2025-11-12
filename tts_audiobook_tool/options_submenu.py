@@ -21,22 +21,19 @@ class OptionsSubmenu:
             return f"Insert page turn sound effect at section breaks {value}"
 
         def make_unload_label(_) -> str:
-            result = AppUtil.get_nv_vram()
-            if result is None:
-                vram_label = ""
-            else:
-                used, total = result
-                vram_label = f"{COL_DIM}(system VRAM: {make_gb_string(used)}/{make_gb_string(total)})"
-            return f"Attempt to unload models {vram_label}"
+            memory_string = make_system_memory_string()
+            if memory_string:
+                memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
+            return f"Attempt to unload models {memory_string}"
 
         def on_unload(_, __) -> None:
-            result = Tts.clear_all_models()
-            if result:
-                message = f"VRAM usage before: {make_gb_string(result[0])}\n"
-                message += f"VRAM usage after: {make_gb_string(result[1])}"
-            else:
-                message = "OK"
-            print_feedback(message)
+            before_string = make_system_memory_string()
+            if before_string:
+                printt(f"Before: {before_string}")
+            Tts.clear_all_models()
+            after_string = make_system_memory_string()
+            if after_string:
+                printt(f"After:  {after_string}")
 
         def on_hints(_, __) -> None:
             state.prefs.reset_hints()
@@ -136,3 +133,28 @@ class OptionsSubmenu:
 def make_whisper_config_label(state: State) -> str:
     value = make_currently_string(state.prefs.stt_config.description)
     return f"Whisper config {value}"
+
+def make_system_memory_string(base_color=COL_DIM) -> str:
+
+    result = AppUtil.get_nv_vram()
+    if result is None:
+        vram_string = ""
+    else:
+        used, total = result
+        vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
+
+    result = AppUtil.get_system_ram()
+    if result is None:
+        ram_string = ""
+    else:
+        used, total = result
+        ram_string = f"{base_color}RAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
+
+    if not vram_string and not ram_string:
+        return ""
+    elif not vram_string:
+        return ram_string
+    elif not ram_string:
+        return vram_string
+    else:
+        return f"{vram_string}{base_color}, {ram_string}"

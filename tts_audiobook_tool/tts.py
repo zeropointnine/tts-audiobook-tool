@@ -259,23 +259,12 @@ class Tts:
             AppUtil.gc_ram_vram()
 
     @staticmethod
-    def clear_all_models() -> tuple[int, int] | None:
-        """ Returns before/after VRAM usage if is nvidia, else None """
-
-        from tts_audiobook_tool.app_util import AppUtil
-
-        vram_before = AppUtil.get_nv_vram()
-
+    def clear_all_models() -> None:
         Stt.clear_stt_model()
         Tts.clear_tts_model()
+        from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram() # for good measure
 
-        vram_after = AppUtil.get_nv_vram()
-
-        if vram_before and vram_after:
-            return vram_before[0], vram_after[0]
-        else:
-            return None
 
     @staticmethod
     def get_best_torch_device() -> str:

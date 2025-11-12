@@ -297,6 +297,18 @@ class AppUtil:
             return None
 
     @staticmethod
+    def get_system_ram() -> tuple[int, int] | None:
+        """
+        Returns used and total RAM in bytes
+        """
+        try:
+            import psutil
+            memory = psutil.virtual_memory()
+            return memory.used, memory.total
+        except:
+            return None
+
+    @staticmethod
     def show_inference_hints(prefs: Prefs, p_project) -> None:
         """ Shows one-time hints related to doing inference """
 

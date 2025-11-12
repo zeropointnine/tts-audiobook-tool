@@ -178,8 +178,8 @@ class SttConfig(tuple[str, str, str], Enum):
     Supported combinations of device + compute_type for the faster-whisper model
     """
 
-    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU (int8_float32)") # default
-    CUDA_FLOAT16 = ("cuda", "float16", f"CUDA (float16) {Ansi.hex('666666')}(falls back to cpu if no cuda)") # fyi, can't import COL_DIM
+    CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8_float32") # default
+    CUDA_FLOAT16 = ("cuda", "float16", f"CUDA, float16 {Ansi.hex('666666')}(falls back to cpu if no cuda)") # fyi, can't import COL_DIM
 
     @property
     def device(self) -> str:
