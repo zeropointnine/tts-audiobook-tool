@@ -12,24 +12,19 @@ class ProjectSubmenu:
     @staticmethod
     def menu(state:State) -> None:
 
-        # 1
-        def on_new(_, __) -> bool:
-            did = ProjectSubmenu.ask_and_set_new_project(state)
+        def on_project(_, menu_item) -> bool:
+            is_new: bool = menu_item.data
+            if is_new:
+                did = ProjectSubmenu.ask_and_set_new_project(state)
+            else:
+                did = ProjectSubmenu.ask_and_set_existing_project(state)
             if did:
                 print_feedback("Project directory set:", state.project.dir_path)
+                if is_new:
+                    AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
                 return True
             return False
 
-        # 2
-        def on_existing(_, __) -> bool:
-            did = ProjectSubmenu.ask_and_set_existing_project(state)
-            if did:
-                print_feedback("Project directory set:", state.project.dir_path)
-                AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
-                return True
-            return False
-
-        # 3
         def make_view_label(_) -> str:
             return f"Show directory in OS UI {COL_DIM}({state.project.dir_path})"
 
@@ -45,8 +40,8 @@ class ProjectSubmenu:
 
         def items_maker(_) -> list[MenuItem]:
             items = [
-                MenuItem("New project", on_new),
-                MenuItem("Open existing project", on_existing)
+                MenuItem("New project", on_project, data=True),
+                MenuItem("Open existing project", on_project, data=False)
             ]
             if state.project.dir_path:
                 items.append(

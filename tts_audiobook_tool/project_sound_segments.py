@@ -37,9 +37,9 @@ class ProjectSoundSegments:
     @property
     def sound_segments(self) -> dict[int, str]:
         if self._dirty:
-            print("Project directory contents have changed. Scanning...", end="\r")
+            printt(f"{COL_DIM}{Ansi.ITALICS}Project directory contents have changed. Scanning...", end="\r")
             self._sound_segments = SoundSegmentUtil.get_project_sound_segments(self.project)
-            print(f"{Ansi.ERASE_REST_OF_LINE}", end="\r")
+            printt(f"{Ansi.ERASE_REST_OF_LINE}", end="\r")
             self._dirty = False
         return self._sound_segments
 

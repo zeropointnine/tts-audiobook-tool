@@ -146,14 +146,19 @@ html {
 html {
     box-sizing: border-box;
   }
-*, *::before, *::after {
-    box-sizing: inherit;
-}
 
 html, body {
     margin: 0;
     padding: 0;
     background-color: var(--color-bg);
+}
+
+*, *::before, *::after {
+    box-sizing: inherit;
+}
+
+* {
+    touch-action: manipulation;
 }
 
 /* --------------------------------------------- */

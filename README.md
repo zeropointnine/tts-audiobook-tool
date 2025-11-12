@@ -243,7 +243,7 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 ### Inference speeds, expectations
 
-These are my anecdotal inference speeds (running Windows unless otherwise noted). The app adopts each respective model's reference inference implementation logic as much as possible.
+These are my anecdotal inference speeds (running Windows unless otherwise noted; note that CUDA inference speeds on Linux can be appreciably faster). The app adopts each respective model's reference inference implementation logic as much as possible.
 
 | TTS Model               | Hardware             | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
