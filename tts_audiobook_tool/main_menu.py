@@ -1,5 +1,4 @@
 from tts_audiobook_tool.concat_submenu import ConcatSubmenu
-from tts_audiobook_tool.header import Header
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.real_time_submenu import RealTimeSubmenu
 from tts_audiobook_tool.options_submenu import OptionsSubmenu
@@ -14,7 +13,6 @@ from tts_audiobook_tool.state import State
 
 class MainMenu:
     """
-    Main menu plus reserved header area mechanism
     """
 
     @staticmethod
@@ -22,8 +20,6 @@ class MainMenu:
         """
         This acts as the main program loop.
         """
-
-        Header.init()
 
         while True:
 
@@ -200,5 +196,4 @@ def on_realtime(state: State, __) -> None:
 # Quit
 def on_quit(_, __):
     print_feedback("State saved.", extra_line=False)
-    Header.cleanup_console()
     exit(0)

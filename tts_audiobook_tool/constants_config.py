@@ -10,9 +10,6 @@ DEV_SAVE_INTERMEDIATE_FILES = DEV and True
 if DEV:
     print("\n### DEV ###\n")
 
-# TODO: Remove 'dev guard' when ready
-HEADER_FEATURE = DEV and False
-
 # Max words per text chunk, applied to the source text.
 MAX_WORDS_PER_SEGMENT = 40
 # Max words per text chunk, applied to the source text for "STT mode"
