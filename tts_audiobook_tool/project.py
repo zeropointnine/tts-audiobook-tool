@@ -409,8 +409,8 @@ class Project:
                 # always true bc does not require voice sample
                 return True
             case TtsModelInfos.VIBEVOICE:
-                # always true bc does not require voice sample
-                return True
+                # requires voice sample (in my implementation, for reasons)
+                return bool(self.vibevoice_voice_file_name)
             case TtsModelInfos.INDEXTTS2:
                 # this model requires a voice sample
                 return bool(self.indextts2_voice_file_name)

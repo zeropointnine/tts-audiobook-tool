@@ -38,7 +38,6 @@ torch==2.7.1
 torchaudio==2.7.1
 
 triton-windows==3.3.1.post19; sys_platform == 'win32'
-triton; sys_platform == "linux"
 
 # App dependencies
 audiotsm==0.1.2

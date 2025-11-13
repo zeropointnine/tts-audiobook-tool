@@ -221,7 +221,6 @@ The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents th
 Prefer the *ExLllama2* backend if at all possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires successfully installing into the environment three extra things:
 - exllama2 library (`pip install exllamav2`)
 - [Flash Attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) (note that on Windows, you may need to source a compatible wheel for this)
-- Triton (eg, on Windows, `pip install triton-windows`).
 
 Alternatively, `Backend.HF` is also hardware accelerated but considerably slower. Flash Attention 2 is optional in this case, and also does not speed up inference in practice.
 

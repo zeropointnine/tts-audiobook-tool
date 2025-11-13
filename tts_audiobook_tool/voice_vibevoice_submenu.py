@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -18,7 +18,11 @@ class VoiceVibeVoiceSubmenu:
 
         def make_model_path_label(_) -> str:
             value = project.vibevoice_model_path if project.vibevoice_model_path else "none"
-            return f"VibeVoice custom model path {make_currently_string(value)}"
+            if project.vibevoice_model_path:
+                label = make_currently_string(project.vibevoice_model_path)
+            else:
+                label = f"{COL_DIM}(optional)"
+            return f"VibeVoice custom model path {label}"
 
         def make_cfg_label(_) -> str:
             value = VoiceSubmenuShared.make_parameter_value_string(
