@@ -224,12 +224,21 @@ two consecutive blank lines  are encountered in the text. """
 )
 
 HINT_STT_ENHANCE = Hint(
-    "stt_enahance",
+    "stt_enhance",
     "Text preparation...",
 """It's recommended to first remove any large chunks
 from the source text that do not occur in the audio narration.
 Common examples are: publisher information, table of contents, etc"""
 )
+
+HINT_STT_ENHANCE_CACHED = Hint(
+    "stt_enhance_cached",
+    "Transcription data is cached",
+"""If you feel the need to modify the source text to minimize \"discontinuities\",
+you can re-run the \"Enhance existing audiobook\" process, and it will run faster
+the second time through, as the audio transcription data has been cached."""
+)
+
 
 HINT_STT_LINUX_CUDA_FASTER_WHISPER_1 = Hint(
     "stt_linux_cuda_faster_whisper_1",

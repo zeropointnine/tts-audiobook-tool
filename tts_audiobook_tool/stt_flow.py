@@ -119,15 +119,13 @@ class SttFlow:
                 transcription_pickle_path = ""
 
         # [5] Start
-        ok = SttFlow.make(
+        SttFlow.make(
             prefs,
             raw_text,
             source_audio_path=source_audio_path,
             source_audio_hash=source_audio_hash,
             source_pickle_path=transcription_pickle_path
         )
-        if ok:
-            AppUtil.show_player_hint_if_necessary(prefs)
 
     @staticmethod
     def make(
@@ -213,26 +211,29 @@ class SttFlow:
 
         meta = AppMetadata(raw_text, timed_text_segments)
         if dest_path.lower().endswith(".flac"):
-            err = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))
+            save_error = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))
         else:
-            err = AppMetadata.save_to_mp4(meta, str(source_audio_path), str(dest_path))
-        if err:
-            printt(f"Error: {err}")
-            return False
+            save_error = AppMetadata.save_to_mp4(meta, str(source_audio_path), str(dest_path))
+        if save_error:
+            printt(f"{COL_ERROR}Error: {save_error}")
+            printt()
+        else:
+            printt(f"{COL_ACCENT}Saved {dest_path}")
+            printt()
 
-        printt(f"{COL_ACCENT}Saved {dest_path}")
-        printt()
+        AppUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
 
         # [4b] Review "discontinuity info"
-
-        if DEV and False:
-            b = True
-        else:
-            b = AskUtil.ask_confirm("View discontinuity info summary? ")
+        b = AskUtil.ask_confirm("View discontinuity info summary? ")
         if b:
             print_discontinuity_info(timed_text_segments)
             AskUtil.ask_enter_to_continue()
-        return True
+
+        if not save_error:
+            AppUtil.show_player_hint_if_necessary(prefs)
+
+
+        return bool(save_error)
 
 # ---
 
