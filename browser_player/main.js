@@ -57,6 +57,7 @@ window.app = function() {
     let sleepEndTime = -1;
     let loopIntervalId = -1;
     let isInPlayer = false;
+    let lastStorePosition = 0
     let useSectionDividers = false;
     const mousePosition = { x: -1, y: -1};
 
@@ -138,7 +139,7 @@ window.app = function() {
         });
 
         document.addEventListener("bookmarkSelect", (e) => { onBookmarkSelect(e); });
-        document.addEventListener("bookmarkAdded", () => { saveBookmarks(); });
+        document.addEventListener("bookmarksChanged", () => { saveBookmarks(); });
 
         textHolder.addEventListener('click', onTextClick);
 
@@ -439,9 +440,6 @@ window.app = function() {
     }
 
     function showBookmarkPanel() {
-        if (currentIndex == -1) {
-            return
-        }
         document.body.classList.add("bodyNoScroll");
         bookmarks.updateAddButton(currentIndex);
         showScrim();
@@ -584,6 +582,10 @@ window.app = function() {
             return;
         }
 
+        if (new Date().getTime() - lastStorePosition > 5000) {
+            storePosition();
+        }
+
         updatePlayerVisibility();
 
         const realTimeIndex = getSegmentIndexBySeconds(audio.currentTime);
@@ -596,7 +598,10 @@ window.app = function() {
 
         // Index has changed:
 
-        if (realTimeIndex - currentIndex == 1) {
+        const previousIndex = currentIndex;
+        currentIndex = realTimeIndex;
+
+        if (currentIndex - previousIndex == 1) {
             // Has advanced by one text segment, probably due to normal playback
             if (!hasAdvancedOnce) {
                 hasAdvancedOnce = true;
@@ -604,15 +609,11 @@ window.app = function() {
             }
         }
 
-        const previousSpan = getSpanByIndex(currentIndex);
-        currentIndex = realTimeIndex;
-
-        // Unhighlight previous, if any
-        previousSpan?.classList.remove("highlight");
+        unhighlightByIndex(previousIndex);
 
         // Highlight active and scroll-to
         if (currentIndex >= 0) {
-            getCurrentSpan().classList.add("highlight");
+            getCurrentSpan()?.classList.add("highlight");
             if (!(document.activeElement instanceof HTMLInputElement)) {
                 getCurrentSpan().scrollIntoView({
                     behavior: 'smooth',
@@ -631,6 +632,7 @@ window.app = function() {
     function storePosition(value) {
         value = value || audio.currentTime;
         localStorage.setItem("fileId_" + fileId, value);
+        lastStorePosition = new Date().getTime();
     }
 
     function collapseOptionsButton() {
@@ -711,8 +713,20 @@ window.app = function() {
         }
     }
 
+    /**
+     * Unhighlights specified segment.
+     * Plus its close neighbors, for reasons.
+     */
+    function unhighlightByIndex(i) {
+        const a = Math.max(i - 20, 0)
+        const b = Math.min(i + 20, textSegments.length - 1)
+        for (let i = a; i <= b; i++) {
+            spans[i].classList.remove("highlight");
+        }
+    }
+
     function seekBySegmentIndex(i, andPlay) {
-        getCurrentSpan()?.classList.remove("highlight");
+        unhighlightByIndex(currentIndex);
         const targetTime = textSegments[i]["time_start"];
         audio.currentTime = targetTime;
         if (audio.paused && andPlay) {
@@ -1078,3 +1092,5 @@ window.app = function() {
         return (els.indexOf(element) > -1);
       }
 };
+
+const cl = console.log;

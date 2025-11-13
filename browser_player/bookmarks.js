@@ -5,8 +5,10 @@ class BookmarkController {
 
     constructor(mainDiv) {
         this.mainDiv = mainDiv;
-        this.bookmarkDesc = this.mainDiv.querySelector("#bookmarkDesc");
         this.addButton = this.mainDiv.querySelector("#bookmarkAddButton");
+        this.addButtonDescLine = this.mainDiv.querySelector("#bookmarkAddDescLine");
+        this.addButtonDesc = this.mainDiv.querySelector("#bookmarkAddDesc");
+        this.addButtonLocation = this.mainDiv.querySelector("#bookmarkAddLocation");
         this.listHolder = this.mainDiv.querySelector("#bookmarkList");
         this.indices = [];
         this.currentIndex = -1;
@@ -39,14 +41,13 @@ class BookmarkController {
         this.currentIndex = (index >= 0 && index < this.textSegments.length) ? index : -1;
 
         if (this.currentIndex > -1) {
-            this.addButton.classList.remove("disabled");
-            this.bookmarkDesc.style.display = "block";
-            const text = this.textSegments[this.currentIndex].text;
-            this.bookmarkDesc.textContent = text
+            this.addButton.style.display = "block";
+            const desc_text = this.textSegments[this.currentIndex].text;
+            this.addButtonDesc.textContent = desc_text
+            const loc_text = `${index + 1}/${this.textSegments.length}`
+            this.addButtonLocation.textContent = loc_text;
         } else {
-            this.addButton.classList.add("disabled")
-            this.bookmarkDesc.style.display = "none";
-            this.bookmarkDesc.textContent = ""
+            this.addButton.style.display = "none";
         }
     }
 
@@ -95,31 +96,29 @@ class BookmarkController {
                 this.listHolder.appendChild(itemEl);
             }
         } else {
-            const noneItem = this._makeElement("<div style='margin-left:18px;'>No bookmarks added.</div>")
+            const noneItem = this._makeElement(`<div class="bookmarkItemNone">No bookmarks added.</div>`)
             this.listHolder.appendChild(noneItem);
         }
     }
 
     _makeItemEl(index) {
 
+        // Item
         const itemEl = this._makeElement(`<div class="bookmarkItem">`);
 
+        // Description text
         const text = this.textSegments[index].text;
         const s = `<div class="bookmarkItemText" data-index="${index}" tabindex="-1">${text}</div>`;
         const textEl = this._makeElement(s);
-        textEl.addEventListener("click", (e) => {
-            const index = e.currentTarget.dataset.index;
-            const event = new CustomEvent( "bookmarkSelect", { detail: { index: index } } )
-            document.dispatchEvent(event)
-        });
-        const location = (index + 1) + "";
-        const locationEl = this._makeElement(`<div class="bookmarkItemLocation">${location}</div>`)
+        textEl.addEventListener("click", (e) => { this._onItemClick(e) } );
 
+        // Location text
+        const location = (index + 1) + "";
+        const locationEl = this._makeElement(`<div class="bookmarkLocation">${location}</div>`)
+
+        // Delete button
         const deleteButtonEl = this._makeElement(`<div class="bookmarkItemDelete chromelessButton" data-index='${index}'><svg><use href="#iconDelete"></use></svg></div>`);
-        deleteButtonEl.addEventListener('click', (e) => {
-            const index = e.currentTarget.dataset.index;
-            this.removeIndex(index);
-        })
+        deleteButtonEl.addEventListener("click", (e) => { this._onItemDeleteButton(e) } );
 
         itemEl.appendChild(textEl);
         itemEl.appendChild(locationEl);
@@ -139,6 +138,18 @@ class BookmarkController {
             return;
         }
         this.addIndex(this.currentIndex);
-        document.dispatchEvent(new CustomEvent("bookmarkAdded"));
+        document.dispatchEvent(new CustomEvent("bookmarksChanged"));
+    }
+
+    _onItemClick(e) {
+        const index = e.currentTarget.dataset.index;
+        const event = new CustomEvent( "bookmarkSelect", { detail: { index: index } } )
+        document.dispatchEvent(event)
+    }
+
+    _onItemDeleteButton(e) {
+        const index = e.currentTarget.dataset.index;
+        this.removeIndex(index);
+        document.dispatchEvent(new CustomEvent("bookmarksChanged"));
     }
 }

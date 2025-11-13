@@ -9,16 +9,16 @@
 
     <title>tts-audiobook-tool player/reader</title>
 
-    <link rel="stylesheet" href="base.css?v=251111">
-    <link rel="stylesheet" href="main.css?v=251111">
-    <link rel="stylesheet" href="audio-player.css?v=251111">
+    <link rel="stylesheet" href="base.css?v=251113">
+    <link rel="stylesheet" href="main.css?v=251113">
+    <link rel="stylesheet" href="audio-player.css?v=251113">
 
     <script src="pako.min.js"></script>
 
-    <script src="metadata-util.js?v=251111"></script>
-    <script src="audio-player.js?v=251111"></script>
-    <script src="bookmarks.js?v=251111"></script>
-    <script src="main.js?v=251111"></script>
+    <script src="metadata-util.js?v=251113"></script>
+    <script src="audio-player.js?v=251113"></script>
+    <script src="bookmarks.js?v=251113"></script>
+    <script src="main.js?v=251113"></script>
 
 <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -122,10 +122,13 @@
         </div>
 
         <div id="bookmarkPanel">
-            <!-- <div class="bookmarkTitle titleText">Bookmarks</div> -->
+            <div class="bookmarkTitle titleText">Bookmarks</div>
             <div id="bookmarkAddButton" class="buttonText loadButton">
-                <div>Add bookmark:</div>
-                <div id="bookmarkDesc" tabindex="-1"></div>
+                <div>Add:</div>
+                <div id="bookmarkAddDescLine">
+                    <div id="bookmarkAddDesc" tabindex="-1"></div>
+                    <div id="bookmarkAddLocation" class="bookmarkLocation">666/999</div>
+                </div>
             </div>
             <div id="bookmarkList"></div>
         </div>
