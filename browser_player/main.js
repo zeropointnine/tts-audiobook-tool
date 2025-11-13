@@ -6,9 +6,9 @@ window.app = function() {
 
     const root = document.documentElement;
     const loadFileInput = document.getElementById("loadFileInput");
-    const loadLastHolder = document.getElementById("loadLast")
+    const lastFileNameHolder = document.getElementById("lastFileNameHolder")
     const sleepTimeLeft = document.getElementById("sleepTimeLeft");
-    const fileNameDiv = document.getElementById("fileName")
+    const currentFileNameDiv = document.getElementById("currentFileName")
     const playerOverlay = document.getElementById("playerOverlay"); // always visible
     const playerHolder = document.getElementById("playerHolder"); // animates in and out (translateY)
     const audio = document.getElementById("audio");
@@ -33,14 +33,15 @@ window.app = function() {
     const toast = document.getElementById("toast");
     const loadingOverlay = document.getElementById("loadingOverlay")
 
-    let player = null;
-    let bookmarks = null;
+    // eslint-disable-next-line
+    const player = new AudioPlayer({ audioElement: audio, container: playerHolder });
+
+    // eslint-disable-next-line
+    const bookmarks = new BookmarkController(bookmarkPanel);
+
     let file = null;
     let url = null;
-
     let fileId = null; // id used to track the loaded resource
-
-    let isCheckingZombie = false;
 
     let textSegments = [];
     let spans = []; // cached text segment span refs
@@ -53,29 +54,57 @@ window.app = function() {
     let directSelections = []
 
     let toastHideDelayId = -1
-    let sleepId = -1;
+    let sleepIntervalId = -1;
     let sleepEndTime = -1;
-    let loopIntervalId = -1;
+    let pollIntervalId = -1;
     let isInPlayer = false;
-    let lastStorePosition = 0
+    let isCheckingZombie = false;
+    let lastStorePositionTime = 0
     let useSectionDividers = false;
     const mousePosition = { x: -1, y: -1};
 
-    // ****
-    init();
-    // ****
+    // ********
+    pageInit();
+    // ********
 
-    function init() {
+    function pageInit() {
 
-        // eslint-disable-next-line
-        player = new AudioPlayer({ audioElement: audio, container: playerHolder });
-        // eslint-disable-next-line
-        bookmarks = new BookmarkController(bookmarkPanel);
+        initListeners();
 
-        if (hasPersistentKeyboard()) {
-            addHelp();
+        if (isTouchDevice()) {
+            player.removePinButton();
         }
 
+        useSectionDividers = (localStorage.getItem("pref_dividers") === "1");
+        if (navigator.userAgent == "Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0") {
+            useSectionDividers = true; // yes rly // TODO pls don't
+        }
+
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+            const value = localStorage[key]
+            if (key.startsWith("data-")) {
+                root.setAttribute(key, value)
+            }
+        });
+
+        const s = localStorage.getItem("pref_player_pinned");
+        const isPinned = (s === "1") || !s; // default is pinned
+        player.setPinned(isPinned);
+
+        initClickListeners();
+
+        reset();
+
+        // Load audio from queryparam "url" if any
+        const urlParams = new URLSearchParams(window.location.search);
+        const url = urlParams.get("url");
+        if (url) {
+            loadAudioFileOrUrl(null, url);
+        }
+    }
+
+    function initListeners() {
         window.addEventListener('mousemove', (event) => {
             mousePosition.x = event.clientX;
             mousePosition.y = event.clientY;
@@ -155,48 +184,6 @@ window.app = function() {
                 }
             }
         });
-
-        if (isTouchDevice()) {
-            player.removePinButton();
-        }
-
-        const lastFileId = localStorage.getItem("last_file_id")
-        if (lastFileId) {
-            document.getElementById("loadLastId").textContent = lastFileId;
-            loadLastHolder.style.display = "block";
-        }
-
-        useSectionDividers = (localStorage.getItem("pref_dividers") === "1");
-        if (navigator.userAgent == "Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0") {
-            useSectionDividers = true; // yes rly // TODO pls don't
-        }
-
-        const s = localStorage.getItem("pref_player_pinned");
-        const isPinned = (s === "1") || !s; // default is pinned
-        player.setPinned(isPinned);
-
-        // Load file from queryparam "url" if any
-        const urlParams = new URLSearchParams(window.location.search);
-        const url = urlParams.get("url");
-        if (url) {
-            loadAudioFileOrUrl(null, url);
-        }
-
-        initRootAttributesFromLocalStorage();
-
-        initClickListeners();
-
-        loopIntervalId = setInterval(poll, 50);
-    }
-
-    function initRootAttributesFromLocalStorage() {
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
-            const value = localStorage[key]
-            if (key.startsWith("data-")) {
-                root.setAttribute(key, value)
-            }
-        });
     }
 
     function initClickListeners() {
@@ -272,6 +259,61 @@ window.app = function() {
     }
 
     /**
+     * Reset page state; should be tantamount to a 'reload', mostly
+     */
+    function reset(dontAddHelp=false) {
+
+        clearInterval(pollIntervalId);
+        pollIntervalId = -1;
+        isStarted = false;
+
+        clearInterval(sleepIntervalId);
+        sleepIntervalId = -1;
+        sleepEndTime = -1;
+
+        // Clear audio
+        // src="" + load() aborts any pending activity
+        // Triggers browser console warning, can't be helped
+        audio.src = "";
+        audio.load();
+
+        file = null;
+        url = "";
+        fileId = "";
+        currentIndex = -1;
+        textSegments = [];
+        directSelections = [];
+        isToastPlayPrompt = false;
+        lastStorePositionTime = 0
+        isCheckingZombie = false;
+
+        root.setAttribute("data-player-status", "none");
+        githubButton.style.display = "block";
+        currentFileNameDiv.style.display = "none"
+        clearText();
+        hideElement(bookmarkButton);
+        if (document.activeElement && document.activeElement.blur) { // remove any focus
+            document.activeElement.blur();
+        }
+
+        // Update 'last file opened' text
+        const s = localStorage.getItem("last_file_id")
+        if (s) {
+            document.getElementById("lastFileNameText").textContent = s;
+            lastFileNameHolder.style.display = "block";
+        }
+        else {
+            document.getElementById("lastFileNameText").textContent = s;
+            lastFileNameHolder.style.display = "none";
+        }
+
+        // Add help info
+        if (!dontAddHelp) {
+            addHelpIfKeyboard();
+        }
+    }
+
+    /**
      * pFile and pUrl are mutually exclusive
      */
     async function loadAudioFileOrUrl(pFile, pUrl) {
@@ -308,6 +350,9 @@ window.app = function() {
      */
     function start(pFile, pUrl, pTimedTextSegments) {
 
+        // Reset page state
+        reset(true);
+
         file = pFile;
         url = pUrl;
         fileId = file ? file.name : url
@@ -315,33 +360,24 @@ window.app = function() {
 
         localStorage.setItem("last_file_id", fileId);
 
-        currentIndex = -1;
-        isToastPlayPrompt = false;
-
-        fileNameDiv.style.display = "none"
-        textHolder.style.display = "none";
-        root.setAttribute("data-player-status", "none");
+        helpHolder.innerHTML = "";
         githubButton.style.display = "none";
-        loadLastHolder.style.display = "none";
-        removeHelp();
-        fileNameDiv.style.display = "block"
-        fileNameDiv.textContent = file ? file.name : url
-        showElement(bookmarkButton);
-        if (isTouchDevice() || player.isPinned()) {
-            showPlayer();
-        }
-        if (document.activeElement && document.activeElement.blur) {
-            document.activeElement.blur();
-        }
+        lastFileNameHolder.style.display = "none";
+
+        currentFileNameDiv.style.display = "block"
+        currentFileNameDiv.textContent = file ? file.name : url
 
         populateText();
 
         const arr = loadBookmarks();
         bookmarks.init(textSegments, arr);
+        showElement(bookmarkButton);
+
+        if (isTouchDevice() || player.isPinned()) {
+            showPlayer();
+        }
 
         // Play
-        audio.src = "";
-        audio.load(); // ... src="" + load() aborts any pending activity
         audio.src = url || URL.createObjectURL(file)
         playerPlay();
 
@@ -353,6 +389,9 @@ window.app = function() {
                 audio.currentTime = time;
             }
         }
+
+        clearInterval(pollIntervalId);
+        pollIntervalId = setInterval(poll, 50);
 
         isStarted = true;
     }
@@ -395,6 +434,12 @@ window.app = function() {
         for (let i = 0; i < textSegments.length; i++) {
             spans[i] = document.getElementById("segment-" + i);
         }
+    }
+
+    function clearText() {
+        textHolder.innerHTML = "";
+        textHolder.style.display = "none";
+        spans = []
     }
 
     function updateMenuButtons() {
@@ -585,7 +630,7 @@ window.app = function() {
         updatePlayerVisibility();
 
         // Store audio position at least every 5 seconds
-        if (!audio.ended && new Date().getTime() - lastStorePosition > 5000) {
+        if (!audio.ended && new Date().getTime() - lastStorePositionTime > 5000) {
             storePosition();
         }
 
@@ -628,7 +673,7 @@ window.app = function() {
     function storePosition(value) {
         value = value || audio.currentTime;
         localStorage.setItem("fileId_" + fileId, value);
-        lastStorePosition = new Date().getTime();
+        lastStorePositionTime = new Date().getTime();
     }
 
     function collapseOptionsButton() {
@@ -742,8 +787,13 @@ window.app = function() {
         } catch (error) {
             if (error.name == "NotAllowedError") {
                 showToast("Click to play audio", true);
+            } else if (error.name == "NotSupportedError") {
+                const s = `Error: ${error.name}\nCode: ${error.code}\n\nMessage: ${error.message}`;
+                alert(s)
+                localStorage.setItem("last_file_id", ""); // Roll back value
+                reset();
             } else {
-                console.error("playerPlay error - code:", error.code, "name:", error.name, "message:", error.message)
+                console.error("audio.play() error - code:", error.code, "name:", error.name, "message:", error.message)
             }
         }
     }
@@ -753,9 +803,9 @@ window.app = function() {
 
         sleepEndTime = new Date().getTime() + SLEEP_MS;
 
-        clearInterval(sleepId);
+        clearInterval(sleepIntervalId);
         onSleepInterval();
-        sleepId = setInterval(onSleepInterval, 1000);
+        sleepIntervalId = setInterval(onSleepInterval, 1000);
     }
 
     function clearSleep(isFinishedMessage=false) {
@@ -763,7 +813,7 @@ window.app = function() {
         showToast(message);
 
         root.setAttribute("data-sleep", "");
-        clearInterval(sleepId);
+        clearInterval(sleepIntervalId);
         updateMenuButtons();
     }
 
@@ -1000,13 +1050,12 @@ window.app = function() {
         hideElement(playerHolder, false);
     }
 
-    function addHelp() {
-        const help = helpTemplate.content.cloneNode(true);
-        helpHolder.appendChild(help);
-    }
-
-    function removeHelp() {
+    function addHelpIfKeyboard() {
         helpHolder.innerHTML = "";
+        if (hasPersistentKeyboard()) {
+            const help = helpTemplate.content.cloneNode(true);
+            helpHolder.appendChild(help);
+        }
     }
 
     // --------------------------------------

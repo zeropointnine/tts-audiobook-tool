@@ -259,7 +259,7 @@ html, body {
     outline: 3px solid var(--color-segment-highlight);
 }
 
-#loadLast {
+#lastFileNameHolder {
     display: none;
     margin-top:32px;
     font-size: 16px;
@@ -267,13 +267,13 @@ html, body {
     font-weight: normal;
     color: var(--color-text-dim);
 }
-#loadLastId {
-    margin-top:4px;
-}
 @media (max-width: 600px) {
-    #loadLast {
+    #lastFileNameHolder {
         font-size: 12px;
     }
+}
+#lastFileNameText {
+    margin-top:4px;
 }
 
 /* --------------------------------------- */
@@ -310,20 +310,19 @@ html, body {
 }
 
 
-#fileName {
+#currentFileName {
     margin-left: 36px;
     width: calc(100% - 72px);
     margin-bottom: 16px;
     font-family: sans-serif;
     font-size: 14px;
-    font-weight: bold;
     color: var(--color-text-dim);
     text-align: center;
     overflow-wrap: break-word;
     word-break: break-word; /* Safari fallback */
 }
 @media (max-width: 600px) {
-    #fileName {
+    #currentFileName {
         font-size: 12px;
         margin-left: 18px;
         width: calc(100% - 36px);
