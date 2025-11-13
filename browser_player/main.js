@@ -186,7 +186,7 @@ window.app = function() {
 
         initClickListeners();
 
-        loopIntervalId = setInterval(loop, 50);
+        loopIntervalId = setInterval(poll, 50);
     }
 
     function initRootAttributesFromLocalStorage() {
@@ -574,7 +574,7 @@ window.app = function() {
         hideScrimAndPanels();
     }
 
-    function loop() {
+    function poll() {
         // Checks if audio position has crossed text segment boundaries
         // Also checks for mouse-over-playerOverlay
 
@@ -582,34 +582,33 @@ window.app = function() {
             return;
         }
 
-        if (new Date().getTime() - lastStorePosition > 5000) {
+        updatePlayerVisibility();
+
+        // Store audio position at least every 5 seconds
+        if (!audio.ended && new Date().getTime() - lastStorePosition > 5000) {
             storePosition();
         }
 
-        updatePlayerVisibility();
-
-        const realTimeIndex = getSegmentIndexBySeconds(audio.currentTime);
-        if (realTimeIndex == -1) {
-            return; // TODO: revisit
-        }
-        if (realTimeIndex == currentIndex) {
+        const previousIndex = currentIndex
+        currentIndex = getSegmentIndexBySeconds(audio.currentTime);
+        if (currentIndex == previousIndex) {
             return;
         }
 
         // Index has changed:
 
-        const previousIndex = currentIndex;
-        currentIndex = realTimeIndex;
+        unhighlightByIndex(previousIndex);
 
         if (currentIndex - previousIndex == 1) {
-            // Has advanced by one text segment, probably due to normal playback
+            // Has advanced by one text segment, presumably due to normal playback
             if (!hasAdvancedOnce) {
                 hasAdvancedOnce = true;
                 collapseOptionsButton();
             }
+            if (!audio.ended) {
+                storePosition();
+            }
         }
-
-        unhighlightByIndex(previousIndex);
 
         // Highlight active and scroll-to
         if (currentIndex >= 0) {
@@ -620,9 +619,6 @@ window.app = function() {
                     block: 'center', // 'start', 'center', 'end', or 'nearest'
                     inline: 'nearest' // 'start', 'center', 'end', or 'nearest'
                 });
-            }
-            if (!audio.ended) {
-                storePosition();
             }
         }
     }
@@ -650,12 +646,18 @@ window.app = function() {
     function getSegmentIndexBySeconds(seconds) {
         // Starts search from current index and fans out (optimization)
 
-        let delta = 1;
+        if (textSegments.length == 0) {
+            return -1;
+        }
 
+        const baseIndex = Math.max(currentIndex, 0);
+
+        let delta = 0;
         while (true) {
 
-            const indexInc = currentIndex + delta
-            const indexDec = currentIndex - delta;
+            const indexInc = baseIndex + delta
+            const indexDec = baseIndex - delta;
+
             const oob = (indexInc >= textSegments.length && indexDec < 0)
             if (oob) {
                 return -1;
@@ -714,8 +716,8 @@ window.app = function() {
     }
 
     /**
-     * Unhighlights specified segment.
-     * Plus its close neighbors, for reasons.
+     * Unhighlights specified segment
+     * plus its close neighbors, for reasons.
      */
     function unhighlightByIndex(i) {
         const a = Math.max(i - 20, 0)

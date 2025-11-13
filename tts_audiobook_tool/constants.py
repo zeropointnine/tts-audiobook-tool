@@ -112,7 +112,7 @@ HINT_OUTE_CONFIG = Hint(
 HINT_INDEXTTS2 = Hint(
     "indextts2",
     "This appears to be your first time running the application using the IndexTTS2 model",
-"""We recommend disabling transcription validation for this model,
+"""Consider disabling transcription validation for this model,
 as IndexTTS2 is accurate enough to make this extra step unnecessary.
 (Options > Whisper transcription model > Disabled)"""
 )
@@ -213,7 +213,7 @@ This can be useful for modulating the speed of narration of the generated audio.
 HINT_INDEX_SAMPLE_LEN = Hint(
     "index_sample_len",
     "Note",
-    """IndexTTS2 ignores voice sample reference data past the 15 second mark"""
+    """IndexTTS2 ignores voice sample audio data past the 15 second mark"""
 )
 
 HINT_SECTION_SOUND_EFFECT = Hint(
