@@ -225,9 +225,8 @@ class AudioPlayer {
             isDragging = true;
             thumb.style.transition = 'none';
             document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-            // Handle touch events
             document.addEventListener('touchmove', onMouseMove, { passive: false });
+            document.addEventListener('mouseup', onMouseUp);
             document.addEventListener('touchend', onMouseUp);
             e.preventDefault();
         };
@@ -235,13 +234,7 @@ class AudioPlayer {
         const onMouseMove = (e) => {
             if (!isDragging) return;
             const event = e.touches ? e.touches[0] : e;
-
-            // const rect = bar.getBoundingClientRect();
-            // let percent = (event.clientX - rect.left) / rect.width;
-            // percent = Math.max(0, Math.min(1, percent));
-
             const percent = this._clientXToPercent(event.clientX, thumb, bar);
-
             callback(percent);
             e.preventDefault();
         };

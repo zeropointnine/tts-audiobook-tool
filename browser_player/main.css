@@ -632,9 +632,14 @@ html, body {
         }
 }
 
-span {
-    background-color: transparent;
+#textHolder {
+    /*
+    Prevent i-bar cursor over non-hot text
+    (ie, white space between adjacent TextSegments, and non-matched STT text)
+    */
+    cursor: default;
 }
+
 span.highlight {
     background-color: var(--color-segment-highlight);
     color: var(--color-text);
@@ -654,18 +659,26 @@ span.highlight {
 
 @media (pointer: fine) {
     /* hover effect only when is pointer device */
-    #textHolder span:hover {
+    #textHolder span.hasAudio:hover {
         background-color: var(--color-segment-hover);
         padding: 0.1em 0;
         border-radius: 3px;
         cursor: pointer;
     }
     /* hovering over currently highlighted segment shouldn't change its bg color */
-    #textHolder span:hover.highlight {
+    #textHolder span:hasAudio.highlight:hover {
         border-radius: 3px;
         background-color: var(--color-segment-highlight);
     }
+
+    #textHolder span.noAudio:hover {
+        background-color: var(--color-bg);
+        padding: 0.1em 0;
+        border-radius: 3px;
+        cursor: pointer;
+    }
 }
+
 
 #segmentColorsButton svg path.colored {
     fill: var(--color-segment-highlight); /* hah */

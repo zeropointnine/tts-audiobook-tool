@@ -17,9 +17,9 @@ The app features a number of quality control measures designed to mitigate the i
 
 Plain-vanilla text interface.
 
-### Web-based player:
+### Browser player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it generates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). The web app can be launched directly from the html source (no need for a web server), or from the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
+The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `.\browser_player\index.html` (no need for a web server), or from the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
 **Some example outputs**, all using the same source text and same 15-second voice clone sample:
 

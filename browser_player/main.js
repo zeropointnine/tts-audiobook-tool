@@ -407,7 +407,10 @@ window.app = function() {
                 contentHtml += escapeHtml( o["before"] );
             }
 
-            contentHtml += `<span id="segment-${i}">${ escapeHtml( o["content"] ) }</span>`;
+            const hasAudio = segment["time_start"] > 0.0 && segment["time_end"] > 0.0
+            const className = hasAudio ? "hasAudio" : "noAudio"
+            const spanString = `<span id="segment-${i}" class="${className}">${ escapeHtml( o["content"] ) }</span>`
+            contentHtml += spanString;
 
             if (o["after"]) {
 
