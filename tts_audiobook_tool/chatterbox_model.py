@@ -38,10 +38,7 @@ class ChatterboxModel(ChatterboxModelProtocol):
 
         try:
             data = self._chatterbox.generate(text, **dic)
+            data = data.numpy().squeeze()
+            return Sound(data, self.info.sample_rate)
         except Exception as e:
             return make_error_string(e)
-
-        data = data.numpy().squeeze()
-
-        return Sound(data, self.info.sample_rate)
-

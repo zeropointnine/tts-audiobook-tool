@@ -27,6 +27,7 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_model import HiggsModelProtocol, HiggsProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.util import *
 
 class HiggsModel(HiggsModelProtocol):
     """
@@ -90,39 +91,45 @@ class HiggsModel(HiggsModelProtocol):
         pattern = re.compile(r"\[(SPEAKER\d+)\]")
         speaker_tags = sorted(set(pattern.findall(text)))
 
-        messages, audio_ids = prepare_generation_context(
-            scene_prompt=scene_prompt,
-            voice_path=voice_path,
-            voice_transcript=voice_transcript,
-            ref_audio_in_system_message=ref_audio_in_system_message,
-            audio_tokenizer=self.audio_tokenizer,
-            speaker_tags=speaker_tags,
-        )
+        try:
 
-        chunked_text = prepare_chunk_text(
-            text,
-            chunk_method=chunk_method,
-            chunk_max_word_num=chunk_max_word_num,
-            chunk_max_num_turns=chunk_max_num_turns,
-        )
+            messages, audio_ids = prepare_generation_context(
+                scene_prompt=scene_prompt,
+                voice_path=voice_path,
+                voice_transcript=voice_transcript,
+                ref_audio_in_system_message=ref_audio_in_system_message,
+                audio_tokenizer=self.audio_tokenizer,
+                speaker_tags=speaker_tags,
+            )
 
-        # text_output is the input prompt (not sure if transformed in any way or not)
-        assert(self.model_client is not None)
-        sound_data, sr, text_output = self.model_client.generate(
-            messages=messages,
-            audio_ids=audio_ids,
-            chunked_text=chunked_text,
-            generation_chunk_buffer_size=generation_chunk_buffer_size,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-            ras_win_len=ras_win_len,
-            ras_win_max_num_repeat=ras_win_max_num_repeat,
-            seed=seed,
-        )
-        assert( isinstance(sound_data, ndarray) )
-        sound_data = sound_data.squeeze() # for good measure
-        return Sound(sound_data, sr )
+            chunked_text = prepare_chunk_text(
+                text,
+                chunk_method=chunk_method,
+                chunk_max_word_num=chunk_max_word_num,
+                chunk_max_num_turns=chunk_max_num_turns,
+            )
+
+            # text_output is the input prompt (not sure if transformed in any way or not)
+            assert(self.model_client is not None)
+            sound_data, sr, text_output = self.model_client.generate(
+                messages=messages,
+                audio_ids=audio_ids,
+                chunked_text=chunked_text,
+                generation_chunk_buffer_size=generation_chunk_buffer_size,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                ras_win_len=ras_win_len,
+                ras_win_max_num_repeat=ras_win_max_num_repeat,
+                seed=seed,
+            )
+            assert( isinstance(sound_data, ndarray) )
+            sound_data = sound_data.squeeze() # for good measure
+            return Sound(sound_data, sr )
+
+        except Exception as e:
+            return make_error_string(e)
+
 
 # --------------------------------------------------------------------------------------------------
 

@@ -5,7 +5,7 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.util import printt
+from tts_audiobook_tool.util import *
 
 
 class VibeVoiceModel(VibeVoiceModelProtocol):
@@ -78,29 +78,33 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         but in practice overhead is negligible
         """
 
-        assert(self.model is not None)
-        assert(self.processor is not None)
+        try:
 
-        self.model.set_ddpm_inference_steps(num_steps)
+            assert(self.model is not None)
+            assert(self.processor is not None)
 
-        inputs = self.processor(
-            text=[ text ],  # Wrap in list for batch processing
-            voice_samples=[ [ voice_path ] ],  # Wrap in list for batch processing
-            padding=True,
-            return_tensors="pt",
-            return_attention_mask=True,
-        )
+            self.model.set_ddpm_inference_steps(num_steps)
 
-        # Generate audio
-        outputs = self.model.generate(
-            **inputs, # type: ignore
-            max_new_tokens=self.max_new_tokens,
-            cfg_scale=cfg_scale,
-            tokenizer=self.processor.tokenizer,
-            # generation_config={'do_sample': False, 'temperature': 0.95, 'top_p': 0.95, 'top_k': 0},
-            generation_config={'do_sample': False}, # type: ignore
-            verbose=True,
-        )
+            inputs = self.processor(
+                text=[ text ],  # Wrap in list for batch processing
+                voice_samples=[ [ voice_path ] ],  # Wrap in list for batch processing
+                padding=True,
+                return_tensors="pt",
+                return_attention_mask=True,
+            )
+
+            # Generate audio
+            outputs = self.model.generate(
+                **inputs, # type: ignore
+                max_new_tokens=self.max_new_tokens,
+                cfg_scale=cfg_scale,
+                tokenizer=self.processor.tokenizer,
+                # generation_config={'do_sample': False, 'temperature': 0.95, 'top_p': 0.95, 'top_k': 0},
+                generation_config={'do_sample': False}, # type: ignore
+                verbose=True,
+            )
+        except Exception as e:
+            return make_error_string(e)
 
         has_audio = outputs.speech_outputs and outputs.speech_outputs[0] is not None # type: ignore
         if not has_audio:

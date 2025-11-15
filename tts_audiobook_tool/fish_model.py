@@ -124,70 +124,76 @@ class FishModel(FishModelProtocol):
         if temperature == -1:
             temperature = FishModelProtocol.DEFAULT_TEMPERATURE
 
-        with torch.no_grad(): # !!important
+        try:
+            with torch.no_grad(): # !!important
 
-            start = time.time()
+                start = time.time()
 
-            # Step 1: Prompt tokens
+                # Step 1: Prompt tokens
 
-            if self._voice_clone and self._voice_clone.prompt_tokens is None:
-                audio_lengths = torch.tensor([self._voice_clone.audios.shape[2]], device=self.device, dtype=torch.long)
-                prompt_tokens, _ = self.dac_model.encode(self._voice_clone.audios, audio_lengths)
-                if prompt_tokens.ndim == 3:
-                    prompt_tokens = prompt_tokens[0]
-                self._voice_clone.prompt_tokens = prompt_tokens
+                if self._voice_clone and self._voice_clone.prompt_tokens is None:
+                    audio_lengths = torch.tensor([self._voice_clone.audios.shape[2]], device=self.device, dtype=torch.long)
+                    prompt_tokens, _ = self.dac_model.encode(self._voice_clone.audios, audio_lengths)
+                    if prompt_tokens.ndim == 3:
+                        prompt_tokens = prompt_tokens[0]
+                    self._voice_clone.prompt_tokens = prompt_tokens
 
-            prompt_tokens = self._voice_clone.prompt_tokens if self._voice_clone else None
+                prompt_tokens = self._voice_clone.prompt_tokens if self._voice_clone else None
 
-            # Step 2: Make semantic tokens using prompt tokens
+                # Step 2: Make semantic tokens using prompt tokens
 
-            from fish_speech.models.text2semantic.inference import generate_long # type: ignore
+                from fish_speech.models.text2semantic.inference import generate_long # type: ignore
 
-            prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
+                prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
 
-            # Not currently using these params:
-            # top_p=0.5,
-            # repetition_penalty=1.5
+                # Not currently using these params:
+                # top_p=0.5,
+                # repetition_penalty=1.5
 
-            semantic_tokens = None
-            for response in generate_long(
-                model=self.t2s_model,
-                device=self.device,
-                decode_one_token=self.decode_one_token,  # type: ignore
-                text=text,
-                prompt_text=prompt_text,
-                prompt_tokens=prompt_tokens,
-                temperature=temperature
-            ):
-                if response.action == "sample":
-                    if response.codes is None:
-                        return "No tensor while generating semantic tokens"
-                    semantic_tokens = response.codes.cpu().numpy()
-                    break  # Assuming we only need the first sample
+                semantic_tokens = None
+                for response in generate_long(
+                    model=self.t2s_model,
+                    device=self.device,
+                    decode_one_token=self.decode_one_token,  # type: ignore
+                    text=text,
+                    prompt_text=prompt_text,
+                    prompt_tokens=prompt_tokens,
+                    temperature=temperature
+                ):
+                    if response.action == "sample":
+                        if response.codes is None:
+                            return "No tensor while generating semantic tokens"
+                        semantic_tokens = response.codes.cpu().numpy()
+                        break  # Assuming we only need the first sample
 
-            del prompt_tokens
+                del prompt_tokens
 
-            if semantic_tokens is None:
-                return "Semantic token generation failed"
+                if semantic_tokens is None:
+                    return "Semantic token generation failed"
 
-            # Step 3: Make audio data using semantic tokens
-            prompt_tokens = torch.from_numpy(semantic_tokens).to(self.device).long()
-            if prompt_tokens.ndim == 2:
-                prompt_tokens = prompt_tokens[None]  # Add batch dimension
-            indices_lens = torch.tensor([prompt_tokens.shape[2]], device=self.device, dtype=torch.long)
-            tensor, _ = self.dac_model.decode(prompt_tokens, indices_lens)
+                # Step 3: Make audio data using semantic tokens
+                prompt_tokens = torch.from_numpy(semantic_tokens).to(self.device).long()
+                if prompt_tokens.ndim == 2:
+                    prompt_tokens = prompt_tokens[None]  # Add batch dimension
+                indices_lens = torch.tensor([prompt_tokens.shape[2]], device=self.device, dtype=torch.long)
+                tensor, _ = self.dac_model.decode(prompt_tokens, indices_lens)
 
-            del prompt_tokens
-            del semantic_tokens
+                del prompt_tokens
+                del semantic_tokens
 
-            data = tensor[0, 0].float().cpu().detach().numpy()
-            # print(data.shape)  # Should be (N,) where N is total elements
+                data = tensor[0, 0].float().cpu().detach().numpy()
+                # print(data.shape)  # Should be (N,) where N is total elements
 
-            del tensor
-            if self.device == "cuda":
-                torch.cuda.empty_cache()
+                del tensor
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
 
-        return Sound(data, self.dac_model.sample_rate)
+                return Sound(data, self.dac_model.sample_rate)
+
+        except Exception as e:
+            return make_error_string(e)
+
+
 
 # ---
 

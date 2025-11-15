@@ -17,27 +17,27 @@ class TextSegmenter:
         # Pass 1: Segment text into sentences using pysbd
         # Important: "clean=False" preserves leading and trailing whitespace
         segmenter = pysbd.Segmenter(language=pysbd_language, clean=False, char_span=False)
-        texts = segmenter.segment(source_text)
+        sentence_strings = segmenter.segment(source_text)
 
         # Pass 2: pysbd treats everything enclosed in quotes as a single sentence, so split those up
-        new_texts = []
-        for text in texts:
-            if is_sentence_quotation(text):
-                lst = segment_quote_text(text, segmenter)
-                new_texts.extend(lst)
+        new_sentence_strings = []
+        for string in sentence_strings:
+            if is_sentence_quotation(string):
+                inner_sentences = segment_quote_sentence(string, segmenter)
+                new_sentence_strings.extend(inner_sentences)
             else:
-                new_texts.append(text)
-        texts = new_texts
+                new_sentence_strings.append(string)
+        sentence_strings = new_sentence_strings
 
-        # Pass 3: Split any segments that are longer than max_words using own algo
+        # Pass 3: Split any strings that are longer than max_words using own algo
         tups = []
-        for text in texts:
-            lst = SentenceSegmenter.segment_sentence(text, max_words=max_words)
-            for i, subsegment in enumerate(lst):
+        for string in sentence_strings:
+            inner_sentences = SentenceSegmenter.segment_sentence(string, max_words=max_words)
+            for i, subsegment in enumerate(inner_sentences):
                 if i == 0:
                     reason = TextSegmentReason.SENTENCE
                 else:
-                    previous_subsegment = lst[i - 1].strip()
+                    previous_subsegment = inner_sentences[i - 1].strip()
                     last_char = previous_subsegment[-1]
                     if last_char.isalpha():
                         reason = TextSegmentReason.WORD
@@ -48,10 +48,10 @@ class TextSegmenter:
         # Make TextSegments proper
         counter = 0
         text_segments: list[TextSegment] = []
-        for text, reason in tups:
-            length = len(text)
+        for string, reason in tups:
+            length = len(string)
             text_segment = TextSegment(
-                text=text, index_start=counter, index_end=counter + length, reason=reason
+                text=string, index_start=counter, index_end=counter + length, reason=reason
             )
             text_segments.append(text_segment)
             counter += length
@@ -209,21 +209,6 @@ def make_paragraph_lists(segments: list[TextSegment]) -> list[list[TextSegment]]
 
     return paragraphs
 
-
-def segment_quote_text(text: str, segmenter) -> list[str]:
-    """
-    Given a quote which may consist of multiple sentences and may have whitespace before and/or after the quote,
-    segment the quote by sentence, preserving whitespace.
-    """
-    before, content, after = split_string_parts(text)
-    segments = segmenter.segment(content)
-    if not segments:
-        return [text]
-
-    segments[0] = before + segments[0]
-    segments[-1] = segments[-1] + after
-    return segments
-
 def is_sentence_quotation(pysbd_segmented_string: str) -> bool:
     """
     Given a pysbd-segmented string, does it appear to be a "quotation sentence"
@@ -245,6 +230,20 @@ def is_sentence_quotation(pysbd_segmented_string: str) -> bool:
 
     start, _, end = split_string_parts(pysbd_segmented_string)
     return has_start_quote_char(start) and has_end_quote_char(end)
+
+def segment_quote_sentence(sentence: str, segmenter) -> list[str]:
+    """
+    Given a quote which may consist of multiple sentences and may have whitespace before and/or after the quote,
+    segment the inside of the quote by sentence, preserving whitespace.
+    """
+    before, content, after = split_string_parts(sentence)
+    inner_sentences = segmenter.segment(content)
+    if not inner_sentences:
+        return [sentence]
+
+    inner_sentences[0] = before + inner_sentences[0]
+    inner_sentences[-1] = inner_sentences[-1] + after
+    return inner_sentences
 
 def split_string_parts(text: str) -> tuple[str, str, str]:
     """

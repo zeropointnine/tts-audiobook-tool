@@ -21,8 +21,9 @@ class WhisperUtil:
             stt_config: SttConfig
     ) -> list[Segment] | str:
         """
-        Simple wrapper around whisper `transcribe()`.
         All whisper transcription should be done through here.
+
+        Simple wrapper around whisper `transcribe()`.
         Returns list of (whisper) Segments or error string on fail.
 
         Makes temporary resampled audio if necessary.

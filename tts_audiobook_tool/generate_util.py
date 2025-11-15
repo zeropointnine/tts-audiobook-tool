@@ -76,7 +76,7 @@ class GenerateUtil:
             text_segment = project.text_segments[segment_index]
 
             printt()
-            print_item_heading(
+            GenerateUtil.print_item_heading(
                 is_regenerate, text_segment.text, segment_index, count, len(items)
             )
 
@@ -84,33 +84,35 @@ class GenerateUtil:
                 if path and os.path.exists(path):
                     delete_silently(path)
 
-            opt_sound, validate_result = GenerateUtil.generate_sound_full_flow(
+            result = GenerateUtil.generate_sound_full_flow(
                 project=project,
                 text_segment=text_segment,
                 stt_variant=stt_variant,
                 stt_config=stt_config
             )
 
-            if not opt_sound:
-                # Model failed to produce audio
-                printt(f"{COL_ERROR}Skipped item")
+            if isinstance(result, str):
+                err = result
+                printt(f"{COL_ERROR}Model fail, skipping item:")
+                printt(f"{COL_ERROR}{err}")
                 num_failed += 1
 
             else:
                 # Model successfully generated audio
+                sound, validation_result = result
 
-                # Print ValidationResult info
+                # Print validation info
                 s = "Speech-to-text validation: "
-                if isinstance(validate_result, SkippedResult):
+                if isinstance(validation_result, SkippedResult):
                     num_saved_ok += 1
                     s += "Skipped (Whisper disabled)"
-                if isinstance(validate_result, PassResult):
+                if isinstance(validation_result, PassResult):
                     num_saved_ok += 1
                     s += "Passed"
-                elif isinstance(validate_result, TrimmableResult):
+                elif isinstance(validation_result, TrimmableResult):
                     num_saved_ok += 1
-                    s += f"{COL_OK}Fixed{COL_DEFAULT} - {validate_result.get_ui_message()}"
-                elif isinstance(validate_result, FailResult):
+                    s += f"{COL_OK}Fixed{COL_DEFAULT} - {validation_result.get_ui_message()}"
+                elif isinstance(validation_result, FailResult):
                     num_saved_with_error += 1
                     s += f"{COL_ERROR}Max fails reached{COL_DEFAULT}, tagging as failed, will save anyway"
                 else: # shouldn't get here
@@ -119,13 +121,13 @@ class GenerateUtil:
 
                 # Save file
                 path = SoundSegmentUtil.make_segment_file_path(segment_index, project)
-                if isinstance(validate_result, FailResult):
+                if isinstance(validation_result, FailResult):
                     path = AppUtil.insert_bracket_tag_file_path(path, "fail")
-                err = SoundFileUtil.save_flac(opt_sound, path)
+                err = SoundFileUtil.save_flac(sound, path)
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {path}")
                 else:
-                    printt(f"Saved file: {path}")
+                    printt(f"Saved: {path}")
 
                     # Update meta-timing info and print out
                     saved_elapsed.append(time.time() - saved_start_time)
@@ -168,14 +170,23 @@ class GenerateUtil:
         stt_variant: SttVariant,
         stt_config: SttConfig,
         max_passes: int = 2,
-    ) -> tuple[Sound | None, ValidationResult]:
+    ) -> tuple[Sound, ValidationResult] | str:
         """
+        All TTS inference should be done through here.
+
         Full program flow for generating sound for a single text segment, including retries.
 
-        Prints inference speed info after any successful gen.
-        Prints error feedback only on non-final generation fail.
+        max_passes:
+            0: skips validation
+            1: does validation, does not retry on fail
+            2+: does validation, retries up to n-1 times on fail
 
-        param stt_variant - if DISABLED, validation step is skipped
+        stt_variant:
+            If DISABLED, skips validation, ofc
+
+        Prints: Generation speed info, and error feedback on non-final generation fail.
+
+        Returns either (Sound, ValidationResult) or error string for model failure etc.
         """
 
         pass_num = 0
@@ -184,45 +195,31 @@ class GenerateUtil:
 
             start_time = time.time()
 
-            # Dim color during inference printouts
-            print(COL_DIM, end="", flush=True)
+
+
 
             # Generate
+            print(COL_DIM, end="", flush=True) # Dim color during inference printouts
             result = GenerateUtil.generate_single(project, text_segment)
-
-            # Print blank line after any inference printouts, plus restore print color
-            printt()
+            printt() # Restore print color, print blank line
 
             if isinstance(result, str):
                 err = result
-                printt(f"{err}")
-                if pass_num < max_passes:
-                    printt(f"{COL_ERROR}Will retry")
-                    printt()
-                    continue
-                else:
-                    return None, FailResult(err)
+                return err
 
             sound = result
 
             elapsed = time.time() - start_time or 1.0
-            print_speed_info(result.duration, elapsed)
+            GenerateUtil.print_speed_info(result.duration, elapsed)
 
-            if stt_variant == SttVariant.DISABLED:
+            if max_passes == 0 or stt_variant == SttVariant.DISABLED:
                 return (sound, SkippedResult())
 
             # Transcribe
             result = WhisperUtil.transcribe_to_segments(sound, stt_variant, stt_config)
             if isinstance(result, str):
-                # Transcription error (unlikely)
                 err = result
-                printt(f"{err}")
-                if pass_num < max_passes:
-                    printt(f"{COL_ERROR}Will retry")
-                    printt()
-                    continue
-                else:
-                    return None, FailResult(err)
+                return err
             segments = result
 
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
@@ -259,7 +256,7 @@ class GenerateUtil:
         """
         Core audio generation function.
         Returns model-generated sound data (in model's native samplerate),
-        or error string on model-related fail.
+        or error string
         """
 
         text = text_segment.text
@@ -408,21 +405,25 @@ class GenerateUtil:
 
         return text
 
+    @staticmethod
+    def print_item_heading(is_regenerate: bool, text: str, index: int, count: int, total: int) -> None:
+        verb = "Regenerating" if is_regenerate else "Generating"
+        s  = f"{COL_ACCENT}[{COL_DEFAULT}{count+1}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
+        s += f"{COL_ACCENT}{verb} audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
+        printt(s)
+        printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
+        printt()
+
+    @staticmethod
+    def print_speed_info(sound_duration: float, elapsed: float) -> None:
+        multi = sound_duration / elapsed
+        s = f"Audio duration: {COL_ACCENT}{sound_duration:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
+        s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
+        printt(s)
+
+
+
 # ---
-
-def print_item_heading(is_regenerate: bool, text: str, index: int, count: int, total: int) -> None:
-    verb = "Regenerating" if is_regenerate else "Generating"
-    s  = f"{COL_ACCENT}[{COL_DEFAULT}{count+1}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
-    s += f"{COL_ACCENT}{verb} audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
-    printt(s)
-    printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
-    printt()
-
-def print_speed_info(sound_duration: float, elapsed: float) -> None:
-    multi = sound_duration / elapsed
-    s = f"Audio duration: {COL_ACCENT}{sound_duration:.1f}s{COL_DEFAULT}, inference time: {COL_ACCENT}{elapsed:.1f}s"
-    s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
-    printt(s)
 
 def print_eta(saved_elapsed: list[float], num_left) -> None:
 
