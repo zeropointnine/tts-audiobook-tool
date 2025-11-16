@@ -41,7 +41,6 @@ class Stt:
         """
         Returns lazy-initialized WhisperModel
         """
-
         if Stt._variant == SttVariant.DISABLED:
             raise ValueError(f"Bad variant: {Stt._variant}")
 

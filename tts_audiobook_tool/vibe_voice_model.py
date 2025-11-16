@@ -56,8 +56,8 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         self.processor = None
         self.model = None
 
-    def preprocess_text(self, text: str) -> str:
-        text = super().preprocess_text(text)
+    def massage_for_inference(self, text: str) -> str:
+        text = super().massage_for_inference(text)
 
         # Required speaker tag
         text = f"{SPEAKER_TAG}{text}"

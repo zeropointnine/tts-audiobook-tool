@@ -50,7 +50,7 @@ class State:
 
         # Sync static values
         Tts.set_model_params_using_project(self.project)
-        if not self.real_time.custom_text_segments:
+        if not self.real_time.custom_text_groups:
             self.real_time.line_range = None
 
 
@@ -76,7 +76,7 @@ class State:
             project_dir_path = Path(path).expanduser()
         except:
             return "Bad path"
-        
+
         if not project_dir_path.is_absolute():
             if os.name == "posix":
                 return "Please use either an absolute path or a relative path that starts with \"~\""

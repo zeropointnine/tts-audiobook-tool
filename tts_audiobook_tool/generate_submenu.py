@@ -16,7 +16,7 @@ class GenerateSubmenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def on_start(_, __) -> None:
+        def on_start(_: State, __: MenuItem) -> None:
 
             err = Tts.validate_language_code(state.project.language_code)
             if err:
@@ -59,7 +59,7 @@ class GenerateSubmenu:
         # Menu
         def heading_maker(_) -> str:
             total_segments_generated = state.project.sound_segments.num_generated()
-            num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} total lines complete)"
+            num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
             return f"Generate audio {num_complete_label}"
 
         items = [
@@ -84,7 +84,7 @@ class GenerateSubmenu:
         if state.prefs.stt_variant == SttVariant.DISABLED:
             s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
 
-        print_heading(s, dont_clear=True)
+        print_heading(s, dont_clear=True, non_menu=True)
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
@@ -139,7 +139,7 @@ class GenerateSubmenu:
     @staticmethod
     def ask_item_range(state: State) -> None:
 
-        num_items = len(state.project.text_segments)
+        num_items = len(state.project.phrase_groups)
 
         printt("Enter line numbers to generate (eg, \"1-100, 103\", or \"all\")")
         inp = AskUtil.ask()
@@ -153,7 +153,7 @@ class GenerateSubmenu:
                 print_feedback("\n".join(warnings))
                 return
 
-        s = ParseUtil.make_ranges_string(indices, len(state.project.text_segments))
+        s = ParseUtil.make_ranges_string(indices, len(state.project.phrase_groups))
         state.project.generate_range_string = "" if s == "all" else s
         state.project.save()
 

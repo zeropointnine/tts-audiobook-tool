@@ -9,45 +9,43 @@ from tts_audiobook_tool.app_types import ConcreteWord, Word
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.phrase import Phrase
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.timed_text_segment import TimedTextSegment
+from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class SttUtil:
 
     @staticmethod
-    def make_timed_text_segments(
-        text_segments: List[TextSegment],
+    def make_timed_phrases(
+        phrases: List[Phrase],
         transcribed_words: List[Word],
         print_info: bool=True
-    ) -> tuple[ List[TimedTextSegment], bool ]:
+    ) -> tuple[ List[TimedPhrase], bool ]:
         """
         Force-alignment algorithm
         Takes in source text list of TextSegments and list of transcribed Words
-        to create list of TimedTextSegments.
+        to create list of TimedPhrases.
 
         Returns list and if did interrupt
         """
 
-        result: List[TimedTextSegment] = []
+        result: List[TimedPhrase] = []
 
-        if not text_segments:
+        if not phrases:
             return [], False
         if not transcribed_words:
             # If no transcript, all segments get 0 time
-            for seg in text_segments:
-                result.append(TimedTextSegment(
-                    seg.text, seg.index_start, seg.index_end, 0.0, 0.0
-                ))
+            for phrase in phrases:
+                result.append(TimedPhrase(phrase.text, 0.0, 0.0))
             return result, False
 
         if DEBUG:
             # Clear screen and scrollback, print the lists
             print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK)
             print("\nsource text:\n")
-            for i, item in enumerate(text_segments):
+            for i, item in enumerate(phrases):
                 print(i, item.text.strip())
             s = ""
             for item in transcribed_words:
@@ -65,19 +63,17 @@ class SttUtil:
         # Pointer for transcribed_words
         cursor = 0
 
-        for segment_index, segment in enumerate(text_segments):
+        for segment_index, segment in enumerate(phrases):
 
             if SigIntHandler().did_interrupt:
                 SigIntHandler().clear()
                 return [], True
 
-            segment_text_normed = normalize_text(segment.text)
-            segment_num_words = len(segment_text_normed.split())
+            text_normed = normalize_text(segment.text)
+            num_words = len(text_normed.split())
 
-            if not segment_text_normed: # Empty segment text after normalization
-                result.append(TimedTextSegment(
-                    segment.text, segment.index_start, segment.index_end, 0.0, 0.0
-                ))
+            if not text_normed: # Empty segment text after normalization
+                result.append(TimedPhrase(segment.text, 0.0, 0.0))
                 continue
 
             best_match: MatchInfo | None = None
@@ -91,10 +87,10 @@ class SttUtil:
 
             for trans_index_start in range(trans_index_start_min, trans_index_start_max):
 
-                phrase_length_min = int(segment_num_words * 0.75) or 1
-                extra = int(segment_num_words * 0.25)
+                phrase_length_min = int(num_words * 0.75) or 1
+                extra = int(num_words * 0.25)
                 extra = max(extra, 2)
-                phrase_length_max = segment_num_words + extra
+                phrase_length_max = num_words + extra
 
                 # Inner loop slides the transcribed word ending index
                 # in a range relatively close to the source text segment word length
@@ -118,11 +114,11 @@ class SttUtil:
                     # to help prevent false positives on short text segments
                     # Note, this may prevent correct "free-standing" matches from passing,
                     # but still, should do more good than harm
-                    modded_segment_text_normed = segment_text_normed
+                    modded_segment_text_normed = text_normed
                     modded_trans_text_normed = trans_text_normed
 
                     if cursor > 0 and trans_index_start > 0:
-                        previous_segment = text_segments[segment_index - 1]
+                        previous_segment = phrases[segment_index - 1]
                         previous_segment_word = normalize_text(previous_segment.text).split(" ")[-1]
                         previous_segment_word = normalize_text(previous_segment_word)
 
@@ -130,7 +126,7 @@ class SttUtil:
                         previous_trans_word = normalize_text(previous_trans_word)
 
                         if previous_segment_word and previous_trans_word:
-                            modded_segment_text_normed = previous_segment_word + " " + segment_text_normed
+                            modded_segment_text_normed = previous_segment_word + " " + text_normed
                             modded_trans_text_normed = previous_trans_word + " " + trans_text_normed
 
                     matcher = difflib.SequenceMatcher(None, modded_segment_text_normed, modded_trans_text_normed)
@@ -149,8 +145,8 @@ class SttUtil:
 
 
             def print_result(is_success: bool): # yes rly
-                printt(f"line {segment_index + 1}/{len(text_segments)}")
-                printt(f"{COL_DIM}    source text: {pretty_truncate(segment_text_normed, 50)}")
+                printt(f"line {segment_index + 1}/{len(phrases)}")
+                printt(f"{COL_DIM}    source text: {pretty_truncate(text_normed, 50)}")
                 if best_match:
                     printt(f"{COL_DIM}    transcribed: {pretty_truncate(best_match.trans_text, 50)}")
                 s = f"{COL_DIM}    score: {best_match.score if best_match else 0}"
@@ -174,10 +170,8 @@ class SttUtil:
                 else:
                     end_time = transcribed_words[best_match.trans_index_end - 1].end
                 result.append(
-                    TimedTextSegment(
+                    TimedPhrase(
                         segment.text,
-                        segment.index_start,
-                        segment.index_end,
                         start_time,
                         end_time
                 ))
@@ -201,7 +195,7 @@ class SttUtil:
                 # No good match found for this segment
                 # Add 'empty' result, do NOT advance cursor
                 result.append(
-                    TimedTextSegment(segment.text, segment.index_start, segment.index_end, 0.0, 0.0)
+                    TimedPhrase(segment.text, 0.0, 0.0)
                 )
 
                 # Ensure the always-advancing source text segments can't "outrun" the transcribed text.
@@ -225,10 +219,10 @@ class SttUtil:
             if cursor >= len(transcribed_words) - 1:
                 # Reached end of transcription
                 # Add remaining text_segments with zeroed timestamps
-                for remaining_segment_index in range(segment_index + 1, len(text_segments)):
-                    remaining_seg = text_segments[remaining_segment_index]
-                    result.append(TimedTextSegment(
-                        remaining_seg.text, remaining_seg.index_start, remaining_seg.index_end, 0.0, 0.0
+                for remaining_segment_index in range(segment_index + 1, len(phrases)):
+                    remaining_seg = phrases[remaining_segment_index]
+                    result.append(TimedPhrase(
+                        remaining_seg.text, 0.0, 0.0
                     ))
                 break
 

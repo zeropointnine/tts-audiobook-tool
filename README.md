@@ -57,11 +57,17 @@ Clone the repository and cd into it:
     git clone https://github.com/zeropointnine/tts-audiobook-tool
     cd tts-audiobook-tool
 
-A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below. Model-specific options will be enabled automatically in the app based on which virtual environment has been enabled.
+A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. Model-specific options will be enabled automatically in the app based on which virtual environment has been enabled.
+
+To enable torch CUDA acceleration on Windows, run the following commands (On Linux, no extra step is required).
+
+    pip uninstall -y torch torchaudio
+    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
 Finally, run the app by entering:
 
     python -m tts_audiobook_tool
+
 
 ## Install for IndexTTS2
 
@@ -77,18 +83,9 @@ Install dependencies:
 
     pip install -r requirements-indextts2.txt
 
-### Additional steps for CUDA:
-
-Uninstall the vanilla version of torch:
-
-    pip uninstall torch torchaudio
-
-Install torch 2.8 for CUDA v12.8:
-
-    pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-
 > **ℹ️ Note:**
-> To run the app using IndexTTS2 comfortably within 12GB of VRAM, consider setting FP16 to True
+> To run the app using IndexTTS2 comfortably within 12GB of VRAM, consider setting FP16 to True and also potentially using the smaller turbo Whisper model, setting the Whisper device to CPU, or disabling Whisper transcription validation altotether.
+
 
 ## Install for VibeVoice
 
@@ -106,23 +103,21 @@ Install dependencies:
 
 Note that because Microsoft famously removed the source code from their project github repo, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
-### Additional steps for CUDA:
+### Optional, when using CUDA: 
 
-Uninstall the vanilla version of torch:
+Install Flash Attention:
 
-    pip uninstall torch
+On Windows, the best path for doing so is to source a wheel from a trustworthy source. For example, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
 
-Install torch 2.6 for CUDA v12.6:
+On Linux, enter:
 
-    pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-
-Finally, install Flash Attention. The procedure for doing so varies by operating system. On Windows, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
+    pip install flash-attn==2.7.4.post1 --no-build-isolation
 
 
 ## Install for Higgs Audio V2:
 
 > **ℹ️ Note!**
-> Higgs V2 requires CUDA, and 24 GB is almost a necessity (yes really)
+> For CUDA acceleration, 24 GB VRAM is recommended (yes really)
 
 On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install portaudio`)
 
@@ -140,7 +135,6 @@ Install dependencies:
 
 Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
 
-Uninstall the vanilla version of torch that just got installed, and install the CUDA version in its place (latest is fine).
 
 ## Install for Fish OpenAudio-S1-mini:
 
@@ -156,19 +150,12 @@ Install dependencies:
 
     pip install -r requirements-fish.txt
 
-And then, two extra steps:
+Authenticate the model on HuggingFace:
 
-You have to opt in to gain access to the Fish/OpenAudio model by visiting the [FishAudio Hugging Face page](https://huggingface.co/fishaudio/openaudio-s1-mini), using a logged-in Hugging Face account.
+1. Accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/openaudio-s1-mini).
 
-Then, [generate a Hugging Face access token](https://huggingface.co/settings/tokens) and paste the token at the command line after entering:
-
-    hf auth login
-
-When the app runs for the first time and tries to download the models from huggingface, it should now be authorized to do so.
-
-### Additional steps for CUDA:
-
-Uninstall the vanilla version of torch that just got installed, and install the [CUDA version of torch v2.7.1](https://pytorch.org/get-started/previous-versions/)
+2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
+ 
 
 ## Install for Chatterbox TTS:
 
@@ -210,11 +197,10 @@ Install dependencies:
 
     pip install -r requirements-oute.txt
 
-If using CUDA, uninstall the vanilla version of torch that just got installed, and install the [CUDA version of torch v2.6.0](https://pytorch.org/get-started/previous-versions/)
 
 ### Oute TTS model configuration
 
-Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends, model sizes and quantizations. You will need to review and hand-edit the file **`config_oute.py`** accordingly.
+Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends, model sizes and quantizations. You will need to review and hand-edit the source file **`config_oute.py`** accordingly.
 
 The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. But here are some recommendations based on my own testing...
 
@@ -244,30 +230,39 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 ### Inference speeds, expectations
 
-These are my anecdotal inference speeds (running Windows unless otherwise noted; note that CUDA inference speeds on Linux can be appreciably faster). The app adopts each respective model's reference inference implementation logic as much as possible.
+These are my anecdotal inference speeds (note though that CUDA inference speeds on Linux can be *appreciably* faster than on Windows). The app adopts each respective model's reference inference implementation logic as much as possible.
 
-| TTS Model               | Hardware             | Speed           | Notes |
+| TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| IndexTTS2               | GTX 4090             | ~150% realtime  | has the lowest word error rate and least quirks, IMO
-|                         | GTX 3080 Ti          | ~90% realtime   |
+| IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
+|                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
-| VibeVoice 1.5B          | GTX 3080 Ti          | ~120% realtime  | default steps, Flash attention 2 enabled
+| VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | (default steps, Flash attention 2 enabled)
 |                         | Macbook Pro M1       | ~40% realtime   |
-| Higgs V2 3B             | GTX 4090             | 200+% realtime  | inference speed inversely proportional to voice sample duration, FYI
+| Higgs V2 3B             | GTX 4090, Windows    | 200+% realtime  | inference speed inversely proportional to voice sample duration, FYI
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
-| Fish OpenAudio S1-mini  | GTX 3080 Ti          | 500+% realtime  | best combination of inference speed and quality output IMO
-|                         | Macbook Pro M1 (MPS) | ~15% realtime   |
-| Chatterbox              | GTX 3080 Ti          | ~130% realtime  | best multilanguage capabilities
+| Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | best combination of inference speed and quality output IMO
+|                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
+| Chatterbox              | GTX 4090, Windows    | ~190% realtime  | best multilanguage capabilities
+|                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
-| Oute                    | GTX 3080 Ti          | ~90% realtime   | using `outetts.Backend.EXL2`
-|                         | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
+| Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | (using `outetts.Backend.EXL2`)
+|                         | Macbook Pro M1 (MPS) | 20-25% realtime | (using `outetts.Backend.LLAMACPP`)
 
 
 # Update highlights
 
+**2025-12-07**
+
+Added **max text segment word length** option, allowing for up to 80 words per text segment prompt. Can be useful with VibeVoice (Most other models are best left at the default of 40 words).
+
+**Resolved Linux CUDA crashes** related to faster-whisper library by changing Linux torch requirements. If you were experiencing this problem, get latest and update your virtual environment (`pip install -r requirements-[modelname].txt`).
+
+Broad code refactor related to handling of text segments.
+
 **2025-12-06**
 
-Updated **Chatterbox** requirement to v0.1.4, which is multilanguage capable. Added language code project setting. Thanks to @JuMGameN. 
+**Updated Chatterbox** requirement to v0.1.4, which is multilanguage capable, and **added language code** project setting. Thanks to @JuMGameN, co-author.
 
 For existing users, the Chatterbox venv must be recreated using Python v3.11.
 

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_types import NormalizationType, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import NormalizationType, SegmentationStrategy, SttConfig, SttVariant
 from tts_audiobook_tool.l import L
 
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -22,7 +24,9 @@ class Prefs:
             stt_config: SttConfig | None = None,
             normalization_type: NormalizationType = NormalizationType.DEFAULT,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            use_section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT
+            use_section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT,
+            segmentation_strategy: SegmentationStrategy = SegmentationStrategy.NORMAL,
+            max_words_dict: dict = {}
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -31,6 +35,8 @@ class Prefs:
         self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
         self._use_section_sound_effect = use_section_sound_effect
+        self._segmentation_strategy = segmentation_strategy
+        self._max_words_dict = max_words_dict
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -39,9 +45,12 @@ class Prefs:
         return prefs
 
     @staticmethod
-    def load() -> Prefs:
+    def load(save_if_dirty: bool=True) -> Prefs:
         """
         Returns Prefs instance and error message if any
+
+        param save_if_dirty:
+            If any pref value is missing or invalid and gets set to default value, saves updated prefs file.
         """
         if not os.path.exists(Prefs.get_file_path()):
             return Prefs.new_and_save()
@@ -112,6 +121,25 @@ class Prefs:
             section_sound_effect = PREFS_DEFAULT_SECTION_SOUND_EFFECT
             dirty = True
 
+        # Segmentation strategy
+        s = prefs_dict.get("segmentation_strategy", "")
+        segmentation_strategy = SegmentationStrategy.from_json_id(s)
+        if not segmentation_strategy:
+            segmentation_strategy = SegmentationStrategy.NORMAL
+            dirty = True
+
+        # Segment max words dict (tricky)
+        max_words_dict = prefs_dict.get("max_words", {})
+        if not isinstance(max_words_dict, dict):
+            max_words_dict = {}
+            dirty = True
+        current_model_max_words_key = Tts.get_type().value.max_words_prefs_key
+        current_model_max_words = max_words_dict.get(current_model_max_words_key, 0)
+        if not (MIN_MAX_WORDS_PER_SEGMENT <= current_model_max_words <= MAX_MAX_WORDS_PER_SEGMENT):
+            current_model_max_words = Tts.get_type().value.max_words_default
+            max_words_dict[current_model_max_words_key] = current_model_max_words
+            dirty = True
+
         # Make prefs instance
         prefs = Prefs(
             project_dir=project_dir,
@@ -120,10 +148,12 @@ class Prefs:
             stt_config=stt_config,
             play_on_generate=play_on_generate,
             use_section_sound_effect=section_sound_effect,
-            hints=hints
+            segmentation_strategy=segmentation_strategy,
+            hints=hints,
+            max_words_dict=max_words_dict
         )
 
-        if dirty:
+        if dirty and save_if_dirty:
             prefs.save()
         return prefs
 
@@ -195,20 +225,50 @@ class Prefs:
         self.save()
 
     @property
+    def segmentation_strategy(self) -> SegmentationStrategy:
+        return self._segmentation_strategy
+
+    @segmentation_strategy.setter
+    def segmentation_strategy(self, value: SegmentationStrategy) -> None:
+        self._segmentation_strategy = value
+        self.save()
+
+    @property
+    def max_words(self) -> int:
+        key = Tts.get_type().value.max_words_prefs_key
+        value = self._max_words_dict[key]
+        if not (MIN_MAX_WORDS_PER_SEGMENT <= value <= MAX_MAX_WORDS_PER_SEGMENT): # shdnt happen
+            value = Tts.get_type().value.max_words_default
+        return value
+
+    @max_words.setter
+    def max_words(self, value: int) -> None:
+        value = int(value)
+        key = Tts.get_type().value.max_words_prefs_key
+        if not (MIN_MAX_WORDS_PER_SEGMENT <= value <= MAX_MAX_WORDS_PER_SEGMENT):
+            value = Tts.get_type().value.max_words_default
+        self._max_words_dict[key] = value
+        self.save()
+
+    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
 
     def save(self) -> None:
+
         dic = {
             "project_dir": self._project_dir,
             "hints": self._hints,
             "stt_variant": self._stt_variant.id,
             "stt_config": self._stt_config.json_id,
-            "normalization_type": self._normalization_type.value.json_value,
+            "normalization_type": self._normalization_type.value.json_id,
             "play_on_generate": self._play_on_generate,
-            "use_section_sound_effect": self._use_section_sound_effect
+            "use_section_sound_effect": self._use_section_sound_effect,
+            "segmentation_strategy": self._segmentation_strategy.json_id,
+            "max_words": self._max_words_dict
         }
+
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:
                 json.dump(dic, f, indent=4)

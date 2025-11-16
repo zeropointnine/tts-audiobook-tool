@@ -146,7 +146,7 @@ class FishModel(FishModelProtocol):
 
                 prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
 
-                # Not currently using these params:
+                # Not currently changing these params:
                 # top_p=0.5,
                 # repetition_penalty=1.5
 
@@ -172,6 +172,7 @@ class FishModel(FishModelProtocol):
                     return "Semantic token generation failed"
 
                 # Step 3: Make audio data using semantic tokens
+
                 prompt_tokens = torch.from_numpy(semantic_tokens).to(self.device).long()
                 if prompt_tokens.ndim == 2:
                     prompt_tokens = prompt_tokens[None]  # Add batch dimension
@@ -192,8 +193,6 @@ class FishModel(FishModelProtocol):
 
         except Exception as e:
             return make_error_string(e)
-
-
 
 # ---
 

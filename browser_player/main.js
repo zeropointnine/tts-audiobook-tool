@@ -424,7 +424,7 @@ window.app = function() {
                         contentHtml += escapeHtml( o["after"] );
                     }
                     } else {
-                    contentHtml += escapeHtml( o["after"] );
+                        contentHtml += escapeHtml( o["after"] );
                 }
             }
         });

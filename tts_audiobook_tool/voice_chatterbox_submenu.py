@@ -1,4 +1,6 @@
-from tts_audiobook_tool.menu_util import MenuItem
+from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import ChatterboxProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -21,8 +23,8 @@ class VoiceChatterboxSubmenu:
             )
             return f"Temperature {make_currently_string(value)}"
 
-        def on_temperature(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_temperature(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter temperature (0.01 to 2.0):",
                 0.01, 2.0,
@@ -36,8 +38,8 @@ class VoiceChatterboxSubmenu:
             )
             return f"Exaggeration {make_currently_string(value)}"
 
-        def on_exagg(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_exagg(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter value for exaggeration (0.25 to 2.0):",
                 0.25, 2.0,
@@ -51,8 +53,8 @@ class VoiceChatterboxSubmenu:
             )
             return f"CFG/pace {make_currently_string(value)}"
 
-        def on_cfg(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_cfg(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter value for exaggeration (0.2 to 1.0):",
                 0.25, 1.0,

@@ -11,6 +11,8 @@ from tts_audiobook_tool.app_types import FailResult, Sound, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class SoundFileUtil:
@@ -64,9 +66,6 @@ class SoundFileUtil:
     @staticmethod
     def debug_save_result_info(result: ValidationResult, source_text: str, transcribed_text: str):
 
-        if not DEV_SAVE_INTERMEDIATE_FILES:
-            return
-
         s = type(result).__name__
         if isinstance(result, FailResult):
             s = "[fail] " + s
@@ -75,14 +74,24 @@ class SoundFileUtil:
 
         text = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n\n"
         text += "source text:" + "\n" + source_text + "\n\n"
+
+        # This is the logic used to get the final prompt text;
+        # ideally this would get passed into the function but
+        s = TextUtil.massage_for_inference(source_text)
+        s = Tts.get_instance().massage_for_inference(s)
+        text += "prompt text:" + "\n" + s + "\n\n"
+
         text += "transcribed_text:" + "\n" + transcribed_text + "\n\n"
-        source_text_massaged = massage_for_text_comparison(source_text)
+        source_text_massaged = TextUtil.massage_for_text_comparison(source_text)
         text += "source_text, massaged:" + "\n" + source_text_massaged + "\n\n"
-        transcribed_text_massaged = massage_for_text_comparison(transcribed_text)
+        transcribed_text_massaged = TextUtil.massage_for_text_comparison(transcribed_text)
         text += "transcribed_text, massaged:" + "\n" + transcribed_text_massaged + "\n\n"
 
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(text)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(text)
+        except Exception as e:
+            printt(f"Couldn't save file {path}: {make_error_string(e)}")
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:

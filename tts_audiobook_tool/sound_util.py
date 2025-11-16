@@ -1,3 +1,4 @@
+from typing import Any
 import librosa
 import numpy as np
 from numpy import ndarray
@@ -89,12 +90,19 @@ class SoundUtil:
     def add_silence(sound: Sound, duration: float) -> Sound:
         """
         Returns error message on fail or empty string
+
+        TODO: Consider "dithered"
         """
         silence = np.zeros(int(sound.sr * duration), dtype=sound.data.dtype) # Match dtype for concatenation
 
         new_data = np.concatenate([sound.data, silence])
         new_sound = Sound(new_data, sound.sr)
         return new_sound
+
+    @staticmethod
+    def make_silence_sound(seconds: float, sr: int, dtype: np.dtype) -> Sound:
+        data = np.zeros(int(sr * seconds), dtype=dtype)
+        return Sound(data, sr)
 
     @staticmethod
     def append_sound_using_path(base_sound: Sound, appended_sound_path: str) -> Sound:

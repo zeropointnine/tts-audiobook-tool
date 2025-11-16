@@ -46,7 +46,6 @@ class LoudnessLufsUtil:
             audio, sample_rate = sf.read(wav_file_path, dtype='float32')
 
             loudness = LoudnessLufsUtil.calculate_integrated_loudness(audio, sample_rate)
-            print("loudness", loudness)
             if loudness is None:
                 # Skip, sample too short
                 return ""
@@ -61,8 +60,6 @@ class LoudnessLufsUtil:
 
             gain_db = target_lufs - loudness
             gain_linear = 10 ** (gain_db / 20.0)
-            print("gain_db", gain_db)
-            print("gain_linear", gain_linear)
 
             # Apply gain
             normalized_audio = audio * gain_linear

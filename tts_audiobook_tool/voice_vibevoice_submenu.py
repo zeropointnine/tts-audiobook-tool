@@ -30,8 +30,8 @@ class VoiceVibeVoiceSubmenu:
             )
             return f"CFG scale {make_currently_string(value)}"
 
-        def on_cfg(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_cfg(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter CFG (1.3 to 7.0):",
                 1.3, 7.0, # Sane range IMO
@@ -45,8 +45,8 @@ class VoiceVibeVoiceSubmenu:
             )
             return f"Steps {make_currently_string(value)}"
 
-        def on_steps(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_steps(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter num steps (1-30):",
                 1, 30, # Sane range IMO
@@ -55,26 +55,44 @@ class VoiceVibeVoiceSubmenu:
                 is_int=True
             )
 
-        items = [
-            MenuItem(
-                VoiceSubmenuShared.make_select_voice_label,
-                lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
-            ),
-            VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE),
-            MenuItem(
-                make_model_path_label,
-                lambda _, __: ask_model_path(state.project)
-            ),
-            MenuItem(
-                make_cfg_label,
-                on_cfg
-            ),
-            MenuItem(
-                make_steps_label,
-                on_steps
-            ),
-        ]
-        VoiceSubmenuShared.show_voice_menu(state, items)
+        def on_clear_custom_model(_: State, __: MenuItem) -> None:
+            state.project.vibevoice_model_path = ""
+            state.project.save()
+            Tts.set_model_params_using_project(project)
+            Tts.clear_tts_model()
+            print_feedback("Cleared, will use default model")
+
+        def make_items(_: State) -> list[MenuItem]:
+            items = [
+                MenuItem(
+                    VoiceSubmenuShared.make_select_voice_label,
+                    lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
+                ),
+                VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE),
+                MenuItem(
+                    make_model_path_label,
+                    lambda _, __: ask_model_path(state.project)
+                )
+            ]
+
+            if state.project.vibevoice_model_path:
+                items.append( MenuItem("Clear custom model path", on_clear_custom_model) )
+
+            items.extend( [
+
+                MenuItem(
+                    make_cfg_label,
+                    on_cfg
+                ),
+                MenuItem(
+                    make_steps_label,
+                    on_steps
+                ),
+            ] )
+
+            return items
+        
+        VoiceSubmenuShared.show_voice_menu(state, make_items)
 
 # ---
 
@@ -91,7 +109,7 @@ def ask_model_path(project: Project) -> None: # type: ignore
         return
     apply_model_path_and_validate(project, dir_path)
 
-def apply_model_path_and_validate(project: Project, path: str) -> None: # type: ignore
+def apply_model_path_and_validate(project: Project, path: str) -> None: 
 
     project.vibevoice_model_path = path
     project.save()

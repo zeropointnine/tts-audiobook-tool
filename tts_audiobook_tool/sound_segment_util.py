@@ -4,7 +4,7 @@ from typing import NamedTuple
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.text_segment import TextSegment
+from tts_audiobook_tool.phrase import Phrase, PhraseGroup
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -28,7 +28,7 @@ class SoundSegmentUtil:
             return {}
 
         result = dict[int, str]()
-        text_segments = project.text_segments
+        groups = project.phrase_groups
 
         for path in Path(project.sound_segments_dir_path).iterdir():
 
@@ -41,11 +41,11 @@ class SoundSegmentUtil:
 
             if parts is None:
                 continue
-            if parts.zb_index >= len(text_segments):
+            if parts.zb_index >= len(groups):
                 continue
 
-            text_segment = text_segments[parts.zb_index]
-            segment_hash = SoundSegmentUtil.calc_segment_hash(parts.zb_index, text_segment.text)
+            text_group = groups[parts.zb_index]
+            segment_hash = SoundSegmentUtil.calc_segment_hash(parts.zb_index, text_group.text)
             if parts.hash != segment_hash:
                 continue
 
@@ -141,7 +141,7 @@ class SoundSegmentUtil:
     def make_segment_file_path(index: int, project: Project) -> str:
         fn = SoundSegmentUtil.make_file_name(
             index=index,
-            text_segment=project.text_segments[index],
+            phrase_group=project.phrase_groups[index],
             model_tag=Tts.get_type().value.file_tag,
             voice_tag=project.get_voice_label()
         )
@@ -149,13 +149,13 @@ class SoundSegmentUtil:
 
     @staticmethod
     def make_file_name(
-        index: int, text_segment: TextSegment, model_tag: str, voice_tag: str, suffix=".flac"
+        index: int, phrase_group: PhraseGroup, model_tag: str, voice_tag: str, suffix=".flac"
     ) -> str:
         index_tag = "[" + str(index + 1).zfill(5) + "]" # one-based-index
-        hash_tag = "[" + SoundSegmentUtil.calc_segment_hash(index, text_segment.text) + "]"
+        hash_tag = "[" + SoundSegmentUtil.calc_segment_hash(index, phrase_group.text) + "]"
         model_tag = "[" + model_tag + "]"
         voice_tag = "[" + voice_tag + "]"
-        sanitized_text = sanitize_for_filename(text_segment.text[:50])
+        sanitized_text = sanitize_for_filename(phrase_group.presentable_text[:50])
         s = f"{index_tag} {hash_tag} {model_tag} {voice_tag} {sanitized_text}{suffix}"
         return s
 

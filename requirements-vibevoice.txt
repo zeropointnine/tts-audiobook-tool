@@ -1,10 +1,18 @@
+#################
+# Use Python 3.11
+#################
+
 # Archived fork of VibeVoice (due to removal of vibevoice project's code from github)
 git+https://github.com/vibevoice-community/VibeVoice@d244401c9d761b9f059dff3c6a6411e77a0a5edf
 
 triton-windows==3.3.1.post19; sys_platform == 'win32'
 
+# App dependencies
+faster-whisper==1.2.1
+ctranslate2==4.6.1
+torch==2.6.0
+
 audiotsm==0.1.2
-faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 librosa==0.11.0
 loguru==0.7.3

@@ -6,15 +6,14 @@ from numpy import ndarray
 
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
-from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_segment import TextSegment, TextSegmentReason
-from tts_audiobook_tool.timed_text_segment import TimedTextSegment
+from tts_audiobook_tool.phrase import Phrase, Reason
+from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:
@@ -38,29 +37,30 @@ class ConcatUtil:
         # This list is the full length of the project.text_segments,
         # but uses empty strings for file paths outside the range of the chapter
 
-        ranges = make_section_ranges(state.project.section_dividers, len(state.project.text_segments))
+        ranges = make_section_ranges(state.project.section_dividers, len(state.project.phrase_groups))
         sound_segments = state.project.sound_segments.sound_segments
 
         chapter_index_start, chapter_index_end = ranges[chapter_index]
         num_missing = 0
 
-        # Make text segment + file path list
-        segments_and_paths: list[ tuple[TextSegment, str]] = []
-        for segment_index, segment in enumerate(state.project.text_segments):
-            if segment_index < chapter_index_start or segment_index > chapter_index_end:
+        # Make phrase + file path list
+        phrases_and_paths: list[ tuple[Phrase, str]] = []
+        for group_index, group in enumerate(state.project.phrase_groups):
+            segment = group.as_flattened_phrase()
+            if group_index < chapter_index_start or group_index > chapter_index_end:
                 # Out of range
-                segments_and_paths.append((segment, ""))
+                phrases_and_paths.append((segment, ""))
                 continue
-            if not segment_index in sound_segments:
+            if not group_index in sound_segments:
                 # Audio segment file not yet generated
-                segments_and_paths.append((segment, ""))
+                phrases_and_paths.append((segment, ""))
                 num_missing += 1
                 continue
-            file_path = sound_segments[segment_index]
-            segments_and_paths.append((segment, file_path))
+            file_path = sound_segments[group_index]
+            phrases_and_paths.append((segment, file_path))
 
         # Filename
-        extant_paths = [item[1] for item in segments_and_paths if item[1]]
+        extant_paths = [item[1] for item in phrases_and_paths if item[1]]
         # [1] project name
         file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
         # [2] file number
@@ -86,7 +86,7 @@ class ConcatUtil:
         # Concat
         durations = ConcatUtil.concatenate_files_plus_silence(
             dest_path,
-            segments_and_paths,
+            phrases_and_paths,
             print_progress=True,
             use_section_sound_effect=state.prefs.use_section_sound_effect,
             to_aac_not_flac=to_aac_not_flac
@@ -95,8 +95,8 @@ class ConcatUtil:
             return "", durations
 
         # Add the app metadata
-        text_segments = [item[0] for item in segments_and_paths]
-        timed_text_segments = TimedTextSegment.make_list_using(text_segments, durations)
+        text_segments = [item[0] for item in phrases_and_paths]
+        timed_text_segments = TimedPhrase.make_list_using(text_segments, durations)
         meta = AppMetadata(raw_text=raw_text, timed_text_segments=timed_text_segments)
 
         if to_aac_not_flac:
@@ -112,16 +112,17 @@ class ConcatUtil:
     @staticmethod
     def concatenate_files_plus_silence(
         dest_path: str,
-        segments_and_paths: list[ tuple[TextSegment, str] ],
+        phrases_and_paths: list[ tuple[Phrase, str] ],
         use_section_sound_effect: bool,
         print_progress: bool,
         to_aac_not_flac: bool
     ) -> list[float] | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
-        Dynamically adds silence between adjacent segments based on text segment "reason".
+        Dynamically adds silence between adjacent segments based on phrase "reason".
 
-        Returns timestamps of added segments to be used for app metadata
+        Returns list of float durations of each added segment to be used for app metadata .
+
         On error, returns error string
         """
 
@@ -130,13 +131,13 @@ class ConcatUtil:
 
         process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac)
 
-        # Add dummy item to ensure real last item is processed in the loop
-        segments_and_paths = segments_and_paths.copy()
-        segments_and_paths.append((TextSegment("", -1, -1, TextSegmentReason.UNDEFINED), ""))
-
         SigIntHandler().set("concat")
 
-        for i in range(0, len(segments_and_paths) - 1):
+        for i, (phrase, path) in enumerate(phrases_and_paths):
+
+            if not path:
+                durations.append(0)
+                continue
 
             if SigIntHandler().did_interrupt:
                 SigIntHandler().clear()
@@ -144,51 +145,41 @@ class ConcatUtil:
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
 
-            _, path_a = segments_and_paths[i]
-            segment_b, path_b = segments_and_paths[i + 1]
-
-            if not path_a:
-                durations.append(0)
-                continue
-
-            if not path_b:
-                # Gap in the sequence, use some default silence padding value
-                appended_silence_duration = TextSegmentReason.UNDEFINED.pause_duration
-            else:
-                appended_silence_duration = segment_b.reason.pause_duration
-
-            if segment_b.reason == TextSegmentReason.SECTION and use_section_sound_effect:
-                appended_sound_effect_path = SECTION_SOUND_EFFECT_PATH
+            if i < len(phrases_and_paths) - 1:
+                if phrase.reason == Reason.SECTION and use_section_sound_effect:
+                    appended_silence_duration = 0
+                    appended_sound_effect_path = SECTION_SOUND_EFFECT_PATH
+                else:
+                    appended_silence_duration = phrase.reason.pause_duration
+                    appended_sound_effect_path = ""
+            else: # Last phrase
                 appended_silence_duration = 0
-            else:
                 appended_sound_effect_path = ""
 
-            is_last = i == len(segments_and_paths) - 2
-            if is_last:
-                appended_silence_duration = 0
-
             if print_progress:
-                s = f"{time_stamp(total_duration, with_tenth=False)} {Path(path_a).stem[:80]} ..."
+                s = f"{time_stamp(total_duration, with_tenth=False)} {Path(path).stem[:80]} ... "
                 print("\x1b[1G" + s, end="\033[K", flush=True)
 
-            sound_a = SoundFileUtil.load(path_a)
-            if isinstance(sound_a, str): # error
+            result = SoundFileUtil.load(path)
+            if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
-                return sound_a
+                return result
+            else:
+                sound = result
 
-            sound_a = SoundUtil.resample_if_necessary(sound_a, APP_SAMPLE_RATE)
+            sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
 
             # Append sound effect or silence or not
             if appended_sound_effect_path:
-                sound_a = SoundUtil.append_sound_using_path(sound_a, appended_sound_effect_path)
+                sound = SoundUtil.append_sound_using_path(sound, appended_sound_effect_path)
             elif appended_silence_duration:
-                sound_a = SoundUtil.add_silence(sound_a, appended_silence_duration)
+                sound = SoundUtil.add_silence(sound, appended_silence_duration)
 
-            durations.append(sound_a.duration)
+            durations.append(sound.duration)
 
-            total_duration += sound_a.duration
+            total_duration += sound.duration
 
-            ConcatUtil.add_audio_to_ffmpeg_stream(process, sound_a.data)
+            ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
 
         printt()
         printt()

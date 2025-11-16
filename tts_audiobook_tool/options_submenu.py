@@ -26,7 +26,7 @@ class OptionsSubmenu:
                 memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
             return f"Attempt to unload models {memory_string}"
 
-        def on_unload(_, __) -> None:
+        def on_unload(_: State, __: MenuItem) -> None:
             before_string = make_system_memory_string()
             if before_string:
                 printt(f"Before: {before_string}")
@@ -34,8 +34,9 @@ class OptionsSubmenu:
             after_string = make_system_memory_string()
             if after_string:
                 printt(f"After:  {after_string}")
+            printt()
 
-        def on_hints(_, __) -> None:
+        def on_hints(_: State, __: MenuItem) -> None:
             state.prefs.reset_hints()
             s = "One-time contextual hints have been reset.\n"
             s += "They will now appear again when relevant."
@@ -47,7 +48,7 @@ class OptionsSubmenu:
                 lambda _, __: OptionsSubmenu.transcription_model_menu(state)
             ),
             MenuItem(
-                make_whisper_config_label,
+                make_whisper_device_label,
                 lambda _, __: OptionsSubmenu.transcription_model_config_menu(state)
             ),
             MenuItem(
@@ -65,9 +66,9 @@ class OptionsSubmenu:
 
         def make_heading(_) -> str:
             value = make_currently_string(state.prefs.stt_variant.value[0])
-            return f"Select Whisper model type {value}"
+            return f"Whisper model type {value}"
 
-        def handler(_, item: MenuItem) -> bool:
+        def handler(_: State, item: MenuItem) -> bool:
             if not item.data or not isinstance(item.data, SttVariant):
                 return False
             state.prefs.stt_variant = item.data
@@ -86,7 +87,7 @@ class OptionsSubmenu:
     @staticmethod
     def transcription_model_config_menu(state: State) -> None:
 
-        def on_item(_, item: MenuItem) -> bool:
+        def on_item(_: State, item: MenuItem) -> bool:
             stt_config: SttConfig = item.data
             if state.prefs.stt_config != stt_config:
                 state.prefs.stt_config= stt_config
@@ -100,7 +101,7 @@ class OptionsSubmenu:
 
         MenuUtil.menu(
             state,
-            make_whisper_config_label(state),
+            make_whisper_device_label(state),
             items,
             one_shot=True
         )
@@ -108,7 +109,7 @@ class OptionsSubmenu:
     @staticmethod
     def section_break_menu(state: State) -> None:
 
-        def on_item(_, item: MenuItem) -> bool:
+        def on_item(_: State, item: MenuItem) -> bool:
             state.prefs.use_section_sound_effect = item.data
             print_feedback(
                 "Section break sound effect has been set to:",
@@ -130,9 +131,9 @@ class OptionsSubmenu:
 
 # ---
 
-def make_whisper_config_label(state: State) -> str:
+def make_whisper_device_label(state: State) -> str:
     value = make_currently_string(state.prefs.stt_config.description)
-    return f"Whisper config {value}"
+    return f"Whisper device {value}"
 
 def make_system_memory_string(base_color=COL_DIM) -> str:
 

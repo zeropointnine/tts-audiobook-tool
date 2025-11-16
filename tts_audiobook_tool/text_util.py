@@ -1,9 +1,12 @@
 import re
+import unicodedata
+import string
+
 from tts_audiobook_tool.words_dict import Dictionary
 
 class TextUtil:
     """
-    App util functions for parsing or transforming source text.
+    Lower level functions for parsing, processing source text, etc
     """
 
     @staticmethod
@@ -46,43 +49,97 @@ class TextUtil:
 
 
     @staticmethod
-    def split_text_into_paragraphs(text: str) -> list[str]:
+    def is_ws_punc(s: str) -> bool:
         """
-        Splits a long block of text by the line feed character in the following manner:
+        Is the string all punctuation and/or whitespace
+        TODO: Ideally we want a test which answers the question, "Is this string 'vocalizable'?"
+        """
+        if not s:
+            return True
+        punc_and_white = set(string.whitespace + string.punctuation)
+        return all(char in punc_and_white for char in s)
 
-        - A new item starts right after a line feed character.
-        - Items can have trailing whitespace.
-        - Items consisting only of whitespace are merged with the previous item.
-        - The total number of characters in the output list is the same as the input string.
+    @staticmethod
+    def massage_for_display(s: str) -> str:
+        """ Massage text so it is fit to display in the console on a single line """
+        return s.strip()
+
+    @staticmethod
+    def get_words(s: str, filtered: bool=False) -> list[str]:
+        """
+        Splits string into words, preserving whitespace
         """
 
-        if not text:
+        # Like str.split() but preserves the whitespace at end of each item
+        words = re.findall(r'\S+\s*|\s+', s.lstrip())
+
+        if filtered:
+            return [word for word in words if not TextUtil.is_ws_punc(word)]
+        else:
+            return words
+
+    @staticmethod
+    def get_words_merged(s: str) -> list[str]:
+        """
+        Merges "non-content" words with predecessor
+        TODO: May not be useful
+        """
+
+        words = TextUtil.get_words(s)
+        if len(words) == 0:
             return []
 
-        # Handle the case where the entire text is just whitespace
-        if text.isspace():
-            return [text]
-
-        # The positive lookbehind `(?<=\n)` splits the string after each newline,
-        # keeping the newline character with the preceding item.
-        initial_split = re.split(r'(?<=\n)', text)
-
-        # If the text ends with a newline, re.split creates a trailing empty string.
-        # This needs to be removed to maintain character count and correctness.
-        if initial_split and not initial_split[-1]:
-            initial_split.pop()
-
-        # Merge items that consist only of whitespace with the previous item.
-        # This satisfies the requirement to not have whitespace-only items,
-        # while also preserving the total character count.
-        result = []
-        for item in initial_split:
-            if result and item.isspace():
-                result[-1] += item
+        new_words: list[str] = []
+        for word in words:
+            if new_words and TextUtil.is_ws_punc(word):
+                new_words[-1] += word
             else:
-                result.append(item)
+                new_words.append(word)
 
-        return result
+        # Edge case
+        if len(new_words) > 1 and TextUtil.is_ws_punc(new_words[0]):
+            combined_word = new_words[0] + new_words[1]
+            new_words = [combined_word] + new_words[2:]
+
+        return new_words
+
+    @staticmethod
+    def get_word_count(s: str, filtered: bool=False) -> int:
+        return len( TextUtil.get_words(s, filtered) )
+
+    @staticmethod
+    def num_trailing_line_breaks(s: str) -> int:
+        trailing_whitespace = s[len(s.rstrip()):]
+        return trailing_whitespace.count("\n")
+
+    @staticmethod
+    def massage_for_text_comparison(s: str) -> str: 
+        """
+        Massages source and trancription text can they can be more reliably compared against each other.
+        Handles international characters via Unicode-aware regex (backslash-w).
+        """
+        # Normalize Unicode (fixes 'é' vs 'e'+'´' mismatches)
+        s = unicodedata.normalize('NFKC', s)
+
+        # Use casefold for aggressive lowercase (better for Intl text)
+        s = s.casefold().strip()
+
+        # Replace fancy apost with normal apost
+        s = s.replace("’", "'")
+
+        # Replace non-word characters. 
+        # \w matches any Unicode letter or number (and underscore).
+        # Logic: Replace if NOT a word char/space/apostrophe OR if it is a standalone apostrophe OR underscore.
+        s = re.sub(r"[^\w\s']|(?<!\w)'|'(?!\w)|_", ' ', s)
+
+        # Strip white space
+        s = re.sub(r'\s+', ' ', s).strip()
+
+        # TODO: Standardize the text representation of small numbers
+        #       Add param num2words_language_code; consider going from spelled-out numbers to digits
+        #       Consider value threshold (999? 99?)
+
+        return s
 
     @staticmethod
     def un_all_caps(text: str) -> str:

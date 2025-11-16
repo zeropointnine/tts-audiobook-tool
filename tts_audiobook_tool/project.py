@@ -2,17 +2,18 @@ from __future__ import annotations
 import json
 import os
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import SegmentationStrategy, Sound
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.text_segment import TextSegment
-from tts_audiobook_tool.tts_model import ChatterboxProtocol, IndexTts2Protocol
+from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.tts_model import IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -23,7 +24,14 @@ class Project:
 
     dir_path: str
 
-    text_segments: list[TextSegment] = []
+    phrase_groups: list[PhraseGroup] = []
+    # The segmentation strategy used to create the PhraseGroups from the source text
+    segmentation_strategy: SegmentationStrategy | None = None
+    # The max words per segment value used to create the PhraseGroups from the source text
+    segmentation_max_words: int = 0
+    # The language code used to create the PhraseGroups from the source text (ie, for pysbd)
+    segmentation_language_code: str = ""
+
     section_dividers: list[int] = []
     language_code: str = PROJECT_DEFAULT_LANGUAGE
 
@@ -99,10 +107,50 @@ class Project:
 
         project = Project(dir_path)
 
-        # Text segments
-        if "text_segments" in d:
+        # Text
+        if "text" in d:
+            lst = d["text"] # is expected to be a list of lists
+            result = PhraseGroup.phrase_groups_from_json_list(lst)
+            if isinstance(result, str):
+                err = result
+                printt(f"{COL_ERROR}Error loading project text: {err}")
+            else:
+                project.phrase_groups = result
+        elif "text_segments" in d:
+            # Legacy format - list of dicts of "TextSegments"
             lst = d["text_segments"]
-            project.text_segments = TextSegment.dict_list_to_list(lst)
+            result = Phrase.phrases_from_json_dicts(lst) # this is 'compatible' with the old TextSegment json dicts
+            if isinstance(result, str):
+                err = result
+                printt(f"{COL_ERROR}Error loading project text legacy format: {err}")
+            else:
+                # Wrap each Phrase (nee TextGroup) in a PhraseGroup
+                phrases = result
+                project.phrase_groups = []
+                for i in range(0, len(phrases)):
+                    if i < len(phrases) - 1:
+                        # Phrase reason is derived from the text characters _after_ the phrase,
+                        # whereas with TextGroup, reason was derived from the text _before_ the phrase
+                        reason = phrases[i+1].reason
+                    else:
+                        reason = Reason.UNDEFINED
+                    phrase = Phrase(phrases[i].text, reason)
+                    project.phrase_groups.append( PhraseGroup([phrase]) )
+        else:
+            project.phrase_groups = []
+
+        s = d.get("segmentation_strategy", "")
+        project.segmentation_strategy = SegmentationStrategy.from_json_id(s)
+
+        i = d.get("segmentation_max_words", 0)
+        if not (i >= 0):
+            i = 0
+        project.segmentation_max_words = i
+
+        s = d.get("language_code", "")
+        if not isinstance(s, str):
+            s = ""
+        project.language_code = s
 
         s = d.get("language_code", "")
         if not isinstance(s, str):
@@ -114,7 +162,7 @@ class Project:
             lst = d["chapter_indices"]
             is_list_valid = True
             for index in lst:
-                is_item_valid = isinstance(index, int) and index >= 0 and index <= len(project.text_segments)
+                is_item_valid = isinstance(index, int) and index >= 0 and index <= len(project.phrase_groups)
                 if not is_item_valid:
                     is_list_valid = False
                     break
@@ -193,9 +241,20 @@ class Project:
 
     def save(self) -> None:
 
+        if self.segmentation_strategy:
+            seg_string = self.segmentation_strategy.json_id
+        else:
+            seg_string = ""
+
         d = {
+
             "dir_path": self.dir_path,
-            "text_segments": TextSegment.list_to_dict_list(self.text_segments),
+
+            "text": PhraseGroup.phrase_groups_to_json_list(self.phrase_groups),
+            "segmentation_strategy": seg_string,
+            "segmentation_max_words": self.segmentation_max_words,
+            "segmentation_language_code": self.segmentation_language_code,
+
             "language_code": self.language_code,
 
             "chapter_indices": self.section_dividers,
@@ -237,15 +296,26 @@ class Project:
         except Exception as e:
             L.e(f"Save error: {e}") # TODO: need to handle this
 
-    def set_text_segments_and_save(self, text_segments: list[TextSegment], raw_text: str) -> None:
+    def set_phrase_groups_and_save(
+            self,
+            phrase_groups: list[PhraseGroup],
+            strategy: SegmentationStrategy,
+            max_words: int,
+            language_code: str,
+            raw_text: str
+    ) -> None:
 
-        self.text_segments = text_segments
-        # Setting text segments invalidates some things
+        self.phrase_groups = phrase_groups
+        self.segmentation_strategy = strategy
+        self.segmentation_max_words = max_words
+        self.segmentation_language_code = language_code
+
+        # Setting this invalidates some things
         self.section_dividers =[]
         self.generate_range_string = ""
+
         self.save()
-        # Save raw text as well for reference
-        self.save_raw_text(raw_text)
+        self.save_raw_text(raw_text) # saved for reference
 
     def save_raw_text(self, raw_text: str) -> None:
         file_path = os.path.join(self.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
@@ -425,7 +495,7 @@ class Project:
 
     @property
     def can_generate_audio(self) -> bool:
-        return self.can_voice and len(self.text_segments) > 0
+        return self.can_voice and len(self.phrase_groups) > 0
 
     @property
     def sound_segments_dir_path(self) -> str:
@@ -441,9 +511,9 @@ class Project:
         range_string = self.generate_range_string
         is_all = not range_string or range_string == "all" or range_string == "a"
         if is_all:
-            result = set(range(len(self.text_segments)))
+            result = set(range(len(self.phrase_groups)))
         else:
-            result, _ = ParseUtil.parse_ranges_string(range_string, len(self.text_segments))
+            result, _ = ParseUtil.parse_ranges_string(range_string, len(self.phrase_groups))
         return result
 
     @staticmethod

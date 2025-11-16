@@ -138,6 +138,9 @@ def timestamp_string() -> str:
     current_time = datetime.now()
     return current_time.strftime("%y%m%d_%H%M%S")
 
+def is_number(o: Any) -> bool:
+    return isinstance(o, int) or isinstance(o, float)
+
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
     num_bytes = 0
@@ -153,7 +156,7 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
         color = COL_ACCENT
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
-def make_currently_string(value: str, label: str="currently: ", color_code=COL_ACCENT) -> str:
+def make_currently_string(value: str | int | float | bool, label: str="currently: ", color_code=COL_ACCENT) -> str:
     return f"{COL_DIM}({label}{color_code}{value}{COL_DIM})"
 
 def make_gb_string(bytes: int) -> str:
@@ -177,64 +180,6 @@ def lerp_clamped(
     normalized = (value - min_value) / (max_value - min_value)
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
-
-def massage_for_text_comparison(s: str) -> str:
-    """
-    Massages text so that source text and transcribed text can be compared.
-    Is meant to be applied to both the source text and the transcribed text.
-    """
-
-    s = s.lower().strip()
-
-    # First replace fancy apost with normal apost
-    s = s.replace("’", "'") #
-    # Replace all non-alpha-numerics with space, except for apost that is inside a word
-    s = re.sub(r"[^a-zA-Z0-9'’]|(?<![a-zA-Z])['’]|['’](?![a-zA-Z])", ' ', s)
-
-    # Strip white space from the ends
-    s = re.sub(r' +', ' ', s)
-    s = s.strip(' ')
-
-    # Standardize the spelling of small numbers
-    s = substitute_smol_numbers(s)
-
-    return s
-
-def substitute_smol_numbers(text) -> str:
-    """Replace standalone numbers 0-20 with their written equivalents (in lowercase)."""
-    number_map = {
-        '0': 'zero',
-        '1': 'one',
-        '2': 'two',
-        '3': 'three',
-        '4': 'four',
-        '5': 'five',
-        '6': 'six',
-        '7': 'seven',
-        '8': 'eight',
-        '9': 'nine',
-        '10': 'ten',
-        '11': 'eleven',
-        '12': 'twelve',
-        '13': 'thirteen',
-        '14': 'fourteen',
-        '15': 'fifteen',
-        '16': 'sixteen',
-        '17': 'seventeen',
-        '18': 'eighteen',
-        '19': 'nineteen',
-        '20': 'twenty'
-    }
-    # Use regex to find standalone numbers (surrounded by word boundaries)
-    pattern = r'\b(?:' + '|'.join(number_map.keys()) + r')\b'
-    # Replace each found number with its word equivalent
-    result = re.sub(
-        pattern,
-        lambda match: number_map[match.group()],
-        text
-    )
-    return result
-
 
 def sanitize_for_filename(filename: str) -> str:
     """

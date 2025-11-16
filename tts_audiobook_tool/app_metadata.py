@@ -9,14 +9,14 @@ from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L # type: ignore
-from tts_audiobook_tool.timed_text_segment import TimedTextSegment
+from tts_audiobook_tool.timed_phrase import TimedPhrase
 
 class AppMetadata(NamedTuple):
     """
     """
 
     raw_text: str
-    timed_text_segments: list[TimedTextSegment]
+    timed_text_segments: list[TimedPhrase]
 
     def to_json_string(self) -> str:
 
@@ -27,7 +27,7 @@ class AppMetadata(NamedTuple):
 
         dic = {
             "raw_text": raw_text_base64,
-            "text_segments": TimedTextSegment.to_dict_list(self.timed_text_segments)
+            "text_segments": TimedPhrase.to_dict_list(self.timed_text_segments)
         }
         string = json.dumps(dic)
         return string
@@ -61,7 +61,7 @@ class AppMetadata(NamedTuple):
             return f"Bad type for text_segments: {type(text_segment_dicts)}"
         if not text_segment_dicts:
             return f"text_segments list is empty"
-        result = TimedTextSegment.list_from_dict_list(text_segment_dicts)
+        result = TimedPhrase.list_from_dict_list(text_segment_dicts)
         if isinstance(result, str):
             return result
         timed_text_segments = result

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from importlib import util
 from typing import Callable
-import torch
 
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.stt import Stt
@@ -269,7 +268,7 @@ class Tts:
 
     @staticmethod
     def get_best_torch_device() -> str:
-
+        import torch
         if torch.cuda.is_available():
             return "cuda"
         elif torch.backends.mps.is_available():

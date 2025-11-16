@@ -7,12 +7,13 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.stt_util import SttUtil
-from tts_audiobook_tool.timed_text_segment import TimedTextSegment
-from tts_audiobook_tool.text_segmenter import TextSegmenter
+from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.constants_config import *
 
 from tts_audiobook_tool.util import *
@@ -118,6 +119,8 @@ class SttFlow:
             if not b:
                 transcription_pickle_path = ""
 
+        # TODO: new [5] Ask for language code hint
+
         # [5] Start
         SttFlow.make(
             prefs,
@@ -145,7 +148,8 @@ class SttFlow:
 
         printt("Segmenting source text...")
         printt()
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT_STT, pysbd_language="en") # TODO: ask for language code as part of 'wizard'
+        groups = PhraseGrouper.text_to_groups(raw_text, max_words=MAX_WORDS_PER_SEGMENT_STT)
+        phrases = PhraseGroup.flatten_groups(groups)
 
         # [2] Transcribe audio file (or load pickle file)
 
@@ -192,14 +196,11 @@ class SttFlow:
 
         print_heading("Merging data...", dont_clear=True, non_menu=True)
 
-        timed_text_segments, did_interrupt = SttUtil.make_timed_text_segments(text_segments, words)
+        timed_text_segments, did_interrupt = SttUtil.make_timed_phrases(phrases, words)
 
         if did_interrupt:
             print_feedback("Interrupted")
             return False
-
-        # with open("temp_timed_segments.pickle", "wb") as file: # TODO: meh?
-        #     pickle.dump(timed_text_segments, file)
 
         # [4] Save "abr" audio file
 
@@ -241,12 +242,12 @@ def make_transcription_pickle_file_path(hash: str) -> str:
     file_name = f"transcription {hash}.pkl"
     return os.path.join(AppUtil.get_app_user_dir(), file_name)
 
-def print_discontinuity_info(timed_text_segments: list[TimedTextSegment]):
+def print_discontinuity_info(timed_text_segments: list[TimedPhrase]):
 
     print_heading("Unmatched text segments:", dont_clear=True, non_menu=True)
     printt()
 
-    discon_ranges = TimedTextSegment.get_discontinuities(timed_text_segments)
+    discon_ranges = TimedPhrase.get_discontinuities(timed_text_segments)
     if not discon_ranges:
         printt("No items found")
         printt()

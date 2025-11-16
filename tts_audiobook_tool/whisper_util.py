@@ -49,13 +49,14 @@ class WhisperUtil:
     @staticmethod
     def get_words_from_segments(segments: Iterable[Segment]) -> list[Word]:
         """
-        Converts a generator of faster-whisper Segments into a flattened list of Words.
+        Converts an interable of faster-whisper Segments into a flattened list of Words.
         """
         words = []
         for segment in segments:
             if segment.words:  # Ensure the words list exists and is not empty
                 words.extend(segment.words)
         return words
+
 
     @staticmethod
     def get_flat_text_from_segments(segments: Iterable[Segment]) -> str:

@@ -40,8 +40,8 @@ StringOrMaker = StringMaker | str
 # A list of MenuItems or a function that returns a list of MenuItems
 MenuItemListOrMaker = Callable[[State], list[MenuItem]] | list[MenuItem]
 
-# Callback function for when an item is selected
-MenuHandler = Callable[[State, MenuItem], Any]
+# Callback function for when an item is selected; returns True if menu should then exit
+MenuHandler = Callable[[State, MenuItem], bool | None]
 
 # ---
 

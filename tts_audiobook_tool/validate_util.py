@@ -10,7 +10,7 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class ValidateUtil:
 
     @staticmethod
-    def validate_item(sound: Sound, reference_text: str, transcribed_words: list[Word], tts_specs: TtsModelInfo) -> ValidationResult:
+    def validate_item(sound: Sound, reference_text: str, transcribed_words: list[Word]) -> ValidationResult:
 
         # Runs various tests to determine if audio generation seems to be valid.
         # Errs on the conservative side, prioritizes avoiding false positives.

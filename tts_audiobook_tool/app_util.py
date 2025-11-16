@@ -6,16 +6,15 @@ import sys
 import tempfile
 import glob
 import time
-import torch
 import xxhash
 
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import SegmentationStrategy, SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.text_segment import TextSegment
-from tts_audiobook_tool.text_segmenter import TextSegmenter
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -67,21 +66,53 @@ class AppUtil:
             return ""
 
     @staticmethod
-    def print_text_segment_text(raw_texts: list[str]) -> None:
+    def print_text_groups(groups: list[PhraseGroup]) -> None:
 
-        printt(f"{COL_ACCENT}Text segments ({COL_DEFAULT}{len(raw_texts)}{COL_ACCENT}):")
+        s = f"Text segments ({COL_DIM}{len(groups)}{COL_DEFAULT}):"
+        print_heading(s, non_menu=True)
         printt()
 
-        for i, raw_text in enumerate(raw_texts):
-            printt(f"{make_hotkey_string(str(i+1))} {raw_text.strip()}")
+        for i, group in enumerate(groups):
+            printt(f"{make_hotkey_string(str(i+1))} {group.presentable_text}")
 
         printt()
+
+    @staticmethod
+    def print_project_text(state) -> None:
+
+        from tts_audiobook_tool.state import State
+        assert(isinstance(state, State))
+
+        indices = state.project.sound_segments.sound_segments.keys()
+        phrase_groups = state.project.phrase_groups
+
+        print_heading("Text segments", non_menu=True)
+
+        if not indices:
+            printt("None")
+
+        max_width = len(str(len(phrase_groups)))
+
+        for i, phrase_group in enumerate(phrase_groups):
+            index_string = "[" + str(i+1).rjust(max_width) + "]"
+            exists_string = "[" + ("generated" if i in indices else " missing ") + "]"
+            if DEV:
+                reason_string = COL_DIM + " [" + phrase_group.as_flattened_phrase().reason.json_value + "]"
+            else:
+                reason_string = ""
+            printt(f"{COL_ACCENT}{index_string} {COL_DIM}{exists_string} {COL_DEFAULT}{phrase_group.presentable_text}{reason_string}")
+
+        printt()
+        printt(f"{COL_DIM}Num generated audio segments: {COL_ACCENT}{len(indices)} {COL_DIM}/ {COL_ACCENT}{len(phrase_groups)}")
+        printt()
+        AskUtil.ask_enter_to_continue()
 
     @staticmethod
     def gc_ram_vram() -> None:
         """ Trigger Python garbage collector, plus torch"""
         gc.collect()
         # "Garbage collect" VRAM
+        import torch
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -114,7 +145,11 @@ class AppUtil:
         return ""
 
     @staticmethod
-    def get_text_segments_from_ask_text_file(pysbd_language: str) -> tuple[ list[TextSegment], str ]:
+    def get_phrase_groups_from_ask_text_file(
+            max_words: int,
+            segmentation_strategy: SegmentationStrategy, 
+            pysbd_language: str
+    ) -> tuple[ list[PhraseGroup], str ]:
         """
         Asks user for path to text file and returns list of TextSegments and raw text.
         Shows feedback except when text segments are returned
@@ -134,17 +169,21 @@ class AppUtil:
             return [], ""
 
         print("Segmenting text... ", end="", flush=True)
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT, pysbd_language=pysbd_language)
+        phrase_groups = PhraseGrouper.text_to_groups(raw_text, pysbd_lang="en", max_words=max_words, strategy=segmentation_strategy)
         print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
-        if not text_segments:
+        if not phrase_groups:
             AskUtil.ask_enter_to_continue("No text segments.")
             return [], raw_text
 
-        return text_segments, raw_text
+        return phrase_groups, raw_text
 
     @staticmethod
-    def get_text_segments_from_ask_std_in(pysbd_language: str) -> tuple[ list[TextSegment], str ]:
+    def get_text_groups_from_ask_std_in(
+            max_words: int,
+            segmentation_strategy: SegmentationStrategy,
+            pysbd_language:str
+    ) -> tuple[ list[PhraseGroup], str ]:
         """
         Asks user to input text using stdin.read() and returns list of TextSegments and raw text
         """
@@ -160,13 +199,13 @@ class AppUtil:
         if not raw_text:
             return [], ""
 
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT, pysbd_language=pysbd_language)
+        phrase_groups = PhraseGrouper.text_to_groups(raw_text, pysbd_lang="en", max_words=max_words, strategy=segmentation_strategy)
 
-        if not text_segments:
+        if not phrase_groups:
             AskUtil.ask_enter_to_continue("No text segments.")
             return [], raw_text
 
-        return text_segments, raw_text
+        return phrase_groups, raw_text
 
     @staticmethod
     def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
@@ -326,6 +365,9 @@ class AppUtil:
         if project.can_voice and project.get_voice_label() == "none":
             AppUtil.show_hint_if_necessary(prefs, HINT_NO_VOICE)
 
-        if platform.system() == "Linux" and torch.cuda.is_available() \
-                and prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
-            AppUtil.show_hint_if_necessary(prefs, HINT_STT_LINUX_CUDA_FASTER_WHISPER_1, and_prompt=True)
+        import torch
+        if platform.system() == "Linux" and torch.cuda.is_available():
+                if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
+                    version = torch.backends.cudnn.version()
+                    if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
+                        AppUtil.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)

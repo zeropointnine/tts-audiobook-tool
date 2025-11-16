@@ -1,11 +1,12 @@
+#################
+# Use Python 3.12
+#################
+
 # Fork of higgs-audio which simply adds missing __init__.py files to various subdirectories
 git+https://github.com/zeropointnine/tts-audiobook-tool-higgs-audio#egg=boson-multimodal
 
 # Higgs dependencies
 descript-audio-codec
-torch
-torchvision
-torchaudio
 transformers>=4.45.1,<4.47.0
 dacite
 boto3==1.35.36
@@ -23,8 +24,12 @@ jieba
 accelerate>=0.26.0
 
 # App dependencies
+faster-whisper==1.2.1
+ctranslate2==4.6.1
+torch==2.6.0
+torchaudio==2.6.0
+
 audiotsm==0.1.2
-faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 librosa==0.11.0
 loguru==0.7.3

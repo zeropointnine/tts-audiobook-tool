@@ -4,7 +4,8 @@ from typing import Callable
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -16,7 +17,7 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class VoiceSubmenuShared:
 
     @staticmethod
-    def show_voice_menu(state: State, items: list[MenuItem]) -> None:
+    def show_voice_menu(state: State, items: MenuItemListOrMaker) -> None:
         MenuUtil.menu(
             state=state,
             heading="Voice clone and model settings",
@@ -149,7 +150,7 @@ class VoiceSubmenuShared:
     @staticmethod
     def make_clear_voice_item(state: State, info_item: TtsModelInfos) -> MenuItem:
 
-        def on_clear_voice(_, item: MenuItem) -> None:
+        def on_clear_voice(_: State, item: MenuItem) -> None:
             info_item: TtsModelInfos = item.data
             state.project.clear_voice_and_save(info_item, is_secondary=False)
             print_feedback("Cleared")

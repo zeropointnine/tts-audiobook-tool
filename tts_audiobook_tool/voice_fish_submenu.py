@@ -1,3 +1,4 @@
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -22,8 +23,8 @@ class VoiceFishSubmenu:
             )
             return f"Temperature {make_currently_string(value)}"
 
-        def on_temperature(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_temperature(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter temperature (0.01 to 2.0):",
                 0.01, 2.0, # sane range IMO

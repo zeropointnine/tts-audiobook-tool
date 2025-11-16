@@ -5,7 +5,6 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.real_time_util import RealTimeUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
@@ -15,13 +14,12 @@ class RealTimeSubmenu:
     def menu(state: State):
 
         # 1
-        def on_start(_, __) -> None:
-
-            if state.real_time.custom_text_segments:
-                text_segments = state.real_time.custom_text_segments
+        def on_start(_: State, __: MenuItem) -> None:
+            if state.real_time.custom_text_groups:
+                text_groups = state.real_time.custom_text_groups
             else:
-                text_segments = state.project.text_segments
-            if not text_segments:
+                text_groups = state.project.phrase_groups
+            if not text_groups:
                 print_feedback("No text segments specified")
                 return
 
@@ -39,7 +37,7 @@ class RealTimeSubmenu:
 
             RealTimeUtil.start(
                 state=state,
-                text_segments=text_segments,
+                phrase_groups=text_groups,
                 line_range=state.real_time.line_range
             )
 
@@ -47,8 +45,8 @@ class RealTimeSubmenu:
 
         # 2
         def make_text_label(_) -> str:
-            if state.real_time.custom_text_segments:
-                value = f"custom text, {len(state.real_time.custom_text_segments)} lines"
+            if state.real_time.custom_text_groups:
+                value = f"custom text, {len(state.real_time.custom_text_groups)} lines"
             else:
                 value = "project text"
             current = make_currently_string(value)
@@ -71,15 +69,14 @@ class RealTimeSubmenu:
         items = [start_item, text_item, range_item]
         MenuUtil.menu(state, "Real-time playback", items, hint=HINT_REAL_TIME)
 
-
     @staticmethod
     def ask_line_range(state: State) -> None:
 
-        if state.real_time.custom_text_segments:
-            text_segments = state.real_time.custom_text_segments
+        if state.real_time.custom_text_groups:
+            text_groups = state.real_time.custom_text_groups
         else:
-            text_segments = state.project.text_segments
-        length = len(text_segments)
+            text_groups = state.project.phrase_groups
+        length = len(text_groups)
 
         s = "Enter line range (eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
         printt(s)
@@ -94,38 +91,41 @@ class RealTimeSubmenu:
         state.real_time.line_range = result
 
         # Print feedback
-        is_all = (result[0] == 0 and result[1] == 0) or (result[0] == 1 and result[1] == len(text_segments))
+        is_all = (result[0] == 0 and result[1] == 0) or (result[0] == 1 and result[1] == len(text_groups))
         if is_all:
-            value = f"1-{len(text_segments)} (all)"
+            value = f"1-{len(text_groups)} (all)"
         else:
             value = f"{result[0]}-{result[1]}"
-            if result[1] == len(text_segments):
+            if result[1] == len(text_groups):
                 value += " (end)"
         print_feedback("Line range set:", value)
-
 
     @staticmethod
     def text_menu(state: State) -> None: # type: ignore
 
         # 1
-        def on_project(_, __) -> None:
-            if state.real_time.custom_text_segments:
-                state.real_time.custom_text_segments = []
+        def on_project(_: State, __: MenuItem) -> bool:
+            if state.real_time.custom_text_groups:
+                state.real_time.custom_text_groups = []
                 state.real_time.line_range = None
             print_feedback("Text source set to", "project")
+            return True
 
         project_item = MenuItem("Use project text", on_project)
 
         # 2, 3
-        def on_custom(_, item: MenuItem) -> None:
+        def on_custom(_: State, item: MenuItem) -> bool:
             if item.data == "file":
-                text_segments, _ = AppUtil.get_text_segments_from_ask_text_file(state.project.language_code)
+                text_segments, __ = AppUtil.get_phrase_groups_from_ask_text_file(
+                    state.prefs.max_words, state.prefs.segmentation_strategy, pysbd_language=state.project.language_code)
             else:
-                text_segments, _ = AppUtil.get_text_segments_from_ask_std_in(state.project.language_code)
+                text_segments, __ = AppUtil.get_text_groups_from_ask_std_in(
+                    state.prefs.max_words, state.prefs.segmentation_strategy, pysbd_language=state.project.language_code)
             if text_segments:
-                state.real_time.custom_text_segments = text_segments
+                state.real_time.custom_text_groups = text_segments
                 state.real_time.line_range = None
                 print_feedback("Text source set to: custom", f"{len(text_segments)} lines")
+            return bool(text_segments)
 
         custom_file_item = MenuItem("Custom text - from text file", on_custom, data="file")
         custom_manual_item = MenuItem("Custom text - manual input", on_custom, data="manual")

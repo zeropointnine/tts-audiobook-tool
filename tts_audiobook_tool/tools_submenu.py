@@ -29,7 +29,7 @@ class ToolsSubmenu:
             lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
         )
 
-        def speed_handler(_, __):
+        def speed_handler(_: State, __: MenuItem):
             AppUtil.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
             ToolsSubmenu.ask_save_speed_up_audio()
 

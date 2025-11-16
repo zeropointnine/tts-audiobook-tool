@@ -27,7 +27,7 @@ class VoiceIndexTts2Submenu:
                 current = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
             return f"Select voice clone sample {current}"
 
-        def on_voice(_, __) -> None:
+        def on_voice(_: State, __: MenuItem) -> None:
             AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
 
@@ -38,8 +38,8 @@ class VoiceIndexTts2Submenu:
             )
             return f"Temperature {make_currently_string(value)}"
 
-        def on_temperature(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_temperature(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter temperature (0.01 <= value <= 2.0):",
                 0.01, 2.0,
@@ -55,7 +55,7 @@ class VoiceIndexTts2Submenu:
                 current = f"{COL_DIM}(optional){COL_DEFAULT}"
             return f"Select emotion voice sample {current}"
 
-        def on_emo_voice(_, __) -> None:
+        def on_emo_voice(_: State, __: MenuItem) -> None:
             # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
             AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceSubmenuShared.ask_and_set_voice_file(
@@ -66,7 +66,7 @@ class VoiceIndexTts2Submenu:
             )
 
         # 5
-        def on_clear_emo(_, __) -> None:
+        def on_clear_emo(_: State, __: MenuItem) -> None:
             project.clear_voice_and_save(TtsModelInfos.INDEXTTS2, is_secondary=True)
             print_feedback("Cleared")
 
@@ -86,8 +86,8 @@ class VoiceIndexTts2Submenu:
             )
             return f"Emotion alpha (strength) {make_currently_string(value)}"
 
-        def on_emo_alpha(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_emo_alpha(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter emotion alpha (0 to 1.0):",
                 0.1, 1.0,
@@ -116,7 +116,7 @@ class VoiceIndexTts2Submenu:
     @staticmethod
     def fp16_menu(state: State) -> None:
 
-        def on_item(_, item: MenuItem) -> bool:
+        def on_item(_: State, item: MenuItem) -> bool:
             if state.project.indextts2_use_fp16 != item.data:
                 state.project.indextts2_use_fp16 = item.data
                 state.project.save()

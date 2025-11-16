@@ -119,10 +119,10 @@ def on_voice(state: State, __) -> None:
 
 # Text
 def make_text_label(state: State) -> str:
-    if state.project.text_segments:
-        lines = "line" if len(state.project.text_segments) == 1 else "lines"
-        value = f"{len(state.project.text_segments)} {lines}"
-        current = make_currently_string(value)
+    if state.project.phrase_groups:
+        num = len(state.project.phrase_groups)
+        lines = make_noun("line", "lines", num)
+        current = make_currently_string(f"{num} {lines}")
     else:
         current = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
     return f"Text {current}"
@@ -131,29 +131,26 @@ def on_text(state: State, __) -> None:
     if not state.prefs.project_dir:
         print_feedback("Requires project", is_error=True)
         return
-    if not state.project.text_segments:
-        TextSubmenu.set_text_menu(state)
-    else:
-        TextSubmenu.replace_text_menu(state)
+    TextSubmenu.menu(state)
 
 # Gen
 def make_gen_label(state: State) -> str:
     num_generated = state.project.sound_segments.num_generated()
-    if not state.project.can_voice and not state.project.text_segments:
+    if not state.project.can_voice and not state.project.phrase_groups:
         s = f"{COL_DIM}({COL_ERROR}requires text and voice sample{COL_DIM})"
     elif not state.project.can_voice:
         s = f"{COL_DIM}({COL_ERROR}requires voice sample{COL_DIM})"
-    elif not state.project.text_segments:
+    elif not state.project.phrase_groups:
         s = f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
     else:
-        s = f"{COL_DIM}({COL_ACCENT}{num_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.text_segments)}{COL_DIM} lines complete)"
+        s = f"{COL_DIM}({COL_ACCENT}{num_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} lines complete)"
     return "Generate audiobook audio " + s
 
 def on_gen(state: State, __) -> None:
     if not state.project.can_voice:
         print_feedback("Requires voice clone sample", is_error=True)
         return
-    if len(state.project.text_segments) == 0:
+    if len(state.project.phrase_groups) == 0:
         print_feedback("Requires text", is_error=True)
         return
     GenerateSubmenu.menu(state)
@@ -174,18 +171,18 @@ def on_concat(state: State, __) -> None:
 
 # Realtime
 def make_realtime_label(state: State) -> str:
-    if not state.project.can_voice and not state.project.text_segments:
+    if not state.project.can_voice and not state.project.phrase_groups:
         s = f"{COL_DIM}({COL_ERROR}requires text and voice sample{COL_DIM})"
     elif not state.project.can_voice:
         s = f"{COL_DIM}({COL_ERROR}requires voice sample{COL_DIM})"
-    elif not state.project.text_segments:
+    elif not state.project.phrase_groups:
         s = f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
     else:
         s = ""
-    return "Generate realtime audio " + s
+    return "Generate audio in realtime " + s
 
 def on_realtime(state: State, __) -> None:
-    if not state.project.text_segments:
+    if not state.project.phrase_groups:
         print_feedback("Requires text", is_error=True)
         return
     if not state.project.can_voice:
@@ -194,6 +191,6 @@ def on_realtime(state: State, __) -> None:
     RealTimeSubmenu.menu(state)
 
 # Quit
-def on_quit(_, __):
+def on_quit(_: State, __: MenuItem):
     print_feedback("State saved.", extra_line=False)
     exit(0)

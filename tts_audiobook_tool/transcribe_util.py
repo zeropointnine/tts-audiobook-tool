@@ -4,6 +4,7 @@ from tts_audiobook_tool.app_types import Sound, Word
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.words_dict import Dictionary
@@ -25,7 +26,7 @@ class TranscribeUtil:
         if sound.duration > DURATION_THRESH:
             return False
 
-        transcribed_text = massage_for_text_comparison(transcribed_text)
+        transcribed_text = TextUtil.massage_for_text_comparison(transcribed_text)
         return not transcribed_text
 
     @staticmethod
@@ -36,8 +37,8 @@ class TranscribeUtil:
 
         Threshold values are kept conservative here.
         """
-        reference_text = massage_for_text_comparison(reference_text)
-        transcribed_text = massage_for_text_comparison(transcribed_text)
+        reference_text = TextUtil.massage_for_text_comparison(reference_text)
+        transcribed_text = TextUtil.massage_for_text_comparison(transcribed_text)
         num_ref_words = len(reference_text.split(" "))
         num_trans_words = len(transcribed_text.split(" "))
         words_delta = num_trans_words - num_ref_words
@@ -80,7 +81,7 @@ class TranscribeUtil:
         TODO: this returns overlapping items (but no practical harm done atm so)
         """
 
-        string = massage_for_text_comparison(string)
+        string = TextUtil.massage_for_text_comparison(string)
         words = string.split()
 
         # Not enough words for any possible repeat
@@ -110,7 +111,7 @@ class TranscribeUtil:
         """
         Returns a value if number of "word over-occurrences" is over a certain threshold
         """
-        s = massage_for_text_comparison(reference_text)
+        s = TextUtil.massage_for_text_comparison(reference_text)
         num_words = len(s.split(" "))
         thresh = 2 if num_words <= 10 else 3
         count = TranscribeUtil.count_word_over_occurrences(reference_text, transcribed_text)
@@ -123,8 +124,8 @@ class TranscribeUtil:
         Count the number of extra occurrences of words found in transcription, basically
         This is another attempt at finding repeat phrases hallucinated by Oute in particular.
         """
-        reference_text = massage_for_text_comparison(reference_text)
-        transcribed_text = massage_for_text_comparison(transcribed_text)
+        reference_text = TextUtil.massage_for_text_comparison(reference_text)
+        transcribed_text = TextUtil.massage_for_text_comparison(transcribed_text)
 
         ref_counts = TranscribeUtil.get_word_counts(reference_text)
         trans_counts = TranscribeUtil.get_word_counts(transcribed_text)
@@ -143,7 +144,7 @@ class TranscribeUtil:
 
     @staticmethod
     def get_word_counts(string: str) -> dict[str, int]:
-        string = massage_for_text_comparison(string)
+        string = TextUtil.massage_for_text_comparison(string)
         words = string.split()
         counts = {}
         for word in words:
@@ -164,8 +165,8 @@ class TranscribeUtil:
         # Source text - need to have 2 words of the last three that are dictionary words
         # Trans text  - must not have ANY of those 2 words in its last 4 words
 
-        source_text = massage_for_text_comparison(source_text)
-        trans_text = massage_for_text_comparison(trans_text)
+        source_text = TextUtil.massage_for_text_comparison(source_text)
+        trans_text = TextUtil.massage_for_text_comparison(trans_text)
 
         source_words = source_text.split(" ")
         trans_words = trans_text.split(" ")
@@ -198,8 +199,8 @@ class TranscribeUtil:
         Tries to determine if generated audio has missing phrase at the beginning.
         WIP: Unlike tail, same logic yields almost all false positives at least with __
         """
-        source_text = massage_for_text_comparison(source_text)
-        trans_text = massage_for_text_comparison(trans_text)
+        source_text = TextUtil.massage_for_text_comparison(source_text)
+        trans_text = TextUtil.massage_for_text_comparison(trans_text)
 
         source_words = source_text.split(" ")
         trans_words = trans_text.split(" ")
@@ -266,7 +267,7 @@ class TranscribeUtil:
             returns 'semantic end time' even if the match is the last word
             (which you might normally treat as redundant)
         """
-        reference_words = massage_for_text_comparison(reference_text)
+        reference_words = TextUtil.massage_for_text_comparison(reference_text)
         reference_words = reference_words.split(" ")
         if len(reference_words) < 1:
             return None
@@ -287,7 +288,7 @@ class TranscribeUtil:
         last_word_obj = {}
         while len(transcribed_words) >= 1:
             last_word_obj = transcribed_words[-1]
-            last_word = massage_for_text_comparison(last_word_obj.word)
+            last_word = TextUtil.massage_for_text_comparison(last_word_obj.word)
             is_match = (last_word == last_reference_word)
             if is_match:
                 if num_iterations == 0 and not include_last_word:
@@ -329,7 +330,7 @@ class TranscribeUtil:
 
         TTS model can insert non-word noises before first word, especially with 1-2 word prompts.
         """
-        reference_words = massage_for_text_comparison(reference_text)
+        reference_words = TextUtil.massage_for_text_comparison(reference_text)
         reference_words = reference_words.split(" ")
         if len(reference_words) < 1:
             return None
@@ -339,7 +340,7 @@ class TranscribeUtil:
         for i in range(min(MAX_START_WORDS, len(transcribed_words))):
             transcribed_word_obj = transcribed_words[i]
             transcribed_word = transcribed_word_obj.word
-            transcribed_word = massage_for_text_comparison(transcribed_word)
+            transcribed_word = TextUtil.massage_for_text_comparison(transcribed_word)
             is_match = (first_reference_word == transcribed_word)
             if is_match:
                 value = float( transcribed_word_obj.start )
@@ -369,7 +370,7 @@ class TranscribeUtil:
             A tuple (start_timestamp, end_timestamp) if the phrase is found,
             otherwise None.
         """
-        reference_text = massage_for_text_comparison(reference_text)
+        reference_text = TextUtil.massage_for_text_comparison(reference_text)
         if not reference_text:
             return None
 
@@ -387,7 +388,7 @@ class TranscribeUtil:
             for j in range(i, num_whisper_words):
                 current_concatenated_raw_text += transcribed_words[j].word
 
-                norm_segment_text = massage_for_text_comparison(current_concatenated_raw_text)
+                norm_segment_text = TextUtil.massage_for_text_comparison(current_concatenated_raw_text)
 
                 if norm_segment_text == reference_text:
 

@@ -157,12 +157,59 @@ class AskUtil:
         printt(message)
         inp = AskUtil.ask("")
         return strip_quotes_from_ends(inp)
-    
+
     @staticmethod
     def is_shell_gui_gtk_based() -> bool:
         desktop_env = get_desktop_environment()
         is_gtk = is_gtk_based(desktop_env)
         return is_gtk
+
+    @staticmethod
+    def ask_number(
+        project_or_prefs: Any,
+        prompt: str,
+        lb: float,
+        ub: float,
+        attr_name: str,
+        success_prefix: str,
+        is_int: bool=False
+    ) -> None:
+        """
+        """
+
+        # Type checking for Prefs or Project, workaround for circular import
+        # Function would work on any "object" regardless but yea
+        from tts_audiobook_tool.prefs import Prefs
+        from tts_audiobook_tool.project import Project
+        if not isinstance(project_or_prefs, Project) and not isinstance(project_or_prefs, Prefs):
+            raise ValueError(f"Not Project or Prefs: {project_or_prefs}")
+
+        if not hasattr(project_or_prefs, attr_name):
+            raise ValueError(f"No such attribute {attr_name}")
+
+        if is_int:
+            lb = int(lb)
+            ub = int(ub)
+
+        value = AskUtil.ask(prompt.strip() + " ")
+        if not value:
+            return
+        try:
+            # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
+            value = float(value)
+        except Exception as e:
+            print_feedback("Bad value", is_error=True)
+            return
+        if is_int:
+            value = int(value)
+        if not (lb <= value <= ub):
+            print_feedback("Out of range", is_error=True)
+            return
+
+        setattr(project_or_prefs, attr_name, value)
+        project_or_prefs.save()
+
+        print_feedback(success_prefix, str(value))
 
 # ---
 
@@ -181,7 +228,7 @@ def get_desktop_environment():
     desktop = os.environ.get('DESKTOP_SESSION')
     if desktop:
         return desktop
-    
+
     # Another common fallback
     desktop = os.environ.get('GDMSESSION')
     if desktop:
@@ -196,12 +243,12 @@ def is_gtk_based(desktop_string):
     """
     if not desktop_string:
         return False
-    
+
     # List of common GTK desktop identifiers (case-insensitive)
     gtk_desktops = ['gnome', 'cinnamon', 'mate', 'xfce', 'budgie', 'pantheon']
-    
+
     for de in gtk_desktops:
         if de in desktop_string.lower():
             return True
-            
+
     return False

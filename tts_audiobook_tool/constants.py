@@ -37,6 +37,12 @@ APP_SAMPLE_RATE = 44100
 # Samplerate required for whisper audio input
 WHISPER_SAMPLERATE = 16000
 
+DEFAULT_MAX_WORDS_PER_SEGMENT = 40
+MIN_MAX_WORDS_PER_SEGMENT = 20
+MAX_MAX_WORDS_PER_SEGMENT = 80
+
+CTRANSLATE_REQUIRED_CUDNN_VERSION = 90100
+
 OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
@@ -191,7 +197,7 @@ HINT_TEST_REAL_TIME = Hint(
     "test_real_time",
     "Tip",
 """After setting voice clone or changing other model properties,
-consider using \"Menu > Generate realtime audio\" to quickly test audio
+consider using \"Menu > Generate audio in realtime\" to quickly test audio
 generation quality before committing to generating audiobook.
 """
 )
@@ -241,13 +247,28 @@ the second time through, as the audio transcription data has been cached."""
 )
 
 
-HINT_STT_LINUX_CUDA_FASTER_WHISPER_1 = Hint(
-    "stt_linux_cuda_faster_whisper_1",
-    f"{COL_ERROR}Special warning!",
-f"""An ongoing issue with the combination of Linux + CUDA + faster-whisper library
-may cause the app to unceremoniously exit on the first inference.
-If this occurs, try changing the Whisper device setting to CPU
-({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
+HINT_LINUX_CUDNN_VERSION = Hint(
+    "stt_linux_cudnn_version",
+    f"{COL_ERROR}cuDNN version mismatch!",
+f"""The installed version of torch is incompatible with faster-whisper CUDA acceleration.
+Either downgrade your version of torch (see README file), or change the Whisper 
+device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
+
+HINT_SEG_STRATEGY = Hint("seg", "",
+"""When text is imported to the project, this dictates how
+it is segmented for text-to-speech inference.""")
+
+HINT_SEG_MAX_SIZE = Hint("seg", "",
+f"""When text is imported to the project, this dictates the maximum number of
+words for each text segment.
+
+Increasing this value beyond the default of {DEFAULT_MAX_WORDS_PER_SEGMENT} should be done
+with some care and extra testing (Some models may emit more errors or fail).
+The value is saved on a per-model basis.""")
+
+HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE = """The project's source text word count per segment (%1)
+exceeds the application's default ("safe") value (%2).
+Make sure this is what you want before generating audio."""
 
 HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(
     "chatterbox_python_downgrade",

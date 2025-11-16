@@ -1,6 +1,8 @@
 from enum import Enum
 from functools import cache
-from typing import NamedTuple
+from typing import Any, NamedTuple
+
+import numpy as np
 
 
 class TtsModelInfo(NamedTuple):
@@ -11,8 +13,14 @@ class TtsModelInfo(NamedTuple):
     module_test: str
     # identifier used in file names
     file_tag: str
-    # the model's output sample rate
+    # The model's output dtype
+    dtype: np.dtype
+    # The model's output sample rate
     sample_rate: int
+    # The key used for Prefs json dict to store the max-words value
+    max_words_prefs_key: str
+    # The model's recommended max-words-per-segment
+    max_words_default: int
     # Should semantic trim return end time stamp if is last word
     # Doing so is generally redundant and risks unintended partial cropping of end of last word,
     # but can be useful for chopping off hallucinated noises past last word (eg, for Chatterbox)
@@ -30,12 +38,17 @@ class TtsModelInfos(Enum):
     Enumerates `TtsModelInfo` instances for all TTS models supported by the app
     """
 
-    NONE = TtsModelInfo("", "none", 0, False, "", {}, [])
+    NONE = TtsModelInfo(
+        "", "none", np.dtype("float32"), 0, "", 0, False, "", {}, []
+    )
 
     OUTE = TtsModelInfo(
         module_test="outetts",
         file_tag="oute",
+        dtype=np.dtype("float32"),
         sample_rate=44100,
+        max_words_prefs_key="max_words_oute",
+        max_words_default=40,
         semantic_trim_last=False,
         requirements_file_name="requirements-oute.txt",
         ui = {
@@ -53,7 +66,10 @@ class TtsModelInfos(Enum):
     CHATTERBOX = TtsModelInfo(
         module_test="chatterbox",
         file_tag="chatterbox",
+        dtype=np.dtype("float32"),
         sample_rate=24000,
+        max_words_prefs_key="max_words_chatterbox",
+        max_words_default=40,
         semantic_trim_last=True,
         requirements_file_name="requirements-chatterbox.txt",
         ui = {
@@ -70,7 +86,10 @@ class TtsModelInfos(Enum):
     FISH = TtsModelInfo(
         module_test="fish_speech",
         file_tag="s1-mini",
+        dtype=np.dtype("float32"),
         sample_rate=44100,
+        max_words_prefs_key="max_words_fish",
+        max_words_default=40,
         semantic_trim_last=False,
         requirements_file_name="requirements-fish.txt",
         ui = {
@@ -87,7 +106,10 @@ class TtsModelInfos(Enum):
     HIGGS = TtsModelInfo(
         module_test="boson_multimodal",
         file_tag="higgs",
+        dtype=np.dtype("float32"),
         sample_rate=24000,
+        max_words_prefs_key="max_words_higgs",
+        max_words_default=40,
         semantic_trim_last=False,
         requirements_file_name="requirements-higgs.txt",
         ui = {
@@ -104,7 +126,10 @@ class TtsModelInfos(Enum):
     VIBEVOICE = TtsModelInfo(
         module_test="vibevoice",
         file_tag="vibevoice",
+        dtype=np.dtype("float32"),
         sample_rate=24000,
+        max_words_prefs_key="max_words_higgs",
+        max_words_default=40,
         semantic_trim_last=False,
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
@@ -123,7 +148,10 @@ class TtsModelInfos(Enum):
     INDEXTTS2 = TtsModelInfo(
         module_test="indextts",
         file_tag="indextts2",
+        dtype=np.dtype("float32"),
         sample_rate=22050,
+        max_words_prefs_key="max_words_indextts2",
+        max_words_default=40,
         semantic_trim_last=False,
         requirements_file_name="requirements-indextts2.txt",
         ui = {

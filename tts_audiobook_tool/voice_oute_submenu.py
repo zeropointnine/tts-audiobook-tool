@@ -26,8 +26,8 @@ class VoiceOuteSubmenu:
             )
             return f"Temperature {make_currently_string(value)}"
 
-        def on_temperature(_, __) -> None:
-            VoiceSubmenuShared.ask_number(
+        def on_temperature(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
                 project,
                 "Enter temperature (0.01 to 2.0):",
                 0.01, 2.0,
@@ -35,7 +35,7 @@ class VoiceOuteSubmenu:
                 "Temperature set to:"
             )
 
-        def on_default(_, __) -> None:
+        def on_default(_: State, __: MenuItem) -> None:
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
                 AskUtil.ask_error(result)

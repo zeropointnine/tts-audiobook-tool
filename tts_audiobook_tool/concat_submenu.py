@@ -49,9 +49,9 @@ class ConcatSubmenu:
     @staticmethod
     def normalization_menu(state: State) -> None:
 
-        def on_select(_, item: MenuItem) -> None:
+        def on_select(_: State, item: MenuItem) -> None:
             info: NormalizationType = item.data
-            state.prefs.set_normalization_type_using(info.value.json_value)
+            state.prefs.set_normalization_type_using(info.value.json_id)
             print_feedback(f"Normalization set to: {info.value.label}")
 
         menu_items = []
@@ -71,11 +71,11 @@ class ConcatSubmenu:
 
         print_heading("Chapter file cut points:")
 
-        num_text_segments = len(state.project.text_segments)
+        num_text_groups = len(state.project.phrase_groups)
 
         section_dividers = state.project.section_dividers
         if section_dividers:
-            print_cut_points(section_dividers, num_text_segments)
+            print_cut_points(section_dividers, num_text_groups)
 
         printt("Enter the line numbers where new chapter files will begin.")
         printt(f"{COL_DIM}For example, if there are 400 lines of text and you enter \"101, 201\",")
@@ -98,7 +98,7 @@ class ConcatSubmenu:
         one_indexed_items = list(set(one_indexed_items))
         one_indexed_items.sort()
         for item in one_indexed_items:
-            if item < 1 or item > len(state.project.text_segments):
+            if item < 1 or item > len(state.project.phrase_groups):
                 AskUtil.ask_error(f"Index out of range: {item}")
                 return
         zero_indexed_items = [item - 1 for item in one_indexed_items]
@@ -129,7 +129,7 @@ class ConcatSubmenu:
             if inp == "all" or inp == "a":
                 chapter_indices = chapter_indices.copy()
             else:
-                input_indices, warnings = ParseUtil.parse_ranges_string(inp, len(state.project.text_segments))
+                input_indices, warnings = ParseUtil.parse_ranges_string(inp, len(state.project.phrase_groups))
                 if warnings:
                     for warning in warnings:
                         printt(warning)
@@ -174,7 +174,7 @@ class ConcatSubmenu:
                 s = f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
             else:
                 s = ""
-            print_heading(f"Creating concatenated audio file{s}...", dont_clear=True)
+            print_heading(f"Creating concatenated audio file{s}...", dont_clear=True, non_menu=True)
 
             is_norm = (state.prefs.normalization_type != NormalizationType.DISABLED)
             is_concat_aac = not is_norm and to_aac_not_flac

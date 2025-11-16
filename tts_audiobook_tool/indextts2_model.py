@@ -71,13 +71,13 @@ class IndexTts2Model(IndexTts2ModelProtocol):
             raise Exception("emo_vector should be empty or have length of 8")
 
         if False:
-            print()
-            print("voice path", voice_path)
-            print("temperature", temperature)
-            print("emo alpha", emo_alpha)
-            print("emo voice path", emo_voice_path)
-            print("emo vector", emo_vector)
-            print()
+            printt()
+            printt("voice path", voice_path)
+            printt("temperature", temperature)
+            printt("emo alpha", emo_alpha)
+            printt("emo voice path", emo_voice_path)
+            printt("emo vector", emo_vector)
+            printt()
 
         try:
             # FYI, infer() caches loaded voice sample/s internally

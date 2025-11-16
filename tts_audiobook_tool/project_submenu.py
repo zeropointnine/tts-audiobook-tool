@@ -3,6 +3,7 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -31,7 +32,7 @@ class ProjectSubmenu:
         def make_view_label(_) -> str:
             return f"Show directory in OS UI {COL_DIM}({state.project.dir_path})"
 
-        def on_view(_, __) -> None:
+        def on_view(_: State, __: MenuItem) -> None:
             err = DirOpenUtil.open(state.project.dir_path)
             if err:
                 AskUtil.ask_error(err)
@@ -40,7 +41,7 @@ class ProjectSubmenu:
             s = make_currently_string(state.project.language_code or "none")
             return f"Language code {s}"
 
-        def on_clear_language(_, __) -> None:
+        def on_clear_language(_: State, __: MenuItem) -> None:
             state.project.language_code = ""
             state.project.save()
             print_feedback("Language code cleared")
@@ -76,18 +77,18 @@ class ProjectSubmenu:
         ui_title = "Select empty directory"
 
         # FYI: GTK-based folder requestor dialog has no "new folder" functionality
-        # but there are no good alternatives IMO, so 
+        # but there are no good alternatives IMO, so
 
         dir_path = AskUtil.ask_dir_path(
-            console_message=console_message, 
-            ui_title=ui_title, 
-            initialdir=state.project.dir_path, 
+            console_message=console_message,
+            ui_title=ui_title,
+            initialdir=state.project.dir_path,
             mustexist=False
         )
 
         if not dir_path:
             return False
-        
+
         err = state.make_new_project(dir_path)
         if err:
             AskUtil.ask_error(err)
@@ -111,6 +112,15 @@ class ProjectSubmenu:
             return False
 
         state.set_existing_project(dir)
+
+        max_count = state.project.segmentation_max_words or PhraseGroup.get_max_num_words(state.project.phrase_groups)
+        if max_count > DEFAULT_MAX_WORDS_PER_SEGMENT:
+            message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
+            message = message.replace("%1", str(max_count))
+            message = message.replace("%2", str(DEFAULT_MAX_WORDS_PER_SEGMENT))
+            hint = Hint("", "FYI", message)
+            AppUtil.show_hint(hint, and_prompt=True)
+
         return True
 
 # ---
@@ -141,8 +151,8 @@ def on_language(state: State, __: MenuItem) -> None:
     )
 
 LANGUAGE_CODE_DESC = "" + \
-"""Language code is used by the app at various stages of the pipeline as a \"hint\" to improve:
-- Imported text segmentation by sentence
+"""Language code is used by the app at various stages of the pipeline as a \"hint\" for:
+- Segmentation of imported text by sentence
 - TTS prompt pre-processing 
-- Whisper transcription (which is used to validate TTS output)
+- Whisper transcription
 - Text-to-speech inference (required by Chatterbox; not utilized by the other supported models)"""

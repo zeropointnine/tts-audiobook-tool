@@ -39,7 +39,7 @@ class ChapterInfo:
 
         all_sound_segments = project.sound_segments.sound_segments
 
-        segment_index_ranges = make_section_ranges(project.section_dividers, len(project.text_segments))
+        segment_index_ranges = make_section_ranges(project.section_dividers, len(project.phrase_groups))
 
         for chapter_index, rang in enumerate(segment_index_ranges):
 

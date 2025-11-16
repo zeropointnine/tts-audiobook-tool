@@ -7,7 +7,6 @@ import platform
 from typing import NamedTuple, Protocol
 
 from numpy import ndarray
-import torch
 
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.constants_config import *
@@ -66,9 +65,7 @@ class Hint:
 
 class ValidationResult(ABC):
     """ Base class for a validation result """
-    dummy = False # allows subclass to be positional-argument-friendly
-    pass
-
+    dummy: str = ""
     @abstractmethod
     def get_ui_message(self) -> str:
         return ""
@@ -79,7 +76,7 @@ class PassResult(ValidationResult):
         return f"Passed validation tests"
 
 @dataclass
-class TrimmableResult(ValidationResult):
+class TrimmableResult(ValidationResult):    
     base_message: str
     start_time: float | None
     end_time: float | None
@@ -108,7 +105,6 @@ class TrimmableResult(ValidationResult):
 @dataclass
 class FailResult(ValidationResult):
     message: str
-
     def get_ui_message(self) -> str:
         return self.message
 
@@ -117,19 +113,18 @@ class SkippedResult(ValidationResult):
     def get_ui_message(self) -> str:
         return f"Validation skipped"
 
-
 # ---
 
 class NormalizationSpecs(NamedTuple):
-    json_value: str
+    json_id: str
     label: str
     i: float
     lra: float
     tp: float
 
-NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_value="default", label="Default - ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Tracks with 'ACX standard'
-NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(json_value="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
-NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(json_value="none", label="Disabled", i=0, lra=0, tp=0)
+NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_id="default", label="Default - ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Tracks with 'ACX standard'
+NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(json_id="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
+NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(json_id="none", label="Disabled", i=0, lra=0, tp=0)
 
 class NormalizationType(Enum):
     DEFAULT = NORMALIZATION_SPECS_DEFAULT
@@ -139,12 +134,12 @@ class NormalizationType(Enum):
     @staticmethod
     @cache
     def all_json_values() -> set[str]:
-         return { item.value.json_value for item in NormalizationType }
+         return { item.value.json_id for item in NormalizationType }
 
     @staticmethod
     def from_json_value(s: str) -> NormalizationType | None:
         for item in NormalizationType:
-            if s == item.value.json_value:
+            if s == item.value.json_id:
                 return item
         return None
 
@@ -206,6 +201,7 @@ class SttConfig(tuple[str, str, str], Enum):
 
     @staticmethod
     def get_default() -> SttConfig:
+        import torch
         if torch.cuda.is_available():
             if platform.system() == "Linux":
                 return SttConfig.CUDA_FLOAT16 # TODO: change this to CPU if can't resolve compatibility issue
@@ -216,8 +212,30 @@ class SttConfig(tuple[str, str, str], Enum):
 
 # ---
 
+class SegmentationStrategy(tuple[str, str], Enum):
+
+    NORMAL = "normal", "normal"
+    MAX_LEN = "max_len", "maximized word count"
+
+    @property
+    def json_id(self) -> str:
+        return self.value[0]
+
+    @property
+    def description(self) -> str:
+        return self.value[1]
+
+    @staticmethod
+    def from_json_id(s: str) -> SegmentationStrategy | None:
+        for item in list(SegmentationStrategy):
+            if s == item.json_id:
+                return item
+        return None
+
+# ---
+
 class RealTimeSubmenuState:
     """ Values related to the real-time playback feature """
-    from tts_audiobook_tool.text_segment import TextSegment
-    custom_text_segments: list[TextSegment] = []
+    from tts_audiobook_tool.phrase import PhraseGroup
+    custom_text_groups: list[PhraseGroup] = [] # ie, PhraseGroups
     line_range: tuple[int, int] | None = None
