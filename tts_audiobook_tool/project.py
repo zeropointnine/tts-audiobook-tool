@@ -12,7 +12,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
-from tts_audiobook_tool.tts_model import IndexTts2Protocol
+from tts_audiobook_tool.tts_model import ChatterboxProtocol, IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -34,6 +34,7 @@ class Project:
     chatterbox_temperature: float = -1
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
+    chatterbox_language: str = ChatterboxProtocol.DEFAULT_LANGUAGE
 
     fish_voice_file_name: str = ""
     fish_voice_transcript: str = ""
@@ -56,6 +57,7 @@ class Project:
     indextts2_emo_vector: list[float] = [] # use either 0 or 8 elements
 
     generate_range_string: str = ""
+    
 
 
     def __init__(self, dir_path: str):
@@ -75,6 +77,7 @@ class Project:
                     return Exception(f"Couldn't create required subdirectory {ss_path}")
 
         self.sound_segments = ProjectSoundSegments(self)
+        self.chatterbox_language = ChatterboxProtocol.DEFAULT_LANGUAGE
 
 
     @staticmethod
@@ -154,6 +157,7 @@ class Project:
         project.chatterbox_temperature = d.get("chatterbox_temperature", -1)
         project.chatterbox_cfg = d.get("chatterbox_cfg", -1)
         project.chatterbox_exaggeration = d.get("chatterbox_exaggeration", -1)
+        project.chatterbox_language = d.get("chatterbox_language", ChatterboxProtocol.DEFAULT_LANGUAGE)
 
         # Fish
         project.fish_voice_file_name = d.get("fish_voice_file_name", "")
@@ -202,6 +206,7 @@ class Project:
             "chatterbox_temperature": self.chatterbox_temperature,
             "chatterbox_cfg": self.chatterbox_cfg,
             "chatterbox_exaggeration": self.chatterbox_exaggeration,
+            "chatterbox_language": self.chatterbox_language,
 
             "fish_voice_file_name": self.fish_voice_file_name,
             "fish_voice_text": self.fish_voice_transcript,

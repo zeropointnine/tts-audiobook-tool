@@ -57,6 +57,7 @@ class ChatterboxProtocol(Protocol):
     DEFAULT_EXAGGERATION = 0.5 # from chatterbox library code
     DEFAULT_CFG = 0.5
     DEFAULT_TEMPERATURE = 0.8
+    DEFAULT_LANGUAGE = "en"
 
     def generate(
             self,
@@ -64,7 +65,8 @@ class ChatterboxProtocol(Protocol):
             voice_path: str,
             exaggeration: float,
             cfg: float,
-            temperature: float
+            temperature: float,
+            language_id: str = DEFAULT_LANGUAGE
     ) -> Sound | str:
         ...
 

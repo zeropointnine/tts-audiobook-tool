@@ -16,12 +16,13 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_segment import TextSegment
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import HiggsModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxProtocol, HiggsModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.whisper_util import WhisperUtil
+from num2words import num2words
 
 class GenerateUtil:
 
@@ -260,7 +261,8 @@ class GenerateUtil:
         """
 
         text = text_segment.text
-        text = GenerateUtil.preprocess_text_common(text)
+        language_code = project.chatterbox_language
+        text = GenerateUtil.preprocess_text_common(text, language_code)
         text = Tts.get_instance().preprocess_text(text)
 
         match Tts.get_type():
@@ -382,7 +384,7 @@ class GenerateUtil:
 
 
     @staticmethod
-    def preprocess_text_common(text: str) -> str:
+    def preprocess_text_common(text: str, language_code: str = ChatterboxProtocol.DEFAULT_LANGUAGE) -> str:
         """
         Transforms text for inference.
         These should be common to (ie, compatible with) any tts model
@@ -401,7 +403,13 @@ class GenerateUtil:
         text = re.sub(r'\.{4,}', '...', text)
 
         # Expand "int words" to prevent TTS model from simply saying a string of digits
-        text = TextUtil.expand_int_words_in_text(text)
+        # text = TextUtil.expand_int_words_in_text(text)
+        try:
+            # This replaces the need for the old 'expand_int_words' entirely
+            text = re.sub(r'\d+', lambda x: num2words(int(x.group()), lang=language_code), text)
+        except NotImplementedError:
+            # Fallback for languages num2words doesn't support
+            pass
 
         return text
 

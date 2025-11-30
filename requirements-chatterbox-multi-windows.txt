@@ -1,4 +1,4 @@
-chatterbox-tts>=0.1.4
+chatterbox-tts==0.1.2
 
 audiotsm==0.1.2
 faster-whisper==1.2.0

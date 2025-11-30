@@ -216,3 +216,27 @@ class VoiceSubmenuShared:
         if value == default_value:
             s += DEFAULT_LABEL
         return s
+
+    @staticmethod
+    def ask_string(
+        project: Project,
+        prompt: str,
+        project_attr_name: str,
+        success_prefix: str
+    ) -> None:
+        """
+        Helper to ask for a string value and save it to the project.
+        """
+        if not hasattr(project, project_attr_name):
+            raise ValueError(f"No such attribute {project_attr_name}")
+
+        # AskUtil.ask is likely a wrapper for input() that handles some cleanup
+        value = AskUtil.ask(prompt.strip() + " ")
+        
+        # If user just hit enter without typing, abort
+        if not value:
+            return
+
+        setattr(project, project_attr_name, value)
+        project.save()
+        print_feedback(success_prefix, value)

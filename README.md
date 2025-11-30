@@ -194,6 +194,36 @@ Install torch 2.6 for CUDA v12.6:
 
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
+### Workaround for Chatterbox Multilingual TTS on Windows:
+
+Install dependencies:
+
+    pip install -r requirements-chatterbox-multi-windows.txt
+
+Uninstall the vanilla version of torch:
+
+    pip uninstall torch torchaudio
+
+Install torch 2.6 for CUDA v12.6:
+
+    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+
+Upgrade your installation tools
+
+    python -m pip install --upgrade pip setuptools wheel
+
+Manually install a Python 3.12 compatible Numpy
+
+    pip install numpy==1.26.4
+
+Install Chatterbox without checking dependencies
+
+    pip install chatterbox-tts==0.1.4 --no-deps
+
+Verify the other dependencies
+
+    pip install scipy librosa soundfile tqdm huggingface_hub
+
 ## Install for Oute TTS:
 
 Initialize a **Python v3.12** virtual environment named "venv-oute". For example:

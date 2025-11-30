@@ -6,6 +6,7 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.ask_util import AskUtil
 
 class VoiceChatterboxSubmenu:
 
@@ -15,6 +16,26 @@ class VoiceChatterboxSubmenu:
         """
 
         project = state.project
+
+        def make_language_label(_) -> str:
+            # Safely get the language, default to 'de' if missing
+            lang = getattr(project, "chatterbox_language", ChatterboxProtocol.DEFAULT_LANGUAGE)
+            if lang == ChatterboxProtocol.DEFAULT_LANGUAGE:
+                 val_str = f"{lang} (default)"
+            else:
+                 val_str = lang
+                 
+            return f"Language Code {make_currently_string(val_str)}"
+
+        def on_language(_, __) -> None:
+            default_code = ChatterboxProtocol.DEFAULT_LANGUAGE
+             
+            VoiceSubmenuShared.ask_string(
+                project,
+                f"Enter language code (default '{default_code}'):",
+                "chatterbox_language",
+                "Language set to:"
+            )
 
         def make_temperature_label(_) -> str:
             value = VoiceSubmenuShared.make_parameter_value_string(
@@ -67,6 +88,10 @@ class VoiceChatterboxSubmenu:
                 lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
             ),
             VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX),
+            MenuItem(
+                make_language_label,
+                on_language
+            ),
             MenuItem(
                 make_temperature_label,
                 on_temperature
