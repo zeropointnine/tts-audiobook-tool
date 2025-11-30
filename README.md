@@ -194,11 +194,15 @@ Install torch 2.6 for CUDA v12.6:
 
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
 
-### Workaround for Chatterbox Multilingual TTS on Windows:
+### ⚠️ Installation Workaround
+
+The current version of `chatterbox-tts` (0.1.4) is currently failing on Python 3.12 environments due to dependency conflicts.
+
+If you encounter dependency conflicts or build errors during installation, please follow these steps to manually resolve them:
 
 Install dependencies:
 
-    pip install -r requirements-chatterbox-multi-windows.txt
+    pip install -r requirements-chatterbox-0-1-2.txt
 
 Uninstall the vanilla version of torch:
 
