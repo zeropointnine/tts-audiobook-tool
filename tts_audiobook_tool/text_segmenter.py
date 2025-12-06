@@ -8,7 +8,7 @@ from tts_audiobook_tool.text_util import TextUtil
 class TextSegmenter:
 
     @staticmethod
-    def segment_text(source_text: str, max_words: int, pysbd_language="en") -> list[TextSegment]:
+    def segment_text(source_text: str, max_words: int, pysbd_language:str) -> list[TextSegment]:
         """
         Splits source text into "TextSegment" chunks.
         App's main text segmentation algorithm.

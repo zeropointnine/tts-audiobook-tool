@@ -15,6 +15,7 @@ librosa
 loguru==0.7.3
 mutagen==1.47.0
 natsort==8.4.0
+num2words==0.5.14
 nvidia-ml-py
 psutil
 pyloudnorm==0.1.1

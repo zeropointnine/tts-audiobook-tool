@@ -172,9 +172,9 @@ Uninstall the vanilla version of torch that just got installed, and install the 
 
 ## Install for Chatterbox TTS:
 
-Initialize a **Python v3.12** virtual environment named "venv-chatterbox". For example:
+Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
 
-    path\to\python3.12\python.exe -m venv venv-chatterbox
+    path\to\python3.11\python.exe -m venv venv-chatterbox
 
 Activate the virtual environment:
 
@@ -184,15 +184,17 @@ Install dependencies:
 
     pip install -r requirements-chatterbox.txt
 
-### Additional steps for CUDA:
+ ⚠️ **Installation Workaround**
 
-Uninstall the vanilla version of torch:
+If you encounter dependency conflicts or build errors during installation, please follow these steps to manually resolve them:
 
-    pip uninstall torch torchaudio
+    pip install numpy setuptools wheel Cython
+    pip install pkuseg==0.0.25 --no-build-isolation
 
-Install torch 2.6 for CUDA v12.6:
+After these two commands complete successfully, re-installing the requirements should work:
 
-    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+    pip install -r requirements-chatterbox.txt
+
 
 ## Install for Oute TTS:
 
@@ -255,7 +257,7 @@ These are my anecdotal inference speeds (running Windows unless otherwise noted;
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
 | Fish OpenAudio S1-mini  | GTX 3080 Ti          | 500+% realtime  | best combination of inference speed and quality output IMO
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   |
-| Chatterbox              | GTX 3080 Ti          | ~130% realtime  |
+| Chatterbox              | GTX 3080 Ti          | ~130% realtime  | best multilanguage capabilities
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Oute                    | GTX 3080 Ti          | ~90% realtime   | using `outetts.Backend.EXL2`
 |                         | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
@@ -263,23 +265,29 @@ These are my anecdotal inference speeds (running Windows unless otherwise noted;
 
 # Update highlights
 
+**2025-12-06**
+
+Updated **Chatterbox** requirement to v0.1.4, which is multilanguage capable. Added language code project setting. Thanks to @JuMGameN. 
+
+For existing users, the Chatterbox venv must be recreated using Python v3.11.
+
 **2025-11-11**
 
-Added option to keep the Whisper model on the CPU.
+Added option to keep the **Whisper** model on the CPU.
 
 **2025-11-05**
 
-Player/reader: Added bookmarks feature, ability to pin the audio player widget in desktop mode, plus.
+Player/reader: Added **bookmarks** feature, ability to pin the audio player widget in desktop mode, plus.
 
 **2025-10-24**
 
-Added option to disable transcription validation (`Options` > `Whisper model type` > `Disabled`). When increased accuracy is important, this is only advisable when using IndexTTS2, which generates the least number of inference errors of any of the supported models to date.
+Added option to **disable transcription validation** (`Options` > `Whisper model type` > `Disabled`). Doing so is only advisable while using IndexTTS2 (IMO), which generates the least number of inference errors of any of the supported models to date.
 
 FYI, Whisper model type is now an app-wide preference setting rather than a per-project setting.
 
 **2025-10-23**
 
-Added option to insert a "page turn" sound effect at section breaks (default is on; must replace text to enable on pre-existing projects)
+Added option to insert a "page turn" **sound effect at section breaks**
 
 Rearranged some menu items
 
@@ -287,11 +295,11 @@ Rearranged some menu items
 
 Added support for **IndexTTS2**, including secondary voice reference sample guiding emotion and "emotion vectors".
 
-Added option to specify Whisper model (large-v3 or large-v3-turbo)
+Added option to **specify Whisper model** (large-v3 or large-v3-turbo)
 
 **2025-09-15**
 
-Added support for VibeVoice alternate models (ie, large/7B model)
+Added support for **VibeVoice alternative models** (ie, large/7B model)
 
 **2025-09-12**
 
@@ -299,7 +307,7 @@ Added support for **VibeVoice**.
 
 **2025-08-10**
 
-Migrated from openai-whisper to faster-whisper (faster, less memory, equivalent accuracy).
+Migrated from openai-whisper to **faster-whisper** (faster, less memory, equivalent accuracy).
 
 **2025-08-06**
 

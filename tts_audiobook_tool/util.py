@@ -35,7 +35,7 @@ def print_feedback(
         extra_line=True
 ) -> None:
     """
-    Should be used for printing feedback after an action is taken (eg a setting has been changed),
+    Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
     and submenu is about to be re-printed.
     """
     if no_preformat:

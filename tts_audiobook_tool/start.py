@@ -5,6 +5,7 @@ os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 from huggingface_hub import constants # type: ignore
 # --------------------------------------------------------------------------------------------------
 
+import sys
 from importlib import util
 from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
@@ -26,28 +27,33 @@ def main() -> None:
     AppUtil.init_logging()
     printt()
 
-    # TTS model check (required)
-    err = Tts.init_model_type()
-    if err:
-        printt(f"{COL_ERROR}{err}")
-        exit(1)
-
-    # FFMPEG check (required)
+    # Hard requirement - FFMPEG 
     if not FfmpegUtil.is_ffmpeg_available():
         printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
         printt(f"{COL_ERROR}Please install it first:")
         printt("https://ffmpeg.org/download.html")
         exit(1)
 
+    # Hard requirement - TTS model 
+    err = Tts.init_model_type()
+    if err:
+        printt(f"{COL_ERROR}{err}")
+        exit(1)
+
+    # Hard requirement - chatterbox + Python v3.11
+    if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+        if sys.version_info.major>= 3 and sys.version_info.minor > 11:
+            AppUtil.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
+            exit(1)
+
     # Updated dependencies check (required)
-    new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil"]
-    not_found = [package for package in new_packages if not util.find_spec(package)]
+    not_found = [package for package in NEW_PACKAGES if not util.find_spec(package)]
     if not_found:
         hint = Hint(
             "none",
             "The app's dependencies have changed",
-            f"The following packages were not found: {COL_ERROR}{', '.join(not_found)}\n"
-            "You may have updated the app from the repository without updating its dependencies.\n\n"
+            f"The following packages were not found: {COL_ERROR}{', '.join(not_found)}{COL_DEFAULT}\n"
+            "You may have updated the app from the repository without updating its dependencies.\n"
             "Install the missing packages or update your virtual environment by re-running:\n"
             f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
         )
@@ -71,3 +77,7 @@ def main() -> None:
     # Start
     printt()
     _ = App()
+
+# ---
+
+NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words"]

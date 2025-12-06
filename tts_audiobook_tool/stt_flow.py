@@ -145,7 +145,7 @@ class SttFlow:
 
         printt("Segmenting source text...")
         printt()
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT_STT)
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT_STT, pysbd_language="en") # TODO: ask for language code as part of 'wizard'
 
         # [2] Transcribe audio file (or load pickle file)
 

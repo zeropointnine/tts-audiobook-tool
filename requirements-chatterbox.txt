@@ -1,12 +1,22 @@
-chatterbox-tts==0.1.2
+#################
+# Use Python 3.11
+#################
+
+chatterbox-tts==0.1.4
+
+# App dependencies
+faster-whisper==1.2.1
+ctranslate2==4.6.1
+torch==2.6.0
+torchaudio==2.6.0
 
 audiotsm==0.1.2
-faster-whisper==1.2.0
 ffmpeg-python==0.2.0
 librosa==0.11.0
 loguru==0.7.3
 mutagen==1.47.0
 natsort==8.4.0
+num2words==0.5.14
 nvidia-ml-py
 psutil
 pyloudnorm==0.1.1

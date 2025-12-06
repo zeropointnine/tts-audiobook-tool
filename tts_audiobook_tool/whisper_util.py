@@ -18,7 +18,8 @@ class WhisperUtil:
     def transcribe_to_segments(
             sound: Sound,
             stt_variant: SttVariant,
-            stt_config: SttConfig
+            stt_config: SttConfig,
+            language_code: str
     ) -> list[Segment] | str:
         """
         All whisper transcription should be done through here.
@@ -35,7 +36,7 @@ class WhisperUtil:
         Stt.set_config(stt_config)
 
         try:
-            segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=None)
+            segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
         except Exception as e:
             return make_error_string(e)
 

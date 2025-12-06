@@ -16,6 +16,7 @@ class RealTimeSubmenu:
 
         # 1
         def on_start(_, __) -> None:
+
             if state.real_time.custom_text_segments:
                 text_segments = state.real_time.custom_text_segments
             else:
@@ -23,6 +24,12 @@ class RealTimeSubmenu:
             if not text_segments:
                 print_feedback("No text segments specified")
                 return
+
+            err = Tts.validate_language_code(state.project.language_code)
+            if err:
+                print_feedback(err)
+                return
+
             if AskUtil.is_readchar:
                 b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
                 if not b:
@@ -112,9 +119,9 @@ class RealTimeSubmenu:
         # 2, 3
         def on_custom(_, item: MenuItem) -> None:
             if item.data == "file":
-                text_segments, _ = AppUtil.get_text_segments_from_ask_text_file()
+                text_segments, _ = AppUtil.get_text_segments_from_ask_text_file(state.project.language_code)
             else:
-                text_segments, _ = AppUtil.get_text_segments_from_ask_std_in()
+                text_segments, _ = AppUtil.get_text_segments_from_ask_std_in(state.project.language_code)
             if text_segments:
                 state.real_time.custom_text_segments = text_segments
                 state.real_time.line_range = None

@@ -1,4 +1,5 @@
 import os
+from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
@@ -82,7 +83,7 @@ class VoiceSubmenuShared:
                 stt_variant = state.prefs.stt_variant
 
             result = WhisperUtil.transcribe_to_segments(
-                sound, stt_variant, state.prefs.stt_config
+                sound, stt_variant, state.prefs.stt_config, language_code=state.project.language_code
             )
 
             if state.prefs.stt_variant == SttVariant.DISABLED:
@@ -192,6 +193,35 @@ class VoiceSubmenuShared:
         project.save()
         print_feedback(success_prefix, str(value))
 
+    @staticmethod
+    def ask_string_and_save(
+        project: Project,
+        prompt: str,
+        project_attr_name: str,
+        success_prefix: str,
+        validator: Callable[[str], str] | None = None 
+    ) -> None:
+        """
+        Helper to ask for a string value and save it to the project.
+        :param validator: Takes in the user input string and returns error string if invalid (optional)
+        """
+        if not hasattr(project, project_attr_name):
+            raise ValueError(f"No such attribute {project_attr_name}")
+
+        value = AskUtil.ask(prompt.strip() + " ")
+        if not value:
+            return
+        
+        if validator:
+            err = validator(value)
+            if err:
+                print_feedback(err, is_error=True)
+                return
+
+        setattr(project, project_attr_name, value)
+        project.save()
+        print_feedback(success_prefix, value)
+        
     @staticmethod
     def make_parameter_value_string(
         value: float | int | bool,

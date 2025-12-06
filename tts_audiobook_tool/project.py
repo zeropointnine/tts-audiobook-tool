@@ -12,7 +12,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_segment import TextSegment
-from tts_audiobook_tool.tts_model import IndexTts2Protocol
+from tts_audiobook_tool.tts_model import ChatterboxProtocol, IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -25,6 +25,7 @@ class Project:
 
     text_segments: list[TextSegment] = []
     section_dividers: list[int] = []
+    language_code: str = PROJECT_DEFAULT_LANGUAGE
 
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
@@ -56,8 +57,7 @@ class Project:
     indextts2_emo_vector: list[float] = [] # use either 0 or 8 elements
 
     generate_range_string: str = ""
-
-
+    
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
 
@@ -75,7 +75,6 @@ class Project:
                     return Exception(f"Couldn't create required subdirectory {ss_path}")
 
         self.sound_segments = ProjectSoundSegments(self)
-
 
     @staticmethod
     def load_using_dir_path(dir_path: str) -> Project | str:
@@ -104,6 +103,11 @@ class Project:
         if "text_segments" in d:
             lst = d["text_segments"]
             project.text_segments = TextSegment.dict_list_to_list(lst)
+
+        s = d.get("language_code", "")
+        if not isinstance(s, str):
+            s = ""
+        project.language_code = s
 
         # Chapter indices
         if "chapter_indices" in d:
@@ -192,6 +196,8 @@ class Project:
         d = {
             "dir_path": self.dir_path,
             "text_segments": TextSegment.list_to_dict_list(self.text_segments),
+            "language_code": self.language_code,
+
             "chapter_indices": self.section_dividers,
             "generate_range": self.generate_range_string,
 

@@ -80,7 +80,7 @@ def make_project_label(state: State) -> str:
         s = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
     else:
         s = make_currently_string(state.prefs.project_dir)
-    return "Project directory " + s
+    return "Project " + s
 
 # Voice
 def make_voice_label(state: State) -> str:

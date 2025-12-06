@@ -296,7 +296,7 @@ class SttUtil:
             s += f"{Ansi.ERASE_REST_OF_LINE}"
             print(s, end="", flush=True)
 
-            segments, _ = Stt.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
+            segments, _ = Stt.get_whisper().transcribe(chunk, word_timestamps=True, language=None) # TODO: add language to 'wizard'
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
             updated_words = []
             for word in transcribed_words:

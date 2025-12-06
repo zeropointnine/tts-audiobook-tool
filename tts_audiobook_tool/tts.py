@@ -31,6 +31,7 @@ class Tts:
         """
         Sets the tts model type by checking the installed modules in the python environment.
         It does not instantiate the TtsModel as such.
+        Must be run first.
 
         Returns error string on fail, else empty string on success.
         """
@@ -275,3 +276,24 @@ class Tts:
             return "mps"
         else:
             return "cpu"
+    
+    @staticmethod
+    def validate_language_code(language_code: str) -> str:
+        """ Returns error string or empty string """
+        is_valid = True
+        extra = ""
+
+        if Tts.get_type() == TtsModelInfos.CHATTERBOX:        
+            from tts_audiobook_tool.chatterbox_model import ChatterboxModel
+            if not language_code in ChatterboxModel.supported_languages():
+                is_valid = False
+                extra = f"Chatterbox requires one of the following: {ChatterboxModel.supported_languages()}\n"
+        
+        if is_valid:
+            return ""
+        
+        err = f"{COL_ERROR}Invalid language code\n{COL_DEFAULT}" + \
+                "Navigate to `Project > Language code` to change it"
+        if extra:
+            err += "\n\n" + extra
+        return err

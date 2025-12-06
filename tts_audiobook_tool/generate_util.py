@@ -195,9 +195,6 @@ class GenerateUtil:
 
             start_time = time.time()
 
-
-
-
             # Generate
             print(COL_DIM, end="", flush=True) # Dim color during inference printouts
             result = GenerateUtil.generate_single(project, text_segment)
@@ -216,7 +213,7 @@ class GenerateUtil:
                 return (sound, SkippedResult())
 
             # Transcribe
-            result = WhisperUtil.transcribe_to_segments(sound, stt_variant, stt_config)
+            result = WhisperUtil.transcribe_to_segments(sound, stt_variant, stt_config, language_code=project.language_code)
             if isinstance(result, str):
                 err = result
                 return err
@@ -260,7 +257,7 @@ class GenerateUtil:
         """
 
         text = text_segment.text
-        text = GenerateUtil.preprocess_text_common(text)
+        text = TextUtil.massage_for_inference(text, project.language_code)
         text = Tts.get_instance().preprocess_text(text)
 
         match Tts.get_type():
@@ -283,7 +280,8 @@ class GenerateUtil:
                     voice_path=voice_path,
                     exaggeration=project.chatterbox_exaggeration,
                     cfg=project.chatterbox_cfg,
-                    temperature=project.chatterbox_temperature
+                    temperature=project.chatterbox_temperature,
+                    language_id=project.language_code
                 )
 
             case TtsModelInfos.FISH:
@@ -379,31 +377,6 @@ class GenerateUtil:
         SoundFileUtil.debug_save("post_process", sound)
 
         return sound
-
-
-    @staticmethod
-    def preprocess_text_common(text: str) -> str:
-        """
-        Transforms text for inference.
-        These should be common to (ie, compatible with) any tts model
-        """
-
-        text = text.strip()
-
-        # Replace fancy double-quotes (important for Higgs, eg)
-        text = text.replace("“", "\"")
-        text = text.replace("”", "\"")
-
-        # Collapse consecutive ellipsis chars
-        text = re.sub(r'…+', '…', text)
-
-        # Collapse consecutive dots to triple-dot
-        text = re.sub(r'\.{4,}', '...', text)
-
-        # Expand "int words" to prevent TTS model from simply saying a string of digits
-        text = TextUtil.expand_int_words_in_text(text)
-
-        return text
 
     @staticmethod
     def print_item_heading(is_regenerate: bool, text: str, index: int, count: int, total: int) -> None:

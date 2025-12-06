@@ -153,7 +153,7 @@ class NormalizationType(Enum):
 class SttVariant(tuple[str, str], Enum):
 
     LARGE_V3 = ("large-v3", "best accuracy, default") # default
-    LARGE_V3_TURBO = ("large-v3-turbo", "slightly lower accuracy, but uses slightly less memory and faster")
+    LARGE_V3_TURBO = ("large-v3-turbo", "less memory, faster")
     DISABLED = ("disabled", "skips validation step when generating audio, adds no extra memory")
 
     @property

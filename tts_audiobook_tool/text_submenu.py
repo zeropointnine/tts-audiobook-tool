@@ -45,11 +45,11 @@ def on_ask_replace(state: State, _) -> None:
     if AskUtil.ask_confirm(s):
         TextSubmenu.set_text_menu(state)
 
-def on_set_text(state, item: MenuItem) -> bool:
+def on_set_text(state: State, item: MenuItem) -> bool:
     if item.data == "import":
-        text_segments, raw_text = AppUtil.get_text_segments_from_ask_text_file()
+        text_segments, raw_text = AppUtil.get_text_segments_from_ask_text_file(state.project.language_code)
     elif item.data == "manual":
-        text_segments, raw_text = AppUtil.get_text_segments_from_ask_std_in()
+        text_segments, raw_text = AppUtil.get_text_segments_from_ask_std_in(state.project.language_code)
     else:
         return False
     if not text_segments:

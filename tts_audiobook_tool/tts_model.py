@@ -64,7 +64,8 @@ class ChatterboxProtocol(Protocol):
             voice_path: str,
             exaggeration: float,
             cfg: float,
-            temperature: float
+            temperature: float,
+            language_id: str = ""
     ) -> Sound | str:
         ...
 

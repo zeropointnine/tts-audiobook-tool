@@ -114,7 +114,7 @@ class AppUtil:
         return ""
 
     @staticmethod
-    def get_text_segments_from_ask_text_file() -> tuple[ list[TextSegment], str ]:
+    def get_text_segments_from_ask_text_file(pysbd_language: str) -> tuple[ list[TextSegment], str ]:
         """
         Asks user for path to text file and returns list of TextSegments and raw text.
         Shows feedback except when text segments are returned
@@ -134,7 +134,7 @@ class AppUtil:
             return [], ""
 
         print("Segmenting text... ", end="", flush=True)
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT, pysbd_language=pysbd_language)
         print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
         if not text_segments:
@@ -144,7 +144,7 @@ class AppUtil:
         return text_segments, raw_text
 
     @staticmethod
-    def get_text_segments_from_ask_std_in() -> tuple[ list[TextSegment], str ]:
+    def get_text_segments_from_ask_std_in(pysbd_language: str) -> tuple[ list[TextSegment], str ]:
         """
         Asks user to input text using stdin.read() and returns list of TextSegments and raw text
         """
@@ -160,7 +160,7 @@ class AppUtil:
         if not raw_text:
             return [], ""
 
-        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT)
+        text_segments = TextSegmenter.segment_text(raw_text, max_words=MAX_WORDS_PER_SEGMENT, pysbd_language=pysbd_language)
 
         if not text_segments:
             AskUtil.ask_enter_to_continue("No text segments.")
@@ -171,15 +171,20 @@ class AppUtil:
     @staticmethod
     def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
         """
-        If hint has already been shown does nothing.
-        Else, shows hint.
-        Then either asks for confirmation, prompts to press enter, or or shows a 3-second 'animation'
-        Returns True if "should continue"
+        Shows hint only if not yet shown.
         """
         if prefs.get_hint(hint.key):
             return True
         prefs.set_hint_true(hint.key)
+        return AppUtil.show_hint(hint, and_confirm=and_confirm, and_prompt=and_prompt)
 
+    @staticmethod
+    def show_hint(hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
+        """
+        Shows hint.
+        Then either asks for confirmation, prompts to press enter, or or shows a 3-second 'animation'
+        Returns True if "should continue"
+        """
         AppUtil.print_hint(hint)
 
         if and_confirm:

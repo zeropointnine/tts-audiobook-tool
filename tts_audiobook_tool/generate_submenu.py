@@ -9,7 +9,6 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class GenerateSubmenu:
@@ -18,11 +17,19 @@ class GenerateSubmenu:
     def menu(state: State) -> None:
 
         def on_start(_, __) -> None:
+
+            err = Tts.validate_language_code(state.project.language_code)
+            if err:
+                print_feedback(err)
+                return
+
             if AskUtil.is_readchar:
                 b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
                 if not b:
                     return
+
             AppUtil.show_inference_hints(state.prefs, state.project)
+
             GenerateSubmenu.do_generate_items(state)
 
         def make_range_label(_) -> str:

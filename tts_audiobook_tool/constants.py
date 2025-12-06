@@ -20,6 +20,7 @@ PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
+PROJECT_DEFAULT_LANGUAGE = "en"
 
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 
@@ -247,3 +248,11 @@ f"""An ongoing issue with the combination of Linux + CUDA + faster-whisper libra
 may cause the app to unceremoniously exit on the first inference.
 If this occurs, try changing the Whisper device setting to CPU
 ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
+
+HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(
+    "chatterbox_python_downgrade",
+    "The app's requirements for Chatterbox have changed",
+"""To run the Chatterbox model, the app now requires a virtual environment running Python 3.11 (which is a downgrade). 
+Please re-install your Chatterbox-specific virtual environment using Python v3.11 by following the procedure described in the README.
+You could also choose to roll back to a previous commit if you do not care about the most recent updates..."""
+)
