@@ -4,9 +4,7 @@ import re
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.app_types import Hint
 
-
 package_dir = os.path.dirname(os.path.abspath(__file__))
-
 
 APP_NAME = "tts-audiobook-tool"
 
@@ -21,13 +19,12 @@ PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
 PROJECT_DEFAULT_LANGUAGE = "en"
-
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 
 FFMPEG_COMMAND = "ffmpeg"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
-
+VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
 
 # App uses a single sample rate for any sound transformations up until outputting final audio
 # This is useful because a single project can use different models which may have different native
@@ -276,4 +273,11 @@ HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(
 """To run the Chatterbox model, the app now requires a virtual environment running Python 3.11 (which is a downgrade). 
 Please re-install your Chatterbox-specific virtual environment using Python v3.11 by following the procedure described in the README.
 You could also choose to roll back to a previous commit if you do not care about the most recent updates..."""
+)
+
+HINT_VALIDATION_UNSUPPORTED_LANGUAGE = Hint(
+    "validation_unsupported_language",
+    "Transcription validation will be disabled",
+    "Transcription-based validation is unsupported for %1 "
+"and will be automatically disabled."
 )

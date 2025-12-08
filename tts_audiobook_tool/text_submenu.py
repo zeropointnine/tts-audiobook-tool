@@ -90,7 +90,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
     s += f"\n    (max words per segment: {COL_ACCENT}{int(state.prefs.max_words)}{COL_DEFAULT}, " \
         f"segmentation strategy: {COL_ACCENT}{state.prefs.segmentation_strategy.description}{COL_DEFAULT}, " \
-        f"project language code: {COL_ACCENT}{state.project.language_code or 'none'}{COL_DEFAULT}"
+        f"project language code: {COL_ACCENT}{state.project.language_code or 'none'}{COL_DEFAULT})"
     printt(s)
     printt()
 

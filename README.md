@@ -15,7 +15,7 @@ The app features a number of quality control measures designed to mitigate the i
 - Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
 - Industry standard loudness normalization (EBU R 128)
 
-Plain-vanilla text interface.
+Plain-vanilla text interface in the console.
 
 ### Browser player:
 

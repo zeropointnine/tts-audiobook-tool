@@ -55,11 +55,11 @@ class ConcreteWord(Word):
         self.word = word
         self.probability = probability
 
+@dataclass
 class Hint:
-    def __init__(self, key: str, heading: str, text: str):
-        self.key: str = key
-        self.heading: str = heading
-        self.text: str = text
+    key: str
+    heading: str
+    text: str
 
 # ---
 
@@ -110,8 +110,9 @@ class FailResult(ValidationResult):
 
 @dataclass
 class SkippedResult(ValidationResult):
+    message: str
     def get_ui_message(self) -> str:
-        return f"Validation skipped"
+        return self.message
 
 # ---
 

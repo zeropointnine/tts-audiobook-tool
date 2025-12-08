@@ -96,14 +96,15 @@ class Tts:
         return False
 
     @staticmethod
-    def warm_up_models() -> None:
+    def warm_up_models(force_no_stt: bool) -> None:
         """
         Instantiates tts model and stt model - if not already - as a convenience,
         and prints that it is doing so.
         """
-
         should_instantiate_tts = not Tts.has_instance()
-        should_instantiate_whisper = (Stt.get_variant() != SttVariant.DISABLED) and not Stt._whisper
+        
+        should_instantiate_whisper = (Stt.get_variant() != SttVariant.DISABLED) and \
+            not force_no_stt and not Stt._whisper
 
         should_neither = (not should_instantiate_whisper and not should_instantiate_whisper)
         if should_neither:
@@ -115,6 +116,11 @@ class Tts:
             print_model_init("Warming up models...")
             printt()
 
+        if not should_instantiate_whisper:
+            # "Lazy unload", useful for user flows like: 
+            # Do inference, choose unsupported validation language, do inference
+            Stt.clear_stt_model()
+
         if should_instantiate_tts:
             _ = Tts.get_instance()
 
@@ -123,8 +129,6 @@ class Tts:
 
         if should_instantiate_whisper:
             _ = Stt.get_whisper()
-
-
 
     @staticmethod
     def get_instance() -> TtsModel:
@@ -196,7 +200,7 @@ class Tts:
     def get_higgs() -> HiggsModelProtocol:
 
         if not Tts._higgs:
-            device = Tts.get_best_torch_device()
+            device = "cpu" # xxx Tts.get_best_torch_device()
             print_model_init(f"Initializing Higgs V2 TTS model ({device})...")
             printt()
             from tts_audiobook_tool.higgs_model import HiggsModel

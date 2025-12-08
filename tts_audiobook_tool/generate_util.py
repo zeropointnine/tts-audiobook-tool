@@ -14,7 +14,7 @@ from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.phrase import Phrase, PhraseGroup
+from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import HiggsModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -59,7 +59,8 @@ class GenerateUtil:
             is_regenerate = True
             items = items_to_regenerate
 
-        Tts.warm_up_models()
+        force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
+        Tts.warm_up_models(force_no_stt)
 
         SigIntHandler().set("generating")
         start_time = time.time()
@@ -182,9 +183,6 @@ class GenerateUtil:
         stt_variant:
             If DISABLED, skips validation, ofc
 
-        skip_reason_buffer:
-            If True, skips validation (because realtime audio buffer duration is too short)
-
         Prints generation speed info, validation info.
         """
 
@@ -210,7 +208,7 @@ class GenerateUtil:
                     dtype = Tts.get_type().value.dtype
                     silence_sound = SoundUtil.make_silence_sound(0.1, sr, dtype)
                     if stt_variant == SttVariant.DISABLED or skip_reason_buffer:
-                        validation_result = SkippedResult()
+                        validation_result = SkippedResult("No vocalizable content")
                         print_validation_result(validation_result, is_realtime=is_realtime)
                     else:
                         validation_result = PassResult()
@@ -224,12 +222,21 @@ class GenerateUtil:
             elapsed = time.time() - start_time or 1.0
             print_speed_info(result.duration, elapsed)
 
-            if stt_variant == SttVariant.DISABLED or skip_reason_buffer:
-                validation_result = SkippedResult()
-                print_validation_result(validation_result, is_realtime=is_realtime, skip_reason_buffer=skip_reason_buffer)
-                return (sound, SkippedResult())
-
             # Transcribe
+            
+            # First, see if should skip
+            skip_reason = ""
+            if stt_variant == SttVariant.DISABLED:
+                skip_reason = "Whisper disabled"
+            elif skip_reason_buffer:
+                skip_reason = "Buffer duration too short"
+            elif ValidateUtil.is_unsupported_language_code(project.language_code):
+                skip_reason = "Unsupported language"
+            if skip_reason:
+                validation_result = SkippedResult(skip_reason)
+                print_validation_result(validation_result, is_realtime=is_realtime)
+                return (sound, validation_result)
+
             start_time = time.time()
             result = WhisperUtil.transcribe_to_segments(
                 sound, stt_variant, stt_config, language_code=project.language_code
@@ -242,6 +249,7 @@ class GenerateUtil:
             transcribed_words = WhisperUtil.get_words_from_segments(segments)
 
             # Validate
+            
             validation_result = ValidateUtil.validate_item(sound, text, transcribed_words)
             elapsed = time.time() - start_time
 
@@ -423,8 +431,7 @@ def print_validation_result(
     result: ValidationResult, 
     is_realtime: bool, 
     elapsed: float = 0,
-    fail_retry: bool=False,
-    skip_reason_buffer: bool=False
+    fail_retry: bool=False
 ) -> None:
 
     s = "Speech-to-text validation"
@@ -433,10 +440,7 @@ def print_validation_result(
     s += ": "
     
     if isinstance(result, SkippedResult):
-        if skip_reason_buffer:
-            s += f"Skipped {COL_DIM}(audio buffer duration too short){COL_DEFAULT}"
-        else:
-            s += f"Skipped {COL_DIM}(Whisper disabled){COL_DEFAULT}"
+        s += f"Skipped {COL_DIM}({result.get_ui_message()}){COL_DEFAULT}"
     elif isinstance(result, PassResult):
         s += f"{COL_OK}Passed"
     elif isinstance(result, TrimmableResult):

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
@@ -9,6 +10,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
 
 class ProjectSubmenu:
@@ -135,12 +137,21 @@ def on_language(state: State, __: MenuItem) -> None:
         printt(f"Valid values for the Chatterbox model are: {ChatterboxModel.supported_languages()}")
         printt()
 
-    def validator(s: str) -> str:
-        # Super-basic validation here
-        # Not using white-list for now; consider a project-language-code-to-x/y/z mapping in the future, if need be
-        bad = len(s) > 5
-        bad = bad or not any(char.isalpha() for char in s)
-        return "Bad value" if bad else ""
+    def validator(code: str) -> str:
+        # Super-basic validation here; not using white-list for now
+        code = code.strip()
+        bad = len(code) > 5
+        bad = bad or not any(char.isalpha() for char in code)
+        if bad:
+            return "Bad value"
+        
+        if ValidateUtil.is_unsupported_language_code(code):
+            # Show hint as a "side effect"
+            text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(VALIDATION_UNSUPPORTED_LANGUAGES))
+            hint = replace(HINT_VALIDATION_UNSUPPORTED_LANGUAGE, text=text)
+            AppUtil.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
+            
+        return ""
 
     VoiceSubmenuShared.ask_string_and_save(
         state.project,

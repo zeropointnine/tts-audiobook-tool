@@ -14,6 +14,7 @@ from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.validate_util import ValidateUtil
 
 
 class RealTimeUtil:
@@ -39,9 +40,10 @@ class RealTimeUtil:
         num_items = end_index - start_index + 1
 
         SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
-
+        
         # Warm up models
-        Tts.warm_up_models()
+        force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
+        Tts.warm_up_models(force_no_stt)
 
         s = "Starting real-time playback..."
         if state.prefs.stt_variant == SttVariant.DISABLED:

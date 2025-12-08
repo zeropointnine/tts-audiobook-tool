@@ -6,7 +6,6 @@ from tts_audiobook_tool.app_types import NormalizationType, SegmentationStrategy
 from tts_audiobook_tool.l import L
 
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *

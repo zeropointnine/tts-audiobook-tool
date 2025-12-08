@@ -35,7 +35,7 @@ class Stt:
             # Clear model, will get lazy re-inited as needed
             Stt._config = value
             Stt.clear_stt_model()
-
+    
     @staticmethod
     def get_whisper() -> WhisperModel:
         """

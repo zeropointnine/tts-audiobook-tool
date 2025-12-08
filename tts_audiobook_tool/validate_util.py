@@ -97,3 +97,10 @@ class ValidateUtil:
 
         # At this point we consider the item to have "passed"
         return PassResult()
+
+    @staticmethod
+    def is_unsupported_language_code(code: str) -> bool:
+        for item in VALIDATION_UNSUPPORTED_LANGUAGES:
+            if code.startswith(item):
+                return True
+        return False

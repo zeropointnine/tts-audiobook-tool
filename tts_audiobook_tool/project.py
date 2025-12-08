@@ -152,11 +152,6 @@ class Project:
             s = ""
         project.language_code = s
 
-        s = d.get("language_code", "")
-        if not isinstance(s, str):
-            s = ""
-        project.language_code = s
-
         # Chapter indices
         if "chapter_indices" in d:
             lst = d["chapter_indices"]

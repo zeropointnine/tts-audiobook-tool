@@ -1,5 +1,4 @@
 from __future__ import annotations
-from enum import Enum, auto
 import math
 import string
 import pysbd
