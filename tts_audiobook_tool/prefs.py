@@ -21,6 +21,7 @@ class Prefs:
             hints: dict[str, bool] = {},
             stt_variant: SttVariant = list(SttVariant)[0],
             stt_config: SttConfig | None = None,
+            tts_force_cpu: bool = False,
             normalization_type: NormalizationType = NormalizationType.DEFAULT,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
             use_section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT,
@@ -31,6 +32,7 @@ class Prefs:
         self._hints = hints
         self._stt_variant = stt_variant
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
+        self._tts_force_cpu = tts_force_cpu
         self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
         self._use_section_sound_effect = use_section_sound_effect
@@ -95,6 +97,12 @@ class Prefs:
             stt_config = SttConfig.get_default()
             dirty = True
 
+        # TTS force
+        tts_force_cpu = prefs_dict.get("tts_force_cpu", False)
+        if not isinstance(tts_force_cpu, bool):
+            tts_force_cpu = PREFS_DEFAULT_PLAY_ON_GENERATE
+            dirty = True
+
         # Normalization type
         if not "normalization_type" in prefs_dict:
             s = "default"
@@ -145,6 +153,7 @@ class Prefs:
             normalization_type=normalization_type,
             stt_variant=stt_variant,
             stt_config=stt_config,
+            tts_force_cpu=tts_force_cpu,
             play_on_generate=play_on_generate,
             use_section_sound_effect=section_sound_effect,
             segmentation_strategy=segmentation_strategy,
@@ -224,6 +233,15 @@ class Prefs:
         self.save()
 
     @property
+    def tts_force_cpu(self) -> bool:
+        return self._tts_force_cpu
+
+    @tts_force_cpu.setter
+    def tts_force_cpu(self, value: bool) -> None:
+        self._tts_force_cpu = value
+        self.save()
+
+    @property
     def segmentation_strategy(self) -> SegmentationStrategy:
         return self._segmentation_strategy
 
@@ -261,6 +279,7 @@ class Prefs:
             "hints": self._hints,
             "stt_variant": self._stt_variant.id,
             "stt_config": self._stt_config.json_id,
+            "tts_force_cpu": self._tts_force_cpu,
             "normalization_type": self._normalization_type.value.json_id,
             "play_on_generate": self._play_on_generate,
             "use_section_sound_effect": self._use_section_sound_effect,

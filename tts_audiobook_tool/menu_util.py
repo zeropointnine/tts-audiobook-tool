@@ -67,7 +67,8 @@ class MenuUtil:
         Otherwise, it repeats until unrecognized key is entered or enter is pressed
 
         param one_shot:
-            If True, exits after executing mapped callback function
+            If True, exits after executing mapped callback function 
+            (ie, in practice, goes to previous menu)
 
         param on_exit
             Gets called when menu exits (ie, when app goes *back* to previous menu)

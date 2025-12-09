@@ -1,10 +1,10 @@
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class OptionsSubmenu:
@@ -12,13 +12,9 @@ class OptionsSubmenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def make_whisper_label(_) -> str:
+        def make_whisper_model_label(_) -> str:
             value = make_currently_string(state.prefs.stt_variant.id)
             return f"Whisper model type {value}"
-
-        def make_section_break_label(_) -> str:
-            value = make_currently_string(str(state.prefs.use_section_sound_effect))
-            return f"Insert page turn sound effect at section breaks {value}"
 
         def make_unload_label(_) -> str:
             memory_string = make_system_memory_string()
@@ -26,6 +22,10 @@ class OptionsSubmenu:
                 memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
             return f"Attempt to unload models {memory_string}"
 
+        def make_section_break_label(_) -> str:
+            value = make_currently_string(str(state.prefs.use_section_sound_effect))
+            return f"Insert page turn sound effect at section breaks {value}"
+        
         def on_unload(_: State, __: MenuItem) -> None:
             before_string = make_system_memory_string()
             if before_string:
@@ -42,23 +42,35 @@ class OptionsSubmenu:
             s += "They will now appear again when relevant."
             print_feedback(s)
 
-        items = [
-            MenuItem(
-                make_whisper_label,
-                lambda _, __: OptionsSubmenu.transcription_model_menu(state)
-            ),
-            MenuItem(
-                make_whisper_device_label,
-                lambda _, __: OptionsSubmenu.transcription_model_config_menu(state)
-            ),
-            MenuItem(
-                make_section_break_label,
-                lambda _, __: OptionsSubmenu.section_break_menu(state)
-            ),
-            MenuItem(make_unload_label, on_unload),
-            MenuItem("Reset contextual hints", on_hints)
-        ]
-        MenuUtil.menu(state, "Options:", items)
+        def item_maker(_: State) -> list[MenuItem]:
+            items = [
+                MenuItem(
+                    make_whisper_model_label,
+                    lambda _, __: OptionsSubmenu.transcription_model_menu(state)
+                ),
+                MenuItem(
+                    make_whisper_device_label,
+                    lambda _, __: OptionsSubmenu.transcription_model_config_menu(state)
+                )
+            ]
+
+            # TODO: add per-model protocol getter which can return None for OUTE; and use this getter in the Tts get_[model] functions
+            b = Tts.get_best_torch_device() != "cpu" and Tts.get_type() != TtsModelInfos.OUTE 
+            if b:
+                item = MenuItem(make_tts_force_cpu_label, lambda _, __: OptionsSubmenu.tts_force_cpu_menu(state))
+                items.append(item)
+
+            items.extend([
+                MenuItem(make_unload_label, on_unload),
+                MenuItem(
+                    make_section_break_label,
+                    lambda _, __: OptionsSubmenu.section_break_menu(state)
+                ),
+                MenuItem("Reset contextual hints", on_hints)
+            ])
+            return items
+        
+        MenuUtil.menu(state, "Options:", item_maker)
 
 
     @staticmethod
@@ -77,12 +89,12 @@ class OptionsSubmenu:
             return True
 
         menu_items = []
-        for i, stt_variant in enumerate(SttVariant):
+        for stt_variant in SttVariant:
             label = f"{stt_variant.id} {COL_DIM}({stt_variant.description})"
             menu_item = MenuItem(label, handler, data=stt_variant)
             menu_items.append(menu_item)
 
-        MenuUtil.menu(state, make_heading, menu_items)
+        MenuUtil.menu(state, make_heading, menu_items, one_shot=True)
 
     @staticmethod
     def transcription_model_config_menu(state: State) -> None:
@@ -103,6 +115,32 @@ class OptionsSubmenu:
             state,
             make_whisper_device_label(state),
             items,
+            one_shot=True
+        )
+
+    @staticmethod
+    def tts_force_cpu_menu(state: State) -> None:
+
+        def handler(_: State, item: MenuItem) -> bool:            
+            if state.prefs.tts_force_cpu != item.data:
+                state.prefs.tts_force_cpu = item.data
+                Tts.set_force_cpu(state.prefs.tts_force_cpu)
+            print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))
+            return True
+
+        items = []
+        for value in [True, False]:
+            label = f"{value}"
+            if value == False:
+                 label += f" {COL_DIM}(default)"
+            menu_item = MenuItem(label, handler, data=value)
+            items.append(menu_item)
+
+        MenuUtil.menu(
+            state, 
+            make_tts_force_cpu_label(state), 
+            items, 
+            subheading=f"This forces the TTS model {Tts.get_type().value.ui['short_name']} to use cpu as its torch device\neven when CUDA or MPS is available.\n",
             one_shot=True
         )
 
@@ -135,6 +173,10 @@ def make_whisper_device_label(state: State) -> str:
     value = make_currently_string(state.prefs.stt_config.description)
     return f"Whisper device {value}"
 
+def make_tts_force_cpu_label(state: State) -> str:
+    value = make_currently_string(state.prefs.tts_force_cpu)
+    return f"TTS model - use CPU as device {value}"
+        
 def make_system_memory_string(base_color=COL_DIM) -> str:
 
     result = AppUtil.get_nv_vram()

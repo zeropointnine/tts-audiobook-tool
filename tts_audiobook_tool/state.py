@@ -39,7 +39,6 @@ class State:
             else:
                 self.project = result
 
-
     @property
     def project(self) -> Project:
         return self._project
@@ -65,6 +64,7 @@ class State:
         # Sync static values
         Stt.set_variant(self.prefs.stt_variant)
         Stt.set_config(self.prefs.stt_config)
+        Tts.set_force_cpu(self.prefs.tts_force_cpu)
 
     def make_new_project(self, path: str) -> str:
         """
