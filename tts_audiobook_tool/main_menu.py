@@ -1,12 +1,12 @@
-from tts_audiobook_tool.concat_submenu import ConcatSubmenu
+from tts_audiobook_tool.concat_menu import ConcatSubmenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.real_time_submenu import RealTimeSubmenu
-from tts_audiobook_tool.options_submenu import OptionsSubmenu
-from tts_audiobook_tool.generate_submenu import GenerateSubmenu
-from tts_audiobook_tool.project_submenu import ProjectSubmenu
-from tts_audiobook_tool.tools_submenu import ToolsSubmenu
+from tts_audiobook_tool.real_time_menu import RealTimeSubmenu
+from tts_audiobook_tool.options_menu import OptionsSubmenu
+from tts_audiobook_tool.generate_menu import GenerateSubmenu
+from tts_audiobook_tool.project_menu import ProjectSubmenu
+from tts_audiobook_tool.tools_menu import ToolsSubmenu
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.text_submenu import TextSubmenu
+from tts_audiobook_tool.text_menu import TextSubmenu
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -99,22 +99,22 @@ def on_voice(state: State, __) -> None:
         return
     match Tts.get_type():
         case TtsModelInfos.OUTE:
-            from tts_audiobook_tool.voice_oute_submenu import VoiceOuteSubmenu
+            from tts_audiobook_tool.voice_oute_menu import VoiceOuteSubmenu
             VoiceOuteSubmenu.menu(state)
         case TtsModelInfos.CHATTERBOX:
-            from tts_audiobook_tool.voice_chatterbox_submenu import VoiceChatterboxSubmenu
+            from tts_audiobook_tool.voice_chatterbox_menu import VoiceChatterboxSubmenu
             VoiceChatterboxSubmenu.menu(state)
         case TtsModelInfos.FISH:
-            from tts_audiobook_tool.voice_fish_submenu import VoiceFishSubmenu
+            from tts_audiobook_tool.voice_fish_menu import VoiceFishSubmenu
             VoiceFishSubmenu.menu(state)
         case TtsModelInfos.HIGGS:
-            from tts_audiobook_tool.voice_higgs_submenu import VoiceHiggsSubmenu
+            from tts_audiobook_tool.voice_higgs_menu import VoiceHiggsSubmenu
             VoiceHiggsSubmenu.menu(state)
         case TtsModelInfos.VIBEVOICE:
-            from tts_audiobook_tool.voice_vibevoice_submenu import VoiceVibeVoiceSubmenu
+            from tts_audiobook_tool.voice_vibevoice_menu import VoiceVibeVoiceSubmenu
             VoiceVibeVoiceSubmenu.menu(state)
         case TtsModelInfos.INDEXTTS2:
-            from tts_audiobook_tool.voice_indextts2_submenu import VoiceIndexTts2Submenu
+            from tts_audiobook_tool.voice_indextts2_menu import VoiceIndexTts2Submenu
             VoiceIndexTts2Submenu.menu(state)
 
 # Text

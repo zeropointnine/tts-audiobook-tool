@@ -7,7 +7,7 @@ from tts_audiobook_tool.tts_model import VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_submenu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
 
 class VoiceVibeVoiceSubmenu:
 
