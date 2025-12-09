@@ -123,7 +123,7 @@ class NormalizationSpecs(NamedTuple):
     lra: float
     tp: float
 
-NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_id="default", label="Default - ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Tracks with 'ACX standard'
+NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_id="default", label="ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Values approximate 'ACX standard'
 NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(json_id="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
 NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(json_id="none", label="Disabled", i=0, lra=0, tp=0)
 
@@ -175,7 +175,7 @@ class SttConfig(tuple[str, str, str], Enum):
     """
 
     CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8_float32") # default
-    CUDA_FLOAT16 = ("cuda", "float16", f"CUDA, float16 {Ansi.hex('666666')}(falls back to cpu if no cuda)") # fyi, can't import COL_DIM
+    CUDA_FLOAT16 = ("cuda", "float16", f"CUDA, float16")
 
     @property
     def device(self) -> str:

@@ -17,7 +17,6 @@ class VoiceVibeVoiceSubmenu:
         project = state.project
 
         def make_model_path_label(_) -> str:
-            value = project.vibevoice_model_path if project.vibevoice_model_path else "none"
             if project.vibevoice_model_path:
                 label = make_currently_string(project.vibevoice_model_path)
             else:
@@ -67,29 +66,22 @@ class VoiceVibeVoiceSubmenu:
                 MenuItem(
                     VoiceSubmenuShared.make_select_voice_label,
                     lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
-                ),
-                VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE),
+                )
+            ]
+            if state.project.vibevoice_voice_file_name:
+                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) )
+            items.append(
                 MenuItem(
                     make_model_path_label,
                     lambda _, __: ask_model_path(state.project)
                 )
-            ]
-
+            )
             if state.project.vibevoice_model_path:
                 items.append( MenuItem("Clear custom model path", on_clear_custom_model) )
-
             items.extend( [
-
-                MenuItem(
-                    make_cfg_label,
-                    on_cfg
-                ),
-                MenuItem(
-                    make_steps_label,
-                    on_steps
-                ),
+                MenuItem(make_cfg_label, on_cfg),
+                MenuItem(make_steps_label, on_steps),
             ] )
-
             return items
         
         VoiceSubmenuShared.show_voice_menu(state, make_items)

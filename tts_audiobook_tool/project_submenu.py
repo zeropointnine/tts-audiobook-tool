@@ -38,6 +38,8 @@ class ProjectSubmenu:
             err = DirOpenUtil.open(state.project.dir_path)
             if err:
                 AskUtil.ask_error(err)
+            else:
+                print_feedback("Launched window")
 
         def make_language_label(_) -> str:
             s = make_currently_string(state.project.language_code or "none")

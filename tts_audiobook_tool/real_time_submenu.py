@@ -67,7 +67,7 @@ class RealTimeSubmenu:
 
         # Menu
         items = [start_item, text_item, range_item]
-        MenuUtil.menu(state, "Real-time playback", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Real-time audio generation", items, hint=HINT_REAL_TIME)
 
     @staticmethod
     def ask_line_range(state: State) -> None:

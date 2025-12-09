@@ -11,10 +11,9 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class ConcatSubmenu:
@@ -34,10 +33,6 @@ class ConcatSubmenu:
                 s = f"{COL_DIM}(optional)"
             return f"Define chapter cut points {s}"
 
-        def make_norm_label(_) -> str:
-            value = state.prefs.normalization_type.value.label
-            return f"Loudness normalization {make_currently_string(value)}"
-
         items = [
             MenuItem("Create as FLAC file", on_start, data=False),
             MenuItem("Create as AAC/M4A file",on_start, data=True),
@@ -55,13 +50,17 @@ class ConcatSubmenu:
             print_feedback(f"Normalization set to: {info.value.label}")
 
         menu_items = []
-        for typ in list(NormalizationType):
-            menu_items.append( MenuItem(typ.value.label, on_select, data=typ) )
+        for i, typ in enumerate(list(NormalizationType)):
+            label = typ.value.label
+            if i == 0:
+                label += f"{COL_DIM} (default)"
+            menu_items.append( MenuItem(label, on_select, data=typ) )
 
         MenuUtil.menu(
             state=state,
-            heading="Loudness normalization:",
+            heading=make_norm_label,
             items=menu_items,
+            subheading=LOUDNORM_SUBHEADING,
             hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None,
             one_shot=True
         )
@@ -227,6 +226,10 @@ class ConcatSubmenu:
 
 # ---
 
+def make_norm_label(state: State) -> str:
+    value = state.prefs.normalization_type.value.label
+    return f"Loudness normalization {make_currently_string(value)}"
+
 def print_cut_points(section_dividers: list[int], num_items: int) -> None:
     section_index_strings = [str(index+1) for index in section_dividers]
     section_indices_string = ", ".join(section_index_strings)
@@ -257,3 +260,7 @@ def make_chapter_info_string(info: ChapterInfo, index: int) -> str:
     s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
     return s
 
+LOUDNORM_SUBHEADING = \
+"""Standardizes audio levels to minimize volume disparities between TTS generations. 
+The Stronger profile applies more aggressive normalization, suitable for mobile devices.
+"""

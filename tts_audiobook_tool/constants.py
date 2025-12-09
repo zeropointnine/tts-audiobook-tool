@@ -162,7 +162,7 @@ To achieve uninterrupted playback, your system must be able to
 do the audio inference faster-than-realtime.
 
 Note that lines get validated and potentially re-generated only when there is
-enough buffered audio to allow for uninterrupted playback."""
+enough buffered audio to allow for uninterrupted playback (60 seconds)."""
 )
 
 HINT_MULTIPLE_MP3S = Hint(
@@ -218,13 +218,6 @@ HINT_INDEX_SAMPLE_LEN = Hint(
     "index_sample_len",
     "Note",
     """IndexTTS2 ignores voice sample audio data past the 15 second mark"""
-)
-
-HINT_SECTION_SOUND_EFFECT = Hint(
-    "section_sound_effect",
-    "Note",
-"""When True, this inserts a page turn sound effect when more than
-two consecutive blank lines  are encountered in the text. """
 )
 
 HINT_STT_ENHANCE = Hint(

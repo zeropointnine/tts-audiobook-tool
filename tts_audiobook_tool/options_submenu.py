@@ -22,10 +22,6 @@ class OptionsSubmenu:
                 memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
             return f"Attempt to unload models {memory_string}"
 
-        def make_section_break_label(_) -> str:
-            value = make_currently_string(str(state.prefs.use_section_sound_effect))
-            return f"Insert page turn sound effect at section breaks {value}"
-        
         def on_unload(_: State, __: MenuItem) -> None:
             before_string = make_system_memory_string()
             if before_string:
@@ -136,11 +132,14 @@ class OptionsSubmenu:
             menu_item = MenuItem(label, handler, data=value)
             items.append(menu_item)
 
+        subheading = f"Forces the TTS model ({Tts.get_type().value.ui['short_name']}) to use cpu as its torch device\n" + \
+            "even when CUDA or MPS is available.\n"
+
         MenuUtil.menu(
             state, 
             make_tts_force_cpu_label(state), 
             items, 
-            subheading=f"This forces the TTS model {Tts.get_type().value.ui['short_name']} to use cpu as its torch device\neven when CUDA or MPS is available.\n",
+            subheading=subheading,
             one_shot=True
         )
 
@@ -150,20 +149,20 @@ class OptionsSubmenu:
         def on_item(_: State, item: MenuItem) -> bool:
             state.prefs.use_section_sound_effect = item.data
             print_feedback(
-                "Section break sound effect has been set to:",
+                "Set to:",
                 str(state.prefs.use_section_sound_effect)
             )
             return True
 
         items = [
             MenuItem("True", on_item, data=True),
-            MenuItem("False", on_item, data=False)
+            MenuItem(f"False {COL_DIM}(default)", on_item, data=False)
         ]
         MenuUtil.menu(
             state,
-            "Insert page turn sound effect at section breaks",
+            make_section_break_label,
             items,
-            hint=HINT_SECTION_SOUND_EFFECT,
+            subheading=SECTION_BREAK_SUBHEADING,
             one_shot=True
         )
 
@@ -176,6 +175,10 @@ def make_whisper_device_label(state: State) -> str:
 def make_tts_force_cpu_label(state: State) -> str:
     value = make_currently_string(state.prefs.tts_force_cpu)
     return f"TTS model - use CPU as device {value}"
+        
+def make_section_break_label(state: State) -> str:
+    value = make_currently_string(state.prefs.use_section_sound_effect)
+    return f"Insert sound effect at section breaks {value}"
         
 def make_system_memory_string(base_color=COL_DIM) -> str:
 
@@ -201,3 +204,9 @@ def make_system_memory_string(base_color=COL_DIM) -> str:
         return vram_string
     else:
         return f"{vram_string}{base_color}, {ram_string}"
+
+SECTION_BREAK_SUBHEADING = \
+"""In the concatenation step, inserts a page turn sound effect when 
+two or more consecutive blank lines are encountered in the text. 
+This can be a useful audible cue, so long as the text is formatted for it.
+"""

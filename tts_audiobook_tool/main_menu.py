@@ -179,7 +179,7 @@ def make_realtime_label(state: State) -> str:
         s = f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
     else:
         s = ""
-    return "Generate audio in realtime " + s
+    return "Realtime audio generation" + s
 
 def on_realtime(state: State, __) -> None:
     if not state.project.phrase_groups:

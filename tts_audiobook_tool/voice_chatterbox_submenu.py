@@ -62,23 +62,29 @@ class VoiceChatterboxSubmenu:
                 "Exaggeration set to:"
             )
 
-        items = [
-            MenuItem(
-                VoiceSubmenuShared.make_select_voice_label,
-                lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
-            ),
-            VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX),
-            MenuItem(
-                make_temperature_label,
-                on_temperature
-            ),
-            MenuItem(
-                make_exagg_label,
-                on_exagg
-            ),
-            MenuItem(
-                make_cfg_label,
-                on_cfg
-            )
-        ]
-        VoiceSubmenuShared.show_voice_menu(state, items)
+        def make_items(_: State) -> list[MenuItem]:
+            items = [
+                MenuItem(
+                    VoiceSubmenuShared.make_select_voice_label,
+                    lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
+                )
+            ]
+            if state.project.chatterbox_voice_file_name:
+                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) )
+            items.extend( [
+                MenuItem(
+                    make_temperature_label,
+                    on_temperature
+                ),
+                MenuItem(
+                    make_exagg_label,
+                    on_exagg
+                ),
+                MenuItem(
+                    make_cfg_label,
+                    on_cfg
+                )
+            ])
+            return items
+        
+        VoiceSubmenuShared.show_voice_menu(state, make_items)

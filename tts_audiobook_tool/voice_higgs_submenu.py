@@ -30,15 +30,16 @@ class VoiceHiggsSubmenu:
                 "Temperature set to:"
             )
 
-        items = [
-            MenuItem(
-                VoiceSubmenuShared.make_select_voice_label,
-                lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
-            ),
-            VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS),
-            MenuItem(
-                make_temperature_label,
-                on_temperature
-            )
-        ]
-        VoiceSubmenuShared.show_voice_menu(state, items)
+        def make_items(_: State) -> list[MenuItem]:
+            items = [
+                MenuItem(
+                    VoiceSubmenuShared.make_select_voice_label,
+                    lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
+                )
+            ]
+            if state.project.higgs_voice_file_name:
+                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) )
+            items.append( MenuItem(make_temperature_label, on_temperature) )
+            return items
+        
+        VoiceSubmenuShared.show_voice_menu(state, make_items)

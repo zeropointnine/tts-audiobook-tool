@@ -76,26 +76,26 @@ class MenuUtil:
 
         while True:
 
-            # Initialize items
+            # Initialize items list
             if isinstance(items, list):
-                items = items
+                items_list: list[MenuItem] = items
             else:
-                items = items(state)
+                items_list = items(state)
 
-            is_all_hotkeys = all(item.hotkey for item in items)
-            is_no_hotkeys = all(not item.hotkey for item in items)
+            is_all_hotkeys = all(item.hotkey for item in items_list)
+            is_no_hotkeys = all(not item.hotkey for item in items_list)
 
             if not is_all_hotkeys and not is_no_hotkeys:
                 raise ValueError("All MenuItems must have hotkeys or no MenuItems must have hotkeys")
 
             if is_no_hotkeys:
                 # Assign hotkeys "1", "2", "3", etc
-                for i, item in enumerate(items):
+                for i, item in enumerate(items_list):
                     item.hotkey = str(i + 1)
             else:
                 # Verify no dupes
                 hotkeys = set[str]()
-                for item in items:
+                for item in items_list:
                     if item.hotkey in hotkeys:
                         raise ValueError(f"Duplicate hotkey {item.hotkey}")
                     hotkeys.add(item.hotkey)
@@ -121,7 +121,7 @@ class MenuUtil:
                 AppUtil.show_hint_if_necessary(state.prefs, hint)
 
             # Print items
-            for item in items:
+            for item in items_list:
                 if isinstance(item.label, str):
                     s = item.label
                 else:
@@ -152,7 +152,7 @@ class MenuUtil:
 
                 # Handle hotkey
                 selected_item = None
-                for item in items:
+                for item in items_list:
                     if item.hotkey == hotkey:
                         selected_item = item
                         break
