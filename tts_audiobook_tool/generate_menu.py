@@ -3,7 +3,7 @@ from __future__ import annotations
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.concat_menu import ConcatSubmenu
+from tts_audiobook_tool.concat_menu import ConcatMenu
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -11,7 +11,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
-class GenerateSubmenu:
+class GenerateMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -30,7 +30,7 @@ class GenerateSubmenu:
 
             AppUtil.show_inference_hints(state.prefs, state.project)
 
-            GenerateSubmenu.do_generate_items(state)
+            GenerateMenu.do_generate_items(state)
 
         def make_range_label(_) -> str:
             if not state.project.generate_range_string:
@@ -64,8 +64,8 @@ class GenerateSubmenu:
 
         items = [
             MenuItem("Generate audio segments", on_start),
-            MenuItem(make_range_label, lambda _, __: GenerateSubmenu.ask_item_range(state)),
-            MenuItem(make_regen_label, lambda _, __: GenerateSubmenu.do_regenerate_items(state))
+            MenuItem(make_range_label, lambda _, __: GenerateMenu.ask_item_range(state)),
+            MenuItem(make_regen_label, lambda _, __: GenerateMenu.do_regenerate_items(state))
         ]
         MenuUtil.menu(state, heading_maker, items)
 
@@ -103,7 +103,7 @@ class GenerateSubmenu:
             hotkey = AskUtil.ask_hotkey(s)
             printt() # TODO revisit
             if hotkey == "c":
-                ConcatSubmenu.menu(state)
+                ConcatMenu.menu(state)
         return
 
     @staticmethod

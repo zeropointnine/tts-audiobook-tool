@@ -28,7 +28,7 @@ class ProjectSoundSegments:
             observer.start()
 
     def force_invalidate(self) -> None:
-        # TODO: add logic "if am at some important point like GenSubMenu etc, and is WSL or MacOS, call this"
+        # TODO: add logic "if am at some important point like GenMenu etc, and is WSL or MacOS, call this"
         self._dirty = True
 
     def on_dir_change(self):

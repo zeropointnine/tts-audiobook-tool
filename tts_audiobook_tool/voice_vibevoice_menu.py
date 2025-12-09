@@ -7,9 +7,9 @@ from tts_audiobook_tool.tts_model import VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class VoiceVibeVoiceSubmenu:
+class VoiceVibeVoiceMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -24,7 +24,7 @@ class VoiceVibeVoiceSubmenu:
             return f"VibeVoice custom model path {label}"
 
         def make_cfg_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.vibevoice_cfg, VibeVoiceProtocol.DEFAULT_CFG, 1
             )
             return f"CFG scale {make_currently_string(value)}"
@@ -39,7 +39,7 @@ class VoiceVibeVoiceSubmenu:
             )
 
         def make_steps_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.vibevoice_steps, VibeVoiceProtocol.DEFAULT_NUM_STEPS, 0
             )
             return f"Steps {make_currently_string(value)}"
@@ -64,12 +64,12 @@ class VoiceVibeVoiceSubmenu:
         def make_items(_: State) -> list[MenuItem]:
             items = [
                 MenuItem(
-                    VoiceSubmenuShared.make_select_voice_label,
-                    lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
+                    VoiceMenuShared.make_select_voice_label,
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
                 )
             ]
             if state.project.vibevoice_voice_file_name:
-                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) )
+                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) )
             items.append(
                 MenuItem(
                     make_model_path_label,
@@ -84,7 +84,7 @@ class VoiceVibeVoiceSubmenu:
             ] )
             return items
         
-        VoiceSubmenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.show_voice_menu(state, make_items)
 
 # ---
 

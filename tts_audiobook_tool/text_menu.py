@@ -5,9 +5,9 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class TextSubmenu:
+class TextMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -22,7 +22,7 @@ class TextSubmenu:
             return f"Text {currently}"
 
         def make_max_size_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 state.prefs.max_words, DEFAULT_MAX_WORDS_PER_SEGMENT
             )
             return f"Text segmentation max words per segment {make_currently_string(value)}"
@@ -36,7 +36,7 @@ class TextSubmenu:
             MenuItem("Manually enter/paste text", on_set_text, data="manual"),
             MenuItem("Print text segments", lambda _, __: AppUtil.print_project_text(state)),
             MenuItem(make_max_size_label, on_ask_max_size),
-            MenuItem(make_strategy_label, TextSubmenu.strategy_menu)
+            MenuItem(make_strategy_label, TextMenu.strategy_menu)
         ]
         MenuUtil.menu(state, make_heading, items, hint=HINT_LINE_BREAKS)
 

@@ -9,7 +9,7 @@ from tts_audiobook_tool.stt_flow import SttFlow
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
 
-class ToolsSubmenu:
+class ToolsMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -31,7 +31,7 @@ class ToolsSubmenu:
 
         def speed_handler(_: State, __: MenuItem):
             AppUtil.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
-            ToolsSubmenu.ask_save_speed_up_audio()
+            ToolsMenu.ask_save_speed_up_audio()
 
         speed_item = MenuItem("Speed up voice sample", speed_handler)
 

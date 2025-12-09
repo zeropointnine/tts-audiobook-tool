@@ -1,12 +1,12 @@
-from tts_audiobook_tool.concat_menu import ConcatSubmenu
+from tts_audiobook_tool.concat_menu import ConcatMenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.real_time_menu import RealTimeSubmenu
-from tts_audiobook_tool.options_menu import OptionsSubmenu
-from tts_audiobook_tool.generate_menu import GenerateSubmenu
-from tts_audiobook_tool.project_menu import ProjectSubmenu
-from tts_audiobook_tool.tools_menu import ToolsSubmenu
+from tts_audiobook_tool.real_time_menu import RealTimeMenu
+from tts_audiobook_tool.options_menu import OptionsMenu
+from tts_audiobook_tool.generate_menu import GenerateMenu
+from tts_audiobook_tool.project_menu import ProjectMenu
+from tts_audiobook_tool.tools_menu import ToolsMenu
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.text_menu import TextSubmenu
+from tts_audiobook_tool.text_menu import TextMenu
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -36,7 +36,7 @@ class MainMenu:
         def make_menu_items(_) -> list[MenuItem]:
             items = []
             items.append(
-                MenuItem(make_project_label, lambda _, __: ProjectSubmenu.menu(state), hotkey="p")
+                MenuItem(make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p")
             )
             if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
                 items.append(
@@ -59,10 +59,10 @@ class MainMenu:
                     MenuItem(make_realtime_label, on_realtime, hotkey="r")
                 )
             items.append(
-                MenuItem("Tools", lambda _, __: ToolsSubmenu.menu(state), hotkey="z")
+                MenuItem("Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z")
             )
             items.append(
-                MenuItem("Options", lambda _, __: OptionsSubmenu.menu(state), hotkey="o")
+                MenuItem("Options", lambda _, __: OptionsMenu.menu(state), hotkey="o")
             )
             items.append(
                 MenuItem("Quit", on_quit, hotkey="q")
@@ -99,23 +99,23 @@ def on_voice(state: State, __) -> None:
         return
     match Tts.get_type():
         case TtsModelInfos.OUTE:
-            from tts_audiobook_tool.voice_oute_menu import VoiceOuteSubmenu
-            VoiceOuteSubmenu.menu(state)
+            from tts_audiobook_tool.voice_oute_menu import VoiceOuteMenu
+            VoiceOuteMenu.menu(state)
         case TtsModelInfos.CHATTERBOX:
-            from tts_audiobook_tool.voice_chatterbox_menu import VoiceChatterboxSubmenu
-            VoiceChatterboxSubmenu.menu(state)
+            from tts_audiobook_tool.voice_chatterbox_menu import VoiceChatterboxMenu
+            VoiceChatterboxMenu.menu(state)
         case TtsModelInfos.FISH:
-            from tts_audiobook_tool.voice_fish_menu import VoiceFishSubmenu
-            VoiceFishSubmenu.menu(state)
+            from tts_audiobook_tool.voice_fish_menu import VoiceFishMenu
+            VoiceFishMenu.menu(state)
         case TtsModelInfos.HIGGS:
-            from tts_audiobook_tool.voice_higgs_menu import VoiceHiggsSubmenu
-            VoiceHiggsSubmenu.menu(state)
+            from tts_audiobook_tool.voice_higgs_menu import VoiceHiggsMenu
+            VoiceHiggsMenu.menu(state)
         case TtsModelInfos.VIBEVOICE:
-            from tts_audiobook_tool.voice_vibevoice_menu import VoiceVibeVoiceSubmenu
-            VoiceVibeVoiceSubmenu.menu(state)
+            from tts_audiobook_tool.voice_vibevoice_menu import VoiceVibeVoiceMenu
+            VoiceVibeVoiceMenu.menu(state)
         case TtsModelInfos.INDEXTTS2:
-            from tts_audiobook_tool.voice_indextts2_menu import VoiceIndexTts2Submenu
-            VoiceIndexTts2Submenu.menu(state)
+            from tts_audiobook_tool.voice_indextts2_menu import VoiceIndexTts2Menu
+            VoiceIndexTts2Menu.menu(state)
 
 # Text
 def make_text_label(state: State) -> str:
@@ -131,7 +131,7 @@ def on_text(state: State, __) -> None:
     if not state.prefs.project_dir:
         print_feedback("Requires project", is_error=True)
         return
-    TextSubmenu.menu(state)
+    TextMenu.menu(state)
 
 # Gen
 def make_gen_label(state: State) -> str:
@@ -153,7 +153,7 @@ def on_gen(state: State, __) -> None:
     if len(state.project.phrase_groups) == 0:
         print_feedback("Requires text", is_error=True)
         return
-    GenerateSubmenu.menu(state)
+    GenerateMenu.menu(state)
 
 # Concat
 def make_concat_label(state: State) -> str:
@@ -167,7 +167,7 @@ def on_concat(state: State, __) -> None:
     num_generated = state.project.sound_segments.num_generated()
     if not state.prefs.project_dir or num_generated == 0:
         return
-    ConcatSubmenu.menu(state)
+    ConcatMenu.menu(state)
 
 # Realtime
 def make_realtime_label(state: State) -> str:
@@ -188,7 +188,7 @@ def on_realtime(state: State, __) -> None:
     if not state.project.can_voice:
         print_feedback("Requires voice clone sample", is_error=True)
         return
-    RealTimeSubmenu.menu(state)
+    RealTimeMenu.menu(state)
 
 # Quit
 def on_quit(_: State, __: MenuItem):

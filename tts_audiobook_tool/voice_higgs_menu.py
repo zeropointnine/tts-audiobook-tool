@@ -6,9 +6,9 @@ from tts_audiobook_tool.tts_model import HiggsProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class VoiceHiggsSubmenu:
+class VoiceHiggsMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -16,7 +16,7 @@ class VoiceHiggsSubmenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.higgs_temperature, HiggsProtocol.DEFAULT_TEMPERATURE, 2
             )
             return f"Temperature {make_currently_string(value)}"
@@ -33,13 +33,13 @@ class VoiceHiggsSubmenu:
         def make_items(_: State) -> list[MenuItem]:
             items = [
                 MenuItem(
-                    VoiceSubmenuShared.make_select_voice_label,
-                    lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
+                    VoiceMenuShared.make_select_voice_label,
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
                 )
             ]
             if state.project.higgs_voice_file_name:
-                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) )
+                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) )
             items.append( MenuItem(make_temperature_label, on_temperature) )
             return items
         
-        VoiceSubmenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.show_voice_menu(state, make_items)

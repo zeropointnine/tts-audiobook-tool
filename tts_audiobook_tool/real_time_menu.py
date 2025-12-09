@@ -8,7 +8,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 
-class RealTimeSubmenu:
+class RealTimeMenu:
 
     @staticmethod
     def menu(state: State):
@@ -52,7 +52,7 @@ class RealTimeSubmenu:
             current = make_currently_string(value)
             return f"Text source {current}"
 
-        text_item = MenuItem(make_text_label, lambda _, __: RealTimeSubmenu.text_menu(state))
+        text_item = MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state))
 
         # 3
         def make_range_label(_) -> str:
@@ -63,7 +63,7 @@ class RealTimeSubmenu:
                 value = "all"
             return f"Select line range {make_currently_string(value)}"
 
-        range_item = MenuItem(make_range_label, lambda _, __: RealTimeSubmenu.ask_line_range(state))
+        range_item = MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state))
 
         # Menu
         items = [start_item, text_item, range_item]

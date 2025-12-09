@@ -16,14 +16,14 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
-class ConcatSubmenu:
+class ConcatMenu:
 
     @staticmethod
     def menu(state: State) -> None:
 
         def on_start(_, data):
             infos = ChapterInfo.make_chapter_infos(state.project)
-            ConcatSubmenu.ask_chapters_and_make(infos, state, aac_not_flac=data)
+            ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=data)
 
         def make_cuts_label(_) -> str:
             qty = len(state.project.section_dividers)
@@ -36,8 +36,8 @@ class ConcatSubmenu:
         items = [
             MenuItem("Create as FLAC file", on_start, data=False),
             MenuItem("Create as AAC/M4A file",on_start, data=True),
-            MenuItem(make_cuts_label, lambda _, __: ConcatSubmenu.ask_cut_points(state)),
-            MenuItem(make_norm_label, lambda _, __: ConcatSubmenu.normalization_menu(state))
+            MenuItem(make_cuts_label, lambda _, __: ConcatMenu.ask_cut_points(state)),
+            MenuItem(make_norm_label, lambda _, __: ConcatMenu.normalization_menu(state))
         ]
         MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
 
@@ -153,7 +153,7 @@ class ConcatSubmenu:
         if not b:
             return
 
-        ConcatSubmenu.make_chapter_files(state, chapter_indices, aac_not_flac)
+        ConcatMenu.make_chapter_files(state, chapter_indices, aac_not_flac)
 
     @staticmethod
     def make_chapter_files(state: State, chapter_indices: list[int], to_aac_not_flac: bool) -> None:

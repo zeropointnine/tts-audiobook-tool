@@ -8,9 +8,9 @@ from tts_audiobook_tool.tts_model import IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class VoiceIndexTts2Submenu:
+class VoiceIndexTts2Menu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -27,10 +27,10 @@ class VoiceIndexTts2Submenu:
 
         def on_voice(_: State, __: MenuItem) -> None:
             AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
-            VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
+            VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
 
         def make_temperature_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.indextts2_temperature, IndexTts2Protocol.DEFAULT_TEMPERATURE, 2
             )
             return f"Temperature {make_currently_string(value)}"
@@ -54,7 +54,7 @@ class VoiceIndexTts2Submenu:
         def on_emo_voice(_: State, __: MenuItem) -> None:
             # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
             AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
-            VoiceSubmenuShared.ask_and_set_voice_file(
+            VoiceMenuShared.ask_and_set_voice_file(
                 state=state,
                 tts_type=TtsModelInfos.INDEXTTS2,
                 is_secondary=True,
@@ -73,7 +73,7 @@ class VoiceIndexTts2Submenu:
             return f"Emotion vector {current}"
 
         def make_emo_alpha_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.indextts2_emo_alpha,
                 IndexTts2Protocol.DEFAULT_EMO_VOICE_ALPHA, 2
             )
@@ -89,7 +89,7 @@ class VoiceIndexTts2Submenu:
             )
 
         def make_fp16_item(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(project.indextts2_use_fp16, IndexTts2Protocol.DEFAULT_USE_FP16)
+            value = VoiceMenuShared.make_parameter_value_string(project.indextts2_use_fp16, IndexTts2Protocol.DEFAULT_USE_FP16)
             return f"FP16 (smaller memory footprint) {make_currently_string(value)}"
 
         # Menu
@@ -98,7 +98,7 @@ class VoiceIndexTts2Submenu:
                 MenuItem(voice_label, on_voice)
             ]
             if state.project.indextts2_voice_file_name:
-                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.INDEXTTS2) )
+                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.INDEXTTS2) )
             items.extend([
                 MenuItem(make_temperature_label, on_temperature),
                 MenuItem(make_emo_voice_label, on_emo_voice)
@@ -108,11 +108,11 @@ class VoiceIndexTts2Submenu:
             items.extend([
                 MenuItem(make_vector_label, lambda _, __: ask_vector(project)),
                 MenuItem(make_emo_alpha_label, on_emo_alpha),
-                MenuItem(make_fp16_item, lambda _, __: VoiceIndexTts2Submenu.fp16_menu(state))
+                MenuItem(make_fp16_item, lambda _, __: VoiceIndexTts2Menu.fp16_menu(state))
             ])
             return items
 
-        VoiceSubmenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.show_voice_menu(state, make_items)
 
     @staticmethod
     def fp16_menu(state: State) -> None:

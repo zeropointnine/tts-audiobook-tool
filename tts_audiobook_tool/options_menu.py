@@ -7,7 +7,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
-class OptionsSubmenu:
+class OptionsMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -42,25 +42,25 @@ class OptionsSubmenu:
             items = [
                 MenuItem(
                     make_whisper_model_label,
-                    lambda _, __: OptionsSubmenu.transcription_model_menu(state)
+                    lambda _, __: OptionsMenu.transcription_model_menu(state)
                 ),
                 MenuItem(
                     make_whisper_device_label,
-                    lambda _, __: OptionsSubmenu.transcription_model_config_menu(state)
+                    lambda _, __: OptionsMenu.transcription_model_config_menu(state)
                 )
             ]
 
             # TODO: add per-model protocol getter which can return None for OUTE; and use this getter in the Tts get_[model] functions
             b = Tts.get_best_torch_device() != "cpu" and Tts.get_type() != TtsModelInfos.OUTE 
             if b:
-                item = MenuItem(make_tts_force_cpu_label, lambda _, __: OptionsSubmenu.tts_force_cpu_menu(state))
+                item = MenuItem(make_tts_force_cpu_label, lambda _, __: OptionsMenu.tts_force_cpu_menu(state))
                 items.append(item)
 
             items.extend([
                 MenuItem(make_unload_label, on_unload),
                 MenuItem(
                     make_section_break_label,
-                    lambda _, __: OptionsSubmenu.section_break_menu(state)
+                    lambda _, __: OptionsMenu.section_break_menu(state)
                 ),
                 MenuItem("Reset contextual hints", on_hints)
             ])

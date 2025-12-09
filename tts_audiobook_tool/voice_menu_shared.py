@@ -13,7 +13,7 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
-class VoiceSubmenuShared:
+class VoiceMenuShared:
 
     @staticmethod
     def show_voice_menu(state: State, items: MenuItemListOrMaker) -> None:
@@ -55,7 +55,7 @@ class VoiceSubmenuShared:
         ]:
             raise ValueError(f"Unsupported tts type {tts_type}")
 
-        path = VoiceSubmenuShared.ask_voice_file(state.project.dir_path, tts_type, message_override)
+        path = VoiceMenuShared.ask_voice_file(state.project.dir_path, tts_type, message_override)
         if not path:
             return
 

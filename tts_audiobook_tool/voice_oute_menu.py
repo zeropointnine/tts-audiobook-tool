@@ -10,9 +10,9 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import OuteProtocol
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class VoiceOuteSubmenu:
+class VoiceOuteMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -21,7 +21,7 @@ class VoiceOuteSubmenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 state.project.oute_temperature, OuteProtocol.DEFAULT_TEMPERATURE, 1
             )
             return f"Temperature {make_currently_string(value)}"
@@ -61,7 +61,7 @@ class VoiceOuteSubmenu:
                 on_temperature
             )
         ]
-        VoiceSubmenuShared.show_voice_menu(state, items)
+        VoiceMenuShared.show_voice_menu(state, items)
 
 # ---
 
@@ -69,7 +69,7 @@ def ask_create_oute_voice(project: Project) -> None:
 
     from tts_audiobook_tool.app_util import AppUtil
 
-    path = VoiceSubmenuShared.ask_voice_file(project.dir_path, Tts.get_type())
+    path = VoiceMenuShared.ask_voice_file(project.dir_path, Tts.get_type())
     if not path:
         return
 

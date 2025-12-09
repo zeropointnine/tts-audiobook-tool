@@ -235,7 +235,7 @@ class SegmentationStrategy(tuple[str, str], Enum):
 
 # ---
 
-class RealTimeSubmenuState:
+class RealTimeMenuState:
     """ Values related to the real-time playback feature """
     from tts_audiobook_tool.phrase import PhraseGroup
     custom_text_groups: list[PhraseGroup] = [] # ie, PhraseGroups

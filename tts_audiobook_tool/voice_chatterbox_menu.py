@@ -6,9 +6,9 @@ from tts_audiobook_tool.tts_model import ChatterboxProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class VoiceChatterboxSubmenu:
+class VoiceChatterboxMenu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -18,7 +18,7 @@ class VoiceChatterboxSubmenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.chatterbox_temperature, ChatterboxProtocol.DEFAULT_TEMPERATURE, 1
             )
             return f"Temperature {make_currently_string(value)}"
@@ -33,7 +33,7 @@ class VoiceChatterboxSubmenu:
             )
 
         def make_exagg_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.chatterbox_exaggeration, ChatterboxProtocol.DEFAULT_EXAGGERATION, 2
             )
             return f"Exaggeration {make_currently_string(value)}"
@@ -48,7 +48,7 @@ class VoiceChatterboxSubmenu:
             )
 
         def make_cfg_label(_) -> str:
-            value = VoiceSubmenuShared.make_parameter_value_string(
+            value = VoiceMenuShared.make_parameter_value_string(
                 project.chatterbox_cfg, ChatterboxProtocol.DEFAULT_CFG, 2
             )
             return f"CFG/pace {make_currently_string(value)}"
@@ -65,12 +65,12 @@ class VoiceChatterboxSubmenu:
         def make_items(_: State) -> list[MenuItem]:
             items = [
                 MenuItem(
-                    VoiceSubmenuShared.make_select_voice_label,
-                    lambda _, __: VoiceSubmenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
+                    VoiceMenuShared.make_select_voice_label,
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
                 )
             ]
             if state.project.chatterbox_voice_file_name:
-                items.append( VoiceSubmenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) )
+                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) )
             items.extend( [
                 MenuItem(
                     make_temperature_label,
@@ -87,4 +87,4 @@ class VoiceChatterboxSubmenu:
             ])
             return items
         
-        VoiceSubmenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.show_voice_menu(state, make_items)

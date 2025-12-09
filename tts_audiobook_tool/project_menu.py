@@ -11,9 +11,9 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.validate_util import ValidateUtil
-from tts_audiobook_tool.voice_menu_shared import VoiceSubmenuShared
+from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
-class ProjectSubmenu:
+class ProjectMenu:
 
     @staticmethod
     def menu(state:State) -> None:
@@ -21,9 +21,9 @@ class ProjectSubmenu:
         def on_project(_, menu_item) -> bool:
             is_new: bool = menu_item.data
             if is_new:
-                did = ProjectSubmenu.ask_and_set_new_project(state)
+                did = ProjectMenu.ask_and_set_new_project(state)
             else:
-                did = ProjectSubmenu.ask_and_set_existing_project(state)
+                did = ProjectMenu.ask_and_set_existing_project(state)
             if did:
                 print_feedback("Project directory set:", state.project.dir_path)
                 if is_new:
@@ -155,7 +155,7 @@ def on_language(state: State, __: MenuItem) -> None:
             
         return ""
 
-    VoiceSubmenuShared.ask_string_and_save(
+    VoiceMenuShared.ask_string_and_save(
         state.project,
         f"Enter language code:",
         "language_code",
