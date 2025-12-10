@@ -37,7 +37,7 @@ window.app = function() {
     const player = new AudioPlayer({ audioElement: audio, container: playerHolder });
 
     // eslint-disable-next-line
-    const bookmarks = new BookmarkController(bookmarkPanel);
+    const bookmarkController = new BookmarkController(bookmarkPanel);
 
     let file = null;
     let url = null;
@@ -369,9 +369,11 @@ window.app = function() {
 
         populateText();
 
+        // Bookmarks
         const arr = loadBookmarks();
-        bookmarks.init(textSegments, arr);
+        bookmarkController.init(textSegments, arr);
         showElement(bookmarkButton);
+        addBookmarkClasses();
 
         if (isTouchDevice() || player.isPinned()) {
             showPlayer();
@@ -466,9 +468,12 @@ window.app = function() {
         document.body.classList.remove("bodyNoScroll");
         loadLocalButtonLabel.removeAttribute("inert");
         player.makeButtonsInert(false);
+        
         hideElement(scrim);
         hideElement(menuPanel);
+        
         hideElement(bookmarkPanel);
+        addBookmarkClasses();
     }
 
     function showMenuPanel() {
@@ -489,7 +494,8 @@ window.app = function() {
 
     function showBookmarkPanel() {
         document.body.classList.add("bodyNoScroll");
-        bookmarks.updateAddButton(currentIndex);
+        removeBookmarkClasses();
+        bookmarkController.updateAddButton(currentIndex);
         showScrim();
         hideElement(menuPanel);
         showElement(bookmarkPanel)
@@ -858,8 +864,20 @@ window.app = function() {
             return;
         }
         const key = `bookmarks_fileId_${fileId}`;
-        const value = JSON.stringify(bookmarks.indices);
+        const value = JSON.stringify(bookmarkController.indices);
         localStorage.setItem(key, value);
+    }
+
+    function addBookmarkClasses() {
+        for (const index of bookmarkController.indices) {
+            spans[index].classList.add("bookmark");
+        }
+    }
+
+    function removeBookmarkClasses() {
+        for (const index of bookmarkController.indices) {
+            spans[index].classList.remove("bookmark");
+        }
     }
 
     // ----------------------------------------
@@ -1144,7 +1162,7 @@ window.app = function() {
     function isMouseOverElement(element) {
         const els = document.elementsFromPoint(mousePosition.x, mousePosition.y);
         return (els.indexOf(element) > -1);
-      }
+    }
 };
 
 const cl = console.log;

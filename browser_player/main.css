@@ -611,7 +611,6 @@ html, body {
     font-family: serif;
     font-size: var(--book-text-size);
     line-height: 1.6;
-    white-space: pre-wrap; /* Honor line breaks and wrap text */
     color: var(--color-text);
     background-color: var(--color-content-bg);
     margin:0;
@@ -619,6 +618,7 @@ html, body {
     border-radius: 8px;
     box-shadow: 0 4px 8px var(--color-shadow);
 
+    white-space: pre-wrap; /* Honor line breaks and wrap text */
     overflow-wrap: break-word;
     word-break: break-word;
 
@@ -638,6 +638,9 @@ html, body {
     (ie, white space between adjacent TextSegments, and non-matched STT text)
     */
     cursor: default;
+
+    /* Anchor for bookmark indicators in the gutter */
+    position:relative;
 }
 
 span.highlight {
@@ -655,6 +658,34 @@ span.highlight {
 }
 [data-player-status="none"] span.highlight {
     background-color: var(--color-segment-hover);
+}
+
+span.bookmark::before {
+
+    content: "";
+
+    position: absolute;
+    left: calc( var(--book-text-size) * -1.6);
+    width: calc( var(--book-text-size) * 1.5);
+    height: calc( var(--book-text-size) * 1.5);
+    margin-top: calc( var(--book-text-size) * 0.15);
+
+    background-color: var(--color-segment-hover); 
+    
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960'><path d='M200-120v-640q0-33 23.5-56.5T280-840h400q33 0 56.5 23.5T760-760v640L480-240 200-120Zm80-122 200-86 200 86v-518H280v518Zm0-518h400-400Z'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 -960 960 960'><path d='M200-120v-640q0-33 23.5-56.5T280-840h400q33 0 56.5 23.5T760-760v640L480-240 200-120Zm80-122 200-86 200 86v-518H280v518Zm0-518h400-400Z'/></svg>");
+    
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;    
+
+    /* top: 50%; 
+    transform: translateY(-50%);     */
+}
+
+span.bookmark.highlight::before {
+    background-color: var(--color-segment-highlight);
 }
 
 @media (pointer: fine) {
