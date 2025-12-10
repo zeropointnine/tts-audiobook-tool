@@ -18,18 +18,23 @@ class ProjectMenu:
     @staticmethod
     def menu(state:State) -> None:
 
-        def on_project(_, menu_item) -> bool:
-            is_new: bool = menu_item.data
-            if is_new:
-                did = ProjectMenu.ask_and_set_new_project(state)
-            else:
-                did = ProjectMenu.ask_and_set_existing_project(state)
+        def on_new_project(_, menu_item) -> bool:            
+            
+            did = ProjectMenu.ask_and_set_new_project(state)
+            if not did:
+                return False
+
+            print_feedback("Project directory set:", state.project.dir_path)
+            AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
+            return True
+
+        def on_existing_project(_, menu_item) -> bool:
+            did = ProjectMenu.ask_and_set_existing_project(state)
             if did:
                 print_feedback("Project directory set:", state.project.dir_path)
-                if is_new:
-                    AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
                 return True
-            return False
+            else:
+                return False
 
         def make_view_label(_) -> str:
             return f"Show directory in OS UI {COL_DIM}({state.project.dir_path})"
@@ -57,8 +62,8 @@ class ProjectMenu:
 
         def items_maker(_) -> list[MenuItem]:
             items = [
-                MenuItem("New project", on_project, data=True),
-                MenuItem("Open existing project", on_project, data=False)
+                MenuItem("New project", on_new_project, data=True),
+                MenuItem("Open existing project", on_existing_project, data=False)
             ]
             if state.project.dir_path:
                 items.append(
@@ -80,8 +85,8 @@ class ProjectMenu:
         console_message = "Enter the path to an empty directory:"
         ui_title = "Select empty directory"
 
-        # FYI: GTK-based folder requestor dialog has no "new folder" functionality
-        # but there are no good alternatives IMO, so
+        # FYI: GTK-based folder requestor dialog has no obvious "new folder" functionality,
+        # but if you enter a directory in the path, it creates it for you.
 
         dir_path = AskUtil.ask_dir_path(
             console_message=console_message,
@@ -93,10 +98,16 @@ class ProjectMenu:
         if not dir_path:
             return False
 
-        err = state.make_new_project(dir_path)
+        old_project = state.project
+
+        err = state.make_and_set_new_project(dir_path)
         if err:
             AskUtil.ask_error(err)
             return False
+        
+        if AskUtil.ask_confirm("Do you want to carry over the current project's settings?"):
+            state.project.migrate_from(old_project)
+
         return True
 
     @staticmethod

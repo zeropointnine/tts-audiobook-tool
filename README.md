@@ -252,9 +252,15 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
+**2025-12-09**
+
+Added option to **clone project** (load an existing project > make new project > "Do you want to carry over the current project's settings?" > "Yes")
+
+Added option to force use of **CPU torch device** even when CUDA or MPS is available.
+
 **2025-12-07**
 
-Added **max text segment word length** option, allowing for up to 80 words per text segment prompt. Can be useful with VibeVoice (Most other models are best left at the default of 40 words).
+Added **max text segment word length** option, allowing for up to 80 words per text segment prompt. Can be useful with VibeVoice and Fish (other models are best left at the default of 40 words).
 
 **Resolved Linux CUDA crashes** related to faster-whisper library by changing Linux torch requirements. If you were experiencing this problem, get latest and update your virtual environment (`pip install -r requirements-[modelname].txt`).
 

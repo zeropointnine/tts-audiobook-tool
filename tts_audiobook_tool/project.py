@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import shutil
 
 from tts_audiobook_tool.app_types import SegmentationStrategy, Sound
 from tts_audiobook_tool.ask_util import AskUtil
@@ -69,8 +70,6 @@ class Project:
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
 
-        from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
-
         if dir_path:
             # Ensure subdir exists
             ss_path = os.path.join(dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
@@ -82,7 +81,11 @@ class Project:
                 if not os.path.exists(ss_path):
                     return Exception(f"Couldn't create required subdirectory {ss_path}")
 
+        from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
         self.sound_segments = ProjectSoundSegments(self)
+
+    def kill(self) -> None:
+        self.sound_segments.observer.stop()
 
     @staticmethod
     def load_using_dir_path(dir_path: str) -> Project | str:
@@ -566,3 +569,38 @@ class Project:
             string = f"{item:.1f}".replace(".0", "") # either one or no decimal point
             strings.append(string)
         return ",".join(strings)
+
+    def migrate_from(self, source_project: Project) -> None:
+        """ 
+        Copies settings from pre-existing project except directory path, and also copies 'active' internal files.
+        Returns error string on fail 
+        """
+
+        # Overwrite all "data" attributes except dir_path; and ofc skip any helper objects 
+        BLACKLIST = ["dir_path", "sound_segments"]
+        source_vars = vars(source_project)        
+        for attr_name, attr_value in source_vars.items():
+            if not attr_name in BLACKLIST:
+                setattr(self, attr_name, attr_value)
+
+        # Copy 'internal' files; fail silently
+        src_files = [PROJECT_TEXT_RAW_FILE_NAME]
+        src_files.append(source_project.chatterbox_voice_file_name)
+        src_files.append(source_project.fish_voice_file_name)
+        src_files.append(source_project.higgs_voice_file_name)
+        src_files.append(source_project.vibevoice_voice_file_name)
+        src_files.append(source_project.indextts2_voice_file_name)
+        src_files.append(source_project.indextts2_emo_voice_file_name)
+        src_files = [file for file in src_files if file]
+
+        for src_file in src_files:
+            src_path = os.path.join(source_project.dir_path, src_file)
+            if not Path(src_path).exists():
+                continue 
+            dest_path = os.path.join(self.dir_path, src_file)
+            try:
+                shutil.copy(src_path, dest_path)
+            except Exception as e:
+                ... # eat silently
+
+        self.save()

@@ -28,6 +28,8 @@ class State:
 
         self.real_time = RealTimeMenuState()
 
+        self._project = None # type: ignore
+
         if not self.prefs.project_dir:
             self.project = Project("")
         else:
@@ -45,6 +47,10 @@ class State:
 
     @project.setter
     def project(self, value: Project) -> None:
+        
+        if self._project and self._project != value:
+            self._project.kill()
+
         self._project = value
 
         # Sync static values
@@ -66,7 +72,7 @@ class State:
         Stt.set_config(self.prefs.stt_config)
         Tts.set_force_cpu(self.prefs.tts_force_cpu)
 
-    def make_new_project(self, path: str) -> str:
+    def make_and_set_new_project(self, path: str) -> str:
         """
         Inits project directory and sets new project instance
         Return error string on fail
@@ -76,23 +82,18 @@ class State:
             project_dir_path = Path(path).expanduser()
         except:
             return "Bad path"
-
         if not project_dir_path.is_absolute():
-            if os.name == "posix":
-                return "Please use either an absolute path or a relative path that starts with \"~\""
-            else: # ie, Windows
-                return "Please use absolute path"
-
+            return "Please use an absolute path"
         if project_dir_path.exists():
             # If exists, make sure dir is empty
             if os.listdir(project_dir_path):
                 return "Directory is not empty"
-        else:
-            # Make project dir
-            try:
-                os.mkdir(project_dir_path) # note, not "make_dirs()"
-            except Exception as e:
-                return f"Error creating directory: {e}"
+
+        # Make project dir
+        try:
+            os.mkdir(project_dir_path) # note, not "make_dirs()"
+        except Exception as e:
+            return f"Error creating directory: {e}"
 
         # Make subdirs
         try:
@@ -103,9 +104,9 @@ class State:
             concat_path = project_dir_path / PROJECT_CONCAT_SUBDIR
             os.makedirs(concat_path, exist_ok=True)
         except Exception as e:
-            return f"Error creating subdirectory"
+            return make_error_string(e)
 
-        # Make project instance
+        # Make project 
         self.prefs.project_dir = str(project_dir_path)
         self.project = Project( str(project_dir_path) )
 
@@ -118,9 +119,7 @@ class State:
                 self.project.set_oute_voice_and_save(result, "default")
 
         self.project.save()
-
         return ""
-
 
     def set_existing_project(self, path: str) -> None:
         self.prefs.project_dir = path

@@ -19,19 +19,19 @@ class ProjectSoundSegments:
         self._sound_segments: dict[int, str] = {}
         self._dirty = True
 
-        event_handler = DirHandler(self.on_dir_change)
-        observer = Observer()
+        event_handler = DirHandler(self.on_dir_contents_change)
+        self.observer = Observer()
 
         if project.dir_path:
             dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
-            observer.schedule(event_handler, dir, recursive=False)
-            observer.start()
+            self.observer.schedule(event_handler, dir, recursive=False)
+            self.observer.start()
 
     def force_invalidate(self) -> None:
         # TODO: add logic "if am at some important point like GenMenu etc, and is WSL or MacOS, call this"
         self._dirty = True
 
-    def on_dir_change(self):
+    def on_dir_contents_change(self):
         self._dirty = True
 
     @property

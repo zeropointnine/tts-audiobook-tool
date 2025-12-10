@@ -4,7 +4,7 @@ from typing import NamedTuple
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.phrase import Phrase, PhraseGroup
+from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
