@@ -250,6 +250,11 @@ window.app = function() {
             hideScrimAndPanels();
         });
 
+        loadUrlIcon = document.getElementById("loadUrlIcon");
+        if (loadUrlIcon) {
+            loadUrlIcon.addEventListener("click", () => { showLoadUrlInfo() })
+        }
+
         toast.addEventListener("click", () => {
             if (isToastPlayPrompt) {
                 audio.play();
@@ -519,6 +524,16 @@ window.app = function() {
         clearTimeout(toastHideDelayId);
         isToastPlayPrompt = false;
         hideElement(toast);
+    }
+
+    function showLoadUrlInfo() {
+        let s = "CORS reminder\n\n";
+        s += `When hosting audio files to be used by the player, remember to set "Access-Control-Allow-Origin" appropriately.\n\n`;
+        s += `For example:\n\n`;
+        s += `Access-Control-Allow-Origin: ${CORS_GITHUB_URL}, http://192.168.1.2:8000\n\n`;
+        s += `or even: \n\n`;
+        s += `Access-Control-Allow-Origin: *`;
+        alert(s);
     }
 
     // --------------------------------------
@@ -1166,3 +1181,5 @@ window.app = function() {
 };
 
 const cl = console.log;
+
+const CORS_GITHUB_URL = "https://zeropointnine.github.io"
