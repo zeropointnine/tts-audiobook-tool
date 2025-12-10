@@ -60,7 +60,6 @@ window.app = function() {
     let isInPlayer = false;
     let isCheckingZombie = false;
     let lastStorePositionTime = 0
-    let useSectionDividers = false;
     const mousePosition = { x: -1, y: -1};
 
     // ********
@@ -73,11 +72,6 @@ window.app = function() {
 
         if (isTouchDevice()) {
             player.removePinButton();
-        }
-
-        useSectionDividers = (localStorage.getItem("pref_dividers") === "1");
-        if (navigator.userAgent == "Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0") {
-            useSectionDividers = true; // yes rly // TODO pls don't
         }
 
         const keys = Object.keys(localStorage);
@@ -347,13 +341,14 @@ window.app = function() {
             return;
         }
 
-        start(pFile, pUrl, appMetadata["text_segments"]);
+        const addSectionDividers = (appMetadata["has_section_break_audio"] === true);
+        start(pFile, pUrl, appMetadata["text_segments"], addSectionDividers);
     }
 
     /**
      * pFile and pUrl are mutually exclusive
      */
-    function start(pFile, pUrl, pTimedTextSegments) {
+    function start(pFile, pUrl, pTimedTextSegments, addSectionDividers) { // TODO: use single object param
 
         // Reset page state
         reset(true);
@@ -372,7 +367,7 @@ window.app = function() {
         currentFileNameDiv.style.display = "block"
         currentFileNameDiv.textContent = file ? file.name : url
 
-        populateText();
+        populateText(addSectionDividers);
 
         // Bookmarks
         const arr = loadBookmarks();
@@ -403,7 +398,7 @@ window.app = function() {
         isStarted = true;
     }
 
-    function populateText() {
+    function populateText(addSectionDividers) {
 
         let contentHtml = '';
         textSegments.forEach((segment, i) => {
@@ -421,7 +416,7 @@ window.app = function() {
 
             if (o["after"]) {
 
-                if (useSectionDividers) {
+                if (addSectionDividers) {
                     const numLfs = o["after"].split('\n').length - 1;
                     if (numLfs >= 3) {
                         // Two+ blank lines - treat as 'section break'

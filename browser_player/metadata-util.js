@@ -76,7 +76,8 @@ async function loadAppMetadata(file, url) {
 
     const result = {
         "raw_text": rawText,
-        "text_segments": timedTextSegments
+        "text_segments": timedTextSegments,
+        "has_section_break_audio": (o["has_section_break_audio"] === true)
     }
     return result
 }

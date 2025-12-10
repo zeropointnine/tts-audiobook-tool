@@ -210,8 +210,8 @@ class LoudnessNormalizationUtil:
             return err
 
         if output_suffix in AAC_SUFFIXES:
-            # Re-add app metadata from source flac file
-            # (When dest is flac, the original abr metadata does get passed along and preserved properly)
+            # Re-apply app metadata from source flac file
+            # (Only required for AAC; when dest is flac, the metadata does get passed along and preserved properly)
             meta = AppMetadata.load_from_flac(input_flac_path)
             if meta:
                 err = AppMetadata.save_to_mp4(meta, output_file_path)

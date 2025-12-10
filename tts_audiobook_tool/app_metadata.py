@@ -8,15 +8,22 @@ import zlib
 from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 
 class AppMetadata(NamedTuple):
     """
+    Metadata of the app-generated audio file.
+    Plus serialization util functions.
     """
 
-    raw_text: str
+    # The list of Phrases that make up the audiobook text, including timing info
     timed_text_segments: list[TimedPhrase]
+
+    # The unmassaged input text 
+    raw_text: str
+
+    # Is True when the audio includes page turn sound effect at so-called section breaks
+    has_section_break_audio: bool | None
 
     def to_json_string(self) -> str:
 
@@ -27,7 +34,8 @@ class AppMetadata(NamedTuple):
 
         dic = {
             "raw_text": raw_text_base64,
-            "text_segments": TimedPhrase.to_dict_list(self.timed_text_segments)
+            "text_segments": TimedPhrase.to_dict_list(self.timed_text_segments),
+            "has_section_break_audio": bool(self.has_section_break_audio)
         }
         string = json.dumps(dic)
         return string
@@ -37,8 +45,6 @@ class AppMetadata(NamedTuple):
         """
         Returns tuple or error string.
         Does some validation.
-
-        TODO: untested
         """
 
         try:
@@ -48,7 +54,7 @@ class AppMetadata(NamedTuple):
         if not isinstance(o, dict):
             return f"Bad type: {type(o)}"
         if not "raw_text" in o or not "text_segments" in o:
-            return f"Missing top-level field in {o}"
+            return f"Missing required field in {o}"
 
         # raw_text - Decode base64 string to bytes, decompress, and convert back to utf8
         s = o["raw_text"]
@@ -66,7 +72,13 @@ class AppMetadata(NamedTuple):
             return result
         timed_text_segments = result
 
-        return AppMetadata(raw_text, timed_text_segments)
+        has_section_break_audio = o.get("has_section_break_audio", False)
+
+        return AppMetadata(
+            timed_text_segments, 
+            raw_text, 
+            has_section_break_audio=has_section_break_audio
+        )
 
     @staticmethod
     def load_from_file(path: str) -> AppMetadata | None:
@@ -80,9 +92,6 @@ class AppMetadata(NamedTuple):
 
     @staticmethod
     def load_from_flac(path: str) -> AppMetadata | None:
-        """
-        TODO: untested
-        """
         string = AudioMetaUtil.get_flac_metadata_field(path, APP_META_FLAC_FIELD)
         if not string:
             return None

@@ -210,7 +210,7 @@ class SttFlow:
         printt(f"\nSaving audio file with added custom metadata")
         printt()
 
-        meta = AppMetadata(raw_text, timed_text_segments)
+        meta = AppMetadata(timed_text_segments, raw_text, has_section_break_audio=False)
         if dest_path.lower().endswith(".flac"):
             save_error = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))
         else:

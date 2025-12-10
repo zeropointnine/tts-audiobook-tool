@@ -97,7 +97,11 @@ class ConcatUtil:
         # Add the app metadata
         text_segments = [item[0] for item in phrases_and_paths]
         timed_text_segments = TimedPhrase.make_list_using(text_segments, durations)
-        meta = AppMetadata(raw_text=raw_text, timed_text_segments=timed_text_segments)
+        meta = AppMetadata(
+            raw_text=raw_text, 
+            timed_text_segments=timed_text_segments,
+            has_section_break_audio=state.prefs.use_section_sound_effect
+        )
 
         if to_aac_not_flac:
             err = AppMetadata.save_to_mp4(meta, dest_path)
