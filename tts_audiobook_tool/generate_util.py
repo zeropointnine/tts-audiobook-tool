@@ -451,7 +451,7 @@ def print_validation_result(
         if fail_retry:
             s += f"    Will retry" + "\n"
         else:
-            s += "    Max fails reached, "
+            s += f"    {COL_ERROR}Max fails reached{COL_DEFAULT}, "
             if is_realtime:
                 s += "playing anyway"
             else:

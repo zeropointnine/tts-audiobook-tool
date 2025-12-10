@@ -144,9 +144,9 @@ HINT_REGEN = Hint(
     "regenerate",
     "About...",
 """The validation algorithm is tuned to be on the conservative side,
-which means lines tagged as having potential errors usually *do* have errors,
-so long as the text itself is not too unconventional.
-Though false positives are also possible.
+which means lines tagged as having potential errors usually *do* have errors
+(so long as the text itself is not too unconventional), but it will also 
+miss errors as well.
 
 Some lines tagged with errors may not be easily correctable,
 even after multiple attempts."""

@@ -21,11 +21,11 @@ class ConcatMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def on_start(_, data):
+        def on_start(_: State, menu_item: MenuItem) -> None:
             infos = ChapterInfo.make_chapter_infos(state.project)
-            ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=data)
+            ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=menu_item.data)
 
-        def make_cuts_label(_) -> str:
+        def make_cuts_label(_: State) -> str:
             qty = len(state.project.section_dividers)
             if state.project.section_dividers:
                 s = make_currently_string(f"{qty} cut {make_noun('point', 'points', qty)}")
