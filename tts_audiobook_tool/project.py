@@ -21,6 +21,7 @@ from tts_audiobook_tool.util import *
 class Project:
     """
     Project settings data-like class, with convenience functions
+    After changing values, must manually `save()`.
     """
 
     dir_path: str
@@ -40,6 +41,7 @@ class Project:
     section_dividers: list[int] = []
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]
+    use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
 
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
@@ -189,6 +191,12 @@ class Project:
         s = d.get("export_type", "")
         project.export_type = ExportType.get_by_id(s) or list(ExportType)[0]
 
+        # Section break sound effect
+        b = d.get("use_section_sound_effect", False)
+        if not isinstance(b, bool):
+            b = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
+        project.use_section_sound_effect = b
+        
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
@@ -271,7 +279,9 @@ class Project:
             "generate_range": self.generate_range_string,
             "chapter_indices": self.section_dividers,
             "subdivide_phrases": self.subdivide_phrases,
+            "use_section_sound_effect": self.use_section_sound_effect,
             "export_type": self.export_type.id,
+            "use_section_sound_effect": self.use_section_sound_effect,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,

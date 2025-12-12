@@ -88,7 +88,7 @@ class ConcatUtil:
             dest_path,
             phrases_and_paths,
             print_progress=True,
-            use_section_sound_effect=state.prefs.use_section_sound_effect,
+            use_section_sound_effect=state.project.use_section_sound_effect,
             to_aac_not_flac=to_aac_not_flac
         )
         if isinstance(durations, str):
@@ -104,7 +104,7 @@ class ConcatUtil:
         meta = AppMetadata(
             raw_text=raw_text, 
             timed_phrases=timed_phrases,
-            has_section_break_audio=state.prefs.use_section_sound_effect
+            has_section_break_audio=state.project.use_section_sound_effect
         )
 
         if to_aac_not_flac:

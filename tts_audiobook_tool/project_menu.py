@@ -60,7 +60,7 @@ class ProjectMenu:
             if state.project.language_code:
                 items.append(MenuItem("Clear language code", on_clear_language))
             if state.project.dir_path:
-                items.append(MenuItem("Show directory in OS UI", on_view))
+                items.append(MenuItem("Show directory in system file browser", on_view))
             return items
 
         MenuUtil.menu(

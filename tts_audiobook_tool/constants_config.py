@@ -8,13 +8,15 @@ import os
 DEV = os.getenv("TTS_AUDIOBOOK_TOOL_DEV", "").lower() in ("true", "1", "yes") and True
 DEV_SAVE_INTERMEDIATE_FILES = DEV and True
 
+PROJECT_DEFAULT_LANGUAGE = "en"
+PROJECT_DEFAULT_SECTION_SOUND_EFFECT = False
+
 # Max words per text chunk, applied to the source text for "STT mode"
 MAX_WORDS_PER_SEGMENT_STT = 40
 
 MENU_CLEARS_SCREEN = False
 
 PREFS_DEFAULT_PLAY_ON_GENERATE = False
-PREFS_DEFAULT_SECTION_SOUND_EFFECT = False
 
 # Offset for whisper word end timestamp being consistently too early
 # The amount varies a lot, usually around 0.15, but is always too early.

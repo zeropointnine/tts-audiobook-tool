@@ -27,7 +27,6 @@ class ConcatMenu:
             is_aac = (state.project.export_type == ExportType.AAC)
             ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=is_aac)
 
-
         def make_cuts_label(_: State) -> str:
             qty = len(state.project.section_dividers)
             if state.project.section_dividers:
@@ -50,6 +49,10 @@ class ConcatMenu:
             MenuItem(
                 lambda _: make_menu_label("Subdivide phrases", state.project.subdivide_phrases), 
                 lambda _, __: ConcatMenu.subdivide_menu(state)
+            ),
+            MenuItem(
+                lambda _: make_menu_label("Section break sound effect", state.project.use_section_sound_effect),
+                lambda _, __: ConcatMenu.section_break_menu(state)
             )
         ]
         MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
@@ -109,6 +112,25 @@ class ConcatMenu:
             on_select=on_select,
             subheading=LOUDNORM_SUBHEADING,
             hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None
+        )
+
+    @staticmethod
+    def section_break_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.use_section_sound_effect = value
+            state.project.save()
+            print_feedback(f"Set to:", value)
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Section break sound effect",
+            subheading=SECTION_BREAK_SUBHEADING,
+            labels=["False", "True"],
+            values=[False, True],
+            current_value=state.project.use_section_sound_effect,
+            default_value=False,
+            on_select=on_select
         )
 
     @staticmethod
@@ -313,4 +335,10 @@ SUBDIVIDE_SUBHEADING = \
 When False, text segments map directly to the TTS prompts of the generated audio. 
 When True, text is further sub-segmented by phrase. Requires \"speech-to-text validation\"
 to be enabled during TTS sound generation.
+"""
+
+SECTION_BREAK_SUBHEADING = \
+"""In the concatenation step, inserts a 'page turn' sound effect when 
+two or more consecutive blank lines are encountered in the text. 
+This can be a useful audible cue, so long as the text is formatted for it.
 """

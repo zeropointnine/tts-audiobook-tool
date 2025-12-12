@@ -33,7 +33,7 @@ class MainMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def make_menu_items(_) -> list[MenuItem]:
+        def make_items(_) -> list[MenuItem]:
             items = []
             items.append(
                 MenuItem(make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p")
@@ -70,7 +70,7 @@ class MainMenu:
             return items
 
         heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{Tts.get_type().value.ui['proper_name']}{COL_DIM})"
-        MenuUtil.menu(state, heading, make_menu_items, is_submenu=False, one_shot=True)
+        MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True)
 
 # ---
 
@@ -166,6 +166,7 @@ def make_concat_label(state: State) -> str:
 def on_concat(state: State, __) -> None:
     num_generated = state.project.sound_segments.num_generated()
     if not state.prefs.project_dir or num_generated == 0:
+        print_feedback("Requires generated audio")
         return
     ConcatMenu.menu(state)
 

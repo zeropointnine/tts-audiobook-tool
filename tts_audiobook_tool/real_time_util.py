@@ -90,12 +90,12 @@ class RealTimeUtil:
                 printt()
                 continue
 
-            sound, validation_result, _ = result
+            sound, _, __ = result
 
             if i == end_index:
                 appended_sound = None
             else:
-                use_sound_effect = state.prefs.use_section_sound_effect and phrase.reason == Reason.SECTION
+                use_sound_effect = state.project.use_section_sound_effect and phrase.reason == Reason.SECTION
                 if use_sound_effect:
                     path = SECTION_SOUND_EFFECT_PATH
                     result = SoundFileUtil.load(path, sound.sr)

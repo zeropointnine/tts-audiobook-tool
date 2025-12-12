@@ -24,7 +24,6 @@ class Prefs:
             tts_force_cpu: bool = False,
             normalization_type: NormalizationType = NormalizationType.DEFAULT,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            use_section_sound_effect: bool = PREFS_DEFAULT_SECTION_SOUND_EFFECT,
             segmentation_strategy: SegmentationStrategy = SegmentationStrategy.NORMAL,
             max_words_dict: dict = {}
     ) -> None:
@@ -35,7 +34,6 @@ class Prefs:
         self._tts_force_cpu = tts_force_cpu
         self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
-        self._use_section_sound_effect = use_section_sound_effect
         self._segmentation_strategy = segmentation_strategy
         self._max_words_dict = max_words_dict
 
@@ -122,12 +120,6 @@ class Prefs:
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
-        # Section sound effect
-        section_sound_effect = prefs_dict.get("use_section_sound_effect", PREFS_DEFAULT_SECTION_SOUND_EFFECT)
-        if not isinstance(section_sound_effect, bool):
-            section_sound_effect = PREFS_DEFAULT_SECTION_SOUND_EFFECT
-            dirty = True
-
         # Segmentation strategy
         s = prefs_dict.get("segmentation_strategy", "")
         segmentation_strategy = SegmentationStrategy.from_json_id(s)
@@ -155,7 +147,6 @@ class Prefs:
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
             play_on_generate=play_on_generate,
-            use_section_sound_effect=section_sound_effect,
             segmentation_strategy=segmentation_strategy,
             hints=hints,
             max_words_dict=max_words_dict
@@ -192,15 +183,6 @@ class Prefs:
     @play_on_generate.setter
     def play_on_generate(self, value: bool):
         self._play_on_generate = value
-        self.save()
-
-    @property
-    def use_section_sound_effect(self) -> bool:
-        return self._use_section_sound_effect
-
-    @use_section_sound_effect.setter
-    def use_section_sound_effect(self, value: bool):
-        self._use_section_sound_effect = value
         self.save()
 
     def get_hint(self, key: str) -> bool:
@@ -282,7 +264,6 @@ class Prefs:
             "tts_force_cpu": self._tts_force_cpu,
             "normalization_type": self._normalization_type.value.json_id,
             "play_on_generate": self._play_on_generate,
-            "use_section_sound_effect": self._use_section_sound_effect,
             "segmentation_strategy": self._segmentation_strategy.json_id,
             "max_words": self._max_words_dict
         }

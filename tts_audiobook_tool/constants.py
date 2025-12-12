@@ -18,7 +18,7 @@ PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
-PROJECT_DEFAULT_LANGUAGE = "en"
+
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 
 

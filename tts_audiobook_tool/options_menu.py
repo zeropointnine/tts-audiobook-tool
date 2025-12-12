@@ -56,10 +56,6 @@ class OptionsMenu:
                 items.append(item)
 
             items.extend([
-                MenuItem(
-                    lambda _: make_menu_label("Insert sound effect at section breaks", state.prefs.use_section_sound_effect),
-                    lambda _, __: OptionsMenu.section_break_menu(state)
-                ),
                 MenuItem(make_unload_label, on_unload),
                 MenuItem("Reset contextual hints", on_hints)
             ])
@@ -135,24 +131,6 @@ class OptionsMenu:
             on_select=on_select
         )
 
-    @staticmethod
-    def section_break_menu(state: State) -> None:
-
-        def on_select(value: bool) -> None:
-            state.prefs.use_section_sound_effect = value
-            print_feedback(f"Set to:", value)
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Insert sound effect at section breaks",
-            subheading=SECTION_BREAK_SUBHEADING,
-            labels=["False", "True"],
-            values=[False, True],
-            current_value=state.prefs.use_section_sound_effect,
-            default_value=False,
-            on_select=on_select
-        )
-
 # ---
         
 def make_system_memory_string(base_color=COL_DIM) -> str:
@@ -179,9 +157,3 @@ def make_system_memory_string(base_color=COL_DIM) -> str:
         return vram_string
     else:
         return f"{vram_string}{base_color}, {ram_string}"
-
-SECTION_BREAK_SUBHEADING = \
-"""In the concatenation step, inserts a 'page turn' sound effect when 
-two or more consecutive blank lines are encountered in the text. 
-This can be a useful audible cue, so long as the text is formatted for it.
-"""
