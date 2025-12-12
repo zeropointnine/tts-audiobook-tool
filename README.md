@@ -252,6 +252,10 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
+** 2025-12-XXX**
+
+Added option `Concatenate` > `Subdivide phrases`. This allows the player/reader app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio must first be re-generated).
+
 **2025-12-09**
 
 Added option to **clone project** (load an existing project > make new project > "Do you want to carry over the current project's settings?" > "Yes")
@@ -288,7 +292,7 @@ FYI, Whisper model type is now an app-wide preference setting rather than a per-
 
 **2025-10-23**
 
-Added option to insert a "page turn" **sound effect at section breaks**
+Added option to insert a "page turn" **sound effect at section breaks** (2+ blank lines in the text). I use this or text files converted from epub files using Calibre, which tends to insert two or more blank lines at chapter breaks, etc.
 
 Rearranged some menu items
 

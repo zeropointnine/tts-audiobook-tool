@@ -25,18 +25,17 @@ class TextMenu:
             value = VoiceMenuShared.make_parameter_value_string(
                 state.prefs.max_words, DEFAULT_MAX_WORDS_PER_SEGMENT
             )
-            return f"Text segmentation max words per segment {make_currently_string(value)}"
-
-        def make_strategy_label(_) -> str:
-            currently = make_currently_string(state.prefs.segmentation_strategy.label)
-            return f"Text segmentation strategy {currently}"
+            return make_menu_label("Text segmentation max words per segment", value)
 
         items = [
             MenuItem("Import from text file", on_set_text, data="import"),
             MenuItem("Manually enter/paste text", on_set_text, data="manual"),
             MenuItem("Print text segments", lambda _, __: AppUtil.print_project_text(state)),
             MenuItem(make_max_size_label, on_ask_max_size),
-            MenuItem(make_strategy_label, lambda _, __: TextMenu.strategy_menu(state))
+            MenuItem(
+                lambda _: make_menu_label("Text segmentation strategy", state.prefs.segmentation_strategy.label.lower()),
+                lambda _, __: TextMenu.strategy_menu(state)
+            )
         ]
         MenuUtil.menu(state, make_heading, items, hint=HINT_LINE_BREAKS)
 
@@ -46,6 +45,7 @@ class TextMenu:
         def on_select(value: SegmentationStrategy) -> None:
             state.prefs.segmentation_strategy = value
             print_feedback("Text segmentation strategy set to:", state.prefs.segmentation_strategy.label)
+
         MenuUtil.options_menu(
             state=state,
             heading_text="Text segmentation strategy",

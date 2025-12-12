@@ -46,11 +46,11 @@ class RealTimeMenu:
         # 2
         def make_text_label(_) -> str:
             if state.real_time.custom_text_groups:
-                value = f"custom text, {len(state.real_time.custom_text_groups)} lines"
+                num = len(state.real_time.custom_text_groups)
+                value = f"custom text, {num} {make_noun('line', 'lines', num)}"
             else:
                 value = "project text"
-            current = make_currently_string(value)
-            return f"Text source {current}"
+            return make_menu_label("Text source", value)
 
         text_item = MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state))
 
@@ -61,7 +61,7 @@ class RealTimeMenu:
                 value = f"{line_range[0]}-{line_range[1]}"
             else:
                 value = "all"
-            return f"Select line range {make_currently_string(value)}"
+            return make_menu_label("Select line range", value)
 
         range_item = MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state))
 

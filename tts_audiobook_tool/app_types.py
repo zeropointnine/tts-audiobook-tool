@@ -147,9 +147,9 @@ class NormalizationType(Enum):
 
 class SttVariant(tuple[str, str], Enum):
 
-    LARGE_V3 = ("large-v3", "best accuracy, default") # default
-    LARGE_V3_TURBO = ("large-v3-turbo", "less memory, faster")
-    DISABLED = ("disabled", "skips validation step when generating audio, adds no extra memory")
+    LARGE_V3 = ("large-v3", "Best accuracy") # default
+    LARGE_V3_TURBO = ("large-v3-turbo", "Less memory, faster")
+    DISABLED = ("disabled", "Skips validation step when generating audio, adds no extra memory")
 
     @property
     def id(self) -> str:
@@ -171,6 +171,7 @@ class SttVariant(tuple[str, str], Enum):
 class SttConfig(tuple[str, str, str], Enum):
     """
     Supported combinations of device + compute_type for the faster-whisper model
+    Rem, no MPS, I think
     """
 
     CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8_float32") # default

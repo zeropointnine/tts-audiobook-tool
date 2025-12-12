@@ -89,9 +89,9 @@ def make_voice_label(state: State) -> str:
         current = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
     else:
         if voice_label != "none":
-            current = make_currently_string(voice_label, label="current voice clone: ")
+            current = make_currently_string(voice_label, value_prefix="current voice clone: ")
         else:
-            current = make_currently_string(voice_label, label="current voice clone: ", color_code=COL_ERROR)
+            current = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
     return f"Voice clone and model settings {current}"
 
 def on_voice(state: State, __) -> None:

@@ -22,13 +22,11 @@ class ConcatMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def on_start(_: State, menu_item: MenuItem) -> None:
+        def on_start(_: State, __: MenuItem) -> None:
             infos = ChapterInfo.make_chapter_infos(state.project)
             is_aac = (state.project.export_type == ExportType.AAC)
             ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=is_aac)
 
-        def make_file_type_label(_: State) -> str:
-            return f"File type {make_currently_string(state.project.export_type.label)}"
 
         def make_cuts_label(_: State) -> str:
             qty = len(state.project.section_dividers)
@@ -40,10 +38,19 @@ class ConcatMenu:
 
         items = [
             MenuItem("Start", on_start),
-            MenuItem(make_file_type_label, lambda _, __: ConcatMenu.file_type_menu(state)),
+            MenuItem(
+                lambda _: make_menu_label("File type", state.project.export_type.label), 
+                lambda _, __: ConcatMenu.file_type_menu(state)
+            ),
             MenuItem(make_cuts_label, lambda _, __: ConcatMenu.ask_cut_points(state)),
-            MenuItem(make_norm_label, lambda _, __: ConcatMenu.normalization_menu(state)),
-            MenuItem(make_subdivide_label, lambda _, __: ConcatMenu.subdivide_menu(state))
+            MenuItem(
+                lambda _: make_menu_label("Loudness normalization", state.prefs.normalization_type.value.label), 
+                lambda _, __: ConcatMenu.normalization_menu(state)
+            ),
+            MenuItem(
+                lambda _: make_menu_label("Subdivide phrases", state.project.subdivide_phrases), 
+                lambda _, __: ConcatMenu.subdivide_menu(state)
+            )
         ]
         MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
 
@@ -265,10 +272,6 @@ class ConcatMenu:
 
 # ---
 
-def make_norm_label(state: State) -> str:
-    value = state.prefs.normalization_type.value.label
-    return f"Loudness normalization {make_currently_string(value)}"
-
 def print_cut_points(section_dividers: list[int], num_items: int) -> None:
     section_index_strings = [str(index+1) for index in section_dividers]
     section_indices_string = ", ".join(section_index_strings)
@@ -298,10 +301,6 @@ def make_chapter_info_string(info: ChapterInfo, index: int) -> str:
     s = f"{COL_DEFAULT}Chapter file {index+1}:{COL_DIM} line {info.segment_index_start + 1} to {info.segment_index_end + 1} "
     s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
     return s
-
-def make_subdivide_label(state: State) -> str:
-    value = state.project.subdivide_phrases
-    return f"Subdivide phrases {make_currently_string(value)}"
 
 LOUDNORM_SUBHEADING = \
 """Performs an extra pass after concatenating audio segments to minimize volume disparities

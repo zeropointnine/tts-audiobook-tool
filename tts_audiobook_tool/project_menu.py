@@ -28,16 +28,13 @@ class ProjectMenu:
             AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
             return True
 
-        def on_existing_project(_, menu_item) -> bool:
+        def on_existing_project(_: State, __: MenuItem) -> bool:
             did = ProjectMenu.ask_and_set_existing_project(state)
             if did:
                 print_feedback("Project directory set:", state.project.dir_path)
                 return True
             else:
                 return False
-
-        def make_view_label(_) -> str:
-            return f"Show directory in OS UI {COL_DIM}({state.project.dir_path})"
 
         def on_view(_: State, __: MenuItem) -> None:
             err = DirOpenUtil.open(state.project.dir_path)
@@ -46,35 +43,31 @@ class ProjectMenu:
             else:
                 print_feedback("Launched window")
 
-        def make_language_label(_) -> str:
-            s = make_currently_string(state.project.language_code or "none")
-            return f"Language code {s}"
-
         def on_clear_language(_: State, __: MenuItem) -> None:
             state.project.language_code = ""
             state.project.save()
-            print_feedback("Language code cleared")
-
-        # Menu
-        def make_heading(_) -> str:
-            s = make_currently_string(state.project.dir_path or "none")
-            return f"Project {s}"
+            print_feedback("Language code cleared")            
 
         def items_maker(_) -> list[MenuItem]:
             items = [
                 MenuItem("New project", on_new_project, data=True),
-                MenuItem("Open existing project", on_existing_project, data=False)
-            ]
-            if state.project.dir_path:
-                items.append(
-                    MenuItem(make_view_label, on_view)
+                MenuItem("Open existing project", on_existing_project, data=False),
+                MenuItem(
+                    lambda _: make_menu_label("Language code", state.project.language_code or "none"), 
+                    on_language
                 )
-            items.append(MenuItem(make_language_label, on_language))
+            ]
             if state.project.language_code:
                 items.append(MenuItem("Clear language code", on_clear_language))
+            if state.project.dir_path:
+                items.append(MenuItem("Show directory in OS UI", on_view))
             return items
 
-        MenuUtil.menu(state, make_heading, items_maker)
+        MenuUtil.menu(
+            state, 
+            lambda _: make_menu_label("Project", state.project.dir_path or "none"), 
+            items_maker
+        )
 
     @staticmethod
     def ask_and_set_new_project(state: State) -> bool:
@@ -84,9 +77,6 @@ class ProjectMenu:
         """
         console_message = "Enter the path to an empty directory:"
         ui_title = "Select empty directory"
-
-        # FYI: GTK-based folder requestor dialog has no obvious "new folder" functionality,
-        # but if you enter a directory in the path, it creates it for you.
 
         dir_path = AskUtil.ask_dir_path(
             console_message=console_message,

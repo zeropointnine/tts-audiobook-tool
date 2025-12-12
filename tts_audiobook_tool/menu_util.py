@@ -126,7 +126,9 @@ class MenuUtil:
                 s = make_hotkey_string(item.hotkey.upper()) + " " + s
                 if item.sublabel:
                     # Print extra line/s
-                    s += "\n" + COL_DIM + get_string_from(state, item.sublabel)
+                    sublabel = get_string_from(state, item.sublabel)
+                    space = "    " if not sublabel.startswith(" ") else ""
+                    s += "\n" + COL_DIM + space + sublabel
                 printt(s)
             printt()
 
@@ -183,8 +185,8 @@ class MenuUtil:
         heading_text: str,
         labels: list[str],
         values: list[T],
-        current_value: T,
-        default_value: T,
+        current_value: T | None,
+        default_value: T | None,
         on_select: Callable[[T], None],
         sublabels: list[str] | None = None,
         hint: Hint | None=None,

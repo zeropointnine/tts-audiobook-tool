@@ -139,6 +139,8 @@ class AskUtil:
             mustexist: bool = True,
     ) -> str:
         try:
+            # FYI: GTK-based folder requestor dialog has no obvious "new folder" functionality,
+            # but will return a non-existing directory path if entered; not ideal but
             from tkinter import filedialog
             printt(console_message)
             result = filedialog.askdirectory(title=ui_title, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows

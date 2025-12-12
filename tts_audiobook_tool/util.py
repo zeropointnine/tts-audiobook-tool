@@ -29,7 +29,7 @@ def printt(s: str="", end=None) -> None:
 
 def print_feedback(
         message: str,
-        end_value: str="",
+        end_value: Any = None,
         is_error=False,
         no_preformat=False,
         extra_line=True
@@ -43,8 +43,8 @@ def print_feedback(
     else:
         col = COL_ERROR if is_error else COL_DIM
         s = Ansi.ITALICS +  col + message
-    if end_value:
-        s = s.strip() + " " + COL_ACCENT + end_value
+    if end_value is not None:
+        s = s.strip() + " " + COL_ACCENT + str(end_value)
     printt(s)
 
     if extra_line:
@@ -156,8 +156,12 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
         color = COL_ACCENT
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
-def make_currently_string(value: Any, label: str="currently: ", color_code=COL_ACCENT) -> str:
-    return f"{COL_DIM}({label}{color_code}{value}{COL_DIM})"
+def make_currently_string(value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
+    return f"{COL_DIM}({value_prefix}{color_code}{value}{COL_DIM})"
+
+def make_menu_label(label: str, value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
+    currently = make_currently_string(value, value_prefix, color_code)
+    return f"{label} {currently}"
 
 def make_gb_string(bytes: int) -> str:
     """ Returns gigabyte string with either one or zero decimal places"""
