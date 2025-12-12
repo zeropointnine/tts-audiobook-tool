@@ -30,7 +30,7 @@ class ToolsMenu:
         )
 
         def speed_handler(_: State, __: MenuItem):
-            AppUtil.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
+            Hint.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
             ToolsMenu.ask_save_speed_up_audio()
 
         speed_item = MenuItem("Speed up voice sample", speed_handler)

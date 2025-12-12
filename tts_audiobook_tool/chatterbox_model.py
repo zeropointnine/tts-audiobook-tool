@@ -1,6 +1,6 @@
 import torch
-import chatterbox.mtl_tts
-from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+import chatterbox.mtl_tts # type: ignore
+from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
 
 import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)

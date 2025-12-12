@@ -1,5 +1,4 @@
 import os
-from typing import cast
 
 from tts_audiobook_tool.app_types import ExportType, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
@@ -37,17 +36,17 @@ class ConcatMenu:
 
         items = [
             MenuItem("Start", on_start),
+            MenuItem(make_cuts_label, lambda _, __: ConcatMenu.ask_cut_points(state)),
             MenuItem(
                 lambda _: make_menu_label("File type", state.project.export_type.label), 
                 lambda _, __: ConcatMenu.file_type_menu(state)
             ),
-            MenuItem(make_cuts_label, lambda _, __: ConcatMenu.ask_cut_points(state)),
             MenuItem(
-                lambda _: make_menu_label("Loudness normalization", state.prefs.normalization_type.value.label), 
+                lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label), 
                 lambda _, __: ConcatMenu.normalization_menu(state)
             ),
             MenuItem(
-                lambda _: make_menu_label("Subdivide phrases", state.project.subdivide_phrases), 
+                lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
                 lambda _, __: ConcatMenu.subdivide_menu(state)
             ),
             MenuItem(
@@ -79,7 +78,8 @@ class ConcatMenu:
     def normalization_menu(state: State) -> None:
 
         def on_select(value: NormalizationType) -> None:
-            state.prefs.set_normalization_type_using(value.value.json_id)
+            state.project.normalization_type = value
+            state.project.save()
             print_feedback(f"Normalization set to: {value.value.label}")
 
         MenuUtil.options_menu(
@@ -87,7 +87,7 @@ class ConcatMenu:
             heading_text="Loudness normalization",
             labels=[item.value.label for item in list(NormalizationType)],
             values=[item for item in list(NormalizationType)],
-            current_value=state.prefs.normalization_type,
+            current_value=state.project.normalization_type,
             default_value=list(NormalizationType)[0],
             on_select=on_select,
             subheading=LOUDNORM_SUBHEADING,
@@ -100,11 +100,11 @@ class ConcatMenu:
         def on_select(value: bool) -> None:
             state.project.subdivide_phrases = value
             state.project.save()
-            print_feedback(f"Subdivide phrases set to: {state.project.subdivide_phrases}")
+            print_feedback(f"Subdivide into phrases set to: {state.project.subdivide_phrases}")
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Subdivide phrases",
+            heading_text="Subdivide into phrases",
             labels=["True", "False"],
             values=[True, False],
             current_value=state.project.subdivide_phrases,
@@ -243,7 +243,7 @@ class ConcatMenu:
                 s = ""
             print_heading(f"Creating concatenated audio file{s}...", dont_clear=True, non_menu=True)
 
-            is_norm = (state.prefs.normalization_type != NormalizationType.DISABLED)
+            is_norm = (state.project.normalization_type != NormalizationType.DISABLED)
             is_concat_aac = not is_norm and to_aac_not_flac
 
             # Concat
@@ -259,7 +259,7 @@ class ConcatMenu:
                 return
 
             # Normalize
-            if state.prefs.normalization_type != NormalizationType.DISABLED:
+            if state.project.normalization_type != NormalizationType.DISABLED:
 
                 source_path = path
                 norm_path = AppUtil.insert_bracket_tag_file_path(path, "normalized")
@@ -267,7 +267,7 @@ class ConcatMenu:
                     norm_path = str( Path(norm_path).with_suffix(".m4a") )
 
                 err = LoudnessNormalizationUtil.normalize_file(
-                    path, state.prefs.normalization_type.value, norm_path
+                    path, state.project.normalization_type.value, norm_path
                 )
                 if err:
                     AskUtil.ask_error(err)
@@ -283,7 +283,7 @@ class ConcatMenu:
         printt("Finished. \a")
         printt()
 
-        AppUtil.show_player_hint_if_necessary(state.prefs)
+        Hint.show_player_hint_if_necessary(state.prefs)
 
         hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file browser: ")
         printt()

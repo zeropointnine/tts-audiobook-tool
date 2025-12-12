@@ -120,7 +120,7 @@ class GenerateMenu:
         printt()
 
         will_hint = not state.prefs.get_hint("regenerate")
-        AppUtil.show_hint_if_necessary(state.prefs, HINT_REGEN)
+        Hint.show_hint_if_necessary(state.prefs, HINT_REGEN)
         if will_hint:
             b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
             if not b:

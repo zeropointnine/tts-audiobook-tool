@@ -208,60 +208,6 @@ class AppUtil:
         return phrase_groups, raw_text
 
     @staticmethod
-    def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
-        """
-        Shows hint only if not yet shown.
-        """
-        if prefs.get_hint(hint.key):
-            return True
-        prefs.set_hint_true(hint.key)
-        return AppUtil.show_hint(hint, and_confirm=and_confirm, and_prompt=and_prompt)
-
-    @staticmethod
-    def show_hint(hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
-        """
-        Shows hint.
-        Then either asks for confirmation, prompts to press enter, or or shows a 3-second 'animation'
-        Returns True if "should continue"
-        """
-        AppUtil.print_hint(hint)
-
-        if and_confirm:
-            return AskUtil.ask_confirm()
-        elif and_prompt:
-            AskUtil.ask_enter_to_continue()
-            return True
-        else:
-            # Anim
-            lines = ["[   ]", "[.  ]", "[.. ]", "[...]"]
-            for i, line in enumerate(lines):
-                print(f"{COL_DIM}{line}{Ansi.RESET}", end="\r", flush=True)
-                time.sleep(0.66)
-            print(f"{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
-            return True
-
-    @staticmethod
-    def print_hint(hint: Hint) -> None:
-        printt(f"🔔 {COL_ACCENT}{hint.heading}")
-        printt(hint.text)
-        printt()
-
-    @staticmethod
-    def show_player_hint_if_necessary(prefs: Prefs) -> None:
-        s = "You can open audio files with the interactive player/reader here:\n"
-        package_dir = get_package_dir()
-        if package_dir:
-            browser_path = str( Path(package_dir).parent / "browser_player" / "index.html" )
-        else:
-            browser_path = "browser_player" + os.path.sep + "index.html"
-        s += browser_path + "\n"
-        s += "or on the web here:" + "\n"
-        s += PLAYER_URL
-
-        hint = Hint(key="player", heading="Reminder", text = s)
-        AppUtil.show_hint_if_necessary(prefs, hint)
-
-    @staticmethod
     def calc_hash_string(string: str) -> str:
         return xxhash.xxh3_64(string).hexdigest()
 
@@ -360,14 +306,14 @@ class AppUtil:
         project: Project = p_project
 
         if Tts.get_type() == TtsModelInfos.FISH:
-            AppUtil.show_hint_if_necessary(prefs, HINT_FISH_FIRST)
+            Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST)
 
         if project.can_voice and project.get_voice_label() == "none":
-            AppUtil.show_hint_if_necessary(prefs, HINT_NO_VOICE)
+            Hint.show_hint_if_necessary(prefs, HINT_NO_VOICE)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():
                 if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
                     version = torch.backends.cudnn.version()
                     if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
-                        AppUtil.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
+                        Hint.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)

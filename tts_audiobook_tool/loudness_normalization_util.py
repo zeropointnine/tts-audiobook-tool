@@ -37,7 +37,7 @@ class LoudnessNormalizationUtil:
         if not dest_path:
             dest_path = source_flac # ie, overwrite original
 
-        printt(f"EBU R 128 loudness normalization ({specs.label})")
+        printt(f"Loudness normalization (EBU R 128) ({specs.label})")
         printt()
 
         printt(f"Pass 1, please wait... {COL_DIM}(no feedback shown)")

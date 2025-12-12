@@ -2,7 +2,6 @@ import os
 import re
 
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_types import Hint
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -19,9 +18,6 @@ PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
 
-PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
-
-
 FFMPEG_COMMAND = "ffmpeg"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
@@ -35,9 +31,9 @@ APP_SAMPLE_RATE = 44100
 # Samplerate required for whisper audio input
 WHISPER_SAMPLERATE = 16000
 
-DEFAULT_MAX_WORDS_PER_SEGMENT = 40
-MIN_MAX_WORDS_PER_SEGMENT = 20
-MAX_MAX_WORDS_PER_SEGMENT = 80
+MAX_WORDS_PER_SEGMENT_DEFAULT = 40
+MAX_WORDS_PER_SEGMENT_MIN = 20
+MAX_WORDS_PER_SEGMENT_MAX = 80
 
 CTRANSLATE_REQUIRED_CUDNN_VERSION = 90100
 
@@ -101,6 +97,8 @@ pattern = r'\[([0-9a-fA-F]{16})\]'
 HASH_PATTERN = re.compile(pattern)
 
 # ---
+
+from tts_audiobook_tool.hint import Hint
 
 HINT_LONG_PATHS = Hint(
     "long_paths",
@@ -237,7 +235,6 @@ you can re-run the \"Enhance existing audiobook\" process, and it will run faste
 the second time through, as the audio transcription data has been cached."""
 )
 
-
 HINT_LINUX_CUDNN_VERSION = Hint(
     "stt_linux_cudnn_version",
     f"{COL_ERROR}cuDNN version mismatch!",
@@ -249,7 +246,7 @@ HINT_SEG_MAX_SIZE = Hint("seg", "",
 f"""When text is imported to the project, this dictates the maximum number of
 words for each text segment.
 
-Increasing this value beyond the default of {DEFAULT_MAX_WORDS_PER_SEGMENT} should be done
+Increasing this value beyond the default of {MAX_WORDS_PER_SEGMENT_DEFAULT} should be done
 with some care and extra testing (Some models may emit more errors or fail).
 The value is saved on a per-model basis.""")
 

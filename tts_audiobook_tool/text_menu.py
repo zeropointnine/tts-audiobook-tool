@@ -23,7 +23,7 @@ class TextMenu:
 
         def make_max_size_label(_) -> str:
             value = VoiceMenuShared.make_parameter_value_string(
-                state.prefs.max_words, DEFAULT_MAX_WORDS_PER_SEGMENT
+                state.project.max_words, MAX_WORDS_PER_SEGMENT_DEFAULT
             )
             return make_menu_label("Text segmentation max words per segment", value)
 
@@ -33,7 +33,7 @@ class TextMenu:
             MenuItem("Print text segments", lambda _, __: AppUtil.print_project_text(state)),
             MenuItem(make_max_size_label, on_ask_max_size),
             MenuItem(
-                lambda _: make_menu_label("Text segmentation strategy", state.prefs.segmentation_strategy.label.lower()),
+                lambda _: make_menu_label("Text segmentation strategy", state.project.segmentation_strategy.label.lower()),
                 lambda _, __: TextMenu.strategy_menu(state)
             )
         ]
@@ -43,8 +43,9 @@ class TextMenu:
     def strategy_menu(state: State) -> None:
 
         def on_select(value: SegmentationStrategy) -> None:
-            state.prefs.segmentation_strategy = value
-            print_feedback("Text segmentation strategy set to:", state.prefs.segmentation_strategy.label)
+            state.project.segmentation_strategy = value
+            state.project.save()
+            print_feedback("Text segmentation strategy set to:", state.project.segmentation_strategy.label)
 
         MenuUtil.options_menu(
             state=state,
@@ -52,7 +53,7 @@ class TextMenu:
             labels=[item.label for item in list(SegmentationStrategy)],
             values=[item for item in list(SegmentationStrategy)],
             sublabels=[item.description for item in list(SegmentationStrategy)],
-            current_value=state.prefs.segmentation_strategy,
+            current_value=state.project.segmentation_strategy,
             default_value=list(SegmentationStrategy)[0],
             on_select=on_select,
             subheading=SEG_STRATEGY_SUBHEADING
@@ -70,11 +71,11 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
     if item.data == "import":
         phrase_groups, raw_text = AppUtil.get_phrase_groups_from_ask_text_file(
-            state.prefs.max_words, state.prefs.segmentation_strategy, pysbd_language=state.project.language_code
+            state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
         )
     elif item.data == "manual":
         phrase_groups, raw_text = AppUtil.get_text_groups_from_ask_std_in(
-            state.prefs.max_words, state.prefs.segmentation_strategy, pysbd_language=state.project.language_code
+            state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
         )
     else:
         return False
@@ -85,8 +86,8 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     AppUtil.print_text_groups(phrase_groups)
     s = f"... is how the text has been segmented for inference"
 
-    s += f"\n    (max words per segment: {COL_ACCENT}{int(state.prefs.max_words)}{COL_DEFAULT}, " \
-        f"segmentation strategy: {COL_ACCENT}{state.prefs.segmentation_strategy.label}{COL_DEFAULT}, " \
+    s += f"\n    (max words per segment: {COL_ACCENT}{int(state.project.max_words)}{COL_DEFAULT}, " \
+        f"segmentation strategy: {COL_ACCENT}{state.project.segmentation_strategy.label}{COL_DEFAULT}, " \
         f"project language code: {COL_ACCENT}{state.project.language_code or 'none'}{COL_DEFAULT})"
     printt(s)
     printt()
@@ -103,8 +104,8 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     # Commit
     state.project.set_phrase_groups_and_save(
         phrase_groups=phrase_groups,
-        strategy=state.prefs.segmentation_strategy,
-        max_words=state.prefs.max_words,
+        strategy=state.project.segmentation_strategy,
+        max_words=state.project.max_words,
         language_code=state.project.language_code,
         raw_text=raw_text
     )
@@ -117,14 +118,16 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
 def on_ask_max_size(state: State, _) -> None:
 
-    AppUtil.show_hint_if_necessary(state.prefs, HINT_SEG_MAX_SIZE)
+    Hint.show_hint_if_necessary(state.prefs, HINT_SEG_MAX_SIZE)
 
+    prompt = f"Enter max words per segment ({MAX_WORDS_PER_SEGMENT_MIN} <= value <= {MAX_WORDS_PER_SEGMENT_MAX}):"
     AskUtil.ask_number(
-        state.prefs,
-        f"Enter max words per segment ({MIN_MAX_WORDS_PER_SEGMENT} <= value <= {MAX_MAX_WORDS_PER_SEGMENT}):",
-        MIN_MAX_WORDS_PER_SEGMENT, MAX_MAX_WORDS_PER_SEGMENT,
-        "max_words",
-        "Max segment size set to:"
+        state.project,
+        prompt=prompt,
+        lb=MAX_WORDS_PER_SEGMENT_MIN, ub=MAX_WORDS_PER_SEGMENT_MAX,
+        attr_name="max_words",
+        success_prefix="Max words per segment set to:",
+        is_int=True
     )
 
 SEG_STRATEGY_SUBHEADING = \

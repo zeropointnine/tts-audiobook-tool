@@ -108,7 +108,7 @@ class VoiceMenuShared:
 
         print_feedback("Voice file saved")
 
-        AppUtil.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
+        Hint.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
 
     @staticmethod
     def ask_voice_file(default_dir_path: str, tts_type: TtsModelInfos, message_override: str="") -> str:

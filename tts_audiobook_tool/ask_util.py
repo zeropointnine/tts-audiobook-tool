@@ -1,6 +1,6 @@
 import sys
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
-
 
 class AskUtil:
     """

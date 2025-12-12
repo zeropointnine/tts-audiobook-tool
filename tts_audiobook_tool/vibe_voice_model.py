@@ -20,7 +20,6 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             model_path: str = "",
             max_new_tokens: int | None = None,
     ):
-
         super().__init__(TtsModelInfos.VIBEVOICE.value)
 
         self.max_new_tokens = max_new_tokens

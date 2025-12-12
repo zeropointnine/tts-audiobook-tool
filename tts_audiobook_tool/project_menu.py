@@ -25,7 +25,7 @@ class ProjectMenu:
                 return False
 
             print_feedback("Project directory set:", state.project.dir_path)
-            AppUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
+            Hint.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
             return True
 
         def on_existing_project(_: State, __: MenuItem) -> bool:
@@ -118,13 +118,14 @@ class ProjectMenu:
 
         state.set_existing_project(dir)
 
-        max_count = state.project.segmentation_max_words or PhraseGroup.get_max_num_words(state.project.phrase_groups)
-        if max_count > DEFAULT_MAX_WORDS_PER_SEGMENT:
+        # Show over-default-max-words hint
+        max_count = state.project.applied_max_words or PhraseGroup.get_max_num_words(state.project.phrase_groups)
+        if max_count > MAX_WORDS_PER_SEGMENT_DEFAULT:
             message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
             message = message.replace("%1", str(max_count))
-            message = message.replace("%2", str(DEFAULT_MAX_WORDS_PER_SEGMENT))
+            message = message.replace("%2", str(MAX_WORDS_PER_SEGMENT_DEFAULT))
             hint = Hint("", "FYI", message)
-            AppUtil.show_hint(hint, and_prompt=True)
+            Hint.show_hint(hint, and_prompt=True)
 
         return True
 
@@ -152,7 +153,7 @@ def on_language(state: State, __: MenuItem) -> None:
             # Show hint as a "side effect"
             text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(VALIDATION_UNSUPPORTED_LANGUAGES))
             hint = replace(HINT_VALIDATION_UNSUPPORTED_LANGUAGE, text=text)
-            AppUtil.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
+            Hint.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
             
         return ""
 

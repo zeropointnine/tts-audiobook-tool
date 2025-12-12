@@ -118,7 +118,7 @@ class MenuUtil:
 
             # Print optional hint
             if hint:
-                AppUtil.show_hint_if_necessary(state.prefs, hint)
+                Hint.show_hint_if_necessary(state.prefs, hint)
 
             # Print items
             for item in items_list:

@@ -36,7 +36,7 @@ class SoundSegmentUtil:
                 continue
             if os.path.getsize(path) == 0:
                 continue
-            if path.suffix.lower() != ".flac": # xxx verify
+            if path.suffix.lower() != ".flac":
                 continue
 
             parts = SoundSegmentUtil.extract_parts_from_file_name(path.name)

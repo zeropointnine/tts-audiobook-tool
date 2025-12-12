@@ -54,12 +54,6 @@ class ConcreteWord(Word):
         self.word = word
         self.probability = probability
 
-@dataclass
-class Hint:
-    key: str
-    heading: str
-    text: str
-
 # ---
 
 class ValidationResult(ABC):
@@ -116,15 +110,15 @@ class SkippedResult(ValidationResult):
 # ---
 
 class NormalizationSpecs(NamedTuple):
-    json_id: str
+    id: str
     label: str
     i: float
     lra: float
     tp: float
 
-NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(json_id="default", label="ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Values approximate 'ACX standard'
-NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(json_id="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
-NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(json_id="none", label="Disabled", i=0, lra=0, tp=0)
+NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(id="default", label="ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Values approximate 'ACX standard'
+NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(id="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
+NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(id="none", label="Disabled", i=0, lra=0, tp=0)
 
 class NormalizationType(Enum):
     DEFAULT = NORMALIZATION_SPECS_DEFAULT
@@ -133,13 +127,13 @@ class NormalizationType(Enum):
 
     @staticmethod
     @cache
-    def all_json_values() -> set[str]:
-         return { item.value.json_id for item in NormalizationType }
+    def all_ids() -> set[str]:
+         return { item.value.id for item in NormalizationType }
 
     @staticmethod
-    def from_json_value(s: str) -> NormalizationType | None:
+    def from_id(s: str) -> NormalizationType | None:
         for item in NormalizationType:
-            if s == item.value.json_id:
+            if s == item.value.id:
                 return item
         return None
 
@@ -190,13 +184,13 @@ class SttConfig(tuple[str, str, str], Enum):
         return self.value[2]
 
     @property
-    def json_id(self) -> str:
+    def id(self) -> str:
         return self.device + "_" + self.compute_type
 
     @staticmethod
-    def get_by_json_id(json_id: str) -> SttConfig | None:
+    def from_id(id: str) -> SttConfig | None:
         for item in list(SttConfig):
-            if json_id == item.json_id:
+            if id == item.id:
                 return item
         return None
 
@@ -228,7 +222,7 @@ class SegmentationStrategy(tuple[str, str, str], Enum):
     MAX_LEN = "max_len", "Maximized word count", SS_MAX_LEN_DESC
 
     @property
-    def json_id(self) -> str:
+    def id(self) -> str:
         return self.value[0]
 
     @property
@@ -240,9 +234,9 @@ class SegmentationStrategy(tuple[str, str, str], Enum):
         return self.value[2]
 
     @staticmethod
-    def from_json_id(s: str) -> SegmentationStrategy | None:
+    def from_id(s: str) -> SegmentationStrategy | None:
         for item in list(SegmentationStrategy):
-            if s == item.json_id:
+            if s == item.id:
                 return item
         return None
 

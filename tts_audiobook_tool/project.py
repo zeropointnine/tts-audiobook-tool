@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 
-from tts_audiobook_tool.app_types import ExportType, SegmentationStrategy, Sound
+from tts_audiobook_tool.app_types import ExportType, NormalizationType, SegmentationStrategy, Sound
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
@@ -20,8 +20,9 @@ from tts_audiobook_tool.util import *
 
 class Project:
     """
-    Project settings data-like class, with convenience functions
+    Project settings data-like class, with convenience functions.
     After changing values, must manually `save()`.
+    Big.
     """
 
     dir_path: str
@@ -30,19 +31,22 @@ class Project:
 
     phrase_groups: list[PhraseGroup] = []
 
+    segmentation_strategy: SegmentationStrategy = list(SegmentationStrategy)[0]
+    max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
+
     # The segmentation strategy used to create the PhraseGroups from the source text
-    segmentation_strategy: SegmentationStrategy | None = None
+    applied_strategy: SegmentationStrategy | None = None
     # The max words per segment value used to create the PhraseGroups from the source text
-    segmentation_max_words: int = 0
+    applied_max_words: int = 0
     # The language code used to create the PhraseGroups from the source text (ie, for pysbd)
-    segmentation_language_code: str = ""
+    applied_language_code: str = ""
 
     generate_range_string: str = ""
     section_dividers: list[int] = []
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]
     use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
-
+    normalization_type: NormalizationType = list(NormalizationType)[0]
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
     oute_temperature: float = -1
@@ -153,12 +157,28 @@ class Project:
         project.language_code = s
 
         s = d.get("segmentation_strategy", "")
-        project.segmentation_strategy = SegmentationStrategy.from_json_id(s)
+        project.segmentation_strategy = SegmentationStrategy.from_id(s) or list(SegmentationStrategy)[0]
 
-        i = d.get("segmentation_max_words", 0)
+        i = d.get("max_words", MAX_WORDS_PER_SEGMENT_DEFAULT)
+        if not isinstance(i, int) and not isinstance(i, float):
+            i = MAX_WORDS_PER_SEGMENT_DEFAULT
+        i = int(i)
+        if not (MAX_WORDS_PER_SEGMENT_MIN <= i <= MAX_WORDS_PER_SEGMENT_MAX):
+            i = MAX_WORDS_PER_SEGMENT_DEFAULT
+        project.max_words = i
+
+        s = d.get("applied_language_code", "")
+        if not isinstance(s, str):
+            s = ""
+        project.applied_language_code = s
+
+        s = d.get("applied_strategy", "")
+        project.applied_strategy = SegmentationStrategy.from_id(s)
+
+        i = d.get("applied_max_words", 0)
         if not (i >= 0):
             i = 0
-        project.segmentation_max_words = i
+        project.applied_max_words = i
 
         # Generate-range string
         # TODO: should validate and set to empty if invalid
@@ -181,7 +201,7 @@ class Project:
             else:
                 project.section_dividers = lst
 
-        # Subdivide phrases
+        # Subdivide into phrases
         b = d.get("subdivide_phrases", False)
         if not isinstance(b, bool):
             b = False
@@ -197,6 +217,10 @@ class Project:
             b = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
         project.use_section_sound_effect = b
         
+        # Normalization type
+        s = d.get("normalization_type", False)
+        project.normalization_type = NormalizationType.from_id(s) or list(NormalizationType)[0]
+
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
@@ -214,6 +238,7 @@ class Project:
             result = OuteUtil.load_oute_voice_json(voice_path)
             if isinstance(result, str):
                 printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}") # not ideal
+                printt()
             else:
                 project.oute_voice_json = result
 
@@ -260,28 +285,24 @@ class Project:
 
     def save(self) -> None:
 
-        if self.segmentation_strategy:
-            seg_string = self.segmentation_strategy.json_id
-        else:
-            seg_string = ""
-
         d = {
-
             "dir_path": self.dir_path,
 
             "language_code": self.language_code,
 
             "text": PhraseGroup.phrase_groups_to_json_list(self.phrase_groups),
-            "segmentation_strategy": seg_string,
-            "segmentation_max_words": self.segmentation_max_words,
-            "segmentation_language_code": self.segmentation_language_code,
+            "segmentation_strategy": self.segmentation_strategy.id,
+            "max_words": self.max_words,
+            "applied_language_code": self.applied_language_code,
+            "applied_strategy": self.applied_strategy.id if self.applied_strategy else "",
+            "applied_max_words": self.applied_max_words,
 
             "generate_range": self.generate_range_string,
             "chapter_indices": self.section_dividers,
             "subdivide_phrases": self.subdivide_phrases,
-            "use_section_sound_effect": self.use_section_sound_effect,
             "export_type": self.export_type.id,
             "use_section_sound_effect": self.use_section_sound_effect,
+            "normalization_type": self.normalization_type.value.id,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
@@ -329,9 +350,9 @@ class Project:
     ) -> None:
 
         self.phrase_groups = phrase_groups
-        self.segmentation_strategy = strategy
-        self.segmentation_max_words = max_words
-        self.segmentation_language_code = language_code
+        self.applied_strategy = strategy
+        self.applied_max_words = max_words
+        self.applied_language_code = language_code
 
         # Setting this invalidates some things
         self.section_dividers =[]

@@ -28,7 +28,7 @@ class SttFlow:
 
         print_heading("Enhance existing audiobook")
 
-        AppUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE)
+        Hint.show_hint_if_necessary(prefs, HINT_STT_ENHANCE)
 
         # [1] Ask text file
         if DEV and False:
@@ -70,7 +70,7 @@ class SttFlow:
 
         # Optional transcode step
         if Path(source_audio_path).suffix == ".mp3":
-            AppUtil.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
+            Hint.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
             b = AskUtil.ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
             if not b:
                 return
@@ -222,7 +222,7 @@ class SttFlow:
             printt(f"{COL_ACCENT}Saved {dest_path}")
             printt()
 
-        AppUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
+        Hint.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
 
         # [4b] Review "discontinuity info"
         b = AskUtil.ask_confirm("View discontinuity info summary? ")
@@ -231,8 +231,7 @@ class SttFlow:
             AskUtil.ask_enter_to_continue()
 
         if not save_error:
-            AppUtil.show_player_hint_if_necessary(prefs)
-
+            Hint.show_player_hint_if_necessary(prefs)
 
         return bool(save_error)
 

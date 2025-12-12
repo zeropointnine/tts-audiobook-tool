@@ -19,8 +19,8 @@ class ForceAlignUtil:
         """
         Creates list of `TimedPhrase`s by force-aligning source text `phrases` and transcribed text + timestamps in `words`.
         """
-        assert(len(phrases) > 0) # xxx
-        assert(len(words) > 0) # xxx
+        if not phrases or not words:
+            raise ValueError("lists must not be empty")
 
         if len(phrases) == 1:
             return [ TimedPhrase(phrases[0].text, 0.0, time_end=sound_duration) ]
@@ -30,7 +30,8 @@ class ForceAlignUtil:
         word_strings = [word.word for word in words]
         boundary_indices = ForceAlignUtil.force_align(phrase_strings, word_strings) 
         # Rem, boundary_indices length is 1 less than that of phrases        
-        assert(len(boundary_indices) == len(phrases) - 1) # xxx
+        if not (len(boundary_indices) == len(phrases) - 1):
+            raise ValueError("Length of indices must be 1 less than that of phrases")
 
         timed_phrases: list[TimedPhrase] = []
 

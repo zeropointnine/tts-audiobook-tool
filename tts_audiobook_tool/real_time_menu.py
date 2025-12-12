@@ -117,10 +117,10 @@ class RealTimeMenu:
         def on_custom(_: State, item: MenuItem) -> bool:
             if item.data == "file":
                 text_segments, __ = AppUtil.get_phrase_groups_from_ask_text_file(
-                    state.prefs.max_words, state.prefs.segmentation_strategy, pysbd_language=state.project.language_code)
+                    state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             else:
                 text_segments, __ = AppUtil.get_text_groups_from_ask_std_in(
-                    state.prefs.max_words, state.prefs.segmentation_strategy, pysbd_language=state.project.language_code)
+                    state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             if text_segments:
                 state.real_time.custom_text_groups = text_segments
                 state.real_time.line_range = None

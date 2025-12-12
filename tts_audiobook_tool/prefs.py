@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_types import NormalizationType, SegmentationStrategy, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.l import L
-
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -22,20 +20,14 @@ class Prefs:
             stt_variant: SttVariant = list(SttVariant)[0],
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
-            normalization_type: NormalizationType = NormalizationType.DEFAULT,
-            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            segmentation_strategy: SegmentationStrategy = SegmentationStrategy.NORMAL,
-            max_words_dict: dict = {}
+            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
         self._stt_variant = stt_variant
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
-        self._normalization_type: NormalizationType = normalization_type
         self._play_on_generate = play_on_generate
-        self._segmentation_strategy = segmentation_strategy
-        self._max_words_dict = max_words_dict
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -46,11 +38,14 @@ class Prefs:
     @staticmethod
     def load(save_if_dirty: bool=True) -> Prefs:
         """
-        Returns Prefs instance and error message if any
+        Loads and parses prefs file, and returns Prefs instance
 
-        param save_if_dirty:
-            If any pref value is missing or invalid and gets set to default value, saves updated prefs file.
+        save_if_dirty:
+            If any pref value is missing or invalid and therefore gets set to default value, 
+            saves updated prefs file.
         """
+        from tts_audiobook_tool.tts import Tts
+
         if not os.path.exists(Prefs.get_file_path()):
             return Prefs.new_and_save()
 
@@ -65,6 +60,16 @@ class Prefs:
             return Prefs.new_and_save()
 
         dirty = False
+
+        # Migration-related (properties which used to but no longer exist in Preferences)
+        if save_if_dirty:            
+            migrated_properties = ["segmentation_strategy", "max_words", "normalization_type", "use_section_sound_effect"]
+            has = [item for item in migrated_properties if prefs_dict.get(item) is not None]
+            if has:
+                from tts_audiobook_tool.hint import Hint                
+                hint = Hint("", "Properties have changed", MIGRATED_MESSAGE.replace("%1", ", ".join(has)))
+                Hint.show_hint(hint, and_prompt=True)
+                dirty = True
 
         # Project dir
         project_dir = prefs_dict.get("project_dir", "")
@@ -90,7 +95,7 @@ class Prefs:
 
         # STT config (device + quantization)
         s = prefs_dict.get("stt_config", "")
-        stt_config = SttConfig.get_by_json_id(s)
+        stt_config = SttConfig.from_id(s)
         if not stt_config:
             stt_config = SttConfig.get_default()
             dirty = True
@@ -101,55 +106,20 @@ class Prefs:
             tts_force_cpu = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
-        # Normalization type
-        if not "normalization_type" in prefs_dict:
-            s = "default"
-            dirty = True
-        else:
-            s = prefs_dict["normalization_type"]
-            if not s in NormalizationType.all_json_values():
-                s = "default"
-                dirty = True
-        normalization_type = NormalizationType.from_json_value(s)
-        if not normalization_type:
-            normalization_type = NormalizationType.DEFAULT
-
         # Play on generate
         play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
-        # Segmentation strategy
-        s = prefs_dict.get("segmentation_strategy", "")
-        segmentation_strategy = SegmentationStrategy.from_json_id(s)
-        if not segmentation_strategy:
-            segmentation_strategy = SegmentationStrategy.NORMAL
-            dirty = True
-
-        # Segment max words dict (tricky)
-        max_words_dict = prefs_dict.get("max_words", {})
-        if not isinstance(max_words_dict, dict):
-            max_words_dict = {}
-            dirty = True
-        current_model_max_words_key = Tts.get_type().value.max_words_prefs_key
-        current_model_max_words = max_words_dict.get(current_model_max_words_key, 0)
-        if not (MIN_MAX_WORDS_PER_SEGMENT <= current_model_max_words <= MAX_MAX_WORDS_PER_SEGMENT):
-            current_model_max_words = Tts.get_type().value.max_words_default
-            max_words_dict[current_model_max_words_key] = current_model_max_words
-            dirty = True
-
         # Make prefs instance
         prefs = Prefs(
             project_dir=project_dir,
-            normalization_type=normalization_type,
             stt_variant=stt_variant,
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
             play_on_generate=play_on_generate,
-            segmentation_strategy=segmentation_strategy,
-            hints=hints,
-            max_words_dict=max_words_dict
+            hints=hints
         )
 
         if dirty and save_if_dirty:
@@ -163,17 +133,6 @@ class Prefs:
     @project_dir.setter
     def project_dir(self, value: str):
         self._project_dir = value
-        self.save()
-
-    @property
-    def normalization_type(self) -> NormalizationType:
-        return self._normalization_type
-
-    def set_normalization_type_using(self, json_value: str) -> None:
-        value = NormalizationType.from_json_value(json_value)
-        if not value:
-            value = NormalizationType.DEFAULT
-        self._normalization_type = value
         self.save()
 
     @property
@@ -224,50 +183,19 @@ class Prefs:
         self.save()
 
     @property
-    def segmentation_strategy(self) -> SegmentationStrategy:
-        return self._segmentation_strategy
-
-    @segmentation_strategy.setter
-    def segmentation_strategy(self, value: SegmentationStrategy) -> None:
-        self._segmentation_strategy = value
-        self.save()
-
-    @property
-    def max_words(self) -> int:
-        key = Tts.get_type().value.max_words_prefs_key
-        value = self._max_words_dict[key]
-        if not (MIN_MAX_WORDS_PER_SEGMENT <= value <= MAX_MAX_WORDS_PER_SEGMENT): # shdnt happen
-            value = Tts.get_type().value.max_words_default
-        return value
-
-    @max_words.setter
-    def max_words(self, value: int) -> None:
-        value = int(value)
-        key = Tts.get_type().value.max_words_prefs_key
-        if not (MIN_MAX_WORDS_PER_SEGMENT <= value <= MAX_MAX_WORDS_PER_SEGMENT):
-            value = Tts.get_type().value.max_words_default
-        self._max_words_dict[key] = value
-        self.save()
-
-    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
 
     def save(self) -> None:
-
         dic = {
             "project_dir": self._project_dir,
             "hints": self._hints,
             "stt_variant": self._stt_variant.id,
-            "stt_config": self._stt_config.json_id,
+            "stt_config": self._stt_config.id,
             "tts_force_cpu": self._tts_force_cpu,
-            "normalization_type": self._normalization_type.value.json_id,
-            "play_on_generate": self._play_on_generate,
-            "segmentation_strategy": self._segmentation_strategy.json_id,
-            "max_words": self._max_words_dict
+            "play_on_generate": self._play_on_generate
         }
-
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:
                 json.dump(dic, f, indent=4)
@@ -279,3 +207,13 @@ class Prefs:
         from tts_audiobook_tool.app_util import AppUtil # ugh
         dir = AppUtil.get_app_user_dir()
         return os.path.join(dir, PREFS_FILE_NAME)
+
+# ---
+
+PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
+
+MIGRATED_MESSAGE = \
+f"""The following values that used to be stored as app preferences 
+are now stored as part of the project, and have been reset:
+    %1
+You may want to review them in this and any other pre-existing projects you may have."""

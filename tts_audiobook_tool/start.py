@@ -48,7 +48,7 @@ def main() -> None:
     # Hard requirement - chatterbox + Python v3.11
     if Tts.get_type() == TtsModelInfos.CHATTERBOX:
         if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
-            AppUtil.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
+            Hint.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
             exit(1)
 
     # Hard requirement - updated dependencies
@@ -62,22 +62,22 @@ def main() -> None:
             "Either install the missing packages or, preferably, update your virtual environment by re-running:\n"
             f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
         )
-        AppUtil.print_hint(hint)
+        Hint.print_hint(hint)
         exit(1)
 
     # Show other one-time startup messages (which are not blockers)
     temp_prefs = Prefs.load(save_if_dirty=False)
 
     if not does_import_test_pass("tkinter"): # To test for tkinter functionality, must do concrete import
-        AppUtil.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
+        Hint.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
 
     if not is_long_path_enabled():
-        AppUtil.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
+        Hint.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
 
     if Tts.get_type() == TtsModelInfos.OUTE:
-        AppUtil.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
+        Hint.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
     elif Tts.get_type() == TtsModelInfos.INDEXTTS2:
-        AppUtil.show_hint_if_necessary(temp_prefs, HINT_INDEXTTS2, and_prompt=True)
+        Hint.show_hint_if_necessary(temp_prefs, HINT_INDEXTTS2, and_prompt=True)
 
     # Start
     printt()

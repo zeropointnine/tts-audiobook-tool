@@ -84,15 +84,17 @@ class ConcatUtil:
         dest_path = os.path.join(base_dir, file_name)
 
         # Concat
-        durations = ConcatUtil.concatenate_files_plus_silence(
+        result = ConcatUtil.concatenate_files_plus_silence(
             dest_path,
             phrases_and_paths,
             print_progress=True,
             use_section_sound_effect=state.project.use_section_sound_effect,
             to_aac_not_flac=to_aac_not_flac
         )
-        if isinstance(durations, str):
-            return "", durations
+
+        if isinstance(result, str): # is error
+            return "", result
+        durations = result
 
         # Add the app metadata
         phrases = [item[0] for item in phrases_and_paths]
@@ -115,7 +117,6 @@ class ConcatUtil:
             return "", err
 
         return dest_path, ""
-
 
     @staticmethod
     def concatenate_files_plus_silence(
@@ -189,10 +190,11 @@ class ConcatUtil:
 
             ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
 
+        if print_progress:
+            printt()
         printt()
-        printt()
-        ConcatUtil.close_ffmpeg_stream(process)
 
+        ConcatUtil.close_ffmpeg_stream(process)
         return durations
 
     @staticmethod
@@ -258,14 +260,13 @@ def make_granular_timed_phrases(
     The argments are parallel lists.
     """
 
-    assert(len(timed_phrases) == len(sound_paths) == len(sound_durations)) # xxx
+    if not (len(timed_phrases) == len(sound_paths) == len(sound_durations)):
+        raise ValueError("lists must have same lengths")
 
     results: list[TimedPhrase] = []
 
     for i in range(0, len(timed_phrases)):
         
-        print()
-
         original_timed_phrase = timed_phrases[i]
         sound_path = sound_paths[i]
 
@@ -304,7 +305,6 @@ def make_granular_timed_phrases(
             time_end = offset + item.time_end
 
             updated_item = TimedPhrase(item.text, time_start, time_end)
-            # print("xxx new timed phrase", updated_item)
             results.append(updated_item)
         
         # Set last item's time_end using the duration of the source audio clip

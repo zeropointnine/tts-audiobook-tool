@@ -13,7 +13,6 @@ from typing import Any
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.l import L
 
 """
 Various small util functions, both app-specific and general
@@ -131,7 +130,6 @@ def delete_silently(path: str):
     try:
         os.remove(path)
     except Exception as e:
-        L.w(f"Couldn't delete temp file {path} {e}")
         pass # eat
 
 def timestamp_string() -> str:

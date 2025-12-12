@@ -26,7 +26,7 @@ class VoiceIndexTts2Menu:
             return f"Select voice clone sample {current}"
 
         def on_voice(_: State, __: MenuItem) -> None:
-            AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
+            Hint.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
 
         def make_temperature_label(_) -> str:
@@ -53,7 +53,7 @@ class VoiceIndexTts2Menu:
 
         def on_emo_voice(_: State, __: MenuItem) -> None:
             # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
-            AppUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
+            Hint.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceMenuShared.ask_and_set_voice_file(
                 state=state,
                 tts_type=TtsModelInfos.INDEXTTS2,

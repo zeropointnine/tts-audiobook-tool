@@ -11,12 +11,13 @@ DEV_SAVE_INTERMEDIATE_FILES = DEV and True
 PROJECT_DEFAULT_LANGUAGE = "en"
 PROJECT_DEFAULT_SECTION_SOUND_EFFECT = False
 
-# Max words per text chunk, applied to the source text for "STT mode"
+PREFS_DEFAULT_PLAY_ON_GENERATE = False
+
+# Max words per text chunk, applied to the source text in "STT flow"
 MAX_WORDS_PER_SEGMENT_STT = 40
 
 MENU_CLEARS_SCREEN = False
 
-PREFS_DEFAULT_PLAY_ON_GENERATE = False
 
 # Offset for whisper word end timestamp being consistently too early
 # The amount varies a lot, usually around 0.15, but is always too early.
