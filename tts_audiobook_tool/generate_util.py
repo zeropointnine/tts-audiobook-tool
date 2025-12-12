@@ -4,9 +4,10 @@ import time
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import SkippedResult, Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import SkippedResult, Sound, SttConfig, SttVariant, Word
 from tts_audiobook_tool.app_types import FailResult, TrimmableResult, PassResult, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
@@ -15,6 +16,7 @@ from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import HiggsModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -74,11 +76,14 @@ class GenerateUtil:
 
         for segment_index, path in sorted(items.items()):
 
-            text_group = project.phrase_groups[segment_index]
+            if SigIntHandler().did_interrupt:
+                break
+
+            phrase_group = project.phrase_groups[segment_index]
 
             printt()
             GenerateUtil.print_item_heading(
-                is_regenerate, text_group.presentable_text, segment_index, count, len(items)
+                is_regenerate, phrase_group.presentable_text, segment_index, count, len(items)
             )
 
             if is_regenerate: # First, delete original
@@ -87,7 +92,7 @@ class GenerateUtil:
 
             result = GenerateUtil.generate_single_full_flow(
                 project=project,
-                phrase_group=text_group,
+                phrase_group=phrase_group,
                 stt_variant=stt_variant,
                 stt_config=stt_config,
                 max_passes=2,
@@ -99,43 +104,59 @@ class GenerateUtil:
                 printt(f"{COL_ERROR}Model fail, skipping item:")
                 printt(f"{COL_ERROR}{err}")
                 num_failed += 1
+                count += 1
+                continue
 
+            sound, validation_result, transcribed_words = result
+
+            # Update counts
+            match validation_result:
+                case SkippedResult():
+                    num_saved_ok += 1
+                case PassResult():
+                    num_saved_ok += 1
+                case TrimmableResult():
+                    num_saved_ok += 1
+                case FailResult():
+                    num_saved_with_error += 1
+                case _: # shouldn't get here
+                    num_saved_ok += 1
+
+            # Save file
+            path = SoundSegmentUtil.make_segment_file_path(segment_index, project)
+            if isinstance(validation_result, FailResult):
+                path = AppUtil.insert_bracket_tag_file_path(path, "fail")
+            err = SoundFileUtil.save_flac(sound, path)
+            
+            # Print info
+            if err:
+                printt(f"{COL_ERROR}Couldn't save file: {err} {path}")
             else:
-                # Model successfully generated audio
-                sound, validation_result = result
-
-                # Update counts
-                match validation_result:
-                    case SkippedResult():
-                        num_saved_ok += 1
-                    case PassResult():
-                        num_saved_ok += 1
-                    case TrimmableResult():
-                        num_saved_ok += 1
-                    case FailResult():
-                        num_saved_with_error += 1
-                    case _: # shouldn't get here
-                        num_saved_ok += 1
-
-                # Save file
-                path = SoundSegmentUtil.make_segment_file_path(segment_index, project)
-                if isinstance(validation_result, FailResult):
-                    path = AppUtil.insert_bracket_tag_file_path(path, "fail")
-                err = SoundFileUtil.save_flac(sound, path)
-                if err:
-                    printt(f"{COL_ERROR}Couldn't save file: {err} {path}")
-                else:
-                    printt(f"Saved: {path}")
-
-                    # Update meta-timing info and print out
-                    saved_elapsed.append(time.time() - saved_start_time)
-                    saved_start_time = time.time()
-                    print_eta(saved_elapsed, len(items) - count + 1)
+                printt(f"Saved: {path}")
+                saved_elapsed.append(time.time() - saved_start_time)
+                saved_start_time = time.time()
+                print_eta(saved_elapsed, len(items) - count + 1)
+            
+            # Make re-segmented timing metadata and save to 'parallel' json file
+            if not isinstance(validation_result, SkippedResult): 
+                # TODO see how trimmableresult as well as failresult fares here...
+                timed_phrases = ForceAlignUtil.make_timed_phrases(
+                    phrases=phrase_group.phrases,
+                    words=transcribed_words,
+                    sound_duration=sound.duration
+                )
+                if isinstance(validation_result, TrimmableResult):
+                    timed_phrases = adjust_timed_phrases_trimmed(timed_phrases, validation_result)
+                path = Path(path).with_suffix(".json")
+                dicts = TimedPhrase.timed_phrases_to_dicts(timed_phrases)
+                json_string = json.dumps(dicts)
+                try:
+                    with open(path, 'w', encoding='utf-8') as file:
+                        file.write(json_string)
+                except Exception as e:
+                    ... # eat silently
 
             count += 1
-
-            if SigIntHandler().did_interrupt:
-                break
 
         # ---
 
@@ -170,10 +191,9 @@ class GenerateUtil:
         max_passes: int,
         is_realtime: bool,
         skip_reason_buffer: bool=False
-    ) -> tuple[Sound, ValidationResult] | str:
+    ) -> tuple[Sound, ValidationResult, list[Word]] | str:
         """
         Full program flow for generating sound from a single "phrase group", including retries.
-        Returns (Sound, ValidationResult) or error string for model failure etc.
         All TTS inference should be done through here.
 
         max_passes:
@@ -184,6 +204,11 @@ class GenerateUtil:
             If DISABLED, skips validation, ofc
 
         Prints generation speed info, validation info.
+
+        Returns:
+            The generated Sound, the ValidationResult, and the transcription data
+            Or error string on fail.
+
         """
 
         pass_num = 0
@@ -213,7 +238,7 @@ class GenerateUtil:
                     else:
                         validation_result = PassResult()
                         print_validation_result(validation_result, is_realtime=is_realtime)
-                    return silence_sound, validation_result
+                    return silence_sound, validation_result, []
                 else:
                     return err
 
@@ -235,18 +260,16 @@ class GenerateUtil:
             if skip_reason:
                 validation_result = SkippedResult(skip_reason)
                 print_validation_result(validation_result, is_realtime=is_realtime)
-                return (sound, validation_result)
+                return (sound, validation_result, [])
 
             start_time = time.time()
-            result = WhisperUtil.transcribe_to_segments(
+            result = WhisperUtil.transcribe_to_words(
                 sound, stt_variant, stt_config, language_code=project.language_code
             )
             if isinstance(result, str):
                 err = result
                 return err
-            segments = result
-
-            transcribed_words = WhisperUtil.get_words_from_segments(segments)
+            transcribed_words = result
 
             # Validate
             
@@ -257,18 +280,21 @@ class GenerateUtil:
                 SoundFileUtil.debug_save_result_info(
                     validation_result,
                     text,
-                    WhisperUtil.get_flat_text(transcribed_words)
+                    WhisperUtil.get_flat_text_from_words(transcribed_words)
                 )
 
             if isinstance(validation_result, PassResult):
                 print_validation_result(validation_result, is_realtime=is_realtime, elapsed=elapsed)
-                return sound, validation_result
+                return sound, validation_result, transcribed_words
+
             elif isinstance(validation_result, TrimmableResult):
                 start_time = validation_result.start_time or 0
                 end_time = validation_result.end_time or sound.duration
                 new_sound = SoundUtil.trim(sound, start_time, end_time)
+                # TODO: adjust transcribed words based on trim 
                 print_validation_result(validation_result, is_realtime=is_realtime, elapsed=elapsed)
-                return new_sound, validation_result
+                return new_sound, validation_result, transcribed_words
+            
             else: # Is invalid
                 if pass_num < max_passes:
                     # Will retry
@@ -277,7 +303,7 @@ class GenerateUtil:
                 else:
                     # Returns sound even though identified as invalid
                     print_validation_result(validation_result, is_realtime=is_realtime, elapsed=elapsed)
-                    return sound, validation_result
+                    return sound, validation_result, transcribed_words
 
     @staticmethod
     def generate_single(project: Project, text: str) -> Sound | str:
@@ -455,7 +481,7 @@ def print_validation_result(
             if is_realtime:
                 s += "playing anyway"
             else:
-                s += "tagging as failed, will save anyway"
+                s += "tagging as failed, saving anyway"
     printt(s)
 
 def print_eta(saved_elapsed: list[float], num_left) -> None:
@@ -476,5 +502,21 @@ def print_eta(saved_elapsed: list[float], num_left) -> None:
     avg = sum / num_samples
     eta = num_left * avg
     printt(f"Est. time remaining: {duration_string(eta)}")
+
+def adjust_timed_phrases_trimmed(timed_phrases: list[TimedPhrase], trimmable_result: TrimmableResult) -> list[TimedPhrase]:
+    
+    start_offset = trimmable_result.start_time or 0
+    end_time = trimmable_result.end_time or trimmable_result.duration
+    full_duration = end_time - start_offset
+    
+    results = []
+    
+    for item in timed_phrases:
+        time_start = max(item.time_start - start_offset, 0)
+        time_end = min(item.time_end, full_duration)
+        new_item = TimedPhrase(text=item.text, time_start=time_start, time_end=time_end)
+        results.append(new_item)
+
+    return results
 
 NO_VOCALIZABLE_CONTENT = "No vocalizable content"

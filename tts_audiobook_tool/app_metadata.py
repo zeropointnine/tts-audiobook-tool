@@ -17,7 +17,7 @@ class AppMetadata(NamedTuple):
     """
 
     # The list of Phrases that make up the audiobook text, including timing info
-    timed_text_segments: list[TimedPhrase]
+    timed_phrases: list[TimedPhrase]
 
     # The unmassaged input text 
     raw_text: str
@@ -34,7 +34,7 @@ class AppMetadata(NamedTuple):
 
         dic = {
             "raw_text": raw_text_base64,
-            "text_segments": TimedPhrase.to_dict_list(self.timed_text_segments),
+            "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
             "has_section_break_audio": bool(self.has_section_break_audio)
         }
         string = json.dumps(dic)
@@ -62,20 +62,20 @@ class AppMetadata(NamedTuple):
         bytes_data = zlib.decompress(data)
         raw_text = bytes_data.decode('utf-8')
 
-        text_segment_dicts = o["text_segments"]
-        if not isinstance(text_segment_dicts, list):
-            return f"Bad type for text_segments: {type(text_segment_dicts)}"
-        if not text_segment_dicts:
+        phrase_dicts = o["text_segments"]
+        if not isinstance(phrase_dicts, list):
+            return f"Bad type for 'text_segments': {type(phrase_dicts)}"
+        if not phrase_dicts:
             return f"text_segments list is empty"
-        result = TimedPhrase.list_from_dict_list(text_segment_dicts)
+        result = TimedPhrase.dicts_to_timed_phrases(phrase_dicts)
         if isinstance(result, str):
             return result
-        timed_text_segments = result
+        timed_phrases = result
 
         has_section_break_audio = o.get("has_section_break_audio", False)
 
         return AppMetadata(
-            timed_text_segments, 
+            timed_phrases, 
             raw_text, 
             has_section_break_audio=has_section_break_audio
         )

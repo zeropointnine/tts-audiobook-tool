@@ -82,7 +82,7 @@ class VoiceMenuShared:
             else:
                 stt_variant = state.prefs.stt_variant
 
-            result = WhisperUtil.transcribe_to_segments(
+            result = WhisperUtil.transcribe_to_words(
                 sound, stt_variant, state.prefs.stt_config, language_code=state.project.language_code
             )
 
@@ -94,7 +94,7 @@ class VoiceMenuShared:
                 AskUtil.ask_error(err)
                 return
 
-            words = WhisperUtil.get_words_from_segments(result)
+            words = result
             transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
 
         else:

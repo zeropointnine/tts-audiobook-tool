@@ -25,7 +25,10 @@ class Project:
 
     dir_path: str
 
+    language_code: str = PROJECT_DEFAULT_LANGUAGE
+
     phrase_groups: list[PhraseGroup] = []
+
     # The segmentation strategy used to create the PhraseGroups from the source text
     segmentation_strategy: SegmentationStrategy | None = None
     # The max words per segment value used to create the PhraseGroups from the source text
@@ -33,8 +36,9 @@ class Project:
     # The language code used to create the PhraseGroups from the source text (ie, for pysbd)
     segmentation_language_code: str = ""
 
+    generate_range_string: str = ""
     section_dividers: list[int] = []
-    language_code: str = PROJECT_DEFAULT_LANGUAGE
+    subdivide_phrases: bool = False
 
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
@@ -64,8 +68,6 @@ class Project:
     indextts2_emo_alpha: float = -1
     indextts2_emo_voice_file_name: str = ""
     indextts2_emo_vector: list[float] = [] # use either 0 or 8 elements
-
-    generate_range_string: str = ""
     
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
@@ -142,6 +144,11 @@ class Project:
         else:
             project.phrase_groups = []
 
+        s = d.get("language_code", "")
+        if not isinstance(s, str):
+            s = ""
+        project.language_code = s
+
         s = d.get("segmentation_strategy", "")
         project.segmentation_strategy = SegmentationStrategy.from_json_id(s)
 
@@ -150,12 +157,14 @@ class Project:
             i = 0
         project.segmentation_max_words = i
 
-        s = d.get("language_code", "")
-        if not isinstance(s, str):
+        # Generate-range string
+        # TODO: should validate and set to empty if invalid
+        s = d.get("generate_range", "")
+        if s == "all" or s == "a":
             s = ""
-        project.language_code = s
+        project.generate_range_string = s
 
-        # Chapter indices
+        # Section dividers / chapter indices
         if "chapter_indices" in d:
             lst = d["chapter_indices"]
             is_list_valid = True
@@ -169,12 +178,11 @@ class Project:
             else:
                 project.section_dividers = lst
 
-        # Generate-range string
-        # TODO: should validate and set to empty if invalid
-        s = d.get("generate_range", "")
-        if s == "all" or s == "a":
-            s = ""
-        project.generate_range_string = s
+        # Subdivide phrases
+        b = d.get("subdivide_phrases", False)
+        if not isinstance(b, bool):
+            b = False
+        project.subdivide_phrases = b
 
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
@@ -248,15 +256,16 @@ class Project:
 
             "dir_path": self.dir_path,
 
+            "language_code": self.language_code,
+
             "text": PhraseGroup.phrase_groups_to_json_list(self.phrase_groups),
             "segmentation_strategy": seg_string,
             "segmentation_max_words": self.segmentation_max_words,
             "segmentation_language_code": self.segmentation_language_code,
 
-            "language_code": self.language_code,
-
-            "chapter_indices": self.section_dividers,
             "generate_range": self.generate_range_string,
+            "chapter_indices": self.section_dividers,
+            "subdivide_phrases": self.subdivide_phrases,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,

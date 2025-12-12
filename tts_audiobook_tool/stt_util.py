@@ -24,7 +24,7 @@ class SttUtil:
         print_info: bool=True
     ) -> tuple[ List[TimedPhrase], bool ]:
         """
-        Force-alignment algorithm
+        Forced-alignment algorithm
         Takes in source text list of TextSegments and list of transcribed Words
         to create list of TimedPhrases.
 
@@ -231,7 +231,7 @@ class SttUtil:
             printt(f"\nElapsed: {elapsed_sec}\n")
 
             for i, item in enumerate(result):
-                printt(f"{i}  {item.pretty_string}")
+                printt(f"{i}  {item}")
             printt()
 
         SigIntHandler().clear()

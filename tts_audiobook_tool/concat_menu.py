@@ -37,7 +37,8 @@ class ConcatMenu:
             MenuItem("Create as FLAC file", on_start, data=False),
             MenuItem("Create as AAC/M4A file",on_start, data=True),
             MenuItem(make_cuts_label, lambda _, __: ConcatMenu.ask_cut_points(state)),
-            MenuItem(make_norm_label, lambda _, __: ConcatMenu.normalization_menu(state))
+            MenuItem(make_norm_label, lambda _, __: ConcatMenu.normalization_menu(state)),
+            MenuItem(make_subdivide_label, lambda _, __: ConcatMenu.subdivide_menu(state))
         ]
         MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
 
@@ -224,6 +225,26 @@ class ConcatMenu:
             if err:
                 AskUtil.ask_error(err)
 
+    @staticmethod
+    def subdivide_menu(state: State) -> None:
+
+        def on_select(_: State, item: MenuItem) -> None:
+            state.project.subdivide_phrases = item.data
+            state.project.save()
+            print_feedback(f"Set to: {state.project.subdivide_phrases}")
+
+        items = [
+            MenuItem("True", on_select, True),
+            MenuItem("False", on_select, False)
+        ]
+        MenuUtil.menu(
+            state=state,
+            heading=make_subdivide_label,
+            items=items,
+            subheading=SUBDIVIDE_SUBHEADING,
+            one_shot=True
+        )
+
 # ---
 
 def make_norm_label(state: State) -> str:
@@ -260,7 +281,19 @@ def make_chapter_info_string(info: ChapterInfo, index: int) -> str:
     s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
     return s
 
+def make_subdivide_label(state: State) -> str:
+    value = state.project.subdivide_phrases
+    return f"Subdivide phrases {make_currently_string(value)}"
+
 LOUDNORM_SUBHEADING = \
-"""Standardizes audio levels to minimize volume disparities between TTS generations. 
-The Stronger profile applies more aggressive normalization, suitable for mobile devices.
+"""Performs an extra pass after concatenating audio segments to minimize volume disparities
+between TTS generations. The \"Stronger\" profile is a more aggressive setting, suitable 
+for mobile devices.
+"""
+
+SUBDIVIDE_SUBHEADING = \
+"""Affects how text is highlighted in the player/reader app.
+When False, text segments map directly to the TTS prompts of the generated audio. 
+When True, text is further sub-segmented by phrase. Requires \"speech-to-text validation\"
+to be enabled during TTS sound generation.
 """

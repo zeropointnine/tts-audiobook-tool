@@ -52,7 +52,7 @@ class ConcatUtil:
                 phrases_and_paths.append((segment, ""))
                 continue
             if not group_index in sound_segments:
-                # Audio segment file not yet generated
+                # Audio segment file missing / not yet generated
                 phrases_and_paths.append((segment, ""))
                 num_missing += 1
                 continue
@@ -95,11 +95,15 @@ class ConcatUtil:
             return "", durations
 
         # Add the app metadata
-        text_segments = [item[0] for item in phrases_and_paths]
-        timed_text_segments = TimedPhrase.make_list_using(text_segments, durations)
+        phrases = [item[0] for item in phrases_and_paths]
+        sound_paths = [item[1] for item in phrases_and_paths]
+        timed_phrases = TimedPhrase.make_list_using(phrases, durations)
+        if state.project.subdivide_phrases:
+            timed_phrases = make_granular_timed_phrases(timed_phrases, sound_paths, durations)
+        
         meta = AppMetadata(
             raw_text=raw_text, 
-            timed_text_segments=timed_text_segments,
+            timed_phrases=timed_phrases,
             has_section_break_audio=state.prefs.use_section_sound_effect
         )
 
@@ -137,9 +141,9 @@ class ConcatUtil:
 
         SigIntHandler().set("concat")
 
-        for i, (phrase, path) in enumerate(phrases_and_paths):
+        for i, (phrase, sound_path) in enumerate(phrases_and_paths):
 
-            if not path:
+            if not sound_path:
                 durations.append(0)
                 continue
 
@@ -161,10 +165,10 @@ class ConcatUtil:
                 appended_sound_effect_path = ""
 
             if print_progress:
-                s = f"{time_stamp(total_duration, with_tenth=False)} {Path(path).stem[:80]} ... "
+                s = f"{time_stamp(total_duration, with_tenth=False)} {Path(sound_path).stem[:80]} ... "
                 print("\x1b[1G" + s, end="\033[K", flush=True)
 
-            result = SoundFileUtil.load(path)
+            result = SoundFileUtil.load(sound_path)
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
                 return result
@@ -239,3 +243,73 @@ class ConcatUtil:
         """
         process.stdin.close()  # type: ignore
         process.wait()
+
+# ---
+
+def make_granular_timed_phrases(
+        timed_phrases: list[TimedPhrase], 
+        sound_paths: list[str],
+        sound_durations: list[float]
+    ) -> list[TimedPhrase]:
+    """
+    Uses the "forced alignment" metadata in the json files saved alongside the sound_paths 
+    to break up the timed_phrases into smaller parts.
+
+    The argments are parallel lists.
+    """
+
+    assert(len(timed_phrases) == len(sound_paths) == len(sound_durations)) # xxx
+
+    results: list[TimedPhrase] = []
+
+    for i in range(0, len(timed_phrases)):
+        
+        print()
+
+        original_timed_phrase = timed_phrases[i]
+        sound_path = sound_paths[i]
+
+        if not sound_path:
+            results.append(original_timed_phrase)
+            continue
+
+        subdivided_items_json_path = Path(sound_path).with_suffix(".json") # TODO rename this to .json
+        if not subdivided_items_json_path.exists():
+            results.append(original_timed_phrase)
+            continue
+
+        try:
+            with open(subdivided_items_json_path, 'r', encoding='utf-8') as file:
+                json_dicts = json.load(file)
+        except Exception as e:
+            # File error; use original item
+            results.append(original_timed_phrase)
+            continue
+
+        parse_result = TimedPhrase.dicts_to_timed_phrases(json_dicts)
+        if isinstance(parse_result, str): 
+            # Parse error; use original item
+            results.append(original_timed_phrase)
+            continue
+        subdivided_timed_phrases = parse_result
+
+        offset = original_timed_phrase.time_start
+
+        for subdivided_index, item in enumerate(subdivided_timed_phrases):
+            
+            if subdivided_index == 0:
+                time_start = offset
+            else:
+                time_start = offset + subdivided_timed_phrases[subdivided_index - 1].time_end
+            time_end = offset + item.time_end
+
+            updated_item = TimedPhrase(item.text, time_start, time_end)
+            # print("xxx new timed phrase", updated_item)
+            results.append(updated_item)
+        
+        # Set last item's time_end using the duration of the source audio clip
+        # rather than the transcription end word timestamp
+        # (prevents discontinuities in segment selectedness across boundaries, which looks distracting)
+        results[-1].time_end = sound_durations[i] + offset
+
+    return results

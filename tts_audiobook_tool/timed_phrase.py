@@ -13,19 +13,10 @@ class TimedPhrase:
         self.time_start = time_start
         self.time_end = time_end
 
-    @property
-    def pretty_string(self, index: int=-1, use_error_color: bool=True) -> str:
-        if index >= 0:
-            s1 = f"[{str(index).rjust(5)}] "
-        else:
-            s1 = ""
-        if use_error_color and self.time_start == 0 and self.time_end == 0:
-            color = COL_ERROR
-        else:
-            color = COL_DEFAULT
-        s3 = f"{color}{time_stamp(self.time_start)}-{time_stamp(self.time_end)}{COL_DEFAULT}  "
-        s4 = ellipsize(self.text.strip(), 50)
-        return f"{s1}{s3}{s4}"
+    def __str__(self) -> str:
+        s1 = ellipsize(self.text.strip(), 50)
+        s2 = f"{time_stamp(self.time_start)}-{time_stamp(self.time_end)} "
+        return f"[TimedPhrase] {s1} {s2}"
 
     # ---
 
@@ -46,14 +37,14 @@ class TimedPhrase:
         }
 
     @staticmethod
-    def to_dict_list(timed_text_segments: list[TimedPhrase]) -> list[dict]:
+    def timed_phrases_to_dicts(timed_text_segments: list[TimedPhrase]) -> list[dict]:
         result = []
         for item in timed_text_segments:
             result.append(TimedPhrase.to_dict(item))
         return result
 
     @staticmethod
-    def list_from_dict_list(dicts: list[dict]) -> list[TimedPhrase] | str:
+    def dicts_to_timed_phrases(dicts: list[dict]) -> list[TimedPhrase] | str:
         """
         Returns list or error string
         """
@@ -72,7 +63,7 @@ class TimedPhrase:
             raise ValueError(f"Parallel arrays have different lengths {len(phrases)} {len(durations)}")
 
         timed_text_segments = []
-        total_seconds = 0.0
+        seconds_cursor = 0.0
 
         for i in range(len(phrases)):
 
@@ -84,9 +75,9 @@ class TimedPhrase:
                 timed_text_segments.append(timed_text_segment)
                 continue
 
-            timed_text_segment = TimedPhrase.make_using(text_segment, total_seconds, total_seconds + duration)
+            timed_text_segment = TimedPhrase.make_using(text_segment, seconds_cursor, seconds_cursor + duration)
             timed_text_segments.append(timed_text_segment)
-            total_seconds += duration
+            seconds_cursor += duration
 
         return timed_text_segments
 

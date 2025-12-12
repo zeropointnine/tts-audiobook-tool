@@ -90,7 +90,7 @@ class RealTimeUtil:
                 printt()
                 continue
 
-            sound, validation_result = result
+            sound, validation_result, _ = result
 
             if i == end_index:
                 appended_sound = None

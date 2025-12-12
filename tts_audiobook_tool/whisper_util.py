@@ -15,17 +15,17 @@ from tts_audiobook_tool.util import make_error_string
 class WhisperUtil:
 
     @staticmethod
-    def transcribe_to_segments(
+    def transcribe_to_words(
             sound: Sound,
             stt_variant: SttVariant,
             stt_config: SttConfig,
             language_code: str
-    ) -> list[Segment] | str:
+    ) -> list[Word] | str:
         """
         All whisper transcription should be done through here.
 
         Simple wrapper around whisper `transcribe()`.
-        Returns list of (whisper) Segments or error string on fail.
+        Returns list of (whisper) Words or error string on fail.
 
         Makes temporary resampled audio if necessary.
         """
@@ -42,7 +42,9 @@ class WhisperUtil:
 
         # Convert generator to concrete list (does the inference)
         segments = list(segments)
-        return segments
+        # Flatten Segments into Words
+        words = WhisperUtil.get_words_from_segments(segments)
+        return words
 
     # ---
 
@@ -61,10 +63,10 @@ class WhisperUtil:
     @staticmethod
     def get_flat_text_from_segments(segments: Iterable[Segment]) -> str:
         words = WhisperUtil.get_words_from_segments(segments)
-        return WhisperUtil.get_flat_text(words)
+        return WhisperUtil.get_flat_text_from_words(words)
 
     @staticmethod
-    def get_flat_text(words: list[Word]) -> str:
+    def get_flat_text_from_words(words: list[Word]) -> str:
         """
         Returns join'ed word.words.
         Rem, this is well formatted, retaining punctuation and capitalizations.
@@ -80,10 +82,10 @@ class WhisperUtil:
         when they are not of high-ish confidence, apparently.
         """
         if min_probability <= 0.0:
-            text = WhisperUtil.get_flat_text(words)
+            text = WhisperUtil.get_flat_text_from_words(words)
         else:
             words = [word for word in words if word.probability >= min_probability]
-            text = WhisperUtil.get_flat_text(words)
+            text = WhisperUtil.get_flat_text_from_words(words)
         return text
 
     # ---

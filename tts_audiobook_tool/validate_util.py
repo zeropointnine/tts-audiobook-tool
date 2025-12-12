@@ -17,7 +17,7 @@ class ValidateUtil:
         # Think layers of swiss cheese mkay.
         # Order of tests matter here.
 
-        transcribed_text = WhisperUtil.get_flat_text(transcribed_words)
+        transcribed_text = WhisperUtil.get_flat_text_from_words(transcribed_words)
 
         # Static audio test
         is_static = TranscribeUtil.is_audio_static(sound, transcribed_text)
