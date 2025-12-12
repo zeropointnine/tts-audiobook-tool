@@ -29,7 +29,7 @@ def printt(s: str="", end=None) -> None:
 
 def print_feedback(
         message: str,
-        ending: str="",
+        end_value: str="",
         is_error=False,
         no_preformat=False,
         extra_line=True
@@ -43,8 +43,8 @@ def print_feedback(
     else:
         col = COL_ERROR if is_error else COL_DIM
         s = Ansi.ITALICS +  col + message
-    if ending:
-        s = s.strip() + " " + Ansi.RESET + ending
+    if end_value:
+        s = s.strip() + " " + COL_ACCENT + end_value
     printt(s)
 
     if extra_line:
@@ -156,7 +156,7 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
         color = COL_ACCENT
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
-def make_currently_string(value: str | int | float | bool, label: str="currently: ", color_code=COL_ACCENT) -> str:
+def make_currently_string(value: Any, label: str="currently: ", color_code=COL_ACCENT) -> str:
     return f"{COL_DIM}({label}{color_code}{value}{COL_DIM})"
 
 def make_gb_string(bytes: int) -> str:

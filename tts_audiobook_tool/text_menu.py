@@ -28,7 +28,7 @@ class TextMenu:
             return f"Text segmentation max words per segment {make_currently_string(value)}"
 
         def make_strategy_label(_) -> str:
-            currently = make_currently_string(state.prefs.segmentation_strategy.description)
+            currently = make_currently_string(state.prefs.segmentation_strategy.label)
             return f"Text segmentation strategy {currently}"
 
         items = [
@@ -36,30 +36,27 @@ class TextMenu:
             MenuItem("Manually enter/paste text", on_set_text, data="manual"),
             MenuItem("Print text segments", lambda _, __: AppUtil.print_project_text(state)),
             MenuItem(make_max_size_label, on_ask_max_size),
-            MenuItem(make_strategy_label, TextMenu.strategy_menu)
+            MenuItem(make_strategy_label, lambda _, __: TextMenu.strategy_menu(state))
         ]
         MenuUtil.menu(state, make_heading, items, hint=HINT_LINE_BREAKS)
 
     @staticmethod
-    def strategy_menu(state: State, _) -> None:
+    def strategy_menu(state: State) -> None:
 
-        def make_heading(_) -> str:
-            value = make_currently_string(state.prefs.segmentation_strategy.description)
-            return f"Text segmentation strategy {value}"
-
-        def handler(_: State, item: MenuItem) -> bool:
-            if not item.data or not isinstance(item.data, SegmentationStrategy):
-                return False
-            state.prefs.segmentation_strategy = item.data
-            print_feedback("Set to:", state.prefs.segmentation_strategy.description)
-            return True
-
-        menu_items = []
-        for  item in list(SegmentationStrategy):
-            menu_item = MenuItem(item.description, handler, data=item)
-            menu_items.append(menu_item)
-
-        MenuUtil.menu(state, make_heading, menu_items, hint=HINT_SEG_STRATEGY)
+        def on_select(value: SegmentationStrategy) -> None:
+            state.prefs.segmentation_strategy = value
+            print_feedback("Text segmentation strategy set to:", state.prefs.segmentation_strategy.label)
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Text segmentation strategy",
+            labels=[item.label for item in list(SegmentationStrategy)],
+            values=[item for item in list(SegmentationStrategy)],
+            sublabels=[item.description for item in list(SegmentationStrategy)],
+            current_value=state.prefs.segmentation_strategy,
+            default_value=list(SegmentationStrategy)[0],
+            on_select=on_select,
+            subheading=SEG_STRATEGY_SUBHEADING
+        )
 
 def on_set_text(state: State, item: MenuItem) -> bool:
 
@@ -89,7 +86,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     s = f"... is how the text has been segmented for inference"
 
     s += f"\n    (max words per segment: {COL_ACCENT}{int(state.prefs.max_words)}{COL_DEFAULT}, " \
-        f"segmentation strategy: {COL_ACCENT}{state.prefs.segmentation_strategy.description}{COL_DEFAULT}, " \
+        f"segmentation strategy: {COL_ACCENT}{state.prefs.segmentation_strategy.label}{COL_DEFAULT}, " \
         f"project language code: {COL_ACCENT}{state.project.language_code or 'none'}{COL_DEFAULT})"
     printt(s)
     printt()
@@ -129,3 +126,8 @@ def on_ask_max_size(state: State, _) -> None:
         "max_words",
         "Max segment size set to:"
     )
+
+SEG_STRATEGY_SUBHEADING = \
+"""When text is imported to the project, this dictates how
+it is segmented for text-to-speech inference.
+"""

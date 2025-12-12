@@ -8,7 +8,6 @@ from typing import NamedTuple, Protocol
 
 from numpy import ndarray
 
-from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.constants_config import *
 
 """
@@ -213,23 +212,62 @@ class SttConfig(tuple[str, str, str], Enum):
 
 # ---
 
-class SegmentationStrategy(tuple[str, str], Enum):
+SS_NORMAL_DESC = \
+"""    Text is segmented by paragraph, and within each paragraph, by sentence.
+    This ensures predictable caesuras between sentences."""
 
-    NORMAL = "normal", "normal"
-    MAX_LEN = "max_len", "maximized word count"
+SS_MAX_LEN_DESC = \
+"""    Text is segmented by paragraph, and within each paragraph, segmented by 
+    'max words per segment' at the nearest phrase boundary.
+    This maximizes text length per TTS generation."""
+
+class SegmentationStrategy(tuple[str, str, str], Enum):
+
+    NORMAL = "normal", "Normal", SS_NORMAL_DESC
+    MAX_LEN = "max_len", "Maximized word count", SS_MAX_LEN_DESC
 
     @property
     def json_id(self) -> str:
         return self.value[0]
 
     @property
-    def description(self) -> str:
+    def label(self) -> str:
         return self.value[1]
+    
+    @property
+    def description(self) -> str:
+        return self.value[2]
 
     @staticmethod
     def from_json_id(s: str) -> SegmentationStrategy | None:
         for item in list(SegmentationStrategy):
             if s == item.json_id:
+                return item
+        return None
+
+# ---
+
+class ExportType(tuple[str, str, str], Enum):
+
+    AAC = ("m4a", "AAC/M4A", ".m4a") # default
+    FLAC = ("flac", "FLAC", ".flac")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def label(self) -> str:
+        return self.value[1]
+
+    @property
+    def suffix(self) -> str:
+        return self.value[2]
+
+    @staticmethod
+    def get_by_id(id: str) -> ExportType | None:
+        for item in list(ExportType):
+            if id == item.id:
                 return item
         return None
 

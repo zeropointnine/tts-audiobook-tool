@@ -1,6 +1,7 @@
 import os
+from typing import cast
 
-from tts_audiobook_tool.app_types import NormalizationType
+from tts_audiobook_tool.app_types import ExportType, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
@@ -23,7 +24,11 @@ class ConcatMenu:
 
         def on_start(_: State, menu_item: MenuItem) -> None:
             infos = ChapterInfo.make_chapter_infos(state.project)
-            ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=menu_item.data)
+            is_aac = (state.project.export_type == ExportType.AAC)
+            ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=is_aac)
+
+        def make_file_type_label(_: State) -> str:
+            return f"File type {make_currently_string(state.project.export_type.label)}"
 
         def make_cuts_label(_: State) -> str:
             qty = len(state.project.section_dividers)
@@ -34,8 +39,8 @@ class ConcatMenu:
             return f"Define chapter cut points {s}"
 
         items = [
-            MenuItem("Create as FLAC file", on_start, data=False),
-            MenuItem("Create as AAC/M4A file",on_start, data=True),
+            MenuItem("Start", on_start),
+            MenuItem(make_file_type_label, lambda _, __: ConcatMenu.file_type_menu(state)),
             MenuItem(make_cuts_label, lambda _, __: ConcatMenu.ask_cut_points(state)),
             MenuItem(make_norm_label, lambda _, __: ConcatMenu.normalization_menu(state)),
             MenuItem(make_subdivide_label, lambda _, __: ConcatMenu.subdivide_menu(state))
@@ -43,27 +48,60 @@ class ConcatMenu:
         MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
 
     @staticmethod
+    def file_type_menu(state: State) -> None:
+
+        def on_select(value: ExportType) -> None:
+            state.project.export_type = value
+            state.project.save()
+            print_feedback(f"File type set to: {value.label}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="File type",
+            labels=[item.label for item in list(ExportType)],
+            values=[item for item in list(ExportType)],
+            current_value=state.project.export_type,
+            default_value=list(ExportType)[0],
+            on_select=on_select
+        )
+
+    @staticmethod
     def normalization_menu(state: State) -> None:
 
-        def on_select(_: State, item: MenuItem) -> None:
-            info: NormalizationType = item.data
-            state.prefs.set_normalization_type_using(info.value.json_id)
-            print_feedback(f"Normalization set to: {info.value.label}")
+        def on_select(value: NormalizationType) -> None:
+            state.prefs.set_normalization_type_using(value.value.json_id)
+            print_feedback(f"Normalization set to: {value.value.label}")
 
-        menu_items = []
-        for i, typ in enumerate(list(NormalizationType)):
-            label = typ.value.label
-            if i == 0:
-                label += f"{COL_DIM} (default)"
-            menu_items.append( MenuItem(label, on_select, data=typ) )
-
-        MenuUtil.menu(
+        MenuUtil.options_menu(
             state=state,
-            heading=make_norm_label,
-            items=menu_items,
+            heading_text="Loudness normalization",
+            labels=[item.value.label for item in list(NormalizationType)],
+            values=[item for item in list(NormalizationType)],
+            current_value=state.prefs.normalization_type,
+            default_value=list(NormalizationType)[0],
+            on_select=on_select,
             subheading=LOUDNORM_SUBHEADING,
-            hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None,
-            one_shot=True
+            hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None
+        )
+
+    @staticmethod
+    def subdivide_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.subdivide_phrases = value
+            state.project.save()
+            print_feedback(f"Subdivide phrases set to: {state.project.subdivide_phrases}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Subdivide phrases",
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.subdivide_phrases,
+            default_value=False,
+            on_select=on_select,
+            subheading=LOUDNORM_SUBHEADING,
+            hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None
         )
 
     @staticmethod
@@ -224,26 +262,6 @@ class ConcatMenu:
             err = open_directory_in_gui(dest_subdir)
             if err:
                 AskUtil.ask_error(err)
-
-    @staticmethod
-    def subdivide_menu(state: State) -> None:
-
-        def on_select(_: State, item: MenuItem) -> None:
-            state.project.subdivide_phrases = item.data
-            state.project.save()
-            print_feedback(f"Set to: {state.project.subdivide_phrases}")
-
-        items = [
-            MenuItem("True", on_select, True),
-            MenuItem("False", on_select, False)
-        ]
-        MenuUtil.menu(
-            state=state,
-            heading=make_subdivide_label,
-            items=items,
-            subheading=SUBDIVIDE_SUBHEADING,
-            one_shot=True
-        )
 
 # ---
 

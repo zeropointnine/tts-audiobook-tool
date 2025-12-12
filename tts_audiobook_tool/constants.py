@@ -21,6 +21,7 @@ PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
 PROJECT_DEFAULT_LANGUAGE = "en"
 PREFS_FILE_NAME = "tts-audiobook-tool-prefs.json"
 
+
 FFMPEG_COMMAND = "ffmpeg"
 
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
@@ -243,10 +244,6 @@ HINT_LINUX_CUDNN_VERSION = Hint(
 f"""The installed version of torch is incompatible with faster-whisper CUDA acceleration.
 Either downgrade your version of torch (see README file), or change the Whisper 
 device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
-
-HINT_SEG_STRATEGY = Hint("seg", "",
-"""When text is imported to the project, this dictates how
-it is segmented for text-to-speech inference.""")
 
 HINT_SEG_MAX_SIZE = Hint("seg", "",
 f"""When text is imported to the project, this dictates the maximum number of

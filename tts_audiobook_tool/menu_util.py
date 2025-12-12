@@ -1,12 +1,14 @@
 from __future__ import annotations
 import inspect
-from typing import Callable
+from typing import Callable, cast
 
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
+from typing import TypeVar, Callable, Any
 
+T = TypeVar("T")
 
 class MenuItem:
     def __init__(
@@ -14,9 +16,13 @@ class MenuItem:
             label: StringOrMaker,
             handler: MenuHandler,
             data: Any = None,
+            sublabel: StringOrMaker | None = None,
             hotkey: str = ""
     ):
         self.label = label
+
+        # Optional extra text printed on second line
+        self.sublabel = sublabel
 
         # handler/callback passes the State object and `data`, if any
         self.handler = handler
@@ -29,7 +35,7 @@ class MenuItem:
 
 # ---
 
-# Type aliases
+# Type aliases:
 
 # A function that returns a string
 StringMaker = Callable[[State], str]
@@ -55,9 +61,9 @@ class MenuUtil:
         heading: StringOrMaker,
         items: MenuItemListOrMaker,
         is_submenu: bool = True,
+        subheading: StringOrMaker | None = None,
         hint: Hint | None = None,
         one_shot: bool = False,
-        subheading: StringOrMaker | None = None,
         on_exit: Callable | None = None
     ):
         """
@@ -101,18 +107,12 @@ class MenuUtil:
                     hotkeys.add(item.hotkey)
 
             # Print heading
-            if isinstance(heading, str):
-                s = heading
-            else:
-                s = heading(state)
+            s = get_string_from(state, heading)
             print_heading(s)
 
             # Print optional subheading
             if subheading:
-                if isinstance(subheading, str):
-                    s = subheading
-                else:
-                    s = subheading(state)
+                s = get_string_from(state, subheading)
                 if s:
                     printt(s)
 
@@ -122,11 +122,11 @@ class MenuUtil:
 
             # Print items
             for item in items_list:
-                if isinstance(item.label, str):
-                    s = item.label
-                else:
-                    s = item.label(state)
+                s = get_string_from(state, item.label)
                 s = make_hotkey_string(item.hotkey.upper()) + " " + s
+                if item.sublabel:
+                    # Print extra line/s
+                    s += "\n" + COL_DIM + get_string_from(state, item.sublabel)
                 printt(s)
             printt()
 
@@ -176,3 +176,60 @@ class MenuUtil:
                 if on_exit:
                     on_exit()
                 return
+
+    @staticmethod
+    def options_menu(
+        state: State,
+        heading_text: str,
+        labels: list[str],
+        values: list[T],
+        current_value: T,
+        default_value: T,
+        on_select: Callable[[T], None],
+        sublabels: list[str] | None = None,
+        hint: Hint | None=None,
+        subheading: str=""
+    ) -> None:
+        """
+        Displays a menu with a list of values.
+        Think radio button group.
+        If an item is selected, calls `on_select` (returns string+value tuple)
+
+        `labels`, `values`, and `sublabels` (if exists) are all "parallel lists"
+        """
+        if len(labels) != len(values):
+            raise ValueError("labels and values lists must have same size")
+        if sublabels and len(sublabels) != len(labels):
+            raise ValueError("labels and sublabels lists must have same size")
+
+        def on_menu_item(_: State, item: MenuItem) -> None:
+            on_select(item.data) # callback
+
+        items: list[MenuItem] = []
+        for i in range(0, len(labels)):
+            label = labels[i]
+            value = values[i]
+            sublabel = sublabels[i] if sublabels else None
+            if value == default_value:
+                label += f" {COL_DIM}(default)"
+            if value == current_value:
+                label += f" {COL_ACCENT}(selected)"
+            menu_item = MenuItem(label, on_menu_item, value, sublabel=sublabel)
+            items.append(menu_item)
+
+        MenuUtil.menu(
+            state=state,
+            heading=heading_text,
+            items=items,
+            hint=hint,
+            subheading=subheading,
+            one_shot=True
+        )
+
+# ---
+
+def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
+    if isinstance(string_or_maker, str):
+        return string_or_maker
+    else:
+        return string_or_maker(state)
