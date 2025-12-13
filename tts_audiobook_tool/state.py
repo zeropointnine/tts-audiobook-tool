@@ -58,7 +58,6 @@ class State:
         if not self.real_time.custom_text_groups:
             self.real_time.line_range = None
 
-
     @property
     def prefs(self) -> Prefs:
         return self._prefs
@@ -66,7 +65,6 @@ class State:
     @prefs.setter
     def prefs(self, value: Prefs) -> None:
         self._prefs = value
-
         # Sync static values
         Stt.set_variant(self.prefs.stt_variant)
         Stt.set_config(self.prefs.stt_config)

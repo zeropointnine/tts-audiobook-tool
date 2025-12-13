@@ -122,6 +122,7 @@ class AppUtil:
     @staticmethod
     def gc_ram_vram() -> None:
         """ Trigger Python garbage collector, plus torch"""
+        # Garbage collect "RAM"
         gc.collect()
         # "Garbage collect" VRAM
         import torch

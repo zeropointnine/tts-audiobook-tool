@@ -68,7 +68,6 @@ class OptionsMenu:
 
         def on_select(value: SttVariant) -> None:
             state.prefs.stt_variant = value
-            Stt.set_variant(state.prefs.stt_variant) # sync static value
             print_feedback(f"Set to:", state.prefs.stt_variant.id)
 
         MenuUtil.options_menu(
@@ -88,7 +87,6 @@ class OptionsMenu:
         def on_select(value: SttConfig) -> None:
             if state.prefs.stt_config != value:
                 state.prefs.stt_config= value
-                Stt.set_config(state.prefs.stt_config) # sync static value
             print_feedback(f"Set whisper device to:", str(state.prefs.stt_config.description))
 
         labels = []
@@ -114,7 +112,6 @@ class OptionsMenu:
         def on_select(value: bool) -> None:
             if state.prefs.tts_force_cpu != value:
                 state.prefs.tts_force_cpu = value
-                Tts.set_force_cpu(state.prefs.tts_force_cpu) # sync static value
             print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))        
 
         model_name = Tts.get_type().value.ui['short_name']
@@ -124,8 +121,8 @@ class OptionsMenu:
             state=state,
             heading_text="TTS model - use CPU as device",
             subheading=subheading,
-            labels=["False", "True"],
-            values=[False, True],
+            labels=["True", "False"],
+            values=[True, False],
             current_value=state.prefs.tts_force_cpu,
             default_value=False,
             on_select=on_select

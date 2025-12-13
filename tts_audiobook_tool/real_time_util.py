@@ -43,7 +43,10 @@ class RealTimeUtil:
         
         # Warm up models
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
-        Tts.warm_up_models(force_no_stt)
+        did_cancel = Tts.warm_up_models(force_no_stt)
+        if did_cancel:
+            print_feedback("\nCancelled")
+            return
 
         s = "Starting real-time playback..."
         if state.prefs.stt_variant == SttVariant.DISABLED:

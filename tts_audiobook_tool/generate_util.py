@@ -62,7 +62,10 @@ class GenerateUtil:
             items = items_to_regenerate
 
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
-        Tts.warm_up_models(force_no_stt)
+        did_cancel = Tts.warm_up_models(force_no_stt)
+        if did_cancel:
+            print_feedback("\nCancelled")
+            return True
 
         SigIntHandler().set("generating")
         start_time = time.time()

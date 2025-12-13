@@ -4,6 +4,7 @@ from importlib import util
 from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
@@ -90,12 +91,13 @@ class Tts:
 
     @staticmethod
     def set_force_cpu(value: bool) -> None:
-        if Tts._force_cpu != bool:
+        if Tts._force_cpu != value:
             Tts._force_cpu = value
+            # Clear model, will get lazy re-inited as needed
             Tts.clear_tts_model()
 
     @staticmethod
-    def has_instance() -> bool:
+    def instance_exists() -> bool:
         items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2]
         for item in items:
             if item is not None:
@@ -103,19 +105,25 @@ class Tts:
         return False
 
     @staticmethod
-    def warm_up_models(force_no_stt: bool) -> None:
+    def warm_up_models(force_no_stt: bool) -> bool:
         """
         Instantiates tts model and stt model - if not already - as a convenience,
         and prints that it is doing so.
+
+        Unlike the 'direct' model getters, it also checks for keyboard interrupt
+        and return True if control-c was pressed
+
+        TODO: `force_no_stt` should be handled elsewhere
         """
-        should_instantiate_tts = not Tts.has_instance()
-        
+
+        should_instantiate_tts = not Tts.instance_exists()        
         should_instantiate_whisper = (Stt.get_variant() != SttVariant.DISABLED) and \
             not force_no_stt and not Stt._whisper
-
         should_neither = (not should_instantiate_whisper and not should_instantiate_whisper)
         if should_neither:
-            return
+            return False
+
+        SigIntHandler().set("model init")
 
         should_both = (should_instantiate_tts and should_instantiate_whisper)
 
@@ -131,11 +139,23 @@ class Tts:
         if should_instantiate_tts:
             _ = Tts.get_instance()
 
+        if SigIntHandler().did_interrupt:
+            SigIntHandler().clear()
+            return True
+
         if should_both:
             printt() # yes rly
 
         if should_instantiate_whisper:
             _ = Stt.get_whisper()
+
+        if SigIntHandler().did_interrupt:
+            SigIntHandler().clear()
+            return True
+        
+        SigIntHandler().clear()
+        return False
+
 
     @staticmethod
     def get_instance() -> TtsModel:

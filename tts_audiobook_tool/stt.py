@@ -32,8 +32,8 @@ class Stt:
     @staticmethod
     def set_config(value: SttConfig) -> None:
         if value != Stt._config:
-            # Clear model, will get lazy re-inited as needed
             Stt._config = value
+            # Clear model, will get lazy re-inited as needed
             Stt.clear_stt_model()
     
     @staticmethod

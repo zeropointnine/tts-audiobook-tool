@@ -31,15 +31,17 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
 
         # Determine attention implementation type
         attn_implementation = "sdpa" # fyi, in my testing, "eager" is completely unusable
+        attn_description = "sdpa"
         if "cuda" in device_map:
             try:
                 from flash_attn import flash_attn_func # type: ignore
                 attn_implementation = "flash_attention_2"
+                attn_description = "flash_attention_2"
             except ImportError as e:
-                printt("\nWarning: Flash attention is not installed. Will fall back to sdpa.\n")
+                attn_description = "sdpa (Flash attention not installed)"
                 # ... note, triton is still required though
         printt()
-        printt(f"Attention implementation: {attn_implementation}")
+        printt(f"Attention implementation: {attn_description}")
         printt()
 
         # Load model
@@ -52,6 +54,10 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         self.model.eval()
 
     def kill(self) -> None:
+        if self.processor:
+            self.processor.tokenizer = None
+            self.processor.audio_processor = None
+            self.processor.audio_normalizer = None
         self.processor = None
         self.model = None
 
@@ -76,12 +82,10 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         FYI: Couldn't pass pre-loaded sound data without inference issues for some reason,
         but in practice overhead is negligible
         """
+        if self.model is None or self.processor is None:
+            return "model or processor is not initialized" # logic error
 
         try:
-
-            assert(self.model is not None)
-            assert(self.processor is not None)
-
             self.model.set_ddpm_inference_steps(num_steps)
 
             inputs = self.processor(
@@ -109,7 +113,7 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         if not has_audio:
             return "No audio output"
 
-        # First (and only) batch item. A tuple of 3 items.
+        # First (and only) batch item. Is a tuple of 3 items.
         data = outputs.speech_outputs[0] # type: ignore
 
         # Is bfloat16
@@ -120,6 +124,5 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         ndarray_data = tensor_data.cpu().numpy()
         sound = Sound(ndarray_data, TtsModelInfos.VIBEVOICE.value.sample_rate)
         return sound
-
 
 SPEAKER_TAG = "Speaker 1: "

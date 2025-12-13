@@ -160,9 +160,12 @@ class Prefs:
         return self._stt_variant
 
     @stt_variant.setter
-    def stt_variant(self, value: SttVariant) -> None:
+    def stt_variant(self, value: SttVariant) -> None:        
         self._stt_variant = value
         self.save()
+        # Sync static value
+        from tts_audiobook_tool.stt import Stt
+        Stt.set_variant(value)
 
     @property
     def stt_config(self) -> SttConfig:
@@ -172,6 +175,9 @@ class Prefs:
     def stt_config(self, value: SttConfig) -> None:
         self._stt_config = value
         self.save()
+        # Sync static value
+        from tts_audiobook_tool.stt import Stt
+        Stt.set_config(value)
 
     @property
     def tts_force_cpu(self) -> bool:
@@ -181,6 +187,9 @@ class Prefs:
     def tts_force_cpu(self, value: bool) -> None:
         self._tts_force_cpu = value
         self.save()
+        # Sync static value
+        from tts_audiobook_tool.tts import Tts
+        Tts.set_force_cpu(value)
 
     @property
     def is_validation_disabled(self) -> bool:

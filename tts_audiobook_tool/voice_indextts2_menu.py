@@ -121,7 +121,8 @@ class VoiceIndexTts2Menu:
             if state.project.indextts2_use_fp16 != item.data:
                 state.project.indextts2_use_fp16 = item.data
                 state.project.save()
-                Tts.set_model_params_using_project(state.project) # sync to global
+                # Sync static value
+                Tts.set_model_params_using_project(state.project) 
             print_feedback(f"FP16 set to:", str(state.project.indextts2_use_fp16))
             return True
 

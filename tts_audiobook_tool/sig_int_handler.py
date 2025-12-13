@@ -49,9 +49,13 @@ class SigIntHandler(SingletonBase):
 
         feedback = ""
         match self._mode:
+            case "model init":
+                feedback = "Control-C pressed, will cancel"
             case "generating":
                 feedback = "Control-C pressed, will stop after current generation is complete"
             case "concatenating":
+                feedback = "Control-C pressed, will stop"
+            case _:
                 feedback = "Control-C pressed, will stop"
         if feedback:
             printt() # Clear any 3p lib's use of "\r" in their print() statements
