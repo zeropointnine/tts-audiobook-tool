@@ -119,7 +119,8 @@ class ProjectMenu:
         state.set_existing_project(dir)
 
         # Show over-default-max-words hint
-        max_count = state.project.applied_max_words or PhraseGroup.get_max_num_words(state.project.phrase_groups)
+        max_count = state.project.applied_max_words 
+        # TODO: Not doing this for now: ... or PhraseGroup.get_max_num_words(state.project.phrase_groups)
         if max_count > MAX_WORDS_PER_SEGMENT_DEFAULT:
             message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
             message = message.replace("%1", str(max_count))

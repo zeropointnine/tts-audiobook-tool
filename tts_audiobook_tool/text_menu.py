@@ -2,6 +2,7 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -27,10 +28,20 @@ class TextMenu:
             )
             return make_menu_label("Text segmentation max words per segment", value)
 
+        def on_print(_: State, __: MenuItem) -> None:
+            AppUtil.print_project_text(
+                phrase_groups=state.project.phrase_groups,
+                extant_indices = set( state.project.sound_segments.sound_segments.keys() ),
+                language_code_used=state.project.applied_language_code,
+                max_words_used=state.project.applied_max_words,
+                strategy_used=state.project.applied_strategy or list(SegmentationStrategy)[0]
+            )
+            AskUtil.ask_enter_to_continue()
+
         items = [
             MenuItem("Import from text file", on_set_text, data="import"),
             MenuItem("Manually enter/paste text", on_set_text, data="manual"),
-            MenuItem("Print text segments", lambda _, __: AppUtil.print_project_text(state)),
+            MenuItem("Print text segments", on_print),
             MenuItem(make_max_size_label, on_ask_max_size),
             MenuItem(
                 lambda _: make_menu_label("Text segmentation strategy", state.project.segmentation_strategy.label.lower()),
@@ -82,15 +93,14 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     if not phrase_groups:
         return False
 
-    # Print
-    AppUtil.print_text_groups(phrase_groups)
-    s = f"... is how the text has been segmented for inference"
-
-    s += f"\n    (max words per segment: {COL_ACCENT}{int(state.project.max_words)}{COL_DEFAULT}, " \
-        f"segmentation strategy: {COL_ACCENT}{state.project.segmentation_strategy.label}{COL_DEFAULT}, " \
-        f"project language code: {COL_ACCENT}{state.project.language_code or 'none'}{COL_DEFAULT})"
-    printt(s)
-    printt()
+    # Preview
+    AppUtil.print_project_text(
+        phrase_groups=phrase_groups,
+        extant_indices=None,
+        language_code_used=state.project.language_code,
+        max_words_used=state.project.max_words,
+        strategy_used=state.project.segmentation_strategy
+    )
 
     # Confirm
     if not AskUtil.ask_confirm():
@@ -131,6 +141,6 @@ def on_ask_max_size(state: State, _) -> None:
     )
 
 SEG_STRATEGY_SUBHEADING = \
-"""When text is imported to the project, this dictates how
-it is segmented for text-to-speech inference.
+"""When text is imported to the project, this dictates how it will be segmented 
+for text-to-speech inference.
 """

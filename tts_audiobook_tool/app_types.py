@@ -209,7 +209,7 @@ class SttConfig(tuple[str, str, str], Enum):
 
 SS_NORMAL_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, by sentence.
-    This ensures predictable caesuras between sentences."""
+    This produces predictable caesuras between sentences."""
 
 SS_MAX_LEN_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, segmented by 
