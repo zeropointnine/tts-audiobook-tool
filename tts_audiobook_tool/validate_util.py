@@ -10,7 +10,12 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class ValidateUtil:
 
     @staticmethod
-    def validate_item(sound: Sound, reference_text: str, transcribed_words: list[Word]) -> ValidationResult:
+    def validate_item(
+        sound: Sound, 
+        reference_text: str, 
+        transcribed_words: list[Word],
+        project_language_code: str
+    ) -> ValidationResult:
 
         # Runs various tests to determine if audio generation seems to be valid.
         # Errs on the conservative side, prioritizes avoiding false positives.
@@ -55,8 +60,10 @@ class ValidateUtil:
             return FailResult(f"Word over-occurrence count: {num_over_occurrences}")
 
         # Dropped words at end or beginning
-        if TranscribeUtil.is_drop_fail_tail(reference_text, transcribed_text): # TODO pass along more info here for the fail message
-            return FailResult("Missing word/s at end")
+        if project_language_code == "en":
+            if TranscribeUtil.is_drop_fail_tail(reference_text, transcribed_text): 
+                # TODO pass along more info here for the fail message
+                return FailResult("Missing word/s at end")
 
         # Word count delta test
         fail_reason = TranscribeUtil.is_word_count_fail(reference_text, transcribed_text)
@@ -72,9 +79,9 @@ class ValidateUtil:
             if trim_start_time == 0:
                 trim_start_time = None
 
-        # Currently disabled because end-time is so unreliable with current implementation using whisper,
+        # Currently disabled because end-time is so unreliable with current whisper implementation,
         # does almost more harm than good.
-        # Although still worth using for 'substring test' maybe.
+        # Although still worth using for 'substring test' maybe
 
         # trim_end_time = TranscribeUtil.get_semantic_match_end_time_trim(
         #     reference_text, transcribed_words, sound, include_last_word=tts_specs.semantic_trim_last

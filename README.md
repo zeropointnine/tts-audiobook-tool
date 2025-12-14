@@ -252,9 +252,11 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
-** 2025-12-XXX**
+** 2025-12-13**
 
 Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player/reader app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio must first be re-generated).
+
+Transferred various app-level preference settings to become project settings.
 
 **2025-12-09**
 

@@ -142,21 +142,20 @@ class TextUtil:
         return s
 
     @staticmethod
-    def un_all_caps(text: str) -> str:
+    def un_all_caps_english(text: str) -> str:
         """
         If a sentence is all caps, force lowercase on all dictionary words.
-        Generally trying to avoid lines like: "PROLOGUE", which some models will get wrong b/c all-caps
+        Generally trying to avoid lines like: "PROLOGUE", which some models can get wrong b/c all-caps
         """
 
-        # String has uppercase letters and no lowercase letters at this point
         has_lower = bool(re.search(r'[a-z]', text))
         if has_lower:
             return text
-
         has_upper = bool(re.search(r'[A-Z]', text))
         if not has_upper:
             return text
 
+        # String is all caps at this point
         words = text.split(" ")
         new_words = []
         for word in words:

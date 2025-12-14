@@ -276,7 +276,7 @@ class GenerateUtil:
 
             # Validate
             
-            validation_result = ValidateUtil.validate_item(sound, text, transcribed_words)
+            validation_result = ValidateUtil.validate_item(sound, text, transcribed_words, project.language_code)
             elapsed = time.time() - start_time
 
             if DEV_SAVE_INTERMEDIATE_FILES:

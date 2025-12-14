@@ -159,6 +159,8 @@ class TranscribeUtil:
         """
         Tries to determine if generated audio has missing phrase at the very end.
         Occurs especially with Fish.
+
+        Because the current logic is "Dictionary" dependent, should only used when project language is en.
         """
 
         # To be considered a fail:
@@ -197,7 +199,8 @@ class TranscribeUtil:
     def is_drop_fail_head(source_text: str, trans_text: str):
         """
         Tries to determine if generated audio has missing phrase at the beginning.
-        WIP: Unlike tail, same logic yields almost all false positives at least with __
+        This is not common as "drop fail tail" above.
+        WIP: Not currently used; unlike tail, same logic yields almost all false positives at least with __
         """
         source_text = TextUtil.massage_for_text_comparison(source_text)
         trans_text = TextUtil.massage_for_text_comparison(trans_text)
