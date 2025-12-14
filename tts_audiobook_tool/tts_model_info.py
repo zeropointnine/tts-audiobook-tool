@@ -11,6 +11,8 @@ class TtsModelInfo(NamedTuple):
     """
     # Module name to test for that implies the TTS model library exists in the current py env
     module_test: str
+    # Supported device types
+    torch_devices: list[str]
     # identifier used in file names
     file_tag: str
     # The model's output dtype
@@ -29,23 +31,21 @@ class TtsModelInfo(NamedTuple):
     requirements_file_name: str
     # ui-related strings and values
     ui: dict
-    # List of string replace pairs (used for "untrained" punctuation)
+    # List of string replace pairs (used for "untrained" punctuation primarily)
     substitutions: list[ tuple[str, str] ]
-
 
 class TtsModelInfos(Enum):
     """
     Enumerates `TtsModelInfo` instances for all TTS models supported by the app
     """
 
-    NONE = TtsModelInfo(
-        "", "none", np.dtype("float32"), 0, "", 0, False, "", {}, []
-    )
+    NONE = TtsModelInfo("", [], "none", np.dtype("float32"), 0, "", 0, False, "", {}, []) # placeholder
 
     OUTE = TtsModelInfo(
         module_test="outetts",
         file_tag="oute",
         dtype=np.dtype("float32"),
+        torch_devices = [], # not applicable
         sample_rate=44100,
         max_words_prefs_key="max_words_oute",
         max_words_default=40,
@@ -67,6 +67,7 @@ class TtsModelInfos(Enum):
         module_test="chatterbox",
         file_tag="chatterbox",
         dtype=np.dtype("float32"),
+        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_prefs_key="max_words_chatterbox",
         max_words_default=40,
@@ -87,6 +88,7 @@ class TtsModelInfos(Enum):
         module_test="fish_speech",
         file_tag="s1-mini",
         dtype=np.dtype("float32"),
+        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_prefs_key="max_words_fish",
         max_words_default=40,
@@ -107,6 +109,7 @@ class TtsModelInfos(Enum):
         module_test="boson_multimodal",
         file_tag="higgs",
         dtype=np.dtype("float32"),
+        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_prefs_key="max_words_higgs",
         max_words_default=40,
@@ -127,6 +130,7 @@ class TtsModelInfos(Enum):
         module_test="vibevoice",
         file_tag="vibevoice",
         dtype=np.dtype("float32"),
+        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_prefs_key="max_words_higgs",
         max_words_default=40,
@@ -149,6 +153,7 @@ class TtsModelInfos(Enum):
         module_test="indextts",
         file_tag="indextts2",
         dtype=np.dtype("float32"),
+        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=22050,
         max_words_prefs_key="max_words_indextts2",
         max_words_default=40,
@@ -166,6 +171,28 @@ class TtsModelInfos(Enum):
         ],
     )
 
+    GLM = TtsModelInfo(
+        module_test="glm_tts",
+        file_tag="glm",
+        dtype=np.dtype("float32"),
+        torch_devices = ["cuda"], # cuda-only atm
+        sample_rate=24000,
+        max_words_prefs_key="max_words_indextts2",
+        max_words_default=40,
+        semantic_trim_last=False,
+        requirements_file_name="requirements-glm.txt",
+        ui = {
+            "proper_name": "GLM-TTS",
+            "short_name": "GLM",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip"
+        },
+        substitutions=[
+            (";", ","), # semicolon generates random syllable
+            ("\u2014", ", "), ("\u2500", ", "), # em-dash doesn't create caesura
+            (" \u2013 ", ", ") # space-en-dash-space doesn't create caesura
+        ],
+    )
 
     @staticmethod
     @cache

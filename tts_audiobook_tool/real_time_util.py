@@ -13,6 +13,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validate_util import ValidateUtil
 
@@ -75,14 +76,13 @@ class RealTimeUtil:
 
             # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 ...
             has_enough_runway = (stream and stream.buffer_duration >= STREAM_DURATION_THRESHOLD)
-            max_passes = 2 if has_enough_runway else 0
 
             result = GenerateUtil.generate_single_full_flow(
                 project=project,
                 phrase_group=phrase_group,
                 stt_variant=state.prefs.stt_variant,
                 stt_config=state.prefs.stt_config,
-                max_passes=max_passes,
+                max_passes=2 if has_enough_runway else 0,
                 is_realtime=True,
                 skip_reason_buffer=(state.prefs.stt_variant != SttVariant.DISABLED and not has_enough_runway)
             )
@@ -113,7 +113,11 @@ class RealTimeUtil:
 
             # Start stream lazy
             if not stream:
-                stream = SoundDeviceStream(Tts.get_type().value.sample_rate)
+                if Tts.get_type() == TtsModelInfos.GLM: # special case
+                    sr = state.project.glm_sr
+                else:
+                    sr = Tts.get_type().value.sample_rate
+                stream = SoundDeviceStream(sr)
                 stream.start()
 
             # Add sound to the stream

@@ -1,7 +1,7 @@
 {
   "name": "tts-audiobook-tool",
   "version": "1.0.0",
-  "description": "This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:\r - IndexTTS2\r - VibeVoice 1.5B\r - Higgs Audio V2\r - Fish OpenAudio S1-mini\r - Chatterbox TTS\r - Oute TTS",
+  "description": "Generative-AI audiobook creation tool that supports various text-to-speech models which utilize zero shot voice cloning",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

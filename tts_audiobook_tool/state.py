@@ -82,16 +82,16 @@ class State:
             return "Bad path"
         if not project_dir_path.is_absolute():
             return "Please use an absolute path"
-        if project_dir_path.exists():
-            # If exists, make sure dir is empty
-            if os.listdir(project_dir_path):
-                return "Directory is not empty"
+        
+        if project_dir_path.exists() and os.listdir(project_dir_path):
+            return "Directory is not empty"
 
         # Make project dir
-        try:
-            os.mkdir(project_dir_path) # note, not "make_dirs()"
-        except Exception as e:
-            return f"Error creating directory: {e}"
+        if not project_dir_path.exists():
+            try:
+                os.mkdir(project_dir_path) # note, not using `make_dirs()``
+            except Exception as e:
+                return f"Error creating directory: {e}"
 
         # Make subdirs
         try:

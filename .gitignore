@@ -8,3 +8,5 @@ checkpoints/
 
 test*.py
 config_oute_dev.py
+output/
+outputs/

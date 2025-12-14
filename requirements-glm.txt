@@ -1,0 +1,28 @@
+#################
+# Use Python 3.11
+#################
+
+# GLM dependencies
+git+https://github.com/zeropointnine/glm-tts-packaged
+
+# App dependencies
+faster-whisper==1.2.1
+ctranslate2==4.6.1
+torch==2.6.0
+torchaudio==2.6.0
+audiotsm==0.1.2
+ffmpeg-python==0.2.0
+librosa==0.11.0
+loguru==0.7.3
+mutagen==1.47.0
+natsort==8.4.0
+num2words==0.5.14
+nvidia-ml-py
+pyloudnorm==0.1.1
+psutil
+pysbd==0.3.4
+readchar==4.2.1
+sounddevice==0.5.2
+soundfile==0.13.1
+watchdog==6.0.0
+xxhash==3.5.0

@@ -23,6 +23,7 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 **Some example outputs**, all using the same source text and same 15-second voice clone sample:
 
+- [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-glm.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2.abr.m4a)
 - [IndexTTS2 (with added emotional guidance voice sample)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2-plus-emo.abr.m4a)
 - [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b.abr.m4a)
@@ -57,7 +58,7 @@ Clone the repository and cd into it:
     git clone https://github.com/zeropointnine/tts-audiobook-tool
     cd tts-audiobook-tool
 
-A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. Model-specific options will be enabled automatically in the app based on which virtual environment has been enabled.
+A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. 
 
 To enable torch CUDA acceleration on Windows, run the following commands (On Linux, no extra step is required).
 
@@ -68,6 +69,50 @@ Finally, run the app by entering:
 
     python -m tts_audiobook_tool
 
+Note that any settings that are specific to a given model will be enabled automatically based on which virtual environment has been enabled.
+
+## Install for GLM-TTS
+
+> **ℹ️ Note:**
+> **Requires CUDA** due to hardcoded cuda-related operations throughout the glm inference code. 
+
+### Linux
+
+Initialize a **Python v3.11** virtual environment named `venv-glm`. For example:
+
+    path\to\python3.11\python.exe -m venv venv-glm
+
+Activate the virtual environment:
+
+    venv-glm\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-glm.txt
+
+### Windows
+
+Requires setting up a "hybrid conda environment" due to a transitive dependency which is difficult to install on Windows using only pip.
+
+Install [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install#quickstart-install-instructions) if not already.
+
+Initialize the conda environment. For example:
+
+    conda create --prefix "c:\path\to\conda-glm" -y
+
+Activate the conda environment:
+
+    conda activate "c:\path\to\conda-glm"
+
+Install this dependency using conda:
+
+    conda install pynini==2.1.5 -c conda-forge
+
+Install the rest of the project dependencies using pip like normal:
+
+    pip install requirements-glm.txt
+
+Note that we pull from [a fork of glm-tts[(https://github.com/zeropointnine/glm-tts-packaged)] that has been refactored as an installable package.
 
 ## Install for IndexTTS2
 
@@ -101,7 +146,7 @@ Install dependencies:
 
     pip install -r requirements-vibevoice.txt
 
-Note that because Microsoft famously removed the source code from their project github repo, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
+Note that because Microsoft famously removed the source code from their github repository, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
 ### Optional, when using CUDA: 
 
@@ -234,6 +279,7 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
+| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
@@ -252,11 +298,15 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
-** 2025-12-13**
+**2025-12-15**
 
-Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player/reader app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio must first be re-generated).
+Added support for **GLM-TTS**.
 
-Transferred various app-level preference settings to become project settings.
+**2025-12-13**
+
+Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player/reader app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio would first need be re-generated).
+
+Transferred various app-level preference settings to be project settings.
 
 **2025-12-09**
 

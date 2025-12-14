@@ -51,7 +51,8 @@ class VoiceMenuShared:
             TtsModelInfos.FISH,
             TtsModelInfos.HIGGS,
             TtsModelInfos.VIBEVOICE,
-            TtsModelInfos.INDEXTTS2
+            TtsModelInfos.INDEXTTS2,
+            TtsModelInfos.GLM
         ]:
             raise ValueError(f"Unsupported tts type {tts_type}")
 
@@ -71,7 +72,7 @@ class VoiceMenuShared:
         printt()
         SoundFileUtil.play_sound_async(sound)
 
-        needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS]
+        needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS, TtsModelInfos.GLM]
         if needs_transcript:
 
             printt("Transcribing...")

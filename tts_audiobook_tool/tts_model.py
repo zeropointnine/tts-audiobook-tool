@@ -137,7 +137,6 @@ class VibeVoiceProtocol(Protocol):
 class VibeVoiceModelProtocol(TtsModel, VibeVoiceProtocol):
     ...
 
-
 class IndexTts2Protocol(Protocol):
 
     DEFAULT_EMO_VOICE_ALPHA = 0.65 # project gradio demo default
@@ -155,6 +154,23 @@ class IndexTts2Protocol(Protocol):
     ) -> Sound | str:
         ...
 
-
 class IndexTts2ModelProtocol(TtsModel, IndexTts2Protocol):
+    ...
+
+# ---
+
+class GlmProtocol(Protocol):
+
+    SAMPLE_RATES = [24000, 32000]
+
+    def generate(
+        self,
+        prompt_text: str,
+        prompt_speech: str,
+        syn_text: str,
+        seed: int
+    ) -> Sound | str:
+        ...
+
+class GlmModelProtocol(TtsModel, GlmProtocol):
     ...

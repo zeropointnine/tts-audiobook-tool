@@ -46,9 +46,7 @@ class OptionsMenu:
                     lambda _, __: OptionsMenu.stt_config_menu(state)
                 )
             ]
-            # TODO: add per-model protocol getter which can return None for OUTE; and use this getter in the Tts get_[model] functions
-            has_gpu_and_not_oute = Tts.get_best_torch_device() != "cpu" and Tts.get_type() != TtsModelInfos.OUTE 
-            if has_gpu_and_not_oute:
+            if Tts.get_type().value.torch_devices:
                 item = MenuItem(
                     lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 
                     lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
@@ -114,8 +112,7 @@ class OptionsMenu:
                 state.prefs.tts_force_cpu = value
             print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))        
 
-        model_name = Tts.get_type().value.ui['short_name']
-        subheading = f"Forces TTS model ({model_name}) to use CPU as its torch device even when GPU is available.\n"
+        subheading = f"Forces TTS model to use CPU as its torch device even when GPU is available.\n"
 
         MenuUtil.options_menu(
             state=state,

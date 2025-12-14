@@ -1,5 +1,6 @@
 import os
 import sys
+import random
 import time
 
 import numpy as np
@@ -225,8 +226,8 @@ class GenerateUtil:
 
             # Generate
             print(COL_DIM, end="", flush=True) # Dim color during inference printouts
-            result = GenerateUtil.generate_single(project, text)
-            printt() # Restore print color, print blank line
+            result = GenerateUtil.generate_single(project, text, is_retry=(pass_num > 1))
+            printt() # Restores print color, prints blank line
 
             if isinstance(result, str):
                 err = result
@@ -309,7 +310,7 @@ class GenerateUtil:
                     return sound, validation_result, transcribed_words
 
     @staticmethod
-    def generate_single(project: Project, text: str) -> Sound | str:
+    def generate_single(project: Project, text: str, is_retry: bool=False) -> Sound | str:
         """
         Core audio generation function.
         Returns model-generated sound data (in model's native samplerate) or error string
@@ -406,6 +407,21 @@ class GenerateUtil:
                     emo_alpha=project.indextts2_emo_alpha,
                     emo_voice_path=emo_voice_path,
                     emo_vector=project.indextts2_emo_vector
+                )
+
+            case TtsModelInfos.GLM:
+
+                voice_path = os.path.join(project.dir_path, project.glm_voice_file_name)
+                voice_transcript = project.glm_voice_transcript
+                if project.glm_seed == -1 or is_retry:
+                    seed = random.randint(0,  2**32 - 1)
+                else:
+                    seed = project.glm_seed
+                result = Tts.get_glm().generate(
+                    prompt_text=voice_transcript,
+                    prompt_speech=voice_path,
+                    syn_text=text,
+                    seed=seed
                 )
 
             case TtsModelInfos.NONE:

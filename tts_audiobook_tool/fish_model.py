@@ -69,7 +69,7 @@ class FishModel(FishModelProtocol):
             exit(1)
         except Exception as e:
             printt()
-            printt(f"Fatal error: {type(e)}")
+            printt(f"Download failed: {type(e)}")
             printt()
             printt(f"{e}")
             printt()

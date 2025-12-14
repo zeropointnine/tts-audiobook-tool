@@ -14,7 +14,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.tts_model import IndexTts2Protocol
+from tts_audiobook_tool.tts_model import GlmProtocol, IndexTts2Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -75,7 +75,12 @@ class Project:
     indextts2_emo_alpha: float = -1
     indextts2_emo_voice_file_name: str = ""
     indextts2_emo_vector: list[float] = [] # use either 0 or 8 elements
-    
+
+    glm_voice_file_name: str = ""
+    glm_voice_transcript: str = ""
+    glm_sr: int = GlmProtocol.SAMPLE_RATES[0]
+    glm_seed: int = -1 # ie, make random
+
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
 
@@ -276,6 +281,17 @@ class Project:
             project.indextts2_emo_alpha = d.get("indextts2_emo_voice_alpha", -1) # legacy support
         project.indextts2_emo_voice_file_name = d.get("indextts2_emo_voice_file_name", "")
 
+        # GLM
+        project.glm_voice_file_name = d.get("glm_voice_file_name", "")
+        project.glm_voice_transcript = d.get("glm_voice_text", "")
+        project.glm_sr = d.get("glm_sr", 0)
+        if not project.glm_sr in GlmProtocol.SAMPLE_RATES:
+            project.glm_sr = GlmProtocol.SAMPLE_RATES[0]
+        seed = d.get("glm_seed", -1)
+        if not isinstance(seed, (int, float)) or not (seed >= -1):
+            seed = -1
+        project.glm_seed = int(seed)
+
         o = d.get("indextts2_emo_vector", [])
         if not isinstance(o, list):
             o = []
@@ -330,7 +346,12 @@ class Project:
             "indextts2_emo_voice_file_name": self.indextts2_emo_voice_file_name,
             "indextts2_emo_vector": self.indextts2_emo_vector,
             "indextts2_temperature": self.indextts2_temperature,
-            "indextts2_use_fp16": self.indextts2_use_fp16
+            "indextts2_use_fp16": self.indextts2_use_fp16,
+
+            "glm_voice_file_name": self.glm_voice_file_name,
+            "glm_voice_text": self.glm_voice_transcript,
+            "glm_sr": self.glm_sr,
+            "glm_seed": self.glm_seed
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -423,6 +444,9 @@ class Project:
                     self.indextts2_voice_file_name = dest_file_name
                 else:
                     self.indextts2_emo_voice_file_name = dest_file_name
+            case TtsModelInfos.GLM:
+                self.glm_voice_file_name = dest_file_name
+                self.glm_voice_transcript = text
             case _:
                 raise Exception(f"Unsupported tts type {tts_type}")
 
@@ -456,6 +480,9 @@ class Project:
                     self.indextts2_voice_file_name = ""
                 else:
                     self.indextts2_emo_voice_file_name = ""
+            case TtsModelInfos.GLM:
+                self.glm_voice_file_name = ""
+                self.glm_voice_transcript = ""
             case _:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
         self.save()
@@ -507,6 +534,11 @@ class Project:
                         return "none"
                     else:
                         return make_label(self.indextts2_emo_voice_file_name)
+            case TtsModelInfos.GLM:
+                if not self.glm_voice_file_name:
+                    return "none"
+                else:
+                    return make_label(self.glm_voice_file_name)
             case TtsModelInfos.NONE:
                 return "none"
 
@@ -534,6 +566,9 @@ class Project:
             case TtsModelInfos.INDEXTTS2:
                 # this model requires a voice sample
                 return bool(self.indextts2_voice_file_name)
+            case TtsModelInfos.GLM:
+                # requires voice sample TODO: verify
+                return bool(self.glm_voice_file_name)
             case TtsModelInfos.NONE:
                 return False
 
@@ -629,7 +664,7 @@ class Project:
             if not attr_name in BLACKLIST:
                 setattr(self, attr_name, attr_value)
 
-        # Copy 'internal' files; fail silently
+        # Copy 'internal' files
         src_files = [PROJECT_TEXT_RAW_FILE_NAME]
         src_files.append(source_project.chatterbox_voice_file_name)
         src_files.append(source_project.fish_voice_file_name)
@@ -637,9 +672,10 @@ class Project:
         src_files.append(source_project.vibevoice_voice_file_name)
         src_files.append(source_project.indextts2_voice_file_name)
         src_files.append(source_project.indextts2_emo_voice_file_name)
+        src_files.append(source_project.glm_voice_file_name)        
         src_files = [file for file in src_files if file]
 
-        for src_file in src_files:
+        for src_file in src_files: # fail silently
             src_path = os.path.join(source_project.dir_path, src_file)
             if not Path(src_path).exists():
                 continue 
@@ -647,6 +683,6 @@ class Project:
             try:
                 shutil.copy(src_path, dest_path)
             except Exception as e:
-                ... # eat silently
+                ...
 
         self.save()

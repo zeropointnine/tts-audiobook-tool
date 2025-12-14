@@ -116,6 +116,9 @@ def on_voice(state: State, __) -> None:
         case TtsModelInfos.INDEXTTS2:
             from tts_audiobook_tool.voice_indextts2_menu import VoiceIndexTts2Menu
             VoiceIndexTts2Menu.menu(state)
+        case TtsModelInfos.GLM:
+            from tts_audiobook_tool.voice_glm_menu import VoiceGlmMenu
+            VoiceGlmMenu.menu(state)
 
 # Text
 def make_text_label(state: State) -> str:

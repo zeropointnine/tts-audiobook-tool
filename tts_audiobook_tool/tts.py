@@ -7,7 +7,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -21,6 +21,7 @@ class Tts:
     _higgs: HiggsModelProtocol | None = None
     _vibevoice: VibeVoiceModelProtocol | None = None
     _indextts2: IndexTts2ModelProtocol | None = None
+    _glm: GlmModelProtocol | None = None
 
     _type: TtsModelInfos
 
@@ -71,10 +72,11 @@ class Tts:
         old_params = Tts._model_params
         Tts._model_params = new_params
 
-        invalidate = False
-        invalidate |= new_params.get("vibevoice_model_path", "") != old_params.get("vibevoice_model_path", "")
-        invalidate |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
-        if invalidate:
+        dirty = False
+        dirty |= new_params.get("vibevoice_model_path", "") != old_params.get("vibevoice_model_path", "")
+        dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
+        dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
+        if dirty:
             Tts.clear_tts_model()
 
     @staticmethod
@@ -86,6 +88,7 @@ class Tts:
         model_params = { }
         model_params["vibevoice_model_path"] = project.vibevoice_model_path
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
+        model_params["glm_sr"] = project.glm_sr
 
         Tts.set_model_params(model_params)
 
@@ -98,7 +101,7 @@ class Tts:
 
     @staticmethod
     def instance_exists() -> bool:
-        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2]
+        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2, Tts._glm]
         for item in items:
             if item is not None:
                 return True
@@ -119,7 +122,8 @@ class Tts:
         should_instantiate_tts = not Tts.instance_exists()        
         should_instantiate_whisper = (Stt.get_variant() != SttVariant.DISABLED) and \
             not force_no_stt and not Stt._whisper
-        should_neither = (not should_instantiate_whisper and not should_instantiate_whisper)
+        
+        should_neither = (not should_instantiate_tts and not should_instantiate_whisper)
         if should_neither:
             return False
 
@@ -166,7 +170,8 @@ class Tts:
             TtsModelInfos.FISH: Tts.get_fish,
             TtsModelInfos.HIGGS: Tts.get_higgs,
             TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
-            TtsModelInfos.INDEXTTS2: Tts.get_indextts2
+            TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
+            TtsModelInfos.GLM: Tts.get_glm,
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -183,7 +188,8 @@ class Tts:
             TtsModelInfos.FISH: Tts._fish,
             TtsModelInfos.HIGGS: Tts._higgs,
             TtsModelInfos.VIBEVOICE: Tts._vibevoice,
-            TtsModelInfos.INDEXTTS2: Tts._indextts2
+            TtsModelInfos.INDEXTTS2: Tts._indextts2,
+            TtsModelInfos.GLM: Tts._glm,
         }
         return MAP.get(Tts._type, None)
 
@@ -201,7 +207,7 @@ class Tts:
     @staticmethod
     def get_chatterbox() -> ChatterboxModelProtocol:
         if not Tts._chatterbox:
-            device = "cpu" if Tts._force_cpu else Tts.get_best_torch_device()
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(f"Initializing Chatterbox TTS model ({device})...")
             printt()
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
@@ -212,7 +218,7 @@ class Tts:
     @staticmethod
     def get_fish() -> FishModelProtocol:
         if not Tts._fish:
-            device = "cpu" if Tts._force_cpu else Tts.get_best_torch_device()
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(f"Initializing Fish OpenAudio S1-mini TTS model ({device})...")
             printt()
             from tts_audiobook_tool.fish_model import FishModel
@@ -223,7 +229,7 @@ class Tts:
     @staticmethod
     def get_higgs() -> HiggsModelProtocol:
         if not Tts._higgs:
-            device = "cpu" if Tts._force_cpu else Tts.get_best_torch_device()
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(f"Initializing Higgs V2 TTS model ({device})...")
             printt()
             from tts_audiobook_tool.higgs_model import HiggsModel
@@ -234,7 +240,7 @@ class Tts:
     @staticmethod
     def get_vibevoice() -> VibeVoiceModelProtocol:
         if not Tts._vibevoice:
-            device = "cpu" if Tts._force_cpu else Tts.get_best_torch_device()
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             model_path = Tts._model_params.get("vibevoice_model_path", "")
             name = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
             print_model_init(f"Initializing VibeVoice TTS model ({name}) ({device})...")
@@ -252,7 +258,7 @@ class Tts:
     @staticmethod
     def get_indextts2() -> IndexTts2ModelProtocol:
         if not Tts._indextts2:
-            device = "cpu" if Tts._force_cpu else Tts.get_best_torch_device()
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
 
             print_model_init(f"Initializing IndexTTS2 model ({device}, use_fp16: {use_fp16})")
@@ -263,6 +269,16 @@ class Tts:
 
         return Tts._indextts2
 
+    @staticmethod
+    def get_glm() -> GlmModelProtocol:
+        if not Tts._glm:
+            device = "cuda" # cpu not currently supported
+            sr = Tts._model_params["glm_sr"]
+            print_model_init(f"Initializing GLM TTS model ({device}, {sr}hz)...")
+            printt()
+            from tts_audiobook_tool.glm_model import GlmModel
+            Tts._glm = GlmModel(device, sr)
+        return Tts._glm
 
     @staticmethod
     def clear_tts_model() -> None:
@@ -277,6 +293,7 @@ class Tts:
             Tts._higgs = None
             Tts._vibevoice = None
             Tts._indextts2 = None
+            Tts._glm = None
 
             from tts_audiobook_tool.app_util import AppUtil
             AppUtil.gc_ram_vram()
@@ -288,16 +305,22 @@ class Tts:
         from tts_audiobook_tool.app_util import AppUtil
         AppUtil.gc_ram_vram() # for good measure
 
-
     @staticmethod
-    def get_best_torch_device() -> str:
+    def get_resolved_torch_device() -> str:
+        """
+        Gets the best torch device available which is supported by the current Tts model
+        Can return empty string (eg, Oute. or a model that supports only cuda on an environment that does not have cuda)
+        """
         import torch
+        available_devices = []
         if torch.cuda.is_available():
-            return "cuda"
-        elif torch.backends.mps.is_available():
-            return "mps"
-        else:
-            return "cpu"
+            available_devices.append("cuda")
+        if torch.backends.mps.is_available():
+            available_devices.append("mps")
+        available_devices.append("cpu")
+        supported_devices = Tts.get_type().value.torch_devices
+        intersection = [item for item in available_devices if item in supported_devices]
+        return intersection[0] if intersection else ""
     
     @staticmethod
     def validate_language_code(language_code: str) -> str:
