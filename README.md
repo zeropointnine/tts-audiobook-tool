@@ -1,12 +1,13 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
-- IndexTTS2
-- VibeVoice 1.5B
-- Higgs Audio V2
-- Fish OpenAudio S1-mini
-- Chatterbox TTS
-- Oute TTS
+- [GLM-TTS](https://github.com/zai-org/GLM-TTS)
+- [IndexTTS2](https://github.com/index-tts/index-tts)
+- [VibeVoice 1.5B](https://github.com/microsoft/VibeVoice)
+- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
+- [Fish OpenAudio S1-mini](https://github.com/fishaudio/fish-speech)
+- [Chatterbox TTS](https://github.com/resemble-ai/chatterbox)
+- [Oute TTS](https://github.com/edwko/OuteTTS)
 
 The app features a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
 
@@ -298,9 +299,11 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
-**2025-12-15**
+**2025-12-16**
 
 Added support for **GLM-TTS**.
+
+Added option: **`Realtime audio generation` > `Save output`**.
 
 **2025-12-13**
 

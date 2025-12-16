@@ -24,7 +24,8 @@ class RealTimeUtil:
     def start(
             state: State,
             phrase_groups: list[PhraseGroup],
-            line_range: tuple[int, int] | None
+            line_range: tuple[int, int] | None,
+            save_output: bool = False
         ) -> None:
         """
         line_range is one-indexed
@@ -40,7 +41,7 @@ class RealTimeUtil:
         end_index -= 1
         num_items = end_index - start_index + 1
 
-        SoundFileUtil.debug_save_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+        SoundFileUtil.debug_save_dir = project.realtime_path
         
         # Warm up models
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
@@ -94,6 +95,25 @@ class RealTimeUtil:
                 continue
 
             sound, _, __ = result
+
+            # Save to disk
+
+            
+            if save_output:
+                if not os.path.exists(state.project.realtime_path):
+                    try:
+                        os.mkdir(state.project.realtime_path)
+                    except Exception as e:
+                        printt(make_error_string(e))
+                        save_output = False
+            if save_output:
+                index_string = str(i + 1).zfill(5)
+                text = sanitize_for_filename(phrase_group.presentable_text[:50])
+                fn = f"[{int(time.time())}] [{index_string}] [{Tts.get_type().value.file_tag}] [{state.project.get_voice_label()}] {text}.flac"
+                path = os.path.join(state.project.realtime_path, fn)
+                err = SoundFileUtil.save_flac(sound, path) # unlike normal gen, no resampling, massaging, etc
+                message = f"{COL_ERROR}{err}" if err else f"Saved: {path}"
+                print(message)
 
             if i == end_index:
                 appended_sound = None

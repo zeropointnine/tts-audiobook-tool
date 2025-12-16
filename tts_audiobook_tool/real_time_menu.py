@@ -13,37 +13,6 @@ class RealTimeMenu:
     @staticmethod
     def menu(state: State):
 
-        # 1
-        def on_start(_: State, __: MenuItem) -> None:
-            if state.real_time.custom_text_groups:
-                text_groups = state.real_time.custom_text_groups
-            else:
-                text_groups = state.project.phrase_groups
-            if not text_groups:
-                print_feedback("No text segments specified")
-                return
-
-            err = Tts.validate_language_code(state.project.language_code)
-            if err:
-                print_feedback(err)
-                return
-
-            if AskUtil.is_readchar:
-                b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-                if not b:
-                    return
-
-            AppUtil.show_inference_hints(state.prefs, state.project)
-
-            RealTimeUtil.start(
-                state=state,
-                phrase_groups=text_groups,
-                line_range=state.real_time.line_range
-            )
-
-        start_item = MenuItem("Start", on_start)
-
-        # 2
         def make_text_label(_) -> str:
             if state.real_time.custom_text_groups:
                 num = len(state.real_time.custom_text_groups)
@@ -52,9 +21,6 @@ class RealTimeMenu:
                 value = "project text"
             return make_menu_label("Text source", value)
 
-        text_item = MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state))
-
-        # 3
         def make_range_label(_) -> str:
             line_range = state.real_time.line_range
             if line_range:
@@ -63,10 +29,16 @@ class RealTimeMenu:
                 value = "all"
             return make_menu_label("Select line range", value)
 
-        range_item = MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state))
-
-        # Menu
-        items = [start_item, text_item, range_item]
+        # Menu        
+        items = [
+            MenuItem("Start", lambda _, __: do_start(state)),
+            MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state)),
+            MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state)),
+            MenuItem(
+                lambda _: make_menu_label("Save output", state.project.realtime_save),
+                lambda _, __: RealTimeMenu.save_menu(state)
+            )
+        ]
         MenuUtil.menu(state, "Real-time audio generation", items, hint=HINT_REAL_TIME)
 
     @staticmethod
@@ -133,3 +105,54 @@ class RealTimeMenu:
         # Menu
         items = [project_item, custom_file_item, custom_manual_item]
         MenuUtil.menu(state, "Real-time - Set text source", items, hint=HINT_REAL_TIME)
+
+    @staticmethod
+    def save_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.realtime_save = value
+            state.project.save()
+            print_feedback(f"Set to:", state.project.realtime_save)
+
+        subheading = f"Saves FLAC files to {state.project.realtime_path}\n"
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Save output to files",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.realtime_save,
+            default_value=PROJECT_DEFAULT_REALTIME_SAVE,
+            on_select=on_select
+        )
+
+# ---
+
+def do_start(state: State) -> None:
+    if state.real_time.custom_text_groups:
+        text_groups = state.real_time.custom_text_groups
+    else:
+        text_groups = state.project.phrase_groups
+    if not text_groups:
+        print_feedback("No text segments specified")
+        return
+
+    err = Tts.validate_language_code(state.project.language_code)
+    if err:
+        print_feedback(err)
+        return
+
+    if AskUtil.is_readchar:
+        b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+        if not b:
+            return
+
+    AppUtil.show_inference_hints(state.prefs, state.project)
+
+    RealTimeUtil.start(
+        state=state,
+        phrase_groups=text_groups,
+        line_range=state.real_time.line_range,
+        save_output=state.project.realtime_save
+    )

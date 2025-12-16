@@ -55,13 +55,12 @@ class SoundFileUtil:
 
     @staticmethod
     def debug_save(label: str, sound: Any): # sound = Sound
-
         if not DEV_SAVE_INTERMEDIATE_FILES:
             return
-
+        os.makedirs(SoundFileUtil.debug_save_dir, exist_ok=True)
         fn = f"{int(time.time()*1000)} {label}.flac"
         path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-        SoundFileUtil.save_flac(sound, path)
+        _ = SoundFileUtil.save_flac(sound, path)
 
     @staticmethod
     def debug_save_result_info(result: ValidationResult, source_text: str, transcribed_text: str):
@@ -87,6 +86,7 @@ class SoundFileUtil:
         transcribed_text_massaged = TextUtil.massage_for_text_comparison(transcribed_text)
         text += "transcribed_text, massaged:" + "\n" + transcribed_text_massaged + "\n\n"
 
+        os.makedirs(SoundFileUtil.debug_save_dir, exist_ok=True)
         try:
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(text)

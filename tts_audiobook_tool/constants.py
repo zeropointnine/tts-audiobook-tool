@@ -13,6 +13,7 @@ ASSETS_DIR_NAME = "assets"
 
 PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
 PROJECT_CONCAT_SUBDIR = "combined"
+PROJECT_REALTIME_SUBDIR = "realtime"
 PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
 PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"

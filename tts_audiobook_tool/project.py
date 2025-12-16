@@ -47,6 +47,8 @@ class Project:
     export_type: ExportType = list(ExportType)[0]
     use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
     normalization_type: NormalizationType = list(NormalizationType)[0]
+    realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
+
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
     oute_temperature: float = -1
@@ -226,6 +228,12 @@ class Project:
         s = d.get("normalization_type", False)
         project.normalization_type = NormalizationType.from_id(s) or list(NormalizationType)[0]
 
+        # Realtime save output
+        b = d.get("realtime_save", False)
+        if not isinstance(b, bool):
+            b = PROJECT_DEFAULT_REALTIME_SAVE
+        project.realtime_save = b
+
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
@@ -319,6 +327,7 @@ class Project:
             "export_type": self.export_type.id,
             "use_section_sound_effect": self.use_section_sound_effect,
             "normalization_type": self.normalization_type.value.id,
+            "realtime_save": self.realtime_save,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
@@ -581,6 +590,12 @@ class Project:
         if not self.dir_path:
             return "" # TODO this feels off, smth abt project not yet having a dir_path, etc
         return os.path.join(self.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+
+    @property
+    def realtime_path(self) -> str:
+        if not self.dir_path:
+            return ""
+        return os.path.join(self.dir_path, PROJECT_REALTIME_SUBDIR)
 
     def get_indices_to_generate(self) -> set[int]:
         """
