@@ -64,8 +64,7 @@ class Stt:
                 cpu_threads = 0
             cpu_threads_string = f", {cpu_threads} threads" if cpu_threads else ""
 
-            print_model_init(f"Initializing faster-whisper model ({model}, {device}, {compute_type}{cpu_threads_string})...")
-            printt()
+            print_init(f"Initializing faster-whisper model ({model}, {device}, {compute_type}{cpu_threads_string})...")
             Stt._whisper = WhisperModel(model, device=device, compute_type=compute_type, cpu_threads=cpu_threads)
 
         return Stt._whisper

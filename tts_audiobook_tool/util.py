@@ -73,8 +73,10 @@ def print_heading(s: str, dont_clear: bool=False, non_menu: bool=False) -> None:
     printt(f"{color_b}{s}")
     printt(color_a  +  ("-" * length))
 
-def print_model_init(s: str) -> None:
+def print_init(s: str) -> None:
+    """ App style for initializing a thing which may take some time """
     printt(f"{Ansi.ITALICS}{COL_DIM}{s}")
+    print()
 
 def strip_quotes_from_ends(s: str) -> str:
     if len(s) >= 2:

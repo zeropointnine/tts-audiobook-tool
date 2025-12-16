@@ -132,8 +132,7 @@ class Tts:
         should_both = (should_instantiate_tts and should_instantiate_whisper)
 
         if should_both:
-            print_model_init("Warming up models...")
-            printt()
+            print_init("Warming up models...")
 
         if not should_instantiate_whisper:
             # "Lazy unload", useful for user flows like: 
@@ -196,45 +195,36 @@ class Tts:
     @staticmethod
     def get_oute() -> OuteModelProtocol:
         if not Tts._oute:
-            print_model_init("Initializing Oute TTS model...")
-            printt()
-
+            print_model_init()
             from tts_audiobook_tool.oute_model import OuteModel
             Tts._oute = OuteModel()
-
         return Tts._oute
 
     @staticmethod
     def get_chatterbox() -> ChatterboxModelProtocol:
         if not Tts._chatterbox:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(f"Initializing Chatterbox TTS model ({device})...")
-            printt()
+            print_model_init(device)
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(device)
-
         return Tts._chatterbox
 
     @staticmethod
     def get_fish() -> FishModelProtocol:
         if not Tts._fish:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(f"Initializing Fish OpenAudio S1-mini TTS model ({device})...")
-            printt()
+            print_model_init(device)
             from tts_audiobook_tool.fish_model import FishModel
             Tts._fish = FishModel(device)
-
         return Tts._fish
 
     @staticmethod
     def get_higgs() -> HiggsModelProtocol:
         if not Tts._higgs:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(f"Initializing Higgs V2 TTS model ({device})...")
-            printt()
+            print_model_init(device)
             from tts_audiobook_tool.higgs_model import HiggsModel
             Tts._higgs = HiggsModel(device)
-
         return Tts._higgs
 
     @staticmethod
@@ -242,9 +232,8 @@ class Tts:
         if not Tts._vibevoice:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             model_path = Tts._model_params.get("vibevoice_model_path", "")
-            name = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
-            print_model_init(f"Initializing VibeVoice TTS model ({name}) ({device})...")
-            printt()
+            model_name = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
+            print_model_init(f"{model_name}) ({device}")
 
             from tts_audiobook_tool.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
@@ -252,7 +241,6 @@ class Tts:
                 model_path=model_path,
                 max_new_tokens=VibeVoiceProtocol.MAX_TOKENS
             )
-
         return Tts._vibevoice
 
     @staticmethod
@@ -260,13 +248,10 @@ class Tts:
         if not Tts._indextts2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
-
-            print_model_init(f"Initializing IndexTTS2 model ({device}, use_fp16: {use_fp16})")
-            printt()
+            print_model_init(f"{device}, fp16: {use_fp16}")
 
             from tts_audiobook_tool.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
-
         return Tts._indextts2
 
     @staticmethod
@@ -274,8 +259,8 @@ class Tts:
         if not Tts._glm:
             device = "cuda" # cpu not currently supported
             sr = Tts._model_params["glm_sr"]
-            print_model_init(f"Initializing GLM TTS model ({device}, {sr}hz)...")
-            printt()
+            print_model_init(f"{device}, {sr}hz")
+
             from tts_audiobook_tool.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
         return Tts._glm
@@ -342,3 +327,15 @@ class Tts:
         if extra:
             err += "\n\n" + extra
         return err
+
+# ---
+
+def print_model_init(properties_string: str = "") -> None:
+    model_name = Tts.get_type().value.ui["proper_name"]
+    s = f"Initializing {model_name} model"
+    if properties_string:
+        s += f" {COL_DIM}({properties_string})"
+    s += "..."
+    print_init(s)
+
+
