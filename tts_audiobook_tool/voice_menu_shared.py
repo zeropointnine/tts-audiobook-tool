@@ -9,6 +9,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
@@ -26,9 +27,12 @@ class VoiceMenuShared:
 
     @staticmethod
     def make_select_voice_label(state: State) -> str:
-        voice_label = state.project.get_voice_label()
-        color_code = COL_ERROR if voice_label == "none" else COL_ACCENT
-        currently = make_currently_string(voice_label, color_code=color_code)
+        if Tts.get_type().value.requires_voice and not state.project.has_voice:
+            currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
+        elif not state.project.has_voice:
+            currently = make_currently_string("none", color_code=COL_ERROR)
+        else:
+            currently = make_currently_string(state.project.get_voice_label())
         return f"Select voice clone sample {currently}"
 
     @staticmethod
@@ -56,6 +60,9 @@ class VoiceMenuShared:
         ]:
             raise ValueError(f"Unsupported tts type {tts_type}")
 
+        if tts_type.value.requires_voice_transcript:
+            Hint.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
+
         path = VoiceMenuShared.ask_voice_file(state.project.dir_path, tts_type, message_override)
         if not path:
             return
@@ -72,34 +79,44 @@ class VoiceMenuShared:
         printt()
         SoundFileUtil.play_sound_async(sound)
 
-        needs_transcript = tts_type in [TtsModelInfos.FISH, TtsModelInfos.HIGGS, TtsModelInfos.GLM]
-        if needs_transcript:
+        transcript = ""
+        if tts_type.value.requires_voice_transcript:
 
-            printt("Transcribing...")
-            printt()
+            # [1] Get transcript from 'parallel text file' if possible
+            transcript_path = Path(path).with_suffix(".txt")
+            if transcript_path.exists():
+                transcript = load_text_file(str(transcript_path), errors="replace").strip()
+                if transcript:
+                    printt(f"Loaded transcript text from {transcript_path}:")
+                    printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
+                    printt()
 
-            if state.prefs.stt_variant == SttVariant.DISABLED:
-                stt_variant = SttVariant.LARGE_V3
-            else:
-                stt_variant = state.prefs.stt_variant
+            if not transcript:
+                # [2] Transcribe sound file using STT
+                printt("Transcribing...")
+                printt()
 
-            result = WhisperUtil.transcribe_to_words(
-                sound, stt_variant, state.prefs.stt_config, language_code=state.project.language_code
-            )
+                if state.prefs.stt_variant == SttVariant.DISABLED:
+                    stt_variant = SttVariant.LARGE_V3
+                else:
+                    stt_variant = state.prefs.stt_variant
+                result = WhisperUtil.transcribe_to_words(
+                    sound, stt_variant, state.prefs.stt_config, language_code=state.project.language_code
+                )
+                if state.prefs.stt_variant == SttVariant.DISABLED:
+                    Stt.clear_stt_model()
 
-            if state.prefs.stt_variant == SttVariant.DISABLED:
-                Stt.clear_stt_model()
+                if isinstance(result, str):
+                    err = result
+                    AskUtil.ask_error(err)
+                    return
 
-            if isinstance(result, str):
-                err = result
-                AskUtil.ask_error(err)
-                return
+                words = result
+                transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+                print(f"Transcribed text {COL_DIM}(filtered for high probablility){COL_DEFAULT}:")
+                printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
+                printt()
 
-            words = result
-            transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
-
-        else:
-            transcript = ""
 
         file_stem = Path(path).stem
         err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)

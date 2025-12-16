@@ -157,6 +157,9 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
 def make_currently_string(value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
+    """
+    Used for presenting the current value of a menu item in a consistent style
+    """
     return f"{COL_DIM}({value_prefix}{color_code}{value}{COL_DIM})"
 
 def make_menu_label(label: str, value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
@@ -429,3 +432,39 @@ def get_torch_allocated_vram() -> int:
     if not torch.cuda.is_available():
         return -1
     return torch.cuda.memory_allocated()
+
+def load_text_file(path: str, errors: str="strict") -> str:
+    """ 
+    Load text file of potentially unknown provenance or format 
+    
+    param errors:
+        is passed to the decode(errors=) function.
+        rem:
+            "strict" is the default, which will raise an exception
+            "ignore" will filter out unknown characters
+            "replace" will replace unknown characters with the standard mystery character U+FFFD
+    """
+    import chardet
+    try:
+        # 1. Open as binary (rb) to get raw bytes, not text
+        with open(path, 'rb') as f:
+            raw_data = f.read()
+
+        # 2. Detect the encoding
+        result = chardet.detect(raw_data)
+        encoding = result['encoding']
+        confidence = result['confidence'] # (Optional) strictly for debugging
+
+        # 3. Handle edge case: if chardet is confused, default to utf-8
+        if encoding is None:
+            encoding = 'utf-8'
+
+        # 4. Decode using the detected encoding
+        transcript = raw_data.decode(encoding, errors=errors)
+        
+        # print(f"Loaded with encoding: {encoding} (Confidence: {confidence})")
+        return transcript
+
+    except Exception as e:
+        print(f"xxx failed completely: {e}")
+        return ""

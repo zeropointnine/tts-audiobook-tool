@@ -6,6 +6,7 @@ chatterbox-tts==0.1.4
 
 # App dependencies
 faster-whisper==1.2.1
+chardet
 ctranslate2==4.6.1
 torch==2.6.0
 torchaudio==2.6.0

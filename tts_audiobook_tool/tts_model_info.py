@@ -1,6 +1,6 @@
 from enum import Enum
 from functools import cache
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import numpy as np
 
@@ -15,31 +15,48 @@ class TtsModelInfo(NamedTuple):
     torch_devices: list[str]
     # identifier used in file names
     file_tag: str
-    # The model's output dtype
+    # The model's sound output dtype
     dtype: np.dtype
-    # The model's output sample rate
+    # The model's sound output sample rate
     sample_rate: int
-    # The key used for Prefs json dict to store the max-words value
-    max_words_prefs_key: str
-    # The model's recommended max-words-per-segment
+    # The app's recommended max-words-per-segment for the model
     max_words_default: int
+    # Does the model require a voice clone sample 
+    requires_voice: bool
+    # Does the model API require the text transcript of the voice clone sample
+    requires_voice_transcript: bool
     # Should semantic trim return end time stamp if is last word
     # Doing so is generally redundant and risks unintended partial cropping of end of last word,
     # but can be useful for chopping off hallucinated noises past last word (eg, for Chatterbox)
     semantic_trim_last: bool
-    # The requirements.txt file that should be used to install the virtual environment for the tts model
+    # The requirements.txt file that should be used to install the virtual environment for the given tts model
     requirements_file_name: str
     # ui-related strings and values
     ui: dict
-    # List of string replace pairs (used for "untrained" punctuation primarily)
+    # List of string replace pairs 
+    # Primarily used for punctuation marks that models might either disregard or trigger them in other ways
     substitutions: list[ tuple[str, str] ]
 
 class TtsModelInfos(Enum):
     """
-    Enumerates `TtsModelInfo` instances for all TTS models supported by the app
+    Enumerates `TtsModelInfo` instances for all supported TTS models
     """
 
-    NONE = TtsModelInfo("", [], "none", np.dtype("float32"), 0, "", 0, False, "", {}, []) # placeholder
+    # Placeholder
+    NONE = TtsModelInfo(
+        module_test="",
+        file_tag="",
+        dtype=np.dtype("float32"),
+        torch_devices = [],
+        sample_rate=0,
+        max_words_default=0,
+        requires_voice=False,
+        requires_voice_transcript=False,
+        semantic_trim_last=False,
+        requirements_file_name="",
+        ui = {},
+        substitutions=[]
+    )
 
     OUTE = TtsModelInfo(
         module_test="outetts",
@@ -47,8 +64,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = [], # not applicable
         sample_rate=44100,
-        max_words_prefs_key="max_words_oute",
         max_words_default=40,
+        requires_voice=True,
+        requires_voice_transcript=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-oute.txt",
         ui = {
@@ -69,8 +87,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
-        max_words_prefs_key="max_words_chatterbox",
         max_words_default=40,
+        requires_voice=False,
+        requires_voice_transcript=False,
         semantic_trim_last=True,
         requirements_file_name="requirements-chatterbox.txt",
         ui = {
@@ -90,8 +109,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
-        max_words_prefs_key="max_words_fish",
         max_words_default=40,
+        requires_voice=False,
+        requires_voice_transcript=True,
         semantic_trim_last=False,
         requirements_file_name="requirements-fish.txt",
         ui = {
@@ -111,8 +131,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
-        max_words_prefs_key="max_words_higgs",
         max_words_default=40,
+        requires_voice=False,
+        requires_voice_transcript=True,
         semantic_trim_last=False,
         requirements_file_name="requirements-higgs.txt",
         ui = {
@@ -132,8 +153,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
-        max_words_prefs_key="max_words_higgs",
         max_words_default=40,
+        requires_voice=True,
+        requires_voice_transcript=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
@@ -155,8 +177,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=22050,
-        max_words_prefs_key="max_words_indextts2",
         max_words_default=40,
+        requires_voice=True,
+        requires_voice_transcript=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-indextts2.txt",
         ui = {
@@ -177,8 +200,9 @@ class TtsModelInfos(Enum):
         dtype=np.dtype("float32"),
         torch_devices = ["cuda"], # cuda-only atm
         sample_rate=24000,
-        max_words_prefs_key="max_words_indextts2",
         max_words_default=40,
+        requires_voice=True,
+        requires_voice_transcript=True,
         semantic_trim_last=False,
         requirements_file_name="requirements-glm.txt",
         ui = {

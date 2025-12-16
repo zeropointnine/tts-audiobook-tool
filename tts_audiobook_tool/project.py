@@ -412,7 +412,7 @@ class Project:
             self,
             source_sound: Sound,
             voice_file_stem: str,
-            text: str,
+            transcript: str,
             tts_type: TtsModelInfos,
             is_secondary: bool=False
     ) -> str:
@@ -442,10 +442,10 @@ class Project:
                 # Rem, chatterbox does not require voice sound file's transcription
             case TtsModelInfos.FISH:
                 self.fish_voice_file_name = dest_file_name
-                self.fish_voice_transcript = text
+                self.fish_voice_transcript = transcript
             case TtsModelInfos.HIGGS:
                 self.higgs_voice_file_name = dest_file_name
-                self.higgs_voice_transcript = text
+                self.higgs_voice_transcript = transcript
             case TtsModelInfos.VIBEVOICE:
                 self.vibevoice_voice_file_name = dest_file_name
             case TtsModelInfos.INDEXTTS2:
@@ -455,7 +455,7 @@ class Project:
                     self.indextts2_emo_voice_file_name = dest_file_name
             case TtsModelInfos.GLM:
                 self.glm_voice_file_name = dest_file_name
-                self.glm_voice_transcript = text
+                self.glm_voice_transcript = transcript
             case _:
                 raise Exception(f"Unsupported tts type {tts_type}")
 
@@ -502,8 +502,8 @@ class Project:
             label = Path(file_name).stem
             # Strip "_model" from end of file stem
             label = label.removesuffix("_" + Tts.get_type().value.file_tag)
-            label = label[:30]
             label = sanitize_for_filename(label)
+            label = label[:30]
             return label
 
         match Tts.get_type():
@@ -552,34 +552,35 @@ class Project:
                 return "none"
 
     @property
+    def has_voice(self) -> bool:
+        match Tts.get_type(): # TODO: adopt this 'pattern' in mumblemumble
+            case TtsModelInfos.NONE:
+                has_voice = False
+            case TtsModelInfos.OUTE:
+                has_voice = bool(self.oute_voice_json)
+            case TtsModelInfos.CHATTERBOX:
+                has_voice = bool(self.chatterbox_voice_file_name)
+            case TtsModelInfos.FISH:
+                has_voice = bool(self.fish_voice_file_name)
+            case TtsModelInfos.HIGGS:
+                has_voice = bool(self.higgs_voice_file_name)
+            case TtsModelInfos.VIBEVOICE:
+                has_voice = bool(self.vibevoice_voice_file_name)
+            case TtsModelInfos.INDEXTTS2:
+                has_voice = bool(self.indextts2_voice_file_name)
+            case TtsModelInfos.GLM:
+                has_voice = bool(self.glm_voice_file_name)
+        return has_voice
+
+    @property
     def can_voice(self) -> bool:
         """
         Returns True if current state allows for outputting a "voice" of any kind.
-        """
-        match Tts.get_type():
-            case TtsModelInfos.OUTE:
-                # must have oute json file
-                return bool(self.oute_voice_json)
-            case TtsModelInfos.CHATTERBOX:
-                # always true bc does not require voice sample
-                return True
-            case TtsModelInfos.FISH:
-                # always true bc does not require voice sample
-                return True
-            case TtsModelInfos.HIGGS:
-                # always true bc does not require voice sample
-                return True
-            case TtsModelInfos.VIBEVOICE:
-                # requires voice sample (in my implementation, for reasons)
-                return bool(self.vibevoice_voice_file_name)
-            case TtsModelInfos.INDEXTTS2:
-                # this model requires a voice sample
-                return bool(self.indextts2_voice_file_name)
-            case TtsModelInfos.GLM:
-                # requires voice sample TODO: verify
-                return bool(self.glm_voice_file_name)
-            case TtsModelInfos.NONE:
-                return False
+        """        
+        if not Tts.get_type().value.requires_voice:
+            return True
+        else:
+            return self.has_voice
 
     @property
     def can_generate_audio(self) -> bool:

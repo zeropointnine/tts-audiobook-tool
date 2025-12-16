@@ -76,7 +76,8 @@ class OptionsMenu:
             values=[item for item in list(SttVariant)],
             current_value=state.prefs.stt_variant,
             default_value=list(SttVariant)[0],
-            on_select=on_select
+            on_select=on_select,
+            hint=HINT_TRANSCRIPTION
         )
 
     @staticmethod

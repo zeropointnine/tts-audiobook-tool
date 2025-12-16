@@ -9,6 +9,7 @@ triton-windows==3.2.0.post19; sys_platform == 'win32'
 faster-whisper==1.2.0
 
 audiotsm==0.1.2
+chardet
 ffmpeg-python==0.2.0
 librosa==0.11.0
 loguru==0.7.3

@@ -59,7 +59,7 @@ def samplerate_menu(state: State) -> None:
     )
 
 def ask_seed(state: State) -> None:
-    prompt = "Enter static seed or -1 for random: "
+    prompt = "Enter static seed value or -1 for random: "
     value = AskUtil.ask(prompt)
     if not value:
         return

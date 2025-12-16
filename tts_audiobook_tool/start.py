@@ -51,6 +51,9 @@ def main() -> None:
             Hint.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
             exit(1)
 
+    # TODO: compare hash of current requirements file with saved hash, and if different, message user
+    #   and reconcile this addition with 'hard requirement' messaging below etc
+
     # Hard requirement - updated dependencies
     not_found = [package for package in NEW_PACKAGES if not util.find_spec(package)]
     if not_found:
@@ -85,4 +88,4 @@ def main() -> None:
 
 # ---
 
-NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words"]
+NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet"]

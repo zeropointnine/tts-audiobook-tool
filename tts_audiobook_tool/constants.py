@@ -195,16 +195,7 @@ HINT_TEST_REAL_TIME = Hint(
     "Tip",
 """After setting voice clone or changing other model properties,
 consider using \"Menu > Generate audio in realtime\" to quickly test audio
-generation quality before committing to generating audiobook.
-"""
-)
-
-HINT_TRANSCRIPTION = Hint(
-    "transcription",
-    "Note",
-"""The Whisper transcription model to check the generated audio for errors.
-Because it is used concurrently with the text-to-speech model,
-it adds 2-3 GB to VRAM memory requirements."""
+generation quality before committing to generating audiobook."""
 )
 
 HINT_SPEED_UP = Hint(
@@ -252,7 +243,7 @@ with some care and extra testing (Some models may emit more errors or fail).
 The value is saved on a per-model basis.""")
 
 HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE = """The project's source text word count per segment (%1)
-exceeds the application's default ("safe") value (%2).
+exceeds the application's recommended default ("safe") value (%2) for the current TTS model.
 Make sure this is what you want before generating audio."""
 
 HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(
@@ -268,4 +259,20 @@ HINT_VALIDATION_UNSUPPORTED_LANGUAGE = Hint(
     "Transcription validation will be disabled",
     "Transcription-based validation is unsupported for %1 "
 "and will be automatically disabled."
+)
+
+HINT_TRANSCRIPTION = Hint(
+    "transcription",
+    "Note",
+"""The Whisper speech-to-text model is used to check the generated audio for errors.
+Because it is used concurrently with the text-to-speech model, it can add 2-3 GB to 
+VRAM memory requirements."""
+)
+
+HINT_VOICE_TRANSCRIPT = Hint(
+    "voice_transcript",
+    "Voice clone transcript",
+"""This TTS model requires a transcript of the voice clone sample.
+The app will load a text file with the same base file name if it exists.
+Otherwise, the text will be transcribed using Whisper."""
 )
