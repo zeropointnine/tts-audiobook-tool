@@ -7,17 +7,29 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 
-
 class Phrase:
     def __init__(self, text: str, reason: Reason):
         self._text = text
         self.reason = reason
         self._words = TextUtil.get_words(self._text)
 
+    def __eq__(self, other: Any):
+        if not isinstance(other, Phrase):
+            return NotImplemented
+        return self._text == other._text and self.reason == other.reason
+    
+    def __str__(self):
+        s = f"[Phrase] reason: {str(self.reason.json_value)}, text: {repr(self._text)}"
+        return s
+
     @property
     def text(self) -> str:
-        """ Read-only """
         return self._text
+
+    @text.setter
+    def text(self, value: str) -> None:
+        self._text = value
+        self._words = TextUtil.get_words(self._text)        
 
     @property
     def words(self) -> list[str]:
@@ -26,10 +38,6 @@ class Phrase:
     @property
     def num_words(self) -> int:
         return len(self._words)
-
-    def __str__(self):
-        s = f"[Phrase] {str(self.reason.json_value).ljust(4)} text: {self.text.strip()}"
-        return s
 
     def to_json_dict(self) -> dict:
         return {
@@ -122,6 +130,10 @@ class PhraseGroup:
     
     def __init__(self, segments: list[Phrase] | None = None):
         self.phrases: list[Phrase] = segments or []
+
+    # def __string__(self) -> str:
+    #     s = " ".join( [repr(phrase.text) for phrase in self.phrases] )            
+    #     return f"[PhraseGroup] {s}"
 
     @property
     def num_words(self) -> int:

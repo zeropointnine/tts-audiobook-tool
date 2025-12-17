@@ -13,6 +13,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.phrase import Phrase, Reason
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
 
@@ -38,70 +39,71 @@ class ConcatUtil:
         # but uses empty strings for file paths outside the range of the chapter
 
         ranges = make_section_ranges(state.project.section_dividers, len(state.project.phrase_groups))
-        sound_segments = state.project.sound_segments.sound_segments
+        psg = state.project.sound_segments
 
         chapter_index_start, chapter_index_end = ranges[chapter_index]
         num_missing = 0
 
-        # Make phrase + file path list
-        phrases_and_paths: list[ tuple[Phrase, str]] = []
-        for group_index, group in enumerate(state.project.phrase_groups):
-            segment = group.as_flattened_phrase()
-            if group_index < chapter_index_start or group_index > chapter_index_end:
-                # Out of range
-                phrases_and_paths.append((segment, ""))
-                continue
-            if not group_index in sound_segments:
-                # Audio segment file missing / not yet generated
-                phrases_and_paths.append((segment, ""))
+        # Make phrase + file name list
+        phrases_and_file_paths: list[ tuple[Phrase, str]] = []
+        for group_index, group in enumerate(state.project.phrase_groups):            
+            phrase = group.as_flattened_phrase()
+            out_of_range = (group_index < chapter_index_start or group_index > chapter_index_end)
+            if out_of_range:
+                file_path = ""
+            else:
+                file_name = psg.get_best_file_for(group_index)
+                if file_name:
+                    file_path = os.path.join(state.project.sound_segments_path, file_name)
+                else:
+                    file_path = ""
+            phrases_and_file_paths.append((phrase, file_path))
+            if file_path == "":
                 num_missing += 1
-                continue
-            file_path = sound_segments[group_index]
-            phrases_and_paths.append((segment, file_path))
-
-        # Filename
-        extant_paths = [item[1] for item in phrases_and_paths if item[1]]
+            
+        # Make destination filename
+        extant_file_names = [file_name for _, file_name in phrases_and_file_paths if file_name]
         # [1] project name
-        file_name = sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
+        dest_file_name = TextUtil.sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
         # [2] file number
         if len(ranges) > 1:
-            file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
+            dest_file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
         # [3] line range
         if len(ranges) > 1:
-            file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
+            dest_file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
         # [4] num lines missing within that range
         if num_missing > 0:
-            file_name += f"[{num_missing} missing]" + " "
+            dest_file_name += f"[{num_missing} missing]" + " "
         # [5] model tag
-        common_model_tag = SoundSegmentUtil.get_common_model_tag(extant_paths)
+        common_model_tag = SoundSegmentUtil.get_common_model_tag(extant_file_names)
         if common_model_tag:
-            file_name += f"[{common_model_tag}]" + " "
+            dest_file_name += f"[{common_model_tag}]" + " "
         # [5] voice tag
-        common_voice_tag = SoundSegmentUtil.get_common_voice_tag(extant_paths)
+        common_voice_tag = SoundSegmentUtil.get_common_voice_tag(extant_file_names)
         if common_voice_tag:
-            file_name += f"[{common_voice_tag}]" + " "
-        file_name = file_name.strip() + ".abr" + (".m4a" if to_aac_not_flac else ".flac")
-        dest_path = os.path.join(base_dir, file_name)
+            dest_file_name += f"[{common_voice_tag}]" + " "
+        dest_file_name = dest_file_name.strip() + ".abr" + (".m4a" if to_aac_not_flac else ".flac")
+        dest_file_path = os.path.join(base_dir, dest_file_name)
 
         # Concat
         result = ConcatUtil.concatenate_files_plus_silence(
-            dest_path,
-            phrases_and_paths,
+            dest_file_path,
+            phrases_and_file_paths,
             print_progress=True,
             use_section_sound_effect=state.project.use_section_sound_effect,
             to_aac_not_flac=to_aac_not_flac
         )
-
         if isinstance(result, str): # is error
             return "", result
-        durations = result
+        else:
+            durations = result
 
         # Add the app metadata
-        phrases = [item[0] for item in phrases_and_paths]
-        sound_paths = [item[1] for item in phrases_and_paths]
+        phrases = [item[0] for item in phrases_and_file_paths]
+        file_paths = [item[1] for item in phrases_and_file_paths]
         timed_phrases = TimedPhrase.make_list_using(phrases, durations)
         if state.project.subdivide_phrases:
-            timed_phrases = make_granular_timed_phrases(timed_phrases, sound_paths, durations)
+            timed_phrases = make_subdivided_timed_phrases(timed_phrases, file_paths, durations)
         
         meta = AppMetadata(
             raw_text=raw_text, 
@@ -110,13 +112,13 @@ class ConcatUtil:
         )
 
         if to_aac_not_flac:
-            err = AppMetadata.save_to_mp4(meta, dest_path)
+            err = AppMetadata.save_to_mp4(meta, dest_file_path)
         else:
-            err = AppMetadata.save_to_flac(meta, dest_path)
+            err = AppMetadata.save_to_flac(meta, dest_file_path)
         if err:
             return "", err
 
-        return dest_path, ""
+        return dest_file_path, ""
 
     @staticmethod
     def concatenate_files_plus_silence(
@@ -248,7 +250,7 @@ class ConcatUtil:
 
 # ---
 
-def make_granular_timed_phrases(
+def make_subdivided_timed_phrases(
         timed_phrases: list[TimedPhrase], 
         sound_paths: list[str],
         sound_durations: list[float]

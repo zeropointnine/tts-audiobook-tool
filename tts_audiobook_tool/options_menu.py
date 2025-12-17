@@ -70,7 +70,7 @@ class OptionsMenu:
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Whisper model type",
+            heading_text="Whisper model",
             labels=[item.id for item in list(SttVariant)],
             sublabels=[item.description for item in list(SttVariant)],
             values=[item for item in list(SttVariant)],

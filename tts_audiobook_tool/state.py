@@ -55,7 +55,7 @@ class State:
 
         # Sync static values
         Tts.set_model_params_using_project(self.project)
-        if not self.real_time.custom_text_groups:
+        if not self.real_time.custom_phrase_groups:
             self.real_time.line_range = None
 
     @property

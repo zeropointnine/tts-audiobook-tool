@@ -13,10 +13,11 @@ class PhraseSegmenter:
     """
 
     @staticmethod
-    def text_to_phrases(text: str, pysbd_lang: str, max_words: int) -> list[Phrase]:
+    def text_to_phrases(text: str, max_words: int, pysbd_lang: str, ) -> list[Phrase]:
         """
-        Returns list of Phrases with correct 'reasons', ready to be grouped as needed
+        Returns list of Phrases with 'reasons', ready to be grouped as needed
         """
+        print()
 
         phrases: list[Phrase] = []
 
@@ -56,19 +57,41 @@ class PhraseSegmenter:
         return phrases
 
     @staticmethod
-    def string_to_sentence_strings(text: str, pysbd_lang: str) -> list[str]:
-        """ Returns list of sentence strings from the source text. Uses pysbd library """
+    def string_to_sentence_strings(source: str, pysbd_lang: str) -> list[str]:
+        """ 
+        Segments source text into sentences using pysbd lib, preserving all characters.
+        """
+
+        def merge_danging_punc_word(sentences: list[str]) -> list[str]:
+            # pysbd can create danging punc-only sentences
+            # eg:: "And you can . . . Yes?" -> "And you can . ", ". . ", "Yes?"
+                        
+            result: list[str] = []
+            for sentence in sentences:
+                if TextUtil.is_ws_punc(sentence) and result:
+                    
+                    # TODO even more, fml
+                    #   pysbd can replace linefeed with space. 
+                    #   eg: "And you can . . .\nYes?" 
+
+                    result[-1] += sentence
+                else:
+                    result.append(sentence)
+            return result
 
         # Segment text into sentences using pysbd
         # Important: "clean=False" preserves leading and trailing whitespace
         segmenter = pysbd.Segmenter(language=pysbd_lang, clean=False, char_span=False)
-        sentences = segmenter.segment(text)
+        sentences = segmenter.segment(source)
+        sentences = merge_danging_punc_word(sentences) # type: ignore
+
 
         # pysbd treats everything enclosed in quotes as a single sentence, so split those up
         new_sentences = []
         for string in sentences:
             if is_sentence_quotation(string):
                 inner_sentences = segment_quote_sentence(string, segmenter)
+                inner_sentences = merge_danging_punc_word(inner_sentences) # type: ignore
                 new_sentences.extend(inner_sentences)
             else:
                 new_sentences.append(string)
@@ -96,7 +119,7 @@ class PhraseSegmenter:
 
         # Move starting whitespace to end of previous item
         for i in range(1, len(items)):
-            leading_ws, remainder = split_leading_whitespace_punctuation(items[i])
+            leading_ws, remainder = split_leading_ws_punc(items[i])
             items[i - 1] += leading_ws
             items[i] = remainder
 
@@ -225,7 +248,7 @@ def split_leading_whitespace(s: str) -> tuple[str, str]:
     return s[:leading_whitespace_len], s[leading_whitespace_len:]
 
 
-def split_leading_whitespace_punctuation(input_string: str) -> tuple[str, str]:
+def split_leading_ws_punc(input_string: str) -> tuple[str, str]:
   for i, char in enumerate(input_string):
     if char not in WHITESPACE_PUNCTUATION:
       return (input_string[:i], input_string[i:])
@@ -236,9 +259,5 @@ def split_leading_whitespace_punctuation(input_string: str) -> tuple[str, str]:
 WHITESPACE_PUNCTUATION = set(string.whitespace + string.punctuation)
 
 # comma, semicolon, colon, en-dash, em-dash, open paren, close paren
-# not including normal dash (which can just as often be used as a connecting-character-between-words)
-# note, skipping single-quote, double-quote, apostrophe, etc
+# not including normal dash, apostrophe/single-quote or double-quote
 PHRASE_DELIMITERS = r'[(),;:\–\—]'
-
-
-

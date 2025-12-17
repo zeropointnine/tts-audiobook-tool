@@ -37,10 +37,10 @@ class LoudnessNormalizationUtil:
         if not dest_path:
             dest_path = source_flac # ie, overwrite original
 
-        printt(f"Loudness normalization (EBU R 128) ({specs.label})")
+        printt(f"Loudness normalization (EBU R 128) ({COL_DIM}{specs.label}{COL_DEFAULT})")
         printt()
 
-        printt(f"Pass 1, please wait... {COL_DIM}(no feedback shown)")
+        printt(f"Pass 1/2, please wait... {COL_DIM}(no feedback shown)")
         printt()
         result = LoudnessNormalizationUtil.get_loudness_json(source_flac, specs.i, specs.lra, specs.tp)
         if isinstance(result, str):
@@ -48,7 +48,7 @@ class LoudnessNormalizationUtil:
         else:
             loudness_stats = result
 
-        printt("Pass 2...")
+        printt("Pass 2/2...")
         printt()
         err = LoudnessNormalizationUtil.do_loudness_transform_and_save(
             source_flac, dest_path, loudness_stats, specs.i, specs.lra, specs.tp)

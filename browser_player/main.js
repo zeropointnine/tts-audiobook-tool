@@ -522,11 +522,13 @@ window.app = function() {
     }
 
     function showLoadUrlInfo() {
-        let s = "CORS reminder\n\n";
+        let s= "For easy sharing...\n\n"
+        s += "Append ?url= followed by your hosted file's URL to share your audiobook with others.\n\n"
+        s += "CORS info:\n\n";
         s += `When hosting audio files to be used by the player, remember to set "Access-Control-Allow-Origin" appropriately.\n\n`;
-        s += `For example:\n\n`;
-        s += `Access-Control-Allow-Origin: ${CORS_GITHUB_URL}, http://192.168.1.2:8000\n\n`;
-        s += `or even: \n\n`;
+        s += `For example:\n`;
+        s += `Access-Control-Allow-Origin: ${CORS_GITHUB_URL}, http://192.168.1.2:8000\n`;
+        s += `or: \n`;
         s += `Access-Control-Allow-Origin: *`;
         alert(s);
     }
@@ -1118,6 +1120,15 @@ window.app = function() {
         // Match leading whitespace, content, and trailing whitespace
         str = str || "";
         const match = str.match(/^(\s*)(.*?)(\s*)$/);
+        if (!match) {
+            // This should not happen with the current regex,
+            // but as a safeguard, return empty parts if match fails.
+            return {
+                before: "",
+                content: str,
+                after: ""
+            };
+        }
         return {
           before: match[1],
           content: match[2],

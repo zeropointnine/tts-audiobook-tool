@@ -1,12 +1,14 @@
+.DS_Store
+.vscode/
 node_modules/
 __pycache__/
+.pytest_cache/
 venv*/
-.vscode/
-checkpoints/
+*.egg-info/
 .python-version
-.DS_Store
 
-test*.py
-config_oute_dev.py
 output/
 outputs/
+checkpoints/
+
+config_oute_dev.py

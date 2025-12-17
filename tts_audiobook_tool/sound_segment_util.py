@@ -5,32 +5,30 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.phrase import PhraseGroup
-from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
 class SoundSegmentUtil:
     """
-    Logic for managing sound segment files
+    Logic for managing sound segment files 
+    (generated audio for a chunk of project text, saved as a file in the project dir)
     """
 
     @staticmethod
-    def get_project_sound_segments(project: Project) -> dict[int, str]:
+    def make_sound_segments_map(project: Project) -> dict[int, list[SoundSegment]]:
         """
-        Returns dict (key = text segment index, value = file path)
-        of sound segment file paths in project.
         """
 
         if not project.dir_path:
             return {}
-        if not os.path.exists(project.sound_segments_dir_path):
+        if not os.path.exists(project.sound_segments_path):
             return {}
 
-        result = dict[int, str]()
-        groups = project.phrase_groups
+        map = dict[int, list[SoundSegment]]()
 
-        for path in Path(project.sound_segments_dir_path).iterdir():
+        for path in Path(project.sound_segments_path).iterdir():
 
             if not path.is_file():
                 continue
@@ -39,127 +37,72 @@ class SoundSegmentUtil:
             if path.suffix.lower() != ".flac":
                 continue
 
-            parts = SoundSegmentUtil.extract_parts_from_file_name(path.name)
-
-            if parts is None:
+            sound_segment = SoundSegment.from_file_name(path.name)
+            if sound_segment is None:
                 continue
-            if parts.zb_index >= len(groups):
-                continue
-
-            text_group = groups[parts.zb_index]
-            segment_hash = SoundSegmentUtil.calc_segment_hash(parts.zb_index, text_group.text)
-            if parts.hash != segment_hash:
+            index = sound_segment.idx
+            if index >= len(project.phrase_groups):
                 continue
 
-            if parts.zb_index in result:
-                # in case of duplicate
-                if "fail" in parts:
-                    continue
+            phrase_group = project.phrase_groups[sound_segment.idx]
+            segment_hash = SoundSegmentUtil.calc_segment_hash(index, phrase_group.text)
+            if sound_segment.hash != segment_hash:
+                continue
 
-            result[parts.zb_index] = str(path)
+            if not map.get(index, []):
+                map[sound_segment.idx] = []
+            map[index].append(sound_segment)
 
-        return result
+        return map
 
     @staticmethod
-    def extract_parts_from_file_name(file_name: str) -> FileNameParts | None:
-        """
-        Must be either:
-            [index, hash, voice, ...] <-- legacy format
-            [index, hash, model, voice, ...]
-        """
-        tags = extract_tags_from_file_name(file_name)
-        if not tags:
-            return None
-
-        if len(tags) < 3:
-            return None
-
-        try:
-            one_based_index = int(tags[0])
-        except:
-            return None
-        if one_based_index < 1:
-            return None
-        zero_based_index = one_based_index - 1
-
-        hash = tags[1]
-        if not AppUtil.is_app_hash(hash):
-            return None
-
-        if tags[2] in TtsModelInfos.all_file_tags():
-            # Must be [index, hash, model, voice, ...]
-            model = tags[2]
-            if len(tags) < 4:
-                return None
-            voice = tags[3]
+    def make_file_name(
+        index: int,
+        phrase_group: PhraseGroup,
+        project: Project,
+        tts_model_info: TtsModelInfo,
+        num_word_fails: int,
+        is_real_time: bool,
+        suffix=".flac"
+    ) -> str:
+        idx = str(index + 1).zfill(5)
+        model = tts_model_info.file_tag
+        voice = project.get_voice_label()
+        text = TextUtil.sanitize_for_filename(phrase_group.presentable_text[:50])
+        fails_tag = f" [{num_word_fails}]" if num_word_fails > -1 else ""
+        if is_real_time:
+            timestamp = SoundSegmentUtil.make_timestamp_string()
+            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{fails_tag} {text}{suffix}"
         else:
-            # Must be [index, hash, voice, ...]
-            voice = tags[2]
-            model = ""
-
-        return FileNameParts(zb_index=zero_based_index, hash=hash, voice=voice, model=model)
-
-
+            hash_string = SoundSegmentUtil.calc_segment_hash(index, phrase_group.text)
+            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{fails_tag} {text}{suffix}"
+        return path
+        
     @staticmethod
     def get_common_model_tag(paths: list[str]) -> str:
-        """
-        """
         result = ""
         for path in paths:
-            stem = Path(path).stem
-            parts = SoundSegmentUtil.extract_parts_from_file_name(stem)
-            if not parts or not parts.model:
+            sound_segment = SoundSegment.from_file_name(Path(path).name)
+            if not sound_segment or not sound_segment.model:
                 return ""
             if not result:
-                result = parts.model
-            elif parts.model != result:
+                result = sound_segment.model
+            elif sound_segment.model != result:
                 return ""
         return result
 
     @staticmethod
     def get_common_voice_tag(paths: list[str]) -> str:
-        """
-        """
         result = ""
         for path in paths:
-            stem = Path(path).stem
-            parts = SoundSegmentUtil.extract_parts_from_file_name(stem)
-            if not parts or not parts.voice:
+            sound_segment = SoundSegment.from_file_name(Path(path).name)
+            if not sound_segment or not sound_segment.voice:
                 return ""
             if not result:
-                result = parts.voice
-            elif parts.voice != result:
+                result = sound_segment.voice
+            elif sound_segment.voice != result:
                 return ""
         return result
-
-    @staticmethod
-    def is_valid_file_name(file_name: str) -> bool:
-        if not file_name.lower().endswith(".flac"):
-            return False
-        match = AUDIO_SEGMENT_FILE_NAME_PATTERN.fullmatch(file_name)
-        return bool(match)
-
-    @staticmethod
-    def make_segment_file_path(index: int, project: Project) -> str:
-        fn = SoundSegmentUtil.make_file_name(
-            index=index,
-            phrase_group=project.phrase_groups[index],
-            model_tag=Tts.get_type().value.file_tag,
-            voice_tag=project.get_voice_label()
-        )
-        return os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR, fn)
-
-    @staticmethod
-    def make_file_name(
-        index: int, phrase_group: PhraseGroup, model_tag: str, voice_tag: str, suffix=".flac"
-    ) -> str:
-        index_tag = "[" + str(index + 1).zfill(5) + "]" # one-based-index
-        hash_tag = "[" + SoundSegmentUtil.calc_segment_hash(index, phrase_group.text) + "]"
-        model_tag = "[" + model_tag + "]"
-        voice_tag = "[" + voice_tag + "]"
-        sanitized_text = sanitize_for_filename(phrase_group.presentable_text[:50])
-        s = f"{index_tag} {hash_tag} {model_tag} {voice_tag} {sanitized_text}{suffix}"
-        return s
 
     @staticmethod
     def calc_segment_hash(index: int, text: str) -> str:
@@ -170,65 +113,123 @@ class SoundSegmentUtil:
         s = str(index) + " " + text
         return AppUtil.calc_hash_string(s)
 
+    @staticmethod
+    def extract_tags_from_file_name(file_name: str) -> list[str] | None:
+        """
+        Extracts tags from a file name string.
+
+        A file_name must look like this to be valid: "[tag1] [tag2] [tag3] optionally-anything-else",
+        where "tag" is a series of characters without whitespace enclosed in square brackets (eg, "[hello_1234]").
+        There must be one or more so-called tags, and they must occur consecutively at the beginning of the string.
+        Anything after the last identified tag is permitted and can be ignored.
+
+        Args:
+            file_name: The string of the file name to process.
+
+        Returns:
+            A list of the extracted tag contents (e.g., ["tag1", "tag2"]) if the file_name is valid,
+            otherwise returns None.
+        """
+        # A regular expression for a single valid tag.
+        # It must start with '[', end with ']', and contain one or more
+        # characters that are NOT whitespace or brackets.
+        tag_pattern = re.compile(r"\[([^\[\]\s]+)\]")
+
+        tags_found = []
+        # We work on a copy of the string, consuming it from the left.
+        # We strip leading whitespace to handle cases like " [tag1]..."
+        remaining_name = file_name.lstrip()
+
+        # Loop as long as the remaining string could potentially start with a tag.
+        while remaining_name.startswith('['):
+            # Attempt to match a single tag at the beginning of the current string.
+            match = tag_pattern.match(remaining_name)
+
+            if not match:
+                # The string starts with '[' but is not a valid tag
+                # (e.g., "[tag with space]", "[]", "[malformed").
+                # Since tags must be consecutive, we stop processing.
+                break
+
+            # If a valid tag is matched, add its content to our list.
+            # group(1) captures the content inside the brackets.
+            tags_found.append(match.group(1))
+
+            # "Consume" the matched tag from the string.
+            # We also strip leading whitespace to prepare for the next tag
+            # or to separate the tags from the rest of the file name.
+            remaining_name = remaining_name[match.end():].lstrip()
+
+        # According to the rules, there must be one or more tags.
+        # If our list is empty after the loop, the file_name is invalid.
+        if not tags_found:
+            return None
+
+        return tags_found
+    
+    @staticmethod
+    def make_timestamp_string() -> str:
+        # "0" ensures debug sound files shows up alphabetically before sound non-debug files in segments dir, yes rly
+        return "0" + str(int(time.time() * 1000)) 
+
 # ---
 
-def extract_tags_from_file_name(file_name: str) -> list[str] | None:
+class SoundSegment(NamedTuple):
     """
-    Extracts tags from a file name string.
-
-    A file_name must look like this to be valid: "[tag1] [tag2] [tag3] optionally-anything-else",
-    where "tag" is a series of characters without whitespace enclosed in square brackets (eg, "[hello_1234]").
-    There must be one or more so-called tags, and they must occur consecutively at the beginning of the string.
-    Anything after the last identified tag is permitted and can be ignored.
-
-    Args:
-        file_name: The string of the file name to process.
-
-    Returns:
-        A list of the extracted tag contents (e.g., ["tag1", "tag2"]) if the file_name is valid,
-        otherwise returns None.
+    Extracts the data from the so-called tags from a sound segment filename
     """
-    # A regular expression for a single valid tag.
-    # It must start with '[', end with ']', and contain one or more
-    # characters that are NOT whitespace or brackets.
-    tag_pattern = re.compile(r"\[([^\[\]\s]+)\]")
 
-    tags_found = []
-    # We work on a copy of the string, consuming it from the left.
-    # We strip leading whitespace to handle cases like " [tag1]..."
-    remaining_name = file_name.lstrip()
+    # The pre-existing file_name from which the SoundSegment fields were extracted
+    file_name: str
 
-    # Loop as long as the remaining string could potentially start with a tag.
-    while remaining_name.startswith('['):
-        # Attempt to match a single tag at the beginning of the current string.
-        match = tag_pattern.match(remaining_name)
-
-        if not match:
-            # The string starts with '[' but is not a valid tag
-            # (e.g., "[tag with space]", "[]", "[malformed").
-            # Since tags must be consecutive, we stop processing.
-            break
-
-        # If a valid tag is matched, add its content to our list.
-        # group(1) captures the content inside the brackets.
-        tags_found.append(match.group(1))
-
-        # "Consume" the matched tag from the string.
-        # We also strip leading whitespace to prepare for the next tag
-        # or to separate the tags from the rest of the file name.
-        remaining_name = remaining_name[match.end():].lstrip()
-
-    # According to the rules, there must be one or more tags.
-    # If our list is empty after the loop, the file_name is invalid.
-    if not tags_found:
-        return None
-
-    return tags_found
-
-# ---
-
-class FileNameParts(NamedTuple):
-    zb_index: int # zero-based index
+    # Zero-based index
+    idx: int 
+    # Hash of the source text used to generate the sound file
     hash: str
-    voice: str
+    num_word_fails: int
+    is_fail: bool
     model: str
+    voice: str
+
+    @staticmethod
+    def from_file_name(file_name: str) -> SoundSegment | None:
+        """
+        Expecting:
+            [0] index, [1] hash, [2] model, [3] voice, [4] num-fails (optional), ...
+        Eg:
+            [00024] [3ae0f21b9de65a3c] [vibevoice] [sy_even_if_ch1_c] [5] [fail] With_Lord_knows_what_s_beyond.flac
+        """
+
+        # In case argument is a full file path
+        file_name = Path(file_name).name 
+
+        tags = SoundSegmentUtil.extract_tags_from_file_name(file_name)
+        if not tags:
+            return None
+
+        if len(tags) < 2:
+            # Index and hash are required
+            return None
+
+        try:
+            idx_1b = int(tags[0])
+        except:
+            return None
+        if idx_1b < 1:
+            return None
+        index_0b = idx_1b - 1
+
+        hash = tags[1]
+        if not AppUtil.is_app_hash(hash):
+            return None
+
+        model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
+        voice = tags[3] if len(tags) >= 4 else ""
+        num_word_fails = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
+        is_fail = ("[fail]" in file_name)
+
+        return SoundSegment(
+            file_name=file_name, idx=index_0b, hash=hash, is_fail=is_fail, 
+            voice=voice, model=model, num_word_fails=num_word_fails
+        )
+

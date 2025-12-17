@@ -37,7 +37,7 @@ class ChapterInfo:
 
         result = []
 
-        all_sound_segments = project.sound_segments.sound_segments
+        psg = project.sound_segments
 
         segment_index_ranges = make_section_ranges(project.section_dividers, len(project.phrase_groups))
 
@@ -49,7 +49,7 @@ class ChapterInfo:
             segment_index_to_path: dict[int, str] = {}
 
             for segment_index in range(segment_index_start, segment_index_end + 1):
-                segment_file_path = all_sound_segments.get(segment_index, "")
+                segment_file_path = psg.get_best_file_for(segment_index)
                 if segment_file_path:
                     segment_index_to_path[segment_index] = segment_file_path
 

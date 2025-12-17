@@ -31,7 +31,7 @@ class TextMenu:
         def on_print(_: State, __: MenuItem) -> None:
             AppUtil.print_project_text(
                 phrase_groups=state.project.phrase_groups,
-                extant_indices = set( state.project.sound_segments.sound_segments.keys() ),
+                extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
                 language_code_used=state.project.applied_language_code,
                 max_words_used=state.project.applied_max_words,
                 strategy_used=state.project.applied_strategy or list(SegmentationStrategy)[0]
@@ -84,15 +84,18 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         phrase_groups, raw_text = AppUtil.get_phrase_groups_from_ask_text_file(
             state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
         )
+        if not phrase_groups:
+            return False
     elif item.data == "manual":
         phrase_groups, raw_text = AppUtil.get_text_groups_from_ask_std_in(
             state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
         )
+        if not phrase_groups:
+            print_feedback("Cancelled")
+            return False
     else:
         return False
-    if not phrase_groups:
-        return False
-
+    
     # Preview
     AppUtil.print_project_text(
         phrase_groups=phrase_groups,
@@ -107,9 +110,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         return False
 
     # Delete now-outdated gens
-    old_sound_segments = state.project.sound_segments.sound_segments
-    for path in old_sound_segments.values():
-        delete_silently(path)
+    state.project.sound_segments.delete_all()
 
     # Commit
     state.project.set_phrase_groups_and_save(
@@ -120,7 +121,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         raw_text=raw_text
     )
 
-    if not state.real_time.custom_text_groups:
+    if not state.real_time.custom_phrase_groups:
         state.real_time.line_range = None
 
     print_feedback("Project text has been set")

@@ -12,6 +12,7 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.tts_model import GlmProtocol, IndexTts2Protocol
@@ -142,6 +143,7 @@ class Project:
             if isinstance(result, str):
                 err = result
                 printt(f"{COL_ERROR}Error loading project text legacy format: {err}")
+                printt()
             else:
                 # Wrap each Phrase (nee TextGroup) in a PhraseGroup
                 phrases = result
@@ -502,7 +504,7 @@ class Project:
             label = Path(file_name).stem
             # Strip "_model" from end of file stem
             label = label.removesuffix("_" + Tts.get_type().value.file_tag)
-            label = sanitize_for_filename(label)
+            label = TextUtil.sanitize_for_filename(label)
             label = label[:30]
             return label
 
@@ -587,10 +589,16 @@ class Project:
         return self.can_voice and len(self.phrase_groups) > 0
 
     @property
-    def sound_segments_dir_path(self) -> str:
+    def sound_segments_path(self) -> str:
         if not self.dir_path:
-            return "" # TODO this feels off, smth abt project not yet having a dir_path, etc
+            return "" # TODO smth abt project not yet having a dir_path, etc
         return os.path.join(self.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+
+    @property
+    def concat_path(self) -> str:
+        if not self.dir_path:
+            return ""
+        return os.path.join(self.dir_path, PROJECT_CONCAT_SUBDIR)
 
     @property
     def realtime_path(self) -> str:

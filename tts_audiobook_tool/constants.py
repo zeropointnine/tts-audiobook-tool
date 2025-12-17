@@ -88,7 +88,7 @@ FILE_REQUESTOR_SOUND_TYPES = [('Sound files', '*.wav *.flac *.mp3,*.aac,*.m4a,*.
 # Capturing group 3 is voice label - alphanumeric chars (and underscores) enclosed in brackets
 # Rest of string can be anything
 pattern = r"\[(\d+)\] \[([0-9A-Fa-f]{16})\] \[(\w+)\] .*"
-AUDIO_SEGMENT_FILE_NAME_PATTERN = re.compile(pattern)
+SOUND_SEGMENT_FILE_NAME_PATTERN = re.compile(pattern)
 
 # Regex for "[h...]", where "h" is 16 hex characters.
 # Captures the hex string (w/o the brackets)

@@ -14,8 +14,8 @@ class RealTimeMenu:
     def menu(state: State):
 
         def make_text_label(_) -> str:
-            if state.real_time.custom_text_groups:
-                num = len(state.real_time.custom_text_groups)
+            if state.real_time.custom_phrase_groups:
+                num = len(state.real_time.custom_phrase_groups)
                 value = f"custom text, {num} {make_noun('line', 'lines', num)}"
             else:
                 value = "project text"
@@ -44,8 +44,8 @@ class RealTimeMenu:
     @staticmethod
     def ask_line_range(state: State) -> None:
 
-        if state.real_time.custom_text_groups:
-            text_groups = state.real_time.custom_text_groups
+        if state.real_time.custom_phrase_groups:
+            text_groups = state.real_time.custom_phrase_groups
         else:
             text_groups = state.project.phrase_groups
         length = len(text_groups)
@@ -77,8 +77,8 @@ class RealTimeMenu:
 
         # 1
         def on_project(_: State, __: MenuItem) -> bool:
-            if state.real_time.custom_text_groups:
-                state.real_time.custom_text_groups = []
+            if state.real_time.custom_phrase_groups:
+                state.real_time.custom_phrase_groups = []
                 state.real_time.line_range = None
             print_feedback("Text source set to", "project")
             return True
@@ -88,16 +88,16 @@ class RealTimeMenu:
         # 2, 3
         def on_custom(_: State, item: MenuItem) -> bool:
             if item.data == "file":
-                text_segments, __ = AppUtil.get_phrase_groups_from_ask_text_file(
+                phrase_groups, __ = AppUtil.get_phrase_groups_from_ask_text_file(
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             else:
-                text_segments, __ = AppUtil.get_text_groups_from_ask_std_in(
+                phrase_groups, __ = AppUtil.get_text_groups_from_ask_std_in(
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
-            if text_segments:
-                state.real_time.custom_text_groups = text_segments
+            if phrase_groups:
+                state.real_time.custom_phrase_groups = phrase_groups
                 state.real_time.line_range = None
-                print_feedback("Text source set to: custom", f"{len(text_segments)} lines")
-            return bool(text_segments)
+                print_feedback("Text source set to: custom", f"{len(phrase_groups)} {make_noun('line', 'lines', len(phrase_groups))}")
+            return bool(phrase_groups)
 
         custom_file_item = MenuItem("Custom text - from text file", on_custom, data="file")
         custom_manual_item = MenuItem("Custom text - manual input", on_custom, data="manual")
@@ -130,8 +130,8 @@ class RealTimeMenu:
 # ---
 
 def do_start(state: State) -> None:
-    if state.real_time.custom_text_groups:
-        text_groups = state.real_time.custom_text_groups
+    if state.real_time.custom_phrase_groups:
+        text_groups = state.real_time.custom_phrase_groups
     else:
         text_groups = state.project.phrase_groups
     if not text_groups:
@@ -153,6 +153,5 @@ def do_start(state: State) -> None:
     RealTimeUtil.start(
         state=state,
         phrase_groups=text_groups,
-        line_range=state.real_time.line_range,
-        save_output=state.project.realtime_save
+        line_range=state.real_time.line_range
     )

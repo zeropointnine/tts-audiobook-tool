@@ -42,7 +42,7 @@ class GenerateMenu:
                 complete_label = ""
             else:
                 selected_indices = state.project.get_indices_to_generate()
-                all_generated_indices = state.project.sound_segments.sound_segments.keys()
+                all_generated_indices = state.project.sound_segments.sound_segments_map.keys()
                 selected_indices_not_generated = selected_indices - all_generated_indices
                 num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
                 complete_label = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
@@ -50,8 +50,8 @@ class GenerateMenu:
             return f"Specify range {range_label} {complete_label}"
 
         def make_regen_label(_) -> str:
-            failed_items = state.project.sound_segments.get_failed_in_generate_range()
-            failed_items_label = f"{str(len(failed_items))} {make_noun('item', 'items', len(failed_items))}"
+            num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
+            failed_items_label = f"{num_fails} {make_noun('item', 'items', num_fails)}"
             qualifier = " in specified range" if state.project.generate_range_string else ""
             regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
             return f"Regenerate segments tagged with potential errors {regenerate_label}"
@@ -73,7 +73,7 @@ class GenerateMenu:
     def do_generate_items(state: State) -> None:
 
         selected_indices_all = state.project.get_indices_to_generate()
-        selected_indices_generated = set( state.project.sound_segments.sound_segments.keys() )
+        selected_indices_generated = set( state.project.sound_segments.sound_segments_map.keys() )
         selected_indices_not_generated = selected_indices_all - selected_indices_generated
 
         if not selected_indices_not_generated:
@@ -88,10 +88,12 @@ class GenerateMenu:
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
-        did_interrupt = GenerateUtil.generate_items_to_files(
+        did_interrupt = GenerateUtil.generate_to_files(
             project=state.project,
-            indices_to_generate=selected_indices_not_generated,
-            items_to_regenerate={},
+            phrase_groups=state.project.phrase_groups,
+            indices_set=selected_indices_not_generated,
+            language_code=state.project.language_code,
+            is_regenerate=False,
             stt_variant=state.prefs.stt_variant,
             stt_config=state.prefs.stt_config
         )
@@ -109,13 +111,13 @@ class GenerateMenu:
     @staticmethod
     def do_regenerate_items(state: State) -> None:
 
-        failed_items = state.project.sound_segments.get_failed_in_generate_range()
-        if not failed_items:
+        failed_indices = state.project.sound_segments.get_failed_indices_in_generate_range()
+        if not failed_indices:
             qualifier = " in specified range" if state.project.generate_range_string else ""
             print_feedback(f"No failed items to regenerate{qualifier}.")
             return
 
-        print_heading(f"Regenerating {len(failed_items)} audio segment/s...", dont_clear=True)
+        print_heading(f"Regenerating {len(failed_indices)} audio segment/s...", dont_clear=True)
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
@@ -126,10 +128,12 @@ class GenerateMenu:
             if not b:
                 return
 
-        _ = GenerateUtil.generate_items_to_files(
+        _ = GenerateUtil.generate_to_files(
             project=state.project,
-            indices_to_generate=set(), # rem, ignored
-            items_to_regenerate=failed_items,
+            phrase_groups=state.project.phrase_groups,
+            indices_set=failed_indices,
+            language_code=state.project.language_code,
+            is_regenerate=True,
             stt_variant=state.prefs.stt_variant,
             stt_config=state.prefs.stt_config
         )

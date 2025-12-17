@@ -1,25 +1,19 @@
 import os
-import time
-from typing import Any
 import librosa
 import sounddevice as sd
 import numpy as np
 import threading
 import soundfile
 
-from tts_audiobook_tool.app_types import FailResult, Sound, ValidationResult
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class SoundFileUtil:
 
     _current_playback_thread = None
     _stop_playback_event = threading.Event()
-    debug_save_dir: str = AppUtil.get_app_temp_dir()
 
     @staticmethod
     def load(path: str, target_sr: int=0) -> Sound | str:
@@ -52,46 +46,6 @@ class SoundFileUtil:
             return ""
         except Exception as e:
             return f"Error saving sound file {flac_path}: {type(e)} {e}"
-
-    @staticmethod
-    def debug_save(label: str, sound: Any): # sound = Sound
-        if not DEV_SAVE_INTERMEDIATE_FILES:
-            return
-        os.makedirs(SoundFileUtil.debug_save_dir, exist_ok=True)
-        fn = f"{int(time.time()*1000)} {label}.flac"
-        path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-        _ = SoundFileUtil.save_flac(sound, path)
-
-    @staticmethod
-    def debug_save_result_info(result: ValidationResult, source_text: str, transcribed_text: str):
-
-        s = type(result).__name__
-        if isinstance(result, FailResult):
-            s = "[fail] " + s
-        fn = f"{int(time.time()*1000)} {s}.txt"
-        path = os.path.join(SoundFileUtil.debug_save_dir, fn)
-
-        text = type(result).__name__ + "\n" + result.get_ui_message() + "\n\n\n"
-        text += "source text:" + "\n" + source_text + "\n\n"
-
-        # This is the logic used to get the final prompt text;
-        # ideally this would get passed into the function but
-        s = TextUtil.massage_for_inference(source_text)
-        s = Tts.get_instance().massage_for_inference(s)
-        text += "prompt text:" + "\n" + s + "\n\n"
-
-        text += "transcribed_text:" + "\n" + transcribed_text + "\n\n"
-        source_text_massaged = TextUtil.massage_for_text_comparison(source_text)
-        text += "source_text, massaged:" + "\n" + source_text_massaged + "\n\n"
-        transcribed_text_massaged = TextUtil.massage_for_text_comparison(transcribed_text)
-        text += "transcribed_text, massaged:" + "\n" + transcribed_text_massaged + "\n\n"
-
-        os.makedirs(SoundFileUtil.debug_save_dir, exist_ok=True)
-        try:
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(text)
-        except Exception as e:
-            printt(f"Couldn't save file {path}: {make_error_string(e)}")
 
     @staticmethod
     def is_valid_sound_file(path: str) -> str:

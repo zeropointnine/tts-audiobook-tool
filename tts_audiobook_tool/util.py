@@ -188,20 +188,10 @@ def lerp_clamped(
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
-def sanitize_for_filename(filename: str) -> str:
-    """
-    Replaces all non-alpha-numeric characters with underscores,
-    replaces consecutive underscores with a single underscore,
-    and removes leading/trailing underscores.
-    """
-    sanitized = re.sub(r'[^a-zA-Z0-9]', '_', filename)
-    collapsed = re.sub(r'_+', '_', sanitized)
-    stripped = collapsed.strip('_')
-    return stripped
-
-
 def make_section_ranges(section_dividers: list[int], num_items: int) -> list[tuple[int, int]]:
-    """ Assumes `section_dividers` is sorted """
+    """ 
+    Assumes `section_dividers` is sorted 
+    """
 
     # TODO: this should be a property in Project
 
@@ -466,5 +456,4 @@ def load_text_file(path: str, errors: str="strict") -> str:
         return transcript
 
     except Exception as e:
-        print(f"xxx failed completely: {e}")
         return ""

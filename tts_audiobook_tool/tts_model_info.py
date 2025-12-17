@@ -168,7 +168,7 @@ class TtsModelInfos(Enum):
             ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
             ("\u2019", "'"), # fancy apostrophe causes rest of word to not be spoken
             ("…", ","), ("...", ",") # ellipsis can wreck gen badly
-        ],
+        ]
     )
 
     INDEXTTS2 = TtsModelInfo(
@@ -191,7 +191,7 @@ class TtsModelInfos(Enum):
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", "), # em-dash oftentimes doesn't create caesura
             ("\u2013", ", ") # en-dash oftentimes generates random syllable
-        ],
+        ]
     )
 
     GLM = TtsModelInfo(
@@ -215,7 +215,7 @@ class TtsModelInfos(Enum):
             (";", ","), # semicolon generates random syllable
             ("\u2014", ", "), ("\u2500", ", "), # em-dash doesn't create caesura
             (" \u2013 ", ", ") # space-en-dash-space doesn't create caesura
-        ],
+        ]
     )
 
     @staticmethod

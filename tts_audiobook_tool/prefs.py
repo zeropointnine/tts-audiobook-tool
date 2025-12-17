@@ -20,6 +20,7 @@ class Prefs:
             stt_variant: SttVariant = list(SttVariant)[0],
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
+            last_voice_dir: str = "",
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
     ) -> None:
         self._project_dir = project_dir
@@ -27,6 +28,7 @@ class Prefs:
         self._stt_variant = stt_variant
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
+        self._last_voice_dir = last_voice_dir
         self._play_on_generate = play_on_generate
 
     @staticmethod
@@ -106,6 +108,15 @@ class Prefs:
             tts_force_cpu = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
+        # Last voice dir
+        last_voice_dir = prefs_dict.get("last_voice_dir", "")
+        if not isinstance(last_voice_dir, str):
+            last_voice_dir = ""
+            dirty = True
+        elif last_voice_dir and not os.path.exists(last_voice_dir):
+            last_voice_dir = ""
+            dirty = True
+
         # Play on generate
         play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
@@ -118,6 +129,7 @@ class Prefs:
             stt_variant=stt_variant,
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
+            last_voice_dir=last_voice_dir,
             play_on_generate=play_on_generate,
             hints=hints
         )
@@ -192,6 +204,15 @@ class Prefs:
         Tts.set_force_cpu(value)
 
     @property
+    def last_voice_dir(self) -> str:
+        return self._last_voice_dir
+
+    @last_voice_dir.setter
+    def last_voice_dir(self, value: str) -> None:
+        self._last_voice_dir = value
+        self.save()
+
+    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
@@ -203,6 +224,7 @@ class Prefs:
             "stt_variant": self._stt_variant.id,
             "stt_config": self._stt_config.id,
             "tts_force_cpu": self._tts_force_cpu,
+            "last_voice_dir": self._last_voice_dir,
             "play_on_generate": self._play_on_generate
         }
         try:

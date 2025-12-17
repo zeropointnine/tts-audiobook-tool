@@ -135,7 +135,7 @@ class MenuUtil:
             # One-time message
             if is_submenu and MenuUtil.is_first_submenu:
                 MenuUtil.is_first_submenu = False
-                printt(f"{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
+                printt(f"{COL_DIM}...or press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
                 printt()
 
             while True:

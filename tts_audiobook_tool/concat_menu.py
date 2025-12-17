@@ -110,7 +110,7 @@ class ConcatMenu:
             current_value=state.project.subdivide_phrases,
             default_value=False,
             on_select=on_select,
-            subheading=LOUDNORM_SUBHEADING,
+            subheading=SUBDIVIDE_SUBHEADING,
             hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None
         )
 
@@ -227,12 +227,11 @@ class ConcatMenu:
     def make_chapter_files(state: State, chapter_indices: list[int], to_aac_not_flac: bool) -> None:
 
         # Make subdir
-        timestamp_subdir = timestamp_string()
-        dest_subdir = os.path.join(state.project.dir_path, PROJECT_CONCAT_SUBDIR, timestamp_subdir)
+        dest_dir = os.path.join(state.project.concat_path, timestamp_string())
         try:
-            os.makedirs(dest_subdir, exist_ok=True)
+            os.makedirs(dest_dir, exist_ok=True)
         except:
-            AskUtil.ask_error(f"Couldn't make directory {dest_subdir}")
+            AskUtil.ask_error(f"Couldn't make directory {dest_dir}")
             return
 
         for i, chapter_index in enumerate(chapter_indices):
@@ -251,7 +250,7 @@ class ConcatMenu:
                 state=state,
                 chapter_index=chapter_index,
                 to_aac_not_flac=is_concat_aac,
-                base_dir=dest_subdir
+                base_dir=dest_dir
             )
             if err:
                 printt()
@@ -288,7 +287,7 @@ class ConcatMenu:
         hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file browser: ")
         printt()
         if hotkey == "o":
-            err = open_directory_in_gui(dest_subdir)
+            err = open_directory_in_gui(dest_dir)
             if err:
                 AskUtil.ask_error(err)
 
@@ -332,7 +331,7 @@ for mobile devices.
 
 SUBDIVIDE_SUBHEADING = \
 """Affects how text is highlighted in the player/reader app.
-When False, text segments map directly to the TTS prompts of the generated audio. 
+When False, text segments map directly to the TTS prompts used to generate the audio segments.
 When True, text is further sub-segmented by phrase. Requires \"speech-to-text validation\"
 to be enabled during TTS sound generation.
 """

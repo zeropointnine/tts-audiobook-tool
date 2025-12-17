@@ -1,20 +1,50 @@
 # --------------------------------------------------------------------------------------------------
 # Must be imported first or else HF_HUB_CACHE can result in returning a relative path
 # due to unknown import side-effect
+
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 from huggingface_hub import constants # type: ignore
+
+# --------------------------------------------------------------------------------------------------
+# Hard requirement - TTS model 
+
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.util import *
+
+err = Tts.init_model_type()
+if err:
+    printt(f"{COL_ERROR}{err}")
+    exit(1)
+
 # --------------------------------------------------------------------------------------------------
 
-import sys
+from tts_audiobook_tool.hint import Hint
 from importlib import util
+
+NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
+
+# Hard requirement - updated dependencies
+not_found = [package for package in NEW_PACKAGES if not util.find_spec(package)]
+if not_found:
+    hint = Hint(
+        "none",
+        "The app's dependencies have changed",
+        f"The following packages were not found: {COL_ERROR}{', '.join(not_found)}{COL_DEFAULT}\n"
+        "You may have updated the app from the repository without updating its dependencies.\n"
+        "Either install the missing packages or, preferably, update your virtual environment by re-running:\n"
+        f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
+    )
+    Hint.print_hint(hint)
+    exit(1)
+
+# --------------------------------------------------------------------------------------------------
+import sys
 from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.util import *
 
 def main() -> None:
 
@@ -38,13 +68,6 @@ def main() -> None:
         printt("https://ffmpeg.org/download.html")
         exit(1)
 
-    # Hard requirement - TTS model 
-    # TODO: Actually should not be 
-    err = Tts.init_model_type()
-    if err:
-        printt(f"{COL_ERROR}{err}")
-        exit(1)
-
     # Hard requirement - chatterbox + Python v3.11
     if Tts.get_type() == TtsModelInfos.CHATTERBOX:
         if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
@@ -53,20 +76,6 @@ def main() -> None:
 
     # TODO: compare hash of current requirements file with saved hash, and if different, message user
     #   and reconcile this addition with 'hard requirement' messaging below etc
-
-    # Hard requirement - updated dependencies
-    not_found = [package for package in NEW_PACKAGES if not util.find_spec(package)]
-    if not_found:
-        hint = Hint(
-            "none",
-            "The app's dependencies have changed",
-            f"The following packages were not found: {COL_ERROR}{', '.join(not_found)}{COL_DEFAULT}\n"
-            "You may have updated the app from the repository without updating its dependencies.\n"
-            "Either install the missing packages or, preferably, update your virtual environment by re-running:\n"
-            f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
-        )
-        Hint.print_hint(hint)
-        exit(1)
 
     # Show other one-time startup messages (which are not blockers)
     temp_prefs = Prefs.load(save_if_dirty=False)
@@ -85,7 +94,3 @@ def main() -> None:
     # Start
     printt()
     _ = App()
-
-# ---
-
-NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet"]

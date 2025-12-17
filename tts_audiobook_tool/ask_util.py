@@ -125,11 +125,11 @@ class AskUtil:
             from tkinter import filedialog
             printt(console_message)
             result = filedialog.askopenfilename(title=requestor_title, filetypes=filetypes, initialdir=initialdir)
+            if isinstance(result, tuple):
+                # In Linux, returns an empty tuple on cancel (Cinnamon)
+                result = ""
         except Exception as e:
             return AskUtil.ask_path_input(console_message)
-        if isinstance(result, tuple):
-            # In Linux Cinnamon, returns an empty tuple on cancel
-            result = ""
         printt(result)
         printt()
         return result

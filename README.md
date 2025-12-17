@@ -20,7 +20,7 @@ Plain-vanilla text interface in the console.
 
 ### Browser player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the audiobook's text in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `.\browser_player\index.html` (no need for a web server), or from the mapped [github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
+The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the text highlighted in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `browser_player\index.html` (no need for a web server), or from the mapped [project github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
 **Some example outputs**, all using the same source text and same 15-second voice clone sample:
 
@@ -286,7 +286,7 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
 | VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | (default steps, Flash attention 2 enabled)
 |                         | Macbook Pro M1       | ~40% realtime   |
-| Higgs V2 3B             | GTX 4090, Windows    | 200+% realtime  | inference speed inversely proportional to voice sample duration, FYI
+| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed inversely proportional to voice sample duration, FYI
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
 | Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | best combination of inference speed and quality output IMO
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 

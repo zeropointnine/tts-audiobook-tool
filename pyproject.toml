@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tts-audiobook-tool"
+version = "0.1.0"
+description = "Audiobook creation tool"
+
+# Dependencies should be handled using "pip install requirements*.txt"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]  # Tells setuptools to look in the root for packages
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = "."

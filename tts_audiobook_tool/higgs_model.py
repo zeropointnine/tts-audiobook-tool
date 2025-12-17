@@ -34,16 +34,15 @@ class HiggsModel(HiggsModelProtocol):
     Pared-down logic from higgs-audio lib script `generation.py`
     """
 
-    def __init__(self, device_code: str):
+    def __init__(self, device: str):
 
         super().__init__(TtsModelInfos.HIGGS.value)
 
-        device_id = 0
-        if device_code == "cuda":
-            device = f"cuda:{device_id}"
+        if device == "cuda":
+            device = f"cuda:0"
             use_static_kv_cache = True
         else:
-            device = device_code
+            device = device
             use_static_kv_cache = False
 
         self.audio_tokenizer = load_higgs_audio_tokenizer(AUDIO_TOKENIZER_PATH, device=device)
@@ -51,7 +50,7 @@ class HiggsModel(HiggsModelProtocol):
         self.model_client = HiggsAudioModelClient(
             model_path=MODEL_PATH,
             audio_tokenizer=self.audio_tokenizer,
-            device=device_id,
+            device=device,
             max_new_tokens=MAX_NEW_TOKENS,
             use_static_kv_cache=use_static_kv_cache,
         )

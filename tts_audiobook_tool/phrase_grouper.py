@@ -1,7 +1,7 @@
 import math
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.phrase_segmenter import Reason, Phrase, PhraseSegmenter
 from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.phrase_segmenter import Reason, Phrase, PhraseSegmenter
 from tts_audiobook_tool.util import printt
 
 class PhraseGrouper:
@@ -19,7 +19,7 @@ class PhraseGrouper:
         """
         Creates PhraseGroups using the passed-in source text.
         """
-        phrases = PhraseSegmenter.text_to_phrases(text, pysbd_lang=pysbd_lang, max_words=max_words)
+        phrases = PhraseSegmenter.text_to_phrases(text, max_words=max_words, pysbd_lang=pysbd_lang)
 
         # Group by either complete sentence or paragraph
         match strategy:

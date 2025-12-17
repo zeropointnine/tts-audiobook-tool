@@ -63,9 +63,17 @@ class VoiceMenuShared:
         if tts_type.value.requires_voice_transcript:
             Hint.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
-        path = VoiceMenuShared.ask_voice_file(state.project.dir_path, tts_type, message_override)
+        if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
+            state.prefs.last_voice_dir = ""
+        path = VoiceMenuShared.ask_voice_file(state.prefs.last_voice_dir, tts_type, message_override)
         if not path:
             return
+        
+        if not os.path.exists(path) or not os.path.isfile(path):
+            AskUtil.ask_error(f"File doesn't exist: {path}")
+            return
+        
+        state.prefs.last_voice_dir = str(Path(path).parent)
 
         # Load sound
         result = SoundFileUtil.load(path)
@@ -113,7 +121,7 @@ class VoiceMenuShared:
 
                 words = result
                 transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
-                print(f"Transcribed text {COL_DIM}(filtered for high probablility){COL_DEFAULT}:")
+                print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
                 printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
                 printt()
 

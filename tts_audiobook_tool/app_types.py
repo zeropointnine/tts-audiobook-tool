@@ -56,24 +56,43 @@ class ConcreteWord(Word):
 
 # ---
 
+@dataclass
 class ValidationResult(ABC):
     """ Base class for a validation result """
-    dummy: str = ""
+    # dummy: str = ""
     @abstractmethod
     def get_ui_message(self) -> str:
         return ""
 
 @dataclass
-class PassResult(ValidationResult):
+class TranscriptResult(ValidationResult, ABC):
+    """ Base class for a ValidationResult that has transcript data """
+    transcript_words: list[Word]
+
+@dataclass
+class PassResult(TranscriptResult):
+    num_word_fails: int
+    word_fail_threshold: int
+    transcript_words: list[Word]
     def get_ui_message(self) -> str:
         return f"Passed validation tests"
 
 @dataclass
-class TrimmableResult(ValidationResult):    
-    base_message: str
+class FailResult(TranscriptResult):
+    message: str
+    num_word_fails: int
+    word_fail_threshold: int
+    transcript_words: list[Word]
+    def get_ui_message(self) -> str:
+        return self.message
+
+@dataclass
+class TrimmableResult(TranscriptResult):
+    """ The sound can be trimmed at either/both ends to create a valid sound """
     start_time: float | None
     end_time: float | None
     duration: float
+    transcript_words: list[Word]
 
     def __post_init__(self):
         if self.start_time is None and self.end_time is None:
@@ -82,24 +101,14 @@ class TrimmableResult(ValidationResult):
             raise ValueError("end time must be None or must be greater than zero")
 
     def get_ui_message(self) -> str:
-
-        start_string = f"{self.start_time:.2f}" if self.start_time is not None else ""
-        end_string = f"{self.end_time:.2f}" if self.end_time is not None else ""
-        duration_string = f"{self.duration:.2f}"
-
-        if start_string and end_string:
-            message = f"Will remove 0 to {start_string} and {end_string} to end {duration_string}"
-        elif start_string:
-            message = f"Will remove 0 to {start_string}"
-        else: # end
-            message = f"Will remove {end_string} to end {duration_string}"
-        return self.base_message + ". " + message
-
-@dataclass
-class FailResult(ValidationResult):
-    message: str
-    def get_ui_message(self) -> str:
-        return self.message
+        s = "Excess words detected at "
+        if self.start_time and self.end_time:
+            s += f"start and end; will remove 0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end"
+        elif self.start_time:
+            s += f"start; will remove 0s to {self.start_time:.2f}s"
+        else:
+            s += f"end; will remove from {self.end_time:.2f}s to end"
+        return s
 
 @dataclass
 class SkippedResult(ValidationResult):
@@ -199,7 +208,7 @@ class SttConfig(tuple[str, str, str], Enum):
         import torch
         if torch.cuda.is_available():
             if platform.system() == "Linux":
-                return SttConfig.CUDA_FLOAT16 # TODO: change this to CPU if can't resolve compatibility issue
+                return SttConfig.CUDA_FLOAT16
             else:
                 return SttConfig.CUDA_FLOAT16
         else:
@@ -271,5 +280,5 @@ class ExportType(tuple[str, str, str], Enum):
 class RealTimeMenuState:
     """ Values related to the real-time playback feature """
     from tts_audiobook_tool.phrase import PhraseGroup
-    custom_text_groups: list[PhraseGroup] = [] # ie, PhraseGroups
+    custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
     line_range: tuple[int, int] | None = None

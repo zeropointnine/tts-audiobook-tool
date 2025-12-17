@@ -34,50 +34,6 @@ class LoudnessLufsUtil:
 
 
     @staticmethod
-    def normalize_and_overwrite(wav_file_path: str) -> str:
-        """
-        Normalizes the loudness of a WAV file to a target LUFS and overwrites the original file.
-        This is a more or less linear transformation.
-        Returns empty string on success or no-action, else error string on fail
-
-        (Not currently using)
-        """
-        try:
-            audio, sample_rate = sf.read(wav_file_path, dtype='float32')
-
-            loudness = LoudnessLufsUtil.calculate_integrated_loudness(audio, sample_rate)
-            if loudness is None:
-                # Skip, sample too short
-                return ""
-            if loudness == -np.inf:
-                # Skip, avoid division by zero or extreme gain if loudness is -inf (silence)
-                return ""
-
-            # Target loudness (LUFS)
-            target_lufs = -10.0
-
-            # TODO: skip if loudness is close to target_lufs
-
-            gain_db = target_lufs - loudness
-            gain_linear = 10 ** (gain_db / 20.0)
-
-            # Apply gain
-            normalized_audio = audio * gain_linear
-
-            # Peak normalize to prevent clipping (-1.0 dBTP ceiling is common, 0.0 is max)
-            # Use pyloudnorm's peak normalization
-            normalized_audio = pyln.normalize.peak(normalized_audio, -1.0)
-
-            # Write the normalized audio back to the original file
-            # Use soundfile to preserve original subtype if possible (e.g., PCM_16, PCM_24, FLOAT)
-            sf.write(wav_file_path, normalized_audio, sample_rate) # sf handles dtype conversion based on file subtype
-
-            return ""
-
-        except Exception as e:
-            return f"Error normalizing {wav_file_path}: {e}"
-
-    @staticmethod
     def calculate_integrated_loudness_file(file_path: str) -> float | None | str:
         """ Returns float or None if sample too short or str if error message """
         try:

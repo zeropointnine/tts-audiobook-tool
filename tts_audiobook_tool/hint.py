@@ -2,7 +2,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import time
-from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.constants import *
 
 @dataclass
@@ -12,10 +11,12 @@ class Hint:
     text: str
 
     @staticmethod
-    def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
+    def show_hint_if_necessary(prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
         """
         Shows hint only if not yet shown.
         """
+        from tts_audiobook_tool.prefs import Prefs
+        assert(isinstance(prefs, Prefs))
         if prefs.get_hint(hint.key):
             return True
         prefs.set_hint_true(hint.key)
@@ -54,8 +55,12 @@ class Hint:
         printt()
 
     @staticmethod
-    def show_player_hint_if_necessary(prefs: Prefs) -> None:
+    def show_player_hint_if_necessary(prefs) -> None:
+        
+        from tts_audiobook_tool.prefs import Prefs
+        assert(isinstance(prefs, Prefs))
         from tts_audiobook_tool.util import get_package_dir
+        
         s = "You can open audio files with the interactive player/reader here:\n"
         package_dir = get_package_dir()
         if package_dir:

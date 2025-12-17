@@ -1,10 +1,10 @@
-import math
 import time
 
 import numpy as np
-from tts_audiobook_tool.app_types import FailResult, PassResult, SkippedResult, Sound, SttConfig, SttVariant, TrimmableResult, ValidationResult
+from tts_audiobook_tool.app_types import FailResult, Sound, SttConfig, SttVariant, ValidationResult
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -24,8 +24,7 @@ class RealTimeUtil:
     def start(
             state: State,
             phrase_groups: list[PhraseGroup],
-            line_range: tuple[int, int] | None,
-            save_output: bool = False
+            line_range: tuple[int, int] | None
         ) -> None:
         """
         line_range is one-indexed
@@ -40,13 +39,11 @@ class RealTimeUtil:
         start_index -= 1
         end_index -= 1
         num_items = end_index - start_index + 1
-
-        SoundFileUtil.debug_save_dir = project.realtime_path
         
         # Warm up models
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
-        did_cancel = Tts.warm_up_models(force_no_stt)
-        if did_cancel:
+        did_interrupt = Tts.warm_up_models(force_no_stt)
+        if did_interrupt:
             print_feedback("\nCancelled")
             return
 
@@ -57,65 +54,41 @@ class RealTimeUtil:
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
-        # Start loop
+        # Outer loop
 
         SigIntHandler().set("generating")
-
+        did_interrupt = False
         stream = None
         count = 0
 
-        for i in range(start_index, end_index + 1):
+        for index in range(start_index, end_index + 1):
 
-            if SigIntHandler().did_interrupt:
+            if did_interrupt:
                 break
 
-            phrase_group = phrase_groups[i]
+            phrase_group = phrase_groups[index]
             phrase = phrase_group.as_flattened_phrase()
 
             printt()
-            GenerateUtil.print_item_heading(False, phrase.text, i, count, num_items)
+            GenerateUtil.print_item_heading(False, phrase.text, index, count, num_items)
 
             # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 ...
-            has_enough_runway = (stream and stream.buffer_duration >= STREAM_DURATION_THRESHOLD)
-
-            result = GenerateUtil.generate_single_full_flow(
-                project=project,
-                phrase_group=phrase_group,
-                stt_variant=state.prefs.stt_variant,
-                stt_config=state.prefs.stt_config,
-                max_passes=2 if has_enough_runway else 0,
-                is_realtime=True,
-                skip_reason_buffer=(state.prefs.stt_variant != SttVariant.DISABLED and not has_enough_runway)
+            has_runway = (stream is not None and stream.buffer_duration >= STREAM_DURATION_THRESHOLD)            
+            
+            sound_opt, did_interrupt = RealTimeUtil.generate_full_flow(
+                project, phrase_groups, index, project.language_code, state.prefs.stt_variant, state.prefs.stt_config,
+                has_runway=has_runway,
+                should_save=state.project.realtime_save
             )
-            if isinstance(result, str):
-                err = result
-                printt(f"{COL_ERROR}Model failure, skipping item:")
-                printt(f"{COL_ERROR}{err}")
+            if not sound_opt:
+                printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
                 printt()
                 continue
+            else:
+                sound = sound_opt
 
-            sound, _, __ = result
-
-            # Save to disk
-
-            
-            if save_output:
-                if not os.path.exists(state.project.realtime_path):
-                    try:
-                        os.mkdir(state.project.realtime_path)
-                    except Exception as e:
-                        printt(make_error_string(e))
-                        save_output = False
-            if save_output:
-                index_string = str(i + 1).zfill(5)
-                text = sanitize_for_filename(phrase_group.presentable_text[:50])
-                fn = f"[{int(time.time())}] [{index_string}] [{Tts.get_type().value.file_tag}] [{state.project.get_voice_label()}] {text}.flac"
-                path = os.path.join(state.project.realtime_path, fn)
-                err = SoundFileUtil.save_flac(sound, path) # unlike normal gen, no resampling, massaging, etc
-                message = f"{COL_ERROR}{err}" if err else f"Saved: {path}"
-                print(message)
-
-            if i == end_index:
+            # Add appended sound
+            if index == end_index:
                 appended_sound = None
             else:
                 use_sound_effect = state.project.use_section_sound_effect and phrase.reason == Reason.SECTION
@@ -158,31 +131,94 @@ class RealTimeUtil:
             s += f"{duration_string(value, include_tenth=True)}"
             printt(f"Buffer duration: {s}")
 
-            SoundFileUtil.debug_save("realtime", sound)
-
             # Sleep if necessary to prevent growing buffer beyond threshold
             if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS:
                 sleep_duration = int(full_duration)
                 printt(f"Sleeping for {sleep_duration}s")
-                for i in range(0, sleep_duration):
+                for index in range(0, sleep_duration):
                     time.sleep(1) # hah
 
             count += 1
 
-        if not stream:
-            printt()
-            return
-
-        if stream.buffer_duration > 0:
-            # Gives opportunity for remaining buffer data to play through before killing stream
-            printt()
-            AskUtil.ask_enter_to_continue()
-
+        # Finished
         SigIntHandler().clear()
-
         if stream:
+            if stream.buffer_duration > 0:
+                # Gives opportunity for remaining buffer data to play through before killing stream
+                printt()
+                AskUtil.ask_enter_to_continue()
             stream.shut_down()
         printt()
+
+    @staticmethod
+    def generate_full_flow(  
+            project: Project,
+            phrase_groups: list[PhraseGroup],
+            index: int,
+            language_code: str,
+            stt_variant: SttVariant,
+            stt_config: SttConfig,
+            has_runway: bool,
+            should_save: bool
+    ) -> tuple[Sound | None, bool]:
+        """
+        Similar to `GenerateUtil.generate_single_full_flow()` but slightly different logic flow, simpler
+        Returns Sound or no-sound if problem, and if user interrupted
+        """
+
+        SigIntHandler().set("generating")
+
+        phrase_group = phrase_groups[index]
+        did_interrupt = False
+
+        gen_result: tuple[Sound, ValidationResult] | str  = ""
+        max_attempts = 2 if has_runway else 1
+        for attempt in range(max_attempts):
+
+            gen_result = GenerateUtil.generate_and_validate(
+                project=project,
+                phrase_group=phrase_group,
+                index=index,
+                language_code=language_code,
+                stt_variant=stt_variant,
+                stt_config=stt_config,
+                gen_info_path=project.realtime_path,
+                is_retry=(attempt > 0),
+                is_realtime=True,
+                is_skip_reason_buffer=not has_runway
+            )
+
+            # Print result feedback
+            if isinstance(gen_result, str):
+                err = gen_result
+                printt(f"{COL_ERROR}Model fail: {err}")
+                printt()
+            else:
+                GenerateUtil.print_validation_result(
+                    gen_result[1], is_last_attempt=(attempt == max_attempts - 1), is_real_time=True
+                )                
+
+            if SigIntHandler().did_interrupt:
+                did_interrupt = True
+
+            success = isinstance(gen_result, tuple) and not isinstance(gen_result[1], FailResult)
+            if success or did_interrupt:
+                break
+
+        if isinstance(gen_result, str): # is error
+            result = None, did_interrupt
+        else:
+            sound, validation_result = gen_result
+            if should_save:
+                err, saved_path = GenerateUtil.save_gen(project, phrase_group, index, sound, validation_result, is_real_time=True)
+                if err:
+                    printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
+                else:
+                    printt(f"Saved: {saved_path}")
+            result = sound, did_interrupt
+
+        SigIntHandler().clear()        
+        return result
 
 # ---
 

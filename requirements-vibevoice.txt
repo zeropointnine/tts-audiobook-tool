@@ -13,10 +13,11 @@ ctranslate2==4.6.1
 torch==2.6.0
 
 audiotsm==0.1.2
-chardet
+chardet==5.2.0
 ffmpeg-python==0.2.0
 librosa==0.11.0
 loguru==0.7.3
+metaphone==0.6
 mutagen==1.47.0
 natsort==8.4.0
 num2words==0.5.14
@@ -28,4 +29,5 @@ readchar==4.2.1
 sounddevice==0.5.2
 soundfile==0.13.1
 watchdog==6.0.0
+whisper_normalizer==0.1.12
 xxhash==3.5.0

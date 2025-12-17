@@ -1,247 +1,201 @@
 from __future__ import annotations
 
+import math
+from typing import List, Optional, Tuple
 from tts_audiobook_tool.app_types import Sound, Word
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.words_dict import Dictionary
+from tts_audiobook_tool.dictionary_en import DictionaryEn
 
 
 class TranscribeUtil:
     """
-    Functions that compare transcription data (Whisper) to ground truth text
     """
 
     @staticmethod
-    def is_audio_static(sound: Sound, transcribed_text: str) -> bool:
+    def is_word_failure(
+        source: str,
+        transcript: str,
+        is_loose: bool, 
+        language_code: str=""
+    ) -> tuple[bool, int, int]:
         """
-        Very simple test
-        We're trying to catch 'empty' sound gens that Oute in particular can produce with short prompts.
-        (Oftentimes is just a pop sound)
+        Returns True if failed plus number of word failures
         """
-        DURATION_THRESH = 2.0
-        if sound.duration > DURATION_THRESH:
-            return False
-
-        transcribed_text = TextUtil.massage_for_text_comparison(transcribed_text)
-        return not transcribed_text
+        normalized_source, normalized_transcript = \
+            TextNormalizer.normalize_source_and_transcript(source, transcript, language_code=language_code)
+        num_words = TextUtil.get_word_count(normalized_source)
+        fail_threshold = math.ceil(num_words / 10)
+        if is_loose:
+            fail_threshold *= 2
+        num_word_fails = \
+            TranscribeUtil.count_word_failures(normalized_source, normalized_transcript, language_code)
+        return num_word_fails > fail_threshold, num_word_fails, fail_threshold
 
     @staticmethod
-    def is_word_count_fail(reference_text: str, transcribed_text: str) -> str:
+    def count_word_failures(
+            normalized_source: str,
+            normalized_transcript: str,
+            language_code: str="",
+            verbose=False
+    ) -> int:
         """
-        Does simple word count comparison between transcribed text vs original text
-        If difference is too large, returns fail reason message
+        Compares source and transcribed text, and returns minimum number of failures as defined by:
 
-        Threshold values are kept conservative here.
-        """
-        reference_text = TextUtil.massage_for_text_comparison(reference_text)
-        transcribed_text = TextUtil.massage_for_text_comparison(transcribed_text)
-        num_ref_words = len(reference_text.split(" "))
-        num_trans_words = len(transcribed_text.split(" "))
-        words_delta = num_trans_words - num_ref_words
+            Match: 0
+            Uncommon Word Match (1-to-1 or 1-to-2): 0 ("Free pass")
+            Substitution: 1
+            Deletion (Skip Source): 1
+            Insertion (Skip Transcript): 1    
 
-        fail_message = ""
-        if num_ref_words <= 5:
-            # Short phrase test
-            abs_delta = abs(words_delta)
-            if abs_delta >= 2:
-                phrase = "too long" if abs_delta > 0 else "too short"
-                fail_message = f"Transcription word count {phrase} (short phrase) (delta: {abs_delta})"
-        else:
-            # Normal test
-            ratio = words_delta / num_ref_words
-            if ratio > 0.20:
-                fail_message = f"Transcription word count too long (ratio: +{int(ratio*100)}%) (words: {num_ref_words})"
-            elif ratio < -0.20:
-                fail_message = f"Transcription word count too short (ratio: {int(ratio*100)}%) (words: {num_ref_words})"
-        return fail_message
-
-    @staticmethod
-    def find_bad_repeats(reference_text: str, transcribed_text: str) -> set[str]:
-        """
-        Returns "adjacent words or phrases" found in the transcription but not the reference text
-        (implying hallucinated repeated word/phrase)
-
-        "Over-occurences" test overlaps with this, but this does pick up some occasional extra
-        things and does not give false positives hardly at all so... keeping
-        """
-        reference_repeats = TranscribeUtil.find_repeats(reference_text)
-        transcribed_repeats = TranscribeUtil.find_repeats(transcribed_text)
-        return transcribed_repeats - reference_repeats
-
-
-    @staticmethod
-    def find_repeats(string: str) -> set[str]:
-        """
-        Finds words or phrases that repeat one or more times.
-        The repeated word or phrase must be adjacent to each other.
-        TODO: this returns overlapping items (but no practical harm done atm so)
+        Uses dynamic programming table (dp)
         """
 
-        string = TextUtil.massage_for_text_comparison(string)
-        words = string.split()
+        def p(s: str):
+            if verbose:
+                print(s)
 
-        # Not enough words for any possible repeat
-        if len(words) < 2:
-            return set()
+        def is_match(a: str, b: str) -> bool:
+            return (a == b) or sounds_the_same(a, b)
 
-        found_repeats = set()
-        n = len(words)
+        def sounds_the_same(a: str, b: str) -> bool:
+            return TextNormalizer.sounds_the_same_en(a, b) if language_code == "en" else False
 
-        # Iterate through all possible phrase lengths
-        # The longest possible repeating phrase can only be half the total length
-        for phrase_len in range(1, (n // 2) + 1):
+        def is_uncommon_word(word: str) -> bool:
+            return not DictionaryEn.has(word) if language_code == "en" else False
 
-            # Slide a window across the list of words to find adjacent phrases
-            for i in range(n - 2 * phrase_len + 1):
-                phrase1 = words[i : i + phrase_len]
-                phrase2 = words[i + phrase_len : i + 2 * phrase_len]
+        p("")
+        p(f"source: {normalized_source}")
+        p(f"transc: {normalized_transcript}")
+        p("")
 
-                # If two adjacent phrases are identical, add to our set
-                if phrase1 == phrase2:
-                    found_repeats.add(" ".join(phrase1))
+        source_words = normalized_source.split()
+        transcript_words = normalized_transcript.split()
+        n = len(source_words)
+        m = len(transcript_words)
 
-        return found_repeats
+        # dp[i][j] stores min failures to align source[:i] and transcript[:j]
+        dp: List[List[float]] = [[float('inf')] * (m + 1) for _ in range(n + 1)]
+        # parent[i][j] stores (prev_i, prev_j, action_description)
+        parent: List[List[Optional[Tuple[int, int, str]]]] = [[None] * (m + 1) for _ in range(n + 1)]
+        
+        dp[0][0] = 0
 
-    @staticmethod
-    def num_bad_over_occurrences(reference_text: str, transcribed_text: str) -> int:
-        """
-        Returns a value if number of "word over-occurrences" is over a certain threshold
-        """
-        s = TextUtil.massage_for_text_comparison(reference_text)
-        num_words = len(s.split(" "))
-        thresh = 2 if num_words <= 10 else 3
-        count = TranscribeUtil.count_word_over_occurrences(reference_text, transcribed_text)
-        return count if count >= thresh else 0
+        for i in range(n + 1):
+            for j in range(m + 1):
+                if i == 0 and j == 0:
+                    continue
+                
+                # 1. Match or Substitution (Source matches Transcript)
+                if i > 0 and j > 0:
+                    s_word = source_words[i-1]
+                    t_word = transcript_words[j-1]
+                    
+                    matches = is_match(s_word, t_word)
+                    is_uncommon = is_uncommon_word(s_word)
+                    
+                    if matches:
+                        cost = dp[i-1][j-1] + 0
+                        if cost < dp[i][j]:
+                            dp[i][j] = cost
+                            parent[i][j] = (i-1, j-1, "match_direct" if s_word == t_word else "match_homophone")
+                    elif is_uncommon:
+                        # Free pass 1-to-1
+                        cost = dp[i-1][j-1] + 0
+                        if cost < dp[i][j]:
+                            dp[i][j] = cost
+                            parent[i][j] = (i-1, j-1, "uncommon_pass_1")
+                    else:
+                        # Substitution (Mismatch) -> Cost 1
+                        cost = dp[i-1][j-1] + 1
+                        if cost < dp[i][j]:
+                            dp[i][j] = cost
+                            parent[i][j] = (i-1, j-1, "mismatch_sub")
 
+                # 2. Uncommon Match 1-to-2
+                if i > 0 and j > 1:
+                    s_word = source_words[i-1]
+                    if is_uncommon_word(s_word):
+                        cost = dp[i-1][j-2] + 0
+                        if cost < dp[i][j]:
+                            dp[i][j] = cost
+                            parent[i][j] = (i-1, j-2, "uncommon_pass_2")
 
-    @staticmethod
-    def count_word_over_occurrences(reference_text: str, transcribed_text: str) -> int:
-        """
-        Count the number of extra occurrences of words found in transcription, basically
-        This is another attempt at finding repeat phrases hallucinated by Oute in particular.
-        """
-        reference_text = TextUtil.massage_for_text_comparison(reference_text)
-        transcribed_text = TextUtil.massage_for_text_comparison(transcribed_text)
+                # 3. Skip Source (Deletion) -> Cost 1
+                if i > 0:
+                    cost = dp[i-1][j] + 1
+                    if cost < dp[i][j]:
+                        dp[i][j] = cost
+                        parent[i][j] = (i-1, j, "skip_source")
 
-        ref_counts = TranscribeUtil.get_word_counts(reference_text)
-        trans_counts = TranscribeUtil.get_word_counts(transcribed_text)
+                # 4. Skip Transcript (Insertion) -> Cost 1
+                if j > 0:
+                    cost = dp[i][j-1] + 1
+                    if cost < dp[i][j]:
+                        dp[i][j] = cost
+                        parent[i][j] = (i, j-1, "skip_transcript")
 
-        count = 0
-        for ref_word in ref_counts:
-            if trans_counts.get(ref_word):
-                # Both dicts have word
-                ref_count = ref_counts[ref_word]
-                trans_count = trans_counts[ref_word]
-                delta = trans_count - ref_count
-                if delta > 0:
-                    count += delta
-        return count
-        # FYI, factoring in probability property is almost useful but overall isn't
+        # Reconstruct Path
+        path = []
+        curr_i, curr_j = n, m
+        final_fails = int(dp[n][m])
 
-    @staticmethod
-    def get_word_counts(string: str) -> dict[str, int]:
-        string = TextUtil.massage_for_text_comparison(string)
-        words = string.split()
-        counts = {}
-        for word in words:
-            if not counts.get(word):
-                counts[word] = 1
-            else:
-                counts[word] += 1
-        return counts
+        while curr_i > 0 or curr_j > 0:
+            node = parent[curr_i][curr_j]
+            if node is None:
+                # Should not happen if reachable
+                break
+            prev_i, prev_j, action = node
 
-    @staticmethod
-    def is_drop_fail_tail(source_text: str, trans_text: str):
-        """
-        Tries to determine if generated audio has missing phrase at the very end.
-        Occurs especially with Fish.
+            s_sub = source_words[prev_i:curr_i]
+            t_sub = transcript_words[prev_j:curr_j]
+            s_text = " ".join(s_sub) if s_sub else "-"
+            t_text = " ".join(t_sub) if t_sub else "-"
 
-        Because the current logic is "Dictionary" dependent, should only used when project language is en.
-        """
+            path.append((action, s_text, t_text))
+            curr_i, curr_j = prev_i, prev_j
 
-        # To be considered a fail:
-        # Source text - need to have 2 words of the last three that are dictionary words
-        # Trans text  - must not have ANY of those 2 words in its last 4 words
+        path.reverse()
 
-        source_text = TextUtil.massage_for_text_comparison(source_text)
-        trans_text = TextUtil.massage_for_text_comparison(trans_text)
+        current_fails = 0
+        
+        for action, s_text, t_text in path:
+            word_info = f"'{s_text}' vs '{t_text}'"
+            if action == "match_direct":
+                p(f"{word_info} -> direct match")
+            elif action == "match_homophone":
+                p(f"{word_info} -> homophone match")
+            elif action == "uncommon_pass_1":
+                p(f"{word_info} -> no match but giving it a free pass because source word is uncommon")
+            elif action == "uncommon_pass_2":
+                p(f"{word_info} -> no match (2 words) but giving it a free pass because source word is uncommon")
+            elif action == "skip_source":
+                current_fails += 1
+                p(f"{word_info} -> transcript out of words - fail #{current_fails}")
+            elif action == "skip_transcript":
+                current_fails += 1
+                p(f"{word_info} -> source out of words - fail #{current_fails}")
+            elif action == "mismatch_sub":
+                current_fails += 1
+                p(f"{word_info} -> mismatch - fail #{current_fails}")
+                
+        return final_fails
 
-        source_words = source_text.split(" ")
-        trans_words = trans_text.split(" ")
-        if len(trans_words) >= len(source_words):
-            return False
-        if len(source_words) < 4 or len(trans_words) < 4:
-            return False # Keep things simple
-
-        tail_source_words = source_words[-3:]
-        dict_words = []
-        for i in reversed(range(len(tail_source_words))):
-            word = tail_source_words[i]
-            if word in Dictionary.words:
-                dict_words.append(word)
-                if len(dict_words) >= 2:
-                    break
-        if len(dict_words) < 2:
-            return False
-
-        tail_trans_words = trans_words[-4:]
-        for word in dict_words:
-            if word in tail_trans_words:
-                return False
-
-        return True
-
-    @staticmethod
-    def is_drop_fail_head(source_text: str, trans_text: str):
-        """
-        Tries to determine if generated audio has missing phrase at the beginning.
-        This is not common as "drop fail tail" above.
-        WIP: Not currently used; unlike tail, same logic yields almost all false positives at least with __
-        """
-        source_text = TextUtil.massage_for_text_comparison(source_text)
-        trans_text = TextUtil.massage_for_text_comparison(trans_text)
-
-        source_words = source_text.split(" ")
-        trans_words = trans_text.split(" ")
-        if len(trans_words) >= len(source_words):
-            return False
-        if len(source_words) < 4 or len(trans_words) < 4:
-            return False # Keep things simple
-
-        head_source_words = source_words[:3]
-        dict_words = []
-        for i in range(len(head_source_words)):
-            word = head_source_words[i]
-            if word in Dictionary.words:
-                dict_words.append(word)
-                if len(dict_words) >= 2:
-                    break
-        if len(dict_words) < 2:
-            return False
-
-        head_trans_words = trans_words[:4]
-        for word in dict_words:
-            if word in head_trans_words:
-                return False
-
-        # print(source_text)
-        # print(trans_text)
-        # print(dict_words, head_trans_words)
-
-        return True
+    # -----
+    # TODO: Must revisit all below. Or drop.
 
     @staticmethod
     def get_semantic_match_end_time_trim(
-        reference_text: str, transcribed_words: list[Word], sound: Sound, include_last_word
+        source: str, transcript_words: list[Word], sound: Sound, include_last_word
     ) -> float | None:
         """
         Returns adjusted time at which sound clip should be trimmed if necessary
         """
-        value = TranscribeUtil.get_semantic_match_end_time(reference_text, transcribed_words, include_last_word)
+        value = TranscribeUtil.get_semantic_match_end_time(source, transcript_words, include_last_word)
         if not value:
             return None
 
@@ -261,7 +215,7 @@ class TranscribeUtil:
 
     @staticmethod
     def get_semantic_match_end_time(
-        reference_text: str, transcribed_words: list[Word], include_last_word: bool
+        source: str, transcript: list[Word], include_last_word: bool
     ) -> float | None:
         """
         Matches last transcription word and reference word and returns word end time
@@ -270,17 +224,20 @@ class TranscribeUtil:
             returns 'semantic end time' even if the match is the last word
             (which you might normally treat as redundant)
         """
-        reference_words = TextUtil.massage_for_text_comparison(reference_text)
-        reference_words = reference_words.split(" ")
-        if len(reference_words) < 1:
+
+        # TODO: Unlike with the text-only operations, does not account for discrepancies with compound words, but yea
+
+        normalized_source = TextNormalizer.normalize_source(source)
+        source_words = normalized_source.split(" ")
+        if len(source_words) < 1:
             return None
-        last_reference_word = reference_words[-1]
+        last_reference_word = source_words[-1]
 
         # Being conservative here
-        if reference_words.count(last_reference_word) > 1:
+        if source_words.count(last_reference_word) > 1:
             last_word_only = True
 
-        if len( transcribed_words ) < 1:
+        if len( transcript ) < 1:
             return None
 
         # Iteratively snip end word until there's a match
@@ -289,30 +246,30 @@ class TranscribeUtil:
         MAX_ITERATIONS = 3 # being conservative here too
         num_iterations = 0
         last_word_obj = {}
-        while len(transcribed_words) >= 1:
-            last_word_obj = transcribed_words[-1]
-            last_word = TextUtil.massage_for_text_comparison(last_word_obj.word)
+        while len(transcript) >= 1:
+            last_word_obj = transcript[-1]
+            last_word = TextNormalizer.normalize_common(last_word_obj.word)
             is_match = (last_word == last_reference_word)
             if is_match:
                 if num_iterations == 0 and not include_last_word:
                     return None
                 end_time = float(last_word_obj.end)
                 return end_time
-            transcribed_words = transcribed_words[:-1]
+            transcript = transcript[:-1]
             num_iterations += 1
-            if len(transcribed_words) <= 1 or num_iterations >= MAX_ITERATIONS:
+            if len(transcript) <= 1 or num_iterations >= MAX_ITERATIONS:
                 return None
 
         return None
 
     @staticmethod
     def get_semantic_match_start_time_trim(
-        reference_text: str, transcribed_words: list[Word], sound: Sound
+        source: str, transcript_words: list[Word], sound: Sound
     ) -> float | None:
         """
         Returns adjusted start time at which sound clip should be trimmed if necessary
         """
-        value = TranscribeUtil.get_semantic_match_start_time(reference_text, transcribed_words)
+        value = TranscribeUtil.get_semantic_match_start_time(source, transcript_words)
         if not value:
             return None
 
@@ -325,7 +282,7 @@ class TranscribeUtil:
 
     @staticmethod
     def get_semantic_match_start_time(
-        reference_text: str, transcribed_words: list[Word]
+        source: str, transcript_words: list[Word]
     ) -> float | None:
         """
         Matches first word transcribed word with first reference word etc
@@ -333,28 +290,27 @@ class TranscribeUtil:
 
         TTS model can insert non-word noises before first word, especially with 1-2 word prompts.
         """
-        reference_words = TextUtil.massage_for_text_comparison(reference_text)
-        reference_words = reference_words.split(" ")
-        if len(reference_words) < 1:
+        normalized_source = TextNormalizer.normalize_common(source)
+        normalized_source_words = normalized_source.split(" ")
+        if len(normalized_source_words) < 1:
             return None
-        first_reference_word = reference_words[0]
+        first_reference_word = normalized_source_words[0]
 
         MAX_START_WORDS = 3
-        for i in range(min(MAX_START_WORDS, len(transcribed_words))):
-            transcribed_word_obj = transcribed_words[i]
+        for i in range(min(MAX_START_WORDS, len(transcript_words))):
+            transcribed_word_obj = transcript_words[i]
             transcribed_word = transcribed_word_obj.word
-            transcribed_word = TextUtil.massage_for_text_comparison(transcribed_word)
+            transcribed_word = TextNormalizer.normalize_common(transcribed_word)
             is_match = (first_reference_word == transcribed_word)
             if is_match:
                 value = float( transcribed_word_obj.start )
                 return None if value == 0 else value
         return None
 
-
     @staticmethod
     def get_substring_time_range(
-        reference_text: str,
-        transcribed_words: list[Word]
+        source: str,
+        transcript_words: list[Word]
     ) -> tuple[float, float] | None:
         """
         Detects if reference text exists as a substring in a Whisper transcription,
@@ -373,36 +329,35 @@ class TranscribeUtil:
             A tuple (start_timestamp, end_timestamp) if the phrase is found,
             otherwise None.
         """
-        reference_text = TextUtil.massage_for_text_comparison(reference_text)
-        if not reference_text:
+        normalized_source = TextNormalizer.normalize_common(source)
+        if not normalized_source:
+            return None
+        if not transcript_words:
             return None
 
-        if not transcribed_words:
-            return None
+        num_transcript_words = len(transcript_words)
 
-        num_whisper_words = len(transcribed_words)
-
-        for i in range(num_whisper_words):
+        for i in range(num_transcript_words):
 
             current_concatenated_raw_text = ""
             current_start_index = i
-            current_start_time = transcribed_words[i].start
+            current_start_time = transcript_words[i].start
 
-            for j in range(i, num_whisper_words):
-                current_concatenated_raw_text += transcribed_words[j].word
+            for j in range(i, num_transcript_words):
+                current_concatenated_raw_text += transcript_words[j].word
 
-                norm_segment_text = TextUtil.massage_for_text_comparison(current_concatenated_raw_text)
+                norm_segment_text = TextNormalizer.normalize_common(current_concatenated_raw_text)
 
-                if norm_segment_text == reference_text:
+                if norm_segment_text == normalized_source:
 
                     # Substring found
 
-                    if current_start_index == 0 and j == num_whisper_words - 1:
+                    if current_start_index == 0 and j == num_transcript_words - 1:
                         # printt("is full match")
                         return None
 
                     start_time = current_start_time
-                    end_time = transcribed_words[j].end
+                    end_time = transcript_words[j].end
 
                     # Adjust start and end times to help ensure we encompass the full audio clip
                     start_time += WHISPER_START_TIME_OFFSET
@@ -411,8 +366,8 @@ class TranscribeUtil:
 
                     return (start_time, end_time)
 
-                if len(norm_segment_text) > len(reference_text) and \
-                not norm_segment_text.startswith(reference_text):
+                if len(norm_segment_text) > len(normalized_source) and \
+                not norm_segment_text.startswith(normalized_source):
                     break
 
         return None
