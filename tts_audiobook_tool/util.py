@@ -158,7 +158,8 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
 
 def make_currently_string(value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
     """
-    Used for presenting the current value of a menu item in a consistent style
+    Used for presenting the current value for a menu item in a consistent style
+    Ex: `(currently: 666)`
     """
     return f"{COL_DIM}({value_prefix}{color_code}{value}{COL_DIM})"
 

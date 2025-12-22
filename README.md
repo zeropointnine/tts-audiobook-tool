@@ -299,6 +299,18 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
+**2025-12-21**
+
+Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model mispronounces (eg, "yigg-drasill" (or something...) for "Yggdrasil"). Requires some experimentation, as you might imagine. 
+
+Relatedly, added: `Project` > `Word substitutions` > `Inspect project text for uncommon words`.
+
+**2025-12-21**
+
+Big improvement to speech-to-text validation, which is now able to calculate the number of word errors in an audio generation (rather than simply adjudging "pass" vs "fail" using a patchwork of bespoke functions). 
+
+When a prompt is re-generated due to excessive word errors, the program is able to cherrypick the generation with the least number of errors.
+
 **2025-12-16**
 
 Added support for **GLM-TTS**.

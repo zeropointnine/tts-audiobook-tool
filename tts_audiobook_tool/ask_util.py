@@ -20,7 +20,7 @@ class AskUtil:
         if not DEV:
             clear_input_buffer()
 
-        message = f"{message}{COL_INPUT}"
+        message = f"{message}{Ansi.RESET}{COL_INPUT}"
         try:
             inp = input(message).strip()
         except (ValueError, EOFError) as e:

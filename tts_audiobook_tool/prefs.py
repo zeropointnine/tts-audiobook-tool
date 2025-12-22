@@ -46,8 +46,6 @@ class Prefs:
             If any pref value is missing or invalid and therefore gets set to default value, 
             saves updated prefs file.
         """
-        from tts_audiobook_tool.tts import Tts
-
         if not os.path.exists(Prefs.get_file_path()):
             return Prefs.new_and_save()
 
@@ -91,9 +89,9 @@ class Prefs:
             result = SttVariant.get_by_id(s)
             if result is not None:
                 stt_variant = result
-                dirty = True
             else:
                 stt_variant = list(SttVariant)[0]
+                dirty = True
 
         # STT config (device + quantization)
         s = prefs_dict.get("stt_config", "")

@@ -1,4 +1,3 @@
-import re
 import unittest
 
 from tts_audiobook_tool.text_normalizer import TextNormalizer
@@ -129,6 +128,31 @@ class TestTextNormalizer(unittest.TestCase):
           result = TextNormalizer.normalize_spacing(source=source, transcript=transcript)
           self.assertEqual(result, answer)
 
+    def test_prompt_word_substitutions_en(self):
+        substitutions = {'Ariekei': 'AriaKay', 'kilohour': 'kilo hour'}
+        items = [ 
+            # "Identity"
+            ("Identity example", "Identity example"), 
+            # Should also change nothing
+            ("It's a kilo hour", "It's a kilo hour"), 
+            # Typical example
+            ("The Ariekei are a species.", "The AriaKay are a species."), 
+            # Lower-to-uppercase (because source word is uppercase)
+            ("Kilohour is the unit of measurement.", "Kilo hour is the unit of measurement."), 
+            # Noun suffix plural
+            ("It is five kilohours away", "It is five kilo hours away"), 
+            # Noun suffix + lower-to-upper 
+            ("Kilohours off my life", "Kilo hours off my life"),
+            # Noun suffix possessive
+            ("The Ariekei's morphology is kinda", "The AriaKay's morphology is kinda") 
+        ]
+        for prompt, answer in items:
+            result = TextNormalizer.apply_prompt_word_substitutions(prompt, substitutions, "en")
+            print("prompt:",prompt)
+            print("result:", result)
+            print("answer:", answer)
+            print()
+            self.assertEqual(result, answer)
 
 if __name__ == '__main__':
     unittest.main()

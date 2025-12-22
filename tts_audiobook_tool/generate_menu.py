@@ -18,6 +18,10 @@ class GenerateMenu:
 
         def on_start(_: State, __: MenuItem) -> None:
 
+            if not state.project.get_selected_indices_not_generated():
+                print_feedback("All items in specified range already generated.")
+                return
+
             err = Tts.validate_language_code(state.project.language_code)
             if err:
                 print_feedback(err)
@@ -72,10 +76,7 @@ class GenerateMenu:
     @staticmethod
     def do_generate_items(state: State) -> None:
 
-        selected_indices_all = state.project.get_indices_to_generate()
-        selected_indices_generated = set( state.project.sound_segments.sound_segments_map.keys() )
-        selected_indices_not_generated = selected_indices_all - selected_indices_generated
-
+        selected_indices_not_generated = state.project.get_selected_indices_not_generated()
         if not selected_indices_not_generated:
             AskUtil.ask_enter_to_continue(f"All items in specified range already generated.")
             return
@@ -162,3 +163,4 @@ class GenerateMenu:
         state.project.save()
 
         print_feedback(f"Range set to: {s}")
+

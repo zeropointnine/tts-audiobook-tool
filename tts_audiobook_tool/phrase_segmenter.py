@@ -256,7 +256,7 @@ def split_leading_ws_punc(input_string: str) -> tuple[str, str]:
 
 
 # Characters that are either whitespace or punctuation
-WHITESPACE_PUNCTUATION = set(string.whitespace + string.punctuation)
+WHITESPACE_PUNCTUATION = set(string.whitespace + string.punctuation) # TODO this is incomplete; reconcile with other related usages
 
 # comma, semicolon, colon, en-dash, em-dash, open paren, close paren
 # not including normal dash, apostrophe/single-quote or double-quote

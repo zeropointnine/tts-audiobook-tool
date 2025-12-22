@@ -10,6 +10,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_util import TextUtil
@@ -34,6 +35,7 @@ class Project:
 
     segmentation_strategy: SegmentationStrategy = list(SegmentationStrategy)[0]
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
+    word_substitutions: dict[str, str]
 
     # The segmentation strategy used to create the PhraseGroups from the source text
     applied_strategy: SegmentationStrategy | None = None
@@ -175,6 +177,13 @@ class Project:
         if not (MAX_WORDS_PER_SEGMENT_MIN <= i <= MAX_WORDS_PER_SEGMENT_MAX):
             i = MAX_WORDS_PER_SEGMENT_DEFAULT
         project.max_words = i
+
+        s = d.get("word_substitutions_json_string", "")
+        result = ProjectUtil.parse_word_substitutions_json_string(s)
+        if isinstance(result, str): # error
+            project.word_substitutions = {}
+        else:
+            project.word_substitutions = result
 
         s = d.get("applied_language_code", "")
         if not isinstance(s, str):
@@ -319,6 +328,7 @@ class Project:
             "text": PhraseGroup.phrase_groups_to_json_list(self.phrase_groups),
             "segmentation_strategy": self.segmentation_strategy.id,
             "max_words": self.max_words,
+            "word_substitutions_json_string": json.dumps(self.word_substitutions),
             "applied_language_code": self.applied_language_code,
             "applied_strategy": self.applied_strategy.id if self.applied_strategy else "",
             "applied_max_words": self.applied_max_words,
@@ -619,6 +629,16 @@ class Project:
             result, _ = ParseUtil.parse_ranges_string(range_string, len(self.phrase_groups))
         return result
 
+    def get_selected_indices_not_generated(self) -> set[int]:
+        """ 
+        From the currently selected range of indices, 
+        returns the indicies for which no sound segment exists.
+        """
+        selected_indices_all = self.get_indices_to_generate()
+        selected_indices_generated = set( self.sound_segments.sound_segments_map.keys() )
+        selected_indices_not_generated = selected_indices_all - selected_indices_generated
+        return selected_indices_not_generated
+
     @staticmethod
     def is_valid_project_dir(project_dir: str) -> str:
         """ Returns error feedback text or empty string if is-valid """
@@ -675,6 +695,37 @@ class Project:
             strings.append(string)
         return ",".join(strings)
 
+    def verify_voice_files_exist(self) -> bool:
+        """
+        Checks if the voice file/s for the current TTS model exist, and if they don't, 
+        clears the field, prints feedback, and re-saves project, and returns True
+        """
+        attribs = []
+        match Tts.get_type().value:
+            case TtsModelInfos.CHATTERBOX:
+                attribs = ["chatterbox_voice_file_name"] 
+            case TtsModelInfos.FISH:
+                attribs = ["fish_voice_file_name"] 
+            case TtsModelInfos.HIGGS:
+                attribs = ["higgs_voice_file_name"] 
+            case TtsModelInfos.VIBEVOICE:
+                attribs = ["vibevoice_voice_file_name"] 
+            case TtsModelInfos.INDEXTTS2:
+                attribs = ["indextts2_voice_file_name", "indextts2_emo_voice_file_name"] 
+            case TtsModelInfos.GLM:
+                attribs = ["glm_voice_file_name"] 
+        if not attribs:
+            return False
+        
+        did_delete = False
+        for attrib in attribs:
+            file_name = getattr(self, attrib)
+            if file_name and not os.path.exists(os.path.join(self.dir_path, file_name)):
+                printt(f"{COL_ERROR}Missing voice file: {COL_DEFAULT}{file_name}")
+                setattr(self, attrib, "")
+                did_delete = True
+        return did_delete
+
     def migrate_from(self, source_project: Project) -> None:
         """ 
         Copies settings from pre-existing project except directory path, and also copies 'active' internal files.
@@ -699,7 +750,7 @@ class Project:
         src_files.append(source_project.glm_voice_file_name)        
         src_files = [file for file in src_files if file]
 
-        for src_file in src_files: # fail silently
+        for src_file in src_files: 
             src_path = os.path.join(source_project.dir_path, src_file)
             if not Path(src_path).exists():
                 continue 
@@ -707,6 +758,25 @@ class Project:
             try:
                 shutil.copy(src_path, dest_path)
             except Exception as e:
-                ...
+                ... # eat
 
         self.save()
+
+# ---
+
+MODEL_TO_VOICE_FILE_ATTRIBS = {
+    "": [""],
+}
+
+            # case TtsModelInfos.CHATTERBOX:
+            #     attribs = ["chatterbox_voice_file_name"] 
+            # case TtsModelInfos.FISH:
+            #     attribs = ["fish_voice_file_name"] 
+            # case TtsModelInfos.HIGGS:
+            #     attribs = ["higgs_voice_file_name"] 
+            # case TtsModelInfos.VIBEVOICE:
+            #     attribs = ["vibevoice_voice_file_name"] 
+            # case TtsModelInfos.INDEXTTS2:
+            #     attribs = ["indextts2_voice_file_name", "indextts2_emo_voice_file_name"] 
+            # case TtsModelInfos.GLM:
+            #     attribs = ["glm_voice_file_name"] 

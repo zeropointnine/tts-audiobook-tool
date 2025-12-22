@@ -334,6 +334,14 @@ class GenerateUtil:
         Returns model-generated sound data (in model's native samplerate) or error string
         """
 
+        if DEV:
+            printt(f"{COL_DIM}Pre-normalized prompt text before word substitutions:")
+            printt(f"{COL_DIM}{prompt_text.strip()}")
+        prompt_text = TextNormalizer.apply_prompt_word_substitutions(prompt_text, project.word_substitutions, project.language_code)
+        if DEV:
+            printt(f"{COL_DIM}Pre-normalized prompt text after word substitutions:")
+            printt(f"{COL_DIM}{prompt_text.strip()}")
+            printt()
         prompt_text = TextNormalizer.normalize_prompt_common(prompt_text, project.language_code)
         prompt_text = Tts.get_instance().massage_for_inference(prompt_text)
 

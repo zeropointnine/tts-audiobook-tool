@@ -8,23 +8,53 @@ class TextUtil:
     Lower level functions for parsing, processing source text, etc
     """
 
-    _whitesspace_punctuation:set[str] = set()
+    ws_punc_chars: set[str] = set(
+        string.whitespace + string.punctuation + 
+        "\u2026\u2013\u2014" + # ellipsis, em-dash, en-dash
+        "\u201C\u201D\u2018\u2019" # open/closed fancy doublequote, open/closed fancy singlequote
+    )
 
     @staticmethod
     def is_ws_punc(s: str) -> bool:
         """
         Is the string all punctuation and/or whitespace
-        TODO: Am using this for both what it says and also to answer question, "Is string 'vocalizable'?" Untangle.
+        TODO: Am using this for both what it says and also to answer question, "Is string not 'vocalizable'?" Untangle.
         """
         if not s:
-            return True                
-        if not TextUtil._whitesspace_punctuation:
-            TextUtil._whitesspace_punctuation = set(
-                string.whitespace + string.punctuation + 
-                "\u2026\u2013\u2014" + # ellipsis, em-dash, en-dash
-                "\u201C\u201D\u2018" # fancy open/closed doublequote, fancy open singlequote
-            )
-        return all(char in TextUtil._whitesspace_punctuation for char in s)
+            return True # TODO: ?...
+        return all(char in TextUtil.ws_punc_chars for char in s)
+
+    @staticmethod
+    def split_raw_word(raw_word: str) -> tuple[str, str, str]: 
+        """
+        Separates word into three parts.
+        First and last item are consecutive "ws_punc_chars", if any.
+        Middle item should be everything in-between.
+
+        param raw_word:
+            A single "word", which may have trailing and leading whitespace and/or punctuation
+
+        # TODO: apply this consistently; some places may use similar but incomplete/incorrect logic
+        """
+        if not raw_word:
+            return ("", "", "")
+            
+        # Find the end of leading ws_punc_chars
+        start_idx = 0
+        while start_idx < len(raw_word) and raw_word[start_idx] in TextUtil.ws_punc_chars:
+            start_idx += 1
+            
+        # Find the start of trailing ws_punc_chars
+        end_idx = len(raw_word) - 1
+        while end_idx >= start_idx and raw_word[end_idx] in TextUtil.ws_punc_chars:
+            end_idx -= 1
+            
+        # Extract the three parts
+        leading = raw_word[:start_idx]
+        middle = raw_word[start_idx:end_idx+1] if start_idx <= end_idx else ""
+        trailing = raw_word[end_idx+1:] if end_idx < len(raw_word) - 1 else ""
+        
+        return (leading, middle, trailing)
 
     @staticmethod
     def massage_for_display(s: str) -> str:
@@ -50,7 +80,8 @@ class TextUtil:
     @staticmethod
     def get_words(s: str, filtered: bool=False) -> list[str]:
         """
-        Splits string into words, preserving whitespace
+        Splits string into words, preserving whitespace, 
+        and optionally filtering out "punctuation words"
         """
 
         # Like str.split() but preserves the whitespace at end of each item
@@ -125,3 +156,37 @@ class TextUtil:
 
         result = " ".join(new_words)
         return result
+    
+    @staticmethod
+    def get_uncommon_words_en(raw_words: list[str]) -> list[tuple[str, int, list[str]]]:
+        """
+        Returns list of "uncommon" words in descending order of frequency
+        Eg: 
+            [ 
+                ("yggdrasil", 50, ["Yggdrasil", "yggdrasil", "YggDrasil"]), 
+                ("zymurgy", 3, ["zymurgy"])
+            ]
+        """
+        counts_dict: dict[str, tuple[int, list[str]]] = {}
+        for raw_word in raw_words:
+            word = TextUtil.split_raw_word(raw_word)[1]
+            word = word.replace("’", "'") # fancy apost
+            if not word:
+                continue
+            word_lc = word.lower() # this is the dict key
+            if DictionaryEn.has(word_lc):
+                continue
+            if word_lc in counts_dict:
+                count, instances = counts_dict[word_lc]
+            else:
+                count = 0
+                instances = []
+            count += 1
+            if not word in instances:
+                instances.append(word)
+            counts_dict[word_lc] = (count, instances)
+        
+        sorted_tuples = sorted(
+            [(word_lc, count, instances) for word_lc, (count, instances) in counts_dict.items()], key=lambda x: x[1], reverse=True
+        )
+        return sorted_tuples
