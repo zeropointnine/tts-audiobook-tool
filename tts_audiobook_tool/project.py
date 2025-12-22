@@ -35,7 +35,7 @@ class Project:
 
     segmentation_strategy: SegmentationStrategy = list(SegmentationStrategy)[0]
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
-    word_substitutions: dict[str, str]
+    word_substitutions: dict[str, str] = {}
 
     # The segmentation strategy used to create the PhraseGroups from the source text
     applied_strategy: SegmentationStrategy | None = None
