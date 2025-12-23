@@ -24,7 +24,7 @@ class VoiceVibeVoiceMenu:
             return f"VibeVoice custom model path {label}"
 
         def make_cfg_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.vibevoice_cfg, VibeVoiceProtocol.DEFAULT_CFG, 1
             )
             return f"CFG scale {make_currently_string(value)}"
@@ -39,7 +39,7 @@ class VoiceVibeVoiceMenu:
             )
 
         def make_steps_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.vibevoice_steps, VibeVoiceProtocol.DEFAULT_NUM_STEPS, 0
             )
             return f"Steps {make_currently_string(value)}"

@@ -18,7 +18,7 @@ class VoiceFishMenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.fish_temperature, FishProtocol.DEFAULT_TEMPERATURE, 1
             )
             return f"Temperature {make_currently_string(value)}"

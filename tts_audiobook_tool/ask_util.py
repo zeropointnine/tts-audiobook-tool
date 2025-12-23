@@ -218,7 +218,7 @@ class AskUtil:
 
 # ---
 
-def get_desktop_environment():
+def get_desktop_environment() -> str | None:
     """
     Checks standard environment variables to determine the desktop environment.
     Returns a string like 'GNOME', 'Cinnamon', 'KDE', etc., or None if not found.
@@ -241,7 +241,7 @@ def get_desktop_environment():
 
     return None
 
-def is_gtk_based(desktop_string):
+def is_gtk_based(desktop_string: str | None) -> bool:
     """
     Checks if a desktop environment string corresponds to a GTK-based DE.
     Cinnamon, MATE, and XFCE are all GTK-based.

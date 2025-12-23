@@ -190,7 +190,7 @@ class TextNormalizer:
     
     @staticmethod
     def apply_prompt_word_substitutions(prompt: str, substitutions: dict[str, str], language_code: str) -> str:
-        
+
         prompt_raw_words_original = TextUtil.get_words(prompt)
         prompt_raw_words = []
         

@@ -21,7 +21,7 @@ class VoiceOuteMenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 state.project.oute_temperature, OuteProtocol.DEFAULT_TEMPERATURE, 1
             )
             return f"Temperature {make_currently_string(value)}"

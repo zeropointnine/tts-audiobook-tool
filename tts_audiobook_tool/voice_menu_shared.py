@@ -95,7 +95,8 @@ class VoiceMenuShared:
             if transcript_path.exists():
                 transcript = load_text_file(str(transcript_path), errors="replace").strip()
                 if transcript:
-                    printt(f"Loaded transcript text from {transcript_path}:")
+                    printt(f"Loaded transcript text from")
+                    printt(f"{transcript_path}:")
                     printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
                     printt()
 
@@ -248,27 +249,3 @@ class VoiceMenuShared:
         project.save()
         print_feedback(success_prefix, value)
         
-    @staticmethod
-    def make_parameter_value_string(
-        value: float | int | bool,
-        default_value: float | int | bool,
-        num_decimals: int=0
-    ) -> str:
-
-        DEFAULT_LABEL = " (default)"
-
-        if isinstance(value, bool):
-            s = str(value)
-            if value == default_value:
-                s += DEFAULT_LABEL
-            return s
-
-        if value == -1:
-            value = default_value
-        if num_decimals == 0:
-            s = str(int(value))
-        else:
-            s = f"{value:.{num_decimals}f}"
-        if value == default_value:
-            s += DEFAULT_LABEL
-        return s

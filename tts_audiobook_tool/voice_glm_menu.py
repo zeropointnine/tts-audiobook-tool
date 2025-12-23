@@ -13,17 +13,19 @@ class VoiceGlmMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        seed_value = str(state.project.glm_seed) if state.project.glm_seed > -1 else "random"
-
         def make_items(_: State) -> list[MenuItem]:
+
             items = [
                 MenuItem(
                     VoiceMenuShared.make_select_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.GLM)
                 )
             ]
+
             if state.project.glm_voice_file_name:
                 items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.GLM) )
+
+            seed_value = str(state.project.glm_seed) if state.project.glm_seed > -1 else "random"
             items.extend([
                 MenuItem(
                     make_menu_label("Model samplerate", str(state.project.glm_sr) + "hz"),

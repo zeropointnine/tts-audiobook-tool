@@ -96,7 +96,8 @@ class GenerateMenu:
             language_code=state.project.language_code,
             is_regenerate=False,
             stt_variant=state.prefs.stt_variant,
-            stt_config=state.prefs.stt_config
+            stt_config=state.prefs.stt_config,
+            max_retries=state.prefs.max_retries
         )
 
         if did_interrupt:
@@ -136,7 +137,8 @@ class GenerateMenu:
             language_code=state.project.language_code,
             is_regenerate=True,
             stt_variant=state.prefs.stt_variant,
-            stt_config=state.prefs.stt_config
+            stt_config=state.prefs.stt_config,
+            max_retries=state.prefs.max_retries
         )
 
         AskUtil.ask_enter_to_continue()

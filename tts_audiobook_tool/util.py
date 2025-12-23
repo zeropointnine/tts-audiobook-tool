@@ -156,16 +156,54 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
         color = COL_ACCENT
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
-def make_currently_string(value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
+def make_menu_label(
+        label: str, value: Any, default: Any=None, value_prefix: str="currently: ", color_code=COL_ACCENT
+    ) -> str:
+    currently = make_currently_string(value, value_prefix, default, color_code)
+    return f"{label} {currently}"
+
+def make_currently_string(
+        value: Any, value_prefix: str="currently: ", default: Any=None, color_code=COL_ACCENT
+    ) -> str:
     """
     Used for presenting the current value for a menu item in a consistent style
     Ex: `(currently: 666)`
     """
-    return f"{COL_DIM}({value_prefix}{color_code}{value}{COL_DIM})"
+    value_string = make_parameter_value_string(value, default)
+    return f"{COL_DIM}({value_prefix}{color_code}{value_string}{COL_DIM})"
 
-def make_menu_label(label: str, value: Any, value_prefix: str="currently: ", color_code=COL_ACCENT) -> str:
-    currently = make_currently_string(value, value_prefix, color_code)
-    return f"{label} {currently}"
+@staticmethod
+def make_parameter_value_string(
+    value: float | int | bool,
+    default: float | int | bool,
+    num_decimals: int=0
+) -> str:
+
+    DEFAULT_LABEL = " (default)"
+
+    if isinstance(value, bool):
+        s = str(value)
+        if value == default:
+            s += DEFAULT_LABEL
+        return s
+
+    if value == -1:
+        # Project attributes use -1 to mean "not set explicitly", ie, use default value
+        value = default 
+    
+    if isinstance(value, float):
+        if num_decimals == 0:
+            s = str(int(value))
+        else:
+            s = f"{value:.{num_decimals}f}"
+    else:
+        s = str(value)
+    
+    if value == default:
+        s += DEFAULT_LABEL
+    
+    return s
+
 
 def make_gb_string(bytes: int) -> str:
     """ Returns gigabyte string with either one or zero decimal places"""

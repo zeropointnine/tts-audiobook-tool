@@ -41,6 +41,7 @@ class GenerateUtil:
             is_regenerate: bool,
             stt_variant: SttVariant,
             stt_config: SttConfig,
+            max_retries: int
     ) -> bool:
         """
         Subroutine for doing a series of audio generations to files
@@ -85,7 +86,7 @@ class GenerateUtil:
             )
 
             result, did_interrupt = GenerateUtil.generate_full_flow(
-                project, phrase_group, index, language_code, stt_variant, stt_config
+                project, phrase_group, index, language_code, stt_variant, stt_config, max_retries=max_retries
             )
             match result:
                 case FullFlowResult.SAVED_OK:
@@ -134,7 +135,8 @@ class GenerateUtil:
             index: int,
             language_code: str,
             stt_variant: SttVariant,
-            stt_config: SttConfig
+            stt_config: SttConfig,
+            max_retries: int
     ) -> tuple[FullFlowResult, bool]:
         """
         Generates, validates, saves, retries if necessary
@@ -145,9 +147,9 @@ class GenerateUtil:
 
         result: FullFlowResult = FullFlowResult.NOTHING
         did_interrupt = False
+        num_attempts = 1 + max_retries
 
-        MAX_ATTEMPTS = 2
-        for attempt in range(MAX_ATTEMPTS):
+        for attempt in range(num_attempts):
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True
@@ -178,7 +180,9 @@ class GenerateUtil:
             sound, validation_result = validation_result
 
             GenerateUtil.print_validation_result(
-                validation_result, is_last_attempt=(attempt == MAX_ATTEMPTS - 1),is_real_time=False
+                validation_result, 
+                is_last_attempt=(attempt == num_attempts - 1), 
+                is_real_time=False
             )
 
             did_save = GenerateUtil._do_save_gen(project, phrase_group, index, sound, validation_result)
@@ -322,7 +326,7 @@ class GenerateUtil:
 
     @staticmethod
     def generate(
-            project: Project, # TODO: make ModelSettings proper
+            project: Project,
             prompt_text: str, 
             force_random_seed: bool, 
             index: int, 
@@ -334,14 +338,7 @@ class GenerateUtil:
         Returns model-generated sound data (in model's native samplerate) or error string
         """
 
-        if DEV:
-            printt(f"{COL_DIM}Pre-normalized prompt text before word substitutions:")
-            printt(f"{COL_DIM}{prompt_text.strip()}")
         prompt_text = TextNormalizer.apply_prompt_word_substitutions(prompt_text, project.word_substitutions, project.language_code)
-        if DEV:
-            printt(f"{COL_DIM}Pre-normalized prompt text after word substitutions:")
-            printt(f"{COL_DIM}{prompt_text.strip()}")
-            printt()
         prompt_text = TextNormalizer.normalize_prompt_common(prompt_text, project.language_code)
         prompt_text = Tts.get_instance().massage_for_inference(prompt_text)
 

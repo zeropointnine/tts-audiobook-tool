@@ -126,8 +126,8 @@ class ConcatMenu:
             state=state,
             heading_text="Section break sound effect",
             subheading=SECTION_BREAK_SUBHEADING,
-            labels=["False", "True"],
-            values=[False, True],
+            labels=["True", "False"],
+            values=[True, False],
             current_value=state.project.use_section_sound_effect,
             default_value=False,
             on_select=on_select

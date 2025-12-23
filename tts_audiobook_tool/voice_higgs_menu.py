@@ -16,7 +16,7 @@ class VoiceHiggsMenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.higgs_temperature, HiggsProtocol.DEFAULT_TEMPERATURE, 2
             )
             return f"Temperature {make_currently_string(value)}"

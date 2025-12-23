@@ -30,7 +30,7 @@ class VoiceIndexTts2Menu:
             VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
 
         def make_temperature_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.indextts2_temperature, IndexTts2Protocol.DEFAULT_TEMPERATURE, 2
             )
             return f"Temperature {make_currently_string(value)}"
@@ -73,7 +73,7 @@ class VoiceIndexTts2Menu:
             return f"Emotion vector {current}"
 
         def make_emo_alpha_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.indextts2_emo_alpha,
                 IndexTts2Protocol.DEFAULT_EMO_VOICE_ALPHA, 2
             )
@@ -89,7 +89,7 @@ class VoiceIndexTts2Menu:
             )
 
         def make_fp16_item(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(project.indextts2_use_fp16, IndexTts2Protocol.DEFAULT_USE_FP16)
+            value = make_parameter_value_string(project.indextts2_use_fp16, IndexTts2Protocol.DEFAULT_USE_FP16)
             return f"FP16 (smaller memory footprint) {make_currently_string(value)}"
 
         # Menu

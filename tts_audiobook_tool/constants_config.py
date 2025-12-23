@@ -1,6 +1,6 @@
 """
 Constants - config-like values
-TODO: make this a config file proper
+TODO: consider making this a config file proper
 """
 
 import os
@@ -13,6 +13,9 @@ PROJECT_DEFAULT_SECTION_SOUND_EFFECT = False
 PROJECT_DEFAULT_REALTIME_SAVE = False
 
 PREFS_DEFAULT_PLAY_ON_GENERATE = False
+PREFS_MAX_RETRIES_DEFAULT = 1
+PREFS_MAX_RETRIES_MIN = 1
+PREFS_MAX_RETRIES_MAX = 5
 
 # Max words per text chunk, applied to the source text in "STT flow"
 MAX_WORDS_PER_SEGMENT_STT = 40

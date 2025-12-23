@@ -73,12 +73,11 @@ class RealTimeUtil:
             GenerateUtil.print_item_heading(False, phrase.text, index, count, num_items)
 
             # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 ...
-            has_runway = (stream is not None and stream.buffer_duration >= STREAM_DURATION_THRESHOLD)            
+            has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.prefs.max_retries))
             
             sound_opt, did_interrupt = RealTimeUtil.generate_full_flow(
                 project, phrase_groups, index, project.language_code, state.prefs.stt_variant, state.prefs.stt_config,
-                has_runway=has_runway,
-                should_save=state.project.realtime_save
+                has_runway=has_runway, should_save=state.project.realtime_save, max_retries=state.prefs.max_retries
             )
             if not sound_opt:
                 printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
@@ -159,11 +158,12 @@ class RealTimeUtil:
             stt_variant: SttVariant,
             stt_config: SttConfig,
             has_runway: bool,
-            should_save: bool
+            should_save: bool,
+            max_retries: int
     ) -> tuple[Sound | None, bool]:
         """
-        Similar to `GenerateUtil.generate_single_full_flow()` but slightly different logic flow, simpler
-        Returns Sound or no-sound if problem, and if user interrupted
+        Similar to `GenerateUtil.generate_full_flow()` but slightly different logic flow, simpler
+        Returns tuple: Sound or no-sound if problem, and if user interrupted
         """
 
         SigIntHandler().set("generating")
@@ -172,8 +172,9 @@ class RealTimeUtil:
         did_interrupt = False
 
         gen_result: tuple[Sound, ValidationResult] | str  = ""
-        max_attempts = 2 if has_runway else 1
-        for attempt in range(max_attempts):
+        num_attempts = 1 + max_retries if has_runway else 1
+        
+        for attempt in range(num_attempts):
 
             gen_result = GenerateUtil.generate_and_validate(
                 project=project,
@@ -195,7 +196,9 @@ class RealTimeUtil:
                 printt()
             else:
                 GenerateUtil.print_validation_result(
-                    gen_result[1], is_last_attempt=(attempt == max_attempts - 1), is_real_time=True
+                    gen_result[1], 
+                    is_last_attempt=(attempt == num_attempts - 1), 
+                    is_real_time=True
                 )                
 
             if SigIntHandler().did_interrupt:
@@ -222,4 +225,4 @@ class RealTimeUtil:
 
 # ---
 
-STREAM_DURATION_THRESHOLD = 60.0
+REQUIRED_SECONDS_PER_RETRY = 60.0

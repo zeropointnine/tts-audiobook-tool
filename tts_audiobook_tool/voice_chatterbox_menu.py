@@ -18,7 +18,7 @@ class VoiceChatterboxMenu:
         project = state.project
 
         def make_temperature_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.chatterbox_temperature, ChatterboxProtocol.DEFAULT_TEMPERATURE, 1
             )
             return f"Temperature {make_currently_string(value)}"
@@ -33,7 +33,7 @@ class VoiceChatterboxMenu:
             )
 
         def make_exagg_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.chatterbox_exaggeration, ChatterboxProtocol.DEFAULT_EXAGGERATION, 2
             )
             return f"Exaggeration {make_currently_string(value)}"
@@ -48,7 +48,7 @@ class VoiceChatterboxMenu:
             )
 
         def make_cfg_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 project.chatterbox_cfg, ChatterboxProtocol.DEFAULT_CFG, 2
             )
             return f"CFG/pace {make_currently_string(value)}"

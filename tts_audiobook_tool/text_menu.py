@@ -23,7 +23,7 @@ class TextMenu:
             return f"Text {currently}"
 
         def make_max_size_label(_) -> str:
-            value = VoiceMenuShared.make_parameter_value_string(
+            value = make_parameter_value_string(
                 state.project.max_words, MAX_WORDS_PER_SEGMENT_DEFAULT
             )
             return make_menu_label("Text segmentation max words per segment", value)
