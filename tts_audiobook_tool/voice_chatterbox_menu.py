@@ -71,18 +71,15 @@ class VoiceChatterboxMenu:
             ]
             if state.project.chatterbox_voice_file_name:
                 items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) )
+
+            seed_value = str(state.project.chatterbox_seed) if state.project.chatterbox_seed != -1 else "random"
             items.extend( [
+                MenuItem(make_temperature_label, on_temperature),
+                MenuItem(make_exagg_label, on_exagg),
+                MenuItem(make_cfg_label, on_cfg),
                 MenuItem(
-                    make_temperature_label,
-                    on_temperature
-                ),
-                MenuItem(
-                    make_exagg_label,
-                    on_exagg
-                ),
-                MenuItem(
-                    make_cfg_label,
-                    on_cfg
+                    make_menu_label("Seed", seed_value), 
+                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "chatterbox_seed")   
                 )
             ])
             return items

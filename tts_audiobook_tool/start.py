@@ -32,7 +32,7 @@ if not_found:
         "The app's dependencies have changed",
         f"The following packages were not found: {COL_ERROR}{', '.join(not_found)}{COL_DEFAULT}\n"
         "You may have updated the app from the repository without updating its dependencies.\n"
-        "Either install the missing packages or, preferably, update your virtual environment by re-running:\n"
+        "Either manually install the missing packages or, preferably, update your virtual environment by re-running:\n"
         f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
     )
     Hint.print_hint(hint)

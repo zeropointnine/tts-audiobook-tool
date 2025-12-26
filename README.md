@@ -1,15 +1,16 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
+- [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
 - [VibeVoice 1.5B](https://github.com/microsoft/VibeVoice)
 - [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
 - [Fish OpenAudio S1-mini](https://github.com/fishaudio/fish-speech)
-- [Chatterbox TTS](https://github.com/resemble-ai/chatterbox)
+- [Chatterbox-Multilingual](https://github.com/resemble-ai/chatterbox)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 
-The app features a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
+The app employs a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
 
 - Rational segmentation of long text at paragraph/sentence/phrase boundaries, as needed
 - Detection and correction of many inference errors and hallucinations using speech-to-text comparison to the source text
@@ -22,8 +23,9 @@ Plain-vanilla text interface in the console.
 
 The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the text highlighted in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `browser_player\index.html` (no need for a web server), or from the mapped [project github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
-**Some example outputs**, all using the same source text and same 15-second voice clone sample:
+**Example outputs**, all using the same source text and same 15-second voice clone sample:
 
+- [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-mira.abr.m4a)
 - [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-glm.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2.abr.m4a)
 - [IndexTTS2 (with added emotional guidance voice sample)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2-plus-emo.abr.m4a)
@@ -36,7 +38,7 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 ### Bonus feature: Enhance existing audiobooks
 
-Using speech-to-text, the app is able to embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player/reader.
+Using speech-to-text, the app is also able to embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player/reader.
 
 Select `Options` > `Enhance existing audiobook`, and select your source audiobook file (typically M4A or M4B) and corresponding book text. This feature is experimental.
 
@@ -72,10 +74,26 @@ Finally, run the app by entering:
 
 Note that any settings that are specific to a given model will be enabled automatically based on which virtual environment has been enabled.
 
+## Install for MiraTTS
+
+> **ℹ️ Requires CUDA** 
+
+Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
+
+    path\to\python3.11\python.exe -m venv venv-mira
+
+Activate the virtual environment:
+
+    venv-glm\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-mira.txt
+
+
 ## Install for GLM-TTS
 
-> **ℹ️ Note:**
-> **Requires CUDA** due to hardcoded cuda-related operations throughout the glm inference code. 
+> **ℹ️ Requires CUDA** due to hardcoded cuda-related torch operations throughout the glm inference code. 
 
 ### Linux
 
@@ -113,7 +131,7 @@ Install the rest of the project dependencies using pip like normal:
 
     pip install requirements-glm.txt
 
-Note that we pull from [a fork of glm-tts[(https://github.com/zeropointnine/glm-tts-packaged)] that has been refactored as an installable package.
+Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-tts-packaged) that has been refactored for use as an installable package.
 
 ## Install for IndexTTS2
 
@@ -203,7 +221,7 @@ Authenticate the model on HuggingFace:
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
  
 
-## Install for Chatterbox TTS:
+## Install for Chatterbox-Multilingual:
 
 Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
 
@@ -276,11 +294,13 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 ### Inference speeds, expectations
 
-These are my anecdotal inference speeds (note though that CUDA inference speeds on Linux can be *appreciably* faster than on Windows). The app adopts each respective model's reference inference implementation logic as much as possible.
+These are my anecdotal TTS inference speeds (note though that CUDA inference speeds on Linux can be *appreciably* faster than on Windows). The app adopts each respective model's reference inference implementation logic as much as possible.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
+| MiraTTS                 | GTX 3080 Ti, Linux   | 2000+% realtime | (batch size = 10)
+|                         | GTX 3080 Ti, Linux   | 700+% realtime  | (no batching)
+| GLM-TTS                 | GTX 3080 Ti, Linux   | 200+% realtime  | outstanding voice likeness, IMO
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
@@ -288,9 +308,9 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 |                         | Macbook Pro M1       | ~40% realtime   |
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed inversely proportional to voice sample duration, FYI
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
-| Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | best combination of inference speed and quality output IMO
+| Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
-| Chatterbox              | GTX 4090, Windows    | ~190% realtime  | best multilanguage capabilities
+| Chatterbox              | GTX 4090, Windows    | ~190% realtime  | best non-en/zh multilanguage capabilities
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | (using `outetts.Backend.EXL2`)
@@ -299,13 +319,21 @@ These are my anecdotal inference speeds (note though that CUDA inference speeds 
 
 # Update highlights
 
+**2025-12-31**
+
+Added support for **MiraTTS**, including batch mode. The model is exceptionally fast when running in batch mode.
+
+Added option: `Generate` > `Transcript validation strictness`
+
+Seed option now available for: Chatterbox, Fish, GLM
+
 **2025-12-23**
 
-Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model mispronounces (eg, "yigg-drasill" (or something...) for "Yggdrasil"). Requires some experimentation, as you might imagine. 
+Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce (eg, "yigg-drasill" (or something...) for "Yggdrasil"). Requires some experimentation, as you might imagine. 
 
 Relatedly, added: `Project` > `Word substitutions` > `Inspect project text for uncommon words`.
 
-Also added option: `Options` > `Max retries on validation fail`
+Also added option: `Generate` > `Transcript validation max retries`
 
 **2025-12-21**
 
@@ -341,7 +369,7 @@ Broad code refactor related to handling of text segments.
 
 **2025-12-06**
 
-**Updated Chatterbox** requirement to v0.1.4, which is multilanguage capable, and **added language code** project setting. Thanks to @JuMGameN, co-author.
+**Updated Chatterbox** requirement to v0.1.4, which is multilanguage capable, and **added language code** project setting. Thanks to @JuMGameN, co-author for this update.
 
 For existing users, the Chatterbox venv must be recreated using Python v3.11.
 

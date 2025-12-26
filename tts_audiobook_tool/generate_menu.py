@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import Strictness, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.concat_menu import ConcatMenu
@@ -9,32 +9,14 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model import MiraProtocol
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class GenerateMenu:
 
     @staticmethod
     def menu(state: State) -> None:
-
-        def on_start(_: State, __: MenuItem) -> None:
-
-            if not state.project.get_selected_indices_not_generated():
-                print_feedback("All items in specified range already generated.")
-                return
-
-            err = Tts.validate_language_code(state.project.language_code)
-            if err:
-                print_feedback(err)
-                return
-
-            if AskUtil.is_readchar:
-                b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-                if not b:
-                    return
-
-            AppUtil.show_inference_hints(state.prefs, state.project)
-
-            GenerateMenu.do_generate_items(state)
 
         def make_range_label(_) -> str:
             if not state.project.generate_range_string:
@@ -60,109 +42,205 @@ class GenerateMenu:
             regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
             return f"Regenerate segments tagged with potential errors {regenerate_label}"
 
+        def make_batch_size_mira_label(_) -> str:
+            value = state.project.mira_batch_size
+            if value == -1:
+                value = MiraProtocol.BATCH_SIZE_DEFAULT
+            value_string = "disabled" if value == 1 else str(value)
+            s = "Batch size "
+            currently = make_currently_string(value_string)
+            s = s + currently
+            return s
+
         # Menu
         def heading_maker(_) -> str:
             total_segments_generated = state.project.sound_segments.num_generated()
             num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
             return f"Generate audio {num_complete_label}"
 
-        items = [
-            MenuItem("Generate audio segments", on_start),
-            MenuItem(make_range_label, lambda _, __: GenerateMenu.ask_item_range(state)),
-            MenuItem(make_regen_label, lambda _, __: GenerateMenu.do_regenerate_items(state))
-        ]
-        MenuUtil.menu(state, heading_maker, items)
+        def items_maker(_: State) -> list[MenuItem]:
+            items = [
+                MenuItem("Generate audio segments", lambda _, __: do_generate(state, is_regen=False)),
+                MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
+                MenuItem(make_regen_label, lambda _, __: do_generate(state, is_regen=True))
+            ]
+            if Tts.get_type() == TtsModelInfos.MIRA:
+                items.append(
+                    MenuItem(make_batch_size_mira_label, lambda _, __: ask_batch_size_mira(state))
+                )
+            items.extend([
+                MenuItem(make_strictness_label, lambda _, __: GenerateMenu.strictness_menu(state)),
+                MenuItem(make_retries_label, lambda _, __: ask_retries(state))
+            ])
+            return items
+        
+        MenuUtil.menu(state, heading_maker, items_maker)
 
     @staticmethod
-    def do_generate_items(state: State) -> None:
+    def strictness_menu(state: State) -> None:
 
-        selected_indices_not_generated = state.project.get_selected_indices_not_generated()
-        if not selected_indices_not_generated:
-            AskUtil.ask_enter_to_continue(f"All items in specified range already generated.")
-            return
+        def on_select(value: Strictness) -> None:
+            state.project.strictness = value
+            state.project.save()
+            print_feedback(f"Strictness set to:", state.project.strictness.label)
 
-        s = f"Generating {len(selected_indices_not_generated)} audio segment/s..."
-        if state.prefs.stt_variant == SttVariant.DISABLED:
-            s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
+        # Special case messaging based on language code and current TTS model specs
+        if state.project.language_code != "en":
+            low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for current language code {state.project.language_code}"
+            medium_desc = ""
+            high_desc = ""
+        elif Tts.get_type().value.strictness_high_discouraged:
+            low_desc = ""
+            medium_desc = ""
+            high_desc = f"{Ansi.ITALICS}Not recommended{Ansi.RESET}{COL_DIM} with current TTS model"
+        else:
+            low_desc = ""
+            medium_desc = ""
+            high_desc = "Best net accuracy but triggers more retries"
 
-        print_heading(s, dont_clear=True, non_menu=True)
-        printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
-        printt()
-
-        did_interrupt = GenerateUtil.generate_to_files(
-            project=state.project,
-            phrase_groups=state.project.phrase_groups,
-            indices_set=selected_indices_not_generated,
-            language_code=state.project.language_code,
-            is_regenerate=False,
-            stt_variant=state.prefs.stt_variant,
-            stt_config=state.prefs.stt_config,
-            max_retries=state.prefs.max_retries
+        MenuUtil.options_menu(
+            state=state,
+            heading_text=make_strictness_label(state),
+            labels=[item.label for item in list(Strictness)],
+            sublabels=[low_desc, medium_desc, high_desc],
+            values=[item for item in list(Strictness)],
+            current_value=state.project.strictness,
+            default_value=None,
+            on_select=on_select,
+            subheading=STRICTNESS_DESC
         )
 
-        if did_interrupt:
-            AskUtil.ask_enter_to_continue()
-        else:
-            s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
-            hotkey = AskUtil.ask_hotkey(s)
-            printt() # TODO revisit
-            if hotkey == "c":
-                ConcatMenu.menu(state)
+# ---
+
+def ask_item_range(state: State) -> None:
+
+    num_items = len(state.project.phrase_groups)
+
+    printt("Enter line numbers to generate (eg, \"1-100, 103\", or \"all\")")
+    inp = AskUtil.ask()
+    if inp == "all" or inp == "a":
+        indices = set( [item for item in range(0, num_items)] )
+    else:
+        indices, warnings = ParseUtil.parse_ranges_string(inp, num_items)
+        if not indices:
+            return
+        if warnings:
+            print_feedback("\n".join(warnings))
+            return
+
+    s = ParseUtil.make_ranges_string(indices, len(state.project.phrase_groups))
+    state.project.generate_range_string = "" if s == "all" else s
+    state.project.save()
+
+    print_feedback(f"Range set to: {s}")
+
+def make_strictness_label(state: State) -> str:
+    label = make_menu_label(
+        label="Transcript validation strictness", 
+        value=state.project.strictness.label
+    )
+    if Strictness.exceeds_recommended_limit(state.project.strictness, state.project.language_code):
+        label += f"{COL_ERROR}*"
+    return label
+
+def make_retries_label(state: State) -> str:
+    return make_menu_label(
+        label="Transcript validation max retries", 
+        value=state.project.max_retries, 
+        default=PROJECT_MAX_RETRIES_DEFAULT
+    )
+
+def ask_retries(state: State) -> None:
+    print_heading(make_retries_label(state))
+    printt(RETRIES_DESC)
+    AskUtil.ask_number(
+        state.project, f"Enter value {COL_DIM}(between {PROJECT_MAX_RETRIES_MIN}-{PROJECT_MAX_RETRIES_MAX}){COL_DEFAULT}:", 
+        PROJECT_MAX_RETRIES_MIN, PROJECT_MAX_RETRIES_MAX, "max_retries", "Max retries set to:", is_int=True
+    )
+
+def ask_batch_size_mira(state: State) -> None:
+    prompt = f"Enter batch size {COL_DIM}(between {MiraProtocol.BATCH_SIZE_MIN}-{MiraProtocol.BATCH_SIZE_MAX}) (1 = batching disabled){COL_DEFAULT}:"
+    AskUtil.ask_number(
+        state.project, prompt, 
+        MiraProtocol.BATCH_SIZE_MIN, MiraProtocol.BATCH_SIZE_MAX, 
+        "mira_batch_size", "Set batch size:", is_int=True
+    )
+
+def do_generate(state: State, is_regen: bool) -> None:
+
+    # Check for valid language code
+    err = Tts.check_valid_language_code(state.project.language_code)
+    if err:
+        print_feedback(err)
         return
 
-    @staticmethod
-    def do_regenerate_items(state: State) -> None:
+    # Get indices to generate
+    if is_regen:
+        indices = state.project.sound_segments.get_failed_indices_in_generate_range()
+    else:
+        indices = state.project.get_selected_indices_not_generated()
+    
+    # Check if already generated
+    if not indices:
+        qualifier = " in currently selected range" if state.project.generate_range_string else ""
+        if is_regen:
+            message = f"No failed items to regenerate{qualifier}."
+        else:
+            message = f"All items{qualifier} already generated."            
+        print_feedback(message)
+        return
 
-        failed_indices = state.project.sound_segments.get_failed_indices_in_generate_range()
-        if not failed_indices:
-            qualifier = " in specified range" if state.project.generate_range_string else ""
-            print_feedback(f"No failed items to regenerate{qualifier}.")
+    # Show hint if necessary
+    if is_regen:
+        Hint.show_hint_if_necessary(state.prefs, HINT_REGEN)
+    else:
+        AppUtil.show_pre_inference_hints(state.prefs, state.project)
+
+    # Confirm
+    if AskUtil.is_readchar:
+        b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+        if not b:
             return
 
-        print_heading(f"Regenerating {len(failed_indices)} audio segment/s...", dont_clear=True)
-        printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
-        printt()
+    # Print heading
+    word = "Regenerating" if is_regen else "Generating"
+    message = f"{word} {len(indices)} audio segment/s..."
+    if state.prefs.stt_variant == SttVariant.DISABLED:
+        message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
+    print_heading(message, dont_clear=True)
+    printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
+    printt()
 
-        will_hint = not state.prefs.get_hint("regenerate")
-        Hint.show_hint_if_necessary(state.prefs, HINT_REGEN)
-        if will_hint:
-            b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-            if not b:
-                return
+    # Generate
+    did_interrupt = GenerateUtil.generate_files(
+        project=state.project,
+        indices_set=indices,
+        stt_variant=state.prefs.stt_variant,
+        stt_config=state.prefs.stt_config,
+        max_retries=state.project.max_retries,
+        batch_size=state.project.mira_batch_size if Tts.get_type() == TtsModelInfos.MIRA else 1,
+        is_regen=is_regen
+    )
 
-        _ = GenerateUtil.generate_to_files(
-            project=state.project,
-            phrase_groups=state.project.phrase_groups,
-            indices_set=failed_indices,
-            language_code=state.project.language_code,
-            is_regenerate=True,
-            stt_variant=state.prefs.stt_variant,
-            stt_config=state.prefs.stt_config,
-            max_retries=state.prefs.max_retries
-        )
-
+    if did_interrupt:
         AskUtil.ask_enter_to_continue()
+        return
 
-    @staticmethod
-    def ask_item_range(state: State) -> None:
+    if not is_regen:
+        s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
+        hotkey = AskUtil.ask_hotkey(s)
+        printt() # TODO revisit
+        if hotkey == "c":
+            ConcatMenu.menu(state)
 
-        num_items = len(state.project.phrase_groups)
+STRICTNESS_DESC = \
+"""Dictates how \"strict\" is the transcript validation.
+A low strictness value allows for more word errors before 
+an audio generation is marked as failed, triggering a retry.
+"""
 
-        printt("Enter line numbers to generate (eg, \"1-100, 103\", or \"all\")")
-        inp = AskUtil.ask()
-        if inp == "all" or inp == "a":
-            indices = set( [item for item in range(0, num_items)] )
-        else:
-            indices, warnings = ParseUtil.parse_ranges_string(inp, num_items)
-            if not indices:
-                return
-            if warnings:
-                print_feedback("\n".join(warnings))
-                return
-
-        s = ParseUtil.make_ranges_string(indices, len(state.project.phrase_groups))
-        state.project.generate_range_string = "" if s == "all" else s
-        state.project.save()
-
-        print_feedback(f"Range set to: {s}")
+RETRIES_DESC = \
+"""This is the max number of retries an audio generation will be attempted 
+when speech-to-text validation fails due to too many word errors.
+"""
 

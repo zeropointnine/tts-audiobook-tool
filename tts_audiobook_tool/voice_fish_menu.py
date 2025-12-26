@@ -41,7 +41,17 @@ class VoiceFishMenu:
             ]
             if state.project.fish_voice_file_name:
                 items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.FISH) )
+
             items.append( MenuItem(make_temperature_label, on_temperature) )
+
+            seed_value = str(state.project.fish_seed) if state.project.fish_seed != -1 else "random"
+            items.append(
+                MenuItem(
+                    make_menu_label("Seed", seed_value), 
+                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "fish_seed")   
+                )
+            )
+
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)

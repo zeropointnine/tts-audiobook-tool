@@ -33,7 +33,7 @@ class VoiceGlmMenu:
                 ),
                 MenuItem(
                     make_menu_label("Seed", seed_value),
-                    lambda _, __: ask_seed(state)                    
+                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "glm_seed")   
                 )
             ])
             return items
@@ -59,23 +59,3 @@ def samplerate_menu(state: State) -> None:
         default_value=GlmProtocol.SAMPLE_RATES[0],
         on_select=on_select
     )
-
-def ask_seed(state: State) -> None:
-    prompt = "Enter static seed value or -1 for random: "
-    value = AskUtil.ask(prompt)
-    if not value:
-        return
-    try:
-        # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
-        value = float(value)
-    except Exception as e:
-        print_feedback("Bad value", is_error=True)
-        return
-    value = int(value)
-    if value < -1:
-        print_feedback("Out of range", is_error=True)
-        return
-
-    state.project.glm_seed = value
-    state.project.save()
-    print_feedback("Seed set to:", value if value > -1 else "random")

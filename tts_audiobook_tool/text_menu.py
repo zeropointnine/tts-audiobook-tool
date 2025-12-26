@@ -82,7 +82,10 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
     if item.data == "import":
         phrase_groups, raw_text = AppUtil.get_phrase_groups_from_ask_text_file(
-            state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
+            state.project.max_words, 
+            state.project.segmentation_strategy, 
+            pysbd_language=state.project.language_code,
+            prefs=state.prefs
         )
         if not phrase_groups:
             return False

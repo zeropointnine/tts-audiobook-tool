@@ -6,6 +6,7 @@ from pathlib import Path
 from tts_audiobook_tool.util import *
 
 class DirOpenUtil:
+    """ Attempts to open a directory in the system's native file explorer GUI """
 
     @staticmethod
     def open(dir_path: str) -> str:

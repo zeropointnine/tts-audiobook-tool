@@ -62,29 +62,28 @@ class PhraseSegmenter:
         Segments source text into sentences using pysbd lib, preserving all characters.
         """
 
+        # Segment text into sentences using pysbd
+        # Important: "clean=False" preserves leading and trailing whitespace
+        segmenter = pysbd.Segmenter(language=pysbd_lang, clean=False, char_span=False)
+        sentences = segmenter.segment(source)
+
         def merge_danging_punc_word(sentences: list[str]) -> list[str]:
+            # TODO: Still not fully resolved, even aside from linefeed bug
             # pysbd can create danging punc-only sentences
             # eg:: "And you can . . . Yes?" -> "And you can . ", ". . ", "Yes?"
                         
             result: list[str] = []
             for sentence in sentences:
-                if TextUtil.is_ws_punc(sentence) and result:
-                    
+                if result and TextUtil.is_ws_punc(sentence):                    
                     # TODO even more, fml
                     #   pysbd can replace linefeed with space. 
                     #   eg: "And you can . . .\nYes?" 
-
                     result[-1] += sentence
                 else:
                     result.append(sentence)
             return result
 
-        # Segment text into sentences using pysbd
-        # Important: "clean=False" preserves leading and trailing whitespace
-        segmenter = pysbd.Segmenter(language=pysbd_lang, clean=False, char_span=False)
-        sentences = segmenter.segment(source)
         sentences = merge_danging_punc_word(sentences) # type: ignore
-
 
         # pysbd treats everything enclosed in quotes as a single sentence, so split those up
         new_sentences = []

@@ -21,13 +21,22 @@ class TtsModelInfo(NamedTuple):
     sample_rate: int
     # The app's recommended max-words-per-segment for the model
     max_words_default: int
+    # The app's recommended max-words-per-segment range (min, max)
+    max_words_reco_range: tuple[int, int]
+    # Does the model use a voice clone audio data (eg, Oute does not, wants a json)
+    uses_voice_sound_file: bool
     # Does the model require a voice clone sample 
     requires_voice: bool
     # Does the model API require the text transcript of the voice clone sample
     requires_voice_transcript: bool
+    # Does the model's API support "batch mode"
+    can_batch: bool
+    # When True, the "high" setting for strictness is discouraged due to model's poor WER
+    strictness_high_discouraged: bool
     # Should semantic trim return end time stamp if is last word
-    # Doing so is generally redundant and risks unintended partial cropping of end of last word,
-    # but can be useful for chopping off hallucinated noises past last word (eg, for Chatterbox)
+    # Doing so is generally redundant and risks unintended partial cropping of end of last word
+    # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
+    # hallucinate past the end of teh prompt (eg, for Chatterbox)
     semantic_trim_last: bool
     # The requirements.txt file that should be used to install the virtual environment for the given tts model
     requirements_file_name: str
@@ -50,8 +59,12 @@ class TtsModelInfos(Enum):
         torch_devices = [],
         sample_rate=0,
         max_words_default=0,
+        max_words_reco_range=(0, 0),
+        uses_voice_sound_file=False,
         requires_voice=False,
         requires_voice_transcript=False,
+        can_batch=False,
+        strictness_high_discouraged=True,
         semantic_trim_last=False,
         requirements_file_name="",
         ui = {},
@@ -65,8 +78,12 @@ class TtsModelInfos(Enum):
         torch_devices = [], # not applicable
         sample_rate=44100,
         max_words_default=40,
+        max_words_reco_range=(40, 40),
+        uses_voice_sound_file=False,
         requires_voice=True,
         requires_voice_transcript=False,
+        can_batch=False,
+        strictness_high_discouraged=True,
         semantic_trim_last=False,
         requirements_file_name="requirements-oute.txt",
         ui = {
@@ -88,8 +105,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
+        max_words_reco_range=(40, 40),
+        uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=False,
+        can_batch=False,
+        strictness_high_discouraged=True,
         semantic_trim_last=True,
         requirements_file_name="requirements-chatterbox.txt",
         ui = {
@@ -110,8 +131,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_default=40,
+        max_words_reco_range=(40, 40),
+        uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=True,
+        can_batch=False,
+        strictness_high_discouraged=True,
         semantic_trim_last=False,
         requirements_file_name="requirements-fish.txt",
         ui = {
@@ -132,8 +157,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
+        max_words_reco_range=(40, 40),
+        uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=True,
+        can_batch=False,
+        strictness_high_discouraged=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-higgs.txt",
         ui = {
@@ -154,8 +183,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
+        max_words_reco_range=(40, 80),
+        uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=False,
+        can_batch=False,
+        strictness_high_discouraged=True,
         semantic_trim_last=False,
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
@@ -178,8 +211,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=22050,
         max_words_default=40,
+        max_words_reco_range=(40, 60),
+        uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=False,
+        can_batch=False,
+        strictness_high_discouraged=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-indextts2.txt",
         ui = {
@@ -201,8 +238,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda"], # cuda-only atm
         sample_rate=24000,
         max_words_default=40,
+        max_words_reco_range=(40, 60),
+        uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=True,
+        can_batch=False,
+        strictness_high_discouraged=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-glm.txt",
         ui = {
@@ -215,6 +256,35 @@ class TtsModelInfos(Enum):
             (";", ","), # semicolon generates random syllable
             ("\u2014", ", "), ("\u2500", ", "), # em-dash doesn't create caesura
             (" \u2013 ", ", ") # space-en-dash-space doesn't create caesura
+        ]
+    )
+
+    MIRA = TtsModelInfo(
+        module_test="mira",
+        file_tag="mira",
+        dtype=np.dtype("float32"), # outputs float16 internally and gets converted in generate()
+        torch_devices = [], # does not take in a device as a parameters
+        sample_rate=48000,
+        max_words_default=40,
+        max_words_reco_range=(40, 60),
+        uses_voice_sound_file=True,
+        requires_voice=True,
+        requires_voice_transcript=False,
+        can_batch=True,
+        strictness_high_discouraged=False,
+        semantic_trim_last=False,
+        requirements_file_name="requirements-mira.txt",
+        ui = {
+            "proper_name": "MiraTTS",
+            "short_name": "Mira",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip"
+        },
+        substitutions=[
+            # semicolon doesn't create caesura, but neither does comma reliably, so
+            # em-dash seems okay
+            # space-en-dash-space seems okay
+            # ... "caesura punctuation" seems unpredictable so there's no use replacing characters
         ]
     )
 

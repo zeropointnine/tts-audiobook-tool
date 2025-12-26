@@ -11,7 +11,8 @@ class ProjectUtil:
     def parse_word_substitutions_json_string(inp: str) -> dict[str, str] | str:
         """ Returns list of two-string lists or user-facing error message """
         try:
-            dic = json.loads(inp)
+            import ast
+            dic = ast.literal_eval(inp) # less strict than json decode, which requires double-quotes
         except Exception as e:
             return make_error_string(e)
         if not isinstance(dic, dict):
@@ -32,7 +33,7 @@ class ProjectUtil:
         # Massage
         result = {}
         for key, value in dic.items():
-            key = key.lower().strip() # lowercase
-            value = value.strip() # preserve case
+            key = key.lower().strip() # search-word is treated as case-insensitive
+            value = value.strip() # replacement-word is not
             result[key] = value
         return result

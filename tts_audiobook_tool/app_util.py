@@ -161,13 +161,21 @@ class AppUtil:
     def get_phrase_groups_from_ask_text_file(
             max_words: int,
             segmentation_strategy: SegmentationStrategy, 
-            pysbd_language: str
+            pysbd_language: str,
+            prefs: Prefs
     ) -> tuple[ list[PhraseGroup], str ]:
         """
         Asks user for path to text file and returns list of TextSegments and raw text.
-        Shows feedback except when text segments are returned
+        Shows feedback except when text segments are returned.
+        Updates prefs.last_text_dir if file was opened.
         """
-        path = AskUtil.ask_file_path("Enter text file path: ", "Select text file")
+        if prefs.last_text_dir and os.path.exists(prefs.last_text_dir):
+            initial_dir = prefs.last_text_dir 
+        else:
+            initial_dir = ""
+        path = AskUtil.ask_file_path(
+            "Enter text file path: ", "Select text file", initialdir=initial_dir
+        )
         if not path:
             return [], ""
         if not os.path.exists(path):
@@ -181,8 +189,12 @@ class AppUtil:
             AskUtil.ask_error(f"Error: {e}")
             return [], ""
 
+        prefs.last_text_dir = str( Path(path).parent )
+
         print("Segmenting text... ", end="", flush=True)
-        phrase_groups = PhraseGrouper.text_to_groups(raw_text, pysbd_lang="en", max_words=max_words, strategy=segmentation_strategy)
+        phrase_groups = PhraseGrouper.text_to_groups(
+            raw_text, pysbd_lang=pysbd_language, max_words=max_words, strategy=segmentation_strategy
+        )
         print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
         if not phrase_groups:
@@ -212,7 +224,9 @@ class AppUtil:
         if not raw_text:
             return [], ""
 
-        phrase_groups = PhraseGrouper.text_to_groups(raw_text, pysbd_lang="en", max_words=max_words, strategy=segmentation_strategy)
+        phrase_groups = PhraseGrouper.text_to_groups(
+            raw_text, pysbd_lang=pysbd_language, max_words=max_words, strategy=segmentation_strategy
+        )
 
         if not phrase_groups:
             AskUtil.ask_enter_to_continue("No text segments.")
@@ -312,7 +326,7 @@ class AppUtil:
             return None
 
     @staticmethod
-    def show_inference_hints(prefs: Prefs, p_project) -> None:
+    def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
         """ Shows one-time hints related to doing inference """
 
         from tts_audiobook_tool.project import Project

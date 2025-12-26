@@ -52,13 +52,6 @@ class OptionsMenu:
                 )
                 items.append(item)
 
-            items.append(
-                MenuItem(
-                    make_retries_label,
-                    lambda _, __: OptionsMenu.ask_retries(state)
-                )
-            )
-
             items.extend([
                 MenuItem(make_unload_label, on_unload),
                 MenuItem("Reset contextual hints", on_hints)
@@ -132,23 +125,7 @@ class OptionsMenu:
             on_select=on_select
         )
 
-    @staticmethod
-    def ask_retries(state: State) -> None:
-        print_heading(make_retries_label(state))
-        printt(RETRIES_DESC)
-        AskUtil.ask_number(
-            state.prefs, f"Enter value {COL_DIM}(between {PREFS_MAX_RETRIES_MIN}-{PREFS_MAX_RETRIES_MAX}){COL_DEFAULT}:", 
-            1, 5, "max_retries", "Max retries set to:", is_int=True
-        )
-
 # ---
-
-def make_retries_label(state: State) -> str:
-    return make_menu_label(
-        label="Max retries on validation fail", 
-        value=state.prefs.max_retries, 
-        default=PREFS_MAX_RETRIES_DEFAULT
-    )
 
 def make_system_memory_string(base_color=COL_DIM) -> str:
 
@@ -174,8 +151,3 @@ def make_system_memory_string(base_color=COL_DIM) -> str:
         return vram_string
     else:
         return f"{vram_string}{base_color}, {ram_string}"
-
-RETRIES_DESC = \
-"""This is the max number of retries an audio generation will be attempted 
-when speech-to-text validation fails due to too many word errors.
-"""

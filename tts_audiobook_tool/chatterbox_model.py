@@ -1,3 +1,5 @@
+import random
+import numpy as np
 import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
@@ -18,8 +20,9 @@ class ChatterboxModel(ChatterboxModelProtocol):
 
     def __init__(self, device: str):
         super().__init__(info=TtsModelInfos.CHATTERBOX.value)
-        self.device_obj = torch.device(device)
-        self._chatterbox = ChatterboxMultilingualTTS.from_pretrained(device=self.device_obj)
+        self._device = device
+        device_obj = torch.device(self._device)
+        self._chatterbox = ChatterboxMultilingualTTS.from_pretrained(device=device_obj)
 
     def kill(self) -> None:
         self._chatterbox = None # type: ignore
@@ -31,12 +34,17 @@ class ChatterboxModel(ChatterboxModelProtocol):
         exaggeration: float = -1,
         cfg: float = -1,
         temperature: float = -1,
+        seed: int = -1,
         language_id: str = ""
     ) -> Sound | str:
 
         if self._chatterbox is None:
-            return "Chatterbox model is not initialized."
+            return "Model is not initialized."
         
+        if seed < 0:
+            seed = random.randrange(0, 2**32 - 1)
+        self.set_seed(seed)
+
         dic = {}
         if language_id:
             dic["language_id"] = language_id
@@ -56,6 +64,15 @@ class ChatterboxModel(ChatterboxModelProtocol):
         except Exception as e:
             return make_error_string(e)
         
+    def set_seed(self, seed: int):
+        """Sets the random seed for reproducibility across torch, numpy, and random."""
+        torch.manual_seed(seed)
+        if self._device.startswith("cuda"):
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+
     @staticmethod
     def supported_languages() -> list[str]:
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)

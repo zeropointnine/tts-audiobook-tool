@@ -17,9 +17,9 @@ class WhisperUtil:
     @staticmethod
     def transcribe_to_words(
             sound: Sound,
-            stt_variant: SttVariant,
-            stt_config: SttConfig,
-            language_code: str
+            language_code: str,
+            stt_variant: SttVariant = SttVariant.LARGE_V3,
+            stt_config: SttConfig = SttConfig.CUDA_FLOAT16,
     ) -> list[Word] | str:
         """
         All whisper transcription should be done through here.

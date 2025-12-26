@@ -7,7 +7,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -22,6 +22,7 @@ class Tts:
     _vibevoice: VibeVoiceModelProtocol | None = None
     _indextts2: IndexTts2ModelProtocol | None = None
     _glm: GlmModelProtocol | None = None
+    _mira: MiraModelProtocol | None = None
 
     _type: TtsModelInfos
 
@@ -101,7 +102,7 @@ class Tts:
 
     @staticmethod
     def instance_exists() -> bool:
-        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2, Tts._glm]
+        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2, Tts._glm, Tts._mira]
         for item in items:
             if item is not None:
                 return True
@@ -171,6 +172,7 @@ class Tts:
             TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
             TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
             TtsModelInfos.GLM: Tts.get_glm,
+            TtsModelInfos.MIRA: Tts.get_mira
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -189,6 +191,7 @@ class Tts:
             TtsModelInfos.VIBEVOICE: Tts._vibevoice,
             TtsModelInfos.INDEXTTS2: Tts._indextts2,
             TtsModelInfos.GLM: Tts._glm,
+            TtsModelInfos.MIRA: Tts._mira
         }
         return MAP.get(Tts._type, None)
 
@@ -266,6 +269,14 @@ class Tts:
         return Tts._glm
 
     @staticmethod
+    def get_mira() -> MiraModelProtocol:
+        if not Tts._mira:
+            print_model_init(f"cuda")
+            from tts_audiobook_tool.mira_model import MiraModel
+            Tts._mira = MiraModel()
+        return Tts._mira
+
+    @staticmethod
     def clear_tts_model() -> None:
 
         model = Tts.get_instance_if_exists()
@@ -308,8 +319,8 @@ class Tts:
         return intersection[0] if intersection else ""
     
     @staticmethod
-    def validate_language_code(language_code: str) -> str:
-        """ Returns error string or empty string """
+    def check_valid_language_code(language_code: str) -> str:
+        """ Returns error string if current TTS model does not support given language code """
         is_valid = True
         extra = ""
 

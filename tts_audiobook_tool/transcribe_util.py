@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from typing import List, Optional, Tuple
-from tts_audiobook_tool.app_types import Sound, Word
+from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_normalizer import TextNormalizer
@@ -20,7 +20,7 @@ class TranscribeUtil:
     def is_word_failure(
         source: str,
         transcript: str,
-        is_loose: bool, 
+        strictness: Strictness, 
         language_code: str=""
     ) -> tuple[bool, int, int]:
         """
@@ -28,12 +28,23 @@ class TranscribeUtil:
         """
         normalized_source, normalized_transcript = \
             TextNormalizer.normalize_source_and_transcript(source, transcript, language_code=language_code)
-        num_words = TextUtil.get_word_count(normalized_source)
-        fail_threshold = math.ceil(num_words / 10)
-        if is_loose:
-            fail_threshold *= 2
+        
         num_word_fails = \
             TranscribeUtil.count_word_failures(normalized_source, normalized_transcript, language_code)
+        
+        num_words = TextUtil.get_word_count(normalized_source)
+        
+        match strictness:
+            case Strictness.LOW:
+                # 1-10 words = 2, 11-20 words = 3, etc
+                fail_threshold = math.ceil(num_words / 10) + 1
+            case Strictness.MODERATE:
+                # 1-10 words = 1, 11-20 words = 2, etc
+                fail_threshold = math.ceil(num_words / 10) 
+            case Strictness.HIGH:
+                # 1-10 words = 0; 11-20 words = 1; etc
+                fail_threshold = math.ceil(num_words / 10) - 1 
+
         return num_word_fails > fail_threshold, num_word_fails, fail_threshold
 
     @staticmethod

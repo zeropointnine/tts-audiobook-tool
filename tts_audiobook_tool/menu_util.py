@@ -194,7 +194,7 @@ class MenuUtil:
     ) -> None:
         """
         Displays a menu with a list of values.
-        Think radio button group.
+        Think drop-down-list or radio button group.
         If an item is selected, calls `on_select` (returns string+value tuple)
 
         `labels`, `values`, and `sublabels` (if exists) are all "parallel lists"

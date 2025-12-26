@@ -63,19 +63,26 @@ class SoundSegmentUtil:
         tts_model_info: TtsModelInfo,
         num_word_fails: int,
         is_real_time: bool,
-        suffix=".flac"
+        suffix=".flac",
+        is_debug_json: bool=False
     ) -> str:
+
         idx = str(index + 1).zfill(5)
         model = tts_model_info.file_tag
         voice = project.get_voice_label()
-        text = TextUtil.sanitize_for_filename(phrase_group.presentable_text[:50])
+        text = " " + TextUtil.sanitize_for_filename(phrase_group.presentable_text[:50])
         fails_tag = f" [{num_word_fails}]" if num_word_fails > -1 else ""
+
+        if is_debug_json:
+            text = ""
+            suffix = ".json"
+
         if is_real_time:
             timestamp = SoundSegmentUtil.make_timestamp_string()
-            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{fails_tag} {text}{suffix}"
+            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{fails_tag}{text}{suffix}"
         else:
             hash_string = SoundSegmentUtil.calc_segment_hash(index, phrase_group.text)
-            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{fails_tag} {text}{suffix}"
+            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{fails_tag}{text}{suffix}"
         return path
         
     @staticmethod

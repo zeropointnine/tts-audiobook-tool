@@ -1,4 +1,5 @@
 from dataclasses import replace
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
@@ -18,7 +19,7 @@ class ProjectMenu:
     @staticmethod
     def menu(state:State) -> None:
 
-        def on_new_project(_, menu_item) -> bool:            
+        def on_new_project(_: State, __: MenuItem) -> bool:            
             
             did = ProjectMenu.ask_and_set_new_project(state)
             if not did:
@@ -241,8 +242,8 @@ def on_language(state: State, __: MenuItem) -> None:
             # Show hint as a "side effect"
             text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(VALIDATION_UNSUPPORTED_LANGUAGES))
             hint = replace(HINT_VALIDATION_UNSUPPORTED_LANGUAGE, text=text)
-            Hint.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
-            
+            Hint.show_hint(hint, and_prompt=True)
+
         return ""
 
     VoiceMenuShared.ask_string_and_save(
@@ -253,13 +254,21 @@ def on_language(state: State, __: MenuItem) -> None:
         validator=validator
     )
 
+    # Special case
+    if state.project.language_code != "en" and state.project.strictness != Strictness.LOW:
+        if not ValidateUtil.is_unsupported_language_code(state.project.language_code):
+            state.project.strictness = Strictness.LOW
+            state.project.save()
+            printt(FORCED_STRICTNESS_LOW_DESC)
+            AskUtil.ask_enter_to_continue()
+
 
 LANGUAGE_CODE_DESC = "" + \
 """Language code is used by the app at various stages of the pipeline as a \"hint\" for:
-- Segmentation of imported text by sentence
-- TTS prompt pre-processing 
+- Semantic segmentation of imported text
+- Prompt pre-processing 
 - Whisper transcription
-- Text-to-speech inference (required by Chatterbox; not utilized by the other supported models)"""
+- TTS inference (required by Chatterbox)"""
 
 SUBSTITUTIONS_DESC = \
 f"""List of words to be replaced in the TTS prompt at inference-time.
@@ -276,4 +285,9 @@ f"""Enter substitutions list. Use this format:
 UNCOMMON_WORDS_DESC = \
 f"""Most frequent words in the project text not found 
 in the app's English \"common words\" dictionary.
+"""
+
+FORCED_STRICTNESS_LOW_DESC = \
+f"""{COL_ACCENT}Note: {COL_DEFAULT}Because the language code is not en, the setting \"Transcript validation strictness\" 
+has been automatically set to \"Low\"
 """

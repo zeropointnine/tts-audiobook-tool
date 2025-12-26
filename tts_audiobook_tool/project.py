@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 
-from tts_audiobook_tool.app_types import ExportType, NormalizationType, SegmentationStrategy, Sound
+from tts_audiobook_tool.app_types import ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
@@ -16,7 +16,7 @@ from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.tts_model import GlmProtocol, IndexTts2Protocol
+from tts_audiobook_tool.tts_model import GlmProtocol, IndexTts2Protocol, MiraProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -51,6 +51,8 @@ class Project:
     use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
     normalization_type: NormalizationType = list(NormalizationType)[0]
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
+    strictness: Strictness = list(Strictness)[0] 
+    max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
 
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
@@ -60,10 +62,12 @@ class Project:
     chatterbox_temperature: float = -1
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
+    chatterbox_seed: int = -1
 
     fish_voice_file_name: str = ""
     fish_voice_transcript: str = ""
     fish_temperature: float = -1
+    fish_seed: int = -1
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
@@ -85,6 +89,10 @@ class Project:
     glm_voice_transcript: str = ""
     glm_sr: int = GlmProtocol.SAMPLE_RATES[0]
     glm_seed: int = -1 # ie, make random
+
+    mira_voice_file_name: str = ""
+    mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT
+    mira_batch_size: int = MiraProtocol.BATCH_SIZE_DEFAULT
 
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
@@ -128,6 +136,11 @@ class Project:
             return f"Project settings file bad type: {type(d)}"
 
         project = Project(dir_path)
+
+        warnings: list[str] = []
+        def add_warning(attr_name: str, defaulting_to: Any):
+            s = f"Warning: Bad or missing value for {attr_name}, setting to default {defaulting_to}"
+            warnings.append(s)
 
         # Text
         if "text" in d:
@@ -245,27 +258,41 @@ class Project:
             b = PROJECT_DEFAULT_REALTIME_SAVE
         project.realtime_save = b
 
+        # Validation strictness
+        s = d.get("strictness", "")
+        value = Strictness.get_by_id(s)
+        if value is None:
+            value = Strictness.get_recommended_default(project.language_code)
+            add_warning("strictness", value)
+        project.strictness = value
+
+        # Max retries
+        value = d.get("max_retries", None)
+        if not isinstance(value, int) or value < PROJECT_MAX_RETRIES_MIN or value > PROJECT_MAX_RETRIES_MAX:
+            add_warning("max_retries", PROJECT_MAX_RETRIES_DEFAULT)
+            value = PROJECT_MAX_RETRIES_DEFAULT # note, not using "unset" value of -1 here b/c
+        project.max_retries = value
+
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
         project.oute_temperature = d.get("oute_temperature", -1)
-
-        if not project.oute_voice_file_name:
-            # Pre-existing project has no oute voice set, so set it Oute default
-            result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
-            if isinstance(result, str):
-                AskUtil.ask_error(result) # not ideal
-            else:
-                project.set_oute_voice_and_save(result, "default")
-        else:
-            # Load specified oute voice json file
+        if Tts.get_type() == TtsModelInfos.OUTE:
             voice_path = os.path.join(dir_path, project.oute_voice_file_name)
-            result = OuteUtil.load_oute_voice_json(voice_path)
-            if isinstance(result, str):
-                printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}") # not ideal
-                printt()
+            if not project.oute_voice_file_name or not os.path.exists(voice_path):
+                # Set it Oute default
+                result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
+                if isinstance(result, str):
+                    AskUtil.ask_error(result) # not ideal
+                else:
+                    project.set_oute_voice_and_save(result, "default")
             else:
-                project.oute_voice_json = result
-
+                # Load specified oute voice json file
+                result = OuteUtil.load_oute_voice_json(voice_path)
+                if isinstance(result, str):
+                    printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}: {result}") # not ideal
+                    printt()
+                else:
+                    project.oute_voice_json = result
 
         # TODO: need validation logic for each of these properties (especially file-related ones)
 
@@ -274,11 +301,19 @@ class Project:
         project.chatterbox_temperature = d.get("chatterbox_temperature", -1)
         project.chatterbox_cfg = d.get("chatterbox_cfg", -1)
         project.chatterbox_exaggeration = d.get("chatterbox_exaggeration", -1)
+        project.chatterbox_seed = d.get("chatterbox_seed", -1)
+        if not (-1 <= project.chatterbox_seed <= 2**32 - 1):
+            add_warning("chatterbox_seed", -1)
+            project.chatterbox_seed = -1
 
         # Fish
         project.fish_voice_file_name = d.get("fish_voice_file_name", "")
         project.fish_voice_transcript = d.get("fish_voice_text", "")
         project.fish_temperature = d.get("fish_temperature", -1)
+        project.fish_seed = d.get("fish_seed", -1)
+        if not (-1 <= project.fish_seed <= 2**32 - 1):
+            add_warning("fish_seed", -1)
+            project.fish_seed = -1
 
         # Higgs
         project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")
@@ -299,6 +334,10 @@ class Project:
         if project.indextts2_emo_alpha == -1 and d.get("indextts2_emo_voice_alpha", -1) >= 0:
             project.indextts2_emo_alpha = d.get("indextts2_emo_voice_alpha", -1) # legacy support
         project.indextts2_emo_voice_file_name = d.get("indextts2_emo_voice_file_name", "")
+        o = d.get("indextts2_emo_vector", [])
+        if not isinstance(o, list):
+            o = []
+        project.indextts2_emo_vector = o
 
         # GLM
         project.glm_voice_file_name = d.get("glm_voice_file_name", "")
@@ -311,10 +350,30 @@ class Project:
             seed = -1
         project.glm_seed = int(seed)
 
-        o = d.get("indextts2_emo_vector", [])
-        if not isinstance(o, list):
-            o = []
-        project.indextts2_emo_vector = o
+        # Mira
+        project.mira_voice_file_name = d.get("mira_voice_file_name", "")
+        
+        value = d.get("mira_temperature", -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (MiraProtocol.TEMPERATURE_MIN <= value <= MiraProtocol.TEMPERATURE_MAX):
+                value = MiraProtocol.TEMPERATURE_DEFAULT
+                add_warning("mira_temperature", value)
+        project.mira_temperature = value
+
+        value = d.get("mira_batch_size", -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (MiraProtocol.BATCH_SIZE_MIN <= value <= MiraProtocol.BATCH_SIZE_MAX):
+                value = MiraProtocol.BATCH_SIZE_DEFAULT
+                add_warning("mira_batch_size", value)
+            value = int(value)
+        project.mira_batch_size = value
+
+        if warnings:
+            project.save()
+            for item in warnings:
+                printt(item)
+            printt()
+            AskUtil.ask_enter_to_continue()
 
         return project
 
@@ -340,6 +399,8 @@ class Project:
             "use_section_sound_effect": self.use_section_sound_effect,
             "normalization_type": self.normalization_type.value.id,
             "realtime_save": self.realtime_save,
+            "strictness": self.strictness.id,
+            "max_retries": self.max_retries,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
@@ -352,6 +413,7 @@ class Project:
             "fish_voice_file_name": self.fish_voice_file_name,
             "fish_voice_text": self.fish_voice_transcript,
             "fish_temperature": self.fish_temperature,
+            "fish_seed": self.fish_seed,
 
             "higgs_voice_file_name": self.higgs_voice_file_name,
             "higgs_voice_text": self.higgs_voice_transcript,
@@ -372,7 +434,11 @@ class Project:
             "glm_voice_file_name": self.glm_voice_file_name,
             "glm_voice_text": self.glm_voice_transcript,
             "glm_sr": self.glm_sr,
-            "glm_seed": self.glm_seed
+            "glm_seed": self.glm_seed,
+
+            "mira_voice_file_name": self.mira_voice_file_name,
+            "mira_temperature": self.mira_temperature,
+            "mira_batch_size": self.mira_batch_size
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -468,6 +534,9 @@ class Project:
             case TtsModelInfos.GLM:
                 self.glm_voice_file_name = dest_file_name
                 self.glm_voice_transcript = transcript
+            case TtsModelInfos.MIRA:
+                self.mira_voice_file_name = dest_file_name
+                self.mira_voice_transcript = transcript
             case _:
                 raise Exception(f"Unsupported tts type {tts_type}")
 
@@ -504,6 +573,8 @@ class Project:
             case TtsModelInfos.GLM:
                 self.glm_voice_file_name = ""
                 self.glm_voice_transcript = ""
+            case TtsModelInfos.MIRA:
+                self.mira_voice_file_name = ""
             case _:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
         self.save()
@@ -560,6 +631,11 @@ class Project:
                     return "none"
                 else:
                     return make_label(self.glm_voice_file_name)
+            case TtsModelInfos.MIRA:
+                if not self.mira_voice_file_name:
+                    return "none"
+                else:
+                    return make_label(self.mira_voice_file_name)
             case TtsModelInfos.NONE:
                 return "none"
 
@@ -582,6 +658,8 @@ class Project:
                 has_voice = bool(self.indextts2_voice_file_name)
             case TtsModelInfos.GLM:
                 has_voice = bool(self.glm_voice_file_name)
+            case TtsModelInfos.MIRA:
+                has_voice = bool(self.mira_voice_file_name)
         return has_voice
 
     @property
@@ -714,6 +792,8 @@ class Project:
                 attribs = ["indextts2_voice_file_name", "indextts2_emo_voice_file_name"] 
             case TtsModelInfos.GLM:
                 attribs = ["glm_voice_file_name"] 
+            case TtsModelInfos.MIRA:
+                attribs = ["mira_voice_file_name"] 
         if not attribs:
             return False
         
@@ -740,14 +820,17 @@ class Project:
                 setattr(self, attr_name, attr_value)
 
         # Copy 'internal' files
-        src_files = [PROJECT_TEXT_RAW_FILE_NAME]
-        src_files.append(source_project.chatterbox_voice_file_name)
-        src_files.append(source_project.fish_voice_file_name)
-        src_files.append(source_project.higgs_voice_file_name)
-        src_files.append(source_project.vibevoice_voice_file_name)
-        src_files.append(source_project.indextts2_voice_file_name)
-        src_files.append(source_project.indextts2_emo_voice_file_name)
-        src_files.append(source_project.glm_voice_file_name)        
+        src_files = [
+            PROJECT_TEXT_RAW_FILE_NAME,
+            source_project.chatterbox_voice_file_name,
+            source_project.fish_voice_file_name,
+            source_project.higgs_voice_file_name,
+            source_project.vibevoice_voice_file_name,
+            source_project.indextts2_voice_file_name,
+            source_project.indextts2_emo_voice_file_name,
+            source_project.glm_voice_file_name,
+            source_project.mira_voice_file_name
+        ]                                 
         src_files = [file for file in src_files if file]
 
         for src_file in src_files: 
@@ -761,22 +844,3 @@ class Project:
                 ... # eat
 
         self.save()
-
-# ---
-
-MODEL_TO_VOICE_FILE_ATTRIBS = {
-    "": [""],
-}
-
-            # case TtsModelInfos.CHATTERBOX:
-            #     attribs = ["chatterbox_voice_file_name"] 
-            # case TtsModelInfos.FISH:
-            #     attribs = ["fish_voice_file_name"] 
-            # case TtsModelInfos.HIGGS:
-            #     attribs = ["higgs_voice_file_name"] 
-            # case TtsModelInfos.VIBEVOICE:
-            #     attribs = ["vibevoice_voice_file_name"] 
-            # case TtsModelInfos.INDEXTTS2:
-            #     attribs = ["indextts2_voice_file_name", "indextts2_emo_voice_file_name"] 
-            # case TtsModelInfos.GLM:
-            #     attribs = ["glm_voice_file_name"] 

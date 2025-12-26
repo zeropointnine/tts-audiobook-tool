@@ -17,13 +17,12 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.text_normalizer import TextNormalizer
-from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import HiggsModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import HiggsModelProtocol, MiraProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -33,29 +32,22 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class GenerateUtil:
 
     @staticmethod
-    def generate_to_files(
+    def generate_files(
             project: Project, 
-            phrase_groups: list[PhraseGroup],
             indices_set: set[int],
-            language_code: str,
-            is_regenerate: bool,
             stt_variant: SttVariant,
             stt_config: SttConfig,
-            max_retries: int
+            max_retries: int,
+            batch_size: int,
+            is_regen: bool
     ) -> bool:
         """
         Subroutine for doing a series of audio generations to files
-
-        :param indices_to_generate:
-
-        :param items_to_regenerate:
-            is mutually exclusive to indices_to_generate
-            "Regenerate" here simply means that the currently existing, failed file
-            for the given index will be deleted first.
-
         Prints feedback at end of each item, and summary at end of loop.
-
         Returns True if ended because interrupted.
+
+        :param batch_size:
+            When set to 1, batch mode is disabled
         """
 
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
@@ -64,224 +56,172 @@ class GenerateUtil:
             print_feedback("\nCancelled")
             return True
 
-        num_processed = 0
-        num_saved_ok = 0
-        num_saved_with_fail = 0
-        num_couldnt_save = 0
-        did_interrupt = False
-        saved_elapsed: list[float] = [] # history of end-to-end time taken to create sound files
+        # Make 'items' (tuple = phase group index, retry_count)
+        sorted_indices = sorted(list(indices_set))
+        items: list[tuple[int, int]] = []
+        for i in range(len(sorted_indices)):
+            index = sorted_indices[i]
+            items.append((index, 0))
+
+        num_saved = 0
+        num_failed = 0
+        num_errored = 0
+
         start_time = time.time()
+        saved_elapsed: list[float] = [] # history of end-to-end times taken to create sound files
         saved_start_time = time.time()
 
-        indices = sorted(list(indices_set))
-
-        for i in range(len(indices)):
-            
-            index = indices[i]
-            phrase_group = phrase_groups[index]
- 
-            printt()
-            GenerateUtil.print_item_heading(
-                is_regenerate, phrase_group.presentable_text, index, num_processed, len(indices)
-            )
-
-            result, did_interrupt = GenerateUtil.generate_full_flow(
-                project, phrase_group, index, language_code, stt_variant, stt_config, max_retries=max_retries
-            )
-            match result:
-                case FullFlowResult.SAVED_OK:
-                    num_saved_ok += 1
-                    num_processed += 1
-                case FullFlowResult.SAVED_WITH_FAIL:
-                    num_saved_with_fail += 1
-                    num_processed += 1
-                case FullFlowResult.COULDNT_SAVE:
-                    num_couldnt_save += 1
-                    num_processed += 1
-
-            # Update durations and print ETA info
-            if result != FullFlowResult.NOTHING:                    
-                saved_elapsed.append(time.time() - saved_start_time)
-                saved_start_time = time.time()
-            if not (i == len(indices) - 1):
-                print_eta(saved_elapsed, len(indices) - num_processed)
-
-            if did_interrupt:
-                break
-
-        # Print summary
-        s = "\n"
-        if did_interrupt:
-            s += "Interrupted. "
-        s += f"Elapsed: {duration_string(time.time() - start_time)}\n"
-        s += "\n"
-        ok = str(num_saved_ok)
-        if num_saved_ok == len(indices):
-            ok += " (all)"
-        s += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
-        col = COL_ACCENT if num_saved_with_fail else ""
-        if num_saved_with_fail:
-            s += f"Num lines saved, but flagged with potential errors: {col}{num_saved_with_fail}{COL_DEFAULT}\n"
-        if num_couldnt_save:
-            s += f"Num lines failed to generate: {COL_ERROR}{num_couldnt_save}{COL_DEFAULT}"
-        printt(s)
-
-        return did_interrupt
-
-    @staticmethod
-    def generate_full_flow(
-            project: Project,
-            phrase_group: PhraseGroup,
-            index: int,
-            language_code: str,
-            stt_variant: SttVariant,
-            stt_config: SttConfig,
-            max_retries: int
-    ) -> tuple[FullFlowResult, bool]:
-        """
-        Generates, validates, saves, retries if necessary
-        Returns: FullFlowResult and if user interrupted
-        """
-
         SigIntHandler().set("generating")
-
-        result: FullFlowResult = FullFlowResult.NOTHING
         did_interrupt = False
-        num_attempts = 1 + max_retries
 
-        for attempt in range(num_attempts):
+        # Loop
+        while items:
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True
-
-            if result == FullFlowResult.SAVED_OK or did_interrupt:
                 break
 
-            validation_result = GenerateUtil.generate_and_validate(
-                project=project,
-                phrase_group=phrase_group,
-                index=index,
-                language_code=language_code,
-                stt_variant=stt_variant,
-                stt_config=stt_config,
-                gen_info_path=project.sound_segments_path,
-                is_retry=(attempt > 0),
+            if not items:
+                break
+
+            # Take batch from items
+            batch = items[:batch_size]
+            items = items[batch_size:]
+
+            # Make parallel arrays from 'batch'
+            indices = [item[0] for item in batch]
+            retry_counts = [item[1] for item in batch]
+
+            # Print item info
+            GenerateUtil.print_item_count_heading(
+                num_complete=num_saved + num_failed + num_errored,
+                num_remaining=len(items) + len(batch),
+                num_total=len(sorted_indices)
+            )
+            for index, retry_count in batch:
+                s = f"Item {index+1}" + (f" (retry #{retry_count}): " if retry_count else ": ")
+                s += f"{COL_DIM}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}"
+                printt(s)
+            printt()
+
+            # Generate and validate
+            results = GenerateUtil.generate_and_validate(
+                project=project, 
+                indices=indices, 
+                phrase_groups=project.phrase_groups,
+                stt_variant=stt_variant, stt_config=stt_config,
+                force_random_seed=is_regen or any(count > 0 for count in retry_counts),
                 is_realtime=False
             )
 
-            if isinstance(validation_result, str):
-                if result == FullFlowResult.NOTHING:
-                    result = FullFlowResult.COULDNT_SAVE
-                err = validation_result
-                printt(f"{COL_ERROR}Model fail: {err}")
-                printt()
-                continue
+            # Process and print results
+            re_adds: list[tuple[int, int]] = []
 
-            sound, validation_result = validation_result
+            for i, result in enumerate(results):
 
-            GenerateUtil.print_validation_result(
-                validation_result, 
-                is_last_attempt=(attempt == num_attempts - 1), 
-                is_real_time=False
-            )
+                index = indices[i]
+                new_retry_count = retry_counts[i] + 1
+                message = f"{COL_DEFAULT}Item {index + 1}: "
 
-            did_save = GenerateUtil._do_save_gen(project, phrase_group, index, sound, validation_result)
-            if not did_save:
-                if result == FullFlowResult.NOTHING:
-                    result = FullFlowResult.COULDNT_SAVE
-            else:
-                result = FullFlowResult.SAVED_WITH_FAIL if isinstance(validation_result, FailResult) else FullFlowResult.SAVED_OK
+                if isinstance(result, str):
+                    message += f"{COL_ERROR}Error: {result}"
+                    if new_retry_count > max_retries:
+                        num_errored += 1
+                        message += f"; {COL_ERROR}max retries reached"
+                    else:
+                        re_adds.append((index, new_retry_count))
+                        message += f"; {COL_DEFAULT}will retry"
+                else:
+                    sound, validation_result = result
+
+                    message += f"{validation_result.get_ui_message()}" # ui_message includes color codes
+
+                    if isinstance(validation_result, FailResult):
+                        if new_retry_count > max_retries:
+                            num_failed += 1
+                            message += f"; {COL_ERROR}max retries reached, tagging as failed"
+                        else:
+                            re_adds.append((index, new_retry_count))
+                            message += f"; {COL_DEFAULT}will retry"
+                    else:
+                        num_saved += 1
+
+                    # Save
+                    phrase_group = project.phrase_groups[index]
+                    err, saved_path = GenerateUtil.save_gen(
+                        project, phrase_group, index, sound, validation_result, is_real_time=False
+                    )
+                    if err:
+                        message += f"\n{COL_ERROR}Couldn't save file: {err} {saved_path}"
+                    else:
+                        project.sound_segments.delete_redundants_for(index)
+                        message += f"\n{Ansi.ITALICS}{COL_DIM}{Path(saved_path).name}"
+
+                printt(message)
+            printt()
+
+            if re_adds:
+                # Insert "re_adds" at the head of the list (not bothering with deque fyi)
+                items[:0] = re_adds
+
+        # Print summary
+        s = ""
+        if did_interrupt:
+            s += "Interrupted. "
+        s += f"Elapsed: {duration_string(time.time() - start_time)}\n"
+        ok = str(num_saved)
+        if num_saved == len(sorted_indices):
+            ok += " (all)"
+        s += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
+        col = COL_ACCENT if num_failed else ""
+        if num_failed:
+            s += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
+        if num_errored:
+            s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}"
+        printt(s)
 
         SigIntHandler().clear()
-        return result, did_interrupt
-
-    @staticmethod
-    def _do_save_gen(
-        project: Project,
-        phrase_group: PhraseGroup,
-        index: int,
-        sound: Sound,
-        validation_result: ValidationResult,
-    ) -> bool:
-        """ 
-        Saves, prints save feedback.
-        Returns True on success
-        """
-        err, saved_path = GenerateUtil.save_gen(
-            project, phrase_group, index, sound, validation_result, is_real_time=False
-        )
-        if err:
-            printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
-            return False
-        printt(f"Saved: {saved_path}")
-        project.sound_segments.delete_redundants_for(index)
-        return True
+        return did_interrupt
 
     @staticmethod
     def generate_and_validate(
         project: Project, 
-        phrase_group: PhraseGroup,
-        index: int,
-        language_code: str,
+        indices: list[int],
+        phrase_groups: list[PhraseGroup],
         stt_variant: SttVariant,
         stt_config: SttConfig,
-        is_retry: bool,
+        force_random_seed: bool,
         is_realtime: bool,
-        gen_info_path: str,
         is_skip_reason_buffer: bool=False
-    ) -> tuple[Sound, ValidationResult] | str:
+    ) -> list[ tuple[Sound, ValidationResult] | str ]:
         """
-        Returns generated sound and ValidationResult, or error string
-        """
+        Generates and validates a batch of prompts
+        Prints updates
+        Returns list of sounds etc
 
-        start_time = time.time()
+        :param indices:
+            When length is 1, batch mode is disabled
+        """
         
-        text = phrase_group.as_flattened_phrase().text
-
-        gen_info = GenInfo(gen_info_path, index, phrase_group, language_code=language_code)
+        # Dim print color during any model inference printouts
+        print(f"{COL_DEFAULT}Generating audio...{Ansi.LINE_HOME}{COL_DIM}", end="", flush=True)
 
         # Generate:
-        
-        # Dim color during any model inference printouts
-        print(COL_DIM, end="", flush=True) 
-        
-        result = GenerateUtil.generate(
+        gen_start_time = time.time()
+        gen_results = GenerateUtil.generate(
             project=project, 
-            prompt_text=text, 
-            force_random_seed=is_retry,
-            index=index,
+            indices=indices,
+            phrase_groups=phrase_groups,
+            force_random_seed=force_random_seed,
             is_realtime=is_realtime,
-            gen_info_path=gen_info_path
-        )
+            gen_info_path=project.sound_segments_path
+        )        
+        printt() # Restore print color, print blank line
+        
+        # Print speed info
+        print_speed_info(time.time() - gen_start_time, gen_results)
 
-        # Restore print color, print blank line
-        printt() 
-
-        if isinstance(result, str):
-            err = result
-            if err == NO_VOCALIZABLE_CONTENT:
-                # Special case - return short silence # TODO: refactor this out
-                sr = Tts.get_type().value.sample_rate
-                dtype = Tts.get_type().value.dtype
-                silence_sound = SoundUtil.make_silence_sound(0.1, sr, dtype)
-                if stt_variant == SttVariant.DISABLED or is_skip_reason_buffer:
-                    validation_result = SkippedResult("No vocalizable content")
-                else:
-                    validation_result = PassResult([], 0, 1)
-                gen_info.set_validation_result(validation_result)
-                gen_info.save(is_realtime=is_realtime)
-                return silence_sound, validation_result
-            else:
-                gen_info.set_model_error(err)
-                gen_info.save(is_realtime=is_realtime)
-                return err
-
-        sound = result
-
-        elapsed = time.time() - start_time or 1.0
-        print_speed_info(result.duration, elapsed)
-
-        # Check if should skip transcription
+        # Should skip or not
         skip_reason = ""
         if stt_variant == SttVariant.DISABLED:
             skip_reason = "Whisper disabled"
@@ -289,68 +229,98 @@ class GenerateUtil:
             skip_reason = "Buffer duration too short"
         elif ValidateUtil.is_unsupported_language_code(project.language_code):
             skip_reason = "Unsupported language"
-        if skip_reason:
-            validation_result = SkippedResult(skip_reason)
-            gen_info.set_validation_result(validation_result)
-            gen_info.save(is_realtime=is_realtime)
-            return sound, validation_result
 
-        # Transcribe
-        transcribe_start_time = time.time()
-        result = WhisperUtil.transcribe_to_words(
-            sound, stt_variant, stt_config, language_code=project.language_code
-        )
-        if isinstance(result, str):
-            err = result                
-            gen_info.set_model_error(err)
-            gen_info.save(is_realtime=is_realtime)
-            return err
-        transcribed_words = result
-        gen_info.set_transcript(transcribed_words)
-        printt(f"Transcribed audio ({COL_ACCENT}{(time.time() - transcribe_start_time):.1f}s{COL_DEFAULT})")
+        if not skip_reason:
+            printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets printed over
 
-        # Validate
-        validation_result = ValidateUtil.validate_item(sound, text, transcribed_words, project.language_code)
-        gen_info.set_validation_result(validation_result)
-        gen_info.save(is_realtime=is_realtime, is_retry=is_retry)
+        val_start_time = time.time()
+        results: list[ tuple[Sound, ValidationResult] | str ] = []
 
-        if isinstance(validation_result, TrimmableResult):
-            # TODO: adjust transcribed words based on trim 
-            start_time = validation_result.start_time or 0
-            end_time = validation_result.end_time or sound.duration
-            trimmed_sound = SoundUtil.trim(sound, start_time, end_time)
-            GenInfo.save_sound(gen_info_path, index, "trimmed", trimmed_sound, is_realtime=is_realtime)
-            return trimmed_sound, validation_result
-        else:
-            return sound, validation_result
+        for i, gen_result in enumerate(gen_results):
+
+            index = indices[i]
+
+            if isinstance(gen_result, str):
+                err = gen_result
+                printt(f"Text segment {index+1} - error: {err}")
+                results.append(err)
+                continue
+
+            sound = gen_result
+
+            if skip_reason:
+                validation_result = SkippedResult(skip_reason)
+                results.append((sound, validation_result))
+                continue
+
+            # Transcribe
+            gen_result = WhisperUtil.transcribe_to_words(
+                sound, project.language_code, stt_variant, stt_config
+            )
+            if isinstance(gen_result, str):
+                err = gen_result
+                results.append(err)
+                continue
+            transcribed_words = gen_result
+
+            # Validate
+            text = phrase_groups[ indices[i] ].as_flattened_phrase().text
+            validation_result = ValidateUtil.validate_item(
+                sound, text, transcribed_words, project.language_code, strictness=project.strictness
+            )
+
+            if isinstance(validation_result, TrimmableResult):
+                # TODO: adjust transcribed words based on trim 
+                gen_start_time = validation_result.start_time or 0
+                end_time = validation_result.end_time or sound.duration
+                trimmed_sound = SoundUtil.trim(sound, gen_start_time, end_time)
+                results.append((trimmed_sound, validation_result))
+            else:
+                results.append((sound, validation_result))
+
+        if not skip_reason:
+            message = f"{COL_DEFAULT}Transcribing audio complete: {(time.time() - val_start_time):.1f}s"
+            printt(f"{Ansi.LINE_HOME}{message}")
+            printt()
+
+        return results
 
     @staticmethod
     def generate(
             project: Project,
-            prompt_text: str, 
+            indices: list[int], 
+            phrase_groups: list[PhraseGroup],
             force_random_seed: bool, 
-            index: int, 
             is_realtime: bool,
             gen_info_path: str
-        ) -> Sound | str:
+        ) -> list[Sound | str]:
         """
         Core audio generation function.
-        Returns model-generated sound data (in model's native samplerate) or error string
+        Returns a list of "results" (same length as that of prompt_text), 
+        where each result is either a generated Sound or an error string.
+
+        param indices:
+            Use a one-element list to not generate in batch mode
         """
 
-        prompt_text = TextNormalizer.apply_prompt_word_substitutions(prompt_text, project.word_substitutions, project.language_code)
-        prompt_text = TextNormalizer.normalize_prompt_common(prompt_text, project.language_code)
-        prompt_text = Tts.get_instance().massage_for_inference(prompt_text)
+        if len(indices) == 0:
+            raise ValueError("Indices cannot be empty")
+        if len(indices) > 1 and not Tts.get_type().value.can_batch:
+            raise ValueError("Logic error - Model does not support batching")
 
-        if TextUtil.is_ws_punc(prompt_text):
-            return NO_VOCALIZABLE_CONTENT
+        # Make prompts (parallel list to indices)
+        prompts = []
+        for index in indices:
+            prompt = GenerateUtil.phrase_group_to_prompt(phrase_groups[index], project)
+            prompts.append(prompt)
 
+        # Generate
         match Tts.get_type():
 
             case TtsModelInfos.OUTE:
 
                 result = Tts.get_oute().generate(
-                    prompt_text,
+                    prompts[0],
                     project.oute_voice_json,
                     project.oute_temperature)
 
@@ -360,12 +330,14 @@ class GenerateUtil:
                     voice_path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
                 else:
                     voice_path = ""
+                
                 result = Tts.get_chatterbox().generate(
-                    text=prompt_text,
+                    text=prompts[0],
                     voice_path=voice_path,
                     exaggeration=project.chatterbox_exaggeration,
                     cfg=project.chatterbox_cfg,
                     temperature=project.chatterbox_temperature,
+                    seed=-1 if force_random_seed else project.chatterbox_seed,
                     language_id=project.language_code
                 )
 
@@ -379,7 +351,12 @@ class GenerateUtil:
                     )
                 else:
                     Tts.get_fish().clear_voice_clone()
-                result = Tts.get_fish().generate(prompt_text, project.fish_temperature)
+
+                result = Tts.get_fish().generate(
+                    prompts[0], 
+                    project.fish_temperature,
+                    seed=-1 if force_random_seed else project.fish_seed,
+                )
 
             case TtsModelInfos.HIGGS:
 
@@ -396,7 +373,7 @@ class GenerateUtil:
                 result = Tts.get_higgs().generate(
                     p_voice_path=voice_path, # TODO is this loading every gen?
                     p_voice_transcript=voice_transcript,
-                    text=prompt_text,
+                    text=prompts[0],
                     seed=random.randint(1, sys.maxsize),
                     temperature=temperature
                 )
@@ -408,7 +385,7 @@ class GenerateUtil:
                 num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
                 result = Tts.get_vibevoice().generate(
-                    text=prompt_text,
+                    text=prompts[0],
                     voice_path=voice_path,
                     cfg_scale=cfg_scale,
                     num_steps=num_steps
@@ -424,7 +401,7 @@ class GenerateUtil:
                     emo_voice_path = ""
 
                 result = Tts.get_indextts2().generate(
-                    text=prompt_text,
+                    text=prompts[0],
                     voice_path=voice_path,
                     temperature=project.indextts2_temperature,
                     emo_alpha=project.indextts2_emo_alpha,
@@ -436,46 +413,75 @@ class GenerateUtil:
 
                 voice_path = os.path.join(project.dir_path, project.glm_voice_file_name)
                 voice_transcript = project.glm_voice_transcript
-                if project.glm_seed == -1 or force_random_seed:
-                    seed = random.randint(0,  2**32 - 1)
-                else:
-                    seed = project.glm_seed
+                
                 result = Tts.get_glm().generate(
                     prompt_text=voice_transcript,
                     prompt_speech=voice_path,
-                    syn_text=prompt_text,
-                    seed=seed
+                    syn_text=prompts[0],
+                    seed=-1 if force_random_seed else project.glm_seed
                 )
 
+            case TtsModelInfos.MIRA:
+
+                voice_path = os.path.join(project.dir_path, project.mira_voice_file_name)
+                Tts.get_mira().set_voice_clone(voice_path)
+
+                if project.mira_temperature == -1:
+                    temperature = MiraProtocol.TEMPERATURE_DEFAULT
+                elif project.mira_temperature < MiraProtocol.TEMPERATURE_MIN or project.mira_temperature > MiraProtocol.TEMPERATURE_MAX:
+                    temperature = MiraProtocol.TEMPERATURE_DEFAULT
+                else:
+                    temperature = project.mira_temperature
+                Tts.get_mira().set_temperature(temperature)
+
+                if len(prompts) == 1:
+                    result = Tts.get_mira().generate(prompts[0])
+                else:
+                    result = Tts.get_mira().generate_batch(prompts)
+
             case TtsModelInfos.NONE:
-                return "No active TTS model"
+                result = "No active TTS model"
 
-        if isinstance(result, str):
-            return result
+        # Result is either an error string or n generated Sounds
+        if isinstance(result, str): 
+            return [result for _ in range(len(prompts))] # return n error strings
 
-        sound = result
-        if sound.data.size == 0:
-            return "Model output is empty, discarding"
+        sounds = [result] if isinstance(result, Sound) else result
+        
+        results: list[Sound | str] = []
 
-        num_nans = np.sum(np.isnan(sound.data))
-        if num_nans > 0:
-            return "Model outputted NaN, discarding"
+        for i, sound in enumerate(sounds):
 
-        # Save "raw" output
-        GenInfo.save_sound(gen_info_path, index, "raw", sound, is_realtime=is_realtime)
+            if sound.data.size == 0:
+                result = "Model output is empty, discarding"
+            elif np.sum(np.isnan(sound.data)) > 0:
+                    result = "Model outputted NaN, discarding"
+            else:
+                # Save "raw" output
+                GenInfo.save_sound(gen_info_path, indices[i], "raw", sound, is_realtime=is_realtime)
 
-        # Trim "silence" from ends of audio clip
-        sound = SilenceUtil.trim_silence(sound)
+                # Trim "silence" from ends of audio clip
+                sound = SilenceUtil.trim_silence(sound)
 
-        # Re-check size
-        if sound.data.size == 0:
-            return "Model output is silence, discarding"
+                # Re-check size
+                if sound.data.size == 0:
+                    result = "Model output is silence, discarding"
+                else:
+                    # Do peak normalization
+                    normalized_data = SoundUtil.normalize(sound.data, headroom_db=3.0)
+                    result = Sound(normalized_data, sound.sr)
+            
+            results.append(result)
 
-        # Do peak normalization
-        normalized_data = SoundUtil.normalize(sound.data, headroom_db=3.0)
-        sound = Sound(normalized_data, sound.sr)
+        return results
 
-        return sound
+    @staticmethod
+    def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
+        prompt = phrase_group.as_flattened_phrase().text
+        prompt = TextNormalizer.apply_prompt_word_substitutions(prompt, project.word_substitutions, project.language_code)
+        prompt = TextNormalizer.normalize_prompt_common(prompt, project.language_code)
+        prompt = Tts.get_instance().massage_for_inference(prompt)
+        return prompt
 
     @staticmethod
     def save_gen(
@@ -487,7 +493,7 @@ class GenerateUtil:
         is_real_time: bool
     ) -> tuple[str, str]:
         """
-        Saves "sound segment" and timing info json
+        Saves sound segment and timing info json
         Returns error string (if any), saved file path
         """
         
@@ -503,7 +509,10 @@ class GenerateUtil:
         )
         if isinstance(validation_result, FailResult):
             file_name = AppUtil.insert_bracket_tag_file_path(file_name, "fail")
+        
         dir_path = project.realtime_path if is_real_time else project.sound_segments_path 
+        os.makedirs(dir_path, exist_ok=True)
+
         sound_path = os.path.join(dir_path, file_name)
         err = SoundFileUtil.save_flac(sound, sound_path)
         if err:
@@ -529,55 +538,83 @@ class GenerateUtil:
             except Exception as e:
                 ... # eat silently
 
+        if DEV_SAVE_INTERMEDIATE_FILES and not is_real_time:
+            # Make and save debug json
+            if isinstance(validation_result, TranscriptResult): 
+                d = {}
+                prompt = GenerateUtil.phrase_group_to_prompt(phrase_group, project)
+                source = phrase_group.as_flattened_phrase().text
+                transcript = WhisperUtil.get_flat_text_from_words(validation_result.transcript_words)
+                normalized_source, normalized_transcript = \
+                    TextNormalizer.normalize_source_and_transcript(source, transcript, project.language_code)
+                d["language_code"] = project.language_code
+                d["prompt"] = repr(prompt)
+                d["source"] = repr(source)
+                d["transc"] = repr(transcript)
+                d["normalized_source"] = repr(normalized_source)
+                d["normalized_transc"] = repr(normalized_transcript)
+                d["result_class"] = type(validation_result).__name__
+                d["result_desc"] = strip_ansi( validation_result.get_ui_message() )
+                file_name = SoundSegmentUtil.make_file_name(
+                    index=index,
+                    phrase_group=phrase_group,
+                    project=project,
+                    tts_model_info=Tts.get_type().value,
+                    num_word_fails=num_word_fails,
+                    is_real_time=False,
+                    is_debug_json=True
+                )
+                json_path = os.path.join(dir_path, file_name)
+                json_string = json.dumps(d, indent=4)
+                try:
+                    with open(json_path, 'w', encoding='utf-8') as file:
+                        file.write(json_string)
+                except Exception as e:
+                    ... # eat silently
+
         return "", sound_path
 
     @staticmethod
-    def print_item_heading(is_regenerate: bool, text: str, index: int, count: int, total: int) -> None:
-        verb = "Regenerating" if is_regenerate else "Generating"
-        s  = f"{COL_ACCENT}[{COL_DEFAULT}{count+1}{COL_ACCENT}/{COL_DEFAULT}{total}{COL_ACCENT}] "
-        s += f"{COL_ACCENT}{verb} audio for text segment {COL_DEFAULT}{index+1}{COL_ACCENT}:{COL_DEFAULT}"
-        printt(s)
-        printt(f"{COL_DIM}{Ansi.ITALICS}{text.strip()}")
+    def print_item_count_heading(num_complete: int, num_remaining: int, num_total: int) -> None:
+        message = f"{COL_ACCENT}Items complete: {COL_DEFAULT}{num_complete} "
+        message += f"{COL_ACCENT}Remaining: {COL_DEFAULT}{num_remaining} "
+        message += f"{COL_ACCENT}Total: {COL_DEFAULT}{num_total}"
+        printt(f"{COL_ACCENT}{'-' * 60}")
+        printt(f"{message}")
         printt()
-
-    @staticmethod
-    def print_validation_result(
-        result: ValidationResult, 
-        is_last_attempt: bool,
-        is_real_time: bool,
-        custom_skip_text: str = ""
-    ) -> None:
-
-        s = "Speech-to-text validation: "
-        if isinstance(result, SkippedResult):
-            skip_message = custom_skip_text if custom_skip_text else result.get_ui_message()
-            s += f"Skipped {COL_DIM}({skip_message}){COL_DEFAULT}"
-        elif isinstance(result, PassResult):
-            s += f"{COL_OK}Passed {COL_DIM}(word fails={result.num_word_fails}, threshold={result.word_fail_threshold}){COL_DEFAULT}"
-        elif isinstance(result, TrimmableResult):
-            s += f"{COL_OK}Fixed{COL_DEFAULT} - {result.get_ui_message()}"
-        elif isinstance(result, FailResult):
-            s += f"{COL_ERROR}Failed {COL_DIM}(word fails={result.num_word_fails}, threshold={result.word_fail_threshold}){COL_DEFAULT}\n"
-            if not is_last_attempt:
-                s += f"Will retry"
-            else:
-                s += f"Max attempts reached, "
-                s += "playing anyway" if is_real_time else "continuing to next"
-        printt(s)
 
 # ---
 
-class FullFlowResult(Enum):
-    SAVED_OK = auto(), # a good gen was saved
-    SAVED_WITH_FAIL = auto(), # a FailResult gen was saved
-    COULDNT_SAVE = auto(), # couldn't save due to model error or save error
-    NOTHING = auto() # no gen attempted (user broke out before anything could happen)
+def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
+    
+    # Elapsed
+    message = f"Generating audio complete: {gen_elapsed:.1f}s"
 
-def print_speed_info(sound_duration: float, elapsed: float) -> None:
-    multi = sound_duration / elapsed
-    s = f"Generated audio ({COL_ACCENT}{elapsed:.1f}s{COL_DEFAULT}) duration: {COL_ACCENT}{sound_duration:.1f}s"
-    s += f"{COL_DEFAULT} = {COL_ACCENT}{multi:.2f}x"
-    printt(s)
+    # Cumulative duration, speed
+    num_sounds = 0
+    cum_duration = 0.0
+    for item in gen_results:
+        if isinstance(item, Sound):
+            num_sounds += 1
+            cum_duration += item.duration
+    if num_sounds == len(gen_results):
+        message += f"; sound duration: {cum_duration:.1f}; "
+        gen_elapsed = max(gen_elapsed, 0.1)
+        speed = cum_duration / gen_elapsed
+        speed = min(speed, 100)
+        speed_str = f"{speed:.1f}"
+        if speed < 1.0:
+            speed_str = "0" + speed_str
+        elif speed == 100:
+            speed_str += "+"
+        speed_str += "x"
+        message += f"speed: {speed_str}"
+    
+    print(message)
+    printt()
+    
+    # Inference time: 10.0s; cumulative sound duration: 20.0s; speed: 2.0x
+
 
 def print_eta(saved_elapsed: list[float], num_left) -> None:
 
@@ -614,4 +651,3 @@ def adjust_timed_phrases_trimmed(timed_phrases: list[TimedPhrase], trimmable_res
 
     return results
 
-NO_VOCALIZABLE_CONTENT = "No vocalizable content"

@@ -65,6 +65,7 @@ class ChatterboxProtocol(Protocol):
             exaggeration: float,
             cfg: float,
             temperature: float,
+            seed: int,  
             language_id: str = ""
     ) -> Sound | str:
         ...
@@ -83,7 +84,7 @@ class FishProtocol(Protocol):
     def clear_voice_clone(self) -> None:
         ...
 
-    def generate(self, text: str, temperature: float) -> Sound | str:
+    def generate(self, text: str, temperature: float, seed: int) -> Sound | str:
         ...
 
 class FishModelProtocol(TtsModel, FishProtocol):
@@ -157,8 +158,6 @@ class IndexTts2Protocol(Protocol):
 class IndexTts2ModelProtocol(TtsModel, IndexTts2Protocol):
     ...
 
-# ---
-
 class GlmProtocol(Protocol):
 
     SAMPLE_RATES = [24000, 32000]
@@ -174,3 +173,25 @@ class GlmProtocol(Protocol):
 
 class GlmModelProtocol(TtsModel, GlmProtocol):
     ...
+
+class MiraProtocol(Protocol):
+
+    TEMPERATURE_DEFAULT = 0.7
+    TEMPERATURE_MIN = 0.0
+    TEMPERATURE_MAX = 2.0
+    BATCH_SIZE_DEFAULT = 1 # ie, disabled
+    BATCH_SIZE_MIN = 1
+    BATCH_SIZE_MAX = 20
+
+class MiraModelProtocol(TtsModel, MiraProtocol):
+    def set_voice_clone(self, path: str) -> None:
+        ...
+    def clear_voice_clone(self) -> None:
+        ...
+    def set_temperature(self, temperature: float) -> None:
+        ...
+    def generate(self, prompt: str) -> Sound | str:
+        ...
+    def generate_batch(self, prompts: list[str]) -> list[Sound] | str:
+        ...
+

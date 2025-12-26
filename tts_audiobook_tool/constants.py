@@ -142,14 +142,10 @@ HINT_LINE_BREAKS = Hint(
 
 HINT_REGEN = Hint(
     "regenerate",
-    "About...",
-"""The validation algorithm is tuned to be on the conservative side,
-which means lines tagged as having potential errors usually *do* have errors
-(so long as the text itself is not too unconventional), but it will also 
-miss errors as well.
-
-Some lines tagged with errors may not be easily correctable,
-even after multiple attempts."""
+    "About regenerating segments tagged as failed...",
+"""Some lines tagged as having excessive errors may not be easily correctable --
+even after multiple attempts -- due to the TTS model being unable to render the audio correctly
+or (just as likely) due to the validation algorithm producing false positives for various reasons."""
 )
 
 HINT_REAL_TIME = Hint(
@@ -257,8 +253,7 @@ You could also choose to roll back to a previous commit if you do not care about
 HINT_VALIDATION_UNSUPPORTED_LANGUAGE = Hint(
     "validation_unsupported_language",
     "Transcription validation will be disabled",
-    "Transcription-based validation is unsupported for %1 "
-"and will be automatically disabled."
+    "Transcription validation is unsupported for %1 and will be automatically disabled."
 )
 
 HINT_TRANSCRIPTION = Hint(

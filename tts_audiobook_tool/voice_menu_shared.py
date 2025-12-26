@@ -50,15 +50,8 @@ class VoiceMenuShared:
         """
 
         # Rem, we do not save raw voice sound file for Oute
-        if not tts_type in [
-            TtsModelInfos.CHATTERBOX,
-            TtsModelInfos.FISH,
-            TtsModelInfos.HIGGS,
-            TtsModelInfos.VIBEVOICE,
-            TtsModelInfos.INDEXTTS2,
-            TtsModelInfos.GLM
-        ]:
-            raise ValueError(f"Unsupported tts type {tts_type}")
+        if not tts_type.value.uses_voice_sound_file:
+            raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
         if tts_type.value.requires_voice_transcript:
             Hint.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
@@ -110,7 +103,7 @@ class VoiceMenuShared:
                 else:
                     stt_variant = state.prefs.stt_variant
                 result = WhisperUtil.transcribe_to_words(
-                    sound, stt_variant, state.prefs.stt_config, language_code=state.project.language_code
+                    sound, state.project.language_code, stt_variant, state.prefs.stt_config
                 )
                 if state.prefs.stt_variant == SttVariant.DISABLED:
                     Stt.clear_stt_model()
@@ -125,7 +118,6 @@ class VoiceMenuShared:
                 print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
                 printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
                 printt()
-
 
         file_stem = Path(path).stem
         err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
@@ -174,11 +166,13 @@ class VoiceMenuShared:
         return path
 
     @staticmethod
-    def make_clear_voice_item(state: State, info_item: TtsModelInfos) -> MenuItem:
+    def make_clear_voice_item(state: State, info_item: TtsModelInfos, callback: Callable | None=None) -> MenuItem: # type: ignore
 
         def on_clear_voice(_: State, item: MenuItem) -> None:
             info_item: TtsModelInfos = item.data
             state.project.clear_voice_and_save(info_item, is_secondary=False)
+            if callback:
+                callback()
             print_feedback("Cleared")
 
         return MenuItem("Clear voice clone sample", on_clear_voice, data=info_item)
@@ -248,4 +242,27 @@ class VoiceMenuShared:
         setattr(project, project_attr_name, value)
         project.save()
         print_feedback(success_prefix, value)
+
+    @staticmethod    
+    def ask_seed_and_save(project: Project, seed_attr_name: str) -> None:
         
+        prompt = "Enter static seed value or -1 for random: "
+        value = AskUtil.ask(prompt)
+        if not value:
+            return
+        
+        try:
+            # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
+            value = float(value)
+        except Exception as e:
+            print_feedback("Bad value", is_error=True)
+            return
+        
+        value = int(value)
+        if value < -1 or value > 2**32 - 1:
+            print_feedback("Out of range", is_error=True)
+            return
+
+        setattr(project, seed_attr_name, value)
+        project.save()
+        print_feedback("Seed set to:", value if value > -1 else "random")

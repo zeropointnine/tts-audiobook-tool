@@ -119,15 +119,24 @@ class FishModel(FishModelProtocol):
         self.decode_one_token = None
 
 
-    def generate(self, text: str, temperature: float = -1) -> Sound | str:
+    def generate(
+            self, 
+            text: str, 
+            temperature: float = -1,
+            seed: int = -1
+    ) -> Sound | str:
 
         if temperature == -1:
             temperature = FishModelProtocol.DEFAULT_TEMPERATURE
 
+        if seed == -1:
+            seed = random.randrange(0, 2**32 - 1)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+
         try:
             with torch.no_grad(): # !!important
-
-                start = time.time()
 
                 # Step 1: Prompt tokens
 

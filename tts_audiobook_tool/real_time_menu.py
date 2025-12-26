@@ -89,7 +89,11 @@ class RealTimeMenu:
         def on_custom(_: State, item: MenuItem) -> bool:
             if item.data == "file":
                 phrase_groups, __ = AppUtil.get_phrase_groups_from_ask_text_file(
-                    state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
+                    state.project.max_words, 
+                    state.project.segmentation_strategy, 
+                    pysbd_language=state.project.language_code,
+                    prefs=state.prefs
+                )
             else:
                 phrase_groups, __ = AppUtil.get_text_groups_from_ask_std_in(
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
@@ -138,7 +142,7 @@ def do_start(state: State) -> None:
         print_feedback("No text segments specified")
         return
 
-    err = Tts.validate_language_code(state.project.language_code)
+    err = Tts.check_valid_language_code(state.project.language_code)
     if err:
         print_feedback(err)
         return
@@ -148,7 +152,7 @@ def do_start(state: State) -> None:
         if not b:
             return
 
-    AppUtil.show_inference_hints(state.prefs, state.project)
+    AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
     RealTimeUtil.start(
         state=state,

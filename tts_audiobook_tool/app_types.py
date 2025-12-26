@@ -8,6 +8,7 @@ from typing import NamedTuple, Protocol
 
 from numpy import ndarray
 
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 
 """
@@ -59,9 +60,9 @@ class ConcreteWord(Word):
 @dataclass
 class ValidationResult(ABC):
     """ Base class for a validation result """
-    # dummy: str = ""
     @abstractmethod
     def get_ui_message(self) -> str:
+        """ User-facing description, including color code formatting"""
         return ""
 
 @dataclass
@@ -75,16 +76,15 @@ class PassResult(TranscriptResult):
     word_fail_threshold: int
     transcript_words: list[Word]
     def get_ui_message(self) -> str:
-        return f"Passed validation tests"
+        return f"{COL_DEFAULT}Passed {COL_DIM}(word_fails={COL_DEFAULT}{self.num_word_fails}{COL_DIM}, fail_threshold={self.word_fail_threshold}){COL_DEFAULT}"
 
 @dataclass
 class FailResult(TranscriptResult):
-    message: str
     num_word_fails: int
     word_fail_threshold: int
     transcript_words: list[Word]
     def get_ui_message(self) -> str:
-        return self.message
+        return f"{COL_ERROR}Word fail threshold exceeded {COL_DIM}(word_fails={COL_DEFAULT}{self.num_word_fails}{COL_DIM}, fail_threshold={self.word_fail_threshold})"
 
 @dataclass
 class TrimmableResult(TranscriptResult):
@@ -101,20 +101,20 @@ class TrimmableResult(TranscriptResult):
             raise ValueError("end time must be None or must be greater than zero")
 
     def get_ui_message(self) -> str:
-        s = "Excess words detected at "
+        s = f"{COL_DEFAULT}Excess words detected at "
         if self.start_time and self.end_time:
-            s += f"start and end; will remove 0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end"
+            s += f"start and end; {COL_DIM}will trim 0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end"
         elif self.start_time:
-            s += f"start; will remove 0s to {self.start_time:.2f}s"
+            s += f"start; {COL_DIM}will trim from 0s to {self.start_time:.2f}s"
         else:
-            s += f"end; will remove from {self.end_time:.2f}s to end"
+            s += f"end; {COL_DIM}will trim from {self.end_time:.2f}s to end"
         return s
 
 @dataclass
 class SkippedResult(ValidationResult):
     message: str
     def get_ui_message(self) -> str:
-        return self.message
+        return f"{COL_DIM}Skipped validation: {self.message}"
 
 # ---
 
@@ -213,6 +213,50 @@ class SttConfig(tuple[str, str, str], Enum):
                 return SttConfig.CUDA_FLOAT16
         else:
             return SttConfig.CPU_INT8FLOAT32
+
+class Strictness(tuple[str, int, str], Enum):
+
+    LOW = ("low", 1, "Low") 
+    MODERATE = ("moderate", 2, "Moderate")
+    HIGH = ("high", 3, "High")
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def level(self) -> int:
+        return self.value[1]
+
+    @property
+    def label(self) -> str:
+        return self.value[2]
+
+    @staticmethod
+    def get_by_id(id: str) -> Strictness | None:
+        for item in list(Strictness):
+            if id == item.id:
+                return item
+        return None
+    
+    @staticmethod
+    def get_recommended_default(language_code: str) -> Strictness:
+        if language_code == "en":
+            return Strictness.MODERATE
+        else:
+            return Strictness.LOW
+    
+    @staticmethod
+    def exceeds_recommended_limit(current_strictness: Strictness, language_code: str) -> bool:
+        if language_code != "en":
+            reco_limit = Strictness.LOW
+        else:
+            from tts_audiobook_tool.tts import Tts
+            if Tts.get_type().value.strictness_high_discouraged:
+                reco_limit = Strictness.MODERATE
+            else:
+                reco_limit = Strictness.HIGH
+        return current_strictness.level > reco_limit.level
 
 # ---
 

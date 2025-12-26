@@ -70,14 +70,20 @@ class RealTimeUtil:
             phrase = phrase_group.as_flattened_phrase()
 
             printt()
-            GenerateUtil.print_item_heading(False, phrase.text, index, count, num_items)
+            GenerateUtil.print_item_count_heading(
+                num_complete=index - start_index,
+                num_remaining=end_index + 1 - index,
+                num_total=end_index + 1 - start_index
+            )
+            printt(f"{COL_DIM}{Ansi.ITALICS}{phrase_group.presentable_text}")
+            printt()
 
-            # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 ...
-            has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.prefs.max_retries))
+            # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 x max_retries...
+            has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.project.max_retries))
             
             sound_opt, did_interrupt = RealTimeUtil.generate_full_flow(
-                project, phrase_groups, index, project.language_code, state.prefs.stt_variant, state.prefs.stt_config,
-                has_runway=has_runway, should_save=state.project.realtime_save, max_retries=state.prefs.max_retries
+                project, phrase_groups, index, state.prefs.stt_variant, state.prefs.stt_config,
+                has_runway=has_runway, should_save=state.project.realtime_save, max_retries=state.project.max_retries
             )
             if not sound_opt:
                 printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
@@ -154,7 +160,6 @@ class RealTimeUtil:
             project: Project,
             phrase_groups: list[PhraseGroup],
             index: int,
-            language_code: str,
             stt_variant: SttVariant,
             stt_config: SttConfig,
             has_runway: bool,
@@ -178,28 +183,23 @@ class RealTimeUtil:
 
             gen_result = GenerateUtil.generate_and_validate(
                 project=project,
-                phrase_group=phrase_group,
-                index=index,
-                language_code=language_code,
+                indices=[index],
+                phrase_groups=phrase_groups,
                 stt_variant=stt_variant,
                 stt_config=stt_config,
-                gen_info_path=project.realtime_path,
-                is_retry=(attempt > 0),
+                force_random_seed=(attempt > 0),
                 is_realtime=True,
                 is_skip_reason_buffer=not has_runway
-            )
+            )[0]
 
-            # Print result feedback
+            # Print result info
             if isinstance(gen_result, str):
                 err = gen_result
                 printt(f"{COL_ERROR}Model fail: {err}")
                 printt()
             else:
-                GenerateUtil.print_validation_result(
-                    gen_result[1], 
-                    is_last_attempt=(attempt == num_attempts - 1), 
-                    is_real_time=True
-                )                
+                printt(f"Transcript validation: {gen_result[1].get_ui_message()}")
+                # is_last_attempt=(attempt == num_attempts - 1), 
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True
@@ -217,7 +217,7 @@ class RealTimeUtil:
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
                 else:
-                    printt(f"Saved: {saved_path}")
+                    printt(f"{COL_DIM}Saved: {Path(saved_path).name}")
             result = sound, did_interrupt
 
         SigIntHandler().clear()        

@@ -1,14 +1,15 @@
 import logging
 import os
+import random
 import time
 import torch
 
-from glm_tts.cosyvoice.cli.frontend import TTSFrontEnd, SpeechTokenizer, TextFrontEnd
-from glm_tts.utils import seed_util
-from glm_tts.utils import tts_model_util, yaml_util
+from glm_tts.cosyvoice.cli.frontend import TTSFrontEnd, SpeechTokenizer, TextFrontEnd # type: ignore
+from glm_tts.utils import seed_util # type: ignore
+from glm_tts.utils import tts_model_util, yaml_util # type: ignore
 from transformers import AutoTokenizer, LlamaForCausalLM
-from glm_tts.llm.glmtts import GLMTTS
-from glm_tts.utils.audio import mel_spectrogram
+from glm_tts.llm.glmtts import GLMTTS # type: ignore
+from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
 
 from tts_audiobook_tool.app_types import Sound
@@ -58,7 +59,7 @@ class GlmModel(GlmModelProtocol):
 
         # glm_tts.utils.audio uses global variables ("bad!"),
         # which must be cleared on subsequent instantiations of GlmModel
-        import glm_tts.utils.audio as audio
+        import glm_tts.utils.audio as audio # type: ignore
         audio.mel_basis = {}
         audio.hann_window = {}
 
@@ -88,7 +89,7 @@ class GlmModel(GlmModelProtocol):
         prompt_text: str,
         prompt_speech: str,
         syn_text: str,
-        seed=42
+        seed=-1
     ):
         assert(self.frontend is not None)
         assert(self.text_frontend is not None)
@@ -105,6 +106,9 @@ class GlmModel(GlmModelProtocol):
         flow_prompt_token = torch.tensor(
             cache_speech_token, dtype=torch.int32
         ).to(self.device)
+
+        if seed == -1:
+            seed = random.randrange(0, 2**32 - 1)
 
         # Initialize Cache
         cache = {
@@ -191,7 +195,7 @@ def load_frontends(
         use_phoneme=False
 ):
     
-    import glm_tts.frontend
+    import glm_tts.frontend # type: ignore
     frontend_dir = os.path.dirname(glm_tts.frontend.__file__)
 
     if sample_rate == 32000:
@@ -448,7 +452,7 @@ def load_models(
         llama_path, dtype=torch.float32
     ).to(device) # type: ignore
 
-    llm.llama_embedding = llm.llama.model.embed_tokens
+    llm.llama_embedding = llm.llama.model.embed_tokens # type: ignore
 
     special_token_ids = get_special_token_ids(frontend.tokenize_fn)
     llm.set_runtime_vars(special_token_ids=special_token_ids)

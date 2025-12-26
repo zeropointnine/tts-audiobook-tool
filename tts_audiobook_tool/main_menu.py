@@ -11,6 +11,7 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 
+
 class MainMenu:
     """
     """
@@ -119,6 +120,9 @@ def on_voice(state: State, __) -> None:
         case TtsModelInfos.GLM:
             from tts_audiobook_tool.voice_glm_menu import VoiceGlmMenu
             VoiceGlmMenu.menu(state)
+        case TtsModelInfos.MIRA:
+            from tts_audiobook_tool.voice_mira_menu import VoiceMiraMenu
+            VoiceMiraMenu.menu(state)
 
 # Text
 def make_text_label(state: State) -> str:

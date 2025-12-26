@@ -61,7 +61,19 @@ class TestPhraseSegmenter(unittest.TestCase):
             (
                 "Simple example. Hello. Ends with ellipsis... Item",
                 ["Simple example. ", "Hello. ", "Ends with ellipsis... ", "Item"]
-            )
+            ),
+            (
+                "Dangling word test ... Hello.",
+                ["Dangling word test ... ", "Hello."]
+            ),
+            (
+                "Non-vocalizable word after paragraph.\n* * *\nHello.",
+                ["Non-vocalizable word after paragraph.\n* * *\n", "Hello."]
+            ),
+            (
+                "Non-vocalizable word after paragraph ...\n* * *\nHello.",
+                ["Non-vocalizable word after paragraph ...\n* * *\n", "Hello."]
+            ),
         ]
 
         for inp, answer in items:
