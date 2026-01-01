@@ -325,7 +325,7 @@ Added support for **MiraTTS**, including batch mode. The model is exceptionally 
 
 Added option: `Generate` > `Transcript validation strictness`
 
-Seed option now available for: Chatterbox, Fish, GLM
+Option to control seed value now available for: Chatterbox, Fish, GLM
 
 **2025-12-23**
 

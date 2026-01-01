@@ -113,14 +113,6 @@ HINT_OUTE_CONFIG = Hint(
     "As a reminder, you'll want to review and adjust the settings\nin the file \"config_oute.py\" for optimal performance."
 )
 
-HINT_INDEXTTS2 = Hint(
-    "indextts2",
-    "This appears to be your first time running the application using the IndexTTS2 model",
-"""Consider disabling transcription validation for this model,
-as IndexTTS2 is accurate enough to make this extra step unnecessary.
-(Options > Whisper transcription model > Disabled)"""
-)
-
 HINT_TKINTER = Hint(
     "tkinter",
     "tkinter not installed",
@@ -230,16 +222,8 @@ f"""The installed version of torch is incompatible with faster-whisper CUDA acce
 Either downgrade your version of torch (see README file), or change the Whisper 
 device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
 
-HINT_SEG_MAX_SIZE = Hint("seg", "",
-f"""When text is imported to the project, this dictates the maximum number of
-words for each text segment.
-
-Increasing this value beyond the default of {MAX_WORDS_PER_SEGMENT_DEFAULT} should be done
-with some care and extra testing (Some models may emit more errors or fail).
-The value is saved on a per-model basis.""")
-
 HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE = """The project's source text word count per segment (%1)
-exceeds the application's recommended default ("safe") value (%2) for the current TTS model.
+exceeds the application's recommended range for the current TTS model (%2).
 Make sure this is what you want before generating audio."""
 
 HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(

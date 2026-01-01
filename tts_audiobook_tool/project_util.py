@@ -1,4 +1,3 @@
-import json
 from tts_audiobook_tool.util import make_error_string
 
 

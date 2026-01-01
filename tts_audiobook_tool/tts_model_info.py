@@ -131,12 +131,12 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_default=40,
-        max_words_reco_range=(40, 40),
+        max_words_reco_range=(40, 80),
         uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=True,
         can_batch=False,
-        strictness_high_discouraged=True,
+        strictness_high_discouraged=False,
         semantic_trim_last=False,
         requirements_file_name="requirements-fish.txt",
         ui = {
@@ -238,7 +238,7 @@ class TtsModelInfos(Enum):
         torch_devices = ["cuda"], # cuda-only atm
         sample_rate=24000,
         max_words_default=40,
-        max_words_reco_range=(40, 60),
+        max_words_reco_range=(40, 40),
         uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=True,
@@ -266,7 +266,7 @@ class TtsModelInfos(Enum):
         torch_devices = [], # does not take in a device as a parameters
         sample_rate=48000,
         max_words_default=40,
-        max_words_reco_range=(40, 60),
+        max_words_reco_range=(40, 80),
         uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=False,
@@ -277,8 +277,8 @@ class TtsModelInfos(Enum):
         ui = {
             "proper_name": "MiraTTS",
             "short_name": "Mira",
-            "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_console": "Enter voice clone audio clip file path (recommended up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (recommended up to 15s)"
         },
         substitutions=[
             # semicolon doesn't create caesura, but neither does comma reliably, so
@@ -287,6 +287,13 @@ class TtsModelInfos(Enum):
             # ... "caesura punctuation" seems unpredictable so there's no use replacing characters
         ]
     )
+
+    @staticmethod
+    def recommended_range_string(info: TtsModelInfo) -> str:
+        if info.max_words_reco_range[1] == info.max_words_reco_range[0]:
+            return f"up to {info.max_words_reco_range[1]}"
+        else:
+            return f"{info.max_words_reco_range[0]}-{info.max_words_reco_range[1]}"
 
     @staticmethod
     @cache

@@ -125,10 +125,12 @@ class ProjectMenu:
         # Show over-default-max-words hint
         max_count = state.project.applied_max_words 
         # TODO: Not doing this for now: ... or PhraseGroup.get_max_num_words(state.project.phrase_groups)
-        if max_count > Tts.get_type().value.max_words_default:
+        reco_range: tuple[int, int] = Tts.get_type().value.max_words_reco_range
+        if max_count > reco_range[1]:
             message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
             message = message.replace("%1", str(max_count))
-            message = message.replace("%2", str(Tts.get_type().value.max_words_default))
+            reco_str = TtsModelInfos.recommended_range_string(Tts.get_type().value)
+            message = message.replace("%2", reco_str)
             hint = Hint("", "FYI", message)
             Hint.show_hint(hint, and_prompt=True)
 

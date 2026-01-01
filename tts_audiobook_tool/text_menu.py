@@ -4,6 +4,8 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
@@ -132,9 +134,14 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
 def on_ask_max_size(state: State, _) -> None:
 
-    Hint.show_hint_if_necessary(state.prefs, HINT_SEG_MAX_SIZE)
+    print_heading("Max words per segment")
 
-    prompt = f"Enter max words per segment ({MAX_WORDS_PER_SEGMENT_MIN} <= value <= {MAX_WORDS_PER_SEGMENT_MAX}):"
+    printt("This is the maximum number of words that will be used for a single TTS prompt.")
+    printt("The value is applied at the point text is imported into the project.")
+    printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelInfos.recommended_range_string(Tts.get_type().value)}")
+    printt()
+
+    prompt = f"Enter max words per segment {COL_DIM}(between {MAX_WORDS_PER_SEGMENT_MIN}-{MAX_WORDS_PER_SEGMENT_MAX}){COL_DEFAULT}:"
     AskUtil.ask_number(
         state.project,
         prompt=prompt,

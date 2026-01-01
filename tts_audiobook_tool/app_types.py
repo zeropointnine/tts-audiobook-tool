@@ -71,18 +71,18 @@ class TranscriptResult(ValidationResult, ABC):
     transcript_words: list[Word]
 
 @dataclass
-class PassResult(TranscriptResult):
+class WordErrorResult(TranscriptResult, ABC):
+    """ Base class for a ValidationResult that has a calculated word error count"""
     num_word_fails: int
     word_fail_threshold: int
-    transcript_words: list[Word]
+
+@dataclass
+class PassResult(WordErrorResult):
     def get_ui_message(self) -> str:
         return f"{COL_DEFAULT}Passed {COL_DIM}(word_fails={COL_DEFAULT}{self.num_word_fails}{COL_DIM}, fail_threshold={self.word_fail_threshold}){COL_DEFAULT}"
 
 @dataclass
-class FailResult(TranscriptResult):
-    num_word_fails: int
-    word_fail_threshold: int
-    transcript_words: list[Word]
+class FailResult(WordErrorResult):
     def get_ui_message(self) -> str:
         return f"{COL_ERROR}Word fail threshold exceeded {COL_DIM}(word_fails={COL_DEFAULT}{self.num_word_fails}{COL_DIM}, fail_threshold={self.word_fail_threshold})"
 

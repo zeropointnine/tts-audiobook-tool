@@ -88,8 +88,6 @@ def main() -> None:
 
     if Tts.get_type() == TtsModelInfos.OUTE:
         Hint.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
-    elif Tts.get_type() == TtsModelInfos.INDEXTTS2:
-        Hint.show_hint_if_necessary(temp_prefs, HINT_INDEXTTS2, and_prompt=True)
 
     # Start
     printt()

@@ -37,13 +37,14 @@ class MiraModel(MiraModelProtocol):
         self.mira_tts = None
         self.context_tokens = None
 
-    def set_temperature(self, temperature: float) -> None:
+    def set_params(self, temperature: float, max_new_tokens: int) -> None:
         assert(self.mira_tts is not None)
-        self.mira_tts.set_params(temperature=temperature)
+        self.mira_tts.set_params(temperature=temperature, max_new_tokens=max_new_tokens)
 
     def generate(self, prompt: str) -> Sound | str:
         
-        assert(self.mira_tts is not None)
+        if not self.mira_tts:
+            return "Logic error - model not initialized"
         if not self.context_tokens:
             return "Logic error - voice clone not set"
         

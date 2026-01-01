@@ -7,7 +7,7 @@ import time
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import SkippedResult, Sound, SttConfig, SttVariant, TranscriptResult
+from tts_audiobook_tool.app_types import SkippedResult, Sound, SttConfig, SttVariant, TranscriptResult, WordErrorResult
 from tts_audiobook_tool.app_types import FailResult, TrimmableResult, PassResult, ValidationResult
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
@@ -66,6 +66,7 @@ class GenerateUtil:
         num_saved = 0
         num_failed = 0
         num_errored = 0
+        word_fail_counts: dict[int, int] = {}
 
         start_time = time.time()
         saved_elapsed: list[float] = [] # history of end-to-end times taken to create sound files
@@ -146,6 +147,12 @@ class GenerateUtil:
                     else:
                         num_saved += 1
 
+                    if isinstance(validation_result, WordErrorResult):
+                        fails = validation_result.num_word_fails
+                        if index in word_fail_counts:
+                            fails = min(fails, word_fail_counts[index])
+                        word_fail_counts[index] = fails
+
                     # Save
                     phrase_group = project.phrase_groups[index]
                     err, saved_path = GenerateUtil.save_gen(
@@ -177,7 +184,10 @@ class GenerateUtil:
         if num_failed:
             s += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
-            s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}"
+            s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}"        
+        if DEV:
+            s += f"Num word fails: {sum(word_fail_counts.values())}"
+        s += "\n"
         printt(s)
 
         SigIntHandler().clear()
@@ -432,7 +442,10 @@ class GenerateUtil:
                     temperature = MiraProtocol.TEMPERATURE_DEFAULT
                 else:
                     temperature = project.mira_temperature
-                Tts.get_mira().set_temperature(temperature)
+
+                Tts.get_mira().set_params(
+                    temperature=temperature, max_new_tokens=MiraProtocol.MAX_NEW_TOKENS
+                )
 
                 if len(prompts) == 1:
                     result = Tts.get_mira().generate(prompts[0])
