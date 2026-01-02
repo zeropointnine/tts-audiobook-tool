@@ -15,7 +15,7 @@ The app employs a number of quality control measures designed to mitigate the in
 - Rational segmentation of long text at paragraph/sentence/phrase boundaries, as needed
 - Detection and correction of many inference errors and hallucinations using speech-to-text comparison to the source text
 - Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
-- Industry standard loudness normalization (EBU R 128)
+- Industry standard loudness normalization
 
 Plain-vanilla text interface in the console.
 

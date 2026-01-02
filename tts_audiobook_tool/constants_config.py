@@ -23,14 +23,6 @@ MAX_WORDS_PER_SEGMENT_STT = 40
 
 MENU_CLEARS_SCREEN = False
 
-
-# Offset for whisper word end timestamp being consistently too early
-# The amount varies a lot, usually around 0.15, but is always too early.
-# This is ofc very stt-model-specific
-WHISPER_END_TIME_OFFSET = 0.25
-
-WHISPER_START_TIME_OFFSET = -0.1
-
 PAUSE_DURATION_WORD = 0.1
 PAUSE_DURATION_PHRASE = 0.5
 PAUSE_DURATION_SENTENCE = 0.9

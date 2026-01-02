@@ -298,10 +298,6 @@ def ellipsize(s: str, length: int) -> str:
         s = s[:length - 3] + "..."
     return s
 
-def strip_ansi(text: str) -> str:
-    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
-    return ansi_escape.sub('', text)
-
 def get_package_dir() -> str | None:
     # Get the current package's root directory
     if not __package__:

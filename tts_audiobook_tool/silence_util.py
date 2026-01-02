@@ -7,14 +7,23 @@ from tts_audiobook_tool.sound_util import SoundUtil
 class SilenceUtil:
 
     @staticmethod
-    def trim_silence(sound) -> Sound:
-        a, b = SilenceUtil.get_start_and_end_silence(sound)
-        if not a and not b:
-            return Sound( np.copy(sound.data), sound.sr )
-        a = a or 0
-        b = b or sound.duration
-        result = SoundUtil.trim(sound, a, b)
-        return result
+    def trim_silence(sound, end_only=False) -> tuple[Sound, float, float]:
+        """
+        Returns trimmed Sound and the start and end times of the trim
+        """
+        start, end = SilenceUtil.get_start_and_end_silence(sound)
+        if not start and not end:
+            return Sound( np.copy(sound.data), sound.sr ), 0.0, sound.duration
+        if end_only and not end:
+            return Sound( np.copy(sound.data), sound.sr ), 0.0, sound.duration
+
+        if end_only:
+            start = 0
+        else:
+            start = start or 0
+        end = end or sound.duration
+        result = SoundUtil.trim(sound, start, end)
+        return result, start, end
 
     @staticmethod
     def get_start_and_end_silence(sound: Sound) -> tuple[float | None, float | None]:

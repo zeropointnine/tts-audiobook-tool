@@ -87,6 +87,16 @@ class WhisperUtil:
             words = [word for word in words if word.probability >= min_probability]
             text = WhisperUtil.get_flat_text_from_words(words)
         return text
+    
+    @staticmethod
+    def words_to_json(words: list[Word], include_probability: bool=False) -> list[dict]:
+        results = []
+        for word in words:
+            d = { "start": word.start, "end": word.end, "word": word.word }
+            if include_probability:
+                d["probability"] = word.probability
+            results.append(d)
+        return results
 
     # ---
 

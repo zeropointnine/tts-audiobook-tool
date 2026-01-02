@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import util
+import sys
 from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
@@ -325,6 +326,8 @@ class Tts:
         extra = ""
 
         if Tts.get_type() == TtsModelInfos.CHATTERBOX:        
+            if not 'tts_audiobook_tool.chatterbox_model' in sys.modules:
+                print_init("Initializing...")
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
             if not language_code in ChatterboxModel.supported_languages():
                 is_valid = False

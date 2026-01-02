@@ -2,7 +2,7 @@ from typing import List, Tuple, Optional
 from tts_audiobook_tool.dictionary_en import DictionaryEn
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 
-def count_word_fails(
+def count_word_errors(
         normalized_source: str,
         normalized_transcript: str,
         language_code: str="",
@@ -160,6 +160,6 @@ for source, transcript, answer in list:
     print(source)
     print(transcript)
     print()
-    num_fails = count_word_fails(source, transcript, language_code="en", verbose=False)
+    num_fails = count_word_errors(source, transcript, language_code="en", verbose=False)
     print("num fails", num_fails)
     print()

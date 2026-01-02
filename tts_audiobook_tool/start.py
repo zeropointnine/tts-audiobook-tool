@@ -59,7 +59,7 @@ def main() -> None:
     printt()
 
     if DEV:
-        printt("\n### DEV ###\n")
+        printt(f"{Ansi.CLEAR_SCREEN_AND_SCROLLBACK}### DEV ###\n")
 
     # Hard requirement - FFMPEG 
     if not FfmpegUtil.is_ffmpeg_available():

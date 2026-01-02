@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from tts_audiobook_tool.app_types import FailResult, Sound, SttConfig, SttVariant, ValidationResult
+from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.project import Project
@@ -16,6 +16,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.validation_result import ValidationResult
 
 
 class RealTimeUtil:
@@ -176,7 +177,7 @@ class RealTimeUtil:
         phrase_group = phrase_groups[index]
         did_interrupt = False
 
-        gen_result: tuple[Sound, ValidationResult] | str  = ""
+        gen_result: ValidationResult | str  = ""
         num_attempts = 1 + max_retries if has_runway else 1
         
         for attempt in range(num_attempts):
@@ -198,30 +199,32 @@ class RealTimeUtil:
                 printt(f"{COL_ERROR}Model fail: {err}")
                 printt()
             else:
-                printt(f"Transcript validation: {gen_result[1].get_ui_message()}")
-                # is_last_attempt=(attempt == num_attempts - 1), 
+                printt(f"Transcript validation: {gen_result.get_ui_message()}")
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True
 
-            success = isinstance(gen_result, tuple) and not isinstance(gen_result[1], FailResult)
-            if success or did_interrupt:
+            if did_interrupt:
+                break
+            is_pass = isinstance(gen_result, ValidationResult) and not gen_result.is_fail
+            if is_pass:
                 break
 
-        if isinstance(gen_result, str): # is error
-            result = None, did_interrupt
+        SigIntHandler().clear()        
+
+        if isinstance(gen_result, str): 
+            return None, did_interrupt # is error
         else:
-            sound, validation_result = gen_result
+            validation_result = gen_result
             if should_save:
-                err, saved_path = GenerateUtil.save_gen(project, phrase_group, index, sound, validation_result, is_real_time=True)
+                err, saved_path = GenerateUtil.save_sound_and_timing_json(
+                    project, phrase_group, index, validation_result, is_real_time=True
+                )
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
                 else:
                     printt(f"{COL_DIM}Saved: {Path(saved_path).name}")
-            result = sound, did_interrupt
-
-        SigIntHandler().clear()        
-        return result
+            return validation_result.sound, did_interrupt
 
 # ---
 

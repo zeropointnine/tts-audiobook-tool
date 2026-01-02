@@ -57,67 +57,6 @@ class ConcreteWord(Word):
 
 # ---
 
-@dataclass
-class ValidationResult(ABC):
-    """ Base class for a validation result """
-    @abstractmethod
-    def get_ui_message(self) -> str:
-        """ User-facing description, including color code formatting"""
-        return ""
-
-@dataclass
-class TranscriptResult(ValidationResult, ABC):
-    """ Base class for a ValidationResult that has transcript data """
-    transcript_words: list[Word]
-
-@dataclass
-class WordErrorResult(TranscriptResult, ABC):
-    """ Base class for a ValidationResult that has a calculated word error count"""
-    num_word_fails: int
-    word_fail_threshold: int
-
-@dataclass
-class PassResult(WordErrorResult):
-    def get_ui_message(self) -> str:
-        return f"{COL_DEFAULT}Passed {COL_DIM}(word_fails={COL_DEFAULT}{self.num_word_fails}{COL_DIM}, fail_threshold={self.word_fail_threshold}){COL_DEFAULT}"
-
-@dataclass
-class FailResult(WordErrorResult):
-    def get_ui_message(self) -> str:
-        return f"{COL_ERROR}Word fail threshold exceeded {COL_DIM}(word_fails={COL_DEFAULT}{self.num_word_fails}{COL_DIM}, fail_threshold={self.word_fail_threshold})"
-
-@dataclass
-class TrimmableResult(TranscriptResult):
-    """ The sound can be trimmed at either/both ends to create a valid sound """
-    start_time: float | None
-    end_time: float | None
-    duration: float
-    transcript_words: list[Word]
-
-    def __post_init__(self):
-        if self.start_time is None and self.end_time is None:
-            raise ValueError("start or end must be a float")
-        if self.end_time == 0.0:
-            raise ValueError("end time must be None or must be greater than zero")
-
-    def get_ui_message(self) -> str:
-        s = f"{COL_DEFAULT}Excess words detected at "
-        if self.start_time and self.end_time:
-            s += f"start and end; {COL_DIM}will trim 0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end"
-        elif self.start_time:
-            s += f"start; {COL_DIM}will trim from 0s to {self.start_time:.2f}s"
-        else:
-            s += f"end; {COL_DIM}will trim from {self.end_time:.2f}s to end"
-        return s
-
-@dataclass
-class SkippedResult(ValidationResult):
-    message: str
-    def get_ui_message(self) -> str:
-        return f"{COL_DIM}Skipped validation: {self.message}"
-
-# ---
-
 class NormalizationSpecs(NamedTuple):
     id: str
     label: str

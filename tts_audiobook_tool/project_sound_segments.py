@@ -61,7 +61,7 @@ class ProjectSoundSegments:
         best_sound_segment = None
         best_fails = 9999 + 1
         for item in sound_segments:
-            item_fails = item.num_word_fails if item.num_word_fails != -1 else 9999
+            item_fails = item.num_errors if item.num_errors != -1 else 9999
             if item_fails < best_fails:
                 best_sound_segment = item
                 best_fails = item_fails    
@@ -128,8 +128,10 @@ class ProjectSoundSegments:
             if item != best_item:    
                 path = Path(os.path.join(self.project.sound_segments_path, item.file_name))
                 delete_silently(str(path))
-                # And also timing json if exists
+                # And also timing json and debug json if exists
                 path = path.with_suffix(".json")
+                delete_silently(str(path))
+                path = path.with_suffix(".debug.json")
                 delete_silently(str(path))
                 num_deleted += 1
         return num_deleted

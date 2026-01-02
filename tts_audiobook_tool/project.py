@@ -409,6 +409,7 @@ class Project:
             "chatterbox_temperature": self.chatterbox_temperature,
             "chatterbox_cfg": self.chatterbox_cfg,
             "chatterbox_exaggeration": self.chatterbox_exaggeration,
+            "chatterbox_seed": self.chatterbox_seed,
 
             "fish_voice_file_name": self.fish_voice_file_name,
             "fish_voice_text": self.fish_voice_transcript,

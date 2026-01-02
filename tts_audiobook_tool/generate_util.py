@@ -1,5 +1,4 @@
 from __future__ import annotations
-from enum import Enum, auto
 import os
 import sys
 import random
@@ -7,11 +6,8 @@ import time
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import SkippedResult, Sound, SttConfig, SttVariant, TranscriptResult, WordErrorResult
-from tts_audiobook_tool.app_types import FailResult, TrimmableResult, PassResult, ValidationResult
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
-from tts_audiobook_tool.gen_info import GenInfo
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
@@ -27,6 +23,7 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.validation_result import SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class GenerateUtil:
@@ -66,7 +63,7 @@ class GenerateUtil:
         num_saved = 0
         num_failed = 0
         num_errored = 0
-        word_fail_counts: dict[int, int] = {}
+        word_error_counts: dict[int, int] = {}
 
         start_time = time.time()
         saved_elapsed: list[float] = [] # history of end-to-end times taken to create sound files
@@ -75,7 +72,7 @@ class GenerateUtil:
         SigIntHandler().set("generating")
         did_interrupt = False
 
-        # Loop
+        # Loop items in batch
         while items:
 
             if SigIntHandler().did_interrupt:
@@ -133,11 +130,14 @@ class GenerateUtil:
                         re_adds.append((index, new_retry_count))
                         message += f"; {COL_DEFAULT}will retry"
                 else:
-                    sound, validation_result = result
+                    validation_result = result
 
-                    message += f"{validation_result.get_ui_message()}" # ui_message includes color codes
+                    s = f"{validation_result.get_ui_message()}"
+                    if new_retry_count > 1 and not validation_result.is_fail:
+                        s = s.replace("Passed", f"{COL_OK}Passed {COL_DIM}on retry") # meh
+                    message += s
 
-                    if isinstance(validation_result, FailResult):
+                    if isinstance(validation_result, WordErrorResult) and validation_result.is_fail:
                         if new_retry_count > max_retries:
                             num_failed += 1
                             message += f"; {COL_ERROR}max retries reached, tagging as failed"
@@ -148,15 +148,15 @@ class GenerateUtil:
                         num_saved += 1
 
                     if isinstance(validation_result, WordErrorResult):
-                        fails = validation_result.num_word_fails
-                        if index in word_fail_counts:
-                            fails = min(fails, word_fail_counts[index])
-                        word_fail_counts[index] = fails
+                        fails = validation_result.num_errors
+                        if index in word_error_counts:
+                            fails = min(fails, word_error_counts[index])
+                        word_error_counts[index] = fails
 
                     # Save
                     phrase_group = project.phrase_groups[index]
-                    err, saved_path = GenerateUtil.save_gen(
-                        project, phrase_group, index, sound, validation_result, is_real_time=False
+                    err, saved_path = GenerateUtil.save_sound_and_timing_json(
+                        project, phrase_group, index, validation_result, is_real_time=False
                     )
                     if err:
                         message += f"\n{COL_ERROR}Couldn't save file: {err} {saved_path}"
@@ -186,7 +186,7 @@ class GenerateUtil:
         if num_errored:
             s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}"        
         if DEV:
-            s += f"Num word fails: {sum(word_fail_counts.values())}"
+            s += f"Num word fails: {sum(word_error_counts.values())}"
         s += "\n"
         printt(s)
 
@@ -203,7 +203,7 @@ class GenerateUtil:
         force_random_seed: bool,
         is_realtime: bool,
         is_skip_reason_buffer: bool=False
-    ) -> list[ tuple[Sound, ValidationResult] | str ]:
+    ) -> list[ ValidationResult | str ]:
         """
         Generates and validates a batch of prompts
         Prints updates
@@ -223,8 +223,7 @@ class GenerateUtil:
             indices=indices,
             phrase_groups=phrase_groups,
             force_random_seed=force_random_seed,
-            is_realtime=is_realtime,
-            gen_info_path=project.sound_segments_path
+            is_realtime=is_realtime
         )        
         printt() # Restore print color, print blank line
         
@@ -244,7 +243,7 @@ class GenerateUtil:
             printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets printed over
 
         val_start_time = time.time()
-        results: list[ tuple[Sound, ValidationResult] | str ] = []
+        results: list[ ValidationResult | str ] = []
 
         for i, gen_result in enumerate(gen_results):
 
@@ -259,8 +258,8 @@ class GenerateUtil:
             sound = gen_result
 
             if skip_reason:
-                validation_result = SkippedResult(skip_reason)
-                results.append((sound, validation_result))
+                validation_result = SkippedResult(sound=sound, message=skip_reason)
+                results.append((validation_result))
                 continue
 
             # Transcribe
@@ -275,18 +274,19 @@ class GenerateUtil:
 
             # Validate
             text = phrase_groups[ indices[i] ].as_flattened_phrase().text
-            validation_result = ValidateUtil.validate_item(
+            validation_result = ValidateUtil.make_validation_result(
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
+            results.append(validation_result)
 
-            if isinstance(validation_result, TrimmableResult):
-                # TODO: adjust transcribed words based on trim 
-                gen_start_time = validation_result.start_time or 0
-                end_time = validation_result.end_time or sound.duration
-                trimmed_sound = SoundUtil.trim(sound, gen_start_time, end_time)
-                results.append((trimmed_sound, validation_result))
-            else:
-                results.append((sound, validation_result))
+            if isinstance(validation_result, TrimmedResult):
+                GenerateUtil.save_debug_sound(
+                    project=project,
+                    index=index,
+                    label="trim",
+                    sound=validation_result.sound,
+                    is_realtime=is_realtime
+                )
 
         if not skip_reason:
             message = f"{COL_DEFAULT}Transcribing audio complete: {(time.time() - val_start_time):.1f}s"
@@ -301,13 +301,13 @@ class GenerateUtil:
             indices: list[int], 
             phrase_groups: list[PhraseGroup],
             force_random_seed: bool, 
-            is_realtime: bool,
-            gen_info_path: str
+            is_realtime: bool
         ) -> list[Sound | str]:
         """
         Core audio generation function.
         Returns a list of "results" (same length as that of prompt_text), 
         where each result is either a generated Sound or an error string.
+        The Sound is trimmed for silence and peak-normalized.
 
         param indices:
             Use a one-element list to not generate in batch mode
@@ -471,10 +471,11 @@ class GenerateUtil:
                     result = "Model outputted NaN, discarding"
             else:
                 # Save "raw" output
-                GenInfo.save_sound(gen_info_path, indices[i], "raw", sound, is_realtime=is_realtime)
+                if DEV_SAVE_INTERMEDIATE_FILES:
+                    GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
-                # Trim "silence" from ends of audio clip
-                sound = SilenceUtil.trim_silence(sound)
+                # Trim silence from ends of audio clip
+                sound = SilenceUtil.trim_silence(sound)[0]
 
                 # Re-check size
                 if sound.data.size == 0:
@@ -497,11 +498,10 @@ class GenerateUtil:
         return prompt
 
     @staticmethod
-    def save_gen(
+    def save_sound_and_timing_json(
         project: Project,
         phrase_group: PhraseGroup,
         index: int,
-        sound: Sound,
         validation_result: ValidationResult,
         is_real_time: bool
     ) -> tuple[str, str]:
@@ -511,23 +511,21 @@ class GenerateUtil:
         """
         
         # Save sound
-        num_word_fails = validation_result.num_word_fails if isinstance(validation_result, (PassResult, FailResult)) else -1
+        num_word_errors = validation_result.num_errors if isinstance(validation_result, WordErrorResult) else -1
         file_name = SoundSegmentUtil.make_file_name(
             index=index,
             phrase_group=phrase_group,
             project=project,
+            validation_result=validation_result,
             tts_model_info=Tts.get_type().value,
-            num_word_fails=num_word_fails,
             is_real_time=is_real_time
         )
-        if isinstance(validation_result, FailResult):
-            file_name = AppUtil.insert_bracket_tag_file_path(file_name, "fail")
         
         dir_path = project.realtime_path if is_real_time else project.sound_segments_path 
         os.makedirs(dir_path, exist_ok=True)
 
         sound_path = os.path.join(dir_path, file_name)
-        err = SoundFileUtil.save_flac(sound, sound_path)
+        err = SoundFileUtil.save_flac(validation_result.sound, sound_path)
         if err:
             return err, sound_path
         
@@ -537,9 +535,9 @@ class GenerateUtil:
             timed_phrases = ForceAlignUtil.make_timed_phrases(
                 phrases=phrase_group.phrases,
                 words=validation_result.transcript_words,
-                sound_duration=sound.duration
+                sound_duration=validation_result.sound.duration
             )
-            if isinstance(validation_result, TrimmableResult):
+            if isinstance(validation_result, TrimmedResult):
                 # TODO verify 
                 timed_phrases = adjust_timed_phrases_trimmed(timed_phrases, validation_result)
             json_path = Path(sound_path).with_suffix(".json")
@@ -552,38 +550,7 @@ class GenerateUtil:
                 ... # eat silently
 
         if DEV_SAVE_INTERMEDIATE_FILES and not is_real_time:
-            # Make and save debug json
-            if isinstance(validation_result, TranscriptResult): 
-                d = {}
-                prompt = GenerateUtil.phrase_group_to_prompt(phrase_group, project)
-                source = phrase_group.as_flattened_phrase().text
-                transcript = WhisperUtil.get_flat_text_from_words(validation_result.transcript_words)
-                normalized_source, normalized_transcript = \
-                    TextNormalizer.normalize_source_and_transcript(source, transcript, project.language_code)
-                d["language_code"] = project.language_code
-                d["prompt"] = repr(prompt)
-                d["source"] = repr(source)
-                d["transc"] = repr(transcript)
-                d["normalized_source"] = repr(normalized_source)
-                d["normalized_transc"] = repr(normalized_transcript)
-                d["result_class"] = type(validation_result).__name__
-                d["result_desc"] = strip_ansi( validation_result.get_ui_message() )
-                file_name = SoundSegmentUtil.make_file_name(
-                    index=index,
-                    phrase_group=phrase_group,
-                    project=project,
-                    tts_model_info=Tts.get_type().value,
-                    num_word_fails=num_word_fails,
-                    is_real_time=False,
-                    is_debug_json=True
-                )
-                json_path = os.path.join(dir_path, file_name)
-                json_string = json.dumps(d, indent=4)
-                try:
-                    with open(json_path, 'w', encoding='utf-8') as file:
-                        file.write(json_string)
-                except Exception as e:
-                    ... # eat silently
+            save_debug_json(project, phrase_group, index, validation_result, dir_path)
 
         return "", sound_path
 
@@ -592,9 +559,25 @@ class GenerateUtil:
         message = f"{COL_ACCENT}Items complete: {COL_DEFAULT}{num_complete} "
         message += f"{COL_ACCENT}Remaining: {COL_DEFAULT}{num_remaining} "
         message += f"{COL_ACCENT}Total: {COL_DEFAULT}{num_total}"
-        printt(f"{COL_ACCENT}{'-' * 60}")
+        printt(f"{COL_ACCENT}{'-' * (len(strip_ansi_codes(message)))}")
         printt(f"{message}")
         printt()
+
+    @staticmethod
+    def save_debug_sound(project: Project, index: int, label: str, sound: Sound, is_realtime: bool): 
+        
+        dir_path = project.realtime_path if is_realtime else project.sound_segments_path
+        os.makedirs(dir_path, exist_ok=True)        
+        index_string = str(index + 1).zfill(5)
+        timestamp = SoundSegmentUtil.make_timestamp_string()
+        
+        # Use same start of filename as sound segment files
+        if is_realtime:
+            file_name = f"[{timestamp}] [{index_string}] [{label}].flac"
+        else:
+            file_name = f"[{index_string}] [{timestamp}] [{label}].flac"
+        path = os.path.join(dir_path, file_name)
+        _ = SoundFileUtil.save_flac(sound, path)
 
 # ---
 
@@ -626,9 +609,6 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
     print(message)
     printt()
     
-    # Inference time: 10.0s; cumulative sound duration: 20.0s; speed: 2.0x
-
-
 def print_eta(saved_elapsed: list[float], num_left) -> None:
 
     MIN_SAMPLES = 5
@@ -648,10 +628,10 @@ def print_eta(saved_elapsed: list[float], num_left) -> None:
     eta = num_left * avg
     printt(f"Est. time remaining: {duration_string(eta)}")
 
-def adjust_timed_phrases_trimmed(timed_phrases: list[TimedPhrase], trimmable_result: TrimmableResult) -> list[TimedPhrase]:
+def adjust_timed_phrases_trimmed(timed_phrases: list[TimedPhrase], trimmed_result: TrimmedResult) -> list[TimedPhrase]:
     
-    start_offset = trimmable_result.start_time or 0
-    end_time = trimmable_result.end_time or trimmable_result.duration
+    start_offset = trimmed_result.start_time or 0
+    end_time = trimmed_result.end_time or trimmed_result.sound.duration
     full_duration = end_time - start_offset
     
     results = []
@@ -664,3 +644,49 @@ def adjust_timed_phrases_trimmed(timed_phrases: list[TimedPhrase], trimmable_res
 
     return results
 
+def save_debug_json(
+        project: Project,
+        phrase_group: PhraseGroup,
+        index: int,
+        validation_result: ValidationResult,
+        dir_path: str
+) -> None:
+
+    if not isinstance(validation_result, TranscriptResult): 
+        return
+
+    d = {}
+    prompt = GenerateUtil.phrase_group_to_prompt(phrase_group, project)
+    source = phrase_group.as_flattened_phrase().text
+    transcript = WhisperUtil.get_flat_text_from_words(validation_result.transcript_words)
+    normalized_source, normalized_transcript = \
+        TextNormalizer.normalize_source_and_transcript(source, transcript, project.language_code)
+    d["language_code"] = project.language_code
+    d["index_1b"] = index + 1
+    d["prompt"] = prompt
+    d["source"] = source
+    d["transc"] = transcript
+    d["normalized_source"] = normalized_source
+    d["normalized_transc"] = normalized_transcript
+    d["result_class"] = type(validation_result).__name__
+    d["result_desc"] = strip_ansi_codes( validation_result.get_ui_message() )
+    if isinstance(validation_result, WordErrorResult):
+        d["result_num_errors"] = validation_result.num_errors
+        d["result_threshold"] = validation_result.threshold
+    d["transcript_words"] = WhisperUtil.words_to_json(validation_result.transcript_words)
+    file_name = SoundSegmentUtil.make_file_name(
+        index=index,
+        phrase_group=phrase_group,
+        project=project,
+        validation_result=validation_result,
+        tts_model_info=Tts.get_type().value,
+        is_real_time=False,
+        is_debug_json=True
+    )
+    json_path = os.path.join(dir_path, file_name)
+    json_string = json.dumps(d, indent=4)
+    try:
+        with open(json_path, 'w', encoding='utf-8') as file:
+            file.write(json_string)
+    except Exception as e:
+        ... # eat silently

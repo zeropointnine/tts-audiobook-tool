@@ -33,7 +33,7 @@ class TtsModelInfo(NamedTuple):
     can_batch: bool
     # When True, the "high" setting for strictness is discouraged due to model's poor WER
     strictness_high_discouraged: bool
-    # Should semantic trim return end time stamp if is last word
+    # Should semantic trim at end of last word
     # Doing so is generally redundant and risks unintended partial cropping of end of last word
     # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
     # hallucinate past the end of teh prompt (eg, for Chatterbox)

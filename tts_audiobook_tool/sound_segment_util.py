@@ -8,6 +8,7 @@ from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.validation_result import ValidationResult, WordErrorResult
 
 
 class SoundSegmentUtil:
@@ -61,7 +62,7 @@ class SoundSegmentUtil:
         phrase_group: PhraseGroup,
         project: Project,
         tts_model_info: TtsModelInfo,
-        num_word_fails: int,
+        validation_result: ValidationResult,
         is_real_time: bool,
         suffix=".flac",
         is_debug_json: bool=False
@@ -71,18 +72,24 @@ class SoundSegmentUtil:
         model = tts_model_info.file_tag
         voice = project.get_voice_label()
         text = " " + TextUtil.sanitize_for_filename(phrase_group.presentable_text[:50])
-        fails_tag = f" [{num_word_fails}]" if num_word_fails > -1 else ""
+        
+        if isinstance(validation_result, WordErrorResult):
+            num_fails_tag = f" [{validation_result.num_errors}]" 
+        else:
+            num_fails_tag = ""
+        
+        fail_tag = " [fail]" if validation_result.is_fail else ""
 
         if is_debug_json:
-            text = ""
-            suffix = ".json"
+            suffix = ".debug.json"
 
         if is_real_time:
             timestamp = SoundSegmentUtil.make_timestamp_string()
-            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{fails_tag}{text}{suffix}"
+            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{num_fails_tag}{fail_tag}{text}{suffix}"
         else:
             hash_string = SoundSegmentUtil.calc_segment_hash(index, phrase_group.text)
-            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{fails_tag}{text}{suffix}"
+            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{num_fails_tag}{fail_tag}{text}{suffix}"
+
         return path
         
     @staticmethod
@@ -193,7 +200,7 @@ class SoundSegment(NamedTuple):
     idx: int 
     # Hash of the source text used to generate the sound file
     hash: str
-    num_word_fails: int
+    num_errors: int
     is_fail: bool
     model: str
     voice: str
@@ -232,11 +239,11 @@ class SoundSegment(NamedTuple):
 
         model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
         voice = tags[3] if len(tags) >= 4 else ""
-        num_word_fails = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
+        num_errors = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
         is_fail = ("[fail]" in file_name)
 
         return SoundSegment(
             file_name=file_name, idx=index_0b, hash=hash, is_fail=is_fail, 
-            voice=voice, model=model, num_word_fails=num_word_fails
+            voice=voice, model=model, num_errors=num_errors
         )
 

@@ -1,6 +1,6 @@
 import unittest
 
-from tts_audiobook_tool.transcribe_util import TranscribeUtil
+from tts_audiobook_tool.validate_util import ValidateUtil
 
 class TestTranscribeGranular(unittest.TestCase):
 
@@ -40,7 +40,8 @@ class TestTranscribeGranular(unittest.TestCase):
         ]
 
         for a, b, answer in items:
-            num_fail_words = TranscribeUtil.count_word_failures(a, b, language_code="en", verbose=True)
+            failure_codes = ValidateUtil.get_word_errors(a, b, language_code="en", verbose=True)
+            num_fail_words = len(failure_codes)
             self.assertTrue(num_fail_words == answer)
 
 
