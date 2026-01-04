@@ -255,3 +255,10 @@ HINT_VOICE_TRANSCRIPT = Hint(
 The app will load a text file with the same base file name if it exists.
 Otherwise, the text will be transcribed using Whisper."""
 )
+
+HINT_FORCED_STRICTNESS_LOW = Hint(
+    "",
+    "Note",
+f"""Because the language code is not en, the setting \"Transcript validation strictness\" 
+has been automatically set to \"Low\""""
+)

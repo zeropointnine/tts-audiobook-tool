@@ -253,7 +253,7 @@ def on_language(state: State, __: MenuItem) -> None:
         state.project,
         f"Enter language code:",
         "language_code",
-        "Language set to:",
+        "Project language code set to:",
         validator=validator
     )
 
@@ -262,8 +262,7 @@ def on_language(state: State, __: MenuItem) -> None:
         if not ValidateUtil.is_unsupported_language_code(state.project.language_code):
             state.project.strictness = Strictness.LOW
             state.project.save()
-            printt(FORCED_STRICTNESS_LOW_DESC)
-            AskUtil.ask_enter_to_continue()
+            Hint.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)
 
 
 LANGUAGE_CODE_DESC = "" + \
@@ -288,9 +287,4 @@ f"""Enter substitutions list. Use this format:
 UNCOMMON_WORDS_DESC = \
 f"""Most frequent words in the project text not found 
 in the app's English \"common words\" dictionary.
-"""
-
-FORCED_STRICTNESS_LOW_DESC = \
-f"""{COL_ACCENT}Note: {COL_DEFAULT}Because the language code is not en, the setting \"Transcript validation strictness\" 
-has been automatically set to \"Low\"
 """

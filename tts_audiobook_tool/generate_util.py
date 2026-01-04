@@ -184,10 +184,9 @@ class GenerateUtil:
         if num_failed:
             s += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
-            s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}"        
+            s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
-            s += f"Num word fails: {sum(word_error_counts.values())}"
-        s += "\n"
+            s += f"Num word fails: {sum(word_error_counts.values())}\n"
         printt(s)
 
         SigIntHandler().clear()

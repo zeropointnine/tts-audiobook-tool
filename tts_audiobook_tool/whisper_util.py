@@ -35,6 +35,10 @@ class WhisperUtil:
         Stt.set_variant(stt_variant)
         Stt.set_config(stt_config)
 
+        if language_code not in Stt.get_whisper().supported_languages:
+            # Silently remove language code rather than triggering an exception
+            language_code = ""
+
         try:
             segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
         except Exception as e:
@@ -107,3 +111,4 @@ class WhisperUtil:
         data = np.clip(data, -1.0, 1.0)
         data = librosa.resample(data, orig_sr=sound.sr, target_sr=WHISPER_SAMPLERATE)
         return Sound(data, WHISPER_SAMPLERATE)
+    

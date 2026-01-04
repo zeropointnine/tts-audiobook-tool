@@ -48,12 +48,12 @@ class Tts:
                 tts_type = item
         if num_models == 0:
             s = "None of the supported TTS models are currently installed.\n"
-            s = "Make sure your virtual environment is activated.\n"
+            s += "Make sure your virtual environment is activated.\n"
             s += "Otherwise, follow the install instructions in the project repo's README."
             return s
         elif num_models > 1:
             s = "More than one of the supported TTS model libraries is currently installed.\n"
-            s = "This is not recommended.\n"
+            s += "This is not recommended.\n"
             s += "Please re-install python environment, following the instructions in the project repo's README."
             return s
 
@@ -340,7 +340,7 @@ class Tts:
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
             if not project.language_code in ChatterboxModel.supported_languages_multi():
                 is_valid = False
-                extra = f"Chatterbox requires one of the following: {ChatterboxModel.supported_languages_multi()}\n"
+                extra = f"Chatterbox-Multilingual requires one of the following: {ChatterboxModel.supported_languages_multi()}\n"
         
         if is_valid:
             return ""
