@@ -1,8 +1,8 @@
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_model import ChatterboxProtocol
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model import ChatterboxProtocol, ChatterboxType
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -63,25 +63,48 @@ class VoiceChatterboxMenu:
             )
 
         def make_items(_: State) -> list[MenuItem]:
-            items = [
+
+            seed_value = str(state.project.chatterbox_seed) if state.project.chatterbox_seed != -1 else "random"
+
+            items = []
+            items.append(
                 MenuItem(
                     VoiceMenuShared.make_select_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
-                )
-            ]
+            ))
             if state.project.chatterbox_voice_file_name:
                 items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) )
-
-            seed_value = str(state.project.chatterbox_seed) if state.project.chatterbox_seed != -1 else "random"
-            items.extend( [
-                MenuItem(make_temperature_label, on_temperature),
-                MenuItem(make_exagg_label, on_exagg),
-                MenuItem(make_cfg_label, on_cfg),
+            items.append( MenuItem(make_type_label, lambda _, __: ask_type(state)) )
+            items.append( MenuItem(make_temperature_label, on_temperature) )
+            items.append( MenuItem(make_exagg_label, on_exagg) )
+            items.append( MenuItem(make_cfg_label, on_cfg) )
+            items.append( 
                 MenuItem(
                     make_menu_label("Seed", seed_value), 
                     lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "chatterbox_seed")   
-                )
-            ])
+            ))
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)
+
+def make_type_label(state: State) -> str:
+    return make_menu_label("Chatterbox model", state.project.chatterbox_type.label)
+
+def ask_type(state: State) -> None:
+
+    def on_select(value: ChatterboxType) -> None:
+        state.project.chatterbox_type = value
+        state.project.save()
+        # Sync static value
+        Tts.set_model_params_using_project(state.project) 
+        print_feedback("Model set to:", state.project.chatterbox_type.label)
+
+    MenuUtil.options_menu(
+        state=state,
+        heading_text="Chatterbox model",
+        labels=[item.label for item in list(ChatterboxType)],
+        values=[item for item in list(ChatterboxType)],
+        current_value=state.project.chatterbox_type,
+        default_value=list(ChatterboxType)[0],
+        on_select=on_select
+    )

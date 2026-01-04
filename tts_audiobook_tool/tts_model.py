@@ -1,4 +1,6 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Protocol
 
 from tts_audiobook_tool.app_types import Sound
@@ -72,6 +74,29 @@ class ChatterboxProtocol(Protocol):
 
 class ChatterboxModelProtocol(TtsModel, ChatterboxProtocol):
         ...
+
+class ChatterboxType(tuple[str, str, str], Enum):
+    MULTILINGUAL = "multilingual", "Chatterbox-Multilingual", "Supports multiple languages"
+    TURBO = "turbo", "Chatterbox-Turbo", "Distilled, en only"
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def label(self) -> str:
+        return self.value[1]
+    
+    @property
+    def description(self) -> str:
+        return self.value[2]
+
+    @staticmethod
+    def get_by_id(id: str) -> ChatterboxType | None:
+        for item in list(ChatterboxType):
+            if id == item.id:
+                return item
+        return None
 
 
 class FishProtocol(Protocol):

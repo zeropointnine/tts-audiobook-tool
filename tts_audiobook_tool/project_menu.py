@@ -8,6 +8,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model import ChatterboxType
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -227,9 +228,9 @@ def on_language(state: State, __: MenuItem) -> None:
     print_heading("Language code")
     printt(LANGUAGE_CODE_DESC)
     printt()
-    if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+    if Tts.get_type() == TtsModelInfos.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
         from tts_audiobook_tool.chatterbox_model import ChatterboxModel
-        printt(f"Valid values for the Chatterbox model are: {ChatterboxModel.supported_languages()}")
+        printt(f"Valid values for Chatterbox-Multilingual are: {ChatterboxModel.supported_languages_multi()}")
         printt()
 
     def validator(code: str) -> str:

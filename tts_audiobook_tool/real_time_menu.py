@@ -142,7 +142,7 @@ def do_start(state: State) -> None:
         print_feedback("No text segments specified")
         return
 
-    err = Tts.check_valid_language_code(state.project.language_code)
+    err = Tts.check_valid_language_code(state.project)
     if err:
         print_feedback(err)
         return

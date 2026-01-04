@@ -18,7 +18,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import HiggsModelProtocol, MiraProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxType, HiggsModelProtocol, MiraProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -340,6 +340,11 @@ class GenerateUtil:
                     voice_path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
                 else:
                     voice_path = ""
+
+                if project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+                    language_id = project.language_code 
+                else:
+                    language_id = ""
                 
                 result = Tts.get_chatterbox().generate(
                     text=prompts[0],
@@ -348,7 +353,7 @@ class GenerateUtil:
                     cfg=project.chatterbox_cfg,
                     temperature=project.chatterbox_temperature,
                     seed=-1 if force_random_seed else project.chatterbox_seed,
-                    language_id=project.language_code
+                    language_id=language_id
                 )
 
             case TtsModelInfos.FISH:

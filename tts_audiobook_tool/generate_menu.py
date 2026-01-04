@@ -169,7 +169,7 @@ def ask_batch_size_mira(state: State) -> None:
 def do_generate(state: State, is_regen: bool) -> None:
 
     # Check for valid language code
-    err = Tts.check_valid_language_code(state.project.language_code)
+    err = Tts.check_valid_language_code(state.project)
     if err:
         print_feedback(err)
         return

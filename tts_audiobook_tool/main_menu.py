@@ -70,7 +70,12 @@ class MainMenu:
             )
             return items
 
-        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{Tts.get_type().value.ui['proper_name']}{COL_DIM})"
+        if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+            model_name = state.project.chatterbox_type.label
+        else:
+            model_name = Tts.get_type().value.ui['proper_name']
+        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"
+        
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True)
 
 # ---

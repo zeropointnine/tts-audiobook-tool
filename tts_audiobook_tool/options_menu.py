@@ -37,7 +37,7 @@ class OptionsMenu:
         def item_maker(_: State) -> list[MenuItem]:
             items = [
                 MenuItem(
-                    lambda _: make_menu_label("Whisper model type", state.prefs.stt_variant.id),
+                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id),
                     lambda _, __: OptionsMenu.stt_model_menu(state)
                 ),
                 MenuItem(

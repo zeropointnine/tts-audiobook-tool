@@ -7,7 +7,7 @@ This is a generative-AI audiobook creation tool that supports a growing list of 
 - [VibeVoice 1.5B](https://github.com/microsoft/VibeVoice)
 - [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
 - [Fish OpenAudio S1-mini](https://github.com/fishaudio/fish-speech)
-- [Chatterbox-Multilingual](https://github.com/resemble-ai/chatterbox)
+- [Chatterbox (Multilingual and Turbo)](https://github.com/resemble-ai/chatterbox)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 
 The app employs a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
@@ -235,17 +235,6 @@ Install dependencies:
 
     pip install -r requirements-chatterbox.txt
 
- ⚠️ **Installation Workaround**
-
-If you encounter dependency conflicts or build errors during installation, please follow these steps to manually resolve them:
-
-    pip install numpy setuptools wheel Cython
-    pip install pkuseg==0.0.25 --no-build-isolation
-
-After these two commands complete successfully, re-installing the requirements should work:
-
-    pip install -r requirements-chatterbox.txt
-
 
 ## Install for Oute TTS:
 
@@ -284,17 +273,26 @@ Use `Backend.LLAMACPP`.
 
 The app saves its state between sessions, so you can interrupt the program at any time and resume later (important due to how long generating a full-length novel can take).
 
-Additionally, setting chapter cut points can be useful to generate and export a long work in  manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
+Additionally, setting chapter cut points can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
 
 Note too that it's possible to utilize different voices and even different models while generating the audio segments for a given project.
 
 ### Voice cloning
 
-When prepping reference audio for voice cloning, it's worthwhile to prepare three or so different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality and characteristics of each voice clone from the same source can vary quite a bit (as well as the word error rate).
+When prepping reference audio for voice cloning, it's worthwhile to prepare three or so different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate of each sample from the same source can vary quite a bit.
+
+### VRAM considerations
+
+Ideally, the app wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you get out of memory errors, try one of the following:
+
+- Choose the Whisper turbo model (saves about 1 GB of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
+- Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
+- Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
+
 
 ### Inference speeds, expectations
 
-These are my anecdotal TTS inference speeds (note though that CUDA inference speeds on Linux can be *appreciably* faster than on Windows). The app adopts each respective model's reference inference implementation logic as much as possible.
+These are my anecdotal TTS inference speeds (note that CUDA inference speeds on Linux can be *appreciably* faster than on Windows). The app adopts each respective model's reference inference implementation logic as much as possible.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
@@ -310,14 +308,21 @@ These are my anecdotal TTS inference speeds (note though that CUDA inference spe
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
 | Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
-| Chatterbox              | GTX 4090, Windows    | ~190% realtime  | best non-en/zh multilanguage capabilities
+| Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | best multilanguage capabilities
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
+| Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | (using `outetts.Backend.EXL2`)
 |                         | Macbook Pro M1 (MPS) | 20-25% realtime | (using `outetts.Backend.LLAMACPP`)
 
 
 # Update highlights
+
+**2025-01-04**
+
+Added support for **Chatterbox-Turbo**.
+
+Improved logic for trimming audio generations with spurious words and noises at the beginning or end (important for Chatterbox).
 
 **2025-12-31**
 

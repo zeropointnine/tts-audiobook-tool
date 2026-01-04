@@ -21,6 +21,7 @@ if err:
 
 from tts_audiobook_tool.hint import Hint
 from importlib import util
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 
 NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
 
@@ -38,13 +39,26 @@ if not_found:
     Hint.print_hint(hint)
     exit(1)
 
+# Chatterbox updated version
+if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+    if not util.find_spec("chatterbox.tts_turbo"): 
+        hint = Hint(
+            "none",
+            "The app's dependencies have changed",
+            f"Updated Chatterbox Turbo support requires the latest version of the Chatterbox library.\n"
+            "Please update your virtual environment by re-running:\n"
+            f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
+        )
+        Hint.print_hint(hint)
+        exit(1)
+
 # --------------------------------------------------------------------------------------------------
 import sys
 from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 
 def main() -> None:
 

@@ -16,7 +16,7 @@ from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.tts_model import GlmProtocol, IndexTts2Protocol, MiraProtocol
+from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -58,6 +58,7 @@ class Project:
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
     oute_temperature: float = -1
 
+    chatterbox_type: ChatterboxType = list(ChatterboxType)[0]
     chatterbox_voice_file_name: str = ""
     chatterbox_temperature: float = -1
     chatterbox_cfg: float = -1
@@ -139,7 +140,7 @@ class Project:
 
         warnings: list[str] = []
         def add_warning(attr_name: str, defaulting_to: Any):
-            s = f"Warning: Bad or missing value for {attr_name}, setting to default {defaulting_to}"
+            s = f"Warning: Missing or bad value for {attr_name}, setting to default: {defaulting_to}"
             warnings.append(s)
 
         # Text
@@ -297,10 +298,20 @@ class Project:
         # TODO: need validation logic for each of these properties (especially file-related ones)
 
         # Chatterbox
+        s = d.get("chatterbox_type", "")
+        chatterbox_type = ChatterboxType.get_by_id(s)
+        if not chatterbox_type:
+            chatterbox_type = list(ChatterboxType)[0]
+            # Don't show warning if current model is not chatterbox
+            if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+                add_warning("chatterbox_type", chatterbox_type.id)
+        project.chatterbox_type = chatterbox_type
+
         project.chatterbox_voice_file_name = d.get("chatterbox_voice_file_name", "")
         project.chatterbox_temperature = d.get("chatterbox_temperature", -1)
         project.chatterbox_cfg = d.get("chatterbox_cfg", -1)
         project.chatterbox_exaggeration = d.get("chatterbox_exaggeration", -1)
+        
         project.chatterbox_seed = d.get("chatterbox_seed", -1)
         if not (-1 <= project.chatterbox_seed <= 2**32 - 1):
             add_warning("chatterbox_seed", -1)
@@ -405,6 +416,7 @@ class Project:
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
 
+            "chatterbox_type": self.chatterbox_type.id,
             "chatterbox_voice_file_name": self.chatterbox_voice_file_name,
             "chatterbox_temperature": self.chatterbox_temperature,
             "chatterbox_cfg": self.chatterbox_cfg,

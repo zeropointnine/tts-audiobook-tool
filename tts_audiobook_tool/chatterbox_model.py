@@ -3,12 +3,13 @@ import numpy as np
 import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
+from chatterbox.tts_turbo import ChatterboxTurboTTS
 
 import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import make_error_string
 
@@ -18,11 +19,17 @@ class ChatterboxModel(ChatterboxModelProtocol):
     Chatterbox inference logic
     """
 
-    def __init__(self, device: str):
+    def __init__(self, model_type: ChatterboxType, device: str):
         super().__init__(info=TtsModelInfos.CHATTERBOX.value)
         self._device = device
         device_obj = torch.device(self._device)
-        self._chatterbox = ChatterboxMultilingualTTS.from_pretrained(device=device_obj)
+        self._model_type = model_type
+
+        match self._model_type:
+            case ChatterboxType.MULTILINGUAL:
+                self._chatterbox = ChatterboxMultilingualTTS.from_pretrained(device=device_obj)
+            case ChatterboxType.TURBO:
+                self._chatterbox = ChatterboxTurboTTS.from_pretrained(device=device_obj)
 
     def kill(self) -> None:
         self._chatterbox = None # type: ignore
@@ -39,9 +46,11 @@ class ChatterboxModel(ChatterboxModelProtocol):
     ) -> Sound | str:
 
         if self._chatterbox is None:
-            return "Model is not initialized."
+            return "Logic error: Model is not initialized"
+        if language_id and self._model_type == ChatterboxType.TURBO:
+            return "Logic error: language_id is not supported for Chatterbox Turbo"
         
-        if seed < 0:
+        if seed <= -1:
             seed = random.randrange(0, 2**32 - 1)
         self.set_seed(seed)
 
@@ -74,5 +83,5 @@ class ChatterboxModel(ChatterboxModelProtocol):
         np.random.seed(seed)
 
     @staticmethod
-    def supported_languages() -> list[str]:
+    def supported_languages_multi() -> list[str]:
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)

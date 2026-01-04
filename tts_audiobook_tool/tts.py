@@ -8,7 +8,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -66,6 +66,20 @@ class Tts:
         return Tts._type
 
     @staticmethod
+    def set_model_params_using_project(project) -> None:
+
+        from tts_audiobook_tool.project import Project
+        assert(isinstance(project, Project))
+
+        model_params = { }
+        model_params["chatterbox_type"] = project.chatterbox_type
+        model_params["vibevoice_model_path"] = project.vibevoice_model_path
+        model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
+        model_params["glm_sr"] = project.glm_sr
+
+        Tts.set_model_params(model_params)
+
+    @staticmethod
     def set_model_params(new_params: dict) -> None:
         """
         Sets any customizable values required for the instantiation of the the TTS model
@@ -75,24 +89,12 @@ class Tts:
         Tts._model_params = new_params
 
         dirty = False
+        dirty |= new_params.get("chatterbox_type", "") != old_params.get("chatterbox_type", "")
         dirty |= new_params.get("vibevoice_model_path", "") != old_params.get("vibevoice_model_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
         if dirty:
             Tts.clear_tts_model()
-
-    @staticmethod
-    def set_model_params_using_project(project) -> None:
-
-        from tts_audiobook_tool.project import Project
-        assert(isinstance(project, Project))
-
-        model_params = { }
-        model_params["vibevoice_model_path"] = project.vibevoice_model_path
-        model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
-        model_params["glm_sr"] = project.glm_sr
-
-        Tts.set_model_params(model_params)
 
     @staticmethod
     def set_force_cpu(value: bool) -> None:
@@ -207,10 +209,13 @@ class Tts:
     @staticmethod
     def get_chatterbox() -> ChatterboxModelProtocol:
         if not Tts._chatterbox:
+            typ = Tts._model_params.get("chatterbox_type")
+            assert isinstance(typ, ChatterboxType), "chatterbox_type not set"
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(device)
+            s = f"{typ.label}, {device}"            
+            print_model_init(s)
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
-            Tts._chatterbox = ChatterboxModel(device)
+            Tts._chatterbox = ChatterboxModel(typ, device)
         return Tts._chatterbox
 
     @staticmethod
@@ -320,23 +325,27 @@ class Tts:
         return intersection[0] if intersection else ""
     
     @staticmethod
-    def check_valid_language_code(language_code: str) -> str:
+    def check_valid_language_code(project) -> str:
         """ Returns error string if current TTS model does not support given language code """
+
+        from tts_audiobook_tool.project import Project
+        assert(isinstance(project, Project))
+
         is_valid = True
         extra = ""
 
-        if Tts.get_type() == TtsModelInfos.CHATTERBOX:        
+        if Tts.get_type() == TtsModelInfos.CHATTERBOX and project.chatterbox_type == ChatterboxType.MULTILINGUAL: 
             if not 'tts_audiobook_tool.chatterbox_model' in sys.modules:
                 print_init("Initializing...")
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
-            if not language_code in ChatterboxModel.supported_languages():
+            if not project.language_code in ChatterboxModel.supported_languages_multi():
                 is_valid = False
-                extra = f"Chatterbox requires one of the following: {ChatterboxModel.supported_languages()}\n"
+                extra = f"Chatterbox requires one of the following: {ChatterboxModel.supported_languages_multi()}\n"
         
         if is_valid:
             return ""
         
-        err = f"{COL_ERROR}Invalid language code\n{COL_DEFAULT}" + \
+        err = f"{COL_ERROR}Invalid language code for the current TTS model configuration\n{COL_DEFAULT}" + \
                 "Navigate to `Project > Language code` to change it"
         if extra:
             err += "\n\n" + extra
