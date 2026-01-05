@@ -318,6 +318,10 @@ These are my anecdotal TTS inference speeds (note that CUDA inference speeds on 
 
 # Update highlights
 
+**2025-01-05**
+
+Added option to **add chapter cut points using regular expressions** (thanks @AntitrustEnthusiast).
+
 **2025-01-04**
 
 Added support for **Chatterbox-Turbo**.
@@ -334,7 +338,7 @@ Option to control seed value now available for: Chatterbox, Fish, GLM
 
 **2025-12-23**
 
-Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce (eg, "yigg-drasill" (or something...) for "Yggdrasil"). Requires some experimentation, as you might imagine. 
+Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce. Requires some experimentation, as you might imagine. 
 
 Relatedly, added: `Project` > `Word substitutions` > `Inspect project text for uncommon words`.
 
