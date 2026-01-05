@@ -6,8 +6,8 @@ from tts_audiobook_tool.sound_util import SoundUtil
 
 # Test "find_local_minima()"
 
-file_path = r"C:\w\test2\segments\1754696921083 after gen.flac"
-target_timestamp = 2.18
+file_path = "/home/lee/Documents/w/w/succession/segments-test/[00692] [01767548142799] [raw].flac"
+target_timestamp = 3.18 + 0.2
 
 sound_or_error = SoundFileUtil.load(file_path)
 if not isinstance(sound_or_error, Sound):

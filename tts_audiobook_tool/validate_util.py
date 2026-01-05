@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.dictionary_en import DictionaryEn
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
@@ -38,14 +39,13 @@ class ValidateUtil:
 
         trimmed_result = ValidateUtil.make_trimmed_result(word_error_result, source, transcript_words, language_code)
         
+        # TODO: Disabled. Too unreliable. No good workarounds.
+        # if trimmed_result and Tts.get_type().value.semantic_trim_last:            
+        #    trimmed_result = ValidateUtil.make_trimmed_result_end_only(trimmed_result)
+
         if trimmed_result:
-
-            if Tts.get_type().value.semantic_trim_last:            
-                trimmed_result = ValidateUtil.make_trimmed_result_end_only(trimmed_result)
-
             delta = word_error_result.sound.duration - trimmed_result.sound.duration
             if delta <= 0.1:
-                # Didn't hardly trim shit, ignore
                 trimmed_result = None
 
         return trimmed_result if trimmed_result else word_error_result
@@ -121,16 +121,16 @@ class ValidateUtil:
         return None
 
     @staticmethod
-    def make_trimmed_result_end_only(trimmed_result: TrimmedResult) -> TrimmedResult:
+    def make_trimmed_result_end_only(trimmed_result: TrimmedResult) -> TrimmedResult | None:
         """
         Trims sound from the end of the sound, based on the end time of the last word in the transcript.
 
         Due to Whisper word time imprecision, should only be applied to TTS output that exhibits frequent
-        post-prompt hallucinations (ie, Chatterbox).
+        "appended" hallucinations (ie, Chatterbox).
         """
         
-        # Whisper end time is oftentimes/usually off by about 200ms, give or take
-        # Being extra-conservative here though
+        # Whisper word end time is usually 200+ ms too soon, and sometimes much more than that
+        # Trying to be extra-conservative here
         OFFSET = 0.3
 
         sound = trimmed_result.sound
@@ -139,10 +139,15 @@ class ValidateUtil:
         end += OFFSET
         if end + 0.1 >= sound.duration:
             return trimmed_result
+        
         end = SoundUtil.get_local_minima(sound, end)
 
         new_sound = SoundUtil.trim(sound, 0, end)
         new_sound = SilenceUtil.trim_silence(new_sound, end_only=True)[0]
+
+        # Even after adding 'offset' above, we may have landed in-between phonemes/syllables/words, so
+        if not ValidateUtil.is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):
+            return None
 
         # Clamp word end times
         for word in trimmed_result.transcript_words:
@@ -156,6 +161,28 @@ class ValidateUtil:
         )
         return result
     
+    @staticmethod
+    def is_last_word_match(sound: Sound, last_word: str) -> bool:
+        """
+        Returns True if the transcribed last word of the passed-in (trimmed) Sound matches `last_word`,
+        and has a high enough probability.
+        TODO: Unverified
+        """
+        transcribed_words = WhisperUtil.transcribe_to_words(sound, "", Stt.get_variant(), Stt.get_config()) # yek 
+        if isinstance(transcribed_words, str):
+            return False
+        if not transcribed_words:
+            return False
+        
+        last_word = TextNormalizer.normalize_common(last_word)
+        transcribed_last = transcribed_words[-1]
+        transcribed_last_word = TextNormalizer.normalize_common(transcribed_last.word)
+        if transcribed_last_word != last_word:
+            return False
+        if transcribed_last.probability < 0.66:
+            return False
+        return True
+
     # ---
 
     @staticmethod

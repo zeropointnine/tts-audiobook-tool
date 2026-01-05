@@ -62,6 +62,12 @@ class PhraseSegmenter:
         Segments source text into sentences using pysbd lib, preserving all characters.
         """
 
+        from pysbd.languages import Language
+        try:
+            _ = Language.get_language_code(pysbd_lang)
+        except:
+            pysbd_lang = "en" # fail silently
+
         # Segment text into sentences using pysbd
         # Important: "clean=False" preserves leading and trailing whitespace
         segmenter = pysbd.Segmenter(language=pysbd_lang, clean=False, char_span=False)

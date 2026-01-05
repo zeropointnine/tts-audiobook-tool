@@ -35,7 +35,7 @@ class WhisperUtil:
         Stt.set_variant(stt_variant)
         Stt.set_config(stt_config)
 
-        if language_code not in Stt.get_whisper().supported_languages:
+        if language_code and language_code not in Stt.get_whisper().supported_languages:
             # Silently remove language code rather than triggering an exception
             language_code = ""
 

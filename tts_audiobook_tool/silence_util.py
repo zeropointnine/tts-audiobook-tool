@@ -140,6 +140,18 @@ class SilenceUtil:
         except Exception:
             return []
 
+    @staticmethod
+    def is_silent_around(
+        sound: Sound,
+        target_timestamp_s: float,
+        width: float = 0.10,
+        silence_threshold_db: float = -40
+    ) -> bool:
+        """
+        Calculates the smallest RMS of a contiguous `width` that encompasses `target_timestamp_s`,
+        and returns True if that value is less than `silence_threshold_db`. 
+        """
+        ...
 
 def ms_to_samples(ms, sr):
     """Converts milliseconds to samples"""
