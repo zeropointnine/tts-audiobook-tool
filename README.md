@@ -133,6 +133,7 @@ Install the rest of the project dependencies using pip like normal:
 
 Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-tts-packaged) that has been refactored for use as an installable package.
 
+
 ## Install for IndexTTS2
 
 Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
@@ -146,9 +147,6 @@ Activate the virtual environment:
 Install dependencies:
 
     pip install -r requirements-indextts2.txt
-
-> **ℹ️ Note:**
-> To run the app using IndexTTS2 comfortably within 12GB of VRAM, consider setting FP16 to True and also potentially using the smaller turbo Whisper model, setting the Whisper device to CPU, or disabling Whisper transcription validation altotether.
 
 
 ## Install for VibeVoice

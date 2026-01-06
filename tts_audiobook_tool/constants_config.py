@@ -6,7 +6,6 @@ TODO: consider making this a config file proper
 import os
 
 DEV = os.getenv("TTS_AUDIOBOOK_TOOL_DEV", "").lower() in ("true", "1", "yes") and True
-DEV_SAVE_INTERMEDIATE_FILES = DEV and True
 
 PROJECT_DEFAULT_LANGUAGE = "en"
 PROJECT_DEFAULT_SECTION_SOUND_EFFECT = False

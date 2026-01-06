@@ -213,11 +213,8 @@ def do_generate(state: State, is_regen: bool) -> None:
 
     # Generate
     did_interrupt = GenerateUtil.generate_files(
-        project=state.project,
+        state=state,
         indices_set=indices,
-        stt_variant=state.prefs.stt_variant,
-        stt_config=state.prefs.stt_config,
-        max_retries=state.project.max_retries,
         batch_size=state.project.mira_batch_size if Tts.get_type() == TtsModelInfos.MIRA else 1,
         is_regen=is_regen
     )

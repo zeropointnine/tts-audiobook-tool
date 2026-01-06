@@ -83,8 +83,7 @@ class RealTimeUtil:
             has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.project.max_retries))
             
             sound_opt, did_interrupt = RealTimeUtil.generate_full_flow(
-                project, phrase_groups, index, state.prefs.stt_variant, state.prefs.stt_config,
-                has_runway=has_runway, should_save=state.project.realtime_save, max_retries=state.project.max_retries
+                state, phrase_groups, index, has_runway=has_runway
             )
             if not sound_opt:
                 printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
@@ -158,14 +157,10 @@ class RealTimeUtil:
 
     @staticmethod
     def generate_full_flow(  
-            project: Project,
+            state: State,
             phrase_groups: list[PhraseGroup],
             index: int,
-            stt_variant: SttVariant,
-            stt_config: SttConfig,
-            has_runway: bool,
-            should_save: bool,
-            max_retries: int
+            has_runway: bool
     ) -> tuple[Sound | None, bool]:
         """
         Similar to `GenerateUtil.generate_full_flow()` but slightly different logic flow, simpler
@@ -174,20 +169,21 @@ class RealTimeUtil:
 
         SigIntHandler().set("generating")
 
+        project = state.project
         phrase_group = phrase_groups[index]
         did_interrupt = False
 
         gen_result: ValidationResult | str  = ""
-        num_attempts = 1 + max_retries if has_runway else 1
+        num_attempts = 1 + project.max_retries if has_runway else 1
         
         for attempt in range(num_attempts):
 
             gen_result = GenerateUtil.generate_and_validate(
-                project=project,
+                state=state,
                 indices=[index],
                 phrase_groups=phrase_groups,
-                stt_variant=stt_variant,
-                stt_config=stt_config,
+                stt_variant=state.prefs.stt_variant,
+                stt_config=state.prefs.stt_config,
                 force_random_seed=(attempt > 0),
                 is_realtime=True,
                 is_skip_reason_buffer=not has_runway
@@ -216,9 +212,9 @@ class RealTimeUtil:
             return None, did_interrupt # is error
         else:
             validation_result = gen_result
-            if should_save:
+            if project.realtime_save:
                 err, saved_path = GenerateUtil.save_sound_and_timing_json(
-                    project, phrase_group, index, validation_result, is_real_time=True
+                    state, phrase_group, index, validation_result, is_real_time=True
                 )
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")

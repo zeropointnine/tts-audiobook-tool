@@ -216,7 +216,7 @@ class ConcatMenu:
                 if err:
                     AskUtil.ask_error(err)
                     return
-                if not DEV_SAVE_INTERMEDIATE_FILES:
+                if not state.prefs.save_debug_files:
                     delete_silently(source_path)
                 path = norm_path
 

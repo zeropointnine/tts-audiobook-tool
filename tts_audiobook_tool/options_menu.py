@@ -35,27 +35,34 @@ class OptionsMenu:
             print_feedback(s)
 
         def item_maker(_: State) -> list[MenuItem]:
-            items = [
+            items = []
+            items.append(
                 MenuItem(
                     lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id),
                     lambda _, __: OptionsMenu.stt_model_menu(state)
-                ),
+                )
+            )
+            items.append(
                 MenuItem(
                     lambda _: make_menu_label("Whisper device", state.prefs.stt_config.description),
                     lambda _, __: OptionsMenu.stt_config_menu(state)
                 )
-            ]
+            )
             if Tts.get_type().value.torch_devices:
-                item = MenuItem(
-                    lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 
-                    lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 
+                        lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
+                    )
                 )
-                items.append(item)
-
-            items.extend([
-                MenuItem(make_unload_label, on_unload),
-                MenuItem("Reset contextual hints", on_hints)
-            ])
+            items.append( MenuItem(make_unload_label, on_unload) )
+            items.append( MenuItem("Reset contextual hints", on_hints) )
+            items.append( 
+                MenuItem(
+                    make_menu_label("Save debug files", state.prefs.save_debug_files, False),
+                    lambda _, __: OptionsMenu.save_debug_files_menu(state)
+                )
+            )
             return items
         
         MenuUtil.menu(state, "Options:", item_maker)
@@ -121,6 +128,28 @@ class OptionsMenu:
             labels=["True", "False"],
             values=[True, False],
             current_value=state.prefs.tts_force_cpu,
+            default_value=False,
+            on_select=on_select
+        )
+
+    @staticmethod
+    def save_debug_files_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            if state.prefs.save_debug_files != value:
+                state.prefs.save_debug_files = value
+            print_feedback(f"Set to:", str(state.prefs.save_debug_files))
+
+        subheading = f"Saves intermediate sound files and diagnostic json data\n"
+        subheading += f"alongside the regular sound segment FLAC files.\n"
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Save debug files",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.prefs.save_debug_files,
             default_value=False,
             on_select=on_select
         )

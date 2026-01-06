@@ -12,6 +12,7 @@ from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -30,11 +31,8 @@ class GenerateUtil:
 
     @staticmethod
     def generate_files(
-            project: Project, 
+            state: State, 
             indices_set: set[int],
-            stt_variant: SttVariant,
-            stt_config: SttConfig,
-            max_retries: int,
             batch_size: int,
             is_regen: bool
     ) -> bool:
@@ -46,6 +44,11 @@ class GenerateUtil:
         :param batch_size:
             When set to 1, batch mode is disabled
         """
+
+        project = state.project
+        max_retries = project.max_retries
+        stt_variant = state.prefs.stt_variant
+        stt_config = state.prefs.stt_config
 
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
         did_cancel = Tts.warm_up_models(force_no_stt)
@@ -104,7 +107,7 @@ class GenerateUtil:
 
             # Generate and validate
             results = GenerateUtil.generate_and_validate(
-                project=project, 
+                state=state, 
                 indices=indices, 
                 phrase_groups=project.phrase_groups,
                 stt_variant=stt_variant, stt_config=stt_config,
@@ -156,7 +159,7 @@ class GenerateUtil:
                     # Save
                     phrase_group = project.phrase_groups[index]
                     err, saved_path = GenerateUtil.save_sound_and_timing_json(
-                        project, phrase_group, index, validation_result, is_real_time=False
+                        state, phrase_group, index, validation_result, is_real_time=False
                     )
                     if err:
                         message += f"\n{COL_ERROR}Couldn't save file: {err} {saved_path}"
@@ -194,7 +197,7 @@ class GenerateUtil:
 
     @staticmethod
     def generate_and_validate(
-        project: Project, 
+        state: State, 
         indices: list[int],
         phrase_groups: list[PhraseGroup],
         stt_variant: SttVariant,
@@ -212,6 +215,8 @@ class GenerateUtil:
             When length is 1, batch mode is disabled
         """
         
+        project = state.project
+
         # Dim print color during any model inference printouts
         print(f"{COL_DEFAULT}Generating audio...{Ansi.LINE_HOME}{COL_DIM}", end="", flush=True)
 
@@ -222,7 +227,8 @@ class GenerateUtil:
             indices=indices,
             phrase_groups=phrase_groups,
             force_random_seed=force_random_seed,
-            is_realtime=is_realtime
+            is_realtime=is_realtime,
+            save_debug_files=state.prefs.save_debug_files
         )        
         printt() # Restore print color, print blank line
         
@@ -300,7 +306,8 @@ class GenerateUtil:
             indices: list[int], 
             phrase_groups: list[PhraseGroup],
             force_random_seed: bool, 
-            is_realtime: bool
+            is_realtime: bool,
+            save_debug_files: bool
         ) -> list[Sound | str]:
         """
         Core audio generation function.
@@ -475,7 +482,7 @@ class GenerateUtil:
                     result = "Model outputted NaN, discarding"
             else:
                 # Save "raw" output
-                if DEV_SAVE_INTERMEDIATE_FILES:
+                if save_debug_files:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
                 # Trim silence from ends of audio clip
@@ -503,7 +510,7 @@ class GenerateUtil:
 
     @staticmethod
     def save_sound_and_timing_json(
-        project: Project,
+        state: State,
         phrase_group: PhraseGroup,
         index: int,
         validation_result: ValidationResult,
@@ -513,6 +520,8 @@ class GenerateUtil:
         Saves sound segment and timing info json
         Returns error string (if any), saved file path
         """
+
+        project = state.project
         
         # Save sound
         num_word_errors = validation_result.num_errors if isinstance(validation_result, WordErrorResult) else -1
@@ -553,7 +562,7 @@ class GenerateUtil:
             except Exception as e:
                 ... # eat silently
 
-        if DEV_SAVE_INTERMEDIATE_FILES and not is_real_time:
+        if state.prefs.save_debug_files and not is_real_time:
             save_debug_json(project, phrase_group, index, validation_result, dir_path)
 
         return "", sound_path

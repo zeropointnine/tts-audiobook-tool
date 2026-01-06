@@ -23,6 +23,7 @@ class Prefs:
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
+            save_debug_files: bool = False,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
     ) -> None:
         self._project_dir = project_dir
@@ -33,6 +34,7 @@ class Prefs:
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
+        self._save_debug_files = save_debug_files
         self._play_on_generate = play_on_generate
 
     @staticmethod
@@ -144,6 +146,12 @@ class Prefs:
             dirty = True
 
         # Play on generate
+        save_debug_files = prefs_dict.get("save_debug_files", False)
+        if not isinstance(save_debug_files, bool):
+            save_debug_files = False
+            dirty = True
+
+        # Play on generate
         play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
@@ -158,6 +166,7 @@ class Prefs:
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
+            save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
             hints=hints
         )
@@ -173,6 +182,15 @@ class Prefs:
     @project_dir.setter
     def project_dir(self, value: str):
         self._project_dir = value
+        self.save()
+
+    @property
+    def save_debug_files(self) -> bool:
+        return self._save_debug_files
+
+    @save_debug_files.setter
+    def save_debug_files(self, value: bool):
+        self._save_debug_files = value
         self.save()
 
     @property
@@ -273,6 +291,7 @@ class Prefs:
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
+            "save_debug_files": self._save_debug_files,
             "play_on_generate": self._play_on_generate
         }
         try:
