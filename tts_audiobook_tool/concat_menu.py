@@ -1,14 +1,13 @@
 import os
 
-from tts_audiobook_tool.app_types import ExportType, NormalizationType
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
-from tts_audiobook_tool.concat_cut_points_menu import ConcatCutPointsMenu
+from tts_audiobook_tool.chapter_dividers_menu import ChapterDividersMenu
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
@@ -21,20 +20,30 @@ class ConcatMenu:
     @staticmethod
     def menu(state: State) -> None:
 
+        def make_chapter_dividers_label(_: State) -> str:
+            qty = len(state.project.section_dividers)
+            label = "Chapter dividers "
+            if qty > 0:
+                noun = make_noun('item', 'items', qty)
+                mode = state.project.chapter_mode.label.lower()
+                value = f"{qty} {noun}, {mode}"
+                label += make_currently_string(value)
+            else:
+                label += f"{COL_DIM}(optional)"
+            return label
+
         def on_start(_: State, __: MenuItem) -> None:
-            infos = ChapterInfo.make_chapter_infos(state.project)
-            is_aac = (state.project.export_type == ExportType.AAC)
-            ConcatMenu.ask_chapters_and_make(infos, state, aac_not_flac=is_aac)
+            ask_chapter_indices_and_make(state)
 
         items = [
             MenuItem("Start", on_start),
-            MenuItem(ConcatCutPointsMenu.make_cut_points_label, lambda _, __: ConcatCutPointsMenu.menu(state)),
+            MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
             MenuItem(
                 lambda _: make_menu_label("File type", state.project.export_type.label), 
                 lambda _, __: ConcatMenu.file_type_menu(state)
             ),
             MenuItem(
-                lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label), 
+                lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
                 lambda _, __: ConcatMenu.normalization_menu(state)
             ),
             MenuItem(
@@ -46,7 +55,7 @@ class ConcatMenu:
                 lambda _, __: ConcatMenu.section_break_menu(state)
             )
         ]
-        MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_info_subheading)
+        MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_files_subheading)
 
     @staticmethod
     def file_type_menu(state: State) -> None:
@@ -125,120 +134,12 @@ class ConcatMenu:
             on_select=on_select
         )
 
-    @staticmethod
-    def ask_chapters_and_make(infos: list[ChapterInfo], state: State, aac_not_flac: bool) -> None:
-
-        # Chapter indices that have any generated files
-        chapter_indices = []
-        for i, info in enumerate(infos):
-            if info.num_files_exist > 0:
-                chapter_indices.append(i)
-
-        if len(chapter_indices) > 1:
-            printt("Enter chapter file numbers to create:")
-            printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
-            inp = AskUtil.ask()
-            if inp == "all" or inp == "a":
-                chapter_indices = chapter_indices.copy()
-            else:
-                input_indices, warnings = ParseUtil.parse_ranges_string(inp, len(state.project.phrase_groups))
-                if warnings:
-                    for warning in warnings:
-                        printt(warning)
-                    printt()
-                    return
-                if not input_indices:
-                    return
-                chapter_indices = [item for item in input_indices if item in chapter_indices]
-
-                if not chapter_indices:
-                    AskUtil.ask_enter_to_continue("No valid chapters numbers entered.")
-                    return
-
-        s = f"Will create the following {'AAC' if aac_not_flac else 'FLAC'} {make_noun('file', 'files', len(chapter_indices))}:"
-        printt(s)
-        strings = make_chapter_info_strings(infos, chapter_indices)
-        s ="\n".join( ("    " + item) for item in strings)
-        printt(s)
-        printt()
-
-        b = AskUtil.ask_confirm()
-        if not b:
-            return
-
-        ConcatMenu.make_chapter_files(state, chapter_indices, aac_not_flac)
-
-    @staticmethod
-    def make_chapter_files(state: State, chapter_indices: list[int], to_aac_not_flac: bool) -> None:
-
-        # Make subdir
-        dest_dir = os.path.join(state.project.concat_path, timestamp_string())
-        try:
-            os.makedirs(dest_dir, exist_ok=True)
-        except:
-            AskUtil.ask_error(f"Couldn't make directory {dest_dir}")
-            return
-
-        for i, chapter_index in enumerate(chapter_indices):
-
-            if len(chapter_indices) > 1:
-                s = f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
-            else:
-                s = ""
-            print_heading(f"Creating concatenated audio file{s}...", dont_clear=True, non_menu=True)
-
-            is_norm = (state.project.normalization_type != NormalizationType.DISABLED)
-            is_concat_aac = not is_norm and to_aac_not_flac
-
-            # Concat
-            path, err = ConcatUtil.concatenate_chapter_file(
-                state=state,
-                chapter_index=chapter_index,
-                to_aac_not_flac=is_concat_aac,
-                base_dir=dest_dir
-            )
-            if err:
-                printt()
-                AskUtil.ask_error(err)
-                return
-
-            # Normalize
-            if state.project.normalization_type != NormalizationType.DISABLED:
-
-                source_path = path
-                norm_path = AppUtil.insert_bracket_tag_file_path(path, "normalized")
-                if to_aac_not_flac:
-                    norm_path = str( Path(norm_path).with_suffix(".m4a") )
-
-                err = LoudnessNormalizationUtil.normalize_file(
-                    path, state.project.normalization_type.value, norm_path
-                )
-                if err:
-                    AskUtil.ask_error(err)
-                    return
-                if not state.prefs.save_debug_files:
-                    delete_silently(source_path)
-                path = norm_path
-
-            printt(f"Saved {COL_ACCENT}{path}")
-            printt()
-
-        # Post-concat feedback
-        printt("Finished. \a")
-        printt()
-
-        Hint.show_player_hint_if_necessary(state.prefs)
-
-        hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file browser: ")
-        printt()
-        if hotkey == "o":
-            err = open_directory_in_gui(dest_dir)
-            if err:
-                AskUtil.ask_error(err)
-
 # ---
 
-def make_chapter_info_subheading(state: State) -> str:
+def make_chapter_files_subheading(state: State) -> str:
+
+    if state.project.chapter_mode != ChapterMode.FILES:
+        return ""
 
     infos = ChapterInfo.make_chapter_infos(state.project)
     if len(infos) == 1:
@@ -261,14 +162,97 @@ def make_chapter_info_subheading(state: State) -> str:
 def make_chapter_info_strings(infos: list[ChapterInfo], indices: list[int]) -> list[str]:
     lst = []
     for index in indices:
-        s = make_chapter_info_string(infos[index], index)
+        s = make_chapter_files_string(infos[index], index)
         lst.append(s)
     return lst
 
-def make_chapter_info_string(info: ChapterInfo, index: int) -> str:
-    s = f"{COL_DEFAULT}Chapter file {index+1}:{COL_DIM} line {info.segment_index_start + 1} to {info.segment_index_end + 1} "
+def make_chapter_files_string(info: ChapterInfo, index: int) -> str:
+    s = f"{COL_DEFAULT}Chapter file {index+1}:{COL_DIM} lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
     s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
     return s
+
+def ask_chapter_indices_and_make(state: State) -> None:
+
+    type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
+
+    should_ask_file_numbers = (state.project.chapter_mode == ChapterMode.FILES) and len(state.project.section_dividers) > 0
+    if should_ask_file_numbers:
+        
+        infos = ChapterInfo.make_chapter_infos(state.project)
+
+        result = ask_chapter_indices(infos, len(state.project.phrase_groups))
+        if result is None:
+            return
+        else:
+            chapter_indices = result
+            bookmark_indices = []
+
+        noun = make_noun('file', 'files', len(chapter_indices))
+        s = f"Will create the following {type_string} {noun}:"
+        printt(s)
+
+        strings = make_chapter_info_strings(infos, chapter_indices)
+        s = "\n".join( ("    " + item) for item in strings)
+        printt(s)
+        printt()
+
+        b = AskUtil.ask_confirm()
+        if not b:
+            return
+
+    else:
+
+        chapter_indices = []
+        bookmark_indices = state.project.section_dividers
+
+        info = ChapterInfo.make_single_info(state.project)
+        s = f"Will create a single {type_string} file"
+        printt(s)
+        s = f"{COL_DIM}All lines "
+        s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
+        printt(s)
+        printt()
+
+        b = AskUtil.ask_confirm()
+        if not b:
+            return
+
+    ConcatUtil.make_files(
+        state=state, 
+        chapter_indices=chapter_indices, 
+        bookmark_indices=bookmark_indices
+    )
+
+def ask_chapter_indices(infos: list[ChapterInfo], num_phrase_groups: int) -> list[int] | None:
+
+    # Filter out items w/o any generated files
+    infos = [info for info in infos if info.num_files_exist > 0] 
+
+    printt("Enter chapter file numbers to create:")
+    printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
+    inp = AskUtil.ask()
+
+    if inp == "all" or inp == "a":
+        indices = [info.chapter_index for info in infos]
+        return indices
+
+    indices, warnings = ParseUtil.parse_ranges_string(inp, num_phrase_groups)
+    if warnings:
+        message = "\n".join(warnings)
+        print_feedback(message, is_error=True)
+        return None
+
+    indices = list(indices)
+    if not indices:
+        return None
+
+    valid_indices = {info.chapter_index for info in infos}
+    for index in indices:
+        if index not in valid_indices:
+            print_feedback(f"Item out of range: {index + 1}", is_error=True)
+            return None
+    
+    return indices
 
 
 LOUDNORM_SUBHEADING = \

@@ -4,10 +4,14 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, Sound
+from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.chapter_metadata import ChapterMetadata
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.app_metadata import AppMetadata
-from tts_audiobook_tool.l import L # type: ignore
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
@@ -20,133 +24,380 @@ from tts_audiobook_tool.util import *
 class ConcatUtil:
 
     @staticmethod
-    def concatenate_chapter_file(
-        state: State,
-        chapter_index: int,
-        to_aac_not_flac: bool,
-        base_dir: str
-    ) -> tuple[str, str]:
+    def make_files(
+        state: State, 
+        chapter_indices: list[int], 
+        bookmark_indices: list[int]
+    ) -> None:
         """
-        Returns saved path, error message
+        Creates a final, concatenated audio file for each chapter index given.
+        Else, creates a single concatenated audio file for the entire book.
+        `chapter_indices` and `bookmark_indices` are mutually exclusive.
         """
 
+        if chapter_indices and bookmark_indices:
+            raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
+        
+        # Make subdir
+        dest_dir = os.path.join(state.project.concat_path, timestamp_string())
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+        except:
+            AskUtil.ask_error(f"Couldn't make directory {dest_dir}")
+            return
+
+        if not chapter_indices:
+            chapter_indices = [0]
+
+        for i, chapter_index in enumerate(chapter_indices):
+
+            message = "Creating concatenated audio file"
+            if len(chapter_indices) > 1:
+                message += f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
+            message += "..."
+            print_heading(message, dont_clear=True, non_menu=True)
+
+            if state.project.chapter_mode == ChapterMode.FILES:
+                ranges = make_chapter_ranges(state.project.section_dividers, len(state.project.phrase_groups))
+                index_start, index_end = ranges[chapter_index]
+                num_chapters = len(ranges)
+            else:
+                index_start, index_end = 0, len(state.project.phrase_groups) - 1
+                num_chapters = 1
+
+            stem = make_stem(
+                project=state.project, 
+                index_start=index_start, index_end=index_end, 
+                chapter_index=chapter_index, num_chapters=num_chapters
+            )
+            dest_stem_path = os.path.join(dest_dir, stem)
+
+            dest_path, err = ConcatUtil.make_file(
+                state=state,
+                index_start=index_start,
+                index_end=index_end,
+                bookmark_indices=bookmark_indices,
+                stem_path=dest_stem_path
+            )
+            if err:
+                printt()
+                AskUtil.ask_error(err)
+                return
+            
+            printt(f"Saved {COL_ACCENT}{dest_path}") 
+            printt()
+
+        # Post-concat feedback, prompt
+        printt("Finished. \a")
+        printt()
+
+        Hint.show_player_hint_if_necessary(state.prefs)
+
+        hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file browser: ")
+        printt()
+        if hotkey == "o":
+            err = open_directory_in_gui(dest_dir)
+            if err:
+                AskUtil.ask_error(err)
+
+    @staticmethod
+    def make_file(
+        state: State,
+        index_start: int,
+        index_end: int,
+        bookmark_indices: list[int],
+        stem_path: str
+    ) -> tuple[str, str]:
+        """
+        Creates final output file, full feature flow.
+
+        Params:
+            index_end: Inclusive
+            stem_path: Destination file path w/o file suffix
+        
+        Prints to console along the way
+        Returns successfull file path, error message if any
+        """
+
+        # Load raw text (player no longer requires this but is still part of the 'spec')
         raw_text = state.project.load_raw_text()
         if not raw_text:
             return "", "Error loading text"
 
-        # Make tuples list
-        # This list is the full length of the project.text_segments,
-        # but uses empty strings for file paths outside the range of the chapter
+        # Intermediate file paths etc
+        
+        is_aac = (state.project.export_type == ExportType.AAC)
+        should_normalize = (state.project.normalization_type != NormalizationType.DISABLED)
 
-        ranges = make_section_ranges(state.project.section_dividers, len(state.project.phrase_groups))
-        psg = state.project.sound_segments
+        concat_suffix = ".m4b" if is_aac and not should_normalize else ".flac" # tricky
+        concat_path = stem_path + " [concat]" + concat_suffix
+        
+        suffix = ".m4b" if is_aac else ".flac"
+        if should_normalize:
+            norm_path = stem_path + " [norm]" + suffix
+        else:
+            norm_path = ""
+        if is_aac and bookmark_indices:
+            chapter_meta_path = stem_path + " [chaptermeta]" + suffix
+        else:
+            chapter_meta_path = ""
+        final_path = stem_path + ".abr" + suffix
+        last_path = ""
 
-        chapter_index_start, chapter_index_end = ranges[chapter_index]
-        num_missing = 0
+        if False:
+            print()
+            print("chapters    ", bookmark_indices)
+            print()
+            print("concated    ", concat_path)
+            print("normed      ", norm_path)
+            print("chapter meta", chapter_meta_path)
+            print("app meta    ", final_path)
+            print()
 
-        # Make phrase + file name list
-        phrases_and_file_paths: list[ tuple[Phrase, str]] = []
+        def delete_intermediate_files(keep_final: bool=False) -> None:
+            # TODO: add delete-as-you-go logic instead
+            if state.prefs.save_debug_files:
+                return
+            paths = [ concat_path, norm_path, chapter_meta_path]
+            if not keep_final:
+                paths.append(final_path)
+            for path in paths:
+                if path:
+                    delete_silently(path)
+
+        # [0] Prep data
+
+        # Make phrase/path list # TODO: Duplicated logic; refactor ChapterInfo and add phrase info etc
+        phrases_and_paths = ConcatUtil.make_phrases_and_paths(
+            state.project, index_start, index_end
+        )
+        phrases_and_paths: list[tuple[Phrase, str]] = []
         for group_index, group in enumerate(state.project.phrase_groups):            
             phrase = group.as_flattened_phrase()
-            out_of_range = (group_index < chapter_index_start or group_index > chapter_index_end)
+            out_of_range = (group_index < index_start or group_index > index_end)
             if out_of_range:
-                file_path = ""
+                path = ""
             else:
-                file_name = psg.get_best_file_for(group_index)
+                file_name = state.project.sound_segments.get_best_file_for(group_index)
                 if file_name:
-                    file_path = os.path.join(state.project.sound_segments_path, file_name)
+                    path = os.path.join(state.project.sound_segments_path, file_name)
                 else:
-                    file_path = ""
-            phrases_and_file_paths.append((phrase, file_path))
-            if file_path == "":
-                num_missing += 1
-            
-        # Make destination filename
-        extant_file_names = [file_name for _, file_name in phrases_and_file_paths if file_name]
-        # [1] project name
-        dest_file_name = TextUtil.sanitize_for_filename( Path(state.prefs.project_dir).name[:20] ) + " "
-        # [2] file number
-        if len(ranges) > 1:
-            dest_file_name += f"[{ chapter_index+1 } of {len(ranges)}]" + " "
-        # [3] line range
-        if len(ranges) > 1:
-            dest_file_name += f"[{chapter_index_start+1}-{chapter_index_end+1}]" + " "
-        # [4] num lines missing within that range
-        if num_missing > 0:
-            dest_file_name += f"[{num_missing} missing]" + " "
-        # [5] model tag
-        common_model_tag = SoundSegmentUtil.get_common_model_tag(extant_file_names)
-        if common_model_tag:
-            dest_file_name += f"[{common_model_tag}]" + " "
-        # [5] voice tag
-        common_voice_tag = SoundSegmentUtil.get_common_voice_tag(extant_file_names)
-        if common_voice_tag:
-            dest_file_name += f"[{common_voice_tag}]" + " "
-        dest_file_name = dest_file_name.strip() + ".abr" + (".m4a" if to_aac_not_flac else ".flac")
-        dest_file_path = os.path.join(base_dir, dest_file_name)
+                    path = ""
+            phrases_and_paths.append((phrase, path))
+                    
+        # [1] Concatenated audio file
 
-        # Concat
-        result = ConcatUtil.concatenate_files_plus_silence(
-            dest_file_path,
-            phrases_and_file_paths,
+        result = ConcatUtil.concatenate_sound_segments(
+            concat_path,
+            phrases_and_paths,
             print_progress=True,
-            use_section_sound_effect=state.project.use_section_sound_effect,
-            to_aac_not_flac=to_aac_not_flac
+            use_section_sound_effect=state.project.use_section_sound_effect
         )
         if isinstance(result, str): # is error
+            delete_intermediate_files()
             return "", result
         else:
             durations = result
+            last_path = concat_path
 
-        # Add the app metadata
-        phrases = [item[0] for item in phrases_and_file_paths]
-        file_paths = [item[1] for item in phrases_and_file_paths]
-        timed_phrases = TimedPhrase.make_list_using(phrases, durations)
+        # [2] Loudness-normalized file
+        #     Ideally, this would go at the very end due to taking the most time but can't be helped
+
+        if norm_path:
+            err = LoudnessNormalizationUtil.normalize_file(
+                source_flac=last_path, 
+                specs=state.project.normalization_type.value, 
+                dest_path=norm_path
+            )
+            if err:
+                delete_intermediate_files()
+                return "", err
+            else:
+                last_path = norm_path
+
+        # [3] Chapter (M4B) metadata
+        #     Must be done before custom metadata
+        #     Also, can't be easily combined into other save operation
+        #     Both due to ffmpeg limitations
+
+        if chapter_meta_path:
+            chapter_metadata = ChapterMetadata.make_metadata(
+                state.project, durations, file_title=Path(stem_path).name
+            )
+            err = ChapterMetadata.make_copy_with_metadata(
+                source_path=last_path, dest_path=chapter_meta_path, metadata=chapter_metadata
+            )
+            if err:
+                delete_intermediate_files()
+                return "", f"Error making file with chapter metadata: {err}"
+            else:
+                last_path = chapter_meta_path
+
+        # [4] App metadata (final file)
+
+        phrases = [item[0] for item in phrases_and_paths]
+        timed_phrases = TimedPhrase.make_list_using(phrases, durations)        
         if state.project.subdivide_phrases:
-            timed_phrases = make_subdivided_timed_phrases(timed_phrases, file_paths, durations)
-        
-        meta = AppMetadata(
-            raw_text=raw_text, 
+            file_paths = [item[1] for item in phrases_and_paths]
+            timed_phrases, bookmark_indices = make_subdivided_timed_phrases(
+                timed_phrases=timed_phrases, 
+                sound_paths=file_paths, 
+                sound_durations=durations, 
+                bookmark_indices=bookmark_indices
+            )
+        app_meta = AppMetadata(
             timed_phrases=timed_phrases,
+            raw_text=raw_text, 
+            bookmark_indices=bookmark_indices,
             has_section_break_audio=state.project.use_section_sound_effect
         )
-
-        if to_aac_not_flac:
-            err = AppMetadata.save_to_mp4(meta, dest_file_path)
+        if is_aac:
+            err = AppMetadata.save_to_mp4(app_meta, last_path, final_path)
         else:
-            err = AppMetadata.save_to_flac(meta, dest_file_path)
+            err = AppMetadata.save_to_flac(app_meta, last_path, final_path)
         if err:
+            delete_intermediate_files()
             return "", err
-
-        return dest_file_path, ""
+        else:
+            delete_intermediate_files(keep_final=True)
+            return final_path, "" # success
 
     @staticmethod
-    def concatenate_files_plus_silence(
+    def make_phrases_and_paths(
+        project: Project, 
+        index_start: int = -1, 
+        index_end: int = -1
+    ) -> list[tuple[Phrase, str]]:
+        
+        if index_start == -1:
+            index_start = 0
+        if index_end == -1:
+            index_end = len(project.phrase_groups) - 1
+
+        phrases_and_paths: list[tuple[Phrase, str]] = []
+
+        for group_index, group in enumerate(project.phrase_groups):            
+            phrase = group.as_flattened_phrase()
+            out_of_range = (group_index < index_start or group_index > index_end)
+            if out_of_range:
+                file_path = ""
+            else:
+                file_name = project.sound_segments.get_best_file_for(group_index)
+                if file_name:
+                    file_path = os.path.join(project.sound_segments_path, file_name)
+                else:
+                    file_path = ""
+            phrases_and_paths.append((phrase, file_path))
+
+        return phrases_and_paths
+
+    @staticmethod
+    def num_missing_in(
+        project: Project, 
+        chapter_index_start: int, 
+        chapter_index_end: int
+    ) -> int:
+        num_missing = 0
+        for group_index in range(len(project.phrase_groups)):
+            out_of_range = (group_index < chapter_index_start or group_index > chapter_index_end)
+            if out_of_range:
+                num_missing += 1
+            else:
+                file_name = project.sound_segments.get_best_file_for(group_index)
+                if not file_name:
+                    num_missing += 1        
+        return num_missing
+
+    @staticmethod
+    def make_rendered_sound_segment(
+        phrase: Phrase,
+        path: str,
+        use_section_sound_effect: bool
+    ) -> Sound | str:
+        """
+        sound_path cannot be empty
+        """
+
+        if phrase.reason == Reason.SECTION and use_section_sound_effect:
+            appended_silence_duration = 0
+            use_appended_sound_effect = True
+        else:
+            appended_silence_duration = phrase.reason.pause_duration
+            use_appended_sound_effect = False
+
+        result = SoundFileUtil.load(path)
+        if isinstance(result, str): # error
+            return result
+        else:
+            sound = result
+
+        sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
+
+        # Append sound effect or silence 
+        if use_appended_sound_effect:
+            sound = SoundUtil.append_sound_using_path(sound, SECTION_SOUND_EFFECT_PATH)
+        elif appended_silence_duration:
+            sound = SoundUtil.add_silence(sound, appended_silence_duration)
+
+        return sound
+
+    @staticmethod
+    def get_rendered_sound_segment_durations(
+        phrases_and_paths: list[ tuple[Phrase, str] ],
+        use_section_sound_effect: bool
+    ) -> list[float] | str:
+        """
+        Calculates the final durations of the sound segments to be concatenated.
+
+        Currently uses the same concrete sound transform operations as the main concat function
+        to ensure same duration results.
+        TODO: Optimize that 
+        """
+
+        durations = []
+
+        for (phrase, path) in phrases_and_paths:
+
+            if not path:
+                durations.append(0)
+                continue
+
+            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect)
+            if isinstance(result, str): # error
+                return result
+            
+            sound = result
+            durations.append(sound.duration)
+
+        return durations
+
+    @staticmethod
+    def concatenate_sound_segments(
         dest_path: str,
         phrases_and_paths: list[ tuple[Phrase, str] ],
         use_section_sound_effect: bool,
         print_progress: bool,
-        to_aac_not_flac: bool
     ) -> list[float] | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
-        Dynamically adds silence between adjacent segments based on phrase "reason".
+        Adds silence or sound effect between adjacent segments based on phrase "reason".
 
         Returns list of float durations of each added segment to be used for app metadata .
 
         On error, returns error string
         """
 
-        total_duration = 0
+        duration_sum = 0
         durations = []
 
+        to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
         process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac)
 
         SigIntHandler().set("concat")
 
-        for i, (phrase, sound_path) in enumerate(phrases_and_paths):
+        for (phrase, path) in phrases_and_paths:
 
-            if not sound_path:
+            if not path:
                 durations.append(0)
                 continue
 
@@ -156,46 +407,28 @@ class ConcatUtil:
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
 
-            if i < len(phrases_and_paths) - 1:
-                if phrase.reason == Reason.SECTION and use_section_sound_effect:
-                    appended_silence_duration = 0
-                    appended_sound_effect_path = SECTION_SOUND_EFFECT_PATH
-                else:
-                    appended_silence_duration = phrase.reason.pause_duration
-                    appended_sound_effect_path = ""
-            else: # Last phrase
-                appended_silence_duration = 0
-                appended_sound_effect_path = ""
-
-            if print_progress:
-                s = f"{time_stamp(total_duration, with_tenth=False)} {Path(sound_path).stem[:80]} ... "
-                print("\x1b[1G" + s, end="\033[K", flush=True)
-
-            result = SoundFileUtil.load(sound_path)
+            result = ConcatUtil.make_rendered_sound_segment(
+                phrase, path, use_section_sound_effect
+            )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
                 return result
-            else:
-                sound = result
-
-            sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
-
-            # Append sound effect or silence or not
-            if appended_sound_effect_path:
-                sound = SoundUtil.append_sound_using_path(sound, appended_sound_effect_path)
-            elif appended_silence_duration:
-                sound = SoundUtil.add_silence(sound, appended_silence_duration)
-
+            
+            sound = result
             durations.append(sound.duration)
-
-            total_duration += sound.duration
+            duration_sum += sound.duration
 
             ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
+
+            if print_progress:
+                s = f"{time_stamp(duration_sum, with_tenth=False)} {Path(path).stem[:80]} ... "
+                print("\x1b[1G" + s, end="\033[K", flush=True)
 
         if print_progress:
             printt()
         printt()
 
+        SigIntHandler().clear()
         ConcatUtil.close_ffmpeg_stream(process)
         return durations
 
@@ -250,35 +483,99 @@ class ConcatUtil:
 
 # ---
 
+def make_stem(
+    project: Project,
+    index_start: int, 
+    index_end: int,
+    chapter_index: int,
+    num_chapters: int
+) -> str:
+
+    phrases_and_paths: list[tuple[Phrase, str]] = []
+    num_missing = 0
+
+    for group_index, group in enumerate(project.phrase_groups):            
+        phrase = group.as_flattened_phrase()
+        out_of_range = (group_index < index_start or group_index > index_end)
+        if out_of_range:
+            file_path = ""
+        else:
+            stem = project.sound_segments.get_best_file_for(group_index)
+            if stem:
+                file_path = os.path.join(project.sound_segments_path, stem)
+            else:
+                file_path = ""
+        phrases_and_paths.append((phrase, file_path))
+        if file_path == "":
+            num_missing += 1
+
+    # Make Filename
+    extant_file_names = [file_name for _, file_name in phrases_and_paths if file_name]
+    # [1] project name
+    stem = TextUtil.sanitize_for_filename( Path(project.dir_path).name[:20] ) + " "
+    # [2] file number
+    if num_chapters > 1:
+        stem += f"[{ chapter_index+1 } of {num_chapters}]" + " "
+    # [3] line range
+    if num_chapters > 1:
+        stem += f"[{index_start+1}-{index_end+1}]" + " "
+    # [4] num lines missing within range
+    if num_missing > 0:
+        stem += f"[{num_missing} missing]" + " "
+    # [5] model tag
+    common_model_tag = SoundSegmentUtil.get_common_model_tag(extant_file_names)
+    if common_model_tag:
+        stem += f"[{common_model_tag}]" + " "
+    # [5] voice tag
+    common_voice_tag = SoundSegmentUtil.get_common_voice_tag(extant_file_names)
+    if common_voice_tag:
+        stem += f"[{common_voice_tag}]" + " "
+
+    stem = stem.strip()
+    return stem
+
 def make_subdivided_timed_phrases(
         timed_phrases: list[TimedPhrase], 
         sound_paths: list[str],
-        sound_durations: list[float]
-    ) -> list[TimedPhrase]:
+        sound_durations: list[float],
+        bookmark_indices: list[int]
+    ) -> tuple[ list[TimedPhrase], list[int] ]:
     """
-    Uses the "forced alignment" metadata in the json files saved alongside the sound_paths 
+    Uses the "forced alignment" metadata in the json files which is saved alongside the sound_paths 
     to break up the timed_phrases into smaller parts.
 
-    The argments are parallel lists.
+    The three arguments are parallel lists.
+
+    Returns updated timed_phrases and bookmark_indices.
     """
 
     if not (len(timed_phrases) == len(sound_paths) == len(sound_durations)):
         raise ValueError("lists must have same lengths")
 
-    results: list[TimedPhrase] = []
+    new_timed_phrases: list[TimedPhrase] = []
+    new_bookmark_indices: list[int] = []
 
     for i in range(0, len(timed_phrases)):
         
+        def add_to_new_bookmark_indices(debug_reason: str, debug_text: str) -> None:
+            if i in bookmark_indices:
+                new_bookmark_index = len(new_timed_phrases)
+                new_bookmark_indices.append(new_bookmark_index)
+                if False:
+                    print("added", new_bookmark_index, "new len", len(new_bookmark_indices), debug_reason, debug_text)
+
         original_timed_phrase = timed_phrases[i]
         sound_path = sound_paths[i]
 
         if not sound_path:
-            results.append(original_timed_phrase)
+            add_to_new_bookmark_indices("no-time-segment", original_timed_phrase.presentable_text)
+            new_timed_phrases.append(original_timed_phrase)
             continue
 
         subdivided_items_json_path = Path(sound_path).with_suffix(".json") # TODO rename this to .json
         if not subdivided_items_json_path.exists():
-            results.append(original_timed_phrase)
+            add_to_new_bookmark_indices("no-subdivided-json", original_timed_phrase.presentable_text)
+            new_timed_phrases.append(original_timed_phrase)
             continue
 
         try:
@@ -286,20 +583,26 @@ def make_subdivided_timed_phrases(
                 json_dicts = json.load(file)
         except Exception as e:
             # File error; use original item
-            results.append(original_timed_phrase)
+            add_to_new_bookmark_indices("file-error", original_timed_phrase.presentable_text)            
+            new_timed_phrases.append(original_timed_phrase)
             continue
 
         parse_result = TimedPhrase.dicts_to_timed_phrases(json_dicts)
         if isinstance(parse_result, str): 
             # Parse error; use original item
-            results.append(original_timed_phrase)
+            add_to_new_bookmark_indices("parse-error", original_timed_phrase.presentable_text)
+            new_timed_phrases.append(original_timed_phrase)
             continue
-        subdivided_timed_phrases = parse_result
+        else:
+            subdivided_timed_phrases = parse_result
 
+        # Finally, do subdivision action
         offset = original_timed_phrase.time_start
-
         for subdivided_index, item in enumerate(subdivided_timed_phrases):
             
+            if subdivided_index == 0:
+                add_to_new_bookmark_indices("first-subdivision", item.presentable_text)
+
             if subdivided_index == 0:
                 time_start = offset
             else:
@@ -307,11 +610,11 @@ def make_subdivided_timed_phrases(
             time_end = offset + item.time_end
 
             updated_item = TimedPhrase(item.text, time_start, time_end)
-            results.append(updated_item)
+            new_timed_phrases.append(updated_item)
         
         # Set last item's time_end using the duration of the source audio clip
         # rather than the transcription end word timestamp
         # (prevents discontinuities in segment selectedness across boundaries, which looks distracting)
-        results[-1].time_end = sound_durations[i] + offset
+        new_timed_phrases[-1].time_end = sound_durations[i] + offset
 
-    return results
+    return new_timed_phrases, new_bookmark_indices

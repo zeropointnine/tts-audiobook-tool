@@ -32,6 +32,11 @@ class Phrase:
         self._words = TextUtil.get_words(self._text)        
 
     @property
+    def presentable_text(self) -> str:
+        """ Text in 'presentable' format for UI-related purposes """
+        return self.text.strip()
+
+    @property
     def words(self) -> list[str]:
         return self._words
 

@@ -1,5 +1,7 @@
 /**
- * Acts as a 'controller' for the bookmark panel
+ * Acts as a 'controller' for the bookmark panel.
+ * 
+ * Does not manage localStorage values.
  */
 class BookmarkController {
 
@@ -20,16 +22,17 @@ class BookmarkController {
      * Should be called when a new file is opened
      */
     init(textSegments, indices=[]) {
-
         this.textSegments = textSegments;
-        this.indices = [];
+        this.initIndices(indices)
+    }
 
+    initIndices(indices) { 
+        this.indices = [];
         if (indices) {
             for (const index of indices) {
                 this.addIndex(index, false);
             }
         }
-
         this._updateList();
     }
 

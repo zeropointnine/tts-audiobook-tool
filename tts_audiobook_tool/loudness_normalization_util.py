@@ -25,14 +25,14 @@ class LoudnessNormalizationUtil:
     ) -> str:
         """
         Source file must be FLAC.
-        Returns error message string on fail, else empty string
-
         Dest audio codec is chosen based on dest file suffix
 
-        Prints some status
+        Returns error message string on fail, else empty string
+
+        Prints some status along the way
         """
         if not source_flac.lower().endswith(".flac"):
-            return "Source file must be .flac"
+            return "Source file must be FLAC"
 
         if not dest_path:
             dest_path = source_flac # ie, overwrite original
@@ -48,7 +48,7 @@ class LoudnessNormalizationUtil:
         else:
             loudness_stats = result
 
-        printt("Pass 2/2...")
+        printt("Pass 2/2")
         printt()
         err = LoudnessNormalizationUtil.do_loudness_transform_and_save(
             source_flac, dest_path, loudness_stats, specs.i, specs.lra, specs.tp)

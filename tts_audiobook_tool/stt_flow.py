@@ -196,7 +196,7 @@ class SttFlow:
 
         print_heading("Merging data...", dont_clear=True, non_menu=True)
 
-        timed_text_segments, did_interrupt = SttUtil.make_timed_phrases(phrases, words)
+        timed_phrases, did_interrupt = SttUtil.make_timed_phrases(phrases, words)
 
         if did_interrupt:
             print_feedback("Interrupted")
@@ -204,13 +204,18 @@ class SttFlow:
 
         # [4] Save "abr" audio file
 
-        dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.m4a"
+        dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.m4b"
         dest_path = str( Path(source_audio_path).with_name(dest_name) )
         dest_path = make_unique_file_path(dest_path)
         printt(f"\nSaving audio file with added custom metadata")
         printt()
 
-        meta = AppMetadata(timed_text_segments, raw_text, has_section_break_audio=False)
+        meta = AppMetadata(
+            timed_phrases=timed_phrases, 
+            bookmark_indices=[],
+            raw_text=raw_text, 
+            has_section_break_audio=False
+        )
         if dest_path.lower().endswith(".flac"):
             save_error = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))
         else:
@@ -227,7 +232,7 @@ class SttFlow:
         # [4b] Review "discontinuity info"
         b = AskUtil.ask_confirm("View discontinuity info summary? ")
         if b:
-            print_discontinuity_info(timed_text_segments)
+            print_discontinuity_info(timed_phrases)
             AskUtil.ask_enter_to_continue()
 
         if not save_error:

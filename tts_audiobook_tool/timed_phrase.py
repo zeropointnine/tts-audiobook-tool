@@ -6,6 +6,9 @@ from tts_audiobook_tool.util import *
 
 class TimedPhrase:
     """
+    A phrase (piece of text) with a start and end time.
+    Used for the app metadata; the text gets displayed as-is in the player UI.
+    Note how does not have/need 'reason' at this stage in teh pipeline.
     """
 
     def __init__(self, text: str, time_start: float, time_end: float):
@@ -17,6 +20,12 @@ class TimedPhrase:
         s1 = ellipsize(self.text.strip(), 50)
         s2 = f"{time_stamp(self.time_start)}-{time_stamp(self.time_end)} "
         return f"[TimedPhrase] {s1} {s2}"
+
+
+    @property
+    def presentable_text(self) -> str:
+        """ Text in 'presentable' format for UI-related purposes """
+        return self.text.strip()
 
     # ---
 

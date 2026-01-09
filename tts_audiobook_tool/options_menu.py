@@ -180,3 +180,8 @@ def make_system_memory_string(base_color=COL_DIM) -> str:
         return vram_string
     else:
         return f"{vram_string}{base_color}, {ram_string}"
+
+DEBUG_SUBHEADING = \
+"""Saves intermediate sound segment files and diagnostic json data
+alongside the regular sound segment FLAC files, and
+preserves intermediate sound files after concatenation."""

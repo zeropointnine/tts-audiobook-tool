@@ -42,9 +42,11 @@ window.app = function() {
     let file = null;
     let url = null;
     let fileId = null; // id used to track the loaded resource
+    let legacyFileId = null; // back compat-related
 
     let textSegments = [];
     let spans = []; // cached text segment span refs
+    let metadataBookmarks = []; // bookmarks from the metadata (ie, not manually added by user)
 
     let isStarted = false; // is audiobook populated and audio loaded
     let hasAdvancedOnce = false; // has audio playback advanced one segment at least once
@@ -162,7 +164,7 @@ window.app = function() {
         });
 
         document.addEventListener("bookmarkSelect", (e) => { onBookmarkSelect(e); });
-        document.addEventListener("bookmarksChanged", () => { saveBookmarks(); });
+        document.addEventListener("bookmarksChanged", (e) => { onBookmarksChanged(e); });
 
         textHolder.addEventListener('click', onTextClick);
 
@@ -279,6 +281,7 @@ window.app = function() {
         file = null;
         url = "";
         fileId = "";
+        legacyFileId = "";
         currentIndex = -1;
         textSegments = [];
         directSelections = [];
@@ -295,8 +298,8 @@ window.app = function() {
             document.activeElement.blur();
         }
 
-        // Update 'last file opened' text
-        const s = localStorage.getItem("last_file_id")
+        // Update 'last opened' text
+        const s = localStorage.getItem("last_opened") 
         if (s) {
             document.getElementById("lastFileNameText").textContent = s;
             lastFileNameHolder.style.display = "block";
@@ -341,24 +344,26 @@ window.app = function() {
             return;
         }
 
-        const addSectionDividers = (appMetadata["has_section_break_audio"] === true);
-        start(pFile, pUrl, appMetadata["text_segments"], addSectionDividers);
+        start(pFile, pUrl, appMetadata);
     }
 
     /**
      * pFile and pUrl are mutually exclusive
      */
-    function start(pFile, pUrl, pTimedTextSegments, addSectionDividers) { // TODO: use single object param
+    function start(pFile, pUrl, appMetadata) {
 
         // Reset page state
         reset(true);
 
         file = pFile;
         url = pUrl;
-        fileId = file ? file.name : url
-        textSegments = pTimedTextSegments
+        fileId = getObjectHashSync(appMetadata);
+        legacyFileId = file ? file.name : url;
+        console.log("fileId", fileId)
 
-        localStorage.setItem("last_file_id", fileId);
+        textSegments = appMetadata["text_segments"];
+
+        localStorage.setItem("last_opened", file ? file.name : url);
 
         helpHolder.innerHTML = "";
         githubButton.style.display = "none";
@@ -367,11 +372,22 @@ window.app = function() {
         currentFileNameDiv.style.display = "block"
         currentFileNameDiv.textContent = file ? file.name : url
 
+        const addSectionDividers = (appMetadata["has_section_break_audio"] === true);
         populateText(addSectionDividers);
 
         // Bookmarks
-        const arr = loadBookmarks();
-        bookmarkController.init(textSegments, arr);
+        const noBookmarksYet = (localStorage.getItem(`bookmarks_fileId_${fileId}`) === null);
+        metadataBookmarks = appMetadata["bookmarks"] || [];        
+        const shouldPopulateMetadataBookmarks = (noBookmarksYet && metadataBookmarks.length > 0);
+        let bookmarks = null;
+        if (shouldPopulateMetadataBookmarks) {
+            bookmarks = metadataBookmarks
+            saveBookmarks()
+            console.log("inited bookmarks", bookmarks)
+        } else {
+            bookmarks = loadBookmarks()
+        }
+        bookmarkController.init(textSegments, bookmarks);
         showElement(bookmarkButton);
         addBookmarkClasses();
 
@@ -640,6 +656,15 @@ window.app = function() {
         hideScrimAndPanels();
     }
 
+    function onBookmarksChanged(e) {
+        if (bookmarkController.indices.length == 0 && metadataBookmarks.length > 0) {
+            if (confirm("Re-add file's embedded bookmarks?")) {
+                bookmarkController.initIndices(metadataBookmarks);
+            }
+        }
+        saveBookmarks();        
+    }
+
     function poll() {
         // Checks if audio position has crossed text segment boundaries
         // Also checks for mouse-over-playerOverlay
@@ -811,7 +836,7 @@ window.app = function() {
             } else if (error.name == "NotSupportedError") {
                 const s = `Error: ${error.name}\nCode: ${error.code}\n\nMessage: ${error.message}`;
                 alert(s)
-                localStorage.setItem("last_file_id", ""); // Roll back value
+                localStorage.setItem("last_opened", ""); // Roll back value
                 reset();
             } else {
                 console.error("audio.play() error - code:", error.code, "name:", error.name, "message:", error.message)
@@ -1189,3 +1214,34 @@ window.app = function() {
 const cl = console.log;
 
 const CORS_GITHUB_URL = "https://zeropointnine.github.io"
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Generates a synchronous 32-bit hash of an object
+ */
+function getObjectHashSync(obj) {
+ 
+    // Stable string representation of object
+    const str = JSON.stringify(obj, Object.keys(obj).sort());
+
+    // FNV-1a Hashing Algorithm
+    let hash = 2166136261; // FNV offset basis
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        // Perform 32-bit integer multiplication
+        hash = Math.imul(hash, 16777619); // FNV prime
+    }
+    // Convert to unsigned hex string
+    return (hash >>> 0).toString(16);
+}

@@ -294,9 +294,8 @@ class GenerateUtil:
                 )
 
         if not skip_reason:
-            message = f"{COL_DEFAULT}Transcribing audio complete: {(time.time() - val_start_time):.1f}s"
+            message = f"{COL_DEFAULT}Transcribed audio {COL_DIM}({(time.time() - val_start_time):.1f}s)"
             printt(f"{Ansi.LINE_HOME}{message}")
-            printt()
 
         return results
 
@@ -570,8 +569,7 @@ class GenerateUtil:
     @staticmethod
     def print_item_count_heading(num_complete: int, num_remaining: int, num_total: int) -> None:
         message = f"{COL_ACCENT}Items complete: {COL_DEFAULT}{num_complete} "
-        message += f"{COL_ACCENT}Remaining: {COL_DEFAULT}{num_remaining} "
-        message += f"{COL_ACCENT}Total: {COL_DEFAULT}{num_total}"
+        message += f"{COL_ACCENT}Remaining: {COL_DEFAULT}{num_remaining}"
         printt(f"{COL_ACCENT}{'-' * (len(strip_ansi_codes(message)))}")
         printt(f"{message}")
         printt()

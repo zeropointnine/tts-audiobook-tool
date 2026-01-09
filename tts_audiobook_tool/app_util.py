@@ -281,7 +281,7 @@ class AppUtil:
         return len(hash) == 16 and all(c in '0123456789abcdefABCDEF' for c in hash)
 
     @staticmethod
-    def insert_bracket_tag_file_path(file_path: str, tag: str) -> str:
+    def path_insert_tag(file_path: str, tag: str) -> str:
         """
         Eg, "[one] [two] hello.flac" -> "[one] [two] [newtag] hello.flac"
         """

@@ -111,7 +111,7 @@ class SoundFileUtil:
         return err
 
     @staticmethod
-    def transcode_to_aac(source_file_path: str) -> tuple[str, str]:
+    def transcode_to_aac(source_file_path: str, suffix: str=".m4b") -> tuple[str, str]:
         """
         Transcodes an audio file to AAC/MP4 format.
         Returns saved file name and error string, mutually exclusive
@@ -123,7 +123,7 @@ class SoundFileUtil:
         if path.suffix in AAC_SUFFIXES:
             return "", "Is already an mp4/m4a file"
 
-        dest_file_path = str(path.with_suffix(".m4a"))
+        dest_file_path = str(path.with_suffix(suffix))
         dest_file_path = make_unique_file_path(dest_file_path)
 
         partial_command = FFMPEG_TYPICAL_OPTIONS[:]

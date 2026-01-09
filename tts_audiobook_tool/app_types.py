@@ -197,6 +197,36 @@ class Strictness(tuple[str, int, str], Enum):
 
 # ---
 
+FILES_DESC = "Each chapter divider will result in a new, separate audio file"
+METADATA_DESC = "Always outputs to a single file\n    Chapter dividers are used for M4B chapter metadata and player bookmark metadata"
+
+class ChapterMode(tuple[str, str, str], Enum):
+
+    FILES = ("files", "Split into files", FILES_DESC)
+    BOOKMARKS = ("metadata", "Chapter metadata", METADATA_DESC)
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def label(self) -> str:
+        return self.value[1]
+
+    @property
+    def description(self) -> str:
+        return self.value[2]
+
+    @staticmethod
+    def get_by_id(id: str) -> ChapterMode | None:
+        for item in list(ChapterMode):
+            if id == item.id:
+                return item
+        return None
+    
+
+# ---
+
 SS_NORMAL_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, by sentence.
     This produces predictable caesuras between sentences."""
@@ -234,7 +264,7 @@ class SegmentationStrategy(tuple[str, str, str], Enum):
 
 class ExportType(tuple[str, str, str], Enum):
 
-    AAC = ("m4a", "AAC/M4A", ".m4a") # default
+    AAC = ("m4a", "AAC/M4B", ".m4b") # default
     FLAC = ("flac", "FLAC", ".flac")
 
     @property

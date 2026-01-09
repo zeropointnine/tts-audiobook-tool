@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 
-from tts_audiobook_tool.app_types import ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
@@ -53,6 +53,7 @@ class Project:
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
     strictness: Strictness = list(Strictness)[0] 
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
+    chapter_mode: ChapterMode = list(ChapterMode)[0]
 
     oute_voice_file_name: str = ""
     oute_voice_json: dict = {} # is loaded from external file, `oute_voice_file_name`
@@ -140,7 +141,9 @@ class Project:
 
         warnings: list[str] = []
         def add_warning(attr_name: str, defaulting_to: Any):
-            s = f"Warning: Missing or bad value for {attr_name}, setting to default: {defaulting_to}"
+            s = f"Warning: Missing or invalid value for: {attr_name}\n"
+            s += "This can occur if a new project property has been added to the app since the last time you opened the project.\n"
+            s += f"Setting to default: {defaulting_to}"
             warnings.append(s)
 
         # Text
@@ -273,6 +276,14 @@ class Project:
             add_warning("max_retries", PROJECT_MAX_RETRIES_DEFAULT)
             value = PROJECT_MAX_RETRIES_DEFAULT # note, not using "unset" value of -1 here b/c
         project.max_retries = value
+
+        # Chapter mode
+        s = d.get("chapter_mode", "")
+        value = ChapterMode.get_by_id(s)
+        if value is None:
+            value = list(ChapterMode)[0]
+            add_warning("chapter_mode", value)
+        project.chapter_mode = value
 
         # Oute
         project.oute_voice_file_name = d.get("oute_voice_file_name", "")
@@ -412,6 +423,7 @@ class Project:
             "realtime_save": self.realtime_save,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,
+            "chapter_mode": self.chapter_mode.id,
 
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,

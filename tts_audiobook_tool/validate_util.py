@@ -105,6 +105,10 @@ class ValidateUtil:
                 end = min(end, word_error_result.sound.duration)
                 end = SoundUtil.get_local_minima(word_error_result.sound, end)
 
+            if start == end: # TODO: revisit
+                return None
+
+
             new_sound = SoundUtil.trim(word_error_result.sound, start, end)
             new_sound, trim_start, _ = SilenceUtil.trim_silence(new_sound) 
 

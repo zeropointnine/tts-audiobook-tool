@@ -316,9 +316,15 @@ These are my anecdotal TTS inference speeds (note that CUDA inference speeds on 
 
 # Update highlights
 
+**2025-01-10**
+
+"Chapter dividers" can now be used for either creating separate files or for creating M4B sections and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
+
+Note, app now uses ".m4b" file suffix for AAC files instead of ".m4a".
+
 **2025-01-05**
 
-Added option to **add chapter cut points using regular expressions** (thanks @AntitrustEnthusiast).
+Added option to **add chapter dividers using regular expressions** (thanks @AntitrustEnthusiast).
 
 **2025-01-04**
 

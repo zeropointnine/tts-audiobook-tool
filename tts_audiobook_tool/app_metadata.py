@@ -9,6 +9,7 @@ from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.util import *
 
 class AppMetadata(NamedTuple):
     """
@@ -18,6 +19,9 @@ class AppMetadata(NamedTuple):
 
     # The list of Phrases that make up the audiobook text, including timing info
     timed_phrases: list[TimedPhrase]
+
+    # Bookmark indices
+    bookmark_indices: list[int]
 
     # The unmassaged input text 
     raw_text: str
@@ -34,6 +38,7 @@ class AppMetadata(NamedTuple):
 
         dic = {
             "raw_text": raw_text_base64,
+            "bookmarks": self.bookmark_indices,
             "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
             "has_section_break_audio": bool(self.has_section_break_audio)
         }
@@ -72,11 +77,20 @@ class AppMetadata(NamedTuple):
             return result
         timed_phrases = result
 
+        bookmarks = o.get("bookmarks", [])
+        if not isinstance(bookmarks, list):
+            return f"Bad type for 'bookmarks': {type(bookmarks)}"
+        try:
+            bookmarks = [int(item) for item in bookmarks]
+        except Exception as e:
+            return "Bad item in bookmarks: " + make_error_string(e)
+
         has_section_break_audio = o.get("has_section_break_audio", False)
 
         return AppMetadata(
-            timed_phrases, 
-            raw_text, 
+            timed_phrases=timed_phrases, 
+            bookmark_indices=bookmarks,
+            raw_text=raw_text, 
             has_section_break_audio=has_section_break_audio
         )
 

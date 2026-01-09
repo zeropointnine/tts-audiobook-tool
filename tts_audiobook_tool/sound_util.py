@@ -112,7 +112,7 @@ class SoundUtil:
         On error, prints feedback and simply returns the base_sound.
         """
 
-        result = appended_sound = SoundFileUtil.load(appended_sound_path)
+        result = SoundFileUtil.load(appended_sound_path)
         if isinstance(result, str):
             printt(f"Couldn't load sound {appended_sound_path} {result}")
             return base_sound

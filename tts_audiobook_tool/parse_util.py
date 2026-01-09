@@ -1,7 +1,7 @@
 class ParseUtil:
 
     @staticmethod
-    def parse_ranges_string(string: str, max_one_indexed: int) -> tuple[ set[int], list[str] ]:
+    def parse_ranges_string(string: str, num_items: int) -> tuple[ set[int], list[str] ]:
         """
         Expects a comma-delimited list of one-indexed ints and/or int ranges. Eg, "1, 3, 6-8"
         Returns tuple of zero-indexed index values and warning strings (eg, 1,3,6,7,8)
@@ -17,12 +17,12 @@ class ParseUtil:
         for token in tokens:
             if token.isdigit():
                 value = int(token)
-                if value < 1 or value > max_one_indexed:
+                if value < 1 or value > num_items:
                     warnings.append(f"Out of range: {value}")
                 else:
                     ints.append(value - 1)
             else:
-                items = ParseUtil._parse_range_string(token, max_one_indexed)
+                items = ParseUtil._parse_range_string(token, num_items)
                 if not items:
                     warnings.append(f"Bad value: {token}")
                 else:

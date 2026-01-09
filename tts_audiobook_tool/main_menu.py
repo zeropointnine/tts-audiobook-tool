@@ -156,7 +156,7 @@ def make_gen_label(state: State) -> str:
         s = f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
     else:
         s = f"{COL_DIM}({COL_ACCENT}{num_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} lines complete)"
-    return "Generate audiobook audio " + s
+    return "Generate audio " + s
 
 def on_gen(state: State, __) -> None:
     if not state.project.can_voice:

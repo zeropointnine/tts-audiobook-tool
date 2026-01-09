@@ -41,11 +41,13 @@ class WhisperUtil:
 
         try:
             segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
+
+            # Convert generator to concrete list (does the actual inference)
+            segments = list(segments)
+
         except Exception as e:
             return make_error_string(e)
 
-        # Convert generator to concrete list (does the inference)
-        segments = list(segments)
         # Flatten Segments into Words
         words = WhisperUtil.get_words_from_segments(segments)
         return words

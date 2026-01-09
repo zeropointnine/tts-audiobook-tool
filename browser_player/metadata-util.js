@@ -52,6 +52,9 @@ async function loadAppMetadata(file, url) {
         return "ABR metadata missing required field 'text_segments'";
     }
 
+    // Static bookmarks
+    const bookmarks = o["bookmarks"] || []
+
     // Raw text (no longer required but)
     let rawText = ""
     const rawTextBase64 = o["raw_text"]
@@ -77,8 +80,10 @@ async function loadAppMetadata(file, url) {
     const result = {
         "raw_text": rawText,
         "text_segments": timedTextSegments,
+        "bookmarks": bookmarks,
         "has_section_break_audio": (o["has_section_break_audio"] === true)
     }
+
     return result
 }
 
