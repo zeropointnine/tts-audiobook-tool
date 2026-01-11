@@ -168,7 +168,8 @@ def print_list(state: State) -> None:
         s = f"{COL_DEFAULT}[{COL_ACCENT}{qual}{index+1}{COL_DEFAULT}] "
         len_prefix = len(strip_ansi_codes(s))
         s += f"Lines {info.segment_index_start + 1}-{info.segment_index_end + 1} "
-        s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
+        missing = f", {info.num_files_missing} missing" if info.num_files_missing else ""
+        s += f"({info.num_files_exist}/{info.num_segments} generated{missing}){COL_DEFAULT}"
         if is_files and index == 0:
             s += f" {Ansi.ITALICS}{COL_DIM}(implicit)"
         printt(s)

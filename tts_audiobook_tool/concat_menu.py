@@ -168,7 +168,8 @@ def make_chapter_info_strings(infos: list[ChapterInfo], indices: list[int]) -> l
 
 def make_chapter_files_string(info: ChapterInfo, index: int) -> str:
     s = f"{COL_DEFAULT}Chapter file {index+1}:{COL_DIM} lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
-    s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
+    missing = f", {info.num_files_missing} missing" if info.num_files_missing else ""
+    s += f"({info.num_files_exist}/{info.num_segments} generated{missing}){COL_DEFAULT}"
     return s
 
 def ask_chapter_indices_and_make(state: State) -> None:

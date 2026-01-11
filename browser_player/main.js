@@ -246,7 +246,7 @@ window.app = function() {
             hideScrimAndPanels();
         });
 
-        loadUrlIcon = document.getElementById("loadUrlIcon");
+        const loadUrlIcon = document.getElementById("loadUrlIcon");
         if (loadUrlIcon) {
             loadUrlIcon.addEventListener("click", () => { showLoadUrlInfo() })
         }
