@@ -1,5 +1,6 @@
-from tts_audiobook_tool.util import make_error_string
-
+import os
+from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.util import *
 
 class ProjectUtil:
     """
@@ -36,3 +37,41 @@ class ProjectUtil:
             value = value.strip() # replacement-word is not
             result[key] = value
         return result
+    
+    @staticmethod
+    def get_latest_concat_file(project: Project) -> str:
+        """
+        Finds the latest concatenated audio file within the project's concat directory.
+        If multiple files in a subdirectory, returns first one.
+        """
+
+        concat_dir = project.concat_path
+        if not concat_dir or not os.path.exists(concat_dir):
+            return ""
+        
+        # Get subdirectories, revchron sorted
+        subdirs = []
+        for item in os.listdir(concat_dir):
+            item_path = os.path.join(concat_dir, item)
+            if os.path.isdir(item_path):
+                subdirs.append(item_path)        
+        subdirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                
+        # Iterate through subdirectories, find first file that matches the criteria
+        EXCLUDED_SUBSTRINGS = ["[concat]", "[norm]", "[chaptermeta]"]        
+        path = ""
+        for subdir in subdirs:
+            try:
+                file_names = sorted(os.listdir(subdir))
+            except (OSError, PermissionError):
+                continue
+            for file_name in file_names:
+                hit = file_name.endswith((".abr.m4b", ".abr.flac")) 
+                hit = hit and not any(sub in file_name for sub in EXCLUDED_SUBSTRINGS)
+                if hit:
+                    path = os.path.join(subdir, file_name)
+                    break
+            if path:
+                break
+        
+        return path

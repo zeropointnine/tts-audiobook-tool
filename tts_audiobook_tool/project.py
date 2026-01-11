@@ -10,7 +10,6 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_util import TextUtil
@@ -123,6 +122,8 @@ class Project:
         Returns error string if json is unviable.
         Else, on some parse errors, falls back to defaults and prints info along the way.
         """
+
+        from tts_audiobook_tool.project_util import ProjectUtil
 
         if not os.path.exists(dir_path):
             return f"Project directory doesn't exist:\n{dir_path}"

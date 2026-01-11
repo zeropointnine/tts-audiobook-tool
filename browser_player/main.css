@@ -121,13 +121,11 @@
     right: 0;
     bottom: 0;
 
-    width: 100vw;
-
     /* Dynamic viewport height re: mobile */
     height: calc(100dvh);
-
+    /* Back compat */
     @supports not (height: 100dvh) {
-        height: 100vh; /* Back compat */
+        height: 100vh; 
     }
 
     pointer-events: none;

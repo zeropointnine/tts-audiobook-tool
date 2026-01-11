@@ -9,6 +9,7 @@ import platform
 import subprocess
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -109,6 +110,13 @@ def make_error_string(e: Exception) -> str:
     Standard way for the app to display exceptions
     """
     return f"{type(e).__name__}: {e}"
+
+def make_url_with_params(base_url: str, params: dict) -> str:
+    """ Builds a properly encoded URL """
+    if params:
+        query_string = urlencode(params, doseq=True)
+        return f"{base_url}?{query_string}"
+    return base_url
 
 def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
     """

@@ -7,9 +7,10 @@ from tts_audiobook_tool.chapter_dividers_menu import ChapterDividersMenu
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
@@ -55,6 +56,14 @@ class ConcatMenu:
                 lambda _, __: ConcatMenu.section_break_menu(state)
             )
         ]
+        if DEV:
+            items.append(
+                MenuItem(
+                    "Launch latest in browser", 
+                    lambda _, __: launch_latest_concat_file(state.project)
+                )
+            )
+
         MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_files_subheading)
 
     @staticmethod
@@ -254,6 +263,52 @@ def ask_chapter_indices(infos: list[ChapterInfo], num_phrase_groups: int) -> lis
             return None
     
     return indices
+
+def launch_latest_concat_file(project: Project) -> None:
+    """
+    Launches local player/reader in browser with the latest concat'ed file
+    """
+
+    audio_file_path = ProjectUtil.get_latest_concat_file(project)
+    if not audio_file_path:
+        print_feedback("Not found")
+        return
+
+    # Eg:
+    #   chromium
+    #       --allow-file-access-from-files
+    #       --autoplay-policy=no-user-gesture-required
+    #       file:///path/to/index.html?url=/path/to/audiobook.m4b
+    # 
+    #   Rem, flags won't take if pre-existing browser process exists w/o those flag
+
+    BROWSER_COMMAND = "chromium"
+    BROWSER_FLAGS = [
+        "--allow-file-access-from-files", 
+        "--autoplay-policy=no-user-gesture-required"
+    ]
+
+    this_file_path = Path(os.path.abspath(__file__))
+    index_html_path = this_file_path.parent.parent / "browser_player" / "index.html"
+    index_html_url = index_html_path.as_uri() # important
+    browser_url = make_url_with_params(index_html_url, { "url": audio_file_path })
+
+    command = []
+    command.append(BROWSER_COMMAND)
+    command.extend(BROWSER_FLAGS)
+    command.append(browser_url)
+
+    try:
+        subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True  # Detach from Python process so it doesn't block
+        )
+        print_feedback(f"Launched process:\n{command}")
+    
+    except (FileNotFoundError, Exception) as e:
+        print_feedback(make_error_string(e), is_error=True)
 
 
 LOUDNORM_SUBHEADING = \
