@@ -392,25 +392,30 @@ window.app = function() {
         if (!appMetadata || typeof appMetadata === 'string') {
             const errorMessage = appMetadata || "No tts-audiobook-tool metadata found";
             alert(errorMessage);
+            syncAddressBar(null)
             return;
         }
 
+        // Success
         start(pFile, pUrl, appMetadata);
     }
 
     /**
-     * pFile and pUrl are mutually exclusive
+     * Initializes page using the given metadata.
+     * 
+     * `pFile` and `pUrl` are mutually exclusive
      */
-    function start(pFile, pUrl, appMetadata) {
+    function start(file, url, appMetadata) {
 
         // Reset page state
         reset(true);
 
-        file = pFile;
-        url = pUrl;
-        fileId = getObjectHashSync(appMetadata);
+        // Rem, this clears the url param if was loaded from file not url
+        syncAddressBar(url)
+
+        fileId = getObjectHash(appMetadata);
         legacyFileId = file ? file.name : url;
-        console.log("fileId", fileId)
+        cl("fileId", fileId)
 
         textSegments = appMetadata["text_segments"];
 
@@ -1167,62 +1172,6 @@ window.app = function() {
         }
     }
 
-    // --------------------------------------
-    // 'Utility' functions
-    // TODO: move to dedicated script after implementing script concat
-
-    function isTouchDevice() {
-        // hand-wavey test
-        return !matchMedia("(pointer:fine)").matches
-    }
-
-    function hasPersistentKeyboard() {
-        // hand-wavey test
-        const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
-        const hasHoverSupport = window.matchMedia("(hover: hover)").matches;
-        return (hasFinePointer && hasHoverSupport);
-    }
-
-    function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#39;")
-    }
-
-    function splitWhitespace(str) {
-        // Match leading whitespace, content, and trailing whitespace
-        str = str || "";
-        const match = str.match(/^(\s*)(.*?)(\s*)$/);
-        if (!match) {
-            // This should not happen with the current regex,
-            // but as a safeguard, return empty parts if match fails.
-            return {
-                before: "",
-                content: str,
-                after: ""
-            };
-        }
-        return {
-          before: match[1],
-          content: match[2],
-          after: match[3]
-        };
-    }
-
-    function msToString(milliseconds) {
-        const totalSeconds = Math.floor(milliseconds / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        if (minutes > 0) {
-            return `${minutes}m${seconds}s`;
-        } else {
-            return `${seconds}s`;
-        }
-    }
-
     // ---
 
     /**
@@ -1260,28 +1209,48 @@ window.app = function() {
         const els = document.elementsFromPoint(mousePosition.x, mousePosition.y);
         return (els.indexOf(element) > -1);
     }
+
+    /**
+     * Updates address bar to reflect currently loaded audio file url.
+     * If file was obtained via local upload, pass null for `audioFileUrl`.
+     */
+    function syncAddressBar(audioFileUrl) {
+        
+        // Create 'clean' url (compatible with local file url)
+        const url = new URL(window.location.href);
+        url.search = ''; 
+        url.hash = '';
+        
+        if (audioFileUrl) {
+            url.searchParams.set('url', audioFileUrl); // automatically uri-encodes
+        }
+        window.history.replaceState(null, '', url.toString());
+    }
 };
 
-const cl = console.log;
+// ----------------------------
+// 'Utility' functions
+// TODO: move to dedicated file
 
-const CORS_GITHUB_URL = "https://zeropointnine.github.io"
+function cl(...rest) {
+    if (true) {
+        console.log(...rest); 
+    }
+}
 
-
-
-
-
-
-
-
-
-
-
-
+function escapeHtml(unsafe) {
+    return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;")
+}
 
 /**
- * Generates a synchronous 32-bit hash of an object
+ * Generates a 32-bit hash of an object
  */
-function getObjectHashSync(obj) {
+function getObjectHash(obj) {
  
     // Stable string representation of object
     const str = JSON.stringify(obj, Object.keys(obj).sort());
@@ -1296,3 +1265,48 @@ function getObjectHashSync(obj) {
     // Convert to unsigned hex string
     return (hash >>> 0).toString(16);
 }
+
+function isTouchDevice() {
+    // hand-wavey test
+    return !matchMedia("(pointer:fine)").matches
+}
+
+function hasPersistentKeyboard() {
+    // hand-wavey test
+    const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
+    const hasHoverSupport = window.matchMedia("(hover: hover)").matches;
+    return (hasFinePointer && hasHoverSupport);
+}
+
+function splitWhitespace(str) {
+    // Match leading whitespace, content, and trailing whitespace
+    str = str || "";
+    const match = str.match(/^(\s*)(.*?)(\s*)$/);
+    if (!match) {
+        // This should not happen with the current regex,
+        // but as a safeguard, return empty parts if match fails.
+        return {
+            before: "",
+            content: str,
+            after: ""
+        };
+    }
+    return {
+        before: match[1],
+        content: match[2],
+        after: match[3]
+    };
+}
+
+function msToString(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes > 0) {
+        return `${minutes}m${seconds}s`;
+    } else {
+        return `${seconds}s`;
+    }
+}
+
+const CORS_GITHUB_URL = "https://zeropointnine.github.io"
