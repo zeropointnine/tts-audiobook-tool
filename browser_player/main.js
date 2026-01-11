@@ -49,6 +49,7 @@ window.app = function() {
     let metadataBookmarks = []; // bookmarks from the metadata (ie, not manually added by user)
 
     let isStarted = false; // is audiobook populated and audio loaded
+    let isLoading = false;
     let hasAdvancedOnce = false; // has audio playback advanced one segment at least once
     let isToastPlayPrompt = false;
 
@@ -63,6 +64,8 @@ window.app = function() {
     let isCheckingZombie = false;
     let lastStorePositionTime = 0
     const mousePosition = { x: -1, y: -1};
+    let dragCounter = 0;
+    let isIgnoreDrag = false;
 
     // ********
     pageInit();
@@ -180,6 +183,8 @@ window.app = function() {
                 }
             }
         });
+
+        initDragDropListeners();
     }
 
     function initClickListeners() {
@@ -259,6 +264,50 @@ window.app = function() {
         });
     }
 
+    function initDragDropListeners() {
+        
+        const overlay = document.getElementById('dragOverlay');
+
+        window.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            isIgnoreDrag = (isLoading || isCheckingZombie);
+            dragCounter++;
+            if (isIgnoreDrag) {
+                return;
+            }
+            overlay.style.display = 'block';
+        });
+        window.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter === 0) {
+                overlay.style.display = 'none';
+                if (isIgnoreDrag) {
+                    isIgnoreDrag = false;
+                }
+            }
+        });
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault(); // required
+        });
+
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            
+            // Reset drag state
+            dragCounter = 0;
+            overlay.style.display = 'none';
+
+            if (isIgnoreDrag) {
+                isIgnoreDrag = false;
+                return;
+            }
+
+            const file = e.dataTransfer.files[0];
+            loadAudioFileOrUrl(file, null);
+        });
+    }
+
     /**
      * Reset page state; should be tantamount to a 'reload', mostly
      */
@@ -331,8 +380,10 @@ window.app = function() {
             showElement(loadingOverlay, "flex");
         }
 
+        isLoading = true;
         // eslint-disable-next-line
         const appMetadata = await loadAppMetadata(pFile, pUrl);
+        isLoading = false;
 
         if (pUrl) {
             hideElement(loadingOverlay);

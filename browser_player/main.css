@@ -608,6 +608,19 @@ html, body {
     box-shadow: 0 4px 8px var(--color-shadow);
 }
 
+#dragOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--color-segment-highlight);
+    opacity:0.5;
+    display: none; 
+    z-index: 9999;
+    pointer-events: none; 
+}
+
 /* ------------------- */
 
 #outerTextHolder {
@@ -768,7 +781,7 @@ span.bookmark.highlight::before {
 }
 #helpHolder td.help2 {
     padding-top:16px;
-    text-align: center;
+    
 }
 
 #githubCorner {

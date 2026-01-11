@@ -241,7 +241,7 @@ def make_chapter_ranges(section_dividers: list[int], num_items: int) -> list[tup
     Assumes `section_dividers` is sorted 
     """
 
-    # TODO: this should be a property in Project xxx
+    # TODO: this should be a property in Project
 
     if not section_dividers:
         return [ (0, num_items - 1) ]
