@@ -84,7 +84,7 @@ Initialize a **Python v3.12** virtual environment named `venv-mira`. For example
 
 Activate the virtual environment:
 
-    venv-glm\Scripts\activate.bat
+    venv-mira\Scripts\activate.bat
 
 Install dependencies:
 
@@ -99,11 +99,12 @@ Install dependencies:
 
 Initialize a **Python v3.11** virtual environment named `venv-glm`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-glm
+    pyenv local 3.11
+    python -m venv venv-glm
 
 Activate the virtual environment:
 
-    venv-glm\Scripts\activate.bat
+    source venv-glm/bin/activate
 
 Install dependencies:
 
@@ -117,7 +118,7 @@ Install [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/inst
 
 Initialize the conda environment. For example:
 
-    conda create --prefix "c:\path\to\conda-glm" -y
+    conda create --prefix "c:\path\to\conda-glm" python=3.11 -y
 
 Activate the conda environment:
 
@@ -125,11 +126,11 @@ Activate the conda environment:
 
 Install this dependency using conda:
 
-    conda install pynini==2.1.5 -c conda-forge
+    conda install pynini==2.1.6 -c conda-forge
 
 Install the rest of the project dependencies using pip like normal:
 
-    pip install requirements-glm.txt
+    pip install -r requirements-glm.txt
 
 Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-tts-packaged) that has been refactored for use as an installable package.
 
