@@ -93,7 +93,7 @@ class ConcatUtil:
 
         Hint.show_player_hint_if_necessary(state.prefs)
 
-        hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file browser: ")
+        hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file explorer: ")
         printt()
         if hotkey == "o":
             err = open_directory_in_gui(dest_dir)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math
 import string
+import re
 import pysbd
 
 from tts_audiobook_tool.phrase import Phrase, Reason
@@ -91,7 +92,7 @@ class PhraseSegmenter:
 
         sentences = merge_danging_punc_word(sentences) # type: ignore
 
-        # pysbd treats everything enclosed in quotes as a single sentence, so split those up
+        # pysbd treats everything enclosed in quotes as a single sentence, so split those up, too
         new_sentences = []
         for string in sentences:
             if is_sentence_quotation(string):
@@ -106,37 +107,57 @@ class PhraseSegmenter:
 
     @staticmethod
     def sentence_string_to_phrase_strings(sentence: str) -> list[str]:
-        """ Returns list of phrase strings from a sentence string """
+        """
+        Returns list of phrase strings from a sentence string
+        """
 
-        # Segment at phrase delimiter
-        items = []
-        string = ""
-        for char in sentence:
-            string += char
-            if char in PHRASE_DELIMITERS:
-                items.append(string)
-                string = ""
-        if string:
-            items.append(string)
+        # Split before:
+        # - open paren `(` 
+        
+        # Split after:
+        # - double-quote+space `" `
+        # - fancy-close-double-quote+space `” `
+        # - comma+space `, `
+        # - semicolon+space `; `
+        # - colon+space `: `
+        # - en-dash `–`
+        # - em-dash `—`
+        # - close paren `)`
+
+        # Using lookahead for splits before pattern, lookbehind for splits after pattern
+        
+        pattern = r'(?=\()|(?<=" )|(?<=” )|(?<=, )|(?<=; )|(?<=: )|(?<=–)|(?<=—)|(?<=\))'
+        items = re.split(pattern, sentence)
+
+        # Not including these punctuation characters on purpose: 
+        # normal dash, apostrophe/single-quote or double-quote
+        
+        # Remove empty strings (e.g. if sentence ends with a delimiter)
+        items = [item for item in items if item]
 
         if len(items) <= 1:
             return items
 
-        # Move starting whitespace to end of previous item
+        def split_leading_ws(input_string: str) -> tuple[str, str]:
+            for i, char in enumerate(input_string):
+                if char not in string.whitespace:
+                    return (input_string[:i], input_string[i:])
+            return (input_string, "")
+
+        # Move leading ws_punc to end of previous item
         for i in range(1, len(items)):
-            leading_ws, remainder = split_leading_ws_punc(items[i])
-            items[i - 1] += leading_ws
+            leading_ws_punc, remainder = split_leading_ws(items[i])
+            items[i - 1] += leading_ws_punc
             items[i] = remainder
 
-        # Combine any ws-punc items to predecessor (edge case)
+        # Combine any all-ws/punc items to predecessor (edge case)
         new_items = [ items[0] ]
         for i in range(1, len(items)):
             if TextUtil.is_ws_punc(items[i]):
-                items[i-1] += items[i]
+                new_items[len(new_items) - 1] += items[i]
             else:
                 new_items.append(items[i])
         items = new_items
-
         return items
 
     @staticmethod
@@ -247,22 +268,6 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
 
     return (before, content, after)
 
-def split_leading_whitespace(s: str) -> tuple[str, str]:
-    lstripped_string = s.lstrip()
-    leading_whitespace_len = len(s) - len(lstripped_string)
-    return s[:leading_whitespace_len], s[leading_whitespace_len:]
-
-
-def split_leading_ws_punc(input_string: str) -> tuple[str, str]:
-  for i, char in enumerate(input_string):
-    if char not in WHITESPACE_PUNCTUATION:
-      return (input_string[:i], input_string[i:])
-  return (input_string, "")
-
-
 # Characters that are either whitespace or punctuation
-WHITESPACE_PUNCTUATION = set(string.whitespace + string.punctuation) # TODO this is incomplete; reconcile with other related usages
-
-# comma, semicolon, colon, en-dash, em-dash, open paren, close paren
-# not including normal dash, apostrophe/single-quote or double-quote
-PHRASE_DELIMITERS = r'[(),;:\–\—]'
+# TODO this is incomplete; reconcile with other related usages
+WHITESPACE_PUNCTUATION = set(string.whitespace + string.punctuation) 

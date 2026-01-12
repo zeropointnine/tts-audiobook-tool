@@ -84,5 +84,64 @@ class TestPhraseSegmenter(unittest.TestCase):
           print("answer:", answer)
           self.assertTrue(result == answer)
 
+    def test_sentence_to_phrases(self):
+       print()
+
+       items = [
+          (
+              "If this, then that.", 
+             ["If this, ", "then that."]
+          ),
+          (
+              "The reason: Because", 
+             ["The reason: ", "Because"]
+          ),
+          (
+              "The reason: Because... \n", 
+             ["The reason: ", "Because... \n"]
+          ),
+          (
+              "They liked it (but I didn't).", 
+             ["They liked it ", "(but I didn't)."] 
+          ),
+          (
+              "They liked it; I didn't", 
+             ["They liked it; ", "I didn't"] 
+          ),
+          (
+             "I was like, \"Yo\"", 
+             ["I was like, ", "\"Yo\""] 
+          ),          
+          (
+              "\"Alright then,\" she said.", 
+             ["\"Alright then,\" ", "she said."] 
+          ),          
+          (
+              "“Alright then,” she said.", 
+             ["“Alright then,” ", "she said."] 
+          ),          
+          (
+              "Is it Steins;Gate or Re:Zero?", 
+             ["Is it Steins;Gate or Re:Zero?"]
+          ),
+          (
+              "Malformed,,,:::;;; text",
+             ["Malformed,,,:::;;; ",  "text"]
+          ),
+          (
+              "Malformed,,,:::;;;text",
+             ["Malformed,,,:::;;;text"]
+          )
+       ]
+
+       for inp, answer in items:
+          result = PhraseSegmenter.sentence_string_to_phrase_strings(inp)
+          print()
+          print("input:", repr(inp))
+          print("result:", result)
+          print("answer:", answer)
+          self.assertTrue(result == answer)
+          
+
 if __name__ == '__main__':
     unittest.main()

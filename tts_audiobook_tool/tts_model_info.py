@@ -38,6 +38,8 @@ class TtsModelInfo(NamedTuple):
     # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
     # hallucinate past the end of teh prompt (eg, for Chatterbox)
     semantic_trim_last: bool
+    # Forces lowercase on prompts that start out all-caps (see `un_all_caps_prompt()`)
+    un_all_caps: bool
     # The requirements.txt file that should be used to install the virtual environment for the given tts model
     requirements_file_name: str
     # ui-related strings and values
@@ -66,6 +68,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=True,
         semantic_trim_last=False,
+        un_all_caps=False,
         requirements_file_name="",
         ui = {},
         substitutions=[]
@@ -85,6 +88,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=True,
         semantic_trim_last=False,
+        un_all_caps=False, # TODO: check this
         requirements_file_name="requirements-oute.txt",
         ui = {
             "proper_name": "Oute TTS",
@@ -112,6 +116,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=True,
         semantic_trim_last=True,
+        un_all_caps=True,
         requirements_file_name="requirements-chatterbox.txt",
         ui = {
             "proper_name": "Chatterbox TTS",
@@ -138,6 +143,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        un_all_caps=True, # Does well with all caps, but still worse than normal case
         requirements_file_name="requirements-fish.txt",
         ui = {
             "proper_name": "Fish S1-mini",
@@ -164,6 +170,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
         requirements_file_name="requirements-higgs.txt",
         ui = {
             "proper_name": "Higgs Audio V2",
@@ -190,6 +197,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=True,
         semantic_trim_last=False,
+        un_all_caps=True,
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
             "proper_name": "VibeVoice",
@@ -218,6 +226,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        un_all_caps=False,
         requirements_file_name="requirements-indextts2.txt",
         ui = {
             "proper_name": "IndexTTS2",
@@ -245,6 +254,7 @@ class TtsModelInfos(Enum):
         can_batch=False,
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        un_all_caps=False,
         requirements_file_name="requirements-glm.txt",
         ui = {
             "proper_name": "GLM-TTS",
@@ -273,6 +283,7 @@ class TtsModelInfos(Enum):
         can_batch=True,
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        un_all_caps=True, # falls down badly with all caps phrases
         requirements_file_name="requirements-mira.txt",
         ui = {
             "proper_name": "MiraTTS",
@@ -281,10 +292,9 @@ class TtsModelInfos(Enum):
             "voice_path_requestor": "Select voice clone audio clip (recommended up to 15s)"
         },
         substitutions=[
-            # semicolon doesn't create caesura, but neither does comma reliably, so
-            # em-dash seems okay
-            # space-en-dash-space seems okay
-            # ... "caesura punctuation" seems unpredictable so there's no use replacing characters
+            # semicolon doesn't create caesura, but neither does comma reliably
+            # em-dash and space-en-dash-space seems okay
+            # "caesura punctuation" in general seems unpredictable so there's no use replacing characters
         ]
     )
 

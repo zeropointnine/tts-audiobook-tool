@@ -80,7 +80,7 @@ class TextUtil:
     @staticmethod
     def get_words(s: str, filtered: bool=False) -> list[str]:
         """
-        Splits string into words, preserving whitespace, 
+        Splits string into words, *preserving whitespace*, 
         and optionally filtering out "punctuation words"
         """
 

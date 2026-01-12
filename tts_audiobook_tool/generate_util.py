@@ -10,6 +10,7 @@ from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
@@ -501,9 +502,16 @@ class GenerateUtil:
 
     @staticmethod
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
+        
         prompt = phrase_group.as_flattened_phrase().text
-        prompt = TextNormalizer.apply_prompt_word_substitutions(prompt, project.word_substitutions, project.language_code)
-        prompt = TextNormalizer.normalize_prompt_common(prompt, project.language_code)
+        prompt = PromptNormalizer.apply_prompt_word_substitutions(
+            prompt, project.word_substitutions, project.language_code
+        )
+        prompt = PromptNormalizer.normalize_prompt(
+            text=prompt, 
+            language_code=project.language_code,
+            un_all_caps=Tts.get_type().value.un_all_caps
+        )
         prompt = Tts.get_instance().massage_for_inference(prompt)
         return prompt
 

@@ -65,7 +65,7 @@ class ProjectMenu:
             if state.project.dir_path:
                 items.append(MenuItem(make_subst_label, lambda _, __: ProjectMenu.word_substitutions_menu(state)))
 
-                items.append(MenuItem("Show directory in system file browser", on_view))
+                items.append(MenuItem("Show directory in system file explorer", on_view))
             return items
 
         MenuUtil.menu(
@@ -270,7 +270,7 @@ LANGUAGE_CODE_DESC = "" + \
 - Semantic segmentation of imported text
 - Prompt pre-processing 
 - Whisper transcription
-- TTS inference (required by Chatterbox)"""
+- TTS inference (Chatterbox)"""
 
 SUBSTITUTIONS_DESC = \
 f"""List of words to be replaced in the TTS prompt at inference-time.
