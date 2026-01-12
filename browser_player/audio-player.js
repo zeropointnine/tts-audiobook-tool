@@ -1,11 +1,13 @@
 class AudioPlayer {
 
     /**
-     * Takes in a pre-existing <audio> element and an empty container.
+     * Opinionated audio player widget
+     * 
+     * Takes in a pre-existing <audio> element and empty container.
      * The controls get programmatically added to the container.
      * Assumes css definitions as found in "audio-player.css"
      *
-     * The class requires very little no "api", as it were.
+     * The class requires very little "api", as it were.
      */
     constructor({ audioElement, container }) {
 

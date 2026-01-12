@@ -181,7 +181,7 @@ html, body {
     transform: translateY(0%);
 }
 
-.loadHolder {
+#loadHolder {
     padding-top:62px; /* clear player + extra */
     padding-left: 18px;
     padding-right: 18px;
@@ -279,7 +279,7 @@ html, body {
     height: 24px;
 }
 
-#lastFileNameHolder {
+#lastFileNameLabel {
     display: none;
     margin-top:32px;
     font-size: 16px;
@@ -288,7 +288,7 @@ html, body {
     color: var(--color-text-dim);
 }
 @media (max-width: 600px) {
-    #lastFileNameHolder {
+    #lastFileNameLabel {
         font-size: 12px;
     }
 }
@@ -743,7 +743,6 @@ span.bookmark.highlight::before {
     }
 }
 
-
 #segmentColorsButton svg path.colored {
     fill: var(--color-segment-highlight); /* hah */
 }
@@ -789,6 +788,8 @@ span.bookmark.highlight::before {
     right: 0;
     top: 0;
     opacity:0.66;
+    cursor:pointer;
+    z-index: 999;
 }
 #githubCorner svg {
     fill: var(--color-text-dim);

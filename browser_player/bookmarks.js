@@ -1,21 +1,48 @@
-/**
- * Acts as a 'controller' for the bookmark panel.
- * 
- * Does not manage localStorage values.
- */
-class BookmarkController {
+"use strict";
 
-    constructor(mainDiv) {
-        this.mainDiv = mainDiv;
-        this.addButton = this.mainDiv.querySelector("#bookmarkAddButton");
-        this.addButtonDescLine = this.mainDiv.querySelector("#bookmarkAddDescLine");
-        this.addButtonDesc = this.mainDiv.querySelector("#bookmarkAddDesc");
-        this.addButtonLocation = this.mainDiv.querySelector("#bookmarkAddLocation");
-        this.listHolder = this.mainDiv.querySelector("#bookmarkList");
+/**
+ * Bookmarks panel widget
+ * 
+ * (Bookmark toggle button handled elsewhere)
+ */
+class Bookmarks {
+
+    /**
+     * @param {Object} config - Configuration object
+     * @param {Object} config.mainEl - 
+     * @param {Object} config.onSelected - 
+     * @param {Object} config.onChanged - 
+     */
+    constructor(config) {
+
+        const err = Util.validateObject(config, ["mainEl", "onSelected", "onChanged"]);
+        if (err) {
+            throw new Error(err)
+        }
+
+        this.mainEl = config.mainEl;
+
+        this.addButton = this.mainEl.querySelector("#bookmarkAddButton");
+        this.addButtonDescLine = this.mainEl.querySelector("#bookmarkAddDescLine");
+        this.addButtonDesc = this.mainEl.querySelector("#bookmarkAddDesc");
+        this.addButtonLocation = this.mainEl.querySelector("#bookmarkAddLocation");
+        this.listHolder = this.mainEl.querySelector("#bookmarkList");
+        
+        const els = [this.addButton, this.addButtonDescLine, this.addButtonDesc, this.addButtonLocation, this.listHolder];
+        for (const el of els) {
+            if (!el) {
+                throw new Error("Missing html element");
+            }
+        }
+
+        this.onSelected = config.onSelected;
+        this.onChanged = config.onChanged;
+
         this.indices = [];
         this.currentIndex = -1;
 
         this.addButton.addEventListener('click', () => { this._onAddButton() });
+        this.mainEl.addEventListener("click", (e) => { e.stopPropagation(); });
     }
 
     /**
@@ -91,6 +118,18 @@ class BookmarkController {
         this._updateList();
     }
 
+    show() {
+       ShowUtil.show(this.mainEl);
+    }
+
+    hide() {
+       ShowUtil.hide(this.mainEl);
+    }
+
+    get isShowing() {
+        return ShowUtil.isShowing(this.mainEl);
+    }
+
     _updateList() {
         this.listHolder.replaceChildren();
         if (this.indices.length > 0) {
@@ -113,7 +152,7 @@ class BookmarkController {
         const text = this.textSegments[index].text;
         const s = `<div class="bookmarkItemText" data-index="${index}" tabindex="-1">${text}</div>`;
         const textEl = this._makeElement(s);
-        textEl.addEventListener("click", (e) => { this._onItemClick(e) } );
+        textEl.addEventListener("click", this._onItemClick);
 
         // Location text
         const location = (index + 1) + "";
@@ -141,18 +180,18 @@ class BookmarkController {
             return;
         }
         this.addIndex(this.currentIndex);
-        document.dispatchEvent(new CustomEvent("bookmarksChanged"));
+        this.onChanged();
     }
 
-    _onItemClick(e) {
-        const index = e.currentTarget.dataset.index;
-        const event = new CustomEvent( "bookmarkSelect", { detail: { index: index } } )
-        document.dispatchEvent(event)
+    _onItemClick = (e) => {
+        let index = e.currentTarget.dataset.index;
+        index = parseInt(index);
+        this.onSelected(index);
     }
 
     _onItemDeleteButton(e) {
         const index = e.currentTarget.dataset.index;
         this.removeIndex(index);
-        document.dispatchEvent(new CustomEvent("bookmarksChanged"));
+        this.onChanged();
     }
 }

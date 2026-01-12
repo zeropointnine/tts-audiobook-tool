@@ -45,7 +45,7 @@ def ask_cut_points(state: State) -> None:
     if section_dividers:
         print_cut_points(section_dividers, num_text_groups)
 
-    printt("Enter the line numbers where new chapters will begin.")
+    printt("Enter the line numbers where new chapters will begin:")
     printt(f"{COL_DIM}For example, if there are 400 lines of text and you enter \"101, 201\",")
     printt(f"{COL_DIM}it will create three sections spanning lines 1-100, 101-200, and 201-400.")
     printt()

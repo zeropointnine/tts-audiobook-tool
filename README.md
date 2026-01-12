@@ -13,7 +13,7 @@ This is a generative-AI audiobook creation tool that supports a growing list of 
 The app employs a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
 
 - Rational segmentation of long text at paragraph/sentence/phrase boundaries, as needed
-- Detection and correction of many inference errors and hallucinations using speech-to-text comparison to the source text
+- Detection and correction of many inference errors using speech-to-text comparison to the source text
 - Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
 - Industry standard loudness normalization
 
@@ -21,7 +21,7 @@ Plain-vanilla text interface in the console.
 
 ### Browser player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the text highlighted in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `browser_player\index.html` (no need for a web server), or from the mapped [project github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
+The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the text highlighted in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `browser_player\index.html` (ie, no need for a web server), or from the [project's mapped github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
 **Example outputs**, all using the same source text and same 15-second voice clone sample:
 
@@ -38,7 +38,7 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 ### Bonus feature: Enhance existing audiobooks
 
-Using speech-to-text, the app is also able to embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player/reader.
+Using speech-to-text, the app is also able to embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player.
 
 Select `Options` > `Enhance existing audiobook`, and select your source audiobook file (typically M4A or M4B) and corresponding book text. This feature is experimental.
 
@@ -49,7 +49,7 @@ Select `Options` > `Enhance existing audiobook`, and select your source audioboo
 3. Select the source text. 3b. Optionally define file split points.
 4. Start inferencing, and ... be prepared to wait.
 5. Concatenate the generated audio segments to create the final FLAC or M4A file/s.
-6. Optionally use the aforementioned web player/reader to play and read your audiobook.
+6. Optionally use the aforementioned web player to play and read your audiobook.
 
 
 # Installation
@@ -274,15 +274,15 @@ The app saves its state between sessions, so you can interrupt the program at an
 
 Additionally, setting chapter cut points can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
 
-Note too that it's possible to utilize different voices and even different models while generating the audio segments for a given project.
+Note too that it's possible to utilize different voices and even different models over the course of generating the audio segments for a given project.
 
 ### Voice cloning
 
-When prepping reference audio for voice cloning, it's worthwhile to prepare three or so different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate of each sample from the same source can vary quite a bit.
+When prepping reference audio for voice cloning, it's worthwhile to prepare three or so different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit.
 
 ### VRAM considerations
 
-Ideally, the app wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you get out of memory errors, try one of the following:
+The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
 
 - Choose the Whisper turbo model (saves about 1 GB of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
 - Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
@@ -307,10 +307,10 @@ These are my anecdotal TTS inference speeds (note that CUDA inference speeds on 
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
 | Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
+| Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
 | Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | best multilanguage capabilities
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
-| Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | (using `outetts.Backend.EXL2`)
 |                         | Macbook Pro M1 (MPS) | 20-25% realtime | (using `outetts.Backend.LLAMACPP`)
 
@@ -319,7 +319,7 @@ These are my anecdotal TTS inference speeds (note that CUDA inference speeds on 
 
 **2025-01-12**
 
-Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting text.
+Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting the source text.
 
 Prevent some TTS models from mangling the output of prompts starting with all-caps phrases (relevant for MiraTTS in particular, plus some others).
 
@@ -369,7 +369,7 @@ Added option: **`Realtime audio generation` > `Save output`**.
 
 **2025-12-13**
 
-Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player/reader app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio would first need be re-generated).
+Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio would first need be re-generated).
 
 Transferred various app-level preference settings to be project settings.
 
