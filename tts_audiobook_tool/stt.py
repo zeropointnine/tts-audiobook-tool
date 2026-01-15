@@ -70,6 +70,13 @@ class Stt:
         return Stt._whisper
 
     @staticmethod
+    def short_description() -> str:
+        config = Stt._config
+        if config.device == "cuda" and not torch.cuda.is_available():
+            config = SttConfig.CPU_INT8FLOAT32
+        return f"{Stt._variant.id}, {config.device}"
+
+    @staticmethod
     def has_whisper() -> bool:
         return Stt._whisper is not None
 

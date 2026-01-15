@@ -14,6 +14,7 @@ from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -138,7 +139,7 @@ class GenerateUtil:
 
                     s = f"{validation_result.get_ui_message()}"
                     if new_retry_count > 1 and not validation_result.is_fail:
-                        s = s.replace("Passed", f"{COL_OK}Passed {COL_DIM}on retry") # meh
+                        s = s.replace("Passed", f"{COL_OK}Passed on retry") 
                     message += s
 
                     if isinstance(validation_result, WordErrorResult) and validation_result.is_fail:
@@ -189,7 +190,7 @@ class GenerateUtil:
             s += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
             s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
-        if DEV:
+        if DEV and Stt.has_whisper(): 
             s += f"Num word fails: {sum(word_error_counts.values())}\n"
         printt(s)
 

@@ -8,6 +8,7 @@ from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import MiraProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
@@ -196,11 +197,24 @@ def do_generate(state: State, is_regen: bool) -> None:
     else:
         AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
-    # Confirm
-    if AskUtil.is_readchar:
-        b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-        if not b:
-            return
+    # Print confirmation info
+    s = f"Will generate {len(indices)} lines in range {state.project.generate_range_string}"
+    if not is_regen:
+        num = state.project.sound_segments.num_generated_in_current_range()
+        if num:
+            s += f" {COL_DIM}({num} already complete)"
+    printt(s)
+    if AppUtil.should_stt(state):
+        s = "Speech-to-text validation enabled"
+        s += f" {COL_DIM}({Stt.short_description()})"
+    else:
+        s = "Speech-to-text validation disabled"
+    printt(s)
+    printt()
+
+    b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+    if not b:
+        return
 
     # Print heading
     word = "Regenerating" if is_regen else "Generating"

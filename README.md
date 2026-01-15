@@ -317,6 +317,10 @@ These are my anecdotal TTS inference speeds (note that CUDA inference speeds on 
 
 # Update highlights
 
+**2025-01-15**
+
+Convenience option to launch most recently created audiobook file in the browser player (`Concat` > `Launch latest...`)
+
 **2025-01-12**
 
 Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting the source text.

@@ -137,7 +137,7 @@ def on_ask_max_size(state: State, _) -> None:
     print_heading("Max words per segment")
 
     printt("This is the maximum number of words that will be used for a single TTS prompt.")
-    printt("The value is applied at the point text is imported into the project.")
+    printt("This value is applied at the point text is imported into the project.")
     printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelInfos.recommended_range_string(Tts.get_type().value)}")
     printt()
 

@@ -5,7 +5,6 @@ import glob
 import sys
 import tempfile
 import glob
-import time
 import xxhash
 
 from tts_audiobook_tool.app_types import SegmentationStrategy, SttVariant
@@ -15,9 +14,11 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.validate_util import ValidateUtil
 
 class AppUtil:
     """
@@ -344,3 +345,57 @@ class AppUtil:
                     version = torch.backends.cudnn.version()
                     if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
                         Hint.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
+
+    @staticmethod
+    def should_stt(state: State) -> bool:
+        """
+        Should the app be doing speech-to-text transcription of the generated audio?
+        """
+        if ValidateUtil.is_unsupported_language_code(state.project.language_code):
+            return False
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            return False
+        return True
+
+    @staticmethod
+    def get_chrome_path() -> str:
+        """ Tries to find Chrome or Chromium path on local machine """
+        
+        import platform
+        
+        system = platform.system()
+        
+        if system == "Windows":
+            # Common Chrome paths on Windows
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+            ]
+        elif system == "Darwin":  # macOS
+            # Common Chrome/Chromium paths on macOS
+            chrome_paths = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            ]
+        elif system == "Linux":
+            # Common Chrome/Chromium paths on Linux
+            chrome_paths = [
+                "/usr/bin/google-chrome",
+                "/usr/bin/google-chrome-stable",
+                "/opt/google/chrome/google-chrome",
+                "/usr/bin/chromium",
+                "/usr/bin/chromium-browser",
+                "/usr/bin/chromium-browser-stable",
+                "/snap/bin/chromium",
+            ]
+        else:
+            # Unsupported OS
+            return ""
+        
+        # Check each path and return the first one that exists
+        for path in chrome_paths:
+            if os.path.exists(path):
+                return path
+        
+        return ""

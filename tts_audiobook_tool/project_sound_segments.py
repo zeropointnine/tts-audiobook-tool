@@ -76,11 +76,12 @@ class ProjectSoundSegments:
     def num_generated(self) -> int:
         return len( self.sound_segments_map.keys() )
 
-    def count_num_generated_in(self, set_: set[int]) -> int:
+    def num_generated_in_current_range(self) -> int:
+        sett = self.project.get_indices_to_generate()
         dic = self.sound_segments_map
         count = 0
         for key in dic.keys():
-            if key in set_:
+            if key in sett:
                 count += 1
         return count
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import time
 from tts_audiobook_tool.constants import *
@@ -74,3 +74,12 @@ class Hint:
         hint = Hint(key="player", heading="Reminder", text = s)
         Hint.show_hint_if_necessary(prefs, hint)
 
+    @staticmethod
+    def make_using(source: Hint, value1: str, value2: str="") -> Hint:
+        """ Does a string replace on the source Hint text using '%1' and optionally '%2' """
+        text = source.text
+        text = text.replace("%1", value1)
+        text = text.replace("%2", value2)
+        new_hint = replace(source, text=text)
+        return new_hint
+    

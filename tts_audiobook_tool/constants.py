@@ -217,8 +217,8 @@ the second time through, as the audio transcription data has been cached."""
 
 HINT_LINUX_CUDNN_VERSION = Hint(
     "stt_linux_cudnn_version",
-    f"{COL_ERROR}cuDNN version mismatch!",
-f"""The installed version of torch is incompatible with faster-whisper CUDA acceleration.
+    f"{COL_ERROR}cuDNN version mismatch",
+f"""The installed version of torch is incompatible with faster-whisper for CUDA acceleration.
 Either downgrade your version of torch (see README file), or change the Whisper 
 device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
 
@@ -261,4 +261,15 @@ HINT_FORCED_STRICTNESS_LOW = Hint(
     "Note",
 f"""Because the language code is not en, the setting \"Transcript validation strictness\" 
 has been automatically set to \"Low\""""
+)
+
+HINT_CONCAT_CHROME = Hint(
+    "concat_chrome",
+    "Will launch %1 using these flags:",
+"""
+  --allow-file-access-from-files
+  --autoplay-policy=no-user-gesture-required
+  
+This allows the browser to open and play local files without being initiated by the user.
+For these flags to take effect, %1 must not be running."""
 )

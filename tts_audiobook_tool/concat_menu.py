@@ -1,6 +1,8 @@
+from dataclasses import replace
 import os
 
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
 from tts_audiobook_tool.chapter_dividers_menu import ChapterDividersMenu
@@ -56,11 +58,12 @@ class ConcatMenu:
                 lambda _, __: ConcatMenu.section_break_menu(state)
             )
         ]
-        if DEV:
+        if chrome_path and ProjectUtil.get_latest_concat_file(state.project):
+            browser_name = "Chromium" if "chromium" in chrome_path.lower() else "Chrome"
             items.append(
                 MenuItem(
-                    "Launch latest in browser", 
-                    lambda _, __: launch_latest_concat_file(state.project)
+                    f"Launch latest in the player app using {browser_name}", 
+                    lambda _, __: launch_latest_concat_file(state, chrome_path)
                 )
             )
 
@@ -264,15 +267,21 @@ def ask_chapter_indices(infos: list[ChapterInfo], num_phrase_groups: int) -> lis
     
     return indices
 
-def launch_latest_concat_file(project: Project) -> None:
+def launch_latest_concat_file(state: State, chrome_path: str) -> None:
     """
-    Launches local player/reader in browser with the latest concat'ed file
+    Launches local player/reader in Chrome/Chromium with the latest concat'ed file
     """
 
-    audio_file_path = ProjectUtil.get_latest_concat_file(project)
+    audio_file_path = ProjectUtil.get_latest_concat_file(state.project)
     if not audio_file_path:
         print_feedback("Not found")
         return
+
+    browser_name = "Chromium" if "chromium" in chrome_path.lower() else "Chrome"
+    heading = HINT_CONCAT_CHROME.heading.replace("%1", browser_name)
+    text = HINT_CONCAT_CHROME.text.replace("%1", browser_name)
+    hint = replace(HINT_CONCAT_CHROME, heading=heading, text=text)
+    Hint.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
 
     # Eg:
     #   chromium
@@ -280,9 +289,9 @@ def launch_latest_concat_file(project: Project) -> None:
     #       --autoplay-policy=no-user-gesture-required
     #       file:///path/to/index.html?url=/path/to/audiobook.m4b
     # 
-    #   Rem, flags won't take if pre-existing browser process exists w/o those flag
+    #   Rem, flags won't take if pre-existing browser process exists w/o those flags
 
-    BROWSER_COMMAND = "chromium"
+    BROWSER_COMMAND = chrome_path
     BROWSER_FLAGS = [
         "--allow-file-access-from-files", 
         "--autoplay-policy=no-user-gesture-required"
@@ -310,6 +319,8 @@ def launch_latest_concat_file(project: Project) -> None:
     except (FileNotFoundError, Exception) as e:
         print_feedback(make_error_string(e), is_error=True)
 
+
+chrome_path = AppUtil.get_chrome_path()
 
 LOUDNORM_SUBHEADING = \
 """Performs an extra pass after concatenating audio segments to minimize volume disparities
