@@ -38,36 +38,38 @@ class ConcatMenu:
         def on_start(_: State, __: MenuItem) -> None:
             ask_chapter_indices_and_make(state)
 
-        items = [
-            MenuItem("Start", on_start),
-            MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
-            MenuItem(
-                lambda _: make_menu_label("File type", state.project.export_type.label), 
-                lambda _, __: ConcatMenu.file_type_menu(state)
-            ),
-            MenuItem(
-                lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
-                lambda _, __: ConcatMenu.normalization_menu(state)
-            ),
-            MenuItem(
-                lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
-                lambda _, __: ConcatMenu.subdivide_menu(state)
-            ),
-            MenuItem(
-                lambda _: make_menu_label("Section break sound effect", state.project.use_section_sound_effect),
-                lambda _, __: ConcatMenu.section_break_menu(state)
-            )
-        ]
-        if chrome_path and ProjectUtil.get_latest_concat_file(state.project):
-            browser_name = "Chromium" if "chromium" in chrome_path.lower() else "Chrome"
-            items.append(
+        def make_items(_: State) -> list[MenuItem]:
+            items = [
+                MenuItem("Start", on_start),
+                MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
                 MenuItem(
-                    f"Launch latest in the player app using {browser_name}", 
-                    lambda _, __: launch_latest_concat_file(state, chrome_path)
+                    lambda _: make_menu_label("File type", state.project.export_type.label), 
+                    lambda _, __: ConcatMenu.file_type_menu(state)
+                ),
+                MenuItem(
+                    lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
+                    lambda _, __: ConcatMenu.normalization_menu(state)
+                ),
+                MenuItem(
+                    lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
+                    lambda _, __: ConcatMenu.subdivide_menu(state)
+                ),
+                MenuItem(
+                    lambda _: make_menu_label("Section break sound effect", state.project.use_section_sound_effect),
+                    lambda _, __: ConcatMenu.section_break_menu(state)
                 )
-            )
+            ]
+            if chrome_path and ProjectUtil.get_latest_concat_file(state.project):
+                browser_name = "Chromium" if "chromium" in chrome_path.lower() else "Chrome"
+                items.append(
+                    MenuItem(
+                        f"Launch latest in the player app using {browser_name}", 
+                        lambda _, __: launch_latest_concat_file(state, chrome_path)
+                    )
+                )
+            return items
 
-        MenuUtil.menu(state, "Concatenate audio segments:", items, subheading=make_chapter_files_subheading)
+        MenuUtil.menu(state, "Concatenate audio segments:", make_items, subheading=make_chapter_files_subheading)
 
     @staticmethod
     def file_type_menu(state: State) -> None:
