@@ -8,6 +8,7 @@ import numpy as np
 
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
+from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
@@ -51,12 +52,15 @@ class GenerateUtil:
         max_retries = project.max_retries
         stt_variant = state.prefs.stt_variant
         stt_config = state.prefs.stt_config
+        showed_vram_warning = False
 
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
         did_cancel = Tts.warm_up_models(force_no_stt)
         if did_cancel:
             print_feedback("\nCancelled")
             return True
+        
+        showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 
         # Make 'items' (tuple = phase group index, retry_count)
         sorted_indices = sorted(list(indices_set))
@@ -86,6 +90,13 @@ class GenerateUtil:
 
             if not items:
                 break
+
+            if not showed_vram_warning:
+                print("xxx hello")
+                b = MemoryUtil.show_vram_memory_warning_if_necessary()
+                if b:
+                    print("\a", end="")
+                    showed_vram_warning = True
 
             # Take batch from items
             batch = items[:batch_size]

@@ -1,10 +1,10 @@
 import time
 
 import numpy as np
-from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -40,6 +40,7 @@ class RealTimeUtil:
         start_index -= 1
         end_index -= 1
         num_items = end_index - start_index + 1
+        showed_vram_warning = False
         
         # Warm up models
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
@@ -47,6 +48,8 @@ class RealTimeUtil:
         if did_interrupt:
             print_feedback("\nCancelled")
             return
+
+        showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 
         s = "Starting real-time playback..."
         if state.prefs.stt_variant == SttVariant.DISABLED:
@@ -66,6 +69,12 @@ class RealTimeUtil:
 
             if did_interrupt:
                 break
+
+            if not showed_vram_warning:
+                b = MemoryUtil.show_vram_memory_warning_if_necessary()
+                if b:
+                    print("\a", end="")
+                    showed_vram_warning = True
 
             phrase_group = phrase_groups[index]
             phrase = phrase_group.as_flattened_phrase()
