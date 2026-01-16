@@ -91,9 +91,6 @@ class MemoryUtil:
                 # Filter out system instances that aren't actual GPUs (usually luid_0x...)
                 # and only check those with actual usage.
                 if usage_gb > 0.001:
-
-                    print(f"xxx instance: {instance} | Current Shared: {usage_gb:.2f} GB")
-
                     if usage_gb > max_usage:
                         max_usage_instance = instance
                         max_usage = usage_gb
