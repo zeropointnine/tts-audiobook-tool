@@ -184,15 +184,16 @@ def on_concat(state: State, __) -> None:
 
 # Realtime
 def make_realtime_label(state: State) -> str:
+    s = "Realtime audio generation "
     if not state.project.can_voice and not state.project.phrase_groups:
-        s = f"{COL_DIM}({COL_ERROR}requires text and voice sample{COL_DIM})"
+        s += f"{COL_DIM}({COL_ERROR}requires text and voice sample{COL_DIM})"
     elif not state.project.can_voice:
-        s = f"{COL_DIM}({COL_ERROR}requires voice sample{COL_DIM})"
+        s += f"{COL_DIM}({COL_ERROR}requires voice sample{COL_DIM})"
     elif not state.project.phrase_groups:
-        s = f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
+        s += f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
     else:
-        s = ""
-    return "Realtime audio generation" + s
+        ...
+    return s
 
 def on_realtime(state: State, __) -> None:
     if not state.project.phrase_groups:

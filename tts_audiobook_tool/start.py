@@ -1,6 +1,13 @@
+"""
+Application entry-point
+Does dependency checks, shows one-time warnings, etc, and launches App.
+
+Note how imports are done in stages
+"""
+
 # --------------------------------------------------------------------------------------------------
 # Must be imported first or else HF_HUB_CACHE can result in returning a relative path
-# due to unknown import side-effect
+# due to unknown import side-effect (possibly from a specific model library)
 
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
@@ -18,15 +25,22 @@ if err:
     exit(1)
 
 # --------------------------------------------------------------------------------------------------
+# Hard requirement - updated dependencies
 
+import sys
 from tts_audiobook_tool.hint import Hint
 from importlib import util
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 
 NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
+NEW_PACKAGES_WIN = ["pywin"]
 
-# Hard requirement - updated dependencies
-not_found = [package for package in NEW_PACKAGES if not util.find_spec(package)]
+new_packages = NEW_PACKAGES
+if sys.platform == "win32":
+    new_packages.extend(NEW_PACKAGES_WIN)
+
+not_found = [package for package in new_packages if not util.find_spec(package)]
+
 if not_found:
     hint = Hint(
         "none",
@@ -58,7 +72,7 @@ from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 
 def main() -> None:
 
