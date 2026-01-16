@@ -604,7 +604,7 @@ class GenerateUtil:
 def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
     
     # Elapsed
-    message = f"Generating audio complete: {gen_elapsed:.1f}s"
+    message = f"Generated audio: {gen_elapsed:.1f}s"
 
     # Cumulative duration, speed
     num_sounds = 0

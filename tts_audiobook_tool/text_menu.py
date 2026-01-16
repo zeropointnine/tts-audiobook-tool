@@ -2,13 +2,12 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
 
 class TextMenu:
 
@@ -83,7 +82,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             return False
 
     if item.data == "import":
-        phrase_groups, raw_text = AppUtil.get_phrase_groups_from_ask_text_file(
+        phrase_groups, raw_text = PhraseGroupAskUtil.get_from_text_file(
             state.project.max_words, 
             state.project.segmentation_strategy, 
             pysbd_language=state.project.language_code,
@@ -92,7 +91,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         if not phrase_groups:
             return False
     elif item.data == "manual":
-        phrase_groups, raw_text = AppUtil.get_text_groups_from_ask_std_in(
+        phrase_groups, raw_text = PhraseGroupAskUtil.get_from_std_in(
             state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
         )
         if not phrase_groups:

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -67,7 +67,7 @@ class VoiceOuteMenu:
 
 def ask_create_oute_voice(project: Project) -> None:
 
-    from tts_audiobook_tool.app_util import AppUtil
+    from tts_audiobook_tool.memory_util import MemoryUtil
 
     path = VoiceMenuShared.ask_voice_file(project.dir_path, Tts.get_type())
     if not path:
@@ -75,12 +75,12 @@ def ask_create_oute_voice(project: Project) -> None:
 
     # Outte is about to create its own instance of whisper, so better clear ours first
     Stt.clear_stt_model()
-    AppUtil.gc_ram_vram()
+    MemoryUtil.gc_ram_vram()
 
     result = Tts.get_oute().create_speaker(path)
 
     # Clear lingering oute-created whisper instance
-    AppUtil.gc_ram_vram()
+    MemoryUtil.gc_ram_vram()
 
     if isinstance(result, str):
         error = result

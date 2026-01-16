@@ -21,9 +21,9 @@ class GenerateMenu:
 
         def make_range_label(_) -> str:
             if not state.project.generate_range_string:
-                range_label = f"{COL_DIM}(currently set to generate {COL_ACCENT}all{COL_DIM} lines)"
+                range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}all{COL_DIM})"
             else:
-                range_label = f"{COL_DIM}(currently set to generate lines {COL_ACCENT}{state.project.generate_range_string}{COL_DIM})"
+                range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}lines {state.project.generate_range_string}{COL_DIM})"
 
             if not state.project.generate_range_string:
                 complete_label = ""
@@ -117,7 +117,11 @@ def ask_item_range(state: State) -> None:
 
     num_items = len(state.project.phrase_groups)
 
-    printt("Enter line numbers to generate (eg, \"1-100, 103\", or \"all\")")
+    s = state.project.generate_range_string if state.project.generate_range_string else "all"
+    printt(f"Enter line numbers to generate (currently: {s}):") 
+    printt(f"{COL_DIM}For example, \"1-100\" or \"201-210, 215\", or just \"all\"") 
+    printt()
+
     inp = AskUtil.ask()
     if inp == "all" or inp == "a":
         indices = set( [item for item in range(0, num_items)] )

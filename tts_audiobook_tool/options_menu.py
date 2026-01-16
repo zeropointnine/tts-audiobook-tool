@@ -2,6 +2,7 @@ import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -158,14 +159,14 @@ class OptionsMenu:
 
 def make_system_memory_string(base_color=COL_DIM) -> str:
 
-    result = AppUtil.get_nv_vram()
+    result = MemoryUtil.get_nv_vram()
     if result is None:
         vram_string = ""
     else:
         used, total = result
         vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
 
-    result = AppUtil.get_system_ram()
+    result = MemoryUtil.get_system_ram()
     if result is None:
         ram_string = ""
     else:

@@ -1,18 +1,14 @@
-import gc
 import logging
 import os
 import glob
-import sys
 import tempfile
 import glob
 import xxhash
 
 from tts_audiobook_tool.app_types import SegmentationStrategy, SttVariant
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -22,7 +18,6 @@ from tts_audiobook_tool.validate_util import ValidateUtil
 
 class AppUtil:
     """
-    Need separation btw 'low level' and 'high level' functions
     """
 
     _is_logging_initialized = False
@@ -121,16 +116,6 @@ class AppUtil:
         printt()                
 
     @staticmethod
-    def gc_ram_vram() -> None:
-        """ Trigger Python garbage collector, plus torch"""
-        # Garbage collect "RAM"
-        gc.collect()
-        # "Garbage collect" VRAM
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    @staticmethod
     def get_app_temp_dir() -> str:
         # eg, 'C:\Users\me\AppData\Local\Temp\tts_audiobook_tool'
         dir = os.path.join(tempfile.gettempdir(), APP_TEMP_SUBDIR)
@@ -157,83 +142,6 @@ class AppUtil:
             if hash in item:
                 return os.path.join(dir, item)
         return ""
-
-    @staticmethod
-    def get_phrase_groups_from_ask_text_file(
-            max_words: int,
-            segmentation_strategy: SegmentationStrategy, 
-            pysbd_language: str,
-            prefs: Prefs
-    ) -> tuple[ list[PhraseGroup], str ]:
-        """
-        Asks user for path to text file and returns list of TextSegments and raw text.
-        Shows feedback except when text segments are returned.
-        Updates prefs.last_text_dir if file was opened.
-        """
-        if prefs.last_text_dir and os.path.exists(prefs.last_text_dir):
-            initial_dir = prefs.last_text_dir 
-        else:
-            initial_dir = ""
-        path = AskUtil.ask_file_path(
-            "Enter text file path: ", "Select text file", initialdir=initial_dir
-        )
-        if not path:
-            return [], ""
-        if not os.path.exists(path):
-            AskUtil.ask_error("No such file")
-            return [], ""
-
-        try:
-            with open(path, 'r', encoding='utf-8') as file:
-                raw_text = file.read()
-        except Exception as e:
-            AskUtil.ask_error(f"Error: {e}")
-            return [], ""
-
-        prefs.last_text_dir = str( Path(path).parent )
-
-        print("Segmenting text... ", end="", flush=True)
-        phrase_groups = PhraseGrouper.text_to_groups(
-            raw_text, pysbd_lang=pysbd_language, max_words=max_words, strategy=segmentation_strategy
-        )
-        print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
-
-        if not phrase_groups:
-            AskUtil.ask_enter_to_continue("No text segments.")
-            return [], raw_text
-
-        return phrase_groups, raw_text
-
-    @staticmethod
-    def get_text_groups_from_ask_std_in(
-            max_words: int,
-            segmentation_strategy: SegmentationStrategy,
-            pysbd_language:str
-    ) -> tuple[ list[PhraseGroup], str ]:
-        """
-        Asks user to input text using stdin.read() and returns list of TextSegments and raw text
-        """
-        printt("Enter/paste text of any length.")
-        if platform.system() == "Windows":
-            s = f"Finish with {COL_ACCENT}[CTRL-Z + ENTER] {COL_DEFAULT}on its own line"
-        else:
-            s = f"Finish with [ENTER + CTRL-D]"
-        printt(s)
-        printt()
-        raw_text = sys.stdin.read().strip()
-        printt()
-        if not raw_text:
-            return [], ""
-
-        phrase_groups = PhraseGrouper.text_to_groups(
-            raw_text, pysbd_lang=pysbd_language, max_words=max_words, strategy=segmentation_strategy
-        )
-
-        if not phrase_groups:
-            AskUtil.ask_enter_to_continue("No text segments.")
-            return [], raw_text
-
-        return phrase_groups, raw_text
 
     @staticmethod
     def calc_hash_string(string: str) -> str:
@@ -297,34 +205,6 @@ class AppUtil:
         new_stem = stem[:i] + substring + stem[i:]
         new_path = path.with_stem(new_stem)
         return str(new_path)
-
-    @staticmethod
-    def get_nv_vram() -> tuple[int, int] | None:
-        """
-        Returns VRAM bytes used, bytes total from NVIDIA GPU (device 0), or None if no nvidia gpu
-        Requires nvidia-ml-py (pip install nvidia-ml-py)
-        """
-        try:
-            import pynvml
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            pynvml.nvmlShutdown()
-            return int(info.used), int(info.total)
-        except Exception as e:
-            return None
-
-    @staticmethod
-    def get_system_ram() -> tuple[int, int] | None:
-        """
-        Returns used and total RAM in bytes
-        """
-        try:
-            import psutil
-            memory = psutil.virtual_memory()
-            return memory.used, memory.total
-        except:
-            return None
 
     @staticmethod
     def show_pre_inference_hints(prefs: Prefs, p_project) -> None:

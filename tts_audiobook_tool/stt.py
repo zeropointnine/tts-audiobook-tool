@@ -84,5 +84,5 @@ class Stt:
     def clear_stt_model() -> None:
         if Stt._whisper:
             Stt._whisper = None
-            from tts_audiobook_tool.app_util import AppUtil
-            AppUtil.gc_ram_vram()
+            from tts_audiobook_tool.memory_util import MemoryUtil
+            MemoryUtil.gc_ram_vram()

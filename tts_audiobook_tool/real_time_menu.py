@@ -2,6 +2,7 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.real_time_util import RealTimeUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -88,14 +89,14 @@ class RealTimeMenu:
         # 2, 3
         def on_custom(_: State, item: MenuItem) -> bool:
             if item.data == "file":
-                phrase_groups, __ = AppUtil.get_phrase_groups_from_ask_text_file(
+                phrase_groups, __ = PhraseGroupAskUtil.get_from_text_file(
                     state.project.max_words, 
                     state.project.segmentation_strategy, 
                     pysbd_language=state.project.language_code,
                     prefs=state.prefs
                 )
             else:
-                phrase_groups, __ = AppUtil.get_text_groups_from_ask_std_in(
+                phrase_groups, __ = PhraseGroupAskUtil.get_from_std_in(
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             if phrase_groups:
                 state.real_time.custom_phrase_groups = phrase_groups

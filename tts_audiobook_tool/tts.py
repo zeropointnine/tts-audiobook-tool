@@ -297,15 +297,17 @@ class Tts:
             Tts._indextts2 = None
             Tts._glm = None
 
-            from tts_audiobook_tool.app_util import AppUtil
-            AppUtil.gc_ram_vram()
+            from tts_audiobook_tool.memory_util import MemoryUtil
+            MemoryUtil.gc_ram_vram()
 
     @staticmethod
     def clear_all_models() -> None:
         Stt.clear_stt_model()
         Tts.clear_tts_model()
-        from tts_audiobook_tool.app_util import AppUtil
-        AppUtil.gc_ram_vram() # for good measure
+        
+        # For good measure
+        from tts_audiobook_tool.memory_util import MemoryUtil
+        MemoryUtil.gc_ram_vram() 
 
     @staticmethod
     def get_resolved_torch_device() -> str:
