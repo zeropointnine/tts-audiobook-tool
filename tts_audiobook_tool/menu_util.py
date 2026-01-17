@@ -94,10 +94,10 @@ class MenuUtil:
 
             if is_no_hotkeys:
                 # Assign hotkeys to items
-                hotkeys = list('123456789abcdefghijklmnopqrstuvwxyz')
-                items_list = items_list[:len(hotkeys)] # Silently clamp to max 35 items
+                HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
+                items_list = items_list[:len(HOTKEYS_AUTO)] # Silently clamp
                 for i, item in enumerate(items_list):
-                    item.hotkey = hotkeys[i]
+                    item.hotkey = HOTKEYS_AUTO[i]
             else:
                 # Verify no dupes
                 hotkeys = set[str]()
@@ -235,3 +235,5 @@ def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
         return string_or_maker
     else:
         return string_or_maker(state)
+    
+HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')

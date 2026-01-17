@@ -148,16 +148,16 @@ class VibeVoiceProtocol(Protocol):
 
     # Setting this explicitly low b/c hallucinations can oftentimes
     # expand to fill up the entire context (!),
-    # and app opts not to use model's long context feature anyway
+    # and app uses limited context length anyway
     MAX_TOKENS = 250
 
     def generate(
             self,
-            text: str,
+            text: list[str],
             voice_path: str,
             cfg_scale: float,
             num_steps: int
-    ) -> Sound | str:
+    ) -> list[Sound] | str:
         ...
 
 class VibeVoiceModelProtocol(TtsModel, VibeVoiceProtocol):
@@ -204,9 +204,6 @@ class MiraProtocol(Protocol):
     TEMPERATURE_DEFAULT = 0.7
     TEMPERATURE_MIN = 0.0
     TEMPERATURE_MAX = 2.0
-    BATCH_SIZE_DEFAULT = 1 # ie, disabled
-    BATCH_SIZE_MIN = 1
-    BATCH_SIZE_MAX = 20
 
     MAX_NEW_TOKENS = 2048 # default is 1024, which is enough for ~60 words
 

@@ -71,13 +71,13 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
 
     def generate(
             self,
-            text: str,
+            text: list[str],
             voice_path: str,
             cfg_scale: float=VibeVoiceProtocol.DEFAULT_CFG,
             num_steps: int=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
-    ) -> Sound | str:
+    ) -> list[Sound] | str:
         """
-        Returns Sound or error string
+        Returns list[Sound] or error string
 
         FYI: Couldn't pass pre-loaded sound data without inference issues for some reason,
         but in practice overhead is negligible
@@ -88,9 +88,13 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         try:
             self.model.set_ddpm_inference_steps(num_steps)
 
+            # Ensure text is a list
+            if isinstance(text, str):
+                text = [text]
+
             inputs = self.processor(
-                text=[ text ],  # Wrap in list for batch processing
-                voice_samples=[ [ voice_path ] ],  # Wrap in list for batch processing
+                text=text,
+                voice_samples=[ [ voice_path ] for _ in text ],
                 padding=True,
                 return_tensors="pt",
                 return_attention_mask=True,
@@ -109,20 +113,23 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         except Exception as e:
             return make_error_string(e)
 
-        has_audio = outputs.speech_outputs and outputs.speech_outputs[0] is not None # type: ignore
-        if not has_audio:
+        if not outputs.speech_outputs: # type: ignore
             return "No audio output"
+            
+        sounds = []
+        for i, data in enumerate(outputs.speech_outputs): # type: ignore
+            if data is None:
+                return f"No audio output for item {i}"
 
-        # First (and only) batch item. Is a tuple of 3 items.
-        data = outputs.speech_outputs[0] # type: ignore
+            # Is bfloat16
+            tensor_data = data[0]
+            if tensor_data.dtype == torch.bfloat16:
+                tensor_data = tensor_data.to(torch.float32)
 
-        # Is bfloat16
-        tensor_data = data[0]
-        if tensor_data.dtype == torch.bfloat16:
-            tensor_data = tensor_data.to(torch.float32)
+            ndarray_data = tensor_data.cpu().numpy()
+            sound = Sound(ndarray_data, TtsModelInfos.VIBEVOICE.value.sample_rate)
+            sounds.append(sound)
 
-        ndarray_data = tensor_data.cpu().numpy()
-        sound = Sound(ndarray_data, TtsModelInfos.VIBEVOICE.value.sample_rate)
-        return sound
+        return sounds
 
 SPEAKER_TAG = "Speaker 1: "

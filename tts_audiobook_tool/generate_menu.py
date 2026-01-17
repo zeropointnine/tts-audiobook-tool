@@ -43,10 +43,10 @@ class GenerateMenu:
             regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
             return f"Regenerate segments tagged with potential errors {regenerate_label}"
 
-        def make_batch_size_mira_label(_) -> str:
-            value = state.project.mira_batch_size
+        def make_batch_size_label(state: State) -> str:
+            value = state.project.get_batch_size()
             if value == -1:
-                value = MiraProtocol.BATCH_SIZE_DEFAULT
+                value = 1
             value_string = "disabled" if value == 1 else str(value)
             s = "Batch size "
             currently = make_currently_string(value_string)
@@ -65,9 +65,14 @@ class GenerateMenu:
                 MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
                 MenuItem(make_regen_label, lambda _, __: do_generate(state, is_regen=True))
             ]
-            if Tts.get_type() == TtsModelInfos.MIRA:
+            # Batch size
+            if Tts.get_type().value.can_batch:
                 items.append(
-                    MenuItem(make_batch_size_mira_label, lambda _, __: ask_batch_size_mira(state))
+                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state))
+                )
+            elif Tts.get_type() == TtsModelInfos.VIBEVOICE:
+                items.append(
+                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state))
                 )
             items.extend([
                 MenuItem(make_strictness_label, lambda _, __: GenerateMenu.strictness_menu(state)),
@@ -163,12 +168,17 @@ def ask_retries(state: State) -> None:
         PROJECT_MAX_RETRIES_MIN, PROJECT_MAX_RETRIES_MAX, "max_retries", "Max retries set to:", is_int=True
     )
 
-def ask_batch_size_mira(state: State) -> None:
-    prompt = f"Enter batch size {COL_DIM}(between {MiraProtocol.BATCH_SIZE_MIN}-{MiraProtocol.BATCH_SIZE_MAX}) (1 = batching disabled){COL_DEFAULT}:"
+def ask_batch_size(state: State) -> None:
+
+    field_name = Tts.get_type().value.batch_size_project_field
+    if not field_name:
+        return # silently ignore (shouldn't happen)
+
+    prompt = f"Enter batch size {COL_DIM}(1 = no batching){COL_DEFAULT}:"
     AskUtil.ask_number(
         state.project, prompt, 
-        MiraProtocol.BATCH_SIZE_MIN, MiraProtocol.BATCH_SIZE_MAX, 
-        "mira_batch_size", "Set batch size:", is_int=True
+        1, PROJECT_BATCH_SIZE_MAX, 
+        field_name, "Set batch size:", is_int=True
     )
 
 def do_generate(state: State, is_regen: bool) -> None:
@@ -233,7 +243,7 @@ def do_generate(state: State, is_regen: bool) -> None:
     did_interrupt = GenerateUtil.generate_files(
         state=state,
         indices_set=indices,
-        batch_size=state.project.mira_batch_size if Tts.get_type() == TtsModelInfos.MIRA else 1,
+        batch_size=state.project.get_batch_size(),
         is_regen=is_regen
     )
 

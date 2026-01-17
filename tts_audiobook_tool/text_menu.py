@@ -41,7 +41,7 @@ class TextMenu:
 
         items = [
             MenuItem("Import from text file", on_set_text, data="import"),
-            MenuItem("Manually enter/paste text", on_set_text, data="manual"),
+            MenuItem("Manually input/paste text", on_set_text, data="manual"),
             MenuItem("Print text segments", on_print),
             MenuItem(make_max_size_label, on_ask_max_size),
             MenuItem(

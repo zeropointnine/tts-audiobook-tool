@@ -291,31 +291,37 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 
 ### Inference speeds, expectations
 
-These are my anecdotal TTS inference speeds (note that CUDA inference speeds on Linux can be *appreciably* faster than on Windows). The app adopts each respective model's reference inference implementation logic as much as possible.
+These are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux can be *appreciably* faster than on Windows.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| MiraTTS                 | GTX 3080 Ti, Linux   | 2000+% realtime | (batch size = 10)
-|                         | GTX 3080 Ti, Linux   | 700+% realtime  | (no batching)
-| GLM-TTS                 | GTX 3080 Ti, Linux   | 200+% realtime  | outstanding voice likeness, IMO
+| MiraTTS                 | GTX 3080 Ti, Linux   | 2000%+ realtime | batch size=10
+|                         | GTX 3080 Ti, Linux   | 700%+ realtime  | batch size=1
+| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | outstanding voice likeness, IMO
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
-| VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | (default steps, Flash attention 2 enabled)
+| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000%+ realtime | batch size=10 (default steps, Flash attention 2 enabled)
+|                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1 (default steps)
+|                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1 (default steps)
 |                         | Macbook Pro M1       | ~40% realtime   |
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed inversely proportional to voice sample duration, FYI
 |                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
-| Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500+% realtime  | 
+| Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
 | Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | best multilanguage capabilities
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
-| Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | (using `outetts.Backend.EXL2`)
-|                         | Macbook Pro M1 (MPS) | 20-25% realtime | (using `outetts.Backend.LLAMACPP`)
+| Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
+|                         | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
 
 
 # Update highlights
+
+**2025-01-16**
+
+**VibeVoice batch support** (drastically speeds up inference)
 
 **2025-01-16**
 
@@ -325,11 +331,11 @@ Added submenu: `Concat` > `Open audiobook file in the player app`
 
 Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting the source text.
 
-Prevent some TTS models from mangling the output of prompts starting with all-caps phrases (relevant for MiraTTS in particular, plus some others).
+Prevent some TTS models from mangling the output of prompts starting with **all-caps phrases** (relevant for MiraTTS in particular, plus some others).
 
 **2025-01-10**
 
-"Chapter dividers" can now be used for creating *M4B sections* and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
+"Chapter dividers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
 
 Note, app now uses ".m4b" file suffix for AAC files instead of ".m4a".
 

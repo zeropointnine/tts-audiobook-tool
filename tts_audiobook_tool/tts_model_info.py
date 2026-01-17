@@ -29,8 +29,8 @@ class TtsModelInfo(NamedTuple):
     requires_voice: bool
     # Does the model API require the text transcript of the voice clone sample
     requires_voice_transcript: bool
-    # Does the model's API support "batch mode"
-    can_batch: bool
+    # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
+    batch_size_project_field: str
     # When True, the "high" setting for strictness is discouraged due to model's poor WER
     strictness_high_discouraged: bool
     # Should semantic trim at end of last word
@@ -47,6 +47,10 @@ class TtsModelInfo(NamedTuple):
     # List of string replace pairs 
     # Primarily used for punctuation marks that models might either disregard or trigger them in other ways
     substitutions: list[ tuple[str, str] ]
+
+    @property
+    def can_batch(self) -> bool:
+        return bool(self.batch_size_project_field)
 
 class TtsModelInfos(Enum):
     """
@@ -65,7 +69,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=False,
         requires_voice=False,
         requires_voice_transcript=False,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=True,
         semantic_trim_last=False,
         un_all_caps=False,
@@ -85,7 +89,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=False,
         requires_voice=True,
         requires_voice_transcript=False,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=True,
         semantic_trim_last=False,
         un_all_caps=False, # TODO: check this
@@ -113,7 +117,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=False,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=True,
         semantic_trim_last=True,
         un_all_caps=True,
@@ -140,7 +144,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=True,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
@@ -167,7 +171,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=False,
         requires_voice_transcript=True,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
         un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
@@ -194,7 +198,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=False,
-        can_batch=False,
+        batch_size_project_field="vibevoice_batch_size",
         strictness_high_discouraged=True,
         semantic_trim_last=False,
         un_all_caps=True,
@@ -223,7 +227,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=False,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
         un_all_caps=False,
@@ -251,7 +255,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=True,
-        can_batch=False,
+        batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
         un_all_caps=False,
@@ -280,7 +284,7 @@ class TtsModelInfos(Enum):
         uses_voice_sound_file=True,
         requires_voice=True,
         requires_voice_transcript=False,
-        can_batch=True,
+        batch_size_project_field="mira_batch_size",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
         un_all_caps=True, # falls down badly with all caps phrases

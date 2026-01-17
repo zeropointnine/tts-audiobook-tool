@@ -15,7 +15,7 @@ from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol
+from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -78,6 +78,7 @@ class Project:
     vibevoice_model_path: str = ""
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
+    vibevoice_batch_size: int = 1
 
     indextts2_temperature: float = -1
     indextts2_use_fp16: bool = IndexTts2Protocol.DEFAULT_USE_FP16
@@ -93,7 +94,7 @@ class Project:
 
     mira_voice_file_name: str = ""
     mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT
-    mira_batch_size: int = MiraProtocol.BATCH_SIZE_DEFAULT
+    mira_batch_size: int = 1
 
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
@@ -349,6 +350,14 @@ class Project:
         project.vibevoice_cfg = d.get("vibevoice_cfg", -1)
         project.vibevoice_steps = d.get("vibevoice_steps", -1)
 
+        value = d.get("vibevoice_batch_size", -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (1 <= value <= PROJECT_BATCH_SIZE_MAX):
+                value = PROJECT_BATCH_SIZE_DEFAULT
+                add_warning("vibevoice_batch_size", value)
+            value = int(value)
+        project.vibevoice_batch_size = value
+
         # IndexTTS2
         project.indextts2_voice_file_name = d.get("indextts2_voice_file_name", "")
         project.indextts2_temperature = d.get("indextts2_temperature", -1)
@@ -385,8 +394,8 @@ class Project:
 
         value = d.get("mira_batch_size", -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (MiraProtocol.BATCH_SIZE_MIN <= value <= MiraProtocol.BATCH_SIZE_MAX):
-                value = MiraProtocol.BATCH_SIZE_DEFAULT
+            if not isinstance(value, (float, int)) or not (1 <= value <= PROJECT_BATCH_SIZE_MAX):
+                value = PROJECT_BATCH_SIZE_DEFAULT
                 add_warning("mira_batch_size", value)
             value = int(value)
         project.mira_batch_size = value
@@ -449,6 +458,7 @@ class Project:
             "vibevoice_model_path": self.vibevoice_model_path,
             "vibevoice_cfg": self.vibevoice_cfg,
             "vibevoice_steps": self.vibevoice_steps,
+            "vibevoice_batch_size": self.vibevoice_batch_size,
 
             "indextts2_voice_file_name": self.indextts2_voice_file_name,
             "indextts2_temperature": self.indextts2_temperature,
@@ -869,4 +879,23 @@ class Project:
             except Exception as e:
                 ... # eat
 
+        self.save()
+
+    def get_batch_size(self) -> int:
+        field = Tts.get_type().value.batch_size_project_field
+        if not field:
+            return 1
+        if not hasattr(self, field):
+            raise ValueError(f"Unrecognized attribute {field}")
+        return getattr(self, field)
+    
+    def set_batch_size_and_save(self, value: int) -> None:
+        field = Tts.get_type().value.batch_size_project_field
+        if not field:
+            raise ValueError(f"No support for batch_size for the current model")
+        if not hasattr(self, field):
+            raise ValueError(f"Unrecognized attribute {field}")
+        if value > PROJECT_BATCH_SIZE_MAX:
+            value = PROJECT_BATCH_SIZE_MAX # clamp silently
+        setattr(self, field, value)
         self.save()

@@ -154,17 +154,13 @@ class ConcatMenu:
             return
 
         MAX = 35 # TODO parameterize menu-max-items
-        file_paths = ProjectUtil.get_latest_concat_files(state.project, MAX + 1)
+        file_paths = ProjectUtil.get_latest_concat_files(state.project, MAX)
         if not file_paths:
             print_feedback("No files found")
             return
         
         user_data_dir=AppUtil.get_chromium_user_data_dir()
 
-        if len(file_paths) > MAX:
-            is_truncated = True
-            file_paths = file_paths[MAX:]
-        
         def on_item(_: State, item: MenuItem) -> None:
             assert(isinstance(chromium_info, tuple))
             launch_player_with_chromium(

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
-from chatterbox.tts_turbo import ChatterboxTurboTTS
+from chatterbox.tts_turbo import ChatterboxTurboTTS # type: ignore
 
 import logging
 logging.getLogger("transformers").setLevel(logging.ERROR)

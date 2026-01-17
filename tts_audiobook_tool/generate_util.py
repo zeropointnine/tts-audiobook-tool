@@ -322,6 +322,7 @@ class GenerateUtil:
         ) -> list[Sound | str]:
         """
         Core audio generation function.
+        
         Returns a list of "results" (same length as that of prompt_text), 
         where each result is either a generated Sound or an error string.
         The Sound is trimmed for silence and peak-normalized.
@@ -417,7 +418,7 @@ class GenerateUtil:
                 num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
                 result = Tts.get_vibevoice().generate(
-                    text=prompts[0],
+                    text=prompts,
                     voice_path=voice_path,
                     cfg_scale=cfg_scale,
                     num_steps=num_steps

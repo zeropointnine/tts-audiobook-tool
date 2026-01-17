@@ -7,7 +7,7 @@ import torch
 from glm_tts.cosyvoice.cli.frontend import TTSFrontEnd, SpeechTokenizer, TextFrontEnd # type: ignore
 from glm_tts.utils import seed_util # type: ignore
 from glm_tts.utils import tts_model_util, yaml_util # type: ignore
-from transformers import AutoTokenizer, LlamaForCausalLM
+from transformers import AutoTokenizer, LlamaForCausalLM # type: ignore
 from glm_tts.llm.glmtts import GLMTTS # type: ignore
 from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
