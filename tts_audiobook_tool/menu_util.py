@@ -1,8 +1,6 @@
 from __future__ import annotations
-import inspect
-from typing import Callable, cast
+from typing import Callable
 
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -95,9 +93,11 @@ class MenuUtil:
                 raise ValueError("All MenuItems must have hotkeys or no MenuItems must have hotkeys")
 
             if is_no_hotkeys:
-                # Assign hotkeys "1", "2", "3", etc
+                # Assign hotkeys to items
+                hotkeys = list('123456789abcdefghijklmnopqrstuvwxyz')
+                items_list = items_list[:len(hotkeys)] # Silently clamp to max 35 items
                 for i, item in enumerate(items_list):
-                    item.hotkey = str(i + 1)
+                    item.hotkey = hotkeys[i]
             else:
                 # Verify no dupes
                 hotkeys = set[str]()

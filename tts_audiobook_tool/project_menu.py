@@ -201,7 +201,9 @@ class ProjectMenu:
                 items.append(MenuItem("Clear", on_clear))
             # Print items
             if state.project.word_substitutions:
-                label = make_menu_label("Print current list", f"{len(state.project.word_substitutions)} items")
+                num_subst = len(state.project.word_substitutions)
+                value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
+                label = f"Word substitutions {make_currently_string(value)}"
                 items.append( MenuItem(label, on_print) )
             # Print uncommon words
             if state.project.language_code == "en" and state.project.phrase_groups:
@@ -219,8 +221,11 @@ class ProjectMenu:
 
 def make_subst_label(state: State) -> str:
     num_subst = len(state.project.word_substitutions)
-    value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
-    label = f"Word substitutions {make_currently_string(value)}"
+    if num_subst > 0:
+        value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
+        label = f"Word substitutions {make_currently_string(value)}"
+    else:
+        label = f"Word substitutions {COL_DIM}(optional)"
     return label
 
 def on_language(state: State, __: MenuItem) -> None:

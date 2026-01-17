@@ -1,4 +1,3 @@
-from dataclasses import replace
 import os
 
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType
@@ -11,7 +10,6 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -59,12 +57,13 @@ class ConcatMenu:
                     lambda _, __: ConcatMenu.section_break_menu(state)
                 )
             ]
-            if chrome_path and ProjectUtil.get_latest_concat_file(state.project):
-                browser_name = "Chromium" if "chromium" in chrome_path.lower() else "Chrome"
+
+            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
+            if can_and_haz:
                 items.append(
                     MenuItem(
-                        f"Launch latest in the player app using {browser_name}", 
-                        lambda _, __: launch_latest_concat_file(state, chrome_path)
+                        f"Open audiobook file in the player app", 
+                        lambda _, __: ConcatMenu.open_audiobook_menu(state)
                     )
                 )
             return items
@@ -146,6 +145,52 @@ class ConcatMenu:
             current_value=state.project.use_section_sound_effect,
             default_value=False,
             on_select=on_select
+        )
+
+    @staticmethod
+    def open_audiobook_menu(state: State) -> None:
+        
+        if chromium_info is None:
+            return
+
+        MAX = 35 # TODO parameterize menu-max-items
+        file_paths = ProjectUtil.get_latest_concat_files(state.project, MAX + 1)
+        if not file_paths:
+            print_feedback("No files found")
+            return
+        
+        user_data_dir=AppUtil.get_chromium_user_data_dir()
+
+        if len(file_paths) > MAX:
+            is_truncated = True
+            file_paths = file_paths[MAX:]
+        
+        def on_item(_: State, item: MenuItem) -> None:
+            assert(isinstance(chromium_info, tuple))
+            launch_player_with_chromium(
+                chromium_path=chromium_info[1],
+                audio_file_path=item.data,
+                user_data_dir=user_data_dir
+            )
+
+        def make_items(_: State) -> list[MenuItem]:
+            items = []
+            for file_path in file_paths:
+                label = Path(file_path).name
+                item = MenuItem(label, on_item, file_path)
+                items.append(item)
+            return items
+        
+        subheading = OPEN_AUDIOBOOK_SUBHEADING
+        subheading = subheading.replace("%1", chromium_info[0])
+        subheading = subheading.replace("%2", user_data_dir)
+
+        MenuUtil.menu(
+            state=state,
+            heading="Open audiobook file",
+            items=make_items,
+            subheading=subheading,
+            one_shot=True
         )
 
 # ---
@@ -269,35 +314,34 @@ def ask_chapter_indices(infos: list[ChapterInfo], num_phrase_groups: int) -> lis
     
     return indices
 
-def launch_latest_concat_file(state: State, chrome_path: str) -> None:
+def launch_player_with_chromium(
+        chromium_path: str, 
+        audio_file_path: str,
+        user_data_dir: str
+    ) -> None:
     """
     Launches local player/reader in Chrome/Chromium with the latest concat'ed file
+
+    Eg:
+      chromium
+          --allow-file-access-from-files
+          --autoplay-policy=no-user-gesture-required
+          --user-data-dir=/path/to/tts-audiobook-tool-chromium-profile
+          file:///path/to/index.html?url=/path/to/audiobook.m4b
     """
 
-    audio_file_path = ProjectUtil.get_latest_concat_file(state.project)
-    if not audio_file_path:
-        print_feedback("Not found")
-        return
+    if user_data_dir:
+        os.makedirs(user_data_dir, exist_ok=True)
+        if not os.path.exists(user_data_dir):
+            print_feedback(f"Couldn't create browser user directory {user_data_dir}")
+            return
 
-    browser_name = "Chromium" if "chromium" in chrome_path.lower() else "Chrome"
-    heading = HINT_CONCAT_CHROME.heading.replace("%1", browser_name)
-    text = HINT_CONCAT_CHROME.text.replace("%1", browser_name)
-    hint = replace(HINT_CONCAT_CHROME, heading=heading, text=text)
-    Hint.show_hint_if_necessary(state.prefs, hint, and_prompt=True)
-
-    # Eg:
-    #   chromium
-    #       --allow-file-access-from-files
-    #       --autoplay-policy=no-user-gesture-required
-    #       file:///path/to/index.html?url=/path/to/audiobook.m4b
-    # 
-    #   Rem, flags won't take if pre-existing browser process exists w/o those flags
-
-    BROWSER_COMMAND = chrome_path
-    BROWSER_FLAGS = [
+    browser_flags = [
         "--allow-file-access-from-files", 
-        "--autoplay-policy=no-user-gesture-required"
+        "--autoplay-policy=no-user-gesture-required",
     ]
+    if user_data_dir:
+        browser_flags.append(f"--user-data-dir={user_data_dir}")
 
     this_file_path = Path(os.path.abspath(__file__))
     index_html_path = this_file_path.parent.parent / "browser_player" / "index.html"
@@ -305,8 +349,8 @@ def launch_latest_concat_file(state: State, chrome_path: str) -> None:
     browser_url = make_url_with_params(index_html_url, { "url": audio_file_path })
 
     command = []
-    command.append(BROWSER_COMMAND)
-    command.extend(BROWSER_FLAGS)
+    command.append(chromium_path)
+    command.extend(browser_flags)
     command.append(browser_url)
 
     try:
@@ -322,7 +366,7 @@ def launch_latest_concat_file(state: State, chrome_path: str) -> None:
         print_feedback(make_error_string(e), is_error=True)
 
 
-chrome_path = AppUtil.get_chrome_path()
+chromium_info = AppUtil.get_chromium_info()
 
 LOUDNORM_SUBHEADING = \
 """Performs an extra pass after concatenating audio segments to minimize volume disparities
@@ -341,4 +385,13 @@ SECTION_BREAK_SUBHEADING = \
 """In the concatenation step, inserts a 'page turn' sound effect when 
 two or more consecutive blank lines are encountered in the text. 
 This can be a useful audible cue, so long as the text is formatted for it.
+"""
+
+OPEN_AUDIOBOOK_SUBHEADING = \
+f"""Select file to be opened in the player app using %1,
+which will be launched with a dedicated user profile and the 
+following flags to enable opening local files without user input:
+  {COL_DIM}--allow-file-access-from-files 
+  --autoplay-policy=no-user-gesture-required
+  --user-data-dir=%2
 """

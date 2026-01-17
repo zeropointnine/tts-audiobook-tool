@@ -39,15 +39,13 @@ class ProjectUtil:
         return result
     
     @staticmethod
-    def get_latest_concat_file(project: Project) -> str:
+    def get_latest_concat_files(project: Project, limit=10) -> list[str]:
         """
-        Finds the latest concatenated audio file within the project's concat directory.
-        If multiple files in a subdirectory, returns first one.
+        Finds the latest concatenated audio files within the project's concat directory.
         """
-
         concat_dir = project.concat_path
         if not concat_dir or not os.path.exists(concat_dir):
-            return ""
+            return []
         
         # Get subdirectories, revchron sorted
         subdirs = []
@@ -57,21 +55,22 @@ class ProjectUtil:
                 subdirs.append(item_path)        
         subdirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
                 
-        # Iterate through subdirectories, find first file that matches the criteria
-        EXCLUDED_SUBSTRINGS = ["[concat]", "[norm]", "[chaptermeta]"]        
-        path = ""
+        # Iterate through subdirectories
+        DEBUG_TAGS = ["[concat]", "[norm]", "[chaptermeta]"] 
+        paths = []
         for subdir in subdirs:
             try:
-                file_names = sorted(os.listdir(subdir))
+                file_names = sorted(os.listdir(subdir)) # alpha-sorted
             except (OSError, PermissionError):
                 continue
             for file_name in file_names:
                 hit = file_name.endswith((".abr.m4b", ".abr.flac")) 
-                hit = hit and not any(sub in file_name for sub in EXCLUDED_SUBSTRINGS)
+                hit = hit and not any(sub in file_name for sub in DEBUG_TAGS)
                 if hit:
                     path = os.path.join(subdir, file_name)
+                    paths.append(path)
                     break
-            if path:
+            if len(paths) > limit:
                 break
         
-        return path
+        return paths

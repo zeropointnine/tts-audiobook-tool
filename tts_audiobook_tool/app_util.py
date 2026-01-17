@@ -130,6 +130,12 @@ class AppUtil:
         return dir
 
     @staticmethod
+    def get_chromium_user_data_dir() -> str:
+        dir = AppUtil.get_app_user_dir()
+        dir = os.path.join(dir, CHROME_USER_DATA_DIR_NAME)
+        return dir
+
+    @staticmethod
     def get_temp_file_path_by_hash(hash: str) -> str:
         """
         Returns file path of item in the app temp directory or empty string
@@ -238,44 +244,45 @@ class AppUtil:
         return True
 
     @staticmethod
-    def get_chrome_path() -> str:
-        """ Tries to find Chrome or Chromium path on local machine """
-        
+    def get_chromium_info() -> tuple[str, str] | None:
+        """ 
+        Looks for Chromium-based browser on local machine, 
+        and returns app name and path.
+        """
         import platform
-        
         system = platform.system()
         
         if system == "Windows":
-            # Common Chrome paths on Windows
-            chrome_paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe"),
+            names_and_paths = [
+                ("Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+                ("Chrome", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+                ("Chrome", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe")),
+                ("Chromium", r"C:\Program Files\Chromium\Application\chrome.exe"),
+                ("Chromium", r"C:\Program Files (x86)\Chromium\Application\chrome.exe"),
+                ("Chromium", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Chromium", "Application", "chrome.exe")),
+                ("Edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
             ]
-        elif system == "Darwin":  # macOS
-            # Common Chrome/Chromium paths on macOS
-            chrome_paths = [
-                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        elif system == "Darwin": # macOS
+            names_and_paths = [
+                ("Chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                ("Chromium", "/Applications/Chromium.app/Contents/MacOS/Chromium"),
             ]
         elif system == "Linux":
-            # Common Chrome/Chromium paths on Linux
-            chrome_paths = [
-                "/usr/bin/google-chrome",
-                "/usr/bin/google-chrome-stable",
-                "/opt/google/chrome/google-chrome",
-                "/usr/bin/chromium",
-                "/usr/bin/chromium-browser",
-                "/usr/bin/chromium-browser-stable",
-                "/snap/bin/chromium",
+            names_and_paths = [
+                ("Chrome", "/usr/bin/google-chrome"),
+                ("Chrome", "/usr/bin/google-chrome-stable"),
+                ("Chrome", "/opt/google/chrome/google-chrome"),
+                ("Chromium", "/usr/bin/chromium"),
+                ("Chromium", "/usr/bin/chromium-browser"),
+                ("Chromium", "/usr/bin/chromium-browser-stable"),
+                ("Chromium", "/snap/bin/chromium"),
             ]
         else:
-            # Unsupported OS
-            return ""
+            return None
         
         # Check each path and return the first one that exists
-        for path in chrome_paths:
-            if os.path.exists(path):
-                return path
+        for item in names_and_paths:
+            if os.path.exists(item[1]):
+                return item
         
-        return ""
+        return None

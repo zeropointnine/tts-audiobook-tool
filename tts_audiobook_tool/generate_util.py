@@ -92,7 +92,6 @@ class GenerateUtil:
                 break
 
             if not showed_vram_warning:
-                print("xxx hello")
                 b = MemoryUtil.show_vram_memory_warning_if_necessary()
                 if b:
                     print("\a", end="")

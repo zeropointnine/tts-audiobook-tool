@@ -317,9 +317,9 @@ These are my anecdotal TTS inference speeds (note that CUDA inference speeds on 
 
 # Update highlights
 
-**2025-01-15**
+**2025-01-16**
 
-Convenience option to launch most recently created audiobook file in the browser player (`Concat` > `Launch latest...`)
+Added submenu: `Concat` > `Open audiobook file in the player app`
 
 **2025-01-12**
 

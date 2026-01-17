@@ -10,6 +10,7 @@ APP_NAME = "tts-audiobook-tool"
 APP_USER_SUBDIR = "tts_audiobook_tool"
 APP_TEMP_SUBDIR = "tts_audiobook_tool"
 ASSETS_DIR_NAME = "assets"
+CHROME_USER_DATA_DIR_NAME = "chromium-user-data"
 
 PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
 PROJECT_CONCAT_SUBDIR = "combined"
@@ -261,15 +262,4 @@ HINT_FORCED_STRICTNESS_LOW = Hint(
     "Note",
 f"""Because the language code is not en, the setting \"Transcript validation strictness\" 
 has been automatically set to \"Low\""""
-)
-
-HINT_CONCAT_CHROME = Hint(
-    "concat_chrome",
-    "Will launch %1 using these flags:",
-"""
-  --allow-file-access-from-files
-  --autoplay-policy=no-user-gesture-required
-  
-This allows the browser to open and play local files without being initiated by the user.
-For these flags to take effect, %1 must not be running."""
 )

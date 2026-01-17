@@ -82,7 +82,7 @@ class MemoryUtil:
             
             results: dict[str, float] = win32pdh.GetFormattedCounterArray(counter_handle, win32pdh.PDH_FMT_DOUBLE)
 
-            for instance, value_bytes in results.items():
+            for instance, value_bytes in results.items(): # type: ignore
                 # Filter out non-GPU entries maybe
                 if value_bytes == 0:
                     continue
