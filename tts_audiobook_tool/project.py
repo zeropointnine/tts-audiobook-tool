@@ -887,7 +887,12 @@ class Project:
             return 1
         if not hasattr(self, field):
             raise ValueError(f"Unrecognized attribute {field}")
-        return getattr(self, field)
+        value = getattr(self, field)
+        if value == -1:
+            value = PROJECT_BATCH_SIZE_DEFAULT
+        elif value > PROJECT_BATCH_SIZE_MAX:
+            value = PROJECT_BATCH_SIZE_MAX # clamp silently
+        return value
     
     def set_batch_size_and_save(self, value: int) -> None:
         field = Tts.get_type().value.batch_size_project_field
