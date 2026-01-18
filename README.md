@@ -291,7 +291,7 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 
 ### Inference speeds, expectations
 
-These are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux can be *appreciably* faster than on Windows.
+These are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux can be significantly faster than on Windows.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
@@ -301,7 +301,8 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
-| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000%+ realtime | batch size=10 (default steps, Flash attention 2 enabled)
+| VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10 (default steps)
+| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000%+ realtime | batch size=10 (default steps)
 |                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1 (default steps)
 |                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1 (default steps)
 |                         | Macbook Pro M1       | ~40% realtime   |
@@ -321,7 +322,7 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 **2025-01-16**
 
-**VibeVoice batch support** (drastically speeds up inference)
+**VibeVoice batch support** (drastically speeds up inference). Plus VibeVoice seed support.
 
 **2025-01-16**
 

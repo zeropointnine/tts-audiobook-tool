@@ -263,3 +263,9 @@ HINT_FORCED_STRICTNESS_LOW = Hint(
 f"""Because the language code is not en, the setting \"Transcript validation strictness\" 
 has been automatically set to \"Low\""""
 )
+
+HINT_SEED_BATCH = Hint(
+    "seed_batch",
+    "Note",
+"""Setting a static seed value guarantees idempotent audio generations only when batch size is 1."""
+)

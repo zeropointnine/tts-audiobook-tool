@@ -156,7 +156,8 @@ class VibeVoiceProtocol(Protocol):
             text: list[str],
             voice_path: str,
             cfg_scale: float,
-            num_steps: int
+            num_steps: int,
+            seed: int
     ) -> list[Sound] | str:
         ...
 

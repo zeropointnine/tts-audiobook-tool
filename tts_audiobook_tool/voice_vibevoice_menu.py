@@ -61,27 +61,34 @@ class VoiceVibeVoiceMenu:
             Tts.clear_tts_model()
             print_feedback("Cleared, will use default model")
 
+        def on_seed(_: State, __: MenuItem) -> None:
+            Hint.show_hint_if_necessary(state.prefs, HINT_SEED_BATCH)
+            VoiceMenuShared.ask_seed_and_save(state.project, "vibevoice_seed")
+
         def make_items(_: State) -> list[MenuItem]:
-            items = [
+
+            items = []
+            items.append(
                 MenuItem(
                     VoiceMenuShared.make_select_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
                 )
-            ]
+            )
             if state.project.vibevoice_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) )
-            items.append(
-                MenuItem(
-                    make_model_path_label,
-                    lambda _, __: ask_model_path(state.project)
+                items.append( 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) 
                 )
+            items.append(
+                MenuItem(make_model_path_label, lambda _, __: ask_model_path(state.project))
             )
             if state.project.vibevoice_model_path:
-                items.append( MenuItem("Clear custom model path", on_clear_custom_model) )
-            items.extend( [
-                MenuItem(make_cfg_label, on_cfg),
-                MenuItem(make_steps_label, on_steps),
-            ] )
+                items.append(MenuItem("Clear custom model path", on_clear_custom_model))
+            items.append(MenuItem(make_cfg_label, on_cfg))
+            items.append(MenuItem(make_steps_label, on_steps))
+            
+            seed_string = str(state.project.vibevoice_seed) if state.project.vibevoice_seed != -1 else "random"
+            items.append( MenuItem(make_menu_label("Seed", seed_string), on_seed))
+            
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)

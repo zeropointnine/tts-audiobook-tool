@@ -246,7 +246,7 @@ class VoiceMenuShared:
     @staticmethod    
     def ask_seed_and_save(project: Project, seed_attr_name: str) -> None:
         
-        prompt = "Enter static seed value or -1 for random: "
+        prompt = "Enter a static seed value or -1 for random: "
         value = AskUtil.ask(prompt)
         if not value:
             return

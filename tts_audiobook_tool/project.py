@@ -79,6 +79,7 @@ class Project:
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
     vibevoice_batch_size: int = 1
+    vibevoice_seed: int = -1
 
     indextts2_temperature: float = -1
     indextts2_use_fp16: bool = IndexTts2Protocol.DEFAULT_USE_FP16
@@ -358,6 +359,11 @@ class Project:
             value = int(value)
         project.vibevoice_batch_size = value
 
+        project.vibevoice_seed = d.get("vibevoice_seed", -1)
+        if not (-1 <= project.vibevoice_seed <= 2**32 - 1):
+            add_warning("vibevoice_seed", -1)
+            project.vibevoice_seed = -1
+
         # IndexTTS2
         project.indextts2_voice_file_name = d.get("indextts2_voice_file_name", "")
         project.indextts2_temperature = d.get("indextts2_temperature", -1)
@@ -459,6 +465,7 @@ class Project:
             "vibevoice_cfg": self.vibevoice_cfg,
             "vibevoice_steps": self.vibevoice_steps,
             "vibevoice_batch_size": self.vibevoice_batch_size,
+            "vibevoice_seed": self.vibevoice_seed,
 
             "indextts2_voice_file_name": self.indextts2_voice_file_name,
             "indextts2_temperature": self.indextts2_temperature,

@@ -51,7 +51,7 @@ class RealTimeMenu:
             text_groups = state.project.phrase_groups
         length = len(text_groups)
 
-        s = "Enter line range (eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
+        s = f"Enter line range {COL_DIM}(eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
         printt(s)
         inp = AskUtil.ask()
         if not inp:

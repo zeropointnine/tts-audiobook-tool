@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
@@ -22,6 +23,7 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
     ):
         super().__init__(TtsModelInfos.VIBEVOICE.value)
 
+        self._device_map = device_map
         self.max_new_tokens = max_new_tokens
 
         if not model_path:
@@ -75,6 +77,7 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             voice_path: str,
             cfg_scale: float=VibeVoiceProtocol.DEFAULT_CFG,
             num_steps: int=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
+            seed: int = -1
     ) -> list[Sound] | str:
         """
         Returns list[Sound] or error string
@@ -84,6 +87,10 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         """
         if self.model is None or self.processor is None:
             return "model or processor is not initialized" # logic error
+
+        if seed <= -1:
+            seed = random.randrange(0, 2**32 - 1)
+        self.set_seed(seed)
 
         try:
             self.model.set_ddpm_inference_steps(num_steps)
@@ -131,5 +138,18 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             sounds.append(sound)
 
         return sounds
+
+    def set_seed(self, seed: int):
+        """ 
+        Sets various static random seed values 
+        From Chatterbox inference code 
+        """
+        torch.manual_seed(seed)
+        if self._device_map.startswith("cuda"):
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+
 
 SPEAKER_TAG = "Speaker 1: "

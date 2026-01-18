@@ -421,7 +421,8 @@ class GenerateUtil:
                     text=prompts,
                     voice_path=voice_path,
                     cfg_scale=cfg_scale,
-                    num_steps=num_steps
+                    num_steps=num_steps,
+                    seed=project.vibevoice_seed
                 )
 
             case TtsModelInfos.INDEXTTS2:
