@@ -33,7 +33,7 @@ class VoiceGlmMenu:
                 ),
                 MenuItem(
                     make_menu_label("Seed", seed_value),
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "glm_seed")   
+                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "glm_seed")   
                 )
             ])
             return items

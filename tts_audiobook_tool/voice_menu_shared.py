@@ -244,9 +244,11 @@ class VoiceMenuShared:
         print_feedback(success_prefix, value)
 
     @staticmethod    
-    def ask_seed_and_save(project: Project, seed_attr_name: str) -> None:
+    def ask_seed_and_save(state: State, seed_attr_name: str) -> None:
         
-        prompt = "Enter a static seed value or -1 for random: "
+        Hint.show_hint_if_necessary(state.prefs, HINT_SEED)
+
+        prompt = f"Enter a static seed value {COL_DIM}(-1 for random){COL_DEFAULT}: "
         value = AskUtil.ask(prompt)
         if not value:
             return
@@ -263,6 +265,7 @@ class VoiceMenuShared:
             print_feedback("Out of range", is_error=True)
             return
 
+        project = state.project
         setattr(project, seed_attr_name, value)
         project.save()
         print_feedback("Seed set to:", value if value > -1 else "random")

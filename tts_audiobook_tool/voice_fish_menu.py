@@ -48,7 +48,7 @@ class VoiceFishMenu:
             items.append(
                 MenuItem(
                     make_menu_label("Seed", seed_value), 
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "fish_seed")   
+                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "fish_seed")   
                 )
             )
 

@@ -63,7 +63,7 @@ Clone the repository and cd into it:
 
 A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. 
 
-To enable torch CUDA acceleration on Windows, run the following commands (On Linux, no extra step is required).
+To enable torch CUDA acceleration on Windows, run the following commands (Note how the project uses the same version of torch for each TTS model's virtual environments - v2.6.0/cu124). On Linux, no extra step is required.
 
     pip uninstall -y torch torchaudio
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
@@ -72,7 +72,7 @@ Finally, run the app by entering:
 
     python -m tts_audiobook_tool
 
-Note that any settings that are specific to a given model will be enabled automatically based on which virtual environment has been enabled.
+Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
 
 ## Install for MiraTTS
 
@@ -168,14 +168,13 @@ Note that because Microsoft famously removed the source code from their github r
 
 ### Optional, when using CUDA: 
 
-Install Flash Attention:
+VibeVoice will utilize Flash Attention if it is installed. However, it may not positively affect inference speed; you'll want to run an A/B benchmark test on your installation to verify.
 
-On Windows, the best path for doing so is to source a wheel from a trustworthy source. For example, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
+On Windows, the best path is to source a wheel from a trustworthy source. For example, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
 
 On Linux, enter:
 
     pip install flash-attn==2.7.4.post1 --no-build-isolation
-
 
 ## Install for Higgs Audio V2:
 
@@ -295,19 +294,19 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| MiraTTS                 | GTX 3080 Ti, Linux   | 2000%+ realtime | batch size=10
-|                         | GTX 3080 Ti, Linux   | 700%+ realtime  | batch size=1
+| MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime  | batch size=10 (yes really)
+|                         | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | outstanding voice likeness, IMO
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
 | VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10 (default steps)
-| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000%+ realtime | batch size=10 (default steps)
+| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10 (default steps)
 |                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1 (default steps)
 |                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1 (default steps)
 |                         | Macbook Pro M1       | ~40% realtime   |
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed inversely proportional to voice sample duration, FYI
-|                         | GTX 3080 Ti          | N/A             | (does not fit in 12 GB VRAM)
+|                         | GTX 3080 Ti          | N/A             | (won't run with 12 GB VRAM)
 | Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
@@ -320,11 +319,11 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 # Update highlights
 
-**2025-01-16**
+**2025-01-17**
 
 **VibeVoice batch support** (drastically speeds up inference). Plus VibeVoice seed support.
 
-**2025-01-16**
+**Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).
 
 Added submenu: `Concat` > `Open audiobook file in the player app`
 

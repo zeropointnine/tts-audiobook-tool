@@ -81,7 +81,7 @@ class VoiceChatterboxMenu:
             items.append( 
                 MenuItem(
                     make_menu_label("Seed", seed_value), 
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state.project, "chatterbox_seed")   
+                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "chatterbox_seed")   
             ))
             return items
         

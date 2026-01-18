@@ -62,8 +62,7 @@ class VoiceVibeVoiceMenu:
             print_feedback("Cleared, will use default model")
 
         def on_seed(_: State, __: MenuItem) -> None:
-            Hint.show_hint_if_necessary(state.prefs, HINT_SEED_BATCH)
-            VoiceMenuShared.ask_seed_and_save(state.project, "vibevoice_seed")
+            VoiceMenuShared.ask_seed_and_save(state, "vibevoice_seed")
 
         def make_items(_: State) -> list[MenuItem]:
 

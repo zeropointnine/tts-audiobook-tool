@@ -174,6 +174,8 @@ def ask_batch_size(state: State) -> None:
     if not field_name:
         return # silently ignore (shouldn't happen)
 
+    Hint.show_hint_if_necessary(state.prefs, HINT_BATCH)
+
     prompt = f"Enter batch size {COL_DIM}(1 = no batching){COL_DEFAULT}:"
     AskUtil.ask_number(
         state.project, prompt, 

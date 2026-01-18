@@ -911,3 +911,11 @@ class Project:
             value = PROJECT_BATCH_SIZE_MAX # clamp silently
         setattr(self, field, value)
         self.save()
+
+    @property
+    def is_language_cjk(self) -> bool:
+        if self.language_code in ["zh", "ja", "ko"]:
+            return True
+        if self.language_code.startswith(("zh-", "ja-", "ko-")):
+            return True
+        return False

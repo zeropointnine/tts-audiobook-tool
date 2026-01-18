@@ -264,8 +264,17 @@ f"""Because the language code is not en, the setting \"Transcript validation str
 has been automatically set to \"Low\""""
 )
 
-HINT_SEED_BATCH = Hint(
-    "seed_batch",
+HINT_SEED = Hint(
+    "seed",
     "Note",
-"""Setting a static seed value guarantees idempotent audio generations only when batch size is 1."""
+"""Setting a static seed value guarantees idempotent 
+audio generations (when batching is not enabled).
+Re-tried generations will always use a random seed."""
+)
+
+HINT_BATCH = Hint(
+    "Batching",
+    "Note",
+    """When batching is active, lines will get processed slightly out of sequence 
+to maximize throughput."""
 )

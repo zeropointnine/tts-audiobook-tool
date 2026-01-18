@@ -239,7 +239,8 @@ def on_language(state: State, __: MenuItem) -> None:
         printt()
 
     def validator(code: str) -> str:
-        # Super-basic validation here; not using white-list for now
+        # Super-basic validation here: 5 or less chars, must have an alpha character, that's it
+        # Not using white-list for now
         code = code.strip()
         bad = len(code) > 5
         bad = bad or not any(char.isalpha() for char in code)

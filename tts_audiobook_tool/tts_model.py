@@ -146,9 +146,7 @@ class VibeVoiceProtocol(Protocol):
 
     DEFAULT_NUM_STEPS = 10 # from vibevoice library code
 
-    # Setting this explicitly low b/c hallucinations can oftentimes
-    # expand to fill up the entire context (!),
-    # and app uses limited context length anyway
+    # Must accommodate worst-case prompt size (app limit 80 words)
     MAX_TOKENS = 250
 
     def generate(

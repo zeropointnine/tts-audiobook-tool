@@ -69,6 +69,10 @@ class GenerateUtil:
             index = sorted_indices[i]
             items.append((index, 0))
 
+        should_bucket = (batch_size > 1 and not state.project.is_language_cjk)
+        if should_bucket:
+            items = bucket_items(items, state.project.phrase_groups, batch_size)
+
         num_saved = 0
         num_failed = 0
         num_errored = 0
@@ -77,6 +81,7 @@ class GenerateUtil:
         start_time = time.time()
         saved_elapsed: list[float] = [] # history of end-to-end times taken to create sound files
         saved_start_time = time.time()
+        gen_val_sum_time = 0
 
         SigIntHandler().set("generating")
         did_interrupt = False
@@ -118,6 +123,7 @@ class GenerateUtil:
             printt()
 
             # Generate and validate
+            gen_start_time = time.time()
             results = GenerateUtil.generate_and_validate(
                 state=state, 
                 indices=indices, 
@@ -126,6 +132,7 @@ class GenerateUtil:
                 force_random_seed=is_regen or any(count > 0 for count in retry_counts),
                 is_realtime=False
             )
+            gen_val_sum_time += (time.time() - gen_start_time)
 
             # Process and print results
             re_adds: list[tuple[int, int]] = []
@@ -200,8 +207,10 @@ class GenerateUtil:
             s += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
             s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
-        if DEV and Stt.has_whisper(): 
-            s += f"Num word fails: {sum(word_error_counts.values())}\n"
+        if DEV:
+            if Stt.has_whisper():
+                s += f"Num word fails: {sum(word_error_counts.values())}\n"
+            s += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}"
         printt(s)
 
         SigIntHandler().clear()
@@ -629,11 +638,11 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
         message += f"; sound duration: {cum_duration:.1f}; "
         gen_elapsed = max(gen_elapsed, 0.1)
         speed = cum_duration / gen_elapsed
-        speed = min(speed, 100)
+        speed = min(speed, 99.9)
         speed_str = f"{speed:.1f}"
         if speed < 1.0:
             speed_str = "0" + speed_str
-        elif speed == 100:
+        elif speed == 99.9:
             speed_str += "+"
         speed_str += "x"
         message += f"speed: {speed_str}"
@@ -722,3 +731,45 @@ def save_debug_json(
             file.write(json_string)
     except Exception as e:
         ... # eat silently
+
+def bucket_items(
+        items: list[tuple[int, int]], 
+        phrase_groups: list[PhraseGroup],
+        batch_size: int) -> list[tuple[int, int]]:
+    """
+    Returns a copy of `items`, sorted by phrase group word count in an alternating 
+    descending/ascending pattern. Reason for sorting in groups is to preserve the 
+    ordering of items to some extent. Does not "bucket" per-se.
+    
+    Params:
+        items: list of tuples (phase group index, retry_count), 
+               which should be sorted by index
+    """
+    
+    # Make copy of items, but with added element for word count
+    triplets: list[tuple[int, int, int]] = []
+
+    for index, retry_count in items:
+        phrase_group = phrase_groups[index]
+        num_words = phrase_group.num_words
+        triplet = (index, retry_count, num_words)
+        triplets.append(triplet)
+
+    BATCH_ITERATIONS_PER_GROUP = 5
+    group_size = batch_size * BATCH_ITERATIONS_PER_GROUP
+    is_descending = True
+
+    # Create a copy of triplets which is sorted in groups of size group_size,
+    # alternating between descending and ascending.
+    grouped_triplets = []
+    for i in range(0, len(triplets), group_size):
+        group = triplets[i:i + group_size]
+        group.sort(key=lambda x: x[2], reverse=is_descending)
+        grouped_triplets.extend(group)
+        is_descending = not is_descending
+
+    # "Extract" the index and retry count elements
+    sorted_items = []
+    for index, retry_count, _ in grouped_triplets:
+        sorted_items.append( (index, retry_count) )
+    return sorted_items
