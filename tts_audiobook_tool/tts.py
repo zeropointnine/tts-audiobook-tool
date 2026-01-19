@@ -71,6 +71,7 @@ class Tts:
         model_params = { }
         model_params["chatterbox_type"] = project.chatterbox_type
         model_params["vibevoice_model_path"] = project.vibevoice_model_path
+        model_params["vibevoice_lora_path"] = project.vibevoice_lora_path
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
         model_params["glm_sr"] = project.glm_sr
 
@@ -88,6 +89,7 @@ class Tts:
         dirty = False
         dirty |= new_params.get("chatterbox_type", "") != old_params.get("chatterbox_type", "")
         dirty |= new_params.get("vibevoice_model_path", "") != old_params.get("vibevoice_model_path", "")
+        dirty |= new_params.get("vibevoice_lora_path", "") != old_params.get("vibevoice_lora_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
         if dirty:
@@ -185,13 +187,17 @@ class Tts:
         if not Tts._vibevoice:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             model_path = Tts._model_params.get("vibevoice_model_path", "")
-            model_name = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
-            print_model_init(f"{model_name}) ({device}")
+            model_desc = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
+            lora_path = Tts._model_params.get("vibevoice_lora_path", "")
+            lora_desc = f"LoRA: {lora_path}, " if lora_path else ""
+            desc = f"{lora_desc}{device}"
+            print_model_init(desc, model_desc)
 
             from tts_audiobook_tool.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
                 device_map=device,
                 model_path=model_path,
+                lora_path=lora_path,
                 max_new_tokens=VibeVoiceProtocol.MAX_TOKENS
             )
         return Tts._vibevoice

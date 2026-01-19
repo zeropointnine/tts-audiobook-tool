@@ -275,6 +275,16 @@ Re-tried generations will always use a random seed."""
 HINT_BATCH = Hint(
     "Batching",
     "Note",
-    """When batching is active, lines will get processed slightly out of sequence 
+"""When batching is active, lines will get processed slightly out of sequence 
 to maximize throughput."""
+)
+
+HINT_VIBEVOICE_LORA = Hint(
+    "vibevoice_lora",
+    "LoRA support is experimental",
+"""Current tips:
+- Train your LoRA using https://github.com/voicepowered-ai/VibeVoice-finetuning with parameter \"voice_prompt_drop_rate 1\"
+- Avoid using a LoRA and a voice clone sample at the same time
+- Here's a (rough, proof-of-concept) LoRA you can experiment with:
+      vibevoice-community/VibeVoice-LoRA-Elise"""
 )

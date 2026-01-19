@@ -273,3 +273,48 @@ class AppUtil:
                 return item
         
         return None
+
+    @staticmethod
+    def validate_hf_model(path_or_id: str) -> tuple[str, str]:
+        """
+        Makes assumption that local directory (direct or cached)
+        must have a file listed in `file_markers` to be considered valid.
+        Revisit if necessary.
+
+        Returns source type or UI error string.
+        """
+
+        from huggingface_hub import model_info, try_to_load_from_cache
+        from huggingface_hub.errors import RepositoryNotFoundError, HFValidationError
+        from huggingface_hub.utils._validators import validate_repo_id
+
+        file_markers = ["config.json", "adapter_config.json"]
+
+        # Validate local dir
+        if os.path.isdir(path_or_id):
+            is_hf_dir = any(os.path.isfile(os.path.join(path_or_id, marker)) for marker in file_markers)
+            if is_hf_dir:
+                return "direct", ""
+            else:
+                return "", "Directory is missing typical hf file markers"
+
+        # Validate string format
+        try:
+            validate_repo_id(path_or_id)
+        except HFValidationError:
+            return "", "Invalid string format for hf repo id"
+
+        # Check local hf cache
+        for file_marker in file_markers:
+            cached_path = try_to_load_from_cache(path_or_id, file_marker)
+            if isinstance(cached_path, str):
+                return "hf_cache", ""
+        
+        # Check remote reachability
+        try:
+            model_info(path_or_id)
+            return "hf_remote", ""
+        except RepositoryNotFoundError:
+            return "", "Repo not found or gated"
+        except Exception as e:
+            return "", f"Network or other error: {e}"

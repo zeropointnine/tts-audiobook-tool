@@ -3,7 +3,7 @@
 #################
 
 # Archived fork of VibeVoice (due to removal of vibevoice project's code from github)
-git+https://github.com/vibevoice-community/VibeVoice@d244401c9d761b9f059dff3c6a6411e77a0a5edf
+git+https://github.com/zeropointnine/vibevoice-community-fix
 
 triton-windows==3.3.1.post19; sys_platform == 'win32'
 
@@ -32,3 +32,6 @@ soundfile==0.13.1
 watchdog==6.0.0
 whisper_normalizer==0.1.12
 xxhash==3.5.0
+
+# Model-specific app dependency
+peft>=0.13.0

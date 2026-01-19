@@ -438,12 +438,15 @@ class GenerateUtil:
 
             case TtsModelInfos.VIBEVOICE:
 
-                voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
-                cfg_scale = VibeVoiceProtocol.DEFAULT_CFG if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+                if project.vibevoice_voice_file_name:
+                    voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
+                else:
+                    voice_path = ""
+                cfg_scale = VibeVoiceProtocol.CFG_DEFAULT if project.vibevoice_cfg == -1 else project.vibevoice_cfg
                 num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
                 result = Tts.get_vibevoice().generate(
-                    text=prompts,
+                    texts=prompts,
                     voice_path=voice_path,
                     cfg_scale=cfg_scale,
                     num_steps=num_steps,

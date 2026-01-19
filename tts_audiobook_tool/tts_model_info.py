@@ -204,7 +204,7 @@ class TtsModelInfos(Enum):
         max_words_default=40,
         max_words_reco_range=(40, 80),
         uses_voice_sound_file=True,
-        requires_voice=True,
+        requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="vibevoice_batch_size",
         strictness_high_discouraged=True,

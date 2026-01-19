@@ -1,7 +1,9 @@
+import traceback
 import numpy as np
 import torch
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
+from peft import PeftModel
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol
@@ -19,32 +21,29 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             self,
             device_map: str,
             model_path: str = "",
+            lora_path: str | None = None,
             max_new_tokens: int | None = None,
     ):
         super().__init__(TtsModelInfos.VIBEVOICE.value)
 
         self._device_map = device_map
-        self.max_new_tokens = max_new_tokens
-
         if not model_path:
             model_path = VibeVoiceProtocol.DEFAULT_MODEL_PATH
+        self.max_new_tokens = max_new_tokens
 
         self.processor = VibeVoiceProcessor.from_pretrained(model_path)
 
         # Determine attention implementation type
-        attn_implementation = "sdpa" # fyi, in my testing, "eager" is completely unusable
-        attn_description = "sdpa"
         if "cuda" in device_map:
             try:
                 from flash_attn import flash_attn_func # type: ignore
                 attn_implementation = "flash_attention_2"
-                attn_description = "flash_attention_2"
             except ImportError as e:
-                attn_description = "sdpa (Flash attention not installed)"
+                attn_implementation = "sdpa" # fyi, in my testing, "eager" is unusable
                 # ... note, triton is still required though
-        printt()
-        printt(f"Attention implementation: {attn_description}")
-        printt()
+        else:
+            attn_implementation = "sdpa" 
+        printt(f"Attention implementation: {attn_implementation}")
 
         # Load model
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
@@ -53,7 +52,40 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             device_map=device_map,
             attn_implementation=attn_implementation
         )
+        
+        if lora_path:
+            # Load LoRA adapter
+            printt()
+            printt(f"Loading LoRA adapter from: {lora_path}")
+            printt()
+            try:
+                # The LoRA is trained on the language model backbone (Qwen2)
+                # VibeVoiceForConditionalGenerationInference wraps VibeVoiceModel
+                # which contains the language_model as a submodule
+                # We need to load the adapter onto the language_model submodule
+                language_model = self.model.model.language_model
+                
+                if hasattr(language_model, 'load_adapter'):
+                    language_model.load_adapter(lora_path)
+                else:
+                    # Fallback to PeftModel wrapper
+                    printt("load_adapter() not available, using PeftModel wrapper on language_model")
+                    self.model.model.language_model = PeftModel.from_pretrained(language_model, lora_path)
+                printt("LoRA adapter activated successfully")
+                printt()
+                self._has_lora = True
+            except Exception as e:
+                printt(f"{COL_ERROR}WARNING: Failed to load LoRA adapter: {e}")
+                printt()
+                self._has_lora = False
+        else:
+            self._has_lora = False
+        
         self.model.eval()
+
+    @property
+    def has_lora(self) -> bool:
+        return self._has_lora
 
     def kill(self) -> None:
         if self.processor:
@@ -65,17 +97,15 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
 
     def massage_for_inference(self, text: str) -> str:
         text = super().massage_for_inference(text)
-
         # Required speaker tag
-        text = f"{SPEAKER_TAG}{text}"
-
+        text = f"{SPEAKER_TAG}{text}" 
         return text
 
     def generate(
             self,
-            text: list[str],
+            texts: list[str],
             voice_path: str,
-            cfg_scale: float=VibeVoiceProtocol.DEFAULT_CFG,
+            cfg_scale: float=VibeVoiceProtocol.CFG_DEFAULT,
             num_steps: int=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
             seed: int = -1
     ) -> list[Sound] | str:
@@ -93,15 +123,16 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         self.set_seed(seed)
 
         try:
-            self.model.set_ddpm_inference_steps(num_steps)
+            self.model.set_ddpm_inference_steps(num_steps) # type: ignore
 
             # Ensure text is a list
-            if isinstance(text, str):
-                text = [text]
+            texts = texts if isinstance(texts, list) else [texts]
+
+            voice_samples = None if not voice_path else [ [ voice_path ] for _ in texts ]
 
             inputs = self.processor(
-                text=text,
-                voice_samples=[ [ voice_path ] for _ in text ],
+                text=texts,
+                voice_samples=voice_samples,  # type: ignore
                 padding=True,
                 return_tensors="pt",
                 return_attention_mask=True,

@@ -141,8 +141,10 @@ class VibeVoiceProtocol(Protocol):
     DEFAULT_MODEL_PATH = "microsoft/VibeVoice-1.5b"
     DEFAULT_MODEL_NAME = "VibeVoice 1.5B"
 
-    # nb, their gradio demo default is 1.3, which is much too low; library code is 1.0 even
-    DEFAULT_CFG = 3.0
+    # nb, their gradio demo default is 1.3, which is IMO much too low
+    CFG_DEFAULT = 3.0
+    CFG_MIN = 1.0
+    CFG_MAX = 7.0
 
     DEFAULT_NUM_STEPS = 10 # from vibevoice library code
 
@@ -151,12 +153,16 @@ class VibeVoiceProtocol(Protocol):
 
     def generate(
             self,
-            text: list[str],
+            texts: list[str],
             voice_path: str,
-            cfg_scale: float,
-            num_steps: int,
-            seed: int
+            cfg_scale: float = 3.0,
+            num_steps: int = 10,
+            seed: int = -1
     ) -> list[Sound] | str:
+        ...
+
+    @property
+    def has_lora(self) -> bool:
         ...
 
 class VibeVoiceModelProtocol(TtsModel, VibeVoiceProtocol):

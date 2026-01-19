@@ -90,15 +90,34 @@ def make_project_label(state: State) -> str:
 
 # Voice
 def make_voice_label(state: State) -> str:
+
     voice_label = state.project.get_voice_label()
-    if not state.project.can_voice:
-        current = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
+
+    if Tts.get_type() == TtsModelInfos.VIBEVOICE:
+
+        lora_label = state.project.vibevoice_lora_path
+
+        if voice_label == "none" and not lora_label:
+            desc = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
+        elif voice_label != "none" and not lora_label:
+            desc = make_currently_string(voice_label, value_prefix="current voice clone: ")
+        elif voice_label == "none" and lora_label:
+            desc = make_currently_string(lora_label, value_prefix="current LoRA: ")
+        else: # has both
+            desc = make_currently_string(f"{voice_label}, {lora_label}", value_prefix="current voice clone and LoRA: ")
+
     else:
-        if voice_label != "none":
-            current = make_currently_string(voice_label, value_prefix="current voice clone: ")
+
+        voice_label = state.project.get_voice_label()
+        if not state.project.can_voice:
+            desc = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
         else:
-            current = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
-    return f"Voice clone and model settings {current}"
+            if voice_label != "none":
+                desc = make_currently_string(voice_label, value_prefix="current voice clone: ")
+            else:
+                desc = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
+    
+    return f"Voice clone and model settings {desc}"
 
 def on_voice(state: State, __) -> None:
     if not state.prefs.project_dir:

@@ -233,7 +233,7 @@ SS_NORMAL_DESC = \
 
 SS_MAX_LEN_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, segmented by 
-    'max words per segment' at the nearest phrase boundary.
+    'max words per segment' to the nearest phrase boundary.
     This maximizes text length per TTS generation."""
 
 class SegmentationStrategy(tuple[str, str, str], Enum):

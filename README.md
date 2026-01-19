@@ -319,6 +319,10 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 # Update highlights
 
+**2025-01-21**
+
+**VibeVoice LoRA support** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)
+
 **2025-01-18, circa**
 
 **Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).

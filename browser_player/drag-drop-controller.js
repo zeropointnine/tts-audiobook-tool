@@ -6,6 +6,9 @@
  */
 class DragDropController {
 
+    // Supported file extensions
+    static VALID_EXTENSIONS = ['.m4a', '.m4b', '.flac'];
+
     /**
      * @param {Object} config - Configuration object
      * @param {HTMLElement} config.overlay - The drag overlay element
@@ -86,6 +89,20 @@ class DragDropController {
     }
 
     /**
+     * Validate file extension
+     * @param {File} file - The file to validate
+     * @returns {boolean} True if file has a valid extension
+     * @private
+     */
+    _isValidFile(file) {
+        if (!file || !file.name) {
+            return false;
+        }
+        const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+        return DragDropController.VALID_EXTENSIONS.includes(ext);
+    }
+
+    /**
      * Handle drop event
      * @param {DragEvent} e
      * @private
@@ -101,6 +118,10 @@ class DragDropController {
         }
 
         const file = e.dataTransfer.files[0];
+        if (!this._isValidFile(file)) {
+            alert("Unsupported file type. Please use .m4a, .m4b, or .flac files.");
+            return;
+        }
         this.onDropFile(file);
     }
 }

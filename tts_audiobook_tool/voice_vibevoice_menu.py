@@ -1,3 +1,4 @@
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.project import Project
@@ -16,6 +17,17 @@ class VoiceVibeVoiceMenu:
 
         project = state.project
 
+        def make_select_voice_label(_: State) -> str: # custom
+            if not state.project.has_voice:
+                if state.project.vibevoice_lora_path:
+                    col = COL_ACCENT
+                else:
+                    col = COL_ERROR
+                currently = make_currently_string("none", color_code=col)
+            else:
+                currently = make_currently_string(state.project.get_voice_label())
+            return f"Select voice clone sample {currently}"
+
         def make_model_path_label(_) -> str:
             if project.vibevoice_model_path:
                 label = make_currently_string(project.vibevoice_model_path)
@@ -23,17 +35,24 @@ class VoiceVibeVoiceMenu:
                 label = f"{COL_DIM}(optional)"
             return f"VibeVoice custom model path {label}"
 
+        def make_lora_path_label(_) -> str:
+            if project.vibevoice_lora_path:
+                label = make_currently_string(project.vibevoice_lora_path)
+            else:
+                label = f"{COL_DIM}(optional)"
+            return f"LoRA {label}"
+
         def make_cfg_label(_) -> str:
             value = make_parameter_value_string(
-                project.vibevoice_cfg, VibeVoiceProtocol.DEFAULT_CFG, 1
+                project.vibevoice_cfg, VibeVoiceProtocol.CFG_DEFAULT, 1
             )
             return f"CFG scale {make_currently_string(value)}"
 
         def on_cfg(_: State, __: MenuItem) -> None:
             AskUtil.ask_number(
                 project,
-                "Enter CFG (1.3 to 7.0):",
-                1.3, 7.0, # Sane range IMO
+                f"Enter CFG {COL_DIM}({VibeVoiceProtocol.CFG_MIN} to {VibeVoiceProtocol.CFG_MAX}):",
+                VibeVoiceProtocol.CFG_MIN, VibeVoiceProtocol.CFG_MAX,
                 "vibevoice_cfg",
                 "CFG set to:"
             )
@@ -54,22 +73,17 @@ class VoiceVibeVoiceMenu:
                 is_int=True
             )
 
-        def on_clear_custom_model(_: State, __: MenuItem) -> None:
-            state.project.vibevoice_model_path = ""
-            state.project.save()
-            Tts.set_model_params_using_project(project)
-            Tts.clear_tts_model()
-            print_feedback("Cleared, will use default model")
-
         def on_seed(_: State, __: MenuItem) -> None:
             VoiceMenuShared.ask_seed_and_save(state, "vibevoice_seed")
 
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
+
+            # Voice
             items.append(
                 MenuItem(
-                    VoiceMenuShared.make_select_voice_label,
+                    make_select_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
                 )
             )
@@ -77,14 +91,24 @@ class VoiceVibeVoiceMenu:
                 items.append( 
                     VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) 
                 )
+            
+            # LoRA
+            items.append(
+                MenuItem(make_lora_path_label, lambda _, __: ask_lora_path(state))
+            )
+            if state.project.vibevoice_lora_path:
+                items.append(MenuItem("Clear LoRA", on_clear_lora))
+
+            # Model
             items.append(
                 MenuItem(make_model_path_label, lambda _, __: ask_model_path(state.project))
             )
             if state.project.vibevoice_model_path:
                 items.append(MenuItem("Clear custom model path", on_clear_custom_model))
+
+            # Other config
             items.append(MenuItem(make_cfg_label, on_cfg))
             items.append(MenuItem(make_steps_label, on_steps))
-            
             seed_string = str(state.project.vibevoice_seed) if state.project.vibevoice_seed != -1 else "random"
             items.append( MenuItem(make_menu_label("Seed", seed_string), on_seed))
             
@@ -94,7 +118,61 @@ class VoiceVibeVoiceMenu:
 
 # ---
 
-def ask_model_path(project: Project) -> None: # type: ignore
+def ask_lora_path(state: State) -> None: 
+    
+    project = state.project
+    
+    Hint.show_hint_if_necessary(state.prefs, HINT_VIBEVOICE_LORA)
+
+    printt("Enter local directory path or huggingface repo id to VibeVoice LoRA:")
+    inp = AskUtil.ask()
+    if not inp:
+        return
+    if inp == project.vibevoice_lora_path:
+        print_feedback("Already set")
+        return
+
+    src, err = AppUtil.validate_hf_model(inp)
+    if err:
+        print_feedback(err, is_error=True)
+        return
+    
+    apply_lora_path_and_validate(project, inp)
+
+def apply_lora_path_and_validate(project: Project, path: str) -> None: 
+
+    project.vibevoice_lora_path = path
+    project.save()
+    Tts.set_model_params_using_project(project)
+
+    # For good measure
+    model = Tts.get_instance_if_exists() 
+    if model:
+        Tts.clear_tts_model()
+
+    instance = Tts.get_vibevoice()
+    if instance.has_lora:
+        print_feedback("\nLoRA set:", path)
+    else:
+        # Revert
+        project.vibevoice_lora_path = ""
+        project.save()
+        Tts.set_model_params_using_project(project)
+        printt()
+        printt(f"{COL_ERROR}Couldn't load LoRA")
+        printt()
+        AskUtil.ask_enter_to_continue()
+
+def on_clear_lora(state: State, __: MenuItem) -> None:
+    state.project.vibevoice_lora_path = ""
+    state.project.save()
+    Tts.set_model_params_using_project(state.project)
+    Tts.clear_tts_model()
+    print_feedback("Cleared LoRA")
+
+# ---
+
+def ask_model_path(project: Project) -> None: 
     s = "Select local directory containing VibeVoice model (Hugging Face model repository format):"
     dir_path = AskUtil.ask_dir_path(s, s)
     if not dir_path:
@@ -121,7 +199,7 @@ def apply_model_path_and_validate(project: Project, path: str) -> None:
 
     # Validate by attempting to instantiate model with new settings
 
-    # Model should have been cleared, but just in case:
+    # For good measure:
     model = Tts.get_instance_if_exists()
     if model:
         Tts.clear_tts_model()
@@ -131,7 +209,7 @@ def apply_model_path_and_validate(project: Project, path: str) -> None:
         print_feedback("\nCustom model path set:", path)
 
     except (OSError, Exception) as e:
-        # Revert change
+        # Revert
         project.vibevoice_model_path = ""
         project.save()
         Tts.set_model_params_using_project(project)
@@ -140,3 +218,10 @@ def apply_model_path_and_validate(project: Project, path: str) -> None:
         printt(f"{COL_ERROR}{make_error_string(e)}")
         printt()
         AskUtil.ask_enter_to_continue()
+
+def on_clear_custom_model(state: State, __: MenuItem) -> None:
+    state.project.vibevoice_model_path = ""
+    state.project.save()
+    Tts.set_model_params_using_project(state.project)
+    Tts.clear_tts_model()
+    print_feedback("Cleared, will use default model")

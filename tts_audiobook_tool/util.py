@@ -79,13 +79,14 @@ def print_init(s: str) -> None:
     printt(f"{Ansi.ITALICS}{COL_DIM}{s}")
     print()
 
-def print_model_init(properties_string: str = "") -> None:
+def print_model_init(description: str = "", model_name: str = "") -> None:
     """ Prints model init message in a consistent style """
     from tts_audiobook_tool.tts import Tts
-    model_name = Tts.get_type().value.ui["proper_name"]
+    if not model_name:
+        model_name = Tts.get_type().value.ui["proper_name"]
     s = f"Initializing {model_name} model"
-    if properties_string:
-        s += f" {COL_DIM}({properties_string})"
+    if description:
+        s += f" {COL_DIM}({description})"
     s += "..."
     print_init(s)
 

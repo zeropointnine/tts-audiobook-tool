@@ -76,6 +76,7 @@ class Project:
 
     vibevoice_voice_file_name: str = ""
     vibevoice_model_path: str = ""
+    vibevoice_lora_path: str = ""
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
     vibevoice_batch_size: int = 1
@@ -348,6 +349,7 @@ class Project:
         # VibeVoice
         project.vibevoice_voice_file_name = d.get("vibevoice_voice_file_name", "")
         project.vibevoice_model_path = d.get("vibevoice_model_path", "")
+        project.vibevoice_lora_path = d.get("vibevoice_lora_path", "")
         project.vibevoice_cfg = d.get("vibevoice_cfg", -1)
         project.vibevoice_steps = d.get("vibevoice_steps", -1)
 
@@ -462,6 +464,7 @@ class Project:
 
             "vibevoice_voice_file_name": self.vibevoice_voice_file_name,
             "vibevoice_model_path": self.vibevoice_model_path,
+            "vibevoice_lora_path": self.vibevoice_lora_path,
             "vibevoice_cfg": self.vibevoice_cfg,
             "vibevoice_steps": self.vibevoice_steps,
             "vibevoice_batch_size": self.vibevoice_batch_size,
