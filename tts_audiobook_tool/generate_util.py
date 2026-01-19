@@ -9,6 +9,8 @@ import numpy as np
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
+from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
@@ -27,7 +29,7 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validate_util import ValidateUtil
-from tts_audiobook_tool.validation_result import SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class GenerateUtil:
@@ -55,7 +57,7 @@ class GenerateUtil:
         showed_vram_warning = False
 
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
-        did_cancel = Tts.warm_up_models(force_no_stt)
+        did_cancel = ModelsUtil.warm_up_models(state)
         if did_cancel:
             print_feedback("\nCancelled")
             return True
@@ -73,11 +75,13 @@ class GenerateUtil:
         if should_bucket:
             items = bucket_items(items, state.project.phrase_groups, batch_size)
 
+        # Metrics-related variables
         num_saved = 0
         num_failed = 0
+        num_failed_music = 0
         num_errored = 0
-        word_error_counts: dict[int, int] = {}
-
+        word_error_counts: dict[int, int] = {} 
+        word_counts: dict[int, int] = {}
         start_time = time.time()
         saved_elapsed: list[float] = [] # history of end-to-end times taken to create sound files
         saved_start_time = time.time()
@@ -86,7 +90,7 @@ class GenerateUtil:
         SigIntHandler().set("generating")
         did_interrupt = False
 
-        # Loop items in batch
+        # Loop through items in the batch
         while items:
 
             if SigIntHandler().did_interrupt:
@@ -144,6 +148,7 @@ class GenerateUtil:
                 message = f"{COL_DEFAULT}Item {index + 1}: "
 
                 if isinstance(result, str):
+                    # Error
                     message += f"{COL_ERROR}Error: {result}"
                     if new_retry_count > max_retries:
                         num_errored += 1
@@ -159,16 +164,23 @@ class GenerateUtil:
                         s = s.replace("Passed", f"{COL_OK}Passed on retry") 
                     message += s
 
-                    if isinstance(validation_result, WordErrorResult) and validation_result.is_fail:
+                    # Failed or not
+                    if validation_result.is_fail:
                         if new_retry_count > max_retries:
                             num_failed += 1
                             message += f"; {COL_ERROR}max retries reached, tagging as failed"
                         else:
                             re_adds.append((index, new_retry_count))
                             message += f"; {COL_DEFAULT}will retry"
+                        if isinstance(validation_result, MusicFailResult):
+                            num_failed_music += 1
                     else:
                         num_saved += 1
 
+                    # Update word count metrics
+                    word_counts[index] = project.phrase_groups[index].num_words
+
+                    # Update error count metrics, word count metrics
                     if isinstance(validation_result, WordErrorResult):
                         fails = validation_result.num_errors
                         if index in word_error_counts:
@@ -193,7 +205,7 @@ class GenerateUtil:
                 # Insert "re_adds" at the head of the list (not bothering with deque fyi)
                 items[:0] = re_adds
 
-        # Print summary
+        # Print summary, metrics
         s = ""
         if did_interrupt:
             s += "Interrupted. "
@@ -208,9 +220,13 @@ class GenerateUtil:
         if num_errored:
             s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
-            if Stt.has_whisper():
+            s += "\n"
+            s += f"Num words: {sum(word_counts.values())}\n"
+            if Stt.has_instance():
                 s += f"Num word fails: {sum(word_error_counts.values())}\n"
-            s += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}"
+                if MusicDetector.has_instance():
+                    s += f"Num music fails: {num_failed_music}\n"
+            s += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
         printt(s)
 
         SigIntHandler().clear()
@@ -300,7 +316,7 @@ class GenerateUtil:
 
             # Validate
             text = phrase_groups[ indices[i] ].as_flattened_phrase().text
-            validation_result = ValidateUtil.make_validation_result(
+            validation_result = ValidateUtil.validate(
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
             results.append(validation_result)
@@ -553,7 +569,6 @@ class GenerateUtil:
         project = state.project
         
         # Save sound
-        num_word_errors = validation_result.num_errors if isinstance(validation_result, WordErrorResult) else -1
         file_name = SoundSegmentUtil.make_file_name(
             index=index,
             phrase_group=phrase_group,

@@ -319,11 +319,15 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 # Update highlights
 
-**2025-01-17**
-
-**VibeVoice batch support** (drastically speeds up inference). Plus VibeVoice seed support.
+**2025-01-18, circa**
 
 **Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).
+
+**VibeVoice batch support** (drastically speeds up inference). 
+
+**VibeVoice seed support**
+
+**Music detection** - Validator will now reject audio with music hallucinations (VibeVoice)
 
 Added submenu: `Concat` > `Open audiobook file in the player app`
 
@@ -337,7 +341,7 @@ Prevent some TTS models from mangling the output of prompts starting with **all-
 
 "Chapter dividers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
 
-Note, app now uses ".m4b" file suffix for AAC files instead of ".m4a".
+Note, app now saves AAC files using `.m4b` suffix instead of `.m4a`.
 
 **2025-01-05**
 

@@ -10,11 +10,8 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validate_util import ValidateUtil
 
 class AppUtil:
     """
@@ -215,7 +212,8 @@ class AppUtil:
     @staticmethod
     def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
         """ Shows one-time hints related to doing inference """
-
+        
+        from tts_audiobook_tool.tts import Tts
         from tts_audiobook_tool.project import Project
         project: Project = p_project
 
@@ -231,17 +229,6 @@ class AppUtil:
                     version = torch.backends.cudnn.version()
                     if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
                         Hint.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
-
-    @staticmethod
-    def should_stt(state: State) -> bool:
-        """
-        Should the app be doing speech-to-text transcription of the generated audio?
-        """
-        if ValidateUtil.is_unsupported_language_code(state.project.language_code):
-            return False
-        if state.prefs.stt_variant == SttVariant.DISABLED:
-            return False
-        return True
 
     @staticmethod
     def get_chromium_info() -> tuple[str, str] | None:

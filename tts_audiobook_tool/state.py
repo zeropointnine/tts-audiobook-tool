@@ -6,7 +6,6 @@ from tts_audiobook_tool.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -46,6 +45,7 @@ class State:
 
     @project.setter
     def project(self, value: Project) -> None:
+        from tts_audiobook_tool.tts import Tts
         
         if self._project and self._project != value:
             self._project.kill()
@@ -63,6 +63,7 @@ class State:
 
     @prefs.setter
     def prefs(self, value: Prefs) -> None:
+        from tts_audiobook_tool.tts import Tts
         self._prefs = value
         # Sync static values
         Stt.set_variant(self.prefs.stt_variant)
@@ -74,6 +75,7 @@ class State:
         Inits project directory and sets new project instance
         Return error string on fail
         """
+        from tts_audiobook_tool.tts import Tts
 
         try:
             project_dir_path = Path(path).expanduser()

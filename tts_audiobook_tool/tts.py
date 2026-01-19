@@ -4,9 +4,6 @@ from importlib import util
 import sys
 from typing import Callable
 
-from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
@@ -110,59 +107,6 @@ class Tts:
             if item is not None:
                 return True
         return False
-
-    @staticmethod
-    def warm_up_models(force_no_stt: bool) -> bool:
-        """
-        Instantiates tts model and stt model - if not already - as a convenience,
-        and prints that it is doing so.
-
-        Unlike the 'direct' model getters, it also checks for keyboard interrupt
-        and return True if control-c was pressed
-
-        TODO: `force_no_stt` should be handled elsewhere
-        """
-
-        should_instantiate_tts = not Tts.instance_exists()        
-        should_instantiate_whisper = (Stt.get_variant() != SttVariant.DISABLED) and \
-            not force_no_stt and not Stt._whisper
-        
-        should_neither = (not should_instantiate_tts and not should_instantiate_whisper)
-        if should_neither:
-            return False
-
-        SigIntHandler().set("model init")
-
-        should_both = (should_instantiate_tts and should_instantiate_whisper)
-
-        if should_both:
-            print_init("Warming up models...")
-
-        if not should_instantiate_whisper:
-            # "Lazy unload", useful for user flows like: 
-            # Do inference, choose unsupported validation language, do inference
-            Stt.clear_stt_model()
-
-        if should_instantiate_tts:
-            _ = Tts.get_instance()
-
-        if SigIntHandler().did_interrupt:
-            SigIntHandler().clear()
-            return True
-
-        if should_both:
-            printt() # yes rly
-
-        if should_instantiate_whisper:
-            _ = Stt.get_whisper()
-
-        if SigIntHandler().did_interrupt:
-            SigIntHandler().clear()
-            return True
-        
-        SigIntHandler().clear()
-        return False
-
 
     @staticmethod
     def get_instance() -> TtsModel:
@@ -301,15 +245,6 @@ class Tts:
             MemoryUtil.gc_ram_vram()
 
     @staticmethod
-    def clear_all_models() -> None:
-        Stt.clear_stt_model()
-        Tts.clear_tts_model()
-        
-        # For good measure
-        from tts_audiobook_tool.memory_util import MemoryUtil
-        MemoryUtil.gc_ram_vram() 
-
-    @staticmethod
     def get_resolved_torch_device() -> str:
         """
         Gets the best torch device available which is supported by the current Tts model
@@ -352,15 +287,3 @@ class Tts:
         if extra:
             err += "\n\n" + extra
         return err
-
-# ---
-
-def print_model_init(properties_string: str = "") -> None:
-    model_name = Tts.get_type().value.ui["proper_name"]
-    s = f"Initializing {model_name} model"
-    if properties_string:
-        s += f" {COL_DIM}({properties_string})"
-    s += "..."
-    print_init(s)
-
-

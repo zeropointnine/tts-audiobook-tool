@@ -220,7 +220,7 @@ def do_generate(state: State, is_regen: bool) -> None:
         if num:
             s += f" {COL_DIM}({num} already complete)"
     printt(s)
-    if AppUtil.should_stt(state):
+    if Stt.should_stt(state):
         s = "Speech-to-text validation enabled"
         s += f" {COL_DIM}({Stt.short_description()})"
     else:

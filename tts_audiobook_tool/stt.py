@@ -77,7 +77,7 @@ class Stt:
         return f"{Stt._variant.id}, {config.device}"
 
     @staticmethod
-    def has_whisper() -> bool:
+    def has_instance() -> bool:
         return Stt._whisper is not None
 
     @staticmethod
@@ -86,3 +86,17 @@ class Stt:
             Stt._whisper = None
             from tts_audiobook_tool.memory_util import MemoryUtil
             MemoryUtil.gc_ram_vram()
+
+    @staticmethod
+    def should_stt(state) -> bool:
+        """
+        Should the app be doing speech-to-text transcription of the generated audio?
+        """
+        from tts_audiobook_tool.state import State
+        from tts_audiobook_tool.validate_util import ValidateUtil
+        assert(isinstance(state, State))
+        if ValidateUtil.is_unsupported_language_code(state.project.language_code):
+            return False
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            return False
+        return True

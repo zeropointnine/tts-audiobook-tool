@@ -21,17 +21,20 @@ class ValidationResult(ABC):
     
     @abstractmethod
     def get_ui_message(self) -> str:
-        """ User-facing description, including color code formatting"""
+        """ User-facing description, including color code formatting """
         ...
 
 @dataclass
 class TranscriptResult(ValidationResult, ABC):
-    """ Base class for a ValidationResult that has transcript data """
+    """ 
+    Base class for a ValidationResult that has transcript data 
+    (ie, anything other than SkippedResult)
+    """
     transcript_words: list[Word]
 
 @dataclass
 class WordErrorResult(TranscriptResult):
-    """ A ValidationResult that has transcript data and has calculated word error list"""
+    """ A ValidationResult that has transcript data and has calculated word error list """
 
     errors: list[str]
     threshold: int
@@ -78,7 +81,19 @@ class TrimmedResult(TranscriptResult):
         return s
 
 @dataclass
+class MusicFailResult(TranscriptResult):
+    """
+    """
+    @property
+    def is_fail(self) -> bool:
+        return True
+
+    def get_ui_message(self) -> str:
+        return f"{COL_ERROR}Music detected"
+
+@dataclass
 class SkippedResult(ValidationResult):
+
     message: str
 
     @property

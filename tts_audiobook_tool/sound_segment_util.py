@@ -8,7 +8,7 @@ from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validation_result import ValidationResult, WordErrorResult
+from tts_audiobook_tool.validation_result import MusicFailResult, ValidationResult, WordErrorResult
 
 
 class SoundSegmentUtil:
@@ -75,6 +75,8 @@ class SoundSegmentUtil:
         
         if isinstance(validation_result, WordErrorResult):
             num_fails_tag = f" [{validation_result.num_errors}]" 
+        elif isinstance(validation_result, MusicFailResult):
+            num_fails_tag = f" [99]" # good enough for now
         else:
             num_fails_tag = ""
         

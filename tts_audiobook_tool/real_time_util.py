@@ -5,6 +5,7 @@ from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
+from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -44,7 +45,7 @@ class RealTimeUtil:
         
         # Warm up models
         force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
-        did_interrupt = Tts.warm_up_models(force_no_stt)
+        did_interrupt = ModelsUtil.warm_up_models(state)
         if did_interrupt:
             print_feedback("\nCancelled")
             return

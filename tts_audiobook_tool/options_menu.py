@@ -4,6 +4,7 @@ from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
@@ -23,7 +24,7 @@ class OptionsMenu:
             before_string = make_system_memory_string()
             if before_string:
                 printt(f"Before: {before_string}")
-            Tts.clear_all_models()
+            ModelsUtil.clear_all_models()
             after_string = make_system_memory_string()
             if after_string:
                 printt(f"After:  {after_string}")

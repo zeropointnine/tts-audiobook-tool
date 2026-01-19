@@ -4,20 +4,22 @@ from typing import Optional
 
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.dictionary_en import DictionaryEn
+from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validation_result import TrimmedResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class ValidateUtil:
+    """
+    """
 
     @staticmethod
-    def make_validation_result(
+    def validate(
         sound: Sound, 
         source: str, 
         transcript_words: list[Word],
@@ -32,6 +34,11 @@ class ValidateUtil:
         _, word_errors, threshold = ValidateUtil.get_word_error_fail(
             source, transcript, language_code=language_code, strictness=strictness
         )
+
+        # Always does music detect if instance exists
+        if MusicDetector.has_instance():
+            if MusicDetector.get_model().has_music(sound, threshold=0.1):
+                return MusicFailResult(sound, transcript_words)
 
         word_error_result = WordErrorResult(
             sound=sound, transcript_words=transcript_words, errors=word_errors, threshold=threshold
@@ -59,6 +66,7 @@ class ValidateUtil:
     ) -> TrimmedResult | None:
         """
         """
+        from tts_audiobook_tool.tts import Tts
         if word_error_result.num_errors == 0 and not Tts.get_type().value.semantic_trim_last:
             return None 
 
@@ -150,7 +158,7 @@ class ValidateUtil:
         new_sound = SilenceUtil.trim_silence(new_sound, end_only=True)[0]
 
         # Even after adding 'offset' above, we may have landed in-between phonemes/syllables/words, so
-        if not ValidateUtil.is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):
+        if not ValidateUtil._is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):
             return None
 
         # Clamp word end times
@@ -166,7 +174,7 @@ class ValidateUtil:
         return result
     
     @staticmethod
-    def is_last_word_match(sound: Sound, last_word: str) -> bool:
+    def _is_last_word_match(sound: Sound, last_word: str) -> bool:
         """
         Returns True if the transcribed last word of the passed-in (trimmed) Sound matches `last_word`,
         and has a high enough probability.
@@ -186,8 +194,6 @@ class ValidateUtil:
         if transcribed_last.probability < 0.66:
             return False
         return True
-
-    # ---
 
     @staticmethod
     def get_word_error_fail(

@@ -45,7 +45,7 @@ for flac_path, json_path in flacs_and_jsons:
     words = WhisperUtil.transcribe_to_words(sound, "en", SttVariant.LARGE_V3, SttConfig.CUDA_FLOAT16)
     assert(isinstance(words, list))
 
-    result = ValidateUtil.make_validation_result(sound, prompt, words, "en", Strictness.MODERATE)
+    result = ValidateUtil.validate(sound, prompt, words, "en", Strictness.MODERATE)
     
     if isinstance(result, TrimmedResult):
 

@@ -38,6 +38,9 @@ class TtsModelInfo(NamedTuple):
     # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
     # hallucinate past the end of teh prompt (eg, for Chatterbox)
     semantic_trim_last: bool
+    # Does the model have a propensity for generating spurious music sounds
+    # (ie, should the STT validator check for music)
+    hallucinates_music: bool
     # Forces lowercase on prompts that start out all-caps (see `un_all_caps_prompt()`)
     un_all_caps: bool
     # The requirements.txt file that should be used to install the virtual environment for the given tts model
@@ -72,6 +75,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=True,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=False,
         requirements_file_name="",
         ui = {},
@@ -92,6 +96,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=True,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=False, # TODO: check this
         requirements_file_name="requirements-oute.txt",
         ui = {
@@ -120,6 +125,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=True,
         semantic_trim_last=True,
+        hallucinates_music=False,
         un_all_caps=True,
         requirements_file_name="requirements-chatterbox.txt",
         ui = {
@@ -147,6 +153,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
         requirements_file_name="requirements-fish.txt",
         ui = {
@@ -174,6 +181,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
         requirements_file_name="requirements-higgs.txt",
         ui = {
@@ -201,6 +209,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="vibevoice_batch_size",
         strictness_high_discouraged=True,
         semantic_trim_last=False,
+        hallucinates_music=True,
         un_all_caps=True,
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
@@ -230,6 +239,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=False,
         requirements_file_name="requirements-indextts2.txt",
         ui = {
@@ -258,6 +268,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=False,
         requirements_file_name="requirements-glm.txt",
         ui = {
@@ -287,6 +298,7 @@ class TtsModelInfos(Enum):
         batch_size_project_field="mira_batch_size",
         strictness_high_discouraged=False,
         semantic_trim_last=False,
+        hallucinates_music=False,
         un_all_caps=True, # falls down badly with all caps phrases
         requirements_file_name="requirements-mira.txt",
         ui = {
