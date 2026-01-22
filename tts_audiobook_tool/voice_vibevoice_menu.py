@@ -124,7 +124,7 @@ def ask_lora_path(state: State) -> None:
     
     Hint.show_hint_if_necessary(state.prefs, HINT_VIBEVOICE_LORA)
 
-    printt("Enter local directory path or huggingface repo id to VibeVoice LoRA:")
+    printt("Enter local directory path or huggingface dataset repo id to VibeVoice LoRA:")
     inp = AskUtil.ask()
     if not inp:
         return

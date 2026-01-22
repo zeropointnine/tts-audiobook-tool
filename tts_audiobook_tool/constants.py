@@ -268,7 +268,7 @@ HINT_SEED = Hint(
     "seed",
     "Note",
 """Setting a static seed value guarantees idempotent 
-audio generations (when batching is not enabled).
+audio generations when batching is not enabled.
 Re-tried generations will always use a random seed."""
 )
 
