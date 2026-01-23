@@ -88,15 +88,17 @@ class Stt:
             MemoryUtil.gc_ram_vram()
 
     @staticmethod
-    def should_stt(state) -> bool:
+    def should_skip(state, is_real_time_buffer_too_short: bool=False) -> str:
         """
-        Should the app be doing speech-to-text transcription of the generated audio?
+        Given app `state`, returns UI-message reason why STT/validation should be skipped, or empty string        
         """
         from tts_audiobook_tool.state import State
         from tts_audiobook_tool.validate_util import ValidateUtil
         assert(isinstance(state, State))
-        if ValidateUtil.is_unsupported_language_code(state.project.language_code):
-            return False
         if state.prefs.stt_variant == SttVariant.DISABLED:
-            return False
-        return True
+            return "Whisper disabled"
+        if ValidateUtil.is_unsupported_language_code(state.project.language_code):
+            return "Unsupported language"
+        if is_real_time_buffer_too_short:
+            return "Sound buffer duration too short"
+        return ""

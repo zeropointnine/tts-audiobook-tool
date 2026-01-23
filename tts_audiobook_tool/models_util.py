@@ -28,7 +28,7 @@ class ModelsUtil:
         """
 
         should_tts = not Tts.instance_exists()        
-        should_stt = Stt.should_stt(state) and not Stt.has_instance()
+        should_stt = not Stt.should_skip(state) and not Stt.has_instance()
         should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance()
         
         shoulds = [should_tts, should_stt, should_yamnet]

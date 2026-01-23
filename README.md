@@ -320,6 +320,10 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 # Update highlights
 
+**2025-01-23**
+
+Added new text segmentation method **"multiple sentences"** (`Text` > `Text segmentation strategy`). Probably the ideal way to chunk text in combination with `max_words_per_segment = 80` when the TTS model can handle long prompts with high accuracy and without speeding up.
+
 **2025-01-21**
 
 **VibeVoice LoRA support** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)

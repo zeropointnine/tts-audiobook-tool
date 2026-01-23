@@ -111,6 +111,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
     # Confirm
     if not AskUtil.ask_confirm():
+        print_feedback("Cancelled")
         return False
 
     # Delete now-outdated gens

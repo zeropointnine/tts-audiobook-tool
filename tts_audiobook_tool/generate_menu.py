@@ -220,7 +220,7 @@ def do_generate(state: State, is_regen: bool) -> None:
         if num:
             s += f" {COL_DIM}({num} already complete)"
     printt(s)
-    if Stt.should_stt(state):
+    if not Stt.should_skip(state):
         s = "Speech-to-text validation enabled"
         s += f" {COL_DIM}({Stt.short_description()})"
     else:
@@ -269,5 +269,6 @@ an audio generation is marked as failed, triggering a retry.
 RETRIES_DESC = \
 """This is the max number of retries an audio generation will be attempted 
 when speech-to-text validation fails due to too many word errors.
+Higher values have diminishing returns.
 """
 

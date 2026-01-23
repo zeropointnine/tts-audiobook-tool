@@ -81,7 +81,8 @@ class RealTimeUtil:
             phrase = phrase_group.as_flattened_phrase()
 
             printt()
-            GenerateUtil.print_item_count_heading(
+            GenerateUtil.print_batch_heading(
+                indices=[index],
                 num_complete=index - start_index,
                 num_remaining=end_index + 1 - index,
                 num_total=end_index + 1 - start_index
@@ -173,7 +174,7 @@ class RealTimeUtil:
             has_runway: bool
     ) -> tuple[Sound | None, bool]:
         """
-        Similar to `GenerateUtil.generate_full_flow()` but slightly different logic flow, simpler
+        Similar to `GenerateUtil.generate_full_flow()` but slightly different control flow, simpler.
         Returns tuple: Sound or no-sound if problem, and if user interrupted
         """
 
@@ -188,7 +189,7 @@ class RealTimeUtil:
         
         for attempt in range(num_attempts):
 
-            gen_result = GenerateUtil.generate_and_validate(
+            gen_result = GenerateUtil.generate_and_validate_batch(
                 state=state,
                 indices=[index],
                 phrase_groups=phrase_groups,

@@ -115,20 +115,16 @@ class GenerateUtil:
             retry_counts = [item[1] for item in batch]
 
             # Print item info
-            GenerateUtil.print_item_count_heading(
+            GenerateUtil.print_batch_heading(
+                indices=indices,
                 num_complete=num_saved + num_failed + num_errored,
                 num_remaining=len(items) + len(batch),
                 num_total=len(sorted_indices)
             )
-            for index, retry_count in batch:
-                s = f"Item {index+1}" + (f" (retry #{retry_count}): " if retry_count else ": ")
-                s += f"{COL_DIM}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}"
-                printt(s)
-            printt()
 
             # Generate and validate
             gen_start_time = time.time()
-            results = GenerateUtil.generate_and_validate(
+            results = GenerateUtil.generate_and_validate_batch(
                 state=state, 
                 indices=indices, 
                 phrase_groups=project.phrase_groups,
@@ -138,44 +134,53 @@ class GenerateUtil:
             )
             gen_val_sum_time += (time.time() - gen_start_time)
 
-            # Process and print results
+            # Process and print results # TODO: separate biz n print logic
             re_adds: list[tuple[int, int]] = []
 
             for i, result in enumerate(results):
 
                 index = indices[i]
+                message_lines = []
+
+                retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
+                text_string = f"{COL_DIM}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
+                item_line = f"{COL_DEFAULT}Line {index + 1}{retry_string}: {text_string}"
+                message_lines.append(item_line)
+                
                 new_retry_count = retry_counts[i] + 1
-                message = f"{COL_DEFAULT}Item {index + 1}: "
 
                 if isinstance(result, str):
                     # Error
-                    message += f"{COL_ERROR}Error: {result}"
+                    val_line = f"{COL_ERROR}Error: {result}"
                     if new_retry_count > max_retries:
                         num_errored += 1
-                        message += f"; {COL_ERROR}max retries reached"
+                        val_line += f"; {COL_ERROR}max retries reached"
                     else:
                         re_adds.append((index, new_retry_count))
-                        message += f"; {COL_DEFAULT}will retry"
+                        val_line += f"; {COL_DEFAULT}will retry"
+                    message_lines.append(val_line)
                 else:
                     validation_result = result
 
-                    s = f"{validation_result.get_ui_message()}"
+                    val_line = f"{validation_result.get_ui_message()}"
                     if new_retry_count > 1 and not validation_result.is_fail:
-                        s = s.replace("Passed", f"{COL_OK}Passed on retry") 
-                    message += s
+                        val_line = val_line.replace("Passed", f"{COL_OK}Passed on retry") 
 
                     # Failed or not
                     if validation_result.is_fail:
                         if new_retry_count > max_retries:
                             num_failed += 1
-                            message += f"; {COL_ERROR}max retries reached, tagging as failed"
+                            val_line += f"; {COL_ERROR}max retries reached, tagging as failed"
                         else:
                             re_adds.append((index, new_retry_count))
-                            message += f"; {COL_DEFAULT}will retry"
+                            val_line += f"; {COL_DEFAULT}will retry"
                         if isinstance(validation_result, MusicFailResult):
                             num_failed_music += 1
                     else:
                         num_saved += 1
+                    
+                    val_line += Ansi.RESET
+                    message_lines.append(val_line)
 
                     # Update word count metrics
                     word_counts[index] = project.phrase_groups[index].num_words
@@ -193,12 +198,16 @@ class GenerateUtil:
                         state, phrase_group, index, validation_result, is_real_time=False
                     )
                     if err:
-                        message += f"\n{COL_ERROR}Couldn't save file: {err} {saved_path}"
+                        save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         project.sound_segments.delete_redundants_for(index)
-                        message += f"\n{Ansi.ITALICS}{COL_DIM}{Path(saved_path).name}"
+                        save_line = f"Saved: {Ansi.ITALICS}{COL_DIM}{Path(saved_path).name}"
+                    message_lines.append(save_line)
 
-                printt(message)
+                printt("\n".join(message_lines))
+                if i < len(results) - 1:
+                    printt()
+                    
             printt()
 
             if re_adds:
@@ -233,7 +242,7 @@ class GenerateUtil:
         return did_interrupt
 
     @staticmethod
-    def generate_and_validate(
+    def generate_and_validate_batch(
         state: State, 
         indices: list[int],
         phrase_groups: list[PhraseGroup],
@@ -273,16 +282,9 @@ class GenerateUtil:
         print_speed_info(time.time() - gen_start_time, gen_results)
 
         # Should skip or not
-        skip_reason = ""
-        if stt_variant == SttVariant.DISABLED:
-            skip_reason = "Whisper disabled"
-        elif is_skip_reason_buffer:
-            skip_reason = "Buffer duration too short"
-        elif ValidateUtil.is_unsupported_language_code(project.language_code):
-            skip_reason = "Unsupported language"
-
+        skip_reason = Stt.should_skip(state, is_skip_reason_buffer)
         if not skip_reason:
-            printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets printed over
+            printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets overwritten
 
         val_start_time = time.time()
         results: list[ ValidationResult | str ] = []
@@ -331,8 +333,10 @@ class GenerateUtil:
                 )
 
         if not skip_reason:
-            message = f"{COL_DEFAULT}Transcribed audio {COL_DIM}({(time.time() - val_start_time):.1f}s)"
+            message = f"{COL_DEFAULT}Transcribed audio: {(time.time() - val_start_time):.1f}s"
             printt(f"{Ansi.LINE_HOME}{message}")
+        if len(indices) > 1:
+            printt()
 
         return results
 
@@ -615,9 +619,21 @@ class GenerateUtil:
         return "", sound_path
 
     @staticmethod
-    def print_item_count_heading(num_complete: int, num_remaining: int, num_total: int) -> None:
-        message = f"{COL_ACCENT}Items complete: {COL_DEFAULT}{num_complete} "
-        message += f"{COL_ACCENT}Remaining: {COL_DEFAULT}{num_remaining}"
+    def print_batch_heading(
+        indices: list[int], num_complete: int, num_remaining: int, num_total: int
+    ) -> None:
+        
+        line_noun = make_noun("line", "lines", len(indices))
+        index_strings = [str(item + 1) for item in indices[:3]]
+        if len(indices) > 3:
+            index_strings.append("...")
+        indices_string = ", ".join(index_strings)
+        processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
+
+        counts = f"{COL_DIM}(lines processed: {COL_DEFAULT}{num_complete}{COL_DIM}; remaining: {COL_DEFAULT}{num_remaining}{COL_DIM})"
+
+        message = f"{processing_string} {counts}"
+        
         printt(f"{COL_ACCENT}{'-' * (len(strip_ansi_codes(message)))}")
         printt(f"{message}")
         printt()
@@ -666,7 +682,6 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
         message += f"speed: {speed_str}"
     
     print(message)
-    printt()
     
 def print_eta(saved_elapsed: list[float], num_left) -> None:
 

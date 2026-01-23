@@ -229,7 +229,13 @@ class ChapterMode(tuple[str, str, str], Enum):
 
 SS_NORMAL_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, by sentence.
-    This produces predictable caesuras between sentences."""
+    This produces predictable caesuras between sentences. Relatively shorter 
+    word length may help some models maintain a more natural speaking pace."""
+
+SS_MULTI_DESC = \
+"""    Text is segmented by paragraph, and within each paragraph, 
+    by one or multiple sentences up to 'max words per segment'.
+    May produce a better sense continuity between those sentences."""
 
 SS_MAX_LEN_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, segmented by 
@@ -239,6 +245,7 @@ SS_MAX_LEN_DESC = \
 class SegmentationStrategy(tuple[str, str, str], Enum):
 
     NORMAL = "normal", "Normal", SS_NORMAL_DESC
+    MULTI_SENTENCE = "multi", "Multiple sentences", SS_MULTI_DESC
     MAX_LEN = "max_len", "Maximized word count", SS_MAX_LEN_DESC
 
     @property

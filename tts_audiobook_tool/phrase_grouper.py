@@ -17,35 +17,43 @@ class PhraseGrouper:
             pysbd_lang: str="en"
     ) -> list[PhraseGroup]:
         """
-        Creates PhraseGroups using the passed-in source text.
+        Creates PhraseGroups using the passed-in raw source text.
+        
+        This is the app's main, high-level function for chunking text.
+        One PhraseGroup gets transformed into one TTS prompt.
         """
         phrases = PhraseSegmenter.text_to_phrases(text, max_words=max_words, pysbd_lang=pysbd_lang)
 
-        # Group by either complete sentence or paragraph
+        # First group by either complete sentence or paragraph
         match strategy:
             case SegmentationStrategy.NORMAL:
                 reason_threshold = Reason.SENTENCE
+            case SegmentationStrategy.MULTI_SENTENCE:
+                reason_threshold = Reason.SENTENCE # (will re-combine sentences later)
             case SegmentationStrategy.MAX_LEN:
                 reason_threshold = Reason.PARAGRAPH
         groups = PhraseGrouper.phrases_to_groups_by_reason(phrases, reason_threshold)
 
-        # Special case for NORMAL:
-        # Mitigate tts glitches due to too-short prompts
         if strategy == SegmentationStrategy.NORMAL:
-            groups = PhraseGrouper.merge_short_sentences(groups, max_words)
+            # Special case for NORMAL:
+            # Mitigate tts glitches due to too-short prompts
+            SHORT_SENTENCE_NUM_WORDS = 2
+            groups = PhraseGrouper.merge_short_sentences(groups, SHORT_SENTENCE_NUM_WORDS, max_words)
+        elif strategy == SegmentationStrategy.MULTI_SENTENCE:
+            # Piggybacks off same logic
+            groups = PhraseGrouper.merge_short_sentences(groups, 9999, max_words)
 
         # Split group when exceeds max_words
         results = []
-        should_group_short = (strategy == SegmentationStrategy.NORMAL)
         for group in groups:
-            groups = PhraseGrouper.group_to_groups_by_max_words(group, max_words, should_group_short)
+            groups = PhraseGrouper.group_to_groups_by_max_words(group, max_words)
             results.extend(groups)
         groups = results
 
         return groups
 
     @staticmethod
-    def group_to_groups_by_max_words(group: PhraseGroup, max_words: int, should_group_short: bool=False) -> list[PhraseGroup]:
+    def group_to_groups_by_max_words(group: PhraseGroup, max_words: int) -> list[PhraseGroup]:
         """
         Breaks up a PhraseGroup into multiple groups if its num_words > max_words.
         Assumes all phrases' num_words <= max_words
@@ -90,18 +98,23 @@ class PhraseGrouper:
         return groups
 
     @staticmethod
-    def merge_short_sentences(groups: list[PhraseGroup], max_words: int) -> list[PhraseGroup]:
+    def merge_short_sentences(
+            groups: list[PhraseGroup], 
+            shortness_threshold: int,
+            max_words: int
+    ) -> list[PhraseGroup]:
         """
         Merges short single phrase group with neighbor if doesn't exceed max_words 
         and does not cross paragraph/section boundary. Uses two passes.
-        """
-        SHORTNESS_THRESHOLD = 2
 
+        Again, the reason for this operation is to prevent very short prompts,
+        which TTS models do not like.
+        """
         # Merge with previous
         new_groups = []
         for i, group in enumerate(groups):  
             did_merge = False            
-            is_single_short_any = len(group.phrases) == 1 and group.num_words <= SHORTNESS_THRESHOLD
+            is_single_short_any = len(group.phrases) == 1 and group.num_words <= shortness_threshold
             if is_single_short_any and len(new_groups) > 0:                
                 last_new_group = new_groups[-1]
                 can_merge = last_new_group.num_words + group.num_words <= max_words and \
@@ -118,7 +131,7 @@ class PhraseGrouper:
         for i, group in enumerate(groups):            
             did_merge = False
             is_short_sentence = len(group.phrases) == 1 and \
-                group.num_words <= SHORTNESS_THRESHOLD and \
+                group.num_words <= shortness_threshold and \
                 group.last_reason <= Reason.SENTENCE
             if is_short_sentence and i + 1 < len(groups):
                 next_group = groups[i+1]
@@ -137,7 +150,7 @@ class PhraseGrouper:
         for group in groups:
             printt(f"Group: ({group.num_words} words)")
             for i, phrase in enumerate(group.phrases):
-                s = f"{phrase.reason}"
+                s = f"{phrase.reason} (words: {phrase.num_words})"
                 if phrase.reason >= Reason.PARAGRAPH:
                     s += " -----"
                 printt(f"  {repr(phrase.text)} {s}")

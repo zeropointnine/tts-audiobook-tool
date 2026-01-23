@@ -40,6 +40,6 @@ yes well. so. and so on. plus! plus! plus! plus!
 
     groups = PhraseGrouper.text_to_groups(text, 40, SegmentationStrategy.NORMAL)
 
-    groups = PhraseGrouper.merge_short_sentences(groups, 40)
+    groups = PhraseGrouper.merge_short_sentences(groups, 2, 40)
     printt("")
     PhraseGrouper.print_groups(groups)
