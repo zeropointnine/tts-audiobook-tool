@@ -62,6 +62,7 @@ export default defineConfig([
       globals: {
         ...globals.browser,
         // Low-level, oft-used static util classes
+        AppUtil: true,
         ShowUtil: true,
         RootAttributer: true,
         Util: true

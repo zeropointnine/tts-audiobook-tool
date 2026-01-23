@@ -190,6 +190,7 @@ class App {
         }
 
         if (pUrl) {
+            pUrl = AppUtil.transformAudioUrl(pUrl)
             ShowUtil.show(this.loadingOverlay, "flex");
         }
 
