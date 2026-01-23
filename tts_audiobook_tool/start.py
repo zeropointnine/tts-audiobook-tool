@@ -32,15 +32,21 @@ from tts_audiobook_tool.hint import Hint
 from importlib import util
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 
-NEW_PACKAGES = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
-NEW_PACKAGES_WIN = ["pywin"]
+new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
 
-new_packages = NEW_PACKAGES
+# win32
 if sys.platform == "win32":
-    new_packages.extend(NEW_PACKAGES_WIN)
+    new_packages.append("win32")
+
+# chatterbox update
+if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+    new_packages.append("chatterbox.tts_turbo")
+
+# vibevoice
+if Tts.get_type() in [TtsModelInfos.VIBEVOICE]:
+    new_packages.append("peft")
 
 not_found = [package for package in new_packages if not util.find_spec(package)]
-
 if not_found:
     hint = Hint(
         "none",
@@ -52,19 +58,6 @@ if not_found:
     )
     Hint.print_hint(hint)
     exit(1)
-
-# Chatterbox updated version
-if Tts.get_type() == TtsModelInfos.CHATTERBOX:
-    if not util.find_spec("chatterbox.tts_turbo"): 
-        hint = Hint(
-            "none",
-            "The app's dependencies have changed",
-            f"Updated Chatterbox Turbo support requires the latest version of the Chatterbox library.\n"
-            "Please update your virtual environment by re-running:\n"
-            f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
-        )
-        Hint.print_hint(hint)
-        exit(1)
 
 # --------------------------------------------------------------------------------------------------
 import sys
