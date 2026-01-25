@@ -7,7 +7,7 @@ class AppUtil {
     static
     transformAudioUrl(url) {
 
-        const previous = "zeropointnine.github.io/tts-audiobook-tool"
+        const previous = "zeropointnine.github.io/tts-audiobook-tool/"
         if (!url.includes(previous)) {
             return url
         }
@@ -39,5 +39,7 @@ class AppUtil {
                 return newUrl;
             }
         }
+
+        return url
     }
 }

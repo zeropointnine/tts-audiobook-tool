@@ -17,7 +17,7 @@ class VoiceGlmMenu:
 
             items = [
                 MenuItem(
-                    VoiceMenuShared.make_select_voice_label,
+                    VoiceMenuShared.make_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.GLM)
                 )
             ]

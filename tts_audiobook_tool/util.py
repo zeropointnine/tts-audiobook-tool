@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import os
 import random
@@ -19,12 +20,13 @@ from tts_audiobook_tool.ansi import Ansi
 Various small util functions, both app-specific and general
 """
 
-def printt(s: str="", end=None) -> None:
+def printt(s: str="", end=None, dont_reset=False) -> None:
     """
     App-standard way of printing to the console.
     (Doesn't do much extra or different at the moment)
     """
-    s += Ansi.RESET
+    if not dont_reset:
+        s += Ansi.RESET
     print(s, end=end, flush=not bool(end))
 
 def print_feedback(
@@ -159,6 +161,25 @@ def timestamp_string() -> str:
 
 def is_number(o: Any) -> bool:
     return isinstance(o, int) or isinstance(o, float)
+
+def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=COL_DEFAULT) -> str:
+    """ 
+    Truncates string for display. Uses colors.
+    Ellipsis in the middle of the string, else at the end
+    """
+    if len(text) <= width:
+        return f"{content_color}{text}"
+    if middle:
+        width -= 3 # bc triple-dots
+        a_len = math.ceil(width / 2)
+        b_len = math.floor(width / 2)
+        a = text[:a_len]
+        b = text[-b_len:]
+        return f"{content_color}{a}{COL_DIM}...{content_color}{b}"
+    else:
+        width -= 3 # bc triple-dots
+        a = text[:width]
+        return f"{content_color}{a}{COL_DIM}..."
 
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata

@@ -2,9 +2,8 @@ import os
 from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -17,16 +16,21 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class VoiceMenuShared:
 
     @staticmethod
-    def show_voice_menu(state: State, items: MenuItemListOrMaker) -> None:
+    def show_voice_menu(
+            state: State, 
+            items: MenuItemListOrMaker,
+            subheading: StringOrMaker | None = None,
+    ) -> None:
         MenuUtil.menu(
             state=state,
             heading="Voice clone and model settings",
             items=items,
+            subheading=subheading,
             on_exit=lambda: SoundFileUtil.stop_sound_async()
         )
 
     @staticmethod
-    def make_select_voice_label(state: State) -> str:
+    def make_voice_label(state: State) -> str:
         if Tts.get_type().value.requires_voice and not state.project.has_voice:
             currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
         elif not state.project.has_voice:
@@ -95,7 +99,7 @@ class VoiceMenuShared:
 
             if not transcript:
                 # [2] Transcribe sound file using STT
-                printt("Transcribing...")
+                printt(f"Transcribing... {COL_DIM}(language code: {state.project.language_code or 'none'})")
                 printt()
 
                 if state.prefs.stt_variant == SttVariant.DISABLED:
@@ -229,7 +233,9 @@ class VoiceMenuShared:
         if not hasattr(project, project_attr_name):
             raise ValueError(f"No such attribute {project_attr_name}")
 
-        value = AskUtil.ask(prompt.strip() + " ")
+        if prompt:
+            prompt = prompt.strip() + " "
+        value = AskUtil.ask(prompt)
         if not value:
             return
         

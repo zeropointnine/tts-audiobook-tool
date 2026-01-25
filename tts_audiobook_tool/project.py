@@ -15,7 +15,7 @@ from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol, Qwen3Protocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -95,8 +95,17 @@ class Project:
     glm_seed: int = -1 # ie, make random
 
     mira_voice_file_name: str = ""
-    mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT
+    mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT # TODO: should use "-1 pattern"
     mira_batch_size: int = 1
+
+    qwen3_path_or_id: str = ""
+    qwen3_voice_file_name: str = ""
+    qwen3_voice_transcript: str = ""
+    qwen3_speaker_id: str = ""
+    qwen3_instructions: str = ""
+    qwen3_batch_size: int = 1
+    qwen3_temperature: float = -1
+    qwen3_seed: int = -1
 
     def __init__(self, dir_path: str):
         self.dir_path = dir_path
@@ -408,6 +417,37 @@ class Project:
             value = int(value)
         project.mira_batch_size = value
 
+        # Qwen3-TTS
+        project.qwen3_path_or_id = d.get("qwen3_path_or_id", "")
+        project.qwen3_voice_file_name = d.get("qwen3_voice_file_name", "")
+        project.qwen3_voice_transcript = d.get("qwen3_voice_text", "")
+        project.qwen3_speaker_id = d.get("qwen3_speaker_id", "")
+        project.qwen3_instructions = d.get("qwen3_instructions", "")
+
+        value = d.get("qwen3_batch_size", -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (1 <= value <= PROJECT_BATCH_SIZE_MAX):
+                value = PROJECT_BATCH_SIZE_DEFAULT
+                add_warning("qwen3_batch_size", value)
+            value = int(value)
+        project.qwen3_batch_size = value
+
+        value = d.get("qwen3_temperature", -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (Qwen3Protocol.TEMPERATURE_MIN <= value <= Qwen3Protocol.TEMPERATURE_MAX):
+                value = -1
+                add_warning("qwen_temperature", value)
+        project.qwen3_temperature = value
+
+        seed = d.get("qwen3_seed", -1)
+        if not (-1 <= seed <= 2**32 - 1):
+            add_warning("qwen3_seed", -1)
+            project.qwen3_seed = -1
+        seed = int(seed)
+        project.qwen3_seed = seed
+
+        # ---
+
         if warnings:
             project.save()
             for item in warnings:
@@ -484,7 +524,16 @@ class Project:
 
             "mira_voice_file_name": self.mira_voice_file_name,
             "mira_temperature": self.mira_temperature,
-            "mira_batch_size": self.mira_batch_size
+            "mira_batch_size": self.mira_batch_size,
+
+            "qwen3_path_or_id": self.qwen3_path_or_id,
+            "qwen3_voice_file_name": self.qwen3_voice_file_name,
+            "qwen3_voice_text": self.qwen3_voice_transcript,
+            "qwen3_speaker_id": self.qwen3_speaker_id,
+            "qwen3_instructions": self.qwen3_instructions,
+            "qwen3_batch_size": self.qwen3_batch_size,
+            "qwen3_temperature": self.qwen3_temperature,
+            "qwen3_seed": self.qwen3_seed,
         }
 
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
@@ -582,7 +631,9 @@ class Project:
                 self.glm_voice_transcript = transcript
             case TtsModelInfos.MIRA:
                 self.mira_voice_file_name = dest_file_name
-                self.mira_voice_transcript = transcript
+            case TtsModelInfos.QWEN3TTS:
+                self.qwen3_voice_file_name = dest_file_name
+                self.qwen3_voice_transcript = transcript
             case _:
                 raise Exception(f"Unsupported tts type {tts_type}")
 
@@ -599,6 +650,7 @@ class Project:
         self.oute_voice_json = voice_dict
         self.save()
 
+    # TODO: Refactor next three methods. Generalize using TtsModel or TtsModelInfos. 
     def clear_voice_and_save(self, tts_type: TtsModelInfos, is_secondary: bool=False) -> None:
         match tts_type:
             case TtsModelInfos.CHATTERBOX:
@@ -621,12 +673,15 @@ class Project:
                 self.glm_voice_transcript = ""
             case TtsModelInfos.MIRA:
                 self.mira_voice_file_name = ""
+            case TtsModelInfos.QWEN3TTS:
+                self.qwen3_voice_file_name = ""
             case _:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
         self.save()
 
     def get_voice_label(self, is_secondary: bool=False) -> str:
-
+        """
+        """
         def make_label(file_name: str) -> str:
             label = Path(file_name).stem
             # Strip "_model" from end of file stem
@@ -682,6 +737,11 @@ class Project:
                     return "none"
                 else:
                     return make_label(self.mira_voice_file_name)
+            case TtsModelInfos.QWEN3TTS:
+                if not self.qwen3_voice_file_name:
+                    return "none"
+                else:
+                    return make_label(self.qwen3_voice_file_name)
             case TtsModelInfos.NONE:
                 return "none"
 
@@ -706,6 +766,8 @@ class Project:
                 has_voice = bool(self.glm_voice_file_name)
             case TtsModelInfos.MIRA:
                 has_voice = bool(self.mira_voice_file_name)
+            case TtsModelInfos.QWEN3TTS:
+                has_voice = bool(self.qwen3_voice_file_name)
         return has_voice
 
     @property

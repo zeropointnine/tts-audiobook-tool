@@ -5,12 +5,15 @@ import sys
 from typing import Callable
 
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, Qwen3ModelProtocol, Qwen3Protocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.util import *
 
 class Tts:
     """
     Static class for accessing the TTS model.
+
+    The model type is derived from the state of the virtual environment 
+    and remains unchanged during the app's runtime.
     """
 
     _oute: OuteModelProtocol | None = None
@@ -21,6 +24,7 @@ class Tts:
     _indextts2: IndexTts2ModelProtocol | None = None
     _glm: GlmModelProtocol | None = None
     _mira: MiraModelProtocol | None = None
+    _qwen3: Qwen3ModelProtocol | None = None
 
     _type: TtsModelInfos
 
@@ -74,6 +78,7 @@ class Tts:
         model_params["vibevoice_lora_path"] = project.vibevoice_lora_path
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
         model_params["glm_sr"] = project.glm_sr
+        model_params["qwen3_path_or_id"] = project.qwen3_path_or_id
 
         Tts.set_model_params(model_params)
 
@@ -92,6 +97,7 @@ class Tts:
         dirty |= new_params.get("vibevoice_lora_path", "") != old_params.get("vibevoice_lora_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
+        dirty |= new_params.get("qwen_path_or_id", "") != old_params.get("qwen_path_or_id", "")
         if dirty:
             Tts.clear_tts_model()
 
@@ -104,7 +110,17 @@ class Tts:
 
     @staticmethod
     def instance_exists() -> bool:
-        items = [Tts._oute, Tts._chatterbox, Tts._fish, Tts._higgs, Tts._vibevoice, Tts._indextts2, Tts._glm, Tts._mira]
+        items = [
+            Tts._oute, 
+            Tts._chatterbox, 
+            Tts._fish, 
+            Tts._higgs, 
+            Tts._vibevoice, 
+            Tts._indextts2, 
+            Tts._glm, 
+            Tts._mira, 
+            Tts._qwen3
+        ]
         for item in items:
             if item is not None:
                 return True
@@ -121,7 +137,8 @@ class Tts:
             TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
             TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
             TtsModelInfos.GLM: Tts.get_glm,
-            TtsModelInfos.MIRA: Tts.get_mira
+            TtsModelInfos.MIRA: Tts.get_mira,
+            TtsModelInfos.QWEN3TTS: Tts.get_qwen3,
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -140,7 +157,8 @@ class Tts:
             TtsModelInfos.VIBEVOICE: Tts._vibevoice,
             TtsModelInfos.INDEXTTS2: Tts._indextts2,
             TtsModelInfos.GLM: Tts._glm,
-            TtsModelInfos.MIRA: Tts._mira
+            TtsModelInfos.MIRA: Tts._mira,
+            TtsModelInfos.QWEN3TTS: Tts._qwen3
         }
         return MAP.get(Tts._type, None)
 
@@ -150,6 +168,7 @@ class Tts:
             print_model_init()
             from tts_audiobook_tool.oute_model import OuteModel
             Tts._oute = OuteModel()
+            printt()
         return Tts._oute
 
     @staticmethod
@@ -162,6 +181,7 @@ class Tts:
             print_model_init(s)
             from tts_audiobook_tool.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(typ, device)
+            printt()
         return Tts._chatterbox
 
     @staticmethod
@@ -171,6 +191,7 @@ class Tts:
             print_model_init(device)
             from tts_audiobook_tool.fish_model import FishModel
             Tts._fish = FishModel(device)
+            printt()
         return Tts._fish
 
     @staticmethod
@@ -180,6 +201,7 @@ class Tts:
             print_model_init(device)
             from tts_audiobook_tool.higgs_model import HiggsModel
             Tts._higgs = HiggsModel(device)
+            printt()
         return Tts._higgs
 
     @staticmethod
@@ -200,6 +222,7 @@ class Tts:
                 lora_path=lora_path,
                 max_new_tokens=VibeVoiceProtocol.MAX_TOKENS
             )
+            printt()
         return Tts._vibevoice
 
     @staticmethod
@@ -211,6 +234,7 @@ class Tts:
 
             from tts_audiobook_tool.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
+            printt()
         return Tts._indextts2
 
     @staticmethod
@@ -222,6 +246,7 @@ class Tts:
 
             from tts_audiobook_tool.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
+            printt()
         return Tts._glm
 
     @staticmethod
@@ -230,11 +255,26 @@ class Tts:
             print_model_init(f"cuda")
             from tts_audiobook_tool.mira_model import MiraModel
             Tts._mira = MiraModel()
+            printt()
         return Tts._mira
 
     @staticmethod
-    def clear_tts_model() -> None:
+    def get_qwen3() -> Qwen3ModelProtocol:
+        if not Tts._qwen3:
+            path_or_id = Tts._model_params["qwen3_path_or_id"]
+            if not path_or_id:
+                path_or_id = Qwen3Protocol.REPO_ID_BASE_DEFAULT
+            display_path_or_id = Qwen3Protocol.get_display_path_or_id(path_or_id)
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            print_model_init(f"{display_path_or_id}, {device}")
 
+            from tts_audiobook_tool.qwen3_model import Qwen3Model
+            Tts._qwen3 = Qwen3Model(path_or_id, device)
+            printt()
+        return Tts._qwen3
+
+    @staticmethod
+    def clear_tts_model() -> None:
         model = Tts.get_instance_if_exists()
         if model:
             model.kill()
@@ -246,9 +286,11 @@ class Tts:
             Tts._vibevoice = None
             Tts._indextts2 = None
             Tts._glm = None
+            Tts._mira = None
+            Tts._qwen3 = None
 
-            from tts_audiobook_tool.memory_util import MemoryUtil
-            MemoryUtil.gc_ram_vram()
+        from tts_audiobook_tool.memory_util import MemoryUtil
+        MemoryUtil.gc_ram_vram()
 
     @staticmethod
     def get_resolved_torch_device() -> str:

@@ -23,7 +23,8 @@ class GenerateMenu:
             if not state.project.generate_range_string:
                 range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}all{COL_DIM})"
             else:
-                range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}lines {state.project.generate_range_string}{COL_DIM})"
+                line_word = make_noun("line", "lines", len(state.project.get_indices_to_generate()))
+                range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}{line_word} {state.project.generate_range_string}{COL_DIM})"
 
             if not state.project.generate_range_string:
                 complete_label = ""

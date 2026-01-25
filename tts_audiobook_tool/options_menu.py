@@ -1,8 +1,6 @@
 import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
@@ -15,17 +13,17 @@ class OptionsMenu:
     def menu(state: State) -> None:
 
         def make_unload_label(_) -> str:
-            memory_string = make_system_memory_string()
+            memory_string = AppUtil.make_memory_string()
             if memory_string:
                 memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
             return f"Attempt to unload models {memory_string}"
 
         def on_unload(_: State, __: MenuItem) -> None:
-            before_string = make_system_memory_string()
+            before_string = AppUtil.make_memory_string()
             if before_string:
                 printt(f"Before: {before_string}")
             ModelsUtil.clear_all_models()
-            after_string = make_system_memory_string()
+            after_string = AppUtil.make_memory_string()
             if after_string:
                 printt(f"After:  {after_string}")
             printt()
@@ -50,7 +48,9 @@ class OptionsMenu:
                     lambda _, __: OptionsMenu.stt_config_menu(state)
                 )
             )
-            if Tts.get_type().value.torch_devices:
+
+            import torch
+            if Tts.get_type().value.torch_devices and torch.cuda.is_available():
                 items.append(
                     MenuItem(
                         lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 
@@ -157,31 +157,6 @@ class OptionsMenu:
         )
 
 # ---
-
-def make_system_memory_string(base_color=COL_DIM) -> str:
-
-    result = MemoryUtil.get_nv_vram()
-    if result is None:
-        vram_string = ""
-    else:
-        used, total = result
-        vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
-
-    result = MemoryUtil.get_system_ram()
-    if result is None:
-        ram_string = ""
-    else:
-        used, total = result
-        ram_string = f"{base_color}RAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
-
-    if not vram_string and not ram_string:
-        return ""
-    elif not vram_string:
-        return ram_string
-    elif not ram_string:
-        return vram_string
-    else:
-        return f"{vram_string}{base_color}, {ram_string}"
 
 DEBUG_SUBHEADING = \
 """Saves intermediate sound segment files and diagnostic json data

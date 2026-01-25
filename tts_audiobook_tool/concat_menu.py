@@ -33,12 +33,9 @@ class ConcatMenu:
                 label += f"{COL_DIM}(optional)"
             return label
 
-        def on_start(_: State, __: MenuItem) -> None:
-            ask_chapter_indices_and_make(state)
-
         def make_items(_: State) -> list[MenuItem]:
             items = [
-                MenuItem("Start", on_start),
+                MenuItem("Start", lambda _, __: ask_chapter_indices_and_make(state)),
                 MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
                 MenuItem(
                     lambda _: make_menu_label("File type", state.project.export_type.label), 
@@ -228,6 +225,11 @@ def make_chapter_files_string(info: ChapterInfo, index: int) -> str:
     return s
 
 def ask_chapter_indices_and_make(state: State) -> None:
+
+    num_generated = state.project.sound_segments.num_generated()
+    if not state.prefs.project_dir or num_generated == 0:
+        print_feedback("Requires generated audio")
+        return
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
 

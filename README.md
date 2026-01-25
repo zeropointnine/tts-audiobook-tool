@@ -1,6 +1,7 @@
 # Description
 
 This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
@@ -23,8 +24,9 @@ Plain-vanilla text interface in the console.
 
 The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the text highlighted in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `browser_player\index.html` (ie, no need for a web server), or from the [project's mapped github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
-**Example outputs**, all using the same source text and using the same 15-second voice clone sample unless otherwise noted:
+**Example outputs**, all using the same source text and using the same 15-second voice clone sample unless otherwise noted, with models' respective default settings:
 
+- [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-qwen3-12hz-1.7b-base.abr.m4a)
 - [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-mira.abr.m4a)
 - [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-glm.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2.abr.m4a)
@@ -55,27 +57,54 @@ Select `Options` > `Enhance existing audiobook`, and select your source audioboo
 
 # Installation
 
+### Step 1
+
 First, [ffmpeg](https://ffmpeg.org/download.html) must be in your system path.
+
+### Step 2
 
 Clone the repository and cd into it:
 
     git clone https://github.com/zeropointnine/tts-audiobook-tool
     cd tts-audiobook-tool
 
+### Step 3 
+
 A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. 
 
-To enable torch CUDA acceleration on Windows, run the following commands (Note how the project uses the same version of torch for each TTS model's virtual environments - v2.6.0/cu124). On Linux, no extra step is required.
+### Step 4 (Windows)
+
+To enable torch CUDA acceleration on Windows, run the following commands (Note how the project uses the same version of torch for each TTS model's virtual environments - v2.6.0/cu124). This extra step is not required when using Linux.
 
     pip uninstall -y torch torchaudio
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
-Finally, run the app by entering:
+### Step 5
+
+Run the app by entering:
 
     python -m tts_audiobook_tool
 
 Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
 
-## Install for MiraTTS
+
+## Virtual environment for Qwen3-TTS 
+
+Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`. For example:
+
+    path\to\python3.11\python.exe -m venv venv-qwen3tts
+
+Activate the virtual environment:
+
+    venv-qwen3tts\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-qwen3tts.txt
+
+Install [Flash Attention](#installing-flash-attention) if using CUDA (optional but recommended).
+
+## Virtual environment for MiraTTS
 
 > **ℹ️ Requires CUDA** 
 
@@ -92,7 +121,7 @@ Install dependencies:
     pip install -r requirements-mira.txt
 
 
-## Install for GLM-TTS
+## Virtual environment for GLM-TTS
 
 > **ℹ️ Requires CUDA** due to hardcoded cuda-related torch operations throughout the glm inference code. 
 
@@ -136,7 +165,7 @@ Install the rest of the project dependencies using pip like normal:
 Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-tts-packaged) that has been refactored for use as an installable package.
 
 
-## Install for IndexTTS2
+## Virtual environment for IndexTTS2
 
 Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
 
@@ -151,7 +180,7 @@ Install dependencies:
     pip install -r requirements-indextts2.txt
 
 
-## Install for VibeVoice
+## Virtual environment for VibeVoice
 
 Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
 
@@ -165,19 +194,11 @@ Install dependencies:
 
     pip install -r requirements-vibevoice.txt
 
+Install [Flash Attention](#installing-flash-attention) if using CUDA (optional but recommended).
+
 Note that because Microsoft famously removed the source code from their github repository, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
-### Optional, when using CUDA: 
-
-VibeVoice will utilize Flash Attention if it is installed. However, it may not positively affect inference speed; you'll want to run an A/B benchmark test on your installation to verify.
-
-On Windows, the best path is to source a wheel from a trustworthy source. For example, I'm using a wheel that has the filename `flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl`.
-
-On Linux, enter:
-
-    pip install flash-attn==2.7.4.post1 --no-build-isolation
-
-## Install for Higgs Audio V2:
+## Virtual environment for Higgs Audio V2:
 
 > **ℹ️ Note!**
 > For CUDA acceleration, 24 GB VRAM is recommended (yes really)
@@ -199,7 +220,7 @@ Install dependencies:
 Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
 
 
-## Install for Fish OpenAudio-S1-mini:
+## Virtual environment for Fish OpenAudio-S1-mini:
 
 Initialize a **Python v3.12** virtual environment named "venv-fish". For example:
 
@@ -220,7 +241,7 @@ Authenticate the model on HuggingFace:
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
  
 
-## Install for Chatterbox-Multilingual:
+## Virtual environment for Chatterbox-Multilingual:
 
 Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
 
@@ -235,7 +256,7 @@ Install dependencies:
     pip install -r requirements-chatterbox.txt
 
 
-## Install for Oute TTS:
+## Virtual environment for Oute TTS:
 
 Initialize a **Python v3.12** virtual environment named "venv-oute". For example:
 
@@ -260,13 +281,27 @@ The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents th
 
 Prefer the *ExLllama2* backend if at all possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires successfully installing into the environment three extra things:
 - exllama2 library (`pip install exllamav2`)
-- [Flash Attention](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) (note that on Windows, you may need to source a compatible wheel for this)
+- [Flash Attention](#installing-flash-attention)
 
-Alternatively, `Backend.HF` is also hardware accelerated but considerably slower. Flash Attention 2 is optional in this case, and also does not speed up inference in practice.
+Alternatively, `Backend.HF` is also hardware accelerated but considerably slower. Flash Attention is optional in this case.
 
 **Mac with Apple silicon:**
 
 Use `Backend.LLAMACPP`.
+
+### Installing Flash Attention
+
+On Windows, the best path is to source a wheel from a trustworthy source. Choose one with the a filename that looks like one of the following, depending on Python version: 
+
+- flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl
+- flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp312-cp312-win_amd64.whl
+
+On Linux, simply enter:
+
+    pip install flash-attn==2.7.4.post1 --no-build-isolation
+
+
+
 
 # Usage notes
 
@@ -295,10 +330,12 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
+| Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 300% realtime   | batch size=5
+|                         | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime  | batch size=10 (yes really)
 |                         | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
-| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | outstanding voice likeness, IMO
-| IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | lowest word error rate and least quirks, IMO
+| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
+| IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
 | VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10 (default steps)
@@ -306,12 +343,11 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 |                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1 (default steps)
 |                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1 (default steps)
 |                         | Macbook Pro M1       | ~40% realtime   |
-| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed inversely proportional to voice sample duration, FYI
-|                         | GTX 3080 Ti          | N/A             | (won't run with 12 GB VRAM)
+| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed varies with voice sample duration
 | Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
-| Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | best multilanguage capabilities
+| Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
@@ -319,6 +355,10 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 
 # Update highlights
+
+**2025-01-26**
+
+**Qwen3-TTS support** (Base, CustomVoice, and VoiceDesign models)
 
 **2025-01-23**
 

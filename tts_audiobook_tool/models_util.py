@@ -32,21 +32,21 @@ class ModelsUtil:
         should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance()
         
         shoulds = [should_tts, should_stt, should_yamnet]
-        num_should = sum(1 for item in shoulds if item is not None)
-        if num_should == 0:
+        num_shoulds = sum(1 for item in shoulds if item)
+        if num_shoulds == 0:
             return False
 
         if not should_stt:
-            # "Lazy unload", useful for user flows like: 
+            # "Lazy unload", relevant for user flows like: 
             # Do inference, choose unsupported validation language, do inference
             Stt.clear_stt_model()
 
-        if num_should >= 2:
+        if num_shoulds >= 2:
             print_init("Warming up models...")
 
         SigIntHandler().set("model init")
 
-        # TTS
+        # Init TTS
         if should_tts:
             _ = Tts.get_instance()
 
@@ -54,10 +54,7 @@ class ModelsUtil:
             SigIntHandler().clear()
             return True
 
-        if should_stt or should_yamnet:
-            printt() # yes rly
-
-        # STT
+        # Init STT
         if should_stt:
             _ = Stt.get_whisper()
 
@@ -65,7 +62,7 @@ class ModelsUtil:
             SigIntHandler().clear()
             return True
         
-        # YAMNet
+        # Init YAMNet
         if should_yamnet:
             _ = MusicDetector.get_model()
 

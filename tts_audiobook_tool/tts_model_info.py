@@ -9,14 +9,14 @@ class TtsModelInfo(NamedTuple):
     """
     App properties of a supported TTS model
     """
+    # TODO: needs to be split between model-properties-proper and program-structure-related maybe
+
     # Module name to test for that implies the TTS model library exists in the current py env
     module_test: str
     # Supported device types
     torch_devices: list[str]
     # identifier used in file names
     file_tag: str
-    # The model's sound output dtype
-    dtype: np.dtype
     # The model's sound output sample rate
     sample_rate: int
     # The app's recommended max-words-per-segment for the model
@@ -64,7 +64,6 @@ class TtsModelInfos(Enum):
     NONE = TtsModelInfo(
         module_test="",
         file_tag="",
-        dtype=np.dtype("float32"),
         torch_devices = [],
         sample_rate=0,
         max_words_default=0,
@@ -85,7 +84,6 @@ class TtsModelInfos(Enum):
     OUTE = TtsModelInfo(
         module_test="outetts",
         file_tag="oute",
-        dtype=np.dtype("float32"),
         torch_devices = [], # not applicable
         sample_rate=44100,
         max_words_default=40,
@@ -114,7 +112,6 @@ class TtsModelInfos(Enum):
     CHATTERBOX = TtsModelInfo(
         module_test="chatterbox",
         file_tag="chatterbox",
-        dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
@@ -142,7 +139,6 @@ class TtsModelInfos(Enum):
     FISH = TtsModelInfo(
         module_test="fish_speech",
         file_tag="s1-mini",
-        dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_default=40,
@@ -170,7 +166,6 @@ class TtsModelInfos(Enum):
     HIGGS = TtsModelInfo(
         module_test="boson_multimodal",
         file_tag="higgs",
-        dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
@@ -198,7 +193,6 @@ class TtsModelInfos(Enum):
     VIBEVOICE = TtsModelInfo(
         module_test="vibevoice",
         file_tag="vibevoice",
-        dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
@@ -228,7 +222,6 @@ class TtsModelInfos(Enum):
     INDEXTTS2 = TtsModelInfo(
         module_test="indextts",
         file_tag="indextts2",
-        dtype=np.dtype("float32"),
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=22050,
         max_words_default=40,
@@ -257,7 +250,6 @@ class TtsModelInfos(Enum):
     GLM = TtsModelInfo(
         module_test="glm_tts",
         file_tag="glm",
-        dtype=np.dtype("float32"),
         torch_devices = ["cuda"], # cuda-only atm
         sample_rate=24000,
         max_words_default=40,
@@ -287,7 +279,6 @@ class TtsModelInfos(Enum):
     MIRA = TtsModelInfo(
         module_test="mira",
         file_tag="mira",
-        dtype=np.dtype("float32"), # outputs float16 internally and gets converted in generate()
         torch_devices = [], # does not take in a device as a parameters
         sample_rate=48000,
         max_words_default=40,
@@ -311,6 +302,33 @@ class TtsModelInfos(Enum):
             # semicolon doesn't create caesura, but neither does comma reliably
             # em-dash and space-en-dash-space seems okay
             # "caesura punctuation" in general seems unpredictable so there's no use replacing characters
+        ]
+    )
+
+    QWEN3TTS = TtsModelInfo(
+        module_test="qwen_tts",
+        file_tag="qwen3",
+        torch_devices = ["cuda", "mps", "cpu"],
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        uses_voice_sound_file=True,
+        requires_voice=False, # actually depends on model_type
+        requires_voice_transcript=True,
+        batch_size_project_field="qwen3_batch_size",
+        strictness_high_discouraged=False,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        un_all_caps=True, # is only slightly more error-prone when all-caps
+        requirements_file_name="requirements-qwen3tts.txt",
+        ui = {
+            "proper_name": "Qwen3-TTS",
+            "short_name": "Qwen3-TTS",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip"
+        },
+        substitutions=[
+            # Does rly well w/ various punctuation
         ]
     )
 

@@ -125,14 +125,14 @@ def ask_lora_path(state: State) -> None:
     Hint.show_hint_if_necessary(state.prefs, HINT_VIBEVOICE_LORA)
 
     printt("Enter local directory path or huggingface dataset repo id to VibeVoice LoRA:")
-    inp = AskUtil.ask()
+    inp = AskUtil.ask(lower=False)
     if not inp:
         return
     if inp == project.vibevoice_lora_path:
         print_feedback("Already set")
         return
 
-    src, err = AppUtil.validate_hf_model(inp)
+    _, err = AppUtil.does_hf_model_exist(inp)
     if err:
         print_feedback(err, is_error=True)
         return
@@ -143,12 +143,9 @@ def apply_lora_path_and_validate(project: Project, path: str) -> None:
 
     project.vibevoice_lora_path = path
     project.save()
+    
     Tts.set_model_params_using_project(project)
-
-    # For good measure
-    model = Tts.get_instance_if_exists() 
-    if model:
-        Tts.clear_tts_model()
+    Tts.clear_tts_model() # for good measure
 
     instance = Tts.get_vibevoice()
     if instance.has_lora:

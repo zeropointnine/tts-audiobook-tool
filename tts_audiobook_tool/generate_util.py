@@ -7,6 +7,7 @@ import time
 import numpy as np
 
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -24,7 +25,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import ChatterboxType, HiggsModelProtocol, MiraProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import ChatterboxType, HiggsModelProtocol, MiraProtocol, Qwen3Protocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -44,10 +45,12 @@ class GenerateUtil:
         """
         Subroutine for doing a series of audio generations to files
         Prints feedback at end of each item, and summary at end of loop.
-        Returns True if ended because interrupted.
 
         :param batch_size:
-            When set to 1, batch mode is disabled
+            When set to 1, batch mode is either explicitly or effectively disabled
+
+        Returns:
+            True if ended because interrupted.
         """
 
         project = state.project
@@ -56,12 +59,25 @@ class GenerateUtil:
         stt_config = state.prefs.stt_config
         showed_vram_warning = False
 
-        force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
         did_cancel = ModelsUtil.warm_up_models(state)
+        
+        # Post-init checks
         if did_cancel:
             print_feedback("\nCancelled")
             return True
-        
+                
+        if Tts.get_type() == TtsModelInfos.QWEN3TTS:
+
+            err = Tts.get_qwen3().get_post_init_error(project)
+            if err:
+                print_feedback(err, is_error=True)
+                return True
+            
+            warning = Tts.get_qwen3().get_post_init_warning(project)
+            if warning:
+                printt(warning)
+                printt()
+
         showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 
         # Make 'items' (tuple = phase group index, retry_count)
@@ -201,13 +217,20 @@ class GenerateUtil:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         project.sound_segments.delete_redundants_for(index)
-                        save_line = f"Saved: {Ansi.ITALICS}{COL_DIM}{Path(saved_path).name}"
+                        save_line = f"Saved: {Ansi.ITALICS}{COL_DIM}{Path(saved_path).name}{Ansi.RESET}"
                     message_lines.append(save_line)
 
                 printt("\n".join(message_lines))
+                
                 if i < len(results) - 1:
                     printt()
-                    
+
+            # Print memory usage
+            if len(results) > 1:
+                printt()
+            s = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
+            printt(s)
+            
             printt()
 
             if re_adds:
@@ -229,7 +252,6 @@ class GenerateUtil:
         if num_errored:
             s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
-            s += "\n"
             s += f"Num words: {sum(word_counts.values())}\n"
             if Stt.has_instance():
                 s += f"Num word fails: {sum(word_error_counts.values())}\n"
@@ -263,8 +285,8 @@ class GenerateUtil:
         
         project = state.project
 
-        # Dim print color during any model inference printouts
-        print(f"{COL_DEFAULT}Generating audio...{Ansi.LINE_HOME}{COL_DIM}", end="", flush=True)
+        # Set print color to dim during any model inference printouts
+        print(f"{COL_DIM}", end="")
 
         # Generate:
         gen_start_time = time.time()
@@ -508,10 +530,66 @@ class GenerateUtil:
                 else:
                     result = Tts.get_mira().generate_batch(prompts)
 
+            case TtsModelInfos.QWEN3TTS:
+                
+                model_type = Tts.get_qwen3().model_type
+                match model_type:
+                    
+                    case "base":
+
+                        can = project.qwen3_voice_file_name and project.qwen3_voice_transcript
+                        if can:
+                            voice_info = (
+                                os.path.join(project.dir_path, project.qwen3_voice_file_name),
+                                project.qwen3_voice_transcript
+                            )
+                            result = Tts.get_qwen3().generate_base(
+                                prompts=prompts,
+                                voice_info=voice_info,
+                                language_code=project.language_code,
+                                temperature=project.qwen3_temperature,
+                                seed=project.qwen3_seed
+                            )
+                        else:
+                            result = "Missing voice path or transcript"
+
+                    case "custom_voice":
+
+                        speakers = Tts.get_qwen3().supported_speakers
+                        speaker_id = project.qwen3_speaker_id
+                        if len(speakers) == 1:
+                            if not speaker_id and speaker_id != speakers[0]:
+                                ... # print warning maybe
+                            speaker_id = speakers[0] # force default
+                        if speaker_id not in speakers:
+                            result = f"Invalid speaker id for this model: {speaker_id}"
+                        else:                            
+                            result = Tts.get_qwen3().generate_custom_voice(
+                                prompts=prompts, 
+                                speaker_id=speaker_id,
+                                instruct=project.qwen3_instructions,
+                                language_code=project.language_code,
+                                temperature=project.qwen3_temperature,
+                                seed=project.qwen3_seed
+                            )
+                    
+                    case "voice_design":
+
+                        result = Tts.get_qwen3().generate_voice_design(
+                            prompts=prompts, 
+                            instruct=project.qwen3_instructions,
+                            language_code=project.language_code,
+                            temperature=project.qwen3_temperature,
+                            seed=project.qwen3_seed
+                        )
+                    
+                    case _:
+                        result = f"Unsupported model type: {model_type}"
+
             case TtsModelInfos.NONE:
                 result = "No active TTS model"
 
-        # Result is either an error string or n generated Sounds
+        # `result` is either n generated Sounds or a single error string
         if isinstance(result, str): 
             return [result for _ in range(len(prompts))] # return n error strings
 
@@ -674,9 +752,7 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
         speed = cum_duration / gen_elapsed
         speed = min(speed, 99.9)
         speed_str = f"{speed:.1f}"
-        if speed < 1.0:
-            speed_str = "0" + speed_str
-        elif speed == 99.9:
+        if speed == 99.9:
             speed_str += "+"
         speed_str += "x"
         message += f"speed: {speed_str}"

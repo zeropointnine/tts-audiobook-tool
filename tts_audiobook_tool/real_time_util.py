@@ -31,24 +31,28 @@ class RealTimeUtil:
         """
         line_range is one-indexed
         """
-
-        project = state.project
-
         if not line_range:
             line_range = (1, len(phrase_groups))
 
-        start_index, end_index = line_range
-        start_index -= 1
-        end_index -= 1
-        num_items = end_index - start_index + 1
-        showed_vram_warning = False
-        
         # Warm up models
-        force_no_stt = ValidateUtil.is_unsupported_language_code(project.language_code)
         did_interrupt = ModelsUtil.warm_up_models(state)
+        
+        # Post-init checks
         if did_interrupt:
             print_feedback("\nCancelled")
             return
+
+        if Tts.get_type() == TtsModelInfos.QWEN3TTS:
+
+            err = Tts.get_qwen3().get_post_init_error(state.project)
+            if err:
+                print_feedback(err, is_error=True)
+                return 
+            
+            warning = Tts.get_qwen3().get_post_init_warning(state.project)
+            if warning:
+                printt(warning)
+                printt()
 
         showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 
@@ -66,6 +70,10 @@ class RealTimeUtil:
         stream = None
         count = 0
 
+        start_index, end_index = line_range
+        start_index -= 1
+        end_index -= 1
+        
         for index in range(start_index, end_index + 1):
 
             if did_interrupt:

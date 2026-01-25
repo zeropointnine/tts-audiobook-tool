@@ -146,9 +146,9 @@ class SttUtil:
 
             def print_result(is_success: bool): # yes rly
                 printt(f"line {segment_index + 1}/{len(phrases)}")
-                printt(f"{COL_DIM}    source text: {pretty_truncate(text_normed, 50)}")
+                printt(f"{COL_DIM}    source text: {truncate_pretty(text_normed, 50)}")
                 if best_match:
-                    printt(f"{COL_DIM}    transcribed: {pretty_truncate(best_match.trans_text, 50)}")
+                    printt(f"{COL_DIM}    transcribed: {truncate_pretty(best_match.trans_text, 50)}")
                 s = f"{COL_DIM}    score: {best_match.score if best_match else 0}"
                 if is_success:
                     s += f" - {COL_OK}OK"
@@ -516,16 +516,6 @@ def are_same_first_last_words(text1: str, text2: str) -> bool:
     last_a = a[-1].strip()
     last_b = b[-1].strip()
     return (first_a == first_b) and (last_a == last_b)
-
-def pretty_truncate(text: str, width: int) -> str:
-    if len(text) <= width:
-        return f"{COL_DEFAULT}{text}"
-    width -= 3 # bc triple-dots
-    a_len = math.ceil(width / 2)
-    b_len = math.floor(width / 2)
-    a = text[:a_len]
-    b = text[-b_len:]
-    return f"{COL_DEFAULT}{a}{COL_DIM}...{COL_DEFAULT}{b}"
 
 def word_list_to_string(lst: list[Word]) -> str:
     l = [item.word.strip() for item in lst]

@@ -10,8 +10,6 @@ class MetadataUtil {
         const MP4_MEAN = "tts-audiobook-tool"
         const MP4_TAG = "audiobook-data"
 
-        const isFlac = url ? url.toLowerCase().endsWith("flac") : file.name.toLowerCase().endsWith("flac");
-
         if (url) {
             // Create File-like adapter
             file = new RemoteFileLike(url)
@@ -20,6 +18,7 @@ class MetadataUtil {
         // Read "abr" metadata (json string)
         let tagValue = null;
         try {
+            const isFlac = url ? url.toLowerCase().endsWith("flac") : file.name.toLowerCase().endsWith("flac");
             if (isFlac) {
                 tagValue = await MetadataUtil.findCustomFlacTag(file, FLAC_FIELD);
             } else {

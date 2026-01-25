@@ -101,4 +101,4 @@ class SkippedResult(ValidationResult):
         return False
 
     def get_ui_message(self) -> str:
-        return f"{COL_DIM}Skipped validation: {self.message}"
+        return f"Skipped validation: {COL_DIM}{self.message}"
