@@ -15,28 +15,12 @@ class Qwen3ModelType(str, Enum):
 
 class Qwen3Protocol(Protocol):
 
-    REPO_ID_BASE_DEFAULT = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    DEFAULT_REPO_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 
     TEMPERATURE_FALLBACK_DEFAULT = 0.9 # (Real default is embedded in the loaded model)
     TEMPERATURE_MIN = 0.01 
     TEMPERATURE_MAX = 3.0 # sane max IMO; at high values, gens can fail to terminate for a very long time
-
-    # MAX_NEW_TOKENS = 2048 # default is 1024, which is enough for ~60 words
-    ...
-
-    @staticmethod
-    def get_display_path_or_id(path_or_id: str) -> str:
-        """ Returns path/id shortened/formatted for display """
-        if not path_or_id:
-            path_or_id = Qwen3Protocol.REPO_ID_BASE_DEFAULT
-        COMMON_ID_PREFIX = "Qwen/"
-        if path_or_id.startswith(COMMON_ID_PREFIX):
-            path_or_id = path_or_id[len(COMMON_ID_PREFIX):]
-        else:
-            if os.path.exists(path_or_id):
-                path_or_id = AppUtil.local_path_for_display(path_or_id)
-        return path_or_id
-        
+            
 class Qwen3ModelProtocol(TtsModel, Qwen3Protocol):
 
     def generate_base(
@@ -74,7 +58,7 @@ class Qwen3ModelProtocol(TtsModel, Qwen3Protocol):
         ...
 
     @property
-    def path_or_id(self) -> str:
+    def model_target(self) -> str:
         ...
 
     @property

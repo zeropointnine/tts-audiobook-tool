@@ -3,7 +3,7 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import FishProtocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared

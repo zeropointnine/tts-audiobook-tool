@@ -13,7 +13,7 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class ConcatMenu:

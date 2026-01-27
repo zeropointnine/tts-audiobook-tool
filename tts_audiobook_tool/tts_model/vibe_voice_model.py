@@ -7,7 +7,7 @@ from peft import PeftModel  # type: ignore
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
@@ -20,18 +20,18 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
     def __init__(
             self,
             device_map: str,
-            model_path: str = "",
+            model_target: str = "",
             lora_path: str | None = None,
             max_new_tokens: int | None = None,
     ):
         super().__init__(TtsModelInfos.VIBEVOICE.value)
 
         self._device_map = device_map
-        if not model_path:
-            model_path = VibeVoiceProtocol.DEFAULT_MODEL_PATH
+        if not model_target:
+            model_target = VibeVoiceProtocol.DEFAULT_REPO_ID
         self.max_new_tokens = max_new_tokens
 
-        self.processor = VibeVoiceProcessor.from_pretrained(model_path)
+        self.processor = VibeVoiceProcessor.from_pretrained(model_target)
 
         # Determine attention implementation type
         if "cuda" in device_map:
@@ -47,7 +47,7 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
 
         # Load model
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            model_path,
+            model_target,
             torch_dtype=torch.bfloat16,
             device_map=device_map,
             attn_implementation=attn_implementation

@@ -2,14 +2,16 @@ import os
 from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.target_util import TargetUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
@@ -275,3 +277,27 @@ class VoiceMenuShared:
         setattr(project, seed_attr_name, value)
         project.save()
         print_feedback("Seed set to:", value if value > -1 else "random")
+
+    @staticmethod
+    def ask_target(
+            project: Project, 
+            prompt: str,
+            current_target: str, 
+            callback: Callable[[Project, str], None]
+    ) -> None: 
+
+        printt(prompt)
+        new_target = AskUtil.ask(lower=False)
+        if not new_target:
+            return
+
+        if TargetUtil.is_same_target(current_target, new_target):
+            print_feedback("Already set")
+            return
+
+        _, err = TargetUtil.exist_test(new_target)
+        if err:
+            print_feedback(err, is_error=True)
+            return
+        
+        callback(project, new_target)

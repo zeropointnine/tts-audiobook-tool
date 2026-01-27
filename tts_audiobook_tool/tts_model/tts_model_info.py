@@ -2,8 +2,6 @@ from enum import Enum
 from functools import cache
 from typing import NamedTuple
 
-import numpy as np
-
 
 class TtsModelInfo(NamedTuple):
     """
@@ -208,7 +206,7 @@ class TtsModelInfos(Enum):
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
             "proper_name": "VibeVoice",
-            "short_name": "Vibe Voice",
+            "short_name": "VibeVoice",
             "voice_path_console": "Enter voice clone audio clip file path: ",
             "voice_path_requestor": "Select voice clone audio clip"
         },

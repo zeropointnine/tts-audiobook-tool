@@ -11,7 +11,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import MiraProtocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class GenerateMenu:

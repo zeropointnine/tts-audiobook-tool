@@ -9,7 +9,7 @@ from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import ChatterboxType
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.validate_util import ValidateUtil

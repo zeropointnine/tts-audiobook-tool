@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-from tts_audiobook_tool.tts_model_info import TtsModelInfo
+from tts_audiobook_tool.tts_model import TtsModelInfo
 from tts_audiobook_tool.util import *
 
 

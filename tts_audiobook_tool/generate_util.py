@@ -25,8 +25,8 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import ChatterboxType, HiggsModelProtocol, MiraProtocol, Qwen3Protocol, VibeVoiceProtocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import ChatterboxType, HiggsModelProtocol, MiraProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validate_util import ValidateUtil

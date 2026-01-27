@@ -181,6 +181,30 @@ def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=
         a = text[:width]
         return f"{content_color}{a}{COL_DIM}..."
 
+def truncate_path_pretty(path: str) -> str:
+    """ App style for displaying local path in menu/UI """
+    LEN = 60
+    if len(path) <= LEN:
+        return path
+    p = Path(path)
+    # Find the separator before path name and construct truncated path
+    parent_str = str(p.parent)
+    sep_pos = parent_str.rfind(os.sep)
+    if sep_pos >= 0:
+        # Include the separator and everything after it
+        suffix = parent_str[sep_pos:] + os.sep + p.name
+    else:
+        suffix = p.name
+    # Calculate how many chars we can take from suffix
+    prefix_len = 10  # first 10 chars
+    ellipsis_len = 3  # "..."
+    max_suffix_len = LEN - prefix_len - ellipsis_len
+    if len(suffix) > max_suffix_len:
+        suffix = suffix[-max_suffix_len:]
+    return path[:prefix_len] + "..." + suffix
+        
+
+
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
     num_bytes = 0

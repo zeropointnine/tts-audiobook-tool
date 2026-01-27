@@ -30,7 +30,7 @@ if err:
 import sys
 from tts_audiobook_tool.hint import Hint
 from importlib import util
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 
 new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
 
@@ -65,7 +65,7 @@ from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 
 def main() -> None:
 

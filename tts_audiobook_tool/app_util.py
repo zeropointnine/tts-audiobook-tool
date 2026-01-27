@@ -10,7 +10,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class AppUtil:
@@ -212,29 +212,6 @@ class AppUtil:
         return str(new_path)
 
     @staticmethod
-    def local_path_for_display(path: str) -> str:
-        """ App style for displaying local path in menu/UI """
-        LEN = 60
-        if len(path) <= LEN:
-            return path
-        p = Path(path)
-        # Find the separator before p.name and construct truncated path
-        parent_str = str(p.parent)
-        sep_pos = parent_str.rfind(os.sep)
-        if sep_pos >= 0:
-            # Include the separator and everything after it
-            suffix = parent_str[sep_pos:] + os.sep + p.name
-        else:
-            suffix = p.name
-        # Calculate how many chars we can take from suffix
-        prefix_len = 10  # first 10 chars
-        ellipsis_len = 3  # "..."
-        max_suffix_len = LEN - prefix_len - ellipsis_len
-        if len(suffix) > max_suffix_len:
-            suffix = suffix[-max_suffix_len:]
-        return path[:prefix_len] + "..." + suffix
-        
-    @staticmethod
     def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
         """ Shows one-time hints related to doing inference """
         
@@ -298,59 +275,6 @@ class AppUtil:
                 return item
         
         return None
-
-    @staticmethod
-    def does_hf_model_exist(
-            path_or_id: str,
-            local_file_markers = ["config.json", "model.safetensors", "adapter_config.json"]
-    ) -> tuple[str, str]:
-        """
-        `path_or_id` can be either a local directory or a huggingface repo id
-
-        Returns 
-            Tuple with source type (local_path | hf_cache | hf_remote), UI error string 
-            (mutually exclusive)
-        """
-
-        from huggingface_hub import model_info, try_to_load_from_cache
-        from huggingface_hub.errors import RepositoryNotFoundError, HFValidationError
-        from huggingface_hub.utils._validators import validate_repo_id
-
-        # If value is an existing local directory, check for existence a 'local file marker'        
-        if os.path.exists(path_or_id):
-            if not os.path.isdir(path_or_id):
-                return "", "Path is not a directory"
-            is_hf_dir = any(os.path.isfile(os.path.join(path_or_id, marker)) for marker in local_file_markers)
-            if is_hf_dir:
-                return "local_path", ""
-            else:
-                return "", "Directory is missing typical hf file markers"
-            
-        error = "No such local directory;\n"
-
-        # Test for correct hf repo id string format
-        try:
-            validate_repo_id(path_or_id)
-        except HFValidationError:
-            error += "Invalid string format for hf repo id"
-            return "", error
-
-        # Check local hf cache
-        for file_marker in local_file_markers:
-            cached_path = try_to_load_from_cache(path_or_id, file_marker)
-            if isinstance(cached_path, str):
-                return "hf_cache", ""
-        
-        # Test for hf repo remote reachability
-        try:
-            model_info(path_or_id)
-            return "hf_remote", ""
-        except RepositoryNotFoundError:
-            error += "Repo not found or gated"
-            return "", error
-        except Exception as e:
-            error += f"Network or other error: {e}"
-            return "", error
 
     @staticmethod
     def make_memory_string(base_color=COL_DIM) -> str:

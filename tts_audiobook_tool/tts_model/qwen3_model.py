@@ -6,7 +6,7 @@ from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: igno
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.tts_model import Qwen3ModelProtocol, Qwen3Protocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 
@@ -15,11 +15,11 @@ class Qwen3Model(Qwen3ModelProtocol):
     App wrapper for `Qwen3TTSModel`
     """
 
-    def __init__(self, path_or_id: str, device: str): 
+    def __init__(self, model_target: str, device: str): 
         
         super().__init__(info=TtsModelInfos.QWEN3TTS.value)
 
-        self._path_or_id = path_or_id
+        self._model_target = model_target
         self._voice_info: tuple[str, str] | None = None
         self._voice_clone_prompt: VoiceClonePromptItem | None = None
         self._device = device
@@ -43,7 +43,7 @@ class Qwen3Model(Qwen3ModelProtocol):
                 ... 
 
         self._model: Qwen3TTSModel = Qwen3TTSModel.from_pretrained(
-                self._path_or_id,
+                self._model_target,
             device_map=device_map,
             dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
@@ -54,8 +54,8 @@ class Qwen3Model(Qwen3ModelProtocol):
         self._voice_clone_prompt = None
 
     @property
-    def path_or_id(self) -> str:
-        return self._path_or_id
+    def model_target(self) -> str:
+        return self._model_target
 
     @property
     def model_type(self) -> str:

@@ -301,8 +301,6 @@ On Linux, simply enter:
     pip install flash-attn==2.7.4.post1 --no-build-isolation
 
 
-
-
 # Usage notes
 
 The app saves its state between sessions, so you can interrupt the program at any time and resume later (important due to how long generating a full-length novel can take).

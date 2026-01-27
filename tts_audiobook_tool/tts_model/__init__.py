@@ -1,4 +1,7 @@
+from .tts_model_info import TtsModelInfo, TtsModelInfos
+
 from .tts_model import TtsModel
+
 from .oute_protocol import OuteProtocol, OuteModelProtocol
 from .chatterbox_protocol import ChatterboxProtocol, ChatterboxModelProtocol, ChatterboxType
 from .fish_protocol import FishProtocol, FishModelProtocol

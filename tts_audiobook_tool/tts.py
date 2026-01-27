@@ -4,7 +4,7 @@ from importlib import util
 import sys
 from typing import Callable
 
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.tts_model import (
     ChatterboxModelProtocol,
     ChatterboxType,
@@ -88,11 +88,11 @@ class Tts:
 
         model_params = { }
         model_params["chatterbox_type"] = project.chatterbox_type
-        model_params["vibevoice_model_path"] = project.vibevoice_model_path
-        model_params["vibevoice_lora_path"] = project.vibevoice_lora_path
+        model_params["vibevoice_target"] = project.vibevoice_target
+        model_params["vibevoice_lora_path"] = project.vibevoice_lora_target
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
         model_params["glm_sr"] = project.glm_sr
-        model_params["qwen3_path_or_id"] = project.qwen3_path_or_id
+        model_params["qwen3_target"] = project.qwen3_target
 
         Tts.set_model_params(model_params)
 
@@ -100,18 +100,18 @@ class Tts:
     def set_model_params(new_params: dict) -> None:
         """
         Sets any customizable values required for the instantiation of the the TTS model
-        Changed model param values trigger a re-instantiation as needed
+        Changed values trigger invalidation of existing instance
         """
         old_params = Tts._model_params
         Tts._model_params = new_params
 
         dirty = False
         dirty |= new_params.get("chatterbox_type", "") != old_params.get("chatterbox_type", "")
-        dirty |= new_params.get("vibevoice_model_path", "") != old_params.get("vibevoice_model_path", "")
+        dirty |= new_params.get("vibevoice_target", "") != old_params.get("vibevoice_target", "")
         dirty |= new_params.get("vibevoice_lora_path", "") != old_params.get("vibevoice_lora_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
-        dirty |= new_params.get("qwen_path_or_id", "") != old_params.get("qwen_path_or_id", "")
+        dirty |= new_params.get("qwen3_target", "") != old_params.get("qwen3_target", "")
         if dirty:
             Tts.clear_tts_model()
 
@@ -220,23 +220,27 @@ class Tts:
 
     @staticmethod
     def get_vibevoice() -> VibeVoiceModelProtocol:
+
         if not Tts._vibevoice:
+
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            model_path = Tts._model_params.get("vibevoice_model_path", "")
-            model_desc = model_path or VibeVoiceProtocol.DEFAULT_MODEL_NAME
+
+            target = Tts._model_params["vibevoice_target"] or VibeVoiceProtocol.DEFAULT_REPO_ID
+            trunc_target = truncate_path_pretty(target)
             lora_path = Tts._model_params.get("vibevoice_lora_path", "")
             lora_desc = f"LoRA: {lora_path}, " if lora_path else ""
             desc = f"{lora_desc}{device}"
-            print_model_init(desc, model_desc)
+            print_model_init(desc, trunc_target)
 
             from tts_audiobook_tool.tts_model.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
                 device_map=device,
-                model_path=model_path,
+                model_target=target,
                 lora_path=lora_path,
                 max_new_tokens=VibeVoiceProtocol.MAX_TOKENS
             )
             printt()
+
         return Tts._vibevoice
 
     @staticmethod
@@ -274,17 +278,18 @@ class Tts:
 
     @staticmethod
     def get_qwen3() -> Qwen3ModelProtocol:
+        
         if not Tts._qwen3:
-            path_or_id = Tts._model_params["qwen3_path_or_id"]
-            if not path_or_id:
-                path_or_id = Qwen3Protocol.REPO_ID_BASE_DEFAULT
-            display_path_or_id = Qwen3Protocol.get_display_path_or_id(path_or_id)
+
+            target = Tts._model_params["qwen3_target"] or Qwen3Protocol.DEFAULT_REPO_ID            
+            s = truncate_path_pretty(target)
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(f"{display_path_or_id}, {device}")
+            print_model_init(f"{s}, {device}")
 
             from tts_audiobook_tool.tts_model.qwen3_model import Qwen3Model
-            Tts._qwen3 = Qwen3Model(path_or_id, device)
+            Tts._qwen3 = Qwen3Model(target, device)
             printt()
+
         return Tts._qwen3
 
     @staticmethod

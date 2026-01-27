@@ -1,11 +1,10 @@
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model import Qwen3Protocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -29,13 +28,13 @@ class VoiceQwen3Menu:
                 currently = make_currently_string(state.project.get_voice_label())
             return f"Select voice clone sample {currently}"
 
-        def make_model_path_label(_) -> str:
-            path_or_id = state.project.qwen3_path_or_id or Qwen3Protocol.REPO_ID_BASE_DEFAULT
-            is_default = (path_or_id == Qwen3Protocol.REPO_ID_BASE_DEFAULT)
+        def make_target_label(_) -> str:
+            target = state.project.qwen3_target or Qwen3Protocol.DEFAULT_REPO_ID
+            is_default = (target == Qwen3Protocol.DEFAULT_REPO_ID)
             if is_default:
                 label = f"{COL_DIM}(optional)"
             else:
-                value = Qwen3Protocol.get_display_path_or_id(path_or_id)
+                value = truncate_path_pretty(target)
                 label = make_currently_string(value)
                 label += f" {COL_DIM}(model type: {Tts.get_qwen3().model_type})"
             return f"Custom model {label}"
@@ -122,25 +121,27 @@ class VoiceQwen3Menu:
                     items.append(
                         MenuItem(make_instructions_cv_label, lambda _, __: ask_instructions(state.project))
                     )
-                    items.append(
-                        MenuItem("Clear instructions", on_clear_instructions)
-                    )
+                    if state.project.qwen3_instructions:
+                        items.append(
+                            MenuItem("Clear instructions", on_clear_instructions)
+                        )
                 case "voice_design":
                     # Instructions
                     items.append(
                         MenuItem(make_instructions_vd_label, lambda _, __: ask_instructions(state.project))
                     )
-                    items.append(
-                        MenuItem("Clear instructions", on_clear_instructions)
-                    )
+                    if state.project.qwen3_instructions:
+                        items.append(
+                            MenuItem("Clear instructions", on_clear_instructions)
+                        )
 
             # Model, clear model
             items.append(
-                MenuItem(make_model_path_label, lambda _, __: ask_model_path(state.project))
+                MenuItem(make_target_label, lambda _, __: ask_target(state.project))
             )
-            if state.project.qwen3_path_or_id:
+            if state.project.qwen3_target:
                 items.append(
-                    MenuItem("Clear custom model", on_clear_model_path_or_id)
+                    MenuItem("Clear custom model", on_clear_model_target)
                 )
             
             # Other params
@@ -171,34 +172,28 @@ class VoiceQwen3Menu:
 
 # ---
 
-def ask_model_path(project: Project) -> None: 
+def ask_target(project: Project) -> None: 
 
-    prompt = "Enter huggingface repo id or local directory path\n"
-    prompt += f"{COL_DIM}Eg, \"Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice\"; \"Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign\"; \"/path/to/checkpoint\""
-    printt(prompt)
-    inp = AskUtil.ask(lower=False)
-    if not inp:
-        return
-    if inp == project.qwen3_path_or_id:
-        print_feedback("Already set")
-        return
+    model_name = Tts.get_type().value.ui["short_name"],
+    prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
+    prompt += f"\n{COL_DIM}Eg, \"Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice\"; \"Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign\"; \"/path/to/checkpoint\""
 
-    _, err = AppUtil.does_hf_model_exist(inp)
-    if err:
-        print_feedback(err, is_error=True)
-        return
+    VoiceMenuShared.ask_target(
+        project=project,
+        prompt=prompt,
+        current_target=project.qwen3_target, 
+        callback=apply_model_and_validate
+    )
     
-    apply_model_and_validate(project, inp)
-
-def apply_model_and_validate(project: Project, path_or_id: str) -> None: 
+def apply_model_and_validate(project: Project, target: str) -> None: 
 
     def revert() -> None:
-        project.qwen3_path_or_id = ""
+        project.qwen3_target = ""
         project.save()
         Tts.set_model_params_using_project(project)
         Tts.clear_tts_model()
 
-    project.qwen3_path_or_id = path_or_id
+    project.qwen3_target = target
     project.save()
 
     Tts.set_model_params_using_project(project)
@@ -218,18 +213,18 @@ def apply_model_and_validate(project: Project, path_or_id: str) -> None:
             # Invalidate speaker id (but keep instructions ig)
             project.qwen3_speaker_id = ""
             project.save()
-        print_feedback("Model path/repo id set:", path_or_id)
+        print_feedback("Model set:", target)
 
     except (OSError, Exception) as e:
         printt()
-        printt(f"{COL_ERROR}Contents at {path_or_id} appear to be invalid:")
+        printt(f"{COL_ERROR}Contents at {target} appear to be invalid:")
         printt(f"{COL_ERROR}{make_error_string(e)}")
         printt()
         revert()
         AskUtil.ask_enter_to_continue()
 
-def on_clear_model_path_or_id(state: State, __: MenuItem) -> None:
-    state.project.qwen3_path_or_id = ""
+def on_clear_model_target(state: State, __: MenuItem) -> None:
+    state.project.qwen3_target = ""
     state.project.save()
     Tts.set_model_params_using_project(state.project)
     Tts.clear_tts_model()

@@ -5,8 +5,7 @@ from tts_audiobook_tool.tts_model.tts_model import TtsModel
 
 class VibeVoiceProtocol(Protocol):
 
-    DEFAULT_MODEL_PATH = "microsoft/VibeVoice-1.5b"
-    DEFAULT_MODEL_NAME = "VibeVoice 1.5B"
+    DEFAULT_REPO_ID = "microsoft/VibeVoice-1.5b"
 
     # nb, their gradio demo default is 1.3, which is IMO much too low
     CFG_DEFAULT = 3.0

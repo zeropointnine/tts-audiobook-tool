@@ -10,7 +10,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import make_error_string
 
 

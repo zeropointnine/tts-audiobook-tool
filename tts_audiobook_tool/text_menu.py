@@ -5,7 +5,7 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 

@@ -16,7 +16,7 @@ from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol, Qwen3Protocol, VibeVoiceProtocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class Project:
@@ -75,8 +75,8 @@ class Project:
     higgs_temperature: float = -1
 
     vibevoice_voice_file_name: str = ""
-    vibevoice_model_path: str = ""
-    vibevoice_lora_path: str = ""
+    vibevoice_target: str = ""
+    vibevoice_lora_target: str = "" 
     vibevoice_cfg: float = -1
     vibevoice_steps: int = -1
     vibevoice_batch_size: int = 1
@@ -98,7 +98,7 @@ class Project:
     mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT # TODO: should use "-1 pattern"
     mira_batch_size: int = 1
 
-    qwen3_path_or_id: str = ""
+    qwen3_target: str = ""
     qwen3_voice_file_name: str = ""
     qwen3_voice_transcript: str = ""
     qwen3_speaker_id: str = ""
@@ -357,8 +357,8 @@ class Project:
 
         # VibeVoice
         project.vibevoice_voice_file_name = d.get("vibevoice_voice_file_name", "")
-        project.vibevoice_model_path = d.get("vibevoice_model_path", "")
-        project.vibevoice_lora_path = d.get("vibevoice_lora_path", "")
+        project.vibevoice_target = d.get("vibevoice_target", "") or d.get("vibevoice_model_path", "") # legacy key compat
+        project.vibevoice_lora_target = d.get("vibevoice_lora_path", "")
         project.vibevoice_cfg = d.get("vibevoice_cfg", -1)
         project.vibevoice_steps = d.get("vibevoice_steps", -1)
 
@@ -418,7 +418,7 @@ class Project:
         project.mira_batch_size = value
 
         # Qwen3-TTS
-        project.qwen3_path_or_id = d.get("qwen3_path_or_id", "")
+        project.qwen3_target = d.get("qwen3_target", "") or d.get("qwen3_path_or_id", "") # legacy key compat
         project.qwen3_voice_file_name = d.get("qwen3_voice_file_name", "")
         project.qwen3_voice_transcript = d.get("qwen3_voice_text", "")
         project.qwen3_speaker_id = d.get("qwen3_speaker_id", "")
@@ -436,7 +436,7 @@ class Project:
         if value != -1:
             if not isinstance(value, (float, int)) or not (Qwen3Protocol.TEMPERATURE_MIN <= value <= Qwen3Protocol.TEMPERATURE_MAX):
                 value = -1
-                add_warning("qwen_temperature", value)
+                add_warning("qwen3_temperature", value)
         project.qwen3_temperature = value
 
         seed = d.get("qwen3_seed", -1)
@@ -503,8 +503,8 @@ class Project:
             "higgs_temperature": self.higgs_temperature,
 
             "vibevoice_voice_file_name": self.vibevoice_voice_file_name,
-            "vibevoice_model_path": self.vibevoice_model_path,
-            "vibevoice_lora_path": self.vibevoice_lora_path,
+            "vibevoice_target": self.vibevoice_target,
+            "vibevoice_lora_path": self.vibevoice_lora_target,
             "vibevoice_cfg": self.vibevoice_cfg,
             "vibevoice_steps": self.vibevoice_steps,
             "vibevoice_batch_size": self.vibevoice_batch_size,
@@ -526,7 +526,7 @@ class Project:
             "mira_temperature": self.mira_temperature,
             "mira_batch_size": self.mira_batch_size,
 
-            "qwen3_path_or_id": self.qwen3_path_or_id,
+            "qwen3_target": self.qwen3_target,
             "qwen3_voice_file_name": self.qwen3_voice_file_name,
             "qwen3_voice_text": self.qwen3_voice_transcript,
             "qwen3_speaker_id": self.qwen3_speaker_id,

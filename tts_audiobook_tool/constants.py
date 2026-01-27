@@ -284,7 +284,5 @@ HINT_VIBEVOICE_LORA = Hint(
     "LoRA support is experimental",
 """Current tips:
 - Train your LoRA using https://github.com/voicepowered-ai/VibeVoice-finetuning with parameter \"voice_prompt_drop_rate 1\"
-- Avoid using a LoRA and a voice clone sample at the same time
-- Here's a (rough, proof-of-concept) LoRA you can experiment with:
-      vibevoice-community/VibeVoice-LoRA-Elise"""
+- Avoid using a LoRA and a voice clone sample at the same time"""
 )

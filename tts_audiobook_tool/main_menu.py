@@ -8,7 +8,7 @@ from tts_audiobook_tool.tools_menu import ToolsMenu
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_menu import TextMenu
 from tts_audiobook_tool.tts_model import Qwen3Protocol
-from tts_audiobook_tool.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.voice_menu import VoiceQwen3Menu
@@ -77,7 +77,8 @@ class MainMenu:
         else:
             model_name = Tts.get_type().value.ui['proper_name']
         if Tts.get_type() == TtsModelInfos.QWEN3TTS:
-            s = Qwen3Protocol.get_display_path_or_id(state.project.qwen3_path_or_id)
+            path = state.project.qwen3_target or Qwen3Protocol.DEFAULT_REPO_ID
+            s = truncate_path_pretty(path)
             model_name += f" {COL_DIM}{s}"
 
         heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"
@@ -101,7 +102,7 @@ def make_voice_label(state: State) -> str:
 
     if Tts.get_type() == TtsModelInfos.VIBEVOICE:
 
-        lora_label = state.project.vibevoice_lora_path
+        lora_label = state.project.vibevoice_lora_target
         if voice_label == "none" and not lora_label:
             desc = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
         elif voice_label != "none" and not lora_label:
