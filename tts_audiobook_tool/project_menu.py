@@ -13,7 +13,7 @@ from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.validate_util import ValidateUtil
-from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.voice_menu import VoiceMenuShared
 
 class ProjectMenu:
 
@@ -234,7 +234,7 @@ def on_language(state: State, __: MenuItem) -> None:
     printt(LANGUAGE_CODE_DESC)
     printt()
     if Tts.get_type() == TtsModelInfos.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
-        from tts_audiobook_tool.chatterbox_model import ChatterboxModel
+        from tts_audiobook_tool.tts_model.chatterbox_model import ChatterboxModel
         printt(f"Valid values for Chatterbox-Multilingual are: {ChatterboxModel.supported_languages_multi()}")
         printt()
 

@@ -5,7 +5,21 @@ import sys
 from typing import Callable
 
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.tts_model import ChatterboxModelProtocol, ChatterboxType, FishModelProtocol, GlmModelProtocol, HiggsModelProtocol, IndexTts2ModelProtocol, MiraModelProtocol, OuteModelProtocol, Qwen3ModelProtocol, Qwen3Protocol, TtsModel, VibeVoiceModelProtocol, VibeVoiceProtocol
+from tts_audiobook_tool.tts_model import (
+    ChatterboxModelProtocol,
+    ChatterboxType,
+    FishModelProtocol,
+    GlmModelProtocol,
+    HiggsModelProtocol,
+    IndexTts2ModelProtocol,
+    MiraModelProtocol,
+    OuteModelProtocol,
+    Qwen3ModelProtocol,
+    Qwen3Protocol,
+    TtsModel,
+    VibeVoiceModelProtocol,
+    VibeVoiceProtocol,
+)
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -166,7 +180,7 @@ class Tts:
     def get_oute() -> OuteModelProtocol:
         if not Tts._oute:
             print_model_init()
-            from tts_audiobook_tool.oute_model import OuteModel
+            from tts_audiobook_tool.tts_model.oute_model import OuteModel
             Tts._oute = OuteModel()
             printt()
         return Tts._oute
@@ -179,7 +193,7 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             s = f"{typ.label}, {device}"            
             print_model_init(s)
-            from tts_audiobook_tool.chatterbox_model import ChatterboxModel
+            from tts_audiobook_tool.tts_model.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(typ, device)
             printt()
         return Tts._chatterbox
@@ -189,7 +203,7 @@ class Tts:
         if not Tts._fish:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(device)
-            from tts_audiobook_tool.fish_model import FishModel
+            from tts_audiobook_tool.tts_model.fish_model import FishModel
             Tts._fish = FishModel(device)
             printt()
         return Tts._fish
@@ -199,7 +213,7 @@ class Tts:
         if not Tts._higgs:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(device)
-            from tts_audiobook_tool.higgs_model import HiggsModel
+            from tts_audiobook_tool.tts_model.higgs_model import HiggsModel
             Tts._higgs = HiggsModel(device)
             printt()
         return Tts._higgs
@@ -215,7 +229,7 @@ class Tts:
             desc = f"{lora_desc}{device}"
             print_model_init(desc, model_desc)
 
-            from tts_audiobook_tool.vibe_voice_model import VibeVoiceModel
+            from tts_audiobook_tool.tts_model.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
                 device_map=device,
                 model_path=model_path,
@@ -232,7 +246,7 @@ class Tts:
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
             print_model_init(f"{device}, fp16: {use_fp16}")
 
-            from tts_audiobook_tool.indextts2_model import IndexTts2Model
+            from tts_audiobook_tool.tts_model.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
             printt()
         return Tts._indextts2
@@ -244,7 +258,7 @@ class Tts:
             sr = Tts._model_params["glm_sr"]
             print_model_init(f"{device}, {sr}hz")
 
-            from tts_audiobook_tool.glm_model import GlmModel
+            from tts_audiobook_tool.tts_model.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
             printt()
         return Tts._glm
@@ -253,7 +267,7 @@ class Tts:
     def get_mira() -> MiraModelProtocol:
         if not Tts._mira:
             print_model_init(f"cuda")
-            from tts_audiobook_tool.mira_model import MiraModel
+            from tts_audiobook_tool.tts_model.mira_model import MiraModel
             Tts._mira = MiraModel()
             printt()
         return Tts._mira
@@ -268,7 +282,7 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(f"{display_path_or_id}, {device}")
 
-            from tts_audiobook_tool.qwen3_model import Qwen3Model
+            from tts_audiobook_tool.tts_model.qwen3_model import Qwen3Model
             Tts._qwen3 = Qwen3Model(path_or_id, device)
             printt()
         return Tts._qwen3
@@ -322,7 +336,7 @@ class Tts:
         if Tts.get_type() == TtsModelInfos.CHATTERBOX and project.chatterbox_type == ChatterboxType.MULTILINGUAL: 
             if not 'tts_audiobook_tool.chatterbox_model' in sys.modules:
                 print_init("Initializing...")
-            from tts_audiobook_tool.chatterbox_model import ChatterboxModel
+            from tts_audiobook_tool.tts_model.chatterbox_model import ChatterboxModel
             if not project.language_code in ChatterboxModel.supported_languages_multi():
                 is_valid = False
                 extra = f"Chatterbox-Multilingual requires one of the following: {ChatterboxModel.supported_languages_multi()}\n"

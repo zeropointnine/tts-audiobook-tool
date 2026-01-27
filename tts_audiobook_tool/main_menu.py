@@ -11,7 +11,7 @@ from tts_audiobook_tool.tts_model import Qwen3Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.voice_qwen3_menu import VoiceQwen3Menu
+from tts_audiobook_tool.voice_menu import VoiceQwen3Menu
 
 
 class MainMenu:
@@ -137,28 +137,28 @@ def on_voice(state: State, __) -> None:
         return
     match Tts.get_type():
         case TtsModelInfos.OUTE:
-            from tts_audiobook_tool.voice_oute_menu import VoiceOuteMenu
+            from tts_audiobook_tool.voice_menu import VoiceOuteMenu
             VoiceOuteMenu.menu(state)
         case TtsModelInfos.CHATTERBOX:
-            from tts_audiobook_tool.voice_chatterbox_menu import VoiceChatterboxMenu
+            from tts_audiobook_tool.voice_menu import VoiceChatterboxMenu
             VoiceChatterboxMenu.menu(state)
         case TtsModelInfos.FISH:
-            from tts_audiobook_tool.voice_fish_menu import VoiceFishMenu
+            from tts_audiobook_tool.voice_menu import VoiceFishMenu
             VoiceFishMenu.menu(state)
         case TtsModelInfos.HIGGS:
-            from tts_audiobook_tool.voice_higgs_menu import VoiceHiggsMenu
+            from tts_audiobook_tool.voice_menu import VoiceHiggsMenu
             VoiceHiggsMenu.menu(state)
         case TtsModelInfos.VIBEVOICE:
-            from tts_audiobook_tool.voice_vibevoice_menu import VoiceVibeVoiceMenu
+            from tts_audiobook_tool.voice_menu import VoiceVibeVoiceMenu
             VoiceVibeVoiceMenu.menu(state)
         case TtsModelInfos.INDEXTTS2:
-            from tts_audiobook_tool.voice_indextts2_menu import VoiceIndexTts2Menu
+            from tts_audiobook_tool.voice_menu import VoiceIndexTts2Menu
             VoiceIndexTts2Menu.menu(state)
         case TtsModelInfos.GLM:
-            from tts_audiobook_tool.voice_glm_menu import VoiceGlmMenu
+            from tts_audiobook_tool.voice_menu import VoiceGlmMenu
             VoiceGlmMenu.menu(state)
         case TtsModelInfos.MIRA:
-            from tts_audiobook_tool.voice_mira_menu import VoiceMiraMenu
+            from tts_audiobook_tool.voice_menu import VoiceMiraMenu
             VoiceMiraMenu.menu(state)
         case TtsModelInfos.QWEN3TTS:
             _ = Tts.get_instance() # Pre-emptively instantiate model (special case for qwen)

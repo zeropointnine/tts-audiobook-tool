@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tts_audiobook_tool.app_types import RealTimeMenuState
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.oute_util import OuteUtil
+from tts_audiobook_tool.tts_model.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.stt import Stt

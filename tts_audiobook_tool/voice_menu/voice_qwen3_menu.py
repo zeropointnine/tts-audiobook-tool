@@ -8,7 +8,8 @@ from tts_audiobook_tool.tts_model import Qwen3Protocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.voice_menu import VoiceMenuShared
+from tts_audiobook_tool.voice_menu import VoiceMenuShared
 
 class VoiceQwen3Menu:
     """

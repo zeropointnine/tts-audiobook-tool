@@ -2,24 +2,22 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_model import FishProtocol
+from tts_audiobook_tool.tts_model import HiggsProtocol
 from tts_audiobook_tool.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.voice_menu import VoiceMenuShared
 
-class VoiceFishMenu:
+class VoiceHiggsMenu:
 
     @staticmethod
     def menu(state: State) -> None:
-        """
-        """
 
         project = state.project
 
         def make_temperature_label(_) -> str:
             value = make_parameter_value_string(
-                project.fish_temperature, FishProtocol.DEFAULT_TEMPERATURE, 1
+                project.higgs_temperature, HiggsProtocol.DEFAULT_TEMPERATURE, 2
             )
             return f"Temperature {make_currently_string(value)}"
 
@@ -28,7 +26,7 @@ class VoiceFishMenu:
                 project,
                 "Enter temperature (0.01 to 2.0):",
                 0.01, 2.0, # sane range IMO
-                "fish_temperature",
+                "higgs_temperature",
                 "Temperature set to:"
             )
 
@@ -36,22 +34,12 @@ class VoiceFishMenu:
             items = [
                 MenuItem(
                     VoiceMenuShared.make_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.FISH)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
                 )
             ]
-            if state.project.fish_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.FISH) )
-
+            if state.project.higgs_voice_file_name:
+                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) )
             items.append( MenuItem(make_temperature_label, on_temperature) )
-
-            seed_value = str(state.project.fish_seed) if state.project.fish_seed != -1 else "random"
-            items.append(
-                MenuItem(
-                    make_menu_label("Seed", seed_value), 
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "fish_seed")   
-                )
-            )
-
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)

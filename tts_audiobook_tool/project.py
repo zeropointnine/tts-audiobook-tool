@@ -7,7 +7,7 @@ from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationT
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.oute_util import OuteUtil
+from tts_audiobook_tool.tts_model.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
