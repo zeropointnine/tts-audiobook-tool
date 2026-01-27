@@ -15,29 +15,28 @@ class VoiceGlmMenu:
 
         def make_items(_: State) -> list[MenuItem]:
 
-            items = [
+            items = []
+            items.append(
                 MenuItem(
                     VoiceMenuShared.make_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.GLM)
                 )
-            ]
-
+            )
             if state.project.glm_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.GLM) )
-
-            seed_value = str(state.project.glm_seed) if state.project.glm_seed > -1 else "random"
-            items.extend([
+                items.append( 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.GLM) 
+                )
+            items.append(
                 MenuItem(
                     make_menu_label("Model samplerate", str(state.project.glm_sr) + "hz"),
                     lambda _, __: samplerate_menu(state)
-                ),
-                MenuItem(
-                    make_menu_label("Seed", seed_value),
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "glm_seed")   
                 )
-            ])
+            )
+            items.append(
+                VoiceMenuShared.make_seed_item(state, "glm_seed")
+            )
             return items
-        
+
         VoiceMenuShared.show_voice_menu(state, make_items)
 
 def samplerate_menu(state: State) -> None:
@@ -47,8 +46,6 @@ def samplerate_menu(state: State) -> None:
         state.project.save()
         Tts.set_model_params_using_project(state.project)
         print_feedback(f"Model samplerate set to:", str(value))        
-
-    model_name = Tts.get_type().value.ui['short_name']
 
     MenuUtil.options_menu(
         state=state,

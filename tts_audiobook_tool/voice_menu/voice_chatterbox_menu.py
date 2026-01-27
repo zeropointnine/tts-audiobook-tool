@@ -14,57 +14,8 @@ class VoiceChatterboxMenu:
     def menu(state: State) -> None:
         """
         """
-
-        project = state.project
-
-        def make_temperature_label(_) -> str:
-            value = make_parameter_value_string(
-                project.chatterbox_temperature, ChatterboxProtocol.DEFAULT_TEMPERATURE, 1
-            )
-            return f"Temperature {make_currently_string(value)}"
-
-        def on_temperature(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter temperature (0.01 to 2.0):",
-                0.01, 2.0,
-                "chatterbox_temperature",
-                "Temperature set to:"
-            )
-
-        def make_exagg_label(_) -> str:
-            value = make_parameter_value_string(
-                project.chatterbox_exaggeration, ChatterboxProtocol.DEFAULT_EXAGGERATION, 2
-            )
-            return f"Exaggeration {make_currently_string(value)}"
-
-        def on_exagg(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter value for exaggeration (0.25 to 2.0):",
-                0.25, 2.0,
-                "chatterbox_exaggeration",
-                "Exaggeration set to:"
-            )
-
-        def make_cfg_label(_) -> str:
-            value = make_parameter_value_string(
-                project.chatterbox_cfg, ChatterboxProtocol.DEFAULT_CFG, 2
-            )
-            return f"CFG/pace {make_currently_string(value)}"
-
-        def on_cfg(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter value for exaggeration (0.2 to 1.0):",
-                0.25, 1.0,
-                "chatterbox_cfg",
-                "Exaggeration set to:"
-            )
-
+        
         def make_items(_: State) -> list[MenuItem]:
-
-            seed_value = str(state.project.chatterbox_seed) if state.project.chatterbox_seed != -1 else "random"
 
             items = []
             items.append(
@@ -73,16 +24,49 @@ class VoiceChatterboxMenu:
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
             ))
             if state.project.chatterbox_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) )
-            items.append( MenuItem(make_type_label, lambda _, __: ask_type(state)) )
-            items.append( MenuItem(make_temperature_label, on_temperature) )
-            items.append( MenuItem(make_exagg_label, on_exagg) )
-            items.append( MenuItem(make_cfg_label, on_cfg) )
+                items.append( 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) 
+                )
             items.append( 
-                MenuItem(
-                    make_menu_label("Seed", seed_value), 
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "chatterbox_seed")   
-            ))
+                MenuItem(make_type_label, lambda _, __: ask_type(state)) 
+            )
+            items.append( 
+                VoiceMenuShared.make_temperature_item(
+                    state=state, 
+                    attr="chatterbox_temperature", 
+                    default_value=ChatterboxProtocol.DEFAULT_TEMPERATURE, 
+                    min_value=0.01, max_value=2.0
+                )
+            )
+            items.append( 
+                MenuUtil.make_number_item(
+                    state=state, 
+                    attr="chatterbox_exaggeration",
+                    base_label="Exaggeration",
+                    default_value=ChatterboxProtocol.DEFAULT_EXAGGERATION,
+                    is_minus_one_default=True,
+                    num_decimals=2,
+                    prompt=f"Enter value for exaggeration {COL_DIM}({0.25} to {2.0}){COL_DEFAULT}:",
+                    min_value=0.25, 
+                    max_value=2.0
+                )
+            )
+            items.append( 
+                MenuUtil.make_number_item(
+                    state=state, 
+                    attr="chatterbox_cfg",
+                    base_label="CFG/pace",
+                    default_value=ChatterboxProtocol.DEFAULT_CFG,
+                    is_minus_one_default=True,
+                    num_decimals=2,
+                    prompt=f"Enter value for CFG {COL_DIM}({0.2} to {1.0}){COL_DEFAULT}:",
+                    min_value=0.2, 
+                    max_value=1.0
+                )
+            )
+            items.append(
+                VoiceMenuShared.make_seed_item(state, "chatterbox_seed")
+            )
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)

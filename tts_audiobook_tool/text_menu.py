@@ -146,7 +146,7 @@ def on_ask_max_size(state: State, _) -> None:
         state.project,
         prompt=prompt,
         lb=MAX_WORDS_PER_SEGMENT_MIN, ub=MAX_WORDS_PER_SEGMENT_MAX,
-        attr_name="max_words",
+        attr="max_words",
         success_prefix="Max words per segment set to:",
         is_int=True
     )

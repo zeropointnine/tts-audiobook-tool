@@ -1,6 +1,4 @@
-from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model import HiggsProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
@@ -13,23 +11,6 @@ class VoiceHiggsMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        project = state.project
-
-        def make_temperature_label(_) -> str:
-            value = make_parameter_value_string(
-                project.higgs_temperature, HiggsProtocol.DEFAULT_TEMPERATURE, 2
-            )
-            return f"Temperature {make_currently_string(value)}"
-
-        def on_temperature(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter temperature (0.01 to 2.0):",
-                0.01, 2.0, # sane range IMO
-                "higgs_temperature",
-                "Temperature set to:"
-            )
-
         def make_items(_: State) -> list[MenuItem]:
             items = [
                 MenuItem(
@@ -38,8 +19,18 @@ class VoiceHiggsMenu:
                 )
             ]
             if state.project.higgs_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) )
-            items.append( MenuItem(make_temperature_label, on_temperature) )
+                items.append( 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) 
+                )
+            items.append( 
+                VoiceMenuShared.make_temperature_item(
+                    state=state,
+                    attr="higgs_temperature",
+                    default_value=HiggsProtocol.DEFAULT_TEMPERATURE,
+                    min_value=0.01,
+                    max_value=2.0
+                )
+            )
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)

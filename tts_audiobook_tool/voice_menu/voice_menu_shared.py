@@ -183,100 +183,49 @@ class VoiceMenuShared:
 
         return MenuItem("Clear voice clone sample", on_clear_voice, data=info_item)
 
-    @staticmethod
-    def ask_number(
-        project: Project,
-        prompt: str,
-        lb: float,
-        ub: float,
-        project_attr_name: str,
-        success_prefix: str,
-        is_int: bool=False
-    ) -> None:
-
-        if not hasattr(project, project_attr_name):
-            raise ValueError(f"No such attribute {project_attr_name}")
-
-        if is_int:
-            lb = int(lb)
-            ub = int(ub)
-
-        value = AskUtil.ask(prompt.strip() + " ")
-        if not value:
-            return
-        try:
-            # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
-            value = float(value)
-        except Exception as e:
-            print_feedback("Bad value", is_error=True)
-            return
-        if is_int:
-            value = int(value)
-        if not (lb <= value <= ub):
-            print_feedback("Out of range", is_error=True)
-            return
-
-        setattr(project, project_attr_name, value)
-        project.save()
-        print_feedback(success_prefix, str(value))
 
     @staticmethod
-    def ask_string_and_save(
-        project: Project,
-        prompt: str,
-        project_attr_name: str,
-        success_prefix: str,
-        validator: Callable[[str], str] | None = None 
-    ) -> None:
-        """
-        Helper to ask for a string value and save it to the project.
-        :param validator: Takes in the user input string and returns error string if invalid (optional)
-        """
-        if not hasattr(project, project_attr_name):
-            raise ValueError(f"No such attribute {project_attr_name}")
+    def make_temperature_item(
+            state: State,
+            attr: str,
+            default_value: float,
+            min_value: float,
+            max_value: float
+    ) -> MenuItem:
 
-        if prompt:
-            prompt = prompt.strip() + " "
-        value = AskUtil.ask(prompt)
-        if not value:
-            return
-        
-        if validator:
-            err = validator(value)
-            if err:
-                print_feedback(err, is_error=True)
-                return
+        return MenuUtil.make_number_item(
+            state=state,
+            attr=attr,
+            base_label="Temperature", 
+            default_value=default_value,
+            is_minus_one_default=True,
+            num_decimals=2,
+            prompt=f"Enter temperature {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            min_value=min_value,
+            max_value=max_value
+        )
 
-        setattr(project, project_attr_name, value)
-        project.save()
-        print_feedback(success_prefix, value)
+    @staticmethod
+    def make_seed_item(state: State, attr: str) -> MenuItem:
+        """ Makes "self-contained" menu item for seed setting, including handler """
 
-    @staticmethod    
-    def ask_seed_and_save(state: State, seed_attr_name: str) -> None:
-        
-        Hint.show_hint_if_necessary(state.prefs, HINT_SEED)
+        def on_item(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
+                project_or_prefs=state.project,
+                attr=attr,
+                prompt=f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}: ",
+                lb=-1, 
+                ub=2**32-1,
+                success_prefix="Seed set:",
+                is_int=True
+            )
 
-        prompt = f"Enter a static seed value {COL_DIM}(-1 for random){COL_DEFAULT}: "
-        value = AskUtil.ask(prompt)
-        if not value:
-            return
-        
-        try:
-            # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
-            value = float(value)
-        except Exception as e:
-            print_feedback("Bad value", is_error=True)
-            return
-        
-        value = int(value)
-        if value < -1 or value > 2**32 - 1:
-            print_feedback("Out of range", is_error=True)
-            return
-
-        project = state.project
-        setattr(project, seed_attr_name, value)
-        project.save()
-        print_feedback("Seed set to:", value if value > -1 else "random")
+        seed_value: int | None = getattr(state.project, attr, None)
+        if seed_value is None:
+            raise ValueError(f"Attribute doesn't exist: {attr}")
+        suffix = str(seed_value) if seed_value != -1 else "random"
+        label = make_menu_label("Seed", suffix)
+        return MenuItem(label, on_item)
 
     @staticmethod
     def ask_target(

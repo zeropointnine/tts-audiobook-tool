@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Callable
 
 from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from typing import TypeVar, Callable, Any
@@ -227,6 +228,66 @@ class MenuUtil:
             subheading=subheading,
             one_shot=True
         )
+
+    @staticmethod
+    def make_number_label(
+        project: Project,
+        attr: str,
+        base_label: str,
+        default_value: int | float | None = None,
+        is_minus_one_default: bool = True,
+        num_decimals: int = 1,
+    ) -> str:
+
+        label_value: float | int | None = getattr(project, attr, None)
+        if label_value is None:
+            raise ValueError(f"Attribute doesn't exist: {attr}")
+        if is_minus_one_default and label_value == -1:
+            if default_value is None:
+                raise ValueError("Default value required")
+            label_value = default_value
+        label = make_menu_label(base_label, label_value, default_value, num_decimals=num_decimals)
+        return label
+
+    @staticmethod
+    def make_number_item(
+        state: State, 
+        attr: str,
+        base_label: str,
+        default_value: int | float | None,
+        is_minus_one_default: bool,
+        num_decimals: int,
+        prompt: str,
+        min_value: int | float,
+        max_value: int | float
+    ) -> MenuItem:
+        """ 
+        Makes "self-contained" MenuItem that displays a number value,
+        and does stock "ask_number()" action on select.
+        """
+
+        def on_item(_: State, __: MenuItem) -> None:
+            AskUtil.ask_number(
+                state.project,
+                attr,
+                prompt,
+                min_value, max_value,
+                "Value set:",
+                is_int=(num_decimals == 0)
+            )
+
+        label = MenuUtil.make_number_label(
+            project=state.project,
+            attr=attr,
+            base_label=base_label,
+            default_value=default_value,
+            is_minus_one_default=is_minus_one_default,
+            num_decimals=num_decimals
+        )
+
+        return MenuItem(label, on_item)
+
+
 
 # ---
 

@@ -1,5 +1,7 @@
 import sys
+from typing import Callable
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 
 class AskUtil:
@@ -172,10 +174,10 @@ class AskUtil:
     @staticmethod
     def ask_number(
         project_or_prefs: Any,
+        attr: str,
         prompt: str,
         lb: float,
         ub: float,
-        attr_name: str,
         success_prefix: str,
         is_int: bool=False
     ) -> None:
@@ -189,8 +191,8 @@ class AskUtil:
         if not isinstance(project_or_prefs, Project) and not isinstance(project_or_prefs, Prefs):
             raise ValueError(f"Not Project or Prefs: {project_or_prefs}")
 
-        if not hasattr(project_or_prefs, attr_name):
-            raise ValueError(f"No such attribute {attr_name}")
+        if not hasattr(project_or_prefs, attr):
+            raise ValueError(f"No such attribute {attr}")
 
         if is_int:
             lb = int(lb)
@@ -211,10 +213,80 @@ class AskUtil:
             print_feedback("Out of range", is_error=True)
             return
 
-        setattr(project_or_prefs, attr_name, value)
+        setattr(project_or_prefs, attr, value)
         project_or_prefs.save()
 
         print_feedback(success_prefix, str(value))
+
+    @staticmethod
+    def ask_number_and_save(
+        project: Project,
+        prompt: str,
+        lb: float,
+        ub: float,
+        project_attr_name: str,
+        success_prefix: str,
+        is_int: bool=False
+    ) -> None:
+
+        if not hasattr(project, project_attr_name):
+            raise ValueError(f"No such attribute {project_attr_name}")
+
+        if is_int:
+            lb = int(lb)
+            ub = int(ub)
+
+        value = AskUtil.ask(prompt.strip() + " ")
+        if not value:
+            return
+        try:
+            # fyi, always cast to float bc "int(5.1)"" throws exception in 3.11 seems like
+            value = float(value)
+        except Exception as e:
+            print_feedback("Bad value", is_error=True)
+            return
+        if is_int:
+            value = int(value)
+        if not (lb <= value <= ub):
+            print_feedback("Out of range", is_error=True)
+            return
+
+        setattr(project, project_attr_name, value)
+        project.save()
+        print_feedback(success_prefix, str(value))
+
+    @staticmethod
+    def ask_string_and_save(
+        project: Project,
+        prompt: str,
+        project_attr_name: str,
+        success_prefix: str,
+        validator: Callable[[str], str] | None = None 
+    ) -> None:
+        """
+        Helper to ask for a string value and save it to the project.
+        :param validator: Takes in the user input string and returns error string if invalid (optional)
+        """
+        if not hasattr(project, project_attr_name):
+            raise ValueError(f"No such attribute {project_attr_name}")
+
+        if prompt:
+            prompt = prompt.strip() + " "
+        value = AskUtil.ask(prompt)
+        if not value:
+            return
+        
+        if validator:
+            err = validator(value)
+            if err:
+                print_feedback(err, is_error=True)
+                return
+
+        setattr(project, project_attr_name, value)
+        project.save()
+        print_feedback(success_prefix, value)
+
+
 
 # ---
 

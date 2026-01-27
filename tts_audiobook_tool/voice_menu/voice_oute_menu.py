@@ -29,9 +29,9 @@ class VoiceOuteMenu:
         def on_temperature(_: State, __: MenuItem) -> None:
             AskUtil.ask_number(
                 project,
+                "oute_temperature",
                 "Enter temperature (0.01 to 2.0):",
                 0.01, 2.0,
-                "oute_temperature",
                 "Temperature set to:"
             )
 

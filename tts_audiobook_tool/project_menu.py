@@ -256,7 +256,7 @@ def on_language(state: State, __: MenuItem) -> None:
         return ""
 
     printt(f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"zh\", \"pt\", etc){COL_DEFAULT}:")
-    VoiceMenuShared.ask_string_and_save(
+    AskUtil.ask_string_and_save(
         state.project,
         "",
         "language_code",

@@ -29,21 +29,6 @@ class VoiceIndexTts2Menu:
             Hint.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
 
-        def make_temperature_label(_) -> str:
-            value = make_parameter_value_string(
-                project.indextts2_temperature, IndexTts2Protocol.DEFAULT_TEMPERATURE, 2
-            )
-            return f"Temperature {make_currently_string(value)}"
-
-        def on_temperature(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter temperature (0.01 <= value <= 2.0):",
-                0.01, 2.0,
-                "indextts2_temperature",
-                "Temperature set to:"
-            )
-
         def make_emo_voice_label(_) -> str:
             if project.indextts2_emo_voice_file_name:
                 current = make_currently_string(project.get_voice_label(is_secondary=True))
@@ -72,44 +57,55 @@ class VoiceIndexTts2Menu:
                 current = f"{COL_DIM}(optional){COL_DEFAULT}"
             return f"Emotion vector {current}"
 
-        def make_emo_alpha_label(_) -> str:
-            value = make_parameter_value_string(
-                project.indextts2_emo_alpha,
-                IndexTts2Protocol.DEFAULT_EMO_VOICE_ALPHA, 2
-            )
-            return f"Emotion alpha (strength) {make_currently_string(value)}"
-
-        def on_emo_alpha(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter emotion alpha (0 to 1.0):",
-                0.1, 1.0,
-                "indextts2_emo_alpha",
-                "Emotion alpha set to:"
-            )
-
         def make_fp16_item(_) -> str:
             value = make_parameter_value_string(project.indextts2_use_fp16, IndexTts2Protocol.DEFAULT_USE_FP16)
             return f"FP16 (smaller memory footprint) {make_currently_string(value)}"
 
         # Menu
         def make_items(_: State) -> list[MenuItem]:
-            items = [
+            items = []
+            items.append(
                 MenuItem(voice_label, on_voice)
-            ]
+            )
             if state.project.indextts2_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.INDEXTTS2) )
-            items.extend([
-                MenuItem(make_temperature_label, on_temperature),
+                items.append( 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.INDEXTTS2) 
+                )
+            items.append(
+                VoiceMenuShared.make_temperature_item(
+                    state=state,
+                    attr="indextts2_temperature",
+                    default_value=IndexTts2Protocol.DEFAULT_TEMPERATURE,
+                    min_value=0.01,
+                    max_value=2.0
+                )
+            )
+            items.append(
                 MenuItem(make_emo_voice_label, on_emo_voice)
-            ])
+            )
             if state.project.indextts2_emo_voice_file_name:
-                items.append( MenuItem("Clear emotion voice sample", on_clear_emo) )
-            items.extend([
-                MenuItem(make_vector_label, lambda _, __: ask_vector(project)),
-                MenuItem(make_emo_alpha_label, on_emo_alpha),
+                items.append( 
+                    MenuItem("Clear emotion voice sample", on_clear_emo) 
+                )
+            items.append(
+                MenuItem(make_vector_label, lambda _, __: ask_vector(project))
+            )
+            items.append(
+                MenuUtil.make_number_item(
+                    state=state,
+                    attr="indextts2_emo_alpha",
+                    base_label="Emotion alpha (strength)",
+                    default_value=IndexTts2Protocol.DEFAULT_EMO_VOICE_ALPHA,
+                    is_minus_one_default=True,
+                    num_decimals=2,
+                    prompt=f"Enter emotion alpha {COL_DIM}({0.01} to {1.0}){COL_DEFAULT}:",
+                    min_value=0.01, # xxx confirm not 0.0
+                    max_value=1.0
+                )
+            )
+            items.append(
                 MenuItem(make_fp16_item, lambda _, __: VoiceIndexTts2Menu.fp16_menu(state))
-            ])
+            )
             return items
 
         VoiceMenuShared.show_voice_menu(state, make_items)

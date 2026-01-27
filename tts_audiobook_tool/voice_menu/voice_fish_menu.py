@@ -14,44 +14,32 @@ class VoiceFishMenu:
     def menu(state: State) -> None:
         """
         """
-
-        project = state.project
-
-        def make_temperature_label(_) -> str:
-            value = make_parameter_value_string(
-                project.fish_temperature, FishProtocol.DEFAULT_TEMPERATURE, 1
-            )
-            return f"Temperature {make_currently_string(value)}"
-
-        def on_temperature(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter temperature (0.01 to 2.0):",
-                0.01, 2.0, # sane range IMO
-                "fish_temperature",
-                "Temperature set to:"
-            )
-
         def make_items(_: State) -> list[MenuItem]:
-            items = [
+            items = []
+            items.append(
                 MenuItem(
                     VoiceMenuShared.make_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.FISH)
                 )
-            ]
+            )
             if state.project.fish_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.FISH) )
+                items.append( 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.FISH) 
+                )
 
-            items.append( MenuItem(make_temperature_label, on_temperature) )
-
-            seed_value = str(state.project.fish_seed) if state.project.fish_seed != -1 else "random"
-            items.append(
-                MenuItem(
-                    make_menu_label("Seed", seed_value), 
-                    lambda _, __: VoiceMenuShared.ask_seed_and_save(state, "fish_seed")   
+            items.append( 
+                VoiceMenuShared.make_temperature_item(
+                    state=state,
+                    attr="fish_temperature",
+                    default_value=FishProtocol.DEFAULT_TEMPERATURE,
+                    min_value=0.01,
+                    max_value=2.0
                 )
             )
 
+            items.append(
+                VoiceMenuShared.make_seed_item(state, "fish_seed")
+            )
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)

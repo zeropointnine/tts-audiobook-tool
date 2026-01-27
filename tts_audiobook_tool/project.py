@@ -4,7 +4,6 @@ import os
 import shutil
 
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_model.oute_util import OuteUtil
@@ -92,7 +91,7 @@ class Project:
     glm_voice_file_name: str = ""
     glm_voice_transcript: str = ""
     glm_sr: int = GlmProtocol.SAMPLE_RATES[0]
-    glm_seed: int = -1 # ie, make random
+    glm_seed: int = -1
 
     mira_voice_file_name: str = ""
     mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT # TODO: should use "-1 pattern"
@@ -307,6 +306,7 @@ class Project:
                 # Set it Oute default
                 result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
                 if isinstance(result, str):
+                    from tts_audiobook_tool.ask_util import AskUtil
                     AskUtil.ask_error(result) # not ideal
                 else:
                     project.set_oute_voice_and_save(result, "default")
@@ -453,6 +453,7 @@ class Project:
             for item in warnings:
                 printt(item)
             printt()
+            from tts_audiobook_tool.ask_util import AskUtil
             AskUtil.ask_enter_to_continue()
 
         return project
@@ -514,6 +515,7 @@ class Project:
             "indextts2_temperature": self.indextts2_temperature,
             "indextts2_emo_voice_file_name": self.indextts2_emo_voice_file_name,
             "indextts2_emo_vector": self.indextts2_emo_vector,
+            "indextts2_emo_alpha": self.indextts2_emo_alpha,
             "indextts2_temperature": self.indextts2_temperature,
             "indextts2_use_fp16": self.indextts2_use_fp16,
 
@@ -644,6 +646,7 @@ class Project:
         file_name = dest_file_stem + ".json"
         err = save_json(voice_dict, os.path.join(self.dir_path, file_name))
         if err:
+            from tts_audiobook_tool.ask_util import AskUtil
             AskUtil.ask_error(err)
             return
         self.oute_voice_file_name = file_name

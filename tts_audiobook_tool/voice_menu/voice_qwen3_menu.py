@@ -76,28 +76,6 @@ class VoiceQwen3Menu:
             state.project.save()
             print_feedback("Instructions cleared")
 
-        def make_temperature_label(_) -> str:
-            default = Tts.get_qwen3().generate_defaults.get(
-                "temperature", Qwen3Protocol.TEMPERATURE_FALLBACK_DEFAULT
-            )
-            value = make_parameter_value_string(
-                state.project.qwen3_temperature, default, 2
-            )
-            return f"Temperature {make_currently_string(value)}"
-
-        def on_temperature(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                state.project,
-                f"Enter temperature ({Qwen3Protocol.TEMPERATURE_MIN} to {Qwen3Protocol.TEMPERATURE_MAX}):",
-                Qwen3Protocol.TEMPERATURE_MIN, Qwen3Protocol.TEMPERATURE_MAX, 
-                "qwen3_temperature",
-                "Temperature set to:"
-            )
-
-        def on_seed(_: State, __: MenuItem) -> None:
-            VoiceMenuShared.ask_seed_and_save(state, "qwen3_seed")
-
-
         def make_items(_: State) -> list[MenuItem]:
             
             items = []
@@ -145,13 +123,19 @@ class VoiceQwen3Menu:
                 )
             
             # Other params
+            default_temp = Tts.get_qwen3().generate_defaults.get(
+                "temperature", Qwen3Protocol.TEMPERATURE_FALLBACK_DEFAULT
+            )
             items.append(
-                MenuItem(make_temperature_label, on_temperature)
+                VoiceMenuShared.make_temperature_item(
+                    state=state,
+                    attr="qwen3_temperature",
+                    default_value=default_temp,
+                    min_value=Qwen3Protocol.TEMPERATURE_MIN, 
+                    max_value=Qwen3Protocol.TEMPERATURE_MAX
+                )
             )
-            seed_string = str(state.project.qwen3_seed) if state.project.qwen3_seed != -1 else "random"
-            items.append( 
-                MenuItem(make_menu_label("Seed", seed_string), on_seed)
-            )
+            items.append(VoiceMenuShared.make_seed_item(state, "qwen3_seed"))
             return items
         
         # TODO: not using atm; revisit, reword

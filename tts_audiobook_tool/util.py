@@ -221,19 +221,32 @@ def make_hotkey_string(hotkey: str, color: str="") -> str:
     return f"[{color}{hotkey}{Ansi.RESET}]"
 
 def make_menu_label(
-        label: str, value: Any, default: Any=None, value_prefix: str="currently: ", color_code=COL_ACCENT
+        label: str, 
+        value: Any, 
+        default: Any=None, 
+        value_prefix: str="currently: ", 
+        color_code=COL_ACCENT,
+        num_decimals=0
     ) -> str:
-    currently = make_currently_string(value, value_prefix, default, color_code)
+    currently = make_currently_string(
+        value, value_prefix, default, color_code, num_decimals
+    )
     return f"{label} {currently}"
 
 def make_currently_string(
-        value: Any, value_prefix: str="currently: ", default: Any=None, color_code=COL_ACCENT
+        value: Any, 
+        value_prefix: str="currently: ", 
+        default: Any=None, 
+        color_code=COL_ACCENT,
+        num_decimals=0
     ) -> str:
     """
     Used for presenting the current value for a menu item in a consistent style
     Ex: `(currently: 666)`
     """
-    value_string = make_parameter_value_string(value, default)
+    value_string = make_parameter_value_string(
+        value=value, default=default, num_decimals=num_decimals
+    )
     return f"{COL_DIM}({value_prefix}{color_code}{value_string}{COL_DIM})"
 
 @staticmethod
@@ -243,7 +256,7 @@ def make_parameter_value_string(
     num_decimals: int=0
 ) -> str:
 
-    DEFAULT_LABEL = " (default)"
+    DEFAULT_LABEL = f" {COL_DIM}default"
 
     if isinstance(value, bool):
         s = str(value)

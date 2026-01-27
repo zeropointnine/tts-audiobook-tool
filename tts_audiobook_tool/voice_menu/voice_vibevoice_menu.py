@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -41,40 +41,6 @@ class VoiceVibeVoiceMenu:
                 label = f"{COL_DIM}(optional)"
             return f"LoRA {label}"
 
-        def make_cfg_label(_) -> str:
-            value = make_parameter_value_string(
-                project.vibevoice_cfg, VibeVoiceProtocol.CFG_DEFAULT, 1
-            )
-            return f"CFG scale {make_currently_string(value)}"
-
-        def on_cfg(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                f"Enter CFG {COL_DIM}({VibeVoiceProtocol.CFG_MIN} to {VibeVoiceProtocol.CFG_MAX}):",
-                VibeVoiceProtocol.CFG_MIN, VibeVoiceProtocol.CFG_MAX,
-                "vibevoice_cfg",
-                "CFG set to:"
-            )
-
-        def make_steps_label(_) -> str:
-            value = make_parameter_value_string(
-                project.vibevoice_steps, VibeVoiceProtocol.DEFAULT_NUM_STEPS, 0
-            )
-            return f"Steps {make_currently_string(value)}"
-
-        def on_steps(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
-                project,
-                "Enter num steps (1-30):",
-                1, 30, # Sane range IMO
-                "vibevoice_steps",
-                "Num steps set to:",
-                is_int=True
-            )
-
-        def on_seed(_: State, __: MenuItem) -> None:
-            VoiceMenuShared.ask_seed_and_save(state, "vibevoice_seed")
-
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
@@ -108,11 +74,35 @@ class VoiceVibeVoiceMenu:
                 )
 
             # Other config
-            items.append(MenuItem(make_cfg_label, on_cfg))
-            items.append(MenuItem(make_steps_label, on_steps))
-            seed_string = str(state.project.vibevoice_seed) if state.project.vibevoice_seed != -1 else "random"
-            items.append( MenuItem(make_menu_label("Seed", seed_string), on_seed))
-            
+            items.append(
+                MenuUtil.make_number_item(
+                    state=state,
+                    attr="vibevoice_cfg",
+                    base_label="CFG", 
+                    default_value=VibeVoiceProtocol.CFG_DEFAULT,
+                    is_minus_one_default=True,
+                    num_decimals=2,
+                    prompt=f"Enter CFG {COL_DIM}({VibeVoiceProtocol.CFG_MIN} to {VibeVoiceProtocol.CFG_MAX}):",
+                    min_value=VibeVoiceProtocol.CFG_MIN,
+                    max_value=VibeVoiceProtocol.CFG_MAX
+                )
+            )
+            items.append(
+                MenuUtil.make_number_item(
+                    state=state,
+                    attr="vibevoice_steps",
+                    base_label="Steps", 
+                    default_value=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
+                    is_minus_one_default=True,
+                    num_decimals=0,
+                    prompt=f"Enter num steps {COL_DIM}(1-30){COL_DEFAULT}:",
+                    min_value=1,
+                    max_value=30
+                )
+            )
+            items.append(
+                VoiceMenuShared.make_seed_item(state, "vibevoice_seed")
+            )
             return items
         
         VoiceMenuShared.show_voice_menu(state, make_items)
