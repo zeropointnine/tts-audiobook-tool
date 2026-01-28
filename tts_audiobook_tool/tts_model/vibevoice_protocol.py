@@ -17,20 +17,9 @@ class VibeVoiceProtocol(Protocol):
     # Must accommodate worst-case prompt size (app limit 80 words)
     MAX_TOKENS = 250
 
-    def generate(
-            self,
-            texts: list[str],
-            voice_path: str,
-            cfg_scale: float = 3.0,
-            num_steps: int = 10,
-            seed: int = -1
-    ) -> list[Sound] | str:
-        ...
+class VibeVoiceModelProtocol(TtsModel, VibeVoiceProtocol):
 
     @property
     def has_lora(self) -> bool:
         ...
-
-class VibeVoiceModelProtocol(TtsModel, VibeVoiceProtocol):
-    ...
 

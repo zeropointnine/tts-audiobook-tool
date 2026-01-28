@@ -1,3 +1,4 @@
+import os
 import random
 import numpy as np
 import torch
@@ -6,6 +7,8 @@ from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
 from chatterbox.tts_turbo import ChatterboxTurboTTS # type: ignore
 
 import logging
+
+from tts_audiobook_tool.project import Project
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 from tts_audiobook_tool.app_types import Sound
@@ -33,6 +36,44 @@ class ChatterboxModel(ChatterboxModelProtocol):
 
     def kill(self) -> None:
         self._chatterbox = None # type: ignore
+
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+        
+        if len(prompts) != 1:
+            raise ValueError("Implementation does not support batching")
+        prompt = prompts[0]
+
+        if project.chatterbox_voice_file_name:
+            voice_path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
+        else:
+            voice_path = ""
+
+        if project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+            language_id = project.language_code 
+        else:
+            language_id = ""
+
+        seed = -1 if force_random_seed else project.chatterbox_seed
+
+        result = self.generate(
+            text=prompt,
+            voice_path=voice_path,
+            exaggeration=project.chatterbox_exaggeration,
+            cfg=project.chatterbox_cfg,
+            temperature=project.chatterbox_temperature,
+            seed=seed,
+            language_id=language_id
+        )
+
+        if isinstance(result, Sound):
+            return [result]
+        else:
+            return result
 
     def generate(
         self,

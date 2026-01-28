@@ -6,6 +6,7 @@ import numpy
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import IndexTts2ModelProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -46,6 +47,40 @@ class IndexTts2Model(IndexTts2ModelProtocol):
     def kill(self) -> None:
         self.model = None
 
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+        
+        if len(prompts) != 1:
+            raise ValueError("Implementation does not support batching")
+        prompt = prompts[0]
+
+        if project.indextts2_voice_file_name:
+            voice_path = os.path.join(project.dir_path, project.indextts2_voice_file_name)
+        else:
+            voice_path = ""
+
+        if project.indextts2_emo_voice_file_name:
+            emo_voice_path = os.path.join(project.dir_path, project.indextts2_emo_voice_file_name)
+        else:
+            emo_voice_path = ""
+
+        result = self.generate(
+            text=prompt,
+            voice_path=voice_path,
+            temperature=project.indextts2_temperature,
+            emo_alpha=project.indextts2_emo_alpha,
+            emo_voice_path=emo_voice_path,
+            emo_vector=project.indextts2_emo_vector
+        )
+
+        if isinstance(result, Sound):
+            return [result]
+        else:
+            return result
 
     def generate(
             self,
@@ -68,7 +103,7 @@ class IndexTts2Model(IndexTts2ModelProtocol):
         if emo_alpha == -1:
             emo_alpha = IndexTts2Model.DEFAULT_EMO_VOICE_ALPHA
         if emo_vector and len(emo_vector) != 8:
-            raise Exception("emo_vector should be empty or have length of 8")
+            return "emo_vector should be either empty or have length of 8"
 
         if False:
             printt()

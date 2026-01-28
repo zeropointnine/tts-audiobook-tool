@@ -2,7 +2,6 @@ from __future__ import annotations
 from enum import Enum
 from typing import Protocol
 
-from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.tts_model.tts_model import TtsModel
 
 
@@ -11,18 +10,6 @@ class ChatterboxProtocol(Protocol):
     DEFAULT_EXAGGERATION = 0.5 # from chatterbox library code
     DEFAULT_CFG = 0.5
     DEFAULT_TEMPERATURE = 0.8
-
-    def generate(
-            self,
-            text: str,
-            voice_path: str,
-            exaggeration: float,
-            cfg: float,
-            temperature: float,
-            seed: int,  
-            language_id: str = ""
-    ) -> Sound | str:
-        ...
 
 class ChatterboxModelProtocol(TtsModel, ChatterboxProtocol):
         ...

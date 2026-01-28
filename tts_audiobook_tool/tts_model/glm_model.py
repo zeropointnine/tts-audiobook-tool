@@ -1,7 +1,6 @@
 import logging
 import os
 import random
-import time
 import torch
 
 from glm_tts.cosyvoice.cli.frontend import TTSFrontEnd, SpeechTokenizer, TextFrontEnd # type: ignore
@@ -13,6 +12,7 @@ from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import GlmModelProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import printt
@@ -84,6 +84,33 @@ class GlmModel(GlmModelProtocol):
         self.llm = None
         self.flow = None
 
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+        
+        if len(prompts) != 1:
+            raise ValueError("Implementation does not support batching")
+        prompt = prompts[0]
+
+        voice_path = os.path.join(project.dir_path, project.glm_voice_file_name)
+        voice_transcript = project.glm_voice_transcript
+        seed = -1 if force_random_seed else project.glm_seed
+
+        result = self.generate(
+            prompt_text=voice_transcript,
+            prompt_speech=voice_path,
+            syn_text=prompt,
+            seed=seed
+        )
+
+        if isinstance(result, Sound):
+            return [result]
+        else:
+            return result
+
     def generate(
         self,
         prompt_text: str,
@@ -93,6 +120,9 @@ class GlmModel(GlmModelProtocol):
     ):
         assert(self.frontend is not None)
         assert(self.text_frontend is not None)
+
+        if not prompt_speech:
+            return "Voice clone path is required"
 
         # Text Normalization
         prompt_text = self.text_frontend.text_normalize(prompt_text) or ""

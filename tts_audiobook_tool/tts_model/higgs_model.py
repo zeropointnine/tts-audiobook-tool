@@ -1,3 +1,4 @@
+import sys
 import langid # type: ignore
 import jieba # type: ignore
 import os
@@ -25,6 +26,7 @@ from transformers.cache_utils import StaticCache
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import HiggsModelProtocol, HiggsProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -59,6 +61,42 @@ class HiggsModel(HiggsModelProtocol):
         self.audio_tokenizer = None
         self.model_client.kill() # type: ignore
         self.model_client = None
+
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+        
+        if len(prompts) != 1:
+            raise ValueError("Implementation does not support batching")
+        prompt = prompts[0]
+
+        if project.higgs_voice_file_name:
+            voice_path = os.path.join(project.dir_path, project.higgs_voice_file_name)
+            voice_transcript = project.higgs_voice_transcript
+        else:
+            voice_path = ""
+            voice_transcript = ""
+
+        if project.higgs_temperature == -1:
+            temperature = HiggsModelProtocol.DEFAULT_TEMPERATURE
+        else:
+            temperature = project.higgs_temperature
+
+        result = self.generate(
+            p_voice_path=voice_path, # TODO is this loading every gen?
+            p_voice_transcript=voice_transcript,
+            text=prompt,
+            seed=random.randint(1, sys.maxsize),
+            temperature=temperature
+        )
+
+        if isinstance(result, Sound):
+            return [result]
+        else:
+            return result
 
     def generate(
             self,

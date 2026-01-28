@@ -2,6 +2,7 @@ import copy
 import outetts # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import OuteModelProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import make_error_string
@@ -40,6 +41,27 @@ class OuteModel(OuteModelProtocol):
     def kill(self) -> None:
         self._interface = None # type: ignore
 
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+        
+        if len(prompts) != 1:
+            raise ValueError("Implementation does not support batching")
+        prompt = prompts[0]
+
+        result = self.generate(
+            prompt,
+            project.oute_voice_json,
+            project.oute_temperature)
+
+        if isinstance(result, Sound):
+            return [result]
+        else:
+            return result
+        
     def generate(
         self,
         prompt: str,

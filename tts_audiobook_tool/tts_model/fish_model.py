@@ -8,6 +8,7 @@ from huggingface_hub.errors import GatedRepoError
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import FishModelProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -117,16 +118,51 @@ class FishModel(FishModelProtocol):
         self.t2s_model = None
         self.decode_one_token = None
 
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+
+        if len(prompts) != 1:
+            raise ValueError("Implementation does not support batching")
+        prompt = prompts[0]
+
+        if project.fish_voice_file_name:
+            source_path = os.path.join(project.dir_path, project.fish_voice_file_name)
+            self.set_voice_clone_using(
+                source_path=source_path,
+                transcribed_text=project.fish_voice_transcript
+            )
+        else:
+            self.clear_voice_clone()
+
+
+        if project.fish_temperature == -1:
+            temperature = FishModelProtocol.DEFAULT_TEMPERATURE
+        else:
+            temperature = project.fish_temperature
+
+        seed = -1 if force_random_seed else project.fish_seed
+
+        result = self.generate(
+            prompt=prompt, 
+            temperature=temperature,
+            seed=seed
+        )
+
+        if isinstance(result, Sound):
+            return [result]
+        else:
+            return result    
 
     def generate(
             self, 
-            text: str, 
-            temperature: float = -1,
-            seed: int = -1
+            prompt: str, 
+            temperature: float,
+            seed: int
     ) -> Sound | str:
-
-        if temperature == -1:
-            temperature = FishModelProtocol.DEFAULT_TEMPERATURE
 
         if seed == -1:
             seed = random.randrange(0, 2**32 - 1)
@@ -163,7 +199,7 @@ class FishModel(FishModelProtocol):
                     model=self.t2s_model,
                     device=self.device,
                     decode_one_token=self.decode_one_token,  # type: ignore
-                    text=text,
+                    text=prompt,
                     prompt_text=prompt_text,
                     prompt_tokens=prompt_tokens,
                     temperature=temperature

@@ -1,7 +1,9 @@
 from itertools import cycle
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import MiraModelProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.mira_protocol import MiraProtocol
 from tts_audiobook_tool.util import *
 
 import torch
@@ -41,7 +43,38 @@ class MiraModel(MiraModelProtocol):
         assert(self.mira_tts is not None)
         self.mira_tts.set_params(temperature=temperature, max_new_tokens=max_new_tokens)
 
-    def generate(self, prompt: str) -> Sound | str:
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+
+        voice_path = os.path.join(project.dir_path, project.mira_voice_file_name)
+        self.set_voice_clone(voice_path)
+
+        if project.mira_temperature == -1:
+            temperature = MiraProtocol.TEMPERATURE_DEFAULT
+        elif project.mira_temperature < MiraProtocol.TEMPERATURE_MIN or project.mira_temperature > MiraProtocol.TEMPERATURE_MAX:
+            temperature = MiraProtocol.TEMPERATURE_DEFAULT
+        else:
+            temperature = project.mira_temperature
+
+        self.set_params(
+            temperature=temperature, max_new_tokens=MiraProtocol.MAX_NEW_TOKENS
+        )
+
+        if len(prompts) == 1:
+            result = self.generate_single(prompts[0])
+            if isinstance(result, Sound):
+                return [result]
+            else:
+                return result
+        else:
+            result = self.generate_batch(prompts)
+            return result
+
+    def generate_single(self, prompt: str) -> Sound | str:
         
         if not self.mira_tts:
             return "Logic error - model not initialized"

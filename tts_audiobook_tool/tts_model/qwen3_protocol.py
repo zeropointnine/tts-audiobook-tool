@@ -2,8 +2,6 @@ from __future__ import annotations
 from enum import Enum
 from typing import Protocol
 
-from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.tts_model.tts_model import TtsModel
 from tts_audiobook_tool.util import *
 
@@ -22,37 +20,6 @@ class Qwen3Protocol(Protocol):
     TEMPERATURE_MAX = 3.0 # sane max IMO; at high values, gens can fail to terminate for a very long time
             
 class Qwen3ModelProtocol(TtsModel, Qwen3Protocol):
-
-    def generate_base(
-            self, 
-            prompts: list[str], 
-            voice_info: tuple[str, str], 
-            language_code: str,
-            temperature: float,
-            seed: int
-    ) -> list[Sound] | str:
-        ...
-
-    def generate_custom_voice(
-        self, 
-        prompts: list[str], 
-        speaker_id: str, 
-        instruct: str, 
-        language_code: str,
-        temperature: float,
-        seed: int
-    ) -> list[Sound] | str:
-        ...
-
-    def generate_voice_design(
-        self, 
-        prompts: list[str], 
-        instruct: str, 
-        language_code: str,
-        temperature: float,
-        seed: int
-    ) -> list[Sound] | str:
-        ...
 
     def clear_voice(self) -> None:
         ...
@@ -195,5 +162,3 @@ class Qwen3ModelProtocol(TtsModel, Qwen3Protocol):
             return warning
         
         return ""
-        
-        

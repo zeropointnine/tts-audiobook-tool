@@ -5,6 +5,7 @@ from qwen_tts import Qwen3TTSModel # type: ignore
 from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import Qwen3ModelProtocol, Qwen3Protocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -77,11 +78,77 @@ class Qwen3Model(Qwen3ModelProtocol):
         self._voice_info = None
         self._voice_clone_prompt = None
 
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+    ) -> list[Sound] | str:
+
+        language = self.resolve_language_code_and_warning(project.language_code)[0]
+        temperature = project.qwen3_temperature
+        seed = -1 if force_random_seed else project.qwen3_seed
+
+        match self.model_type:
+            
+            case "base":
+
+                can = project.qwen3_voice_file_name and project.qwen3_voice_transcript
+                if can:
+                    voice_info = (
+                        os.path.join(project.dir_path, project.qwen3_voice_file_name),
+                        project.qwen3_voice_transcript
+                    )
+                    result = self.generate_base(
+                        prompts=prompts,
+                        voice_info=voice_info,
+                        language=language,
+                        temperature=temperature,
+                        seed=seed
+                    )
+                else:
+                    result = "Missing voice path or transcript"
+
+            case "custom_voice":
+
+                speakers = self.supported_speakers
+                speaker_id = project.qwen3_speaker_id
+                if len(speakers) == 1:
+                    if not speaker_id and speaker_id != speakers[0]:
+                        ... # print warning maybe
+                    speaker_id = speakers[0] # force default
+                if speaker_id not in speakers:
+                    result = f"Invalid speaker id for this model: {speaker_id}"
+                else:                            
+                    result = self.generate_custom_voice(
+                        prompts=prompts, 
+                        speaker_id=speaker_id,
+                        instruct=project.qwen3_instructions,
+                        language=language,
+                        temperature=temperature,
+                        seed=seed
+                    )
+            
+            case "voice_design":
+
+                result = self.generate_voice_design(
+                    prompts=prompts, 
+                    instruct=project.qwen3_instructions,
+                    language=language,
+                    temperature=temperature,
+                    seed=seed
+                )
+            
+            case _:
+                result = f"Unsupported model type: {self.model_type}"
+
+        return result
+
     def generate_base(
           self, 
           prompts: list[str], 
           voice_info: tuple[str, str], 
-          language_code: str,
+          language: str,
           temperature: float = -1,
           seed: int = -1
     ) -> list[Sound] | str:
@@ -106,7 +173,6 @@ class Qwen3Model(Qwen3ModelProtocol):
 
         voice_clone_prompts = [self._voice_clone_prompt for _ in prompts]
         
-        language = self.resolve_language_code_and_warning(language_code)[0]
         languages = [language for _ in prompts]
 
         if seed == -1:
@@ -140,13 +206,12 @@ class Qwen3Model(Qwen3ModelProtocol):
         prompts: list[str], 
         speaker_id: str, 
         instruct: str, 
-        language_code: str,
+        language: str,
         temperature: float = -1,
         seed: int = -1
     ) -> list[Sound] | str:
 
         speaker_ids = [speaker_id for _ in prompts]
-        language = self.resolve_language_code_and_warning(language_code)[0]
         languages = [language for _ in prompts]
         instructs = [instruct for _ in prompts] if instruct else None
 
@@ -177,12 +242,11 @@ class Qwen3Model(Qwen3ModelProtocol):
         self, 
         prompts: list[str], 
         instruct: str, 
-        language_code: str,
+        language: str,
         temperature: float = -1,
         seed: int = -1
     ) -> list[Sound] | str:
 
-        language = self.resolve_language_code_and_warning(language_code)[0]
         languages = [language for _ in prompts]
         instructs = [instruct for _ in prompts] 
 

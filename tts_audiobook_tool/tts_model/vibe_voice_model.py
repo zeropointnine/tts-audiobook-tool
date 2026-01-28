@@ -6,6 +6,7 @@ from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: i
 from peft import PeftModel  # type: ignore
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol
 from tts_audiobook_tool.tts_model import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -100,6 +101,33 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         # Required speaker tag
         text = f"{SPEAKER_TAG}{text}" 
         return text
+
+    def generate_using_project(
+            self, 
+            project: Project, 
+            prompts: list[str], 
+            force_random_seed: bool=False
+        ) -> list[Sound] | str:
+        
+        if project.vibevoice_voice_file_name:
+            voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
+        else:
+            voice_path = ""
+
+        cfg_scale = VibeVoiceProtocol.CFG_DEFAULT if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+        
+        num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
+
+        seed = -1 if force_random_seed else project.vibevoice_seed
+
+        result = self.generate(
+            texts=prompts,
+            voice_path=voice_path,
+            cfg_scale=cfg_scale,
+            num_steps=num_steps,
+            seed=seed
+        )
+        return result
 
     def generate(
             self,
