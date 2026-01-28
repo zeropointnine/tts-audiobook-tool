@@ -10,7 +10,9 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class AppUtil:
@@ -212,8 +214,45 @@ class AppUtil:
         return str(new_path)
 
     @staticmethod
+    def get_label_with_prereq_error(project: Project, base_label: str) -> str:
+        error = AppUtil.get_combined_prereq_error(project, is_short=True)
+        if error:
+            return base_label + f" {COL_DIM}({COL_ERROR}{error}{COL_DIM})"
+        else:
+            return base_label
+
+    @staticmethod
+    def get_combined_prereq_error(project: Project, is_short: bool) -> str: 
+        """ 
+        Returns combined error string with reasons (both non-model-related and model-related)
+        """
+        all_errors = []
+        
+        if not project.phrase_groups:
+            err = "requires text" if is_short else "Text must be defined"
+            all_errors.append(err)
+
+        model_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance_if_exists(), is_short) 
+        if model_errors:
+            all_errors.extend(model_errors)
+
+        if is_short:
+            if len(all_errors) > 2:
+                all_errors = all_errors[:2]
+                did_truncate = True
+            else:
+                did_truncate = False
+            combined_string = "" if not all_errors else "; ".join(all_errors)
+            if did_truncate:
+                combined_string += "; ..." if did_truncate else ""
+        else:
+            combined_string = "" if not all_errors else "\n\n".join(all_errors)
+
+        return combined_string
+        
+    @staticmethod
     def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
-        """ Shows one-time hints related to doing inference """
+        """ Shows one-time hints or warnings related to doing inference """
         
         from tts_audiobook_tool.tts import Tts
         from tts_audiobook_tool.project import Project
@@ -222,8 +261,11 @@ class AppUtil:
         if Tts.get_type() == TtsModelInfos.FISH:
             Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST)
 
-        if project.can_voice and project.get_voice_label() == "none":
-            Hint.show_hint_if_necessary(prefs, HINT_NO_VOICE)
+        random_warning = Tts.get_class().get_random_voice_reason(project, Tts.get_instance_if_exists())
+        if random_warning:
+            text = HINT_RANDOM_VOICE.text.replace("%1", random_warning)
+            hint = Hint(HINT_RANDOM_VOICE.key, HINT_RANDOM_VOICE.heading, text)
+            Hint.show_hint_if_necessary(prefs, hint)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():

@@ -43,7 +43,7 @@ class Hint:
             lines = ["[   ]", "[.  ]", "[.. ]", "[...]"]
             for i, line in enumerate(lines):
                 print(f"{COL_DIM}{line}{Ansi.RESET}", end="\r", flush=True)
-                time.sleep(0.66)
+                time.sleep(0.5)
             print(f"{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
             return True
 

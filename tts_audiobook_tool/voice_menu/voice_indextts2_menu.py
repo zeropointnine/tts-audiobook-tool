@@ -1,11 +1,10 @@
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import IndexTts2Protocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -20,10 +19,10 @@ class VoiceIndexTts2Menu:
 
         def voice_label(_) -> str:
             if project.indextts2_voice_file_name:
-                current = make_currently_string(project.get_voice_label())
+                currently = make_currently_string(project.get_voice_label())
             else:
-                current = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
-            return f"Select voice clone sample {current}"
+                currently = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
+            return f"Select voice clone sample {currently}"
 
         def on_voice(_: State, __: MenuItem) -> None:
             Hint.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
@@ -31,10 +30,11 @@ class VoiceIndexTts2Menu:
 
         def make_emo_voice_label(_) -> str:
             if project.indextts2_emo_voice_file_name:
-                current = make_currently_string(project.get_voice_label(is_secondary=True))
+                value = truncate_path_for_menu(project.indextts2_emo_voice_file_name)
+                currently = make_currently_string(value)
             else:
-                current = f"{COL_DIM}(optional){COL_DEFAULT}"
-            return f"Select emotion voice sample {current}"
+                currently = f"{COL_DIM}(optional){COL_DEFAULT}"
+            return f"Select emotion voice sample {currently}"
 
         def on_emo_voice(_: State, __: MenuItem) -> None:
             # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
@@ -58,7 +58,7 @@ class VoiceIndexTts2Menu:
             return f"Emotion vector {current}"
 
         def make_fp16_item(_) -> str:
-            value = make_parameter_value_string(project.indextts2_use_fp16, IndexTts2Protocol.DEFAULT_USE_FP16)
+            value = make_parameter_value_string(project.indextts2_use_fp16, IndexTts2BaseModel.DEFAULT_USE_FP16)
             return f"FP16 (smaller memory footprint) {make_currently_string(value)}"
 
         # Menu
@@ -75,7 +75,7 @@ class VoiceIndexTts2Menu:
                 VoiceMenuShared.make_temperature_item(
                     state=state,
                     attr="indextts2_temperature",
-                    default_value=IndexTts2Protocol.DEFAULT_TEMPERATURE,
+                    default_value=IndexTts2BaseModel.DEFAULT_TEMPERATURE,
                     min_value=0.01,
                     max_value=2.0
                 )
@@ -95,7 +95,7 @@ class VoiceIndexTts2Menu:
                     state=state,
                     attr="indextts2_emo_alpha",
                     base_label="Emotion alpha (strength)",
-                    default_value=IndexTts2Protocol.DEFAULT_EMO_VOICE_ALPHA,
+                    default_value=IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA,
                     is_minus_one_default=True,
                     num_decimals=2,
                     prompt=f"Enter emotion alpha {COL_DIM}({0.01} to {1.0}){COL_DEFAULT}:",
@@ -142,7 +142,7 @@ def ask_vector(project: Project) -> None:
     s = "This should be a list of eight numbers between 0-1 corresponding to:\n"
     s += "happy, angry, sad, afraid, disgusted, melancholic, surprised, calm\n"
     s += f'{COL_DIM}Eg: "0, 0.8, 0, 0, 0.2, 0, 0, 0" = very angry, slightly disgusted{COL_DEFAULT}\n'
-    s += f'{COL_DIM}Enter \"none\" to remove{COL_DEFAULT}'
+    s += f'{COL_DIM}Enter \"none\" to clear{COL_DEFAULT}'
     printt(s)
     printt()
     inp = AskUtil.ask("")

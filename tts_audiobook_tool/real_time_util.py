@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 from tts_audiobook_tool.app_types import Sound, SttVariant
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
@@ -14,9 +15,8 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.validation_result import ValidationResult
 
 
@@ -38,21 +38,22 @@ class RealTimeUtil:
         did_interrupt = ModelsUtil.warm_up_models(state)
         
         # Post-init checks
+
         if did_interrupt:
             print_feedback("\nCancelled")
             return
+        
+        # Because model has just been inited, will use instance in this case:
+        err = AppUtil.get_combined_prereq_error(state.project, is_short=False) 
+        if err:
+            print_feedback(err, is_error=True)
+            AskUtil.ask_enter_to_continue()
+            return
+        
+        warning = Tts.get_instance().get_prereq_warning(state.project)
+        if warning:
 
-        if Tts.get_type() == TtsModelInfos.QWEN3TTS:
-
-            err = Tts.get_qwen3().get_post_init_error(state.project)
-            if err:
-                print_feedback(err, is_error=True)
-                return 
-            
-            warning = Tts.get_qwen3().get_post_init_warning(state.project)
-            if warning:
-                printt(warning)
-                printt()
+            print_feedback(Ansi.ITALICS + warning, no_preformat=True)
 
         showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 

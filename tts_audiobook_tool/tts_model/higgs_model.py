@@ -27,18 +27,16 @@ from transformers.cache_utils import StaticCache
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import HiggsModelProtocol, HiggsProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
-class HiggsModel(HiggsModelProtocol):
+class HiggsModel(HiggsBaseModel):
     """
     Pared-down logic from higgs-audio lib script `generation.py`
     """
 
     def __init__(self, device: str):
-
-        super().__init__(TtsModelInfos.HIGGS.value)
 
         if device == "cuda":
             device = f"cuda:0"
@@ -81,7 +79,7 @@ class HiggsModel(HiggsModelProtocol):
             voice_transcript = ""
 
         if project.higgs_temperature == -1:
-            temperature = HiggsModelProtocol.DEFAULT_TEMPERATURE
+            temperature = HiggsBaseModel.DEFAULT_TEMPERATURE
         else:
             temperature = project.higgs_temperature
 
@@ -104,7 +102,7 @@ class HiggsModel(HiggsModelProtocol):
             p_voice_transcript: str,
             text: str,
             seed: int,
-            temperature: float = HiggsProtocol.DEFAULT_TEMPERATURE
+            temperature: float = HiggsBaseModel.DEFAULT_TEMPERATURE
     ) -> Sound | str:
 
         if p_voice_path:

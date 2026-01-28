@@ -1,3 +1,4 @@
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_menu import ConcatMenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.real_time_menu import RealTimeMenu
@@ -7,8 +8,8 @@ from tts_audiobook_tool.project_menu import ProjectMenu
 from tts_audiobook_tool.tools_menu import ToolsMenu
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_menu import TextMenu
-from tts_audiobook_tool.tts_model import Qwen3Protocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.voice_menu import VoiceQwen3Menu
@@ -49,17 +50,21 @@ class MainMenu:
                 items.append(
                     MenuItem(make_text_label, on_text, hotkey="t")
                 )
-            if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
+            if state.prefs.project_dir:
                 items.append(
-                    MenuItem(make_gen_label, on_gen, hotkey="g")
+                    MenuItem(
+                        make_gen_label, on_generate, hotkey="g"
+                    )
                 )
             if state.prefs.project_dir:
                 items.append(
                     MenuItem(make_concat_label, lambda _, __: ConcatMenu.menu(state), hotkey="c")
                 )
-            if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
+            if state.prefs.project_dir:
                 items.append(
-                    MenuItem(make_realtime_label, on_realtime, hotkey="r")
+                    MenuItem(
+                        make_realtime_label, on_realtime, hotkey="r"
+                    )
                 )
             items.append(
                 MenuItem("Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z")
@@ -77,12 +82,11 @@ class MainMenu:
         else:
             model_name = Tts.get_type().value.ui['proper_name']
         if Tts.get_type() == TtsModelInfos.QWEN3TTS:
-            path = state.project.qwen3_target or Qwen3Protocol.DEFAULT_REPO_ID
+            path = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
             s = truncate_path_pretty(path)
             model_name += f" {COL_DIM}{s}"
 
-        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"
-        
+        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"        
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True)
 
 # ---
@@ -97,41 +101,17 @@ def make_project_label(state: State) -> str:
 
 # Voice
 def make_voice_label(state: State) -> str:
-
-    voice_label = state.project.get_voice_label()
-
-    if Tts.get_type() == TtsModelInfos.VIBEVOICE:
-
-        lora_label = state.project.vibevoice_lora_target
-        if voice_label == "none" and not lora_label:
-            desc = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
-        elif voice_label != "none" and not lora_label:
-            desc = make_currently_string(voice_label, value_prefix="current voice clone: ")
-        elif voice_label == "none" and lora_label:
-            desc = make_currently_string(lora_label, value_prefix="current LoRA: ")
-        else: # has both
-            desc = make_currently_string(f"{voice_label}, {lora_label}", value_prefix="current voice clone and LoRA: ")
-
-    elif Tts.get_type() == TtsModelInfos.QWEN3TTS:
-        
-        if not Tts.instance_exists():
-            # Model not loaded, and we don't want to make loaded model a requirement for main menu
-            desc = ""
-        else:
-            desc = Tts.get_qwen3().make_main_menu_model_desc(state.project)
-
-    else:
-
-        voice_label = state.project.get_voice_label()
-        if not state.project.can_voice:
-            desc = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
-        else:
-            if voice_label != "none":
-                desc = make_currently_string(voice_label, value_prefix="current voice clone: ")
-            else:
-                desc = make_currently_string(voice_label, value_prefix="current voice clone: ", color_code=COL_ERROR)
     
-    return f"Voice clone and model settings {desc}"
+    base_label = f"Voice clone and model settings"
+    
+    prefix, value = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
+    
+    if not value:
+        combined = prefix
+    else:
+        combined = f"{prefix}: {value}"
+    
+    return f"{base_label} {COL_DIM}({combined}{COL_DIM})"
 
 def on_voice(state: State, __) -> None:
     if not state.prefs.project_dir:
@@ -185,25 +165,14 @@ def on_text(state: State, __) -> None:
 
 # Gen
 def make_gen_label(state: State) -> str:
-    num_generated = state.project.sound_segments.num_generated()
-    if not state.project.can_voice and not state.project.phrase_groups:
-        s = f"{COL_DIM}({COL_ERROR}requires text and voice sample{COL_DIM})"
-    elif not state.project.can_voice:
-        s = f"{COL_DIM}({COL_ERROR}requires voice sample{COL_DIM})"
-    elif not state.project.phrase_groups:
-        s = f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
-    else:
-        s = f"{COL_DIM}({COL_ACCENT}{num_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} lines complete)"
-    return "Generate audio " + s
+    return AppUtil.get_label_with_prereq_error(state.project, "Generate audio")
 
-def on_gen(state: State, __) -> None:
-    if not state.project.can_voice:
-        print_feedback("Requires voice clone sample", is_error=True)
-        return
-    if len(state.project.phrase_groups) == 0:
+def on_generate(state: State, _: MenuItem) -> None:
+    # Note, not blocking on other missing prereq types
+    if not state.project.phrase_groups:
         print_feedback("Requires text", is_error=True)
-        return
-    GenerateMenu.menu(state)
+    else:
+        GenerateMenu.menu(state)
 
 # Concat
 def make_concat_label(state: State) -> str:
@@ -215,25 +184,13 @@ def make_concat_label(state: State) -> str:
 
 # Realtime
 def make_realtime_label(state: State) -> str:
-    s = "Realtime audio generation "
-    if not state.project.can_voice and not state.project.phrase_groups:
-        s += f"{COL_DIM}({COL_ERROR}requires text and voice sample{COL_DIM})"
-    elif not state.project.can_voice:
-        s += f"{COL_DIM}({COL_ERROR}requires voice sample{COL_DIM})"
-    elif not state.project.phrase_groups:
-        s += f"{COL_DIM}({COL_ERROR}requires text{COL_DIM})"
-    else:
-        ...
-    return s
+    return AppUtil.get_label_with_prereq_error(state.project, "Realtime audio generation")
 
-def on_realtime(state: State, __) -> None:
+def on_realtime(state: State, _: MenuItem) -> None:
     if not state.project.phrase_groups:
         print_feedback("Requires text", is_error=True)
-        return
-    if not state.project.can_voice:
-        print_feedback("Requires voice clone sample", is_error=True)
-        return
-    RealTimeMenu.menu(state)
+    else:
+        RealTimeMenu.menu(state)
 
 # Quit
 def on_quit(_: State, __: MenuItem):

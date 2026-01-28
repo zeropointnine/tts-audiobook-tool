@@ -1,9 +1,7 @@
 from itertools import cycle
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import MiraModelProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
-from tts_audiobook_tool.tts_model.mira_protocol import MiraProtocol
+from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.util import *
 
 import torch
@@ -11,11 +9,9 @@ import torch
 from mira.model import MiraTTS # type: ignore
 
 
-class MiraModel(MiraModelProtocol):
+class MiraModel(MiraBaseModel):
 
     def __init__(self): 
-        super().__init__(info=TtsModelInfos.MIRA.value)
-
         self.mira_tts = MiraTTS('YatharthS/MiraTTS')
         self.context_tokens = None
         self.last_voice_path: str = ""
@@ -54,14 +50,14 @@ class MiraModel(MiraModelProtocol):
         self.set_voice_clone(voice_path)
 
         if project.mira_temperature == -1:
-            temperature = MiraProtocol.TEMPERATURE_DEFAULT
-        elif project.mira_temperature < MiraProtocol.TEMPERATURE_MIN or project.mira_temperature > MiraProtocol.TEMPERATURE_MAX:
-            temperature = MiraProtocol.TEMPERATURE_DEFAULT
+            temperature = MiraBaseModel.TEMPERATURE_DEFAULT
+        elif project.mira_temperature < MiraBaseModel.TEMPERATURE_MIN or project.mira_temperature > MiraBaseModel.TEMPERATURE_MAX:
+            temperature = MiraBaseModel.TEMPERATURE_DEFAULT
         else:
             temperature = project.mira_temperature
 
         self.set_params(
-            temperature=temperature, max_new_tokens=MiraProtocol.MAX_NEW_TOKENS
+            temperature=temperature, max_new_tokens=MiraBaseModel.MAX_NEW_TOKENS
         )
 
         if len(prompts) == 1:
@@ -94,7 +90,7 @@ class MiraModel(MiraModelProtocol):
         except Exception as e:
             return make_error_string(e)
 
-        return Sound(audio_np, self.info.sample_rate)
+        return Sound(audio_np, MiraModel.INFO.sample_rate)
 
 
     def generate_batch(self, prompts: list[str]) -> list[Sound] | str:
@@ -119,7 +115,7 @@ class MiraModel(MiraModelProtocol):
             print(f"< {len(sounds) + 1}/{len(prompts)} >", end=Ansi.ERASE_REST_OF_LINE + Ansi.LINE_HOME, flush=True)
             audio = self.mira_tts.codec.decode(generated_token, context_token)
             audio_np = audio.to(torch.float32).cpu().numpy()
-            sound = Sound(audio_np, self.info.sample_rate)
+            sound = Sound(audio_np, MiraModel.INFO.sample_rate)
             sounds.append(sound)
         print()
                     

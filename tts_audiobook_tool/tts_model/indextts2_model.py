@@ -7,18 +7,15 @@ import numpy
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import IndexTts2ModelProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.util import *
 
 
-class IndexTts2Model(IndexTts2ModelProtocol):
+class IndexTts2Model(IndexTts2BaseModel):
     """
     """
 
     def __init__(self, use_fp16: bool):
-
-        super().__init__(info=TtsModelInfos.INDEXTTS2.value)
 
         # Download model to default cache location
         model_dir = huggingface_hub.snapshot_download(
@@ -99,9 +96,9 @@ class IndexTts2Model(IndexTts2ModelProtocol):
             return "Model is not initialized"
 
         if temperature == -1:
-            temperature = IndexTts2Model.DEFAULT_TEMPERATURE
+            temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
         if emo_alpha == -1:
-            emo_alpha = IndexTts2Model.DEFAULT_EMO_VOICE_ALPHA
+            emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
         if emo_vector and len(emo_vector) != 8:
             return "emo_vector should be either empty or have length of 8"
 

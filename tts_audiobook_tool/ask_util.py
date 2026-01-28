@@ -257,36 +257,38 @@ class AskUtil:
 
     @staticmethod
     def ask_string_and_save(
-        project: Project,
-        prompt: str,
+        project_or_prefs: Any,
+        prompt_line: str,
         project_attr_name: str,
         success_prefix: str,
-        validator: Callable[[str], str] | None = None 
+        loop_on_error: bool=False,
+        validator: Callable[[str], str] | None = None
     ) -> None:
         """
         Helper to ask for a string value and save it to the project.
         :param validator: Takes in the user input string and returns error string if invalid (optional)
         """
-        if not hasattr(project, project_attr_name):
+        if not hasattr(project_or_prefs, project_attr_name):
             raise ValueError(f"No such attribute {project_attr_name}")
 
-        if prompt:
-            prompt = prompt.strip() + " "
-        value = AskUtil.ask(prompt)
-        if not value:
-            return
-        
-        if validator:
-            err = validator(value)
-            if err:
-                print_feedback(err, is_error=True)
-                return
+        while True:
+            printt(prompt_line)
+            value = AskUtil.ask(lower=False)
+            if not value:
+                return            
+            if validator:
+                err = validator(value)
+                if err:
+                    print_feedback(err, is_error=True)
+                    if loop_on_error:
+                        continue
+                    else:
+                        return
+                break                    
 
-        setattr(project, project_attr_name, value)
-        project.save()
+        setattr(project_or_prefs, project_attr_name, value)
+        project_or_prefs.save()
         print_feedback(success_prefix, value)
-
-
 
 # ---
 

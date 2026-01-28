@@ -1,9 +1,8 @@
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import GlmProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -50,9 +49,9 @@ def samplerate_menu(state: State) -> None:
     MenuUtil.options_menu(
         state=state,
         heading_text="GLM model samplerate",
-        labels=[str(item) + "hz" for item in GlmProtocol.SAMPLE_RATES],
-        values=GlmProtocol.SAMPLE_RATES,
+        labels=[str(item) + "hz" for item in GlmBaseModel.SAMPLE_RATES],
+        values=GlmBaseModel.SAMPLE_RATES,
         current_value=state.project.glm_sr,
-        default_value=GlmProtocol.SAMPLE_RATES[0],
+        default_value=GlmBaseModel.SAMPLE_RATES[0],
         on_select=on_select
     )

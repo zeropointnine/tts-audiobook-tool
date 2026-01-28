@@ -173,17 +173,17 @@ HINT_FISH_FIRST = Hint(
 which may take 1-2 minutes without any feedback shown."""
 )
 
-HINT_NO_VOICE = Hint(
-    "gen_no_voice",
-    "No voice clone defined",
-    "The TTS model will generate random-sounding voices because no voice sample has been set."
+HINT_RANDOM_VOICE = Hint(
+    "gen_random",
+    "Random voice",
+    "The TTS model may generate random-sounding voices because %1."
 )
 
 HINT_TEST_REAL_TIME = Hint(
     "test_real_time",
     "Tip",
-"""After setting voice clone or changing other model properties,
-consider using \"Menu > Generate audio in realtime\" to quickly test audio
+f"""After setting voice clone or changing other model properties,
+consider using \"{COL_ACCENT}Menu > Generate audio in realtime{COL_DEFAULT}\" to quickly test audio
 generation quality before committing to generating audiobook."""
 )
 
@@ -191,7 +191,7 @@ HINT_SPEED_UP = Hint(
     "speed_up",
     "Note",
 """Use this feature to create a sped-up (or slowed-down) copy of a voice clone sample.
-This can be useful for modulating the speed of narration of the generated audio."""
+This can be (potentially) useful for modulating the speed of narration of the generated audio."""
 )
 
 HINT_INDEX_SAMPLE_LEN = Hint(
@@ -252,9 +252,9 @@ VRAM memory requirements."""
 HINT_VOICE_TRANSCRIPT = Hint(
     "voice_transcript",
     "Voice clone transcript",
-"""This TTS model requires a transcript of the voice clone sample.
-The app will load a text file with the same base file name if it exists.
-Otherwise, the text will be transcribed using Whisper."""
+"""Because this TTS model requires a transcript of the voice clone sample,
+the app will automatically transcribe the text using Whisper.
+If a .txt file with the same base file name exists, it will use that instead."""
 )
 
 HINT_FORCED_STRICTNESS_LOW = Hint(

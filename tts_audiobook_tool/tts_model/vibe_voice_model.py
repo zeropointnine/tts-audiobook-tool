@@ -1,4 +1,3 @@
-import traceback
 import numpy as np
 import torch
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
@@ -7,12 +6,12 @@ from peft import PeftModel  # type: ignore
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import VibeVoiceModelProtocol, VibeVoiceProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.util import *
 
 
-class VibeVoiceModel(VibeVoiceModelProtocol):
+class VibeVoiceModel(VibeVoiceBaseModel):
     """
     VibeVoice TTS inference logic
     Mostly copy-pasted from: VibeVoice/demo/inference_from_file.py
@@ -25,11 +24,10 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             lora_path: str | None = None,
             max_new_tokens: int | None = None,
     ):
-        super().__init__(TtsModelInfos.VIBEVOICE.value)
 
         self._device_map = device_map
         if not model_target:
-            model_target = VibeVoiceProtocol.DEFAULT_REPO_ID
+            model_target = VibeVoiceBaseModel.DEFAULT_REPO_ID
         self.max_new_tokens = max_new_tokens
 
         self.processor = VibeVoiceProcessor.from_pretrained(model_target)
@@ -114,9 +112,9 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
         else:
             voice_path = ""
 
-        cfg_scale = VibeVoiceProtocol.CFG_DEFAULT if project.vibevoice_cfg == -1 else project.vibevoice_cfg
+        cfg_scale = VibeVoiceBaseModel.CFG_DEFAULT if project.vibevoice_cfg == -1 else project.vibevoice_cfg
         
-        num_steps = VibeVoiceProtocol.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
+        num_steps = VibeVoiceBaseModel.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
         seed = -1 if force_random_seed else project.vibevoice_seed
 
@@ -133,8 +131,8 @@ class VibeVoiceModel(VibeVoiceModelProtocol):
             self,
             texts: list[str],
             voice_path: str,
-            cfg_scale: float=VibeVoiceProtocol.CFG_DEFAULT,
-            num_steps: int=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
+            cfg_scale: float=VibeVoiceBaseModel.CFG_DEFAULT,
+            num_steps: int=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
             seed: int = -1
     ) -> list[Sound] | str:
         """

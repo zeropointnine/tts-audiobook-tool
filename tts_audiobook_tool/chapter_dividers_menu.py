@@ -66,7 +66,7 @@ def ask_cut_points(state: State) -> None:
     one_indexed_items.sort()
     for item in one_indexed_items:
         if item < 1 or item > len(state.project.phrase_groups):
-            AskUtil.ask_error(f"Index out of range: {item}")
+            print_feedback(f"Index out of range: {item}", is_error=True)
             return
     zero_indexed_items = [item - 1 for item in one_indexed_items]
     if 0 in zero_indexed_items:

@@ -6,20 +6,17 @@ from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: igno
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import Qwen3ModelProtocol, Qwen3Protocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.util import *
 
 
-class Qwen3Model(Qwen3ModelProtocol):
+class Qwen3Model(Qwen3BaseModel):
     """
     App wrapper for `Qwen3TTSModel`
     """
 
     def __init__(self, model_target: str, device: str): 
         
-        super().__init__(info=TtsModelInfos.QWEN3TTS.value)
-
         self._model_target = model_target
         self._voice_info: tuple[str, str] | None = None
         self._voice_clone_prompt: VoiceClonePromptItem | None = None
@@ -276,7 +273,7 @@ class Qwen3Model(Qwen3ModelProtocol):
         if temperature == -1:
             resolved_temperature = self._model.generate_defaults.get("temperature", None)
             if resolved_temperature is None:
-                resolved_temperature = Qwen3Protocol.TEMPERATURE_FALLBACK_DEFAULT
+                resolved_temperature = Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
         else:
             resolved_temperature = temperature
         return resolved_temperature
@@ -289,4 +286,3 @@ class Qwen3Model(Qwen3ModelProtocol):
             torch.cuda.manual_seed_all(seed)
         random.seed(seed)
         np.random.seed(seed)
-

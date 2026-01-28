@@ -8,12 +8,11 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import ChatterboxType
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.validate_util import ValidateUtil
-from tts_audiobook_tool.voice_menu import VoiceMenuShared
 
 class ProjectMenu:
 
@@ -233,44 +232,54 @@ def on_language(state: State, __: MenuItem) -> None:
     print_heading("Language code")
     printt(LANGUAGE_CODE_DESC)
     printt()
+
+    # TODO: consider making this a property of TtsBaseModel
+    required_model_languages = []
+
+    # Chatterbox Multilingual special case
     if Tts.get_type() == TtsModelInfos.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
-        from tts_audiobook_tool.tts_model.chatterbox_model import ChatterboxModel
-        printt(f"Valid values for Chatterbox-Multilingual are: {ChatterboxModel.supported_languages_multi()}")
+        instance = Tts.get_instance() # Force model instantiation
+        assert(isinstance(instance, ChatterboxBaseModel))
+        required_model_languages = instance.supported_languages_multi()
+        printt(f"Chatterbox-Multilingual requires one of the following language codes:\n{required_model_languages}")
         printt()
 
     def validator(code: str) -> str:
-        # Super-basic validation here: 5 or less chars, must have an alpha character, that's it
-        # Not using white-list for now
+
+        # (1) Super-basic syntax check
         code = code.strip()
         bad = len(code) > 5
         bad = bad or not any(char.isalpha() for char in code)
         if bad:
             return "Bad value"
-        
-        if ValidateUtil.is_unsupported_language_code(code):
-            # Show hint as a "side effect"
+
+        # (2) Required model language 
+        if required_model_languages and not code in required_model_languages:
+            return "Language code not supported by Chatterbox Multilingual"
+
+        # (3) Hint-side-effect re: CJK
+        if ValidateUtil.is_unsupported_language_code(code): # (not to be confused with chatterbox multilingual requirement)
             text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(VALIDATION_UNSUPPORTED_LANGUAGES))
             hint = replace(HINT_VALIDATION_UNSUPPORTED_LANGUAGE, text=text)
             Hint.show_hint(hint, and_prompt=True)
 
+        # (4) Hint-side-effect re: strictness non-en
+        if state.project.language_code != "en" and state.project.strictness != Strictness.LOW:
+            if not ValidateUtil.is_unsupported_language_code(state.project.language_code):
+                state.project.strictness = Strictness.LOW
+                state.project.save()
+                Hint.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)
+
         return ""
 
-    printt(f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"zh\", \"pt\", etc){COL_DEFAULT}:")
+    prompt = f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"zh\", \"pt\", etc){COL_DEFAULT}:"
     AskUtil.ask_string_and_save(
         state.project,
-        "",
+        prompt,
         "language_code",
         "Project language code set to:",
         validator=validator
     )
-
-    # Special case
-    if state.project.language_code != "en" and state.project.strictness != Strictness.LOW:
-        if not ValidateUtil.is_unsupported_language_code(state.project.language_code):
-            state.project.strictness = Strictness.LOW
-            state.project.save()
-            Hint.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)
-
 
 LANGUAGE_CODE_DESC = "" + \
 """Language code is used by the app at various stages of the pipeline as a \"hint\" for:

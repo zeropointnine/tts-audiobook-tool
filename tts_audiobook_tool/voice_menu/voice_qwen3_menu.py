@@ -3,8 +3,8 @@ from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import Qwen3Protocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -29,14 +29,14 @@ class VoiceQwen3Menu:
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:
-            target = state.project.qwen3_target or Qwen3Protocol.DEFAULT_REPO_ID
-            is_default = (target == Qwen3Protocol.DEFAULT_REPO_ID)
+            target = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
+            is_default = (target == Qwen3BaseModel.DEFAULT_REPO_ID)
             if is_default:
                 label = f"{COL_DIM}(optional)"
             else:
                 value = truncate_path_pretty(target)
                 label = make_currently_string(value)
-                label += f" {COL_DIM}(model type: {Tts.get_qwen3().model_type})"
+                label += f" {COL_DIM}(model type: {COL_ACCENT}{Tts.get_qwen3().model_type}{COL_DIM})"
             return f"Custom model {label}"
 
         def make_speaker_label(_) -> str:
@@ -124,15 +124,15 @@ class VoiceQwen3Menu:
             
             # Other params
             default_temp = Tts.get_qwen3().generate_defaults.get(
-                "temperature", Qwen3Protocol.TEMPERATURE_FALLBACK_DEFAULT
+                "temperature", Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
             )
             items.append(
                 VoiceMenuShared.make_temperature_item(
                     state=state,
                     attr="qwen3_temperature",
                     default_value=default_temp,
-                    min_value=Qwen3Protocol.TEMPERATURE_MIN, 
-                    max_value=Qwen3Protocol.TEMPERATURE_MAX
+                    min_value=Qwen3BaseModel.TEMPERATURE_MIN, 
+                    max_value=Qwen3BaseModel.TEMPERATURE_MAX
                 )
             )
             items.append(VoiceMenuShared.make_seed_item(state, "qwen3_seed"))
@@ -173,13 +173,12 @@ def apply_model_and_validate(project: Project, target: str) -> None:
 
     def revert() -> None:
         project.qwen3_target = ""
+        project.qwen3_model_type = ""
         project.save()
         Tts.set_model_params_using_project(project)
         Tts.clear_tts_model()
 
     project.qwen3_target = target
-    project.save()
-
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model() # for good measure
 
@@ -193,10 +192,15 @@ def apply_model_and_validate(project: Project, target: str) -> None:
             return        
         
         # Success
+        
         if project.qwen3_speaker_id:
             # Invalidate speaker id (but keep instructions ig)
             project.qwen3_speaker_id = ""
-            project.save()
+
+        # Now that model has been validated (and is loaded), save the model type
+        project.qwen3_model_type = instance.model_type
+        
+        project.save()
         print_feedback("Model set:", target)
 
     except (OSError, Exception) as e:
@@ -209,6 +213,7 @@ def apply_model_and_validate(project: Project, target: str) -> None:
 
 def on_clear_model_target(state: State, __: MenuItem) -> None:
     state.project.qwen3_target = ""
+    state.project.qwen3_model_type = ""
     state.project.save()
     Tts.set_model_params_using_project(state.project)
     Tts.clear_tts_model()

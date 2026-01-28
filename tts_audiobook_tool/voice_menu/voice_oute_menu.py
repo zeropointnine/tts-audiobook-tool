@@ -7,7 +7,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import OuteProtocol
+from tts_audiobook_tool.tts_model.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -22,7 +22,7 @@ class VoiceOuteMenu:
 
         def make_temperature_label(_) -> str:
             value = make_parameter_value_string(
-                state.project.oute_temperature, OuteProtocol.DEFAULT_TEMPERATURE, 1
+                state.project.oute_temperature, OuteBaseModel.DEFAULT_TEMPERATURE, 1
             )
             return f"Temperature {make_currently_string(value)}"
 

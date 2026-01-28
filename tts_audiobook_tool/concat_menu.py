@@ -13,13 +13,20 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class ConcatMenu:
 
     @staticmethod
     def menu(state: State) -> None:
+
+        def make_start_label(state: State) -> str:
+            s = "Start"
+            num_generated = state.project.sound_segments.num_generated()
+            if num_generated == 0:
+                s += f" {COL_DIM}({COL_ERROR}requires generated audio{COL_DIM})"
+            return s
 
         def make_chapter_dividers_label(_: State) -> str:
             qty = len(state.project.section_dividers)
@@ -35,7 +42,7 @@ class ConcatMenu:
 
         def make_items(_: State) -> list[MenuItem]:
             items = [
-                MenuItem("Start", lambda _, __: ask_chapter_indices_and_make(state)),
+                MenuItem(make_start_label, lambda _, __: ask_chapter_indices_and_make(state)),
                 MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
                 MenuItem(
                     lambda _: make_menu_label("File type", state.project.export_type.label), 
@@ -228,7 +235,7 @@ def ask_chapter_indices_and_make(state: State) -> None:
 
     num_generated = state.project.sound_segments.num_generated()
     if not state.prefs.project_dir or num_generated == 0:
-        print_feedback("Requires generated audio")
+        print_feedback("Requires generated audio", is_error=True)
         return
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"

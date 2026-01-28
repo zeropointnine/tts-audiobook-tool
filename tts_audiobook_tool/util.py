@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
+from tts_audiobook_tool.text_util import TextUtil
 
 """
 Various small util functions, both app-specific and general
@@ -40,14 +41,11 @@ def print_feedback(
     Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
     and submenu is about to be re-printed.
     """
-    if no_preformat:
-        s = ""
-    else:
-        col = COL_ERROR if is_error else COL_DIM
-        s = Ansi.ITALICS +  col + message
+    if not no_preformat:
+        message = Ansi.ITALICS + (COL_ERROR if is_error else COL_DIM) + message
     if end_value is not None:
-        s = s.strip() + " " + COL_ACCENT + str(end_value)
-    printt(s)
+        message = message.strip() + " " + COL_ACCENT + str(end_value)
+    printt(message)
 
     if extra_line:
         printt()
@@ -181,12 +179,19 @@ def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=
         a = text[:width]
         return f"{content_color}{a}{COL_DIM}..."
 
-def truncate_path_pretty(path: str) -> str:
+def truncate_path_pretty(path: str, length: int=60, truncate_file_suffix=False) -> str:
     """ App style for displaying local path in menu/UI """
-    LEN = 60
-    if len(path) <= LEN:
+    
+    if not path:
         return path
+    
     p = Path(path)
+    if truncate_file_suffix:
+        p = p.with_suffix('')
+
+    if len(str(p)) <= length:
+        return str(p)
+
     # Find the separator before path name and construct truncated path
     parent_str = str(p.parent)
     sep_pos = parent_str.rfind(os.sep)
@@ -198,13 +203,15 @@ def truncate_path_pretty(path: str) -> str:
     # Calculate how many chars we can take from suffix
     prefix_len = 10  # first 10 chars
     ellipsis_len = 3  # "..."
-    max_suffix_len = LEN - prefix_len - ellipsis_len
+    max_suffix_len = length - prefix_len - ellipsis_len
     if len(suffix) > max_suffix_len:
         suffix = suffix[-max_suffix_len:]
     return path[:prefix_len] + "..." + suffix
+
+def truncate_path_for_menu(path: str) -> str:
+    """ App style for displaying filepath """
+    return truncate_path_pretty(path, 40, truncate_file_suffix=True)
         
-
-
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
     num_bytes = 0
@@ -280,7 +287,6 @@ def make_parameter_value_string(
         s += DEFAULT_LABEL
     
     return s
-
 
 def make_gb_string(bytes: int) -> str:
     """ Returns gigabyte string with either one or zero decimal places"""

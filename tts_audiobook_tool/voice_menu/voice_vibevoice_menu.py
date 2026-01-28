@@ -3,8 +3,8 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import VibeVoiceProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.vibevoice_base_model import VibeVoiceBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -79,12 +79,12 @@ class VoiceVibeVoiceMenu:
                     state=state,
                     attr="vibevoice_cfg",
                     base_label="CFG", 
-                    default_value=VibeVoiceProtocol.CFG_DEFAULT,
+                    default_value=VibeVoiceBaseModel.CFG_DEFAULT,
                     is_minus_one_default=True,
                     num_decimals=2,
-                    prompt=f"Enter CFG {COL_DIM}({VibeVoiceProtocol.CFG_MIN} to {VibeVoiceProtocol.CFG_MAX}):",
-                    min_value=VibeVoiceProtocol.CFG_MIN,
-                    max_value=VibeVoiceProtocol.CFG_MAX
+                    prompt=f"Enter CFG {COL_DIM}({VibeVoiceBaseModel.CFG_MIN} to {VibeVoiceBaseModel.CFG_MAX}):",
+                    min_value=VibeVoiceBaseModel.CFG_MIN,
+                    max_value=VibeVoiceBaseModel.CFG_MAX
                 )
             )
             items.append(
@@ -92,7 +92,7 @@ class VoiceVibeVoiceMenu:
                     state=state,
                     attr="vibevoice_steps",
                     base_label="Steps", 
-                    default_value=VibeVoiceProtocol.DEFAULT_NUM_STEPS,
+                    default_value=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
                     is_minus_one_default=True,
                     num_decimals=0,
                     prompt=f"Enter num steps {COL_DIM}(1-30){COL_DEFAULT}:",

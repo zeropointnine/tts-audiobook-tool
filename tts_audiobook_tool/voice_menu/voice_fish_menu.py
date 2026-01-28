@@ -1,9 +1,7 @@
-from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_model import FishProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.fish_base_model import FishBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -31,7 +29,7 @@ class VoiceFishMenu:
                 VoiceMenuShared.make_temperature_item(
                     state=state,
                     attr="fish_temperature",
-                    default_value=FishProtocol.DEFAULT_TEMPERATURE,
+                    default_value=FishBaseModel.DEFAULT_TEMPERATURE,
                     min_value=0.01,
                     max_value=2.0
                 )

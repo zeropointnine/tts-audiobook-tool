@@ -6,17 +6,22 @@ import shutil
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_model.oute_util import OuteUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.tts_model import ChatterboxType, GlmProtocol, IndexTts2Protocol, MiraProtocol, Qwen3Protocol, VibeVoiceProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
+
+from tts_audiobook_tool.tts import Tts
+
 
 class Project:
     """
@@ -82,7 +87,7 @@ class Project:
     vibevoice_seed: int = -1
 
     indextts2_temperature: float = -1
-    indextts2_use_fp16: bool = IndexTts2Protocol.DEFAULT_USE_FP16
+    indextts2_use_fp16: bool = IndexTts2BaseModel.DEFAULT_USE_FP16
     indextts2_voice_file_name: str = ""
     indextts2_emo_alpha: float = -1
     indextts2_emo_voice_file_name: str = ""
@@ -90,14 +95,15 @@ class Project:
 
     glm_voice_file_name: str = ""
     glm_voice_transcript: str = ""
-    glm_sr: int = GlmProtocol.SAMPLE_RATES[0]
+    glm_sr: int = GlmBaseModel.SAMPLE_RATES[0]
     glm_seed: int = -1
 
     mira_voice_file_name: str = ""
-    mira_temperature: float = MiraProtocol.TEMPERATURE_DEFAULT # TODO: should use "-1 pattern"
+    mira_temperature: float = MiraBaseModel.TEMPERATURE_DEFAULT # TODO: should use "-1 pattern"
     mira_batch_size: int = 1
 
     qwen3_target: str = ""
+    qwen3_model_type: str = ""
     qwen3_voice_file_name: str = ""
     qwen3_voice_transcript: str = ""
     qwen3_speaker_id: str = ""
@@ -378,7 +384,7 @@ class Project:
         # IndexTTS2
         project.indextts2_voice_file_name = d.get("indextts2_voice_file_name", "")
         project.indextts2_temperature = d.get("indextts2_temperature", -1)
-        project.indextts2_use_fp16 = d.get("indextts2_use_fp16", IndexTts2Protocol.DEFAULT_USE_FP16)
+        project.indextts2_use_fp16 = d.get("indextts2_use_fp16", IndexTts2BaseModel.DEFAULT_USE_FP16)
         project.indextts2_emo_alpha = d.get("indextts2_emo_alpha", -1)
         if project.indextts2_emo_alpha == -1 and d.get("indextts2_emo_voice_alpha", -1) >= 0:
             project.indextts2_emo_alpha = d.get("indextts2_emo_voice_alpha", -1) # legacy support
@@ -392,8 +398,8 @@ class Project:
         project.glm_voice_file_name = d.get("glm_voice_file_name", "")
         project.glm_voice_transcript = d.get("glm_voice_text", "")
         project.glm_sr = d.get("glm_sr", 0)
-        if not project.glm_sr in GlmProtocol.SAMPLE_RATES:
-            project.glm_sr = GlmProtocol.SAMPLE_RATES[0]
+        if not project.glm_sr in GlmBaseModel.SAMPLE_RATES:
+            project.glm_sr = GlmBaseModel.SAMPLE_RATES[0]
         seed = d.get("glm_seed", -1)
         if not isinstance(seed, (int, float)) or not (seed >= -1):
             seed = -1
@@ -404,8 +410,8 @@ class Project:
         
         value = d.get("mira_temperature", -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (MiraProtocol.TEMPERATURE_MIN <= value <= MiraProtocol.TEMPERATURE_MAX):
-                value = MiraProtocol.TEMPERATURE_DEFAULT
+            if not isinstance(value, (float, int)) or not (MiraBaseModel.TEMPERATURE_MIN <= value <= MiraBaseModel.TEMPERATURE_MAX):
+                value = MiraBaseModel.TEMPERATURE_DEFAULT
                 add_warning("mira_temperature", value)
         project.mira_temperature = value
 
@@ -419,6 +425,7 @@ class Project:
 
         # Qwen3-TTS
         project.qwen3_target = d.get("qwen3_target", "") or d.get("qwen3_path_or_id", "") # legacy key compat
+        project.qwen3_model_type = d.get("qwen3_model_type", "")
         project.qwen3_voice_file_name = d.get("qwen3_voice_file_name", "")
         project.qwen3_voice_transcript = d.get("qwen3_voice_text", "")
         project.qwen3_speaker_id = d.get("qwen3_speaker_id", "")
@@ -434,7 +441,7 @@ class Project:
 
         value = d.get("qwen3_temperature", -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (Qwen3Protocol.TEMPERATURE_MIN <= value <= Qwen3Protocol.TEMPERATURE_MAX):
+            if not isinstance(value, (float, int)) or not (Qwen3BaseModel.TEMPERATURE_MIN <= value <= Qwen3BaseModel.TEMPERATURE_MAX):
                 value = -1
                 add_warning("qwen3_temperature", value)
         project.qwen3_temperature = value
@@ -529,6 +536,7 @@ class Project:
             "mira_batch_size": self.mira_batch_size,
 
             "qwen3_target": self.qwen3_target,
+            "qwen3_model_type": self.qwen3_model_type,
             "qwen3_voice_file_name": self.qwen3_voice_file_name,
             "qwen3_voice_text": self.qwen3_voice_transcript,
             "qwen3_speaker_id": self.qwen3_speaker_id,
@@ -682,110 +690,19 @@ class Project:
                 raise ValueError(f"Unsupported tts_type: {tts_type}")
         self.save()
 
-    def get_voice_label(self, is_secondary: bool=False) -> str:
+    def get_voice_label(self) -> str:
         """
         """
-        def make_label(file_name: str) -> str:
-            label = Path(file_name).stem
-            # Strip "_model" from end of file stem
-            label = label.removesuffix("_" + Tts.get_type().value.file_tag)
-            label = TextUtil.sanitize_for_filename(label)
-            label = label[:30]
-            return label
-
-        match Tts.get_type():
-            case TtsModelInfos.OUTE:
-                if self.can_voice:
-                    return make_label(self.oute_voice_file_name)
-                else:
-                    return "none" # shouldn't happen
-            case TtsModelInfos.CHATTERBOX:
-                if not self.chatterbox_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.chatterbox_voice_file_name)
-            case TtsModelInfos.FISH:
-                if not self.fish_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.fish_voice_file_name)
-            case TtsModelInfos.HIGGS:
-                if not self.higgs_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.higgs_voice_file_name)
-            case TtsModelInfos.VIBEVOICE:
-                if not self.vibevoice_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.vibevoice_voice_file_name)
-            case TtsModelInfos.INDEXTTS2:
-                if not is_secondary:
-                    if not self.indextts2_voice_file_name:
-                        return "none"
-                    else:
-                        return make_label(self.indextts2_voice_file_name)
-                else:
-                    if not self.indextts2_emo_voice_file_name:
-                        return "none"
-                    else:
-                        return make_label(self.indextts2_emo_voice_file_name)
-            case TtsModelInfos.GLM:
-                if not self.glm_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.glm_voice_file_name)
-            case TtsModelInfos.MIRA:
-                if not self.mira_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.mira_voice_file_name)
-            case TtsModelInfos.QWEN3TTS:
-                if not self.qwen3_voice_file_name:
-                    return "none"
-                else:
-                    return make_label(self.qwen3_voice_file_name)
-            case TtsModelInfos.NONE:
-                return "none"
+        value = getattr(self, Tts.get_type().value.voice_file_name_attr, "")
+        if not value: 
+            return "none"
+        value = truncate_path_for_menu(value)
+        return value
 
     @property
     def has_voice(self) -> bool:
-        match Tts.get_type(): # TODO: adopt this 'pattern' in mumblemumble
-            case TtsModelInfos.NONE:
-                has_voice = False
-            case TtsModelInfos.OUTE:
-                has_voice = bool(self.oute_voice_json)
-            case TtsModelInfos.CHATTERBOX:
-                has_voice = bool(self.chatterbox_voice_file_name)
-            case TtsModelInfos.FISH:
-                has_voice = bool(self.fish_voice_file_name)
-            case TtsModelInfos.HIGGS:
-                has_voice = bool(self.higgs_voice_file_name)
-            case TtsModelInfos.VIBEVOICE:
-                has_voice = bool(self.vibevoice_voice_file_name)
-            case TtsModelInfos.INDEXTTS2:
-                has_voice = bool(self.indextts2_voice_file_name)
-            case TtsModelInfos.GLM:
-                has_voice = bool(self.glm_voice_file_name)
-            case TtsModelInfos.MIRA:
-                has_voice = bool(self.mira_voice_file_name)
-            case TtsModelInfos.QWEN3TTS:
-                has_voice = bool(self.qwen3_voice_file_name)
-        return has_voice
-
-    @property
-    def can_voice(self) -> bool:
-        """
-        Returns True if current state allows for outputting a "voice" of any kind.
-        """        
-        if not Tts.get_type().value.requires_voice:
-            return True
-        else:
-            return self.has_voice
-
-    @property
-    def can_generate_audio(self) -> bool:
-        return self.can_voice and len(self.phrase_groups) > 0
+        value = getattr(self, Tts.get_type().value.voice_file_name_attr, "")
+        return bool(value)
 
     @property
     def sound_segments_path(self) -> str:

@@ -1,7 +1,6 @@
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.mp3_concat import Mp3ConcatTranscodeUtil
+from tts_audiobook_tool.mp3_concat import SoundConcatTranscodeUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
@@ -20,12 +19,12 @@ class ToolsMenu:
         )
 
         mp3s_item = MenuItem(
-            "Transcode and concatenate a directory of MP3 files to AAC/M4A",
-            lambda _, __: Mp3ConcatTranscodeUtil.ask_mp3_dir()
+            "Concatenate a directory of audio files",
+            lambda _, __: SoundConcatTranscodeUtil.ask_and_concat_audio_files()
         )
 
         transcode_item = MenuItem(
-            "Transcode an app-created FLAC to AAC/M4A, preserving custom metadata",
+            "Transcode an app-created FLAC to M4B, preserving custom metadata",
             lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
         )
 

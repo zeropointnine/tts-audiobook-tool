@@ -13,18 +13,16 @@ from functools import partial
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import GlmModelProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import printt
 
-class GlmModel(GlmModelProtocol):
+class GlmModel(GlmBaseModel):
     """
     Code adapted from: https://github.com/zai-org/GLM-TTS, glmtts_inference.py
     """
 
     def __init__(self, device: str, sample_rate: int, use_phoneme: bool=False):
-
-        super().__init__(TtsModelInfos.GLM.value)
 
         if not device.startswith("cuda"):
             # TODO: reference code only mentions cuda and cpu; try mps

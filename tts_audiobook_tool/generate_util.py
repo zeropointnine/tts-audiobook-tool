@@ -8,6 +8,7 @@ import numpy as np
 
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -25,8 +26,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import ChatterboxType, HiggsModelProtocol, MiraProtocol, VibeVoiceProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validate_util import ValidateUtil
@@ -66,17 +66,15 @@ class GenerateUtil:
             print_feedback("\nCancelled")
             return True
                 
-        if Tts.get_type() == TtsModelInfos.QWEN3TTS:
+        # Because model has just been inited, will use instance in this case:
+        err = AppUtil.get_combined_prereq_error(state.project, is_short=False) 
+        if err:
+            print_feedback(err, is_error=True)
+            return True
 
-            err = Tts.get_qwen3().get_post_init_error(project)
-            if err:
-                print_feedback(err, is_error=True)
-                return True
-            
-            warning = Tts.get_qwen3().get_post_init_warning(project)
-            if warning:
-                printt(warning)
-                printt()
+        warning = Tts.get_instance().get_prereq_warning(state.project)
+        if warning:
+            print_feedback(Ansi.ITALICS + warning, no_preformat=True)
 
         showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 
@@ -284,6 +282,7 @@ class GenerateUtil:
         """
         
         project = state.project
+        save_debug_files = state.prefs.save_debug_files
 
         # Set print color to dim during any model inference printouts
         print(f"{COL_DIM}", end="")
@@ -296,7 +295,7 @@ class GenerateUtil:
             phrase_groups=phrase_groups,
             force_random_seed=force_random_seed,
             is_realtime=is_realtime,
-            save_debug_files=state.prefs.save_debug_files
+            save_debug_files=save_debug_files
         )        
         printt() # Restore print color, print blank line
         
@@ -345,7 +344,7 @@ class GenerateUtil:
             )
             results.append(validation_result)
 
-            if isinstance(validation_result, TrimmedResult):
+            if save_debug_files and isinstance(validation_result, TrimmedResult):
                 GenerateUtil.save_debug_sound(
                     project=project,
                     index=index,

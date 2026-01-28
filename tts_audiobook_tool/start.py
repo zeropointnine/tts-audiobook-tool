@@ -30,7 +30,7 @@ if err:
 import sys
 from tts_audiobook_tool.hint import Hint
 from importlib import util
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
 new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
 
@@ -65,7 +65,7 @@ from tts_audiobook_tool.app import App
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
 def main() -> None:
 
@@ -80,7 +80,7 @@ def main() -> None:
     printt()
 
     if DEV:
-        printt(f"{Ansi.CLEAR_SCREEN_AND_SCROLLBACK}### DEV ###")
+        printt(f"### DEV ###")
 
     # Hard requirement - FFMPEG 
     if not FfmpegUtil.is_ffmpeg_available():

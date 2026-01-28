@@ -1,9 +1,8 @@
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import ChatterboxProtocol, ChatterboxType
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -34,7 +33,7 @@ class VoiceChatterboxMenu:
                 VoiceMenuShared.make_temperature_item(
                     state=state, 
                     attr="chatterbox_temperature", 
-                    default_value=ChatterboxProtocol.DEFAULT_TEMPERATURE, 
+                    default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
                     min_value=0.01, max_value=2.0
                 )
             )
@@ -43,7 +42,7 @@ class VoiceChatterboxMenu:
                     state=state, 
                     attr="chatterbox_exaggeration",
                     base_label="Exaggeration",
-                    default_value=ChatterboxProtocol.DEFAULT_EXAGGERATION,
+                    default_value=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
                     is_minus_one_default=True,
                     num_decimals=2,
                     prompt=f"Enter value for exaggeration {COL_DIM}({0.25} to {2.0}){COL_DEFAULT}:",
@@ -56,7 +55,7 @@ class VoiceChatterboxMenu:
                     state=state, 
                     attr="chatterbox_cfg",
                     base_label="CFG/pace",
-                    default_value=ChatterboxProtocol.DEFAULT_CFG,
+                    default_value=ChatterboxBaseModel.DEFAULT_CFG,
                     is_minus_one_default=True,
                     num_decimals=2,
                     prompt=f"Enter value for CFG {COL_DIM}({0.2} to {1.0}){COL_DEFAULT}:",

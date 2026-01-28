@@ -10,8 +10,7 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import MiraProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class GenerateMenu:
@@ -19,7 +18,15 @@ class GenerateMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def make_range_label(_) -> str:
+        def make_start_label(_: State) -> str:
+            label = "Start"
+            err = AppUtil.get_combined_prereq_error(state.project, is_short=True)
+            if err:
+                return make_menu_label(label, err, value_prefix="", color_code=COL_ERROR)
+            else:
+                return label
+
+        def make_range_label(_: State) -> str:
             if not state.project.generate_range_string:
                 range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}all{COL_DIM})"
             else:
@@ -37,7 +44,7 @@ class GenerateMenu:
 
             return f"Specify range {range_label} {complete_label}"
 
-        def make_regen_label(_) -> str:
+        def make_regen_label(_: State) -> str:
             num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
             failed_items_label = f"{num_fails} {make_noun('item', 'items', num_fails)}"
             qualifier = " in specified range" if state.project.generate_range_string else ""
@@ -55,17 +62,22 @@ class GenerateMenu:
             return s
 
         # Menu
-        def heading_maker(_) -> str:
+        def heading_maker(_: State) -> str:
             total_segments_generated = state.project.sound_segments.num_generated()
             num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
             return f"Generate audio {num_complete_label}"
 
         def items_maker(_: State) -> list[MenuItem]:
-            items = [
-                MenuItem("Generate audio segments", lambda _, __: do_generate(state, is_regen=False)),
+            items = []
+            items.append(
+                MenuItem(make_start_label, lambda _, __: do_generate(state, is_regen=False)),
+            )
+            items.append(
                 MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
+            )
+            items.append(
                 MenuItem(make_regen_label, lambda _, __: do_generate(state, is_regen=True))
-            ]
+            )
             # Batch size
             if Tts.get_type().value.can_batch:
                 items.append(
@@ -188,10 +200,9 @@ def ask_batch_size(state: State) -> None:
 
 def do_generate(state: State, is_regen: bool) -> None:
 
-    # Check for valid language code
-    err = Tts.check_valid_language_code(state.project)
-    if err:
-        print_feedback(err)
+    warning = AppUtil.get_combined_prereq_error(state.project, is_short=False)
+    if warning:
+        print_feedback(warning, is_error=True)
         return
 
     # Get indices to generate

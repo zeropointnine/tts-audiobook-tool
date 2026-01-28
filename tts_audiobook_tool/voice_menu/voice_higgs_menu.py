@@ -1,7 +1,7 @@
 from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_model import HiggsProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -26,7 +26,7 @@ class VoiceHiggsMenu:
                 VoiceMenuShared.make_temperature_item(
                     state=state,
                     attr="higgs_temperature",
-                    default_value=HiggsProtocol.DEFAULT_TEMPERATURE,
+                    default_value=HiggsBaseModel.DEFAULT_TEMPERATURE,
                     min_value=0.01,
                     max_value=2.0
                 )

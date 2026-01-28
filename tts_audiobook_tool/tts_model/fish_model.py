@@ -9,12 +9,11 @@ from huggingface_hub.errors import GatedRepoError
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import FishModelProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.fish_base_model import FishBaseModel
 from tts_audiobook_tool.util import *
 
 
-class FishModel(FishModelProtocol):
+class FishModel(FishBaseModel): 
     """
     Fish TTS inference logic
 
@@ -25,8 +24,6 @@ class FishModel(FishModelProtocol):
     """
 
     def __init__(self, device: str):
-
-        super().__init__(info=TtsModelInfos.FISH.value)
 
         # TODO verify mpc; also mpc + compile? probably not presumably?
         self.device = device
@@ -140,7 +137,7 @@ class FishModel(FishModelProtocol):
 
 
         if project.fish_temperature == -1:
-            temperature = FishModelProtocol.DEFAULT_TEMPERATURE
+            temperature = FishBaseModel.DEFAULT_TEMPERATURE
         else:
             temperature = project.fish_temperature
 

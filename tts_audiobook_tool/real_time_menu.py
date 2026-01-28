@@ -14,6 +14,14 @@ class RealTimeMenu:
     @staticmethod
     def menu(state: State):
 
+        def make_start_label(_: State) -> str:
+            label = "Start"
+            warning = AppUtil.get_combined_prereq_error(state.project, is_short=True)
+            if warning:
+                return make_menu_label(label, warning, value_prefix="", color_code=COL_ERROR)
+            else:
+                return label
+
         def make_text_label(_) -> str:
             if state.real_time.custom_phrase_groups:
                 num = len(state.real_time.custom_phrase_groups)
@@ -32,7 +40,7 @@ class RealTimeMenu:
 
         # Menu        
         items = [
-            MenuItem("Start", lambda _, __: do_start(state)),
+            MenuItem(make_start_label, lambda _, __: do_start(state)),
             MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state)),
             MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state)),
             MenuItem(
@@ -135,17 +143,13 @@ class RealTimeMenu:
 # ---
 
 def do_start(state: State) -> None:
+    
     if state.real_time.custom_phrase_groups:
         text_groups = state.real_time.custom_phrase_groups
     else:
         text_groups = state.project.phrase_groups
     if not text_groups:
         print_feedback("No text segments specified")
-        return
-
-    err = Tts.check_valid_language_code(state.project)
-    if err:
-        print_feedback(err)
         return
 
     if AskUtil.is_readchar:

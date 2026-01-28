@@ -6,7 +6,8 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.tts_model import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import MusicFailResult, ValidationResult, WordErrorResult
 
@@ -70,7 +71,9 @@ class SoundSegmentUtil:
 
         idx = str(index + 1).zfill(5)
         model = tts_model_info.file_tag
-        voice = project.get_voice_label()
+        
+        voice = Tts.get_class().get_voice_tag(project)
+        
         text = " " + TextUtil.sanitize_for_filename(phrase_group.presentable_text[:50])
         
         if isinstance(validation_result, WordErrorResult):

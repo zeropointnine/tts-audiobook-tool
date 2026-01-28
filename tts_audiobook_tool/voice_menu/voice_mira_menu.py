@@ -1,8 +1,8 @@
 from tts_audiobook_tool.menu_util import MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model import MiraProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.voice_menu import VoiceMenuShared
@@ -33,9 +33,9 @@ class VoiceMiraMenu:
                 VoiceMenuShared.make_temperature_item(
                     state=state,
                     attr="mira_temperature",
-                    default_value=MiraProtocol.TEMPERATURE_DEFAULT,
-                    min_value=MiraProtocol.TEMPERATURE_MIN,
-                    max_value=MiraProtocol.TEMPERATURE_MAX
+                    default_value=MiraBaseModel.TEMPERATURE_DEFAULT,
+                    min_value=MiraBaseModel.TEMPERATURE_MIN,
+                    max_value=MiraBaseModel.TEMPERATURE_MAX
                 )
             )
             return items

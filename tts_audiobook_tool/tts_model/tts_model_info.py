@@ -7,7 +7,6 @@ class TtsModelInfo(NamedTuple):
     """
     App properties of a supported TTS model
     """
-    # TODO: needs to be split between model-properties-proper and program-structure-related maybe
 
     # Module name to test for that implies the TTS model library exists in the current py env
     module_test: str
@@ -21,13 +20,15 @@ class TtsModelInfo(NamedTuple):
     max_words_default: int
     # The app's recommended max-words-per-segment range (min, max)
     max_words_reco_range: tuple[int, int]
-    # Does the model use a voice clone audio data (eg, Oute does not, wants a json)
-    uses_voice_sound_file: bool
-    # Does the model require a voice clone sample 
+    
+    # Project attribute of voice clone file name (when applicable)
+    voice_file_name_attr: str
+    # Does the model require a voice clone sample to generate audio
     requires_voice: bool
     # Does the model API require the text transcript of the voice clone sample
     requires_voice_transcript: bool
     # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
+    
     batch_size_project_field: str
     # When True, the "high" setting for strictness is discouraged due to model's poor WER
     strictness_high_discouraged: bool
@@ -66,7 +67,7 @@ class TtsModelInfos(Enum):
         sample_rate=0,
         max_words_default=0,
         max_words_reco_range=(0, 0),
-        uses_voice_sound_file=False,
+        voice_file_name_attr="",
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="",
@@ -86,7 +87,7 @@ class TtsModelInfos(Enum):
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        uses_voice_sound_file=False,
+        voice_file_name_attr="oute_voice_json", # rem, special case, is not a sound file
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
@@ -114,7 +115,7 @@ class TtsModelInfos(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="chatterbox_voice_file_name",
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="",
@@ -141,7 +142,7 @@ class TtsModelInfos(Enum):
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="fish_voice_file_name",
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
@@ -168,7 +169,7 @@ class TtsModelInfos(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="higgs_voice_file_name",
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
@@ -195,7 +196,7 @@ class TtsModelInfos(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="vibevoice_voice_file_name",
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="vibevoice_batch_size",
@@ -224,7 +225,7 @@ class TtsModelInfos(Enum):
         sample_rate=22050,
         max_words_default=40,
         max_words_reco_range=(40, 60),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="indextts2_voice_file_name",
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
@@ -252,7 +253,7 @@ class TtsModelInfos(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="glm_voice_file_name",
         requires_voice=True,
         requires_voice_transcript=True,
         batch_size_project_field="",
@@ -281,7 +282,7 @@ class TtsModelInfos(Enum):
         sample_rate=48000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        uses_voice_sound_file=True,
+        voice_file_name_attr="mira_voice_file_name",
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="mira_batch_size",
@@ -310,8 +311,8 @@ class TtsModelInfos(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        uses_voice_sound_file=True,
-        requires_voice=False, # actually depends on model_type
+        voice_file_name_attr="qwen3_voice_file_name",
+        requires_voice=True, # this applies to 'base' model type only
         requires_voice_transcript=True,
         batch_size_project_field="qwen3_batch_size",
         strictness_high_discouraged=False,

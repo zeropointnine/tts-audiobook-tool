@@ -3,18 +3,16 @@ import outetts # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model import OuteModelProtocol
-from tts_audiobook_tool.tts_model import TtsModelInfos
+from tts_audiobook_tool.tts_model.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.util import make_error_string
 
 
-class OuteModel(OuteModelProtocol):
+class OuteModel(OuteBaseModel):
     """
     Oute inference logic
     """
 
     def __init__(self):
-        super().__init__(info=TtsModelInfos.OUTE.value)
 
         from tts_audiobook_tool.config_oute import MODEL_CONFIG # let app crash on error
         try:
