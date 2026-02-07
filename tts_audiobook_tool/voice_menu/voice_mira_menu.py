@@ -21,7 +21,7 @@ class VoiceMiraMenu:
             items = []
             items.append(
                 MenuItem(
-                    VoiceMenuShared.make_voice_label,
+                    VoiceMenuShared.make_resolved_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.MIRA)
                 )                
             )
@@ -40,4 +40,4 @@ class VoiceMiraMenu:
             )
             return items
         
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)

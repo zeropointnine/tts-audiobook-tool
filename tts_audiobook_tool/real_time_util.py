@@ -38,22 +38,21 @@ class RealTimeUtil:
         did_interrupt = ModelsUtil.warm_up_models(state)
         
         # Post-init checks
-
         if did_interrupt:
             print_feedback("\nCancelled")
             return
         
-        # Because model has just been inited, will use instance in this case:
+        # Do model prereq check now that model instance exists
         err = AppUtil.get_combined_prereq_error(state.project, is_short=False) 
         if err:
             print_feedback(err, is_error=True)
-            AskUtil.ask_enter_to_continue()
             return
-        
-        warning = Tts.get_instance().get_prereq_warning(state.project)
-        if warning:
 
-            print_feedback(Ansi.ITALICS + warning, no_preformat=True)
+        # Print warnings if any
+        warnings = Tts.get_instance().get_prereq_warnings(state.project)
+        if warnings:
+            warnings_string = "\n".join(warnings)
+            print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
 
         showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 

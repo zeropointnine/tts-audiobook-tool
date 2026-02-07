@@ -105,7 +105,7 @@ class VoiceVibeVoiceMenu:
             )
             return items
         
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)
 
 # ---
 

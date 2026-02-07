@@ -76,7 +76,12 @@ class TtsModelInfos(Enum):
         hallucinates_music=False,
         un_all_caps=False,
         requirements_file_name="",
-        ui = {},
+        ui = {
+            "proper_name": "None",
+            "short_name": "none",
+            "voice_path_console": "",
+            "voice_path_requestor": ""
+        },
         substitutions=[]
     )
 

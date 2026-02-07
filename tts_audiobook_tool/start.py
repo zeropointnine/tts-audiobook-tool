@@ -10,27 +10,44 @@ Note how imports are done in stages
 # due to unknown import side-effect (possibly from a specific model library)
 
 import os
+
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 from huggingface_hub import constants # type: ignore
 
 # --------------------------------------------------------------------------------------------------
-# Hard requirement - TTS model 
+# TTS model type init
 
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
-err = Tts.init_model_type()
-if err:
-    printt(f"{COL_ERROR}{err}")
-    exit(1)
-
+tts_model_infos, num_matches = Tts.init_model_type()
+if tts_model_infos == TtsModelInfos.NONE:
+    if num_matches > 1: # Rly shouldn't happen
+        error = "\nMore than one of the supported TTS models' core libraries is currently installed.\n"
+        error += "This is not recommended. Please re-install your virtual environment, \n"
+        error += "following the instructions in the project's README."
+        printt(COL_ERROR + error)
+        exit(1)
+    else:
+        warning = "\nNone of the supported TTS models are currently installed.\n"
+        warning += "If you've already set up a virtual environment following the instructions\n"
+        warning += "from the project's README, make sure that it activated."
+        printt(COL_ERROR + warning)
+        printt()
+        
+        prompt = f"Press {make_hotkey_string('Y')} to run the app without sound generation functionality: "
+        from tts_audiobook_tool.ask_util import AskUtil
+        hotkey = AskUtil.ask_hotkey(prompt)
+        if hotkey != "y":
+            exit(0)
+        
 # --------------------------------------------------------------------------------------------------
 # Hard requirement - updated dependencies
 
 import sys
 from tts_audiobook_tool.hint import Hint
 from importlib import util
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
 new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
 

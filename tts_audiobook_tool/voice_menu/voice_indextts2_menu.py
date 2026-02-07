@@ -99,7 +99,7 @@ class VoiceIndexTts2Menu:
                     is_minus_one_default=True,
                     num_decimals=2,
                     prompt=f"Enter emotion alpha {COL_DIM}({0.01} to {1.0}){COL_DEFAULT}:",
-                    min_value=0.01, # xxx confirm not 0.0
+                    min_value=0.01,
                     max_value=1.0
                 )
             )
@@ -108,7 +108,7 @@ class VoiceIndexTts2Menu:
             )
             return items
 
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)
 
     @staticmethod
     def fp16_menu(state: State) -> None:

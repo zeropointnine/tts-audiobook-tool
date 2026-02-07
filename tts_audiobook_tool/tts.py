@@ -10,6 +10,7 @@ from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_model.none_base_model import NoneBaseModel
 from tts_audiobook_tool.tts_model.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
@@ -41,35 +42,28 @@ class Tts:
     _force_cpu: bool = False
 
     @staticmethod
-    def init_model_type() -> str:
+    def init_model_type() -> tuple[TtsModelInfos, int]:
         """
         Sets the tts model type by checking the installed modules in the python environment.
         It does not instantiate the TtsModel as such.
         Must be run first.
 
-        Returns error string on fail, else empty string on success.
+        Returns the model type, and num matches (should be either 1 or 0).
         """
-        num_models = 0
-        tts_type = None
+        num_models_found = 0
+        tts_type = TtsModelInfos.NONE
         for item in TtsModelInfos:
             exists = util.find_spec(item.value.module_test) is not None
             if exists:
-                num_models += 1
+                num_models_found += 1
                 tts_type = item
-        if num_models == 0:
-            s = "None of the supported TTS models are currently installed.\n"
-            s += "Make sure your virtual environment is activated.\n"
-            s += "Otherwise, follow the install instructions in the project repo's README."
-            return s
-        elif num_models > 1:
-            s = "More than one of the supported TTS model libraries is currently installed.\n"
-            s += "This is not recommended.\n"
-            s += "Please re-install python environment, following the instructions in the project repo's README."
-            return s
+        
+        # special case, not cool
+        if num_models_found > 1:
+            tts_type = TtsModelInfos.NONE
 
-        assert(tts_type is not None)
         Tts._type = tts_type
-        return ""
+        return tts_type, num_models_found
 
     @staticmethod
     def get_type() -> TtsModelInfos:
@@ -123,6 +117,7 @@ class Tts:
         Gets the current tts model's class, used for accessing static methods.
         """
         MAP = {
+            TtsModelInfos.NONE: NoneBaseModel,
             TtsModelInfos.OUTE: OuteBaseModel,
             TtsModelInfos.CHATTERBOX: ChatterboxBaseModel,
             TtsModelInfos.FISH: FishBaseModel,

@@ -100,6 +100,53 @@ class Qwen3BaseModel(TtsBaseModel):
     # ---
 
     @classmethod
+    def get_prereq_errors(
+            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
+    ) -> list[str]:
+
+        if instance:
+            assert(isinstance(instance, Qwen3BaseModel))
+
+        errors = []
+
+        if instance and not instance.is_model_type_supported:
+            return ["unsupported model type"]
+
+        match project.qwen3_model_type:            
+            case "custom_voice":
+                if not instance:
+                    ... # can't know if project settings valid wo instance
+                else:
+                    is_valid = instance.get_resolved_speaker_info(project)[1]
+                    if not is_valid:
+                        err = "requires speaker" if is_short else "A valid speaker id is required"
+                        errors.append(err)
+            case "voice_design":
+                ... # # has no requirements bc "instruction" is optional
+            case "base" | _:
+                if not project.qwen3_voice_file_name:
+                    err = "requires voice sample" if is_short else "Voice sample required"
+                    errors.append(err)
+        
+        return errors
+
+    def get_prereq_warnings(self, project: Project) -> list[str]:
+        
+        warnings = []
+
+        _, warning = self.resolve_language_code_and_warning(project.language_code)
+        if warning:
+            warnings.append(warning)
+
+        if project.qwen3_model_type == "voice_design" and not project.qwen3_instructions:
+            warning = "Model may generate random voices because no instructions defined"
+            warnings.append(warning)
+
+        return warnings
+
+    # ---
+
+    @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> tuple[str, str]:
@@ -153,48 +200,6 @@ class Qwen3BaseModel(TtsBaseModel):
                 return "voice_design"
             case "base " | _:
                 return super().get_voice_tag(project)
-
-    @classmethod
-    def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
-    ) -> list[str]:
-
-        if instance:
-            assert(isinstance(instance, Qwen3BaseModel))
-
-        errors = []
-
-        if instance and not instance.is_model_type_supported:
-            return ["unsupported model type"]
-
-        match project.qwen3_model_type:            
-            case "custom_voice":
-                if not instance:
-                    ... # can't know if project settings valid wo instance
-                else:
-                    is_valid = instance.get_resolved_speaker_info(project)[1]
-                    if not is_valid:
-                        err = "requires speaker" if is_short else "A valid speaker id is required"
-                        errors.append(err)
-            case "voice_design":
-                ... # # has no requirements bc "instruction" is optional
-            case "base" | _:
-                if not project.qwen3_voice_file_name:
-                    err = "requires voice sample" if is_short else "Voice sample required"
-                    errors.append(err)
-        
-        return errors
-
-    def get_prereq_warning(self, project: Project) -> str:
-        _, warning = self.resolve_language_code_and_warning(project.language_code)
-        return warning
-
-    @classmethod
-    def get_random_voice_reason(cls, project: Project, instance: TtsBaseModel | None) -> str:
-        if project.qwen3_model_type == "voice_design" and not project.qwen3_instructions:
-            return "Qwen3TTS voice_design model is active, and instructions not defined"
-        else:
-            return ""
 
 # ---
 

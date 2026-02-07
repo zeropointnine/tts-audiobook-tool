@@ -152,12 +152,20 @@ def do_start(state: State) -> None:
         print_feedback("No text segments specified")
         return
 
+    # Check model and other app prereqs
+    error = AppUtil.get_combined_prereq_error(state.project, is_short=False)
+    if error:
+        print_feedback(error, is_error=True)
+        return
+
+    # Show pre-inference hint/warning if necessary
+    AppUtil.show_pre_inference_hints(state.prefs, state.project)
+
+    # Confirm and start proper
     if AskUtil.is_readchar:
         b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
         if not b:
             return
-
-    AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
     RealTimeUtil.start(
         state=state,

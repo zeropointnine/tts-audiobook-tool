@@ -61,7 +61,7 @@ class VoiceOuteMenu:
                 on_temperature
             )
         ]
-        VoiceMenuShared.show_voice_menu(state, items)
+        VoiceMenuShared.menu_wrapper(state, items)
 
 # ---
 

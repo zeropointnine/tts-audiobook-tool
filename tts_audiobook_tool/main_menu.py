@@ -12,7 +12,7 @@ from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.voice_menu import VoiceQwen3Menu
+from tts_audiobook_tool.voice_menu.voice_menu_shared import VoiceMenuShared
 
 
 class MainMenu:
@@ -116,36 +116,7 @@ def make_voice_label(state: State) -> str:
 def on_voice(state: State, __) -> None:
     if not state.prefs.project_dir:
         return
-    match Tts.get_type():
-        case TtsModelInfos.OUTE:
-            from tts_audiobook_tool.voice_menu import VoiceOuteMenu
-            VoiceOuteMenu.menu(state)
-        case TtsModelInfos.CHATTERBOX:
-            from tts_audiobook_tool.voice_menu import VoiceChatterboxMenu
-            VoiceChatterboxMenu.menu(state)
-        case TtsModelInfos.FISH:
-            from tts_audiobook_tool.voice_menu import VoiceFishMenu
-            VoiceFishMenu.menu(state)
-        case TtsModelInfos.HIGGS:
-            from tts_audiobook_tool.voice_menu import VoiceHiggsMenu
-            VoiceHiggsMenu.menu(state)
-        case TtsModelInfos.VIBEVOICE:
-            from tts_audiobook_tool.voice_menu import VoiceVibeVoiceMenu
-            VoiceVibeVoiceMenu.menu(state)
-        case TtsModelInfos.INDEXTTS2:
-            from tts_audiobook_tool.voice_menu import VoiceIndexTts2Menu
-            VoiceIndexTts2Menu.menu(state)
-        case TtsModelInfos.GLM:
-            from tts_audiobook_tool.voice_menu import VoiceGlmMenu
-            VoiceGlmMenu.menu(state)
-        case TtsModelInfos.MIRA:
-            from tts_audiobook_tool.voice_menu import VoiceMiraMenu
-            VoiceMiraMenu.menu(state)
-        case TtsModelInfos.QWEN3TTS:
-            _ = Tts.get_instance() # Pre-emptively instantiate model (special case for qwen)
-            VoiceQwen3Menu.menu(state)
-        case _:
-            ...
+    VoiceMenuShared.menu(state)
 
 # Text
 def make_text_label(state: State) -> str:

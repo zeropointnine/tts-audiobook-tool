@@ -17,7 +17,7 @@ class VoiceGlmMenu:
             items = []
             items.append(
                 MenuItem(
-                    VoiceMenuShared.make_voice_label,
+                    VoiceMenuShared.make_resolved_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.GLM)
                 )
             )
@@ -36,7 +36,7 @@ class VoiceGlmMenu:
             )
             return items
 
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)
 
 def samplerate_menu(state: State) -> None:
 

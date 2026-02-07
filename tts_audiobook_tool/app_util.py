@@ -261,12 +261,6 @@ class AppUtil:
         if Tts.get_type() == TtsModelInfos.FISH:
             Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST)
 
-        random_warning = Tts.get_class().get_random_voice_reason(project, Tts.get_instance_if_exists())
-        if random_warning:
-            text = HINT_RANDOM_VOICE.text.replace("%1", random_warning)
-            hint = Hint(HINT_RANDOM_VOICE.key, HINT_RANDOM_VOICE.heading, text)
-            Hint.show_hint_if_necessary(prefs, hint)
-
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():
                 if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":

@@ -173,12 +173,6 @@ HINT_FISH_FIRST = Hint(
 which may take 1-2 minutes without any feedback shown."""
 )
 
-HINT_RANDOM_VOICE = Hint(
-    "gen_random",
-    "Random voice",
-    "The TTS model may generate random-sounding voices because %1."
-)
-
 HINT_TEST_REAL_TIME = Hint(
     "test_real_time",
     "Tip",

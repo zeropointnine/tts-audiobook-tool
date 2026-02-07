@@ -28,25 +28,12 @@ class VibeVoiceBaseModel(TtsBaseModel):
     def has_lora(self) -> bool:
         ...
 
-    @classmethod
-    def get_voice_display_info(
-            cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> tuple[str, str]:
-
-        match (bool(project.vibevoice_voice_file_name), bool(project.vibevoice_lora_target)):
-            case (False, False):
-                prefix = "current voice clone"
-                value = COL_ERROR + "none"
-            case (True, True):
-                prefix = "currently"
-                value = COL_ACCENT + "lora + voice clone"
-            case (True, False):
-                prefix = "current voice clone"
-                value = COL_ACCENT + truncate_path_for_menu(project.vibevoice_voice_file_name)
-            case (False, True):
-                prefix = "current lora"
-                value = COL_ACCENT + truncate_path_for_menu(project.vibevoice_lora_target)
-        return prefix, value
+    def get_prereq_warnings(self, project: Project) -> list[str]:
+        warnings = []
+        if not project.vibevoice_voice_file_name and not project.vibevoice_lora_target:
+            warning = "Model may generate random voices because no voice sample or lora has been defined"
+            warnings.append(warning) 
+        return warnings
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
@@ -68,8 +55,22 @@ class VibeVoiceBaseModel(TtsBaseModel):
                 return get_lora_value()
 
     @classmethod
-    def get_random_voice_reason(cls, project: Project, instance: TtsBaseModel | None) -> str:
-        if not project.vibevoice_voice_file_name and not project.vibevoice_lora_target:
-            return "no voice sample or lora has been defined"
-        else:
-            return ""
+    def get_voice_display_info(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> tuple[str, str]:
+
+        match (bool(project.vibevoice_voice_file_name), bool(project.vibevoice_lora_target)):
+            case (False, False):
+                prefix = "current voice clone"
+                value = COL_ERROR + "none"
+            case (True, True):
+                prefix = "currently"
+                value = COL_ACCENT + "lora + voice clone"
+            case (True, False):
+                prefix = "current voice clone"
+                value = COL_ACCENT + truncate_path_for_menu(project.vibevoice_voice_file_name)
+            case (False, True):
+                prefix = "current lora"
+                value = COL_ACCENT + truncate_path_for_menu(project.vibevoice_lora_target)
+        return prefix, value
+

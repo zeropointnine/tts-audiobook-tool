@@ -66,15 +66,17 @@ class GenerateUtil:
             print_feedback("\nCancelled")
             return True
                 
-        # Because model has just been inited, will use instance in this case:
+        # Do model prereq check now that model instance exists
         err = AppUtil.get_combined_prereq_error(state.project, is_short=False) 
         if err:
             print_feedback(err, is_error=True)
             return True
 
-        warning = Tts.get_instance().get_prereq_warning(state.project)
-        if warning:
-            print_feedback(Ansi.ITALICS + warning, no_preformat=True)
+        # Print warnings if any
+        warnings = Tts.get_instance().get_prereq_warnings(state.project)
+        if warnings:
+            warnings_string = "\n".join(warnings)
+            print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
 
         showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
 
@@ -226,8 +228,8 @@ class GenerateUtil:
             # Print memory usage
             if len(results) > 1:
                 printt()
-            s = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
-            printt(s)
+            warnings_string = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
+            printt(warnings_string)
             
             printt()
 
@@ -236,27 +238,27 @@ class GenerateUtil:
                 items[:0] = re_adds
 
         # Print summary, metrics
-        s = ""
+        warnings_string = ""
         if did_interrupt:
-            s += "Interrupted. "
-        s += f"Elapsed: {duration_string(time.time() - start_time)}\n"
+            warnings_string += "Interrupted. "
+        warnings_string += f"Elapsed: {duration_string(time.time() - start_time)}\n"
         ok = str(num_saved)
         if num_saved == len(sorted_indices):
             ok += " (all)"
-        s += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
+        warnings_string += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
         if num_failed:
-            s += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
+            warnings_string += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
-            s += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
+            warnings_string += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
-            s += f"Num words: {sum(word_counts.values())}\n"
+            warnings_string += f"Num words: {sum(word_counts.values())}\n"
             if Stt.has_instance():
-                s += f"Num word fails: {sum(word_error_counts.values())}\n"
+                warnings_string += f"Num word fails: {sum(word_error_counts.values())}\n"
                 if MusicDetector.has_instance():
-                    s += f"Num music fails: {num_failed_music}\n"
-            s += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
-        printt(s)
+                    warnings_string += f"Num music fails: {num_failed_music}\n"
+            warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
+        printt(warnings_string)
 
         SigIntHandler().clear()
         return did_interrupt

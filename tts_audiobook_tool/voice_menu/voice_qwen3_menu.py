@@ -152,7 +152,7 @@ class VoiceQwen3Menu:
                     subheading = ""
             return subheading
 
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)
 
 # ---
 

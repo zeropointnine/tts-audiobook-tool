@@ -19,7 +19,7 @@ class VoiceChatterboxMenu:
             items = []
             items.append(
                 MenuItem(
-                    VoiceMenuShared.make_voice_label,
+                    VoiceMenuShared.make_resolved_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
             ))
             if state.project.chatterbox_voice_file_name:
@@ -68,7 +68,7 @@ class VoiceChatterboxMenu:
             )
             return items
         
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)
 
 def make_type_label(state: State) -> str:
     return make_menu_label("Chatterbox model", state.project.chatterbox_type.label)

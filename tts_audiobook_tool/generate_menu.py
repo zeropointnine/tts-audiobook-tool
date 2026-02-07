@@ -200,18 +200,12 @@ def ask_batch_size(state: State) -> None:
 
 def do_generate(state: State, is_regen: bool) -> None:
 
-    warning = AppUtil.get_combined_prereq_error(state.project, is_short=False)
-    if warning:
-        print_feedback(warning, is_error=True)
-        return
-
-    # Get indices to generate
+    # Get indices to generate, and check if already generated
     if is_regen:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
     else:
         indices = state.project.get_selected_indices_not_generated()
     
-    # Check if already generated
     if not indices:
         qualifier = " in currently selected range" if state.project.generate_range_string else ""
         if is_regen:
@@ -221,13 +215,19 @@ def do_generate(state: State, is_regen: bool) -> None:
         print_feedback(message)
         return
 
-    # Show hint if necessary
+    # Check model and other app prereqs
+    error = AppUtil.get_combined_prereq_error(state.project, is_short=False)
+    if error:
+        print_feedback(error, is_error=True)
+        return
+
+    # Show pre-inference hint/warning if necessary
     if is_regen:
         Hint.show_hint_if_necessary(state.prefs, HINT_REGEN)
     else:
         AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
-    # Print confirmation info
+    # Print confirmation info, and confirm
     s = f"Will generate {len(indices)} lines in range {state.project.generate_range_string}"
     if not is_regen:
         num = state.project.sound_segments.num_generated_in_current_range()
@@ -241,7 +241,6 @@ def do_generate(state: State, is_regen: bool) -> None:
         s = "Speech-to-text validation disabled"
     printt(s)
     printt()
-
     b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
     if not b:
         return

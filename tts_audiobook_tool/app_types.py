@@ -234,12 +234,12 @@ SS_NORMAL_DESC = \
 
 SS_MULTI_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, 
-    by one or multiple sentences up to 'max words per segment'.
-    May produce a better sense continuity between those sentences."""
+    by one or multiple sentences up to \"max words per segment.\"
+    May produce a better sense of continuity between those sentences."""
 
 SS_MAX_LEN_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, segmented by 
-    'max words per segment' to the nearest phrase boundary.
+    \"max words per segment\" to the nearest sentence or phrase boundary.
     This maximizes text length per TTS generation."""
 
 class SegmentationStrategy(tuple[str, str, str], Enum):

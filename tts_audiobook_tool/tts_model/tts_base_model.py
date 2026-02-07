@@ -9,6 +9,8 @@ from tts_audiobook_tool.constants import *
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+else:
+    Project = object
 
 
 class TtsBaseModel(ABC):
@@ -76,12 +78,41 @@ class TtsBaseModel(ABC):
         Concrete class may want to override-and-super with extra logic, as needed.
         """
 
-        for before, after in self.INFO.substitutions: # INFO is the concrete class being used xxx verify
+        for before, after in self.INFO.substitutions:
             text = text.replace(before, after)
         return text
 
     # ---
     # Class methods (ie, not instance-dependent)
+
+    @classmethod
+    def get_prereq_errors(
+            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
+    ) -> list[str]:
+        """
+        Returns warning messages as to why generate is not possible.
+        Applies to both main gen and realtime gen.
+
+        Some prereq errors can only be known with a concrete instance (param `instance`).
+
+        :param is_short:
+            When true, should return very short phrase, meant to be concatenated on a single line
+            Else, should return full messages meant to be displayed on separate lines
+        """
+
+        # Default implementation is for model whose only possible requirement is voice clone-related
+        
+        err = cls._get_standard_voice_prereq_error(project, is_short)
+        return [err]
+   
+    def get_prereq_warnings(self, project: Project) -> list[str]:
+        """ Returns "non-blocking" warning info based on the state of `project` and `self` """
+
+        # Default implementation returns random voice warning if any
+        warning = self._get_standard_random_voice_reason(project)
+        return [warning] if warning else []
+
+    # ---
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
@@ -150,48 +181,13 @@ class TtsBaseModel(ABC):
 
         return prefix, value
 
-    @classmethod
-    def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
-    ) -> list[str]:
-        """
-        Returns warning messages as to why generate is not possible.
-        Applies to both main gen and realtime gen.
-
-        Some prereq errors can only be known with a concrete instance (param `instance`).
-
-        :param is_short:
-            When true, should return very short phrase, meant to be concatenated on a single line
-            Else, should return full messages meant to be displayed on separate lines
-        """
-
-        # Default implementation is for model whose only possible requirement is voice clone-related
-        
-        err = cls._get_standard_voice_prereq_error(project, is_short)
-        return [err]
-   
-    def get_prereq_warning(self, project: Project) -> str:
-        """ Returns "non-blocking" warning info based on the state of `project` and `self` """
-        return ""
-
-    @classmethod
-    def get_random_voice_reason(cls, project: Project, instance: TtsBaseModel | None) -> str:
-        """        
-        Returns ui-facing "reason" why random voice will be generated, else empty string.
-        """
-
-        # Default implementation assumes model that does not require voice sample
-        # will produce produces random voice when project has no voice sample
-
-        return cls._get_standard_random_voice_reason(project)
-
     # ---
 
     @classmethod
     def _get_standard_voice_prereq_error(cls, project: Project, is_short: bool) -> str:
 
         if not cls.INFO.voice_file_name_attr:
-            raise Exception("Logic error - must override this method")        
+            raise Exception("Logic error - must override this method")
 
         voice_file_name = getattr(project, cls.INFO.voice_file_name_attr, "")
         if cls.INFO.requires_voice and not voice_file_name:
@@ -200,14 +196,16 @@ class TtsBaseModel(ABC):
         else:
             return ""
 
-    @classmethod
-    def _get_standard_random_voice_reason(cls, project: Project) -> str:
+    def _get_standard_random_voice_reason(self, project: Project) -> str:
 
-        if not cls.INFO.voice_file_name_attr:
-            raise Exception("Logic error - must override this method")        
-
-        voice_file_name = getattr(project, cls.INFO.voice_file_name_attr, "")
-        if not cls.INFO.requires_voice and not voice_file_name:
-            return "no voice sample has been defined"
-        else:
+        if self.INFO.requires_voice:
             return ""
+        if not self.INFO.voice_file_name_attr:
+            return ""
+
+        voice_file_name = getattr(project, self.INFO.voice_file_name_attr, "")
+        if voice_file_name:
+            return ""        
+
+        # Voice is not required, and no voice file specified
+        return "Model may generate random voices because no voice clone reference has been specified"

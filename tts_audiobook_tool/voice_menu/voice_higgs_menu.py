@@ -14,7 +14,7 @@ class VoiceHiggsMenu:
         def make_items(_: State) -> list[MenuItem]:
             items = [
                 MenuItem(
-                    VoiceMenuShared.make_voice_label,
+                    VoiceMenuShared.make_resolved_voice_label,
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
                 )
             ]
@@ -33,4 +33,4 @@ class VoiceHiggsMenu:
             )
             return items
         
-        VoiceMenuShared.show_voice_menu(state, make_items)
+        VoiceMenuShared.menu_wrapper(state, make_items)
