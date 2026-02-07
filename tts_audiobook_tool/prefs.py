@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_types import SttConfig, SttVariant
+from tts_audiobook_tool.app_types import Saveable, SttConfig, SttVariant
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 
-class Prefs:
+class Prefs(Saveable):
     """
     User-configurable app settings that persist to file
     """
@@ -281,7 +281,7 @@ class Prefs:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
 
-    def save(self) -> None:
+    def save(self) -> str:
         dic = {
             "project_dir": self._project_dir,
             "hints": self._hints,
@@ -297,8 +297,11 @@ class Prefs:
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:
                 json.dump(dic, f, indent=4)
+            return ""
         except Exception as e:
-            L.e(f"{e}")
+            err = make_error_string(e)
+            printt(f"\n{COL_ERROR}{err}\n")
+            return err
 
     @staticmethod
     def get_file_path() -> str:

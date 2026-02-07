@@ -1,5 +1,6 @@
 import sys
 from typing import Callable
+from tts_audiobook_tool.app_types import Saveable
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
@@ -173,7 +174,7 @@ class AskUtil:
 
     @staticmethod
     def ask_number(
-        project_or_prefs: Any,
+        saveable: Saveable,
         attr: str,
         prompt: str,
         lb: float,
@@ -188,10 +189,10 @@ class AskUtil:
         # Function would work on any "object" regardless but yea
         from tts_audiobook_tool.prefs import Prefs
         from tts_audiobook_tool.project import Project
-        if not isinstance(project_or_prefs, Project) and not isinstance(project_or_prefs, Prefs):
-            raise ValueError(f"Not Project or Prefs: {project_or_prefs}")
+        if not isinstance(saveable, Project) and not isinstance(saveable, Prefs):
+            raise ValueError(f"Not Project or Prefs: {saveable}")
 
-        if not hasattr(project_or_prefs, attr):
+        if not hasattr(saveable, attr):
             raise ValueError(f"No such attribute {attr}")
 
         if is_int:
@@ -213,14 +214,14 @@ class AskUtil:
             print_feedback("Out of range", is_error=True)
             return
 
-        setattr(project_or_prefs, attr, value)
-        project_or_prefs.save()
+        setattr(saveable, attr, value)
+        saveable.save()
 
         print_feedback(success_prefix, str(value))
 
     @staticmethod
     def ask_number_and_save(
-        project: Project,
+        saveable: Saveable,
         prompt: str,
         lb: float,
         ub: float,
@@ -229,7 +230,7 @@ class AskUtil:
         is_int: bool=False
     ) -> None:
 
-        if not hasattr(project, project_attr_name):
+        if not hasattr(saveable, project_attr_name):
             raise ValueError(f"No such attribute {project_attr_name}")
 
         if is_int:
@@ -251,13 +252,13 @@ class AskUtil:
             print_feedback("Out of range", is_error=True)
             return
 
-        setattr(project, project_attr_name, value)
-        project.save()
+        setattr(saveable, project_attr_name, value)
+        saveable.save()
         print_feedback(success_prefix, str(value))
 
     @staticmethod
     def ask_string_and_save(
-        project_or_prefs: Any,
+        saveable: Saveable,
         prompt_line: str,
         project_attr_name: str,
         success_prefix: str,
@@ -268,7 +269,7 @@ class AskUtil:
         Helper to ask for a string value and save it to the project.
         :param validator: Takes in the user input string and returns error string if invalid (optional)
         """
-        if not hasattr(project_or_prefs, project_attr_name):
+        if not hasattr(saveable, project_attr_name):
             raise ValueError(f"No such attribute {project_attr_name}")
 
         while True:
@@ -286,8 +287,8 @@ class AskUtil:
                         return
                 break                    
 
-        setattr(project_or_prefs, project_attr_name, value)
-        project_or_prefs.save()
+        setattr(saveable, project_attr_name, value)
+        saveable.save()
         print_feedback(success_prefix, value)
 
 # ---

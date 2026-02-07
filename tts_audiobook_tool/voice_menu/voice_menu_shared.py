@@ -250,7 +250,7 @@ class VoiceMenuShared:
 
         def on_item(_: State, __: MenuItem) -> None:
             AskUtil.ask_number(
-                project_or_prefs=state.project,
+                saveable=state.project,
                 attr=attr,
                 prompt=f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}: ",
                 lb=-1, 

@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, Saveable, SegmentationStrategy, Sound, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
@@ -23,7 +23,7 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.tts import Tts
 
 
-class Project:
+class Project(Saveable):
     """
     Project settings data-like class, with convenience functions.
     After changing values, must manually `save()`.
@@ -465,7 +465,7 @@ class Project:
 
         return project
 
-    def save(self) -> None:
+    def save(self) -> str:
 
         d = {
             "dir_path": self.dir_path,
@@ -550,8 +550,11 @@ class Project:
         try:
             with open(file_path, "w") as file:
                 json.dump(d, file, indent=4)
+            return ""
         except Exception as e:
-            L.e(f"Save error: {e}") # TODO: need to handle this
+            err = make_error_string(e)
+            printt(f"\n{COL_ERROR}{err}\n")
+            return err
 
     def set_phrase_groups_and_save(
             self,

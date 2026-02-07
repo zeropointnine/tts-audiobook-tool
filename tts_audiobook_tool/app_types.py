@@ -25,6 +25,13 @@ class SingletonBase:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
+class Saveable(Protocol):
+    """
+    An object that can save its own data (`Project`, `Prefs`)
+    """    
+    def save(self) -> str:
+        """ Returns error string if any """
+        ...
 
 class Sound(NamedTuple):
     data: ndarray
