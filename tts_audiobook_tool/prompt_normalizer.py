@@ -20,15 +20,10 @@ class PromptNormalizer:
 
         Model-specific transformations should be done using the model subclasses.
 
-        TODO: Strip out 'non-verbal' characters, or at least emojis. Use re backslash-w, etc.
-        TODO: Strip out stray punctuation-only "words" which do not seem "caesura-related"
+        TODO: Strip out stray punctuation-only "words" which do not seem "caesura-related". Or smth.
         """
 
-        text = text.strip()
-
-        # Replace fancy double-quotes (important for various models)
-        text = text.replace("“", "\"")
-        text = text.replace("”", "\"")
+        text = TextUtil.normalize_text_general(text)
 
         # Collapse multiple triple-dots or multiple ellipses character
         pattern = r'\.{3,}'
@@ -67,6 +62,11 @@ class PromptNormalizer:
                 )        
             except NotImplementedError:
                 pass # Fail silently
+
+        # Collapse consecutive whitespace characters into one space
+        text = re.sub(r"\s+", " ", text)        
+        # Strip white space from ends
+        text = re.sub(r'\s+', ' ', text).strip()
 
         return text
     

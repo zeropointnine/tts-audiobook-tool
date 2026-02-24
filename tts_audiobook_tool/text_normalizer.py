@@ -4,6 +4,8 @@ import string
 import unicodedata
 from whisper_normalizer.english import EnglishNumberNormalizer
 
+from tts_audiobook_tool.text_util import TextUtil
+
 
 class TextNormalizer:
     """
@@ -19,14 +21,11 @@ class TextNormalizer:
         Function should be run on 'both sides'.
         Handles international characters via Unicode-aware regex (backslash-w).
         """
-        # Normalize Unicode (fixes 'é' vs 'e'+'´' mismatches)
-        text = unicodedata.normalize('NFKC', text)
-
+        
+        text = TextUtil.normalize_text_general(text)
+        
         # Use casefold for aggressive lowercase (better for Intl text)
         text = text.casefold().strip()
-
-        # Replace fancy apost with normal apost
-        text = text.replace("’", "'")
 
         # Strip apostrophe which is adjacent to word character
         text = re.sub(r"\b'|'\b", "", text)
@@ -44,11 +43,11 @@ class TextNormalizer:
         text = re.sub(f"[{re.escape(punc)}]", " ", text) # re.escape is necessary because punc contains special regex chars like [ ] - ^
 
         # Strip non-word characters except space (rem, non-word characters are not just limited to ascii)
+        # TODO: Revisit?
         text = re.sub(r'[^\w\s]', '', text) # TODO: '' or ' ' ?
 
         # Collapse consecutive whitespace characters into one space
-        text = re.sub(r"\s+", " ", text)
-        
+        text = re.sub(r"\s+", " ", text)        
         # Strip white space from ends
         text = re.sub(r'\s+', ' ', text).strip()
 

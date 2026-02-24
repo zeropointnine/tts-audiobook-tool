@@ -49,6 +49,43 @@ class TextUtil:
         return False
 
     @staticmethod
+    def normalize_text_general(text: str) -> str:
+        """
+        Text normalization operations that are common to both 
+        TTS prompt strings and source/transcript text comparison strings.
+        """
+
+        # Normalize Unicode (fixes 'é' vs 'e'+'´' mismatches)
+        text = unicodedata.normalize('NFKC', text)
+
+        # Replace fancy apost, fancy double-quotes
+        text = text.replace("’", "'")
+        text = text.replace("“", "\"")
+        text = text.replace("”", "\"")
+
+       # Strip "bad" characters based on unicode category
+        BAD_CATEGORIES = {
+            'So', # Other Symbol - contains the vast majority of emojis, pictographs, and dingbats
+            'Sk', # Modifier Symbol - includes emoji skin-tone modifiers and other standalone modifiers
+            'Cf', # Format - Invisible formatting characters (like the Zero Width Joiner used in complex emojis or Right-to-Left marks)
+            'Cs', # Surrogate / Private Use	- technical artifacts or custom icons that have no phonetic value
+            'Co', # Surrogate / Private Use	- technical artifacts or custom icons that have no phonetic value
+            'Cn', # Other, Not Assigned
+        }
+        clean_chars = [
+            char for char in text 
+            if unicodedata.category(char) not in BAD_CATEGORIES
+        ]
+        text = "".join(clean_chars)
+
+        # Collapse consecutive whitespace characters into one space
+        text = re.sub(r"\s+", " ", text)        
+        # Strip white space from ends
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text
+
+    @staticmethod
     def split_raw_word(raw_word: str) -> tuple[str, str, str]: 
         """
         Separates word into three parts.
@@ -115,31 +152,6 @@ class TextUtil:
             return [word for word in words if not TextUtil.is_ws_punc(word)]
         else:
             return words
-
-    @staticmethod
-    def get_words_merged(s: str) -> list[str]:
-        """
-        Merges "non-content" words with predecessor
-        TODO: May not be useful
-        """
-
-        words = TextUtil.get_words(s)
-        if len(words) == 0:
-            return []
-
-        new_words: list[str] = []
-        for word in words:
-            if new_words and TextUtil.is_ws_punc(word):
-                new_words[-1] += word
-            else:
-                new_words.append(word)
-
-        # Edge case
-        if len(new_words) > 1 and TextUtil.is_ws_punc(new_words[0]):
-            combined_word = new_words[0] + new_words[1]
-            new_words = [combined_word] + new_words[2:]
-
-        return new_words
 
     @staticmethod
     def get_word_count(s: str, filtered: bool=False) -> int:
@@ -214,3 +226,4 @@ class TextUtil:
             [(word_lc, count, instances) for word_lc, (count, instances) in counts_dict.items()], key=lambda x: x[1], reverse=True
         )
         return sorted_tuples
+

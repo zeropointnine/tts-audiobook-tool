@@ -55,7 +55,7 @@ class PhraseSegmenter:
             new_result.extend(phrases)
         phrases = new_result
 
-        # phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
+        phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
 
         return phrases
 
