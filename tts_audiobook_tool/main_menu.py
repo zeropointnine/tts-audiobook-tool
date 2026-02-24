@@ -83,7 +83,7 @@ class MainMenu:
             model_name = Tts.get_type().value.ui['proper_name']
         if Tts.get_type() == TtsModelInfos.QWEN3TTS:
             path = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
-            s = truncate_path_pretty(path)
+            s = ellipsize_path_middle(path)
             model_name += f" {COL_DIM}{s}"
 
         heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"        

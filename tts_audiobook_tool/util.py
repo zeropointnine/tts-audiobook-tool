@@ -179,8 +179,8 @@ def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=
         a = text[:width]
         return f"{content_color}{a}{COL_DIM}..."
 
-def truncate_path_pretty(path: str, length: int=60, truncate_file_suffix=False) -> str:
-    """ App style for displaying local path in menu/UI """
+def ellipsize_path_middle(path: str, length: int=60, truncate_file_suffix=False) -> str:
+    """ Puts ellipsis before path name if necessary """
     
     if not path:
         return path
@@ -208,9 +208,11 @@ def truncate_path_pretty(path: str, length: int=60, truncate_file_suffix=False) 
         suffix = suffix[-max_suffix_len:]
     return path[:prefix_len] + "..." + suffix
 
-def truncate_path_for_menu(path: str) -> str:
-    """ App style for displaying filepath """
-    return truncate_path_pretty(path, 40, truncate_file_suffix=True)
+def ellipsize_path_for_menu(path: str) -> str:
+    """ 
+    App style for displaying filepath in a menu item
+    """
+    return ellipsize_path_middle(path, 40, truncate_file_suffix=True)
         
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
@@ -379,9 +381,12 @@ def time_stamp(seconds: float, with_tenth: bool=True) -> str:
     else:
         return f"{hours_string}:{minutes_string}:{seconds_string}"
 
-def ellipsize(s: str, length: int) -> str:
+def ellipsize(s: str, length: int, from_start:bool = False) -> str:
     if len(s) > length:
-        s = s[:length - 3] + "..."
+        if from_start:
+            s = "..." + s[-(length - 3):]
+        else:
+            s = s[:length - 3] + "..."
     return s
 
 def get_package_dir() -> str | None:

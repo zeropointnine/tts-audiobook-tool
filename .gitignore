@@ -8,9 +8,9 @@ venv*/
 .python-version
 package.json
 package-lock.json
+.roo/
 
 output/
-outputs/
 checkpoints/
 
 config_oute_dev.py

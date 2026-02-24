@@ -22,7 +22,7 @@ from boson_multimodal.dataset.chatml_dataset import ( # type: ignore
 )
 from boson_multimodal.model.higgs_audio.utils import revert_delay_pattern # type: ignore
 from transformers import AutoConfig, AutoTokenizer # type: ignore
-from transformers.cache_utils import StaticCache
+from transformers.cache_utils import StaticCache # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *

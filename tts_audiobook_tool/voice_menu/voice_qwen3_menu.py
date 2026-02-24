@@ -34,7 +34,7 @@ class VoiceQwen3Menu:
             if is_default:
                 label = f"{COL_DIM}(optional)"
             else:
-                value = truncate_path_pretty(target)
+                value = ellipsize_path_middle(target)
                 label = make_currently_string(value)
                 label += f" {COL_DIM}(model type: {COL_ACCENT}{Tts.get_qwen3().model_type}{COL_DIM})"
             return f"Custom model {label}"

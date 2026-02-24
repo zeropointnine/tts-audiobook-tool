@@ -69,12 +69,15 @@ class GenerateMenu:
 
         def items_maker(_: State) -> list[MenuItem]:
             items = []
+            # Start
             items.append(
                 MenuItem(make_start_label, lambda _, __: do_generate(state, is_regen=False)),
             )
+            # Range
             items.append(
                 MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
             )
+            # Re-generate
             items.append(
                 MenuItem(make_regen_label, lambda _, __: do_generate(state, is_regen=True))
             )
@@ -87,10 +90,17 @@ class GenerateMenu:
                 items.append(
                     MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state))
                 )
-            items.extend([
-                MenuItem(make_strictness_label, lambda _, __: GenerateMenu.strictness_menu(state)),
-                MenuItem(make_retries_label, lambda _, __: ask_retries(state))
-            ])
+            # Strictness
+            items.append(MenuItem(make_strictness_label, lambda _, __: GenerateMenu.strictness_menu(state)))
+            # Num retries
+            items.append(MenuItem(make_retries_label, lambda _, __: ask_retries(state)))
+            
+            # Delete all
+            if DEV:
+                num_gen = state.project.sound_segments.num_generated()
+                if num_gen > 0:
+                    items.append(MenuItem(f"Delete all", on_delete_all))
+
             return items
         
         MenuUtil.menu(state, heading_maker, items_maker)
@@ -138,7 +148,6 @@ def ask_item_range(state: State) -> None:
     s = state.project.generate_range_string if state.project.generate_range_string else "all"
     printt(f"Enter line numbers to generate (currently: {s}):") 
     printt(f"{COL_DIM}For example, \"1-100\" or \"201-210, 215\", or just \"all\"") 
-    printt()
 
     inp = AskUtil.ask()
     if inp == "all" or inp == "a":
@@ -272,6 +281,14 @@ def do_generate(state: State, is_regen: bool) -> None:
         printt() # TODO revisit
         if hotkey == "c":
             ConcatMenu.menu(state)
+
+def on_delete_all(state: State, _) -> None:
+    num_gen = state.project.sound_segments.num_generated()
+    message = f"Will delete {num_gen} segments.\n"
+    message += f"Press {make_hotkey_string('Y')} to confirm: "
+    if not AskUtil.ask_confirm(message):
+        return
+    state.project.sound_segments.delete_all()
 
 STRICTNESS_DESC = \
 """Dictates how \"strict\" is the transcript validation.

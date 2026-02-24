@@ -105,6 +105,21 @@ class ProjectSoundSegments:
                 failed_indices.add(index)
         return failed_indices
     
+    def get_word_error_counts_in_generate_range(self) -> dict[int, int]:
+        """ 
+        Within the project's defined 'generate range', 
+        returns the fail counts of existing sound segment items
+        """
+        all_indices = self.project.get_indices_to_generate()
+        fail_counts = {}
+        for index in all_indices:
+            items = self.sound_segments_map.get(index, [])
+            if not items:
+                continue
+            for item in items:
+                fail_counts[index] = item.num_errors
+        return fail_counts
+    
     def delete_all(self) -> None:
         for sound_segments in self.sound_segments_map.values():
             for item in sound_segments:

@@ -349,7 +349,6 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
-|                         | Macbook Pro M1 (MPS) | 20-25% realtime | using `outetts.Backend.LLAMACPP`
 
 
 # Update highlights

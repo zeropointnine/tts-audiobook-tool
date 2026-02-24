@@ -55,6 +55,8 @@ class PhraseSegmenter:
             new_result.extend(phrases)
         phrases = new_result
 
+        # phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
+
         return phrases
 
     @staticmethod
@@ -181,6 +183,28 @@ class PhraseSegmenter:
             result.append(new_phrase)
         return result
 
+    @staticmethod
+    def merge_ornamental_lines(phrases: list[Phrase]) -> list[Phrase]:
+        """
+        When a Phrase ends with PARAGRAPH or SECTION and is 'not vocalizable', merges it with previous phrase
+        Idea here is that these items must be typographical ornamentation lines that signify a section break
+        """
+        
+        def is_ornamental_break(phrase: Phrase) -> bool:
+            return phrase.reason in [Reason.PARAGRAPH, Reason.SECTION] and not TextUtil.is_vocalizable(phrase.text)
+        
+        results: list[Phrase] = []
+
+        for phrase in phrases:
+            if not results or not is_ornamental_break(phrase):
+                results.append(phrase)
+            else:
+                # Merge
+                results[-1].text += phrase.text
+                print("merged:", results[-1].text)
+
+        return results
+
 # ---
 
 def is_sentence_quotation(pysbd_segmented_string: str) -> bool:
@@ -267,7 +291,3 @@ def split_string_parts(text: str) -> tuple[str, str, str]:
     after = text[last_char_index:]
 
     return (before, content, after)
-
-# Characters that are either whitespace or punctuation
-# TODO this is incomplete; reconcile with other related usages
-WHITESPACE_PUNCTUATION = set(string.whitespace + string.punctuation) 

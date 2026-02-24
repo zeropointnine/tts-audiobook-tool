@@ -1,14 +1,11 @@
 from __future__ import annotations
 import os
-import sys
-import random
 import time
 
 import numpy as np
 
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -92,16 +89,16 @@ class GenerateUtil:
             items = bucket_items(items, state.project.phrase_groups, batch_size)
 
         # Metrics-related variables
-        num_saved = 0
+        
+        num_errored = 0
         num_failed = 0
         num_failed_music = 0
-        num_errored = 0
-        word_error_counts: dict[int, int] = {} 
+        num_failed_but_improved = 0
+        num_passed = 0
         word_counts: dict[int, int] = {}
-        start_time = time.time()
-        saved_elapsed: list[float] = [] # history of end-to-end times taken to create sound files
-        saved_start_time = time.time()
+        preexisting_word_error_counts = project.sound_segments.get_word_error_counts_in_generate_range()
         gen_val_sum_time = 0
+        start_time = time.time()
 
         SigIntHandler().set("generating")
         did_interrupt = False
@@ -133,9 +130,10 @@ class GenerateUtil:
             # Print item info
             GenerateUtil.print_batch_heading(
                 indices=indices,
-                num_complete=num_saved + num_failed + num_errored,
+                num_complete=num_passed + num_failed + num_errored,
                 num_remaining=len(items) + len(batch),
-                num_total=len(sorted_indices)
+                num_total=len(sorted_indices),
+                start_time=start_time
             )
 
             # Generate and validate
@@ -166,7 +164,7 @@ class GenerateUtil:
                 new_retry_count = retry_counts[i] + 1
 
                 if isinstance(result, str):
-                    # Error
+                    # Model error
                     val_line = f"{COL_ERROR}Error: {result}"
                     if new_retry_count > max_retries:
                         num_errored += 1
@@ -175,12 +173,28 @@ class GenerateUtil:
                         re_adds.append((index, new_retry_count))
                         val_line += f"; {COL_DEFAULT}will retry"
                     message_lines.append(val_line)
+                
                 else:
+                    # Process validation result
                     validation_result = result
 
                     val_line = f"{validation_result.get_ui_message()}"
-                    if new_retry_count > 1 and not validation_result.is_fail:
-                        val_line = val_line.replace("Passed", f"{COL_OK}Passed on retry") 
+
+                    # Modify validation ui message if needed
+                    if not validation_result.is_fail:
+                        if is_regen:
+                            val_line = val_line.replace("Passed", f"{COL_OK}Passed") 
+                        else:
+                            if new_retry_count > 1:
+                                val_line = val_line.replace("Passed", f"{COL_OK}Passed on retry") 
+                    else:
+                        if is_regen:
+                            if isinstance(validation_result, WordErrorResult):
+                                preexisting_count = preexisting_word_error_counts.get(index, None)
+                                new_count = validation_result.num_errors
+                                if preexisting_count is not None and validation_result.num_errors < preexisting_count:
+                                    val_line += f" (improved from {preexisting_count} to {new_count} word errors)"
+                                    preexisting_word_error_counts[index] = new_count
 
                     # Failed or not
                     if validation_result.is_fail:
@@ -193,20 +207,13 @@ class GenerateUtil:
                         if isinstance(validation_result, MusicFailResult):
                             num_failed_music += 1
                     else:
-                        num_saved += 1
+                        num_passed += 1
                     
                     val_line += Ansi.RESET
                     message_lines.append(val_line)
 
                     # Update word count metrics
                     word_counts[index] = project.phrase_groups[index].num_words
-
-                    # Update error count metrics, word count metrics
-                    if isinstance(validation_result, WordErrorResult):
-                        fails = validation_result.num_errors
-                        if index in word_error_counts:
-                            fails = min(fails, word_error_counts[index])
-                        word_error_counts[index] = fails
 
                     # Save
                     phrase_group = project.phrase_groups[index]
@@ -225,7 +232,7 @@ class GenerateUtil:
                 if i < len(results) - 1:
                     printt()
 
-            # Print memory usage
+            # Print current memory usage
             if len(results) > 1:
                 printt()
             warnings_string = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
@@ -242,19 +249,21 @@ class GenerateUtil:
         if did_interrupt:
             warnings_string += "Interrupted. "
         warnings_string += f"Elapsed: {duration_string(time.time() - start_time)}\n"
-        ok = str(num_saved)
-        if num_saved == len(sorted_indices):
+        ok = str(num_passed)
+        if num_passed == len(sorted_indices):
             ok += " (all)"
         warnings_string += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
         if num_failed:
-            warnings_string += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT}\n"
+            warnings_string += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT} "
+            if is_regen and num_failed_but_improved > 0:
+                warnings_string += f"(num improved: {num_failed_but_improved})"
+            warnings_string += "\n"
         if num_errored:
             warnings_string += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
             warnings_string += f"Num words: {sum(word_counts.values())}\n"
             if Stt.has_instance():
-                warnings_string += f"Num word fails: {sum(word_error_counts.values())}\n"
                 if MusicDetector.has_instance():
                     warnings_string += f"Num music fails: {num_failed_music}\n"
             warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
@@ -465,6 +474,9 @@ class GenerateUtil:
         project = state.project
         
         # Save sound
+        dir_path = project.realtime_path if is_real_time else project.sound_segments_path 
+        os.makedirs(dir_path, exist_ok=True)
+
         file_name = SoundSegmentUtil.make_file_name(
             index=index,
             phrase_group=phrase_group,
@@ -473,11 +485,8 @@ class GenerateUtil:
             tts_model_info=Tts.get_type().value,
             is_real_time=is_real_time
         )
-        
-        dir_path = project.realtime_path if is_real_time else project.sound_segments_path 
-        os.makedirs(dir_path, exist_ok=True)
-
         sound_path = os.path.join(dir_path, file_name)
+
         err = SoundFileUtil.save_flac(validation_result.sound, sound_path)
         if err:
             return err, sound_path
@@ -500,7 +509,8 @@ class GenerateUtil:
                 with open(json_path, 'w', encoding='utf-8') as file:
                     file.write(json_string)
             except Exception as e:
-                ... # eat silently
+                printt(COL_ERROR + str(json_path))
+                printt(COL_ERROR + make_error_string(e))
 
         if state.prefs.save_debug_files and not is_real_time:
             save_debug_json(project, phrase_group, index, validation_result, dir_path)
@@ -509,7 +519,7 @@ class GenerateUtil:
 
     @staticmethod
     def print_batch_heading(
-        indices: list[int], num_complete: int, num_remaining: int, num_total: int
+        indices: list[int], num_complete: int, num_remaining: int, num_total: int, start_time: float
     ) -> None:
         
         line_noun = make_noun("line", "lines", len(indices))
@@ -519,7 +529,8 @@ class GenerateUtil:
         indices_string = ", ".join(index_strings)
         processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
 
-        counts = f"{COL_DIM}(lines processed: {COL_DEFAULT}{num_complete}{COL_DIM}; remaining: {COL_DEFAULT}{num_remaining}{COL_DIM})"
+        elapsed = duration_string(time.time() - start_time)
+        counts = f"{COL_DIM}(lines processed: {COL_DEFAULT}{num_complete}{COL_DIM}; remaining: {COL_DEFAULT}{num_remaining}{COL_DIM}; elapsed: {COL_DEFAULT}{elapsed}{COL_DIM})"
 
         message = f"{processing_string} {counts}"
         

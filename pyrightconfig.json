@@ -1,5 +1,7 @@
 {
 
+    "pythonVersion": "3.11", 
+
     "typeCheckingMode": "standard",
 
     "reportUnusedImport": false,
@@ -9,13 +11,12 @@
     },
 
     "exclude": [
-        "node_modules/**",
-        "**/venv*/**",
-        "boson_multimodal/**",
-        "tts_audiobook_tool/higgs_generator.py",
-        "tts_audiobook_tool/test_higgs.py"
+        "**/.*",
+        "**/node_modules",
+        "**/__pycache__",
+        "**/venv*"
     ],
     "ignore": [
-        "**/venv*/**"
+        "**/venv*"
     ]
 }

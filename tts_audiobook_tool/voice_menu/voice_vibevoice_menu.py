@@ -36,7 +36,8 @@ class VoiceVibeVoiceMenu:
 
         def make_lora_target_label(_) -> str:
             if project.vibevoice_lora_target:
-                label = make_currently_string(project.vibevoice_lora_target)
+                value = ellipsize_path_for_menu(project.vibevoice_lora_target)
+                label = make_currently_string(value)
             else:
                 label = f"{COL_DIM}(optional)"
             return f"LoRA {label}"

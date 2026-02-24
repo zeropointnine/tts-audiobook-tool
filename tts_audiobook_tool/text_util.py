@@ -1,11 +1,12 @@
 import re
 import string
+import unicodedata
 
 from tts_audiobook_tool.dictionary_en import DictionaryEn
 
 class TextUtil:
     """
-    Lower level functions for parsing, processing source text, etc
+    Lower level functions related to parsing, processing source text, etc
     """
 
     ws_punc_chars: set[str] = set(
@@ -23,6 +24,29 @@ class TextUtil:
         if not s:
             return True # TODO: ?...
         return all(char in TextUtil.ws_punc_chars for char in s)
+    
+    @staticmethod
+    def is_vocalizable(s: str) -> bool:
+        """
+        Does string have "vocalizable" content, as defined by these unicode categories:
+        
+        - L = Letter (Lu, Ll, Lt, Lm, Lo) -> All scripts, CJK ideographs
+        - N = Number (Nd, Nl, No)         -> Digits, fractions, Roman numerals
+        
+        Note, we're not considering these by themselves to be sufficient:
+
+        - S = Symbol (Sm, Sc, Sk, So)     -> Currency, math, Emojis
+        """
+
+        VOCALIZABLE_CATEGORIES = {'L', 'N'} # NOT using "S" here
+
+        for char in s:
+            # unicodedata.category(char) returns a 2-letter code (e.g., 'Lu' for Letter, uppercase)
+            # We check the first letter to match the major category.
+            if unicodedata.category(char)[0] in VOCALIZABLE_CATEGORIES:
+                return True
+                
+        return False
 
     @staticmethod
     def split_raw_word(raw_word: str) -> tuple[str, str, str]: 

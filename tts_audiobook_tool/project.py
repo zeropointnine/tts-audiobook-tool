@@ -699,7 +699,7 @@ class Project(Saveable):
         value = getattr(self, Tts.get_type().value.voice_file_name_attr, "")
         if not value: 
             return "none"
-        value = truncate_path_for_menu(value)
+        value = ellipsize_path_for_menu(value)
         return value
 
     @property

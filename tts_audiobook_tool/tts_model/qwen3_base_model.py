@@ -183,7 +183,7 @@ class Qwen3BaseModel(TtsBaseModel):
                     prefix, value = COL_ERROR + "required", ""
                 else:
                     prefix = "current voice clone"
-                    value = COL_ACCENT + truncate_path_for_menu(project.qwen3_voice_file_name)
+                    value = COL_ACCENT + ellipsize_path_for_menu(project.qwen3_voice_file_name)
 
         return prefix, value
 

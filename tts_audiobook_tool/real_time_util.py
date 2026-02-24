@@ -73,7 +73,8 @@ class RealTimeUtil:
         start_index, end_index = line_range
         start_index -= 1
         end_index -= 1
-        
+        start_time = time.time()
+
         for index in range(start_index, end_index + 1):
 
             if did_interrupt:
@@ -93,7 +94,8 @@ class RealTimeUtil:
                 indices=[index],
                 num_complete=index - start_index,
                 num_remaining=end_index + 1 - index,
-                num_total=end_index + 1 - start_index
+                num_total=end_index + 1 - start_index,
+                start_time=start_time
             )
             printt(f"{COL_DIM}{Ansi.ITALICS}{phrase_group.presentable_text}")
             printt()
