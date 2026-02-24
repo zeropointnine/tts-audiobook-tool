@@ -34,7 +34,9 @@ class Phrase:
     @property
     def presentable_text(self) -> str:
         """ Text in 'presentable' format for UI-related purposes """
-        return self.text.strip()
+        text = self.text.replace("\n", " ").replace("\r", " ")
+        text = TextUtil.massage_post_normalize(text)
+        return text
 
     @property
     def words(self) -> list[str]:
@@ -136,10 +138,6 @@ class PhraseGroup:
     def __init__(self, segments: list[Phrase] | None = None):
         self.phrases: list[Phrase] = segments or []
 
-    # def __string__(self) -> str:
-    #     s = " ".join( [repr(phrase.text) for phrase in self.phrases] )            
-    #     return f"[PhraseGroup] {s}"
-
     @property
     def num_words(self) -> int:
         count = 0
@@ -158,8 +156,12 @@ class PhraseGroup:
     @property
     def presentable_text(self) -> str:
         """ Text in 'presentable' format for UI-related purposes """
-        strings = [item.text.strip() for item in self.phrases]
-        return " ".join(strings)
+        text = ""
+        for phrase in self.phrases:
+            text += phrase.text + " "
+        text = text.replace("\n", " ").replace("\r", " ")
+        text = TextUtil.massage_post_normalize(text)
+        return text
     
     @property
     def last_reason(self) -> Reason:

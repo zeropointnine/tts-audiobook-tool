@@ -78,11 +78,18 @@ class TextUtil:
         ]
         text = "".join(clean_chars)
 
-        # Collapse consecutive whitespace characters into one space
-        text = re.sub(r"\s+", " ", text)        
-        # Strip white space from ends
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = TextUtil.massage_post_normalize(text)
 
+        return text
+    
+    @staticmethod
+    def massage_post_normalize(text: str) -> str:
+        """
+        Replaces consecutive whitespace characters with a single space, and strips whitespace from ends.
+        Should be done after any normalize-like text transformation.
+        """
+        text = re.sub(r"\s+", " ", text)        
+        text = re.sub(r'\s+', ' ', text).strip()
         return text
 
     @staticmethod

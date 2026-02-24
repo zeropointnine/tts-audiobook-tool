@@ -46,10 +46,7 @@ class TextNormalizer:
         # TODO: Revisit?
         text = re.sub(r'[^\w\s]', '', text) # TODO: '' or ' ' ?
 
-        # Collapse consecutive whitespace characters into one space
-        text = re.sub(r"\s+", " ", text)        
-        # Strip white space from ends
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = TextUtil.massage_post_normalize(text)
 
         return text
 

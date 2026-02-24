@@ -63,10 +63,7 @@ class PromptNormalizer:
             except NotImplementedError:
                 pass # Fail silently
 
-        # Collapse consecutive whitespace characters into one space
-        text = re.sub(r"\s+", " ", text)        
-        # Strip white space from ends
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = TextUtil.massage_post_normalize(text)
 
         return text
     
