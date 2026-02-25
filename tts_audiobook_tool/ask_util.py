@@ -120,42 +120,66 @@ class AskUtil:
     @staticmethod
     def ask_file_path(
             console_message: str,
-            requestor_title: str,
+            dialog_title: str,
             filetypes: list[tuple[str, str]] = [],
             initialdir: str=""
     ) -> str:
+        """
+        Gets a file path string from user using either gui file requestor or input().
+        """
         try:
             from tkinter import filedialog
             printt(console_message)
-            result = filedialog.askopenfilename(title=requestor_title, filetypes=filetypes, initialdir=initialdir)
-            if isinstance(result, tuple):
-                # In Linux, returns an empty tuple on cancel (Cinnamon)
-                result = ""
+            path = filedialog.askopenfilename(title=dialog_title, filetypes=filetypes, initialdir=initialdir)
+            did_tk = True
+            if isinstance(path, tuple):
+                # Can return an empty tuple on cancel (Linux Mint Cinnamon)
+                path = ""
         except Exception as e:
-            return AskUtil.ask_path_input(console_message)
-        printt(result)
+            path = AskUtil.ask_path_input(console_message)
+            did_tk = False
+
+        if not path:
+            return ""
+        path = os.path.normpath(os.path.abspath(path))
+        
+        if did_tk:
+            printt(path)
         printt()
-        return result
+        return path
 
     @staticmethod
     def ask_dir_path(
             console_message: str,
-            ui_title: str,
+            dialog_title: str,
             initialdir: str = "",
             mustexist: bool = True,
     ) -> str:
+        """
+        Gets a dir path string from user using either gui file requestor or input().
+        """
         try:
             # FYI: GTK-based folder requestor dialog has no obvious "new folder" functionality,
-            # but will return a non-existing directory path if entered; not ideal but
+            # but will return a non-existing directory path if manually entered; not ideal but
             from tkinter import filedialog
             printt(console_message)
-            result = filedialog.askdirectory(title=ui_title, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows
-            if result:
-                printt(result)
-            printt()
-            return result
+            path = filedialog.askdirectory(title=dialog_title, initialdir=initialdir, mustexist=mustexist) # fyi, mustexist doesn't rly do anything on Windows
+            did_tk = True
+            if isinstance(path, tuple):
+                # Can return an empty tuple on cancel (Linux Mint Cinnamon)
+                path = ""
         except Exception as e:
-            return AskUtil.ask_path_input(console_message)
+            path = AskUtil.ask_path_input(console_message)
+            did_tk = False
+
+        if not path:
+            return ""
+        path = os.path.normpath(os.path.abspath(path))
+        
+        if did_tk:
+            printt(path)
+        printt()
+        return path
 
     @staticmethod
     def ask_path_input(message: str="") -> str:

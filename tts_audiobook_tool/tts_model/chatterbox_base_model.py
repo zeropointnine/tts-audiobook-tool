@@ -25,7 +25,7 @@ class ChatterboxBaseModel(TtsBaseModel):
         ...
 
     @classmethod
-    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None, is_short: bool) -> list[str]:
+    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None, short_format: bool) -> list[str]:
 
         verbose_list = ChatterboxBaseModel.get_prereq_errors_verbose(project, instance)
         return ["current language code not supported by model"] if verbose_list else []
@@ -72,5 +72,3 @@ class ChatterboxType(tuple[str, str, str], Enum):
             if id == item.id:
                 return item
         return None
-
-

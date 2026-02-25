@@ -101,7 +101,7 @@ class Qwen3BaseModel(TtsBaseModel):
 
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
+            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
     ) -> list[str]:
 
         if instance:
@@ -119,13 +119,13 @@ class Qwen3BaseModel(TtsBaseModel):
                 else:
                     is_valid = instance.get_resolved_speaker_info(project)[1]
                     if not is_valid:
-                        err = "requires speaker" if is_short else "A valid speaker id is required"
+                        err = "requires speaker" if short_format else "A valid speaker id is required"
                         errors.append(err)
             case "voice_design":
                 ... # # has no requirements bc "instruction" is optional
             case "base" | _:
                 if not project.qwen3_voice_file_name:
-                    err = "requires voice sample" if is_short else "Voice sample required"
+                    err = "requires voice sample" if short_format else "Voice sample required"
                     errors.append(err)
         
         return errors

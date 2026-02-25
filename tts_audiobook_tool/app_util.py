@@ -215,28 +215,28 @@ class AppUtil:
 
     @staticmethod
     def get_label_with_prereq_error(project: Project, base_label: str) -> str:
-        error = AppUtil.get_combined_prereq_error(project, is_short=True)
+        error = AppUtil.get_combined_prereq_error(project, short_format=True)
         if error:
             return base_label + f" {COL_DIM}({COL_ERROR}{error}{COL_DIM})"
         else:
             return base_label
 
     @staticmethod
-    def get_combined_prereq_error(project: Project, is_short: bool) -> str: 
+    def get_combined_prereq_error(project: Project, short_format: bool) -> str: 
         """ 
         Returns combined error string with reasons (both non-model-related and model-related)
         """
         all_errors = []
         
         if not project.phrase_groups:
-            err = "requires text" if is_short else "Text must be defined"
+            err = "requires text" if short_format else "Text must be defined"
             all_errors.append(err)
 
-        model_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance_if_exists(), is_short) 
+        model_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance_if_exists(), short_format) 
         if model_errors:
             all_errors.extend(model_errors)
 
-        if is_short:
+        if short_format:
             if len(all_errors) > 2:
                 all_errors = all_errors[:2]
                 did_truncate = True

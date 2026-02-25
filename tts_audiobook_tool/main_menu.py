@@ -24,7 +24,6 @@ class MainMenu:
         """
         This acts as the main program loop.
         """
-
         while True:
 
             if state.prefs.project_dir and not os.path.exists(state.prefs.project_dir):

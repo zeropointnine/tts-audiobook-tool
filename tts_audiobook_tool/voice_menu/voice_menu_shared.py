@@ -192,7 +192,7 @@ class VoiceMenuShared:
 
         path = AskUtil.ask_file_path(
              console_message=console_message,
-             requestor_title=requestor_title,
+             dialog_title=requestor_title,
              filetypes=FILE_REQUESTOR_SOUND_TYPES,
              initialdir=default_dir_path
         )

@@ -82,19 +82,19 @@ class ProjectMenu:
         console_message = "Enter the path to an empty directory:"
         ui_title = "Select empty directory"
 
-        dir_path = AskUtil.ask_dir_path(
+        dir = AskUtil.ask_dir_path(
             console_message=console_message,
-            ui_title=ui_title,
+            dialog_title=ui_title,
             initialdir=state.project.dir_path,
             mustexist=False
         )
 
-        if not dir_path:
+        if not dir:
             return False
 
         old_project = state.project
 
-        err = state.make_and_set_new_project(dir_path)
+        err = state.make_and_set_new_project(dir)
         if err:
             AskUtil.ask_error(err)
             return False

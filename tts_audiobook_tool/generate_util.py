@@ -64,7 +64,7 @@ class GenerateUtil:
             return True
                 
         # Do model prereq check now that model instance exists
-        err = AppUtil.get_combined_prereq_error(state.project, is_short=False) 
+        err = AppUtil.get_combined_prereq_error(state.project, short_format=False) 
         if err:
             print_feedback(err, is_error=True)
             return True

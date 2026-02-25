@@ -16,7 +16,7 @@ class RealTimeMenu:
 
         def make_start_label(_: State) -> str:
             label = "Start"
-            warning = AppUtil.get_combined_prereq_error(state.project, is_short=True)
+            warning = AppUtil.get_combined_prereq_error(state.project, short_format=True)
             if warning:
                 return make_menu_label(label, warning, value_prefix="", color_code=COL_ERROR)
             else:
@@ -153,7 +153,7 @@ def do_start(state: State) -> None:
         return
 
     # Check model and other app prereqs
-    error = AppUtil.get_combined_prereq_error(state.project, is_short=False)
+    error = AppUtil.get_combined_prereq_error(state.project, short_format=False)
     if error:
         print_feedback(error, is_error=True)
         return

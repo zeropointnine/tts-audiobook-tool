@@ -87,7 +87,7 @@ class TtsBaseModel(ABC):
 
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
+            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
     ) -> list[str]:
         """
         Returns warning messages as to why generate is not possible.
@@ -95,14 +95,14 @@ class TtsBaseModel(ABC):
 
         Some prereq errors can only be known with a concrete instance (param `instance`).
 
-        :param is_short:
+        :param short_format:
             When true, should return very short phrase, meant to be concatenated on a single line
             Else, should return full messages meant to be displayed on separate lines
         """
 
         # Default implementation is for model whose only possible requirement is voice clone-related
         
-        err = cls._get_standard_voice_prereq_error(project, is_short)
+        err = cls._get_standard_voice_prereq_error(project, short_format)
         return [err]
    
     def get_prereq_warnings(self, project: Project) -> list[str]:
@@ -184,14 +184,14 @@ class TtsBaseModel(ABC):
     # ---
 
     @classmethod
-    def _get_standard_voice_prereq_error(cls, project: Project, is_short: bool) -> str:
+    def _get_standard_voice_prereq_error(cls, project: Project, short_format: bool) -> str:
 
         if not cls.INFO.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
         voice_file_name = getattr(project, cls.INFO.voice_file_name_attr, "")
         if cls.INFO.requires_voice and not voice_file_name:
-            err = "requires voice sample" if is_short else "Voice sample required"
+            err = "requires voice sample" if short_format else "Voice sample required"
             return err
         else:
             return ""

@@ -24,9 +24,9 @@ class NoneBaseModel(TtsBaseModel):
 
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, is_short: bool
+            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
     ) -> list[str]:
-        err = "requires TTS model" if is_short else "No TTS model; the app must be launched from a properly configured virtual environment"
+        err = "requires TTS model" if short_format else "No TTS model; the app must be launched from a properly configured virtual environment"
         return [err]
 
 class NoneModel(NoneBaseModel):
