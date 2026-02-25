@@ -21,13 +21,14 @@ class SoundFileUtil:
         Returns data as normalized np32 floats, mono
         """
         try:
-            data, sr = librosa.load(path)
+            # First, load without resampling
+            data, sr = librosa.load(path, sr=None, mono=True)
             sr = int(sr)
         except Exception as e:
             return make_error_string(e)
 
         if target_sr != 0 and target_sr != sr:
-            data = librosa.resample(data, orig_sr=sr, target_sr=target_sr)
+            data = librosa.resample(data, orig_sr=sr, target_sr=target_sr, res_type="soxr_hq")
             return Sound(data, target_sr)
         else:
             return Sound(data, sr)

@@ -112,12 +112,12 @@ class SoundUtil:
         On error, prints feedback and simply returns the base_sound.
         """
 
-        result = SoundFileUtil.load(appended_sound_path)
-        if isinstance(result, str):
-            printt(f"Couldn't load sound {appended_sound_path} {result}")
+        load_result = SoundFileUtil.load(appended_sound_path)
+        if isinstance(load_result, str):
+            printt(f"Couldn't load sound {appended_sound_path} {load_result}")
             return base_sound
 
-        appended_sound = result
+        appended_sound = load_result
         appended_sound = SoundUtil.resample_if_necessary(appended_sound, base_sound.sr)
 
         new_data = numpy.concatenate((base_sound.data, appended_sound.data))

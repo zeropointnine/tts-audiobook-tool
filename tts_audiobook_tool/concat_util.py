@@ -325,13 +325,11 @@ class ConcatUtil:
             appended_silence_duration = phrase.reason.pause_duration
             use_appended_sound_effect = False
 
-        result = SoundFileUtil.load(path)
+        result = SoundFileUtil.load(path, APP_SAMPLE_RATE)
         if isinstance(result, str): # error
             return result
         else:
             sound = result
-
-        sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
 
         # Append sound effect or silence 
         if use_appended_sound_effect:

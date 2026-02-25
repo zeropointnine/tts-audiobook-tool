@@ -114,12 +114,12 @@ class VoiceMenuShared:
         state.prefs.last_voice_dir = str(Path(path).parent)
 
         # Load sound
-        result = SoundFileUtil.load(path)
-        if isinstance(result, str):
-            err = result
+        sound_result = SoundFileUtil.load(path)
+        if isinstance(sound_result, str):
+            err = sound_result
             AskUtil.ask_error(err)
             return
-        sound = result
+        sound = sound_result
 
         printt(f"{COL_DIM}Playing selected sound sample...")
         printt()
@@ -147,18 +147,18 @@ class VoiceMenuShared:
                     stt_variant = SttVariant.LARGE_V3
                 else:
                     stt_variant = state.prefs.stt_variant
-                result = WhisperUtil.transcribe_to_words(
+                sound_result = WhisperUtil.transcribe_to_words(
                     sound, state.project.language_code, stt_variant, state.prefs.stt_config
                 )
                 if state.prefs.stt_variant == SttVariant.DISABLED:
                     Stt.clear_stt_model()
 
-                if isinstance(result, str):
-                    err = result
+                if isinstance(sound_result, str):
+                    err = sound_result
                     AskUtil.ask_error(err)
                     return
 
-                words = result
+                words = sound_result
                 transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
                 print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
                 printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
