@@ -154,7 +154,7 @@ class ProjectMenu:
                 return 
             state.project.word_substitutions = result
             state.project.save()
-            print_feedback("Set word substitutions")
+            print_feedback("Word substitutions set")
             return 
 
         def on_clear(_, __) -> None:
@@ -173,6 +173,7 @@ class ProjectMenu:
             print_heading("Uncommon words")
             printt(UNCOMMON_WORDS_DESC)
             
+            # Make list of project text words (unfiltered, still including whitespace)
             all_words_raw = [] 
             for group in state.project.phrase_groups:
                 for phrase in group.phrases:
@@ -301,6 +302,6 @@ f"""Enter substitutions list. Use this format:
 """
 
 UNCOMMON_WORDS_DESC = \
-f"""Most frequent words in the project text not found 
-in the app's English \"common words\" dictionary.
+f"""Words in the project text not found in the app's 
+English \"common words\" dictionary, sorted by frequency.
 """

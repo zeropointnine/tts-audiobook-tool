@@ -146,23 +146,23 @@ class TextUtil:
         return stripped
 
     @staticmethod
-    def get_words(s: str, filtered: bool=False) -> list[str]:
+    def get_words(s: str, vocalizable_only: bool=False) -> list[str]:
         """
         Splits string into words, *preserving whitespace*, 
-        and optionally filtering out "punctuation words"
+        and optionally filtering out "unvocalizable" words.
         """
 
         # Like str.split() but preserves the whitespace at end of each item
         words = re.findall(r'\S+\s*|\s+', s.lstrip())
 
-        if filtered:
+        if vocalizable_only:
             return [word for word in words if not TextUtil.is_ws_punc(word)]
         else:
             return words
 
     @staticmethod
-    def get_word_count(s: str, filtered: bool=False) -> int:
-        return len( TextUtil.get_words(s, filtered) )
+    def get_word_count(s: str, vocalizable_only: bool=False) -> int:
+        return len( TextUtil.get_words(s, vocalizable_only=vocalizable_only) )
 
     @staticmethod
     def num_trailing_line_breaks(s: str) -> int:
@@ -211,8 +211,9 @@ class TextUtil:
             ]
         """
         counts_dict: dict[str, tuple[int, list[str]]] = {}
+
         for raw_word in raw_words:
-            word = TextUtil.split_raw_word(raw_word)[1]
+            word = TextUtil.split_raw_word(raw_word)[1] # strip outer whitespace and punctuation
             word = word.replace("’", "'") # fancy apost
             if not word:
                 continue
@@ -229,8 +230,10 @@ class TextUtil:
                 instances.append(word)
             counts_dict[word_lc] = (count, instances)
         
+        # Filter out "non-vocalizable" items
+        counts_dict = { k: v for k, v in counts_dict.items() if TextUtil.is_vocalizable(k) }
+
         sorted_tuples = sorted(
             [(word_lc, count, instances) for word_lc, (count, instances) in counts_dict.items()], key=lambda x: x[1], reverse=True
         )
         return sorted_tuples
-

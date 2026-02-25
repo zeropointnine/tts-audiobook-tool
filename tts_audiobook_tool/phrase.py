@@ -11,7 +11,7 @@ class Phrase:
     def __init__(self, text: str, reason: Reason):
         self._text = text
         self.reason = reason
-        self._words = TextUtil.get_words(self._text)
+        self._words = TextUtil.get_words(self._text, vocalizable_only=False)
 
     def __eq__(self, other: Any):
         if not isinstance(other, Phrase):
@@ -29,7 +29,7 @@ class Phrase:
     @text.setter
     def text(self, value: str) -> None:
         self._text = value
-        self._words = TextUtil.get_words(self._text)        
+        self._words = TextUtil.get_words(self._text, vocalizable_only=False)
 
     @property
     def presentable_text(self) -> str:
@@ -40,6 +40,7 @@ class Phrase:
 
     @property
     def words(self) -> list[str]:
+        """ Returns the words in the phrase (with all characters preserved) """
         return self._words
 
     @property

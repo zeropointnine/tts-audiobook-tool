@@ -224,7 +224,7 @@ class AppUtil:
     @staticmethod
     def get_combined_prereq_error(project: Project, short_format: bool) -> str: 
         """ 
-        Returns combined error string with reasons (both non-model-related and model-related)
+        Returns project prerequisites' error string (both non-model-related and model-related)
         """
         all_errors = []
         

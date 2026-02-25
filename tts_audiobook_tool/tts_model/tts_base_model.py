@@ -103,7 +103,7 @@ class TtsBaseModel(ABC):
         # Default implementation is for model whose only possible requirement is voice clone-related
         
         err = cls._get_standard_voice_prereq_error(project, short_format)
-        return [err]
+        return [err] if err else []
    
     def get_prereq_warnings(self, project: Project) -> list[str]:
         """ Returns "non-blocking" warning info based on the state of `project` and `self` """

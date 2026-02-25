@@ -71,7 +71,7 @@ class ValidateUtil:
             return None 
 
         normalized_source = TextNormalizer.normalize_source(source, language_code)
-        source_word_count = TextUtil.get_word_count(normalized_source, filtered=True)        
+        source_word_count = TextUtil.get_word_count(normalized_source, vocalizable_only=True)        
         overage = len(transcript_words) - source_word_count
         if overage < 0:
             return None
@@ -212,7 +212,7 @@ class ValidateUtil:
         word_errors = \
             ValidateUtil.get_word_errors(normalized_source, normalized_transcript, language_code)
         num_word_errors = len(word_errors)
-        num_words = TextUtil.get_word_count(normalized_source)
+        num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
         
         match strictness:
             case Strictness.LOW:
