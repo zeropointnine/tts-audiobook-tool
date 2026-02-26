@@ -1,3 +1,4 @@
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -74,3 +75,19 @@ class VibeVoiceBaseModel(TtsBaseModel):
                 value = COL_ACCENT + ellipsize_path_for_menu(project.vibevoice_lora_target)
         return prefix, value
 
+    @classmethod
+    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
+
+        WARNING = "Not recommended with VibeVoice 1.5B model (w/o use of lora)"
+
+        if strictness >= Strictness.HIGH:
+            if not instance:
+                return WARNING
+            else:
+                if project.vibevoice_target or project.vibevoice_lora_target:
+                    # Custom model or lora means can't make the "not recommended" assumption
+                    return ""
+                else:
+                    return WARNING
+        else:
+            return ""

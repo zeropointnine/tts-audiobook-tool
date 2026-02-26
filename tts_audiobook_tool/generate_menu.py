@@ -113,19 +113,16 @@ class GenerateMenu:
             state.project.save()
             print_feedback(f"Strictness set to:", state.project.strictness.label)
 
-        # Special case messaging based on language code and current TTS model specs
+        warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, Tts.get_instance_if_exists())
+
         if state.project.language_code != "en":
             low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for current language code {state.project.language_code}"
             medium_desc = ""
             high_desc = ""
-        elif Tts.get_type().value.strictness_high_discouraged:
-            low_desc = ""
-            medium_desc = ""
-            high_desc = f"{Ansi.ITALICS}Not recommended{Ansi.RESET}{COL_DIM} with current TTS model"
         else:
             low_desc = ""
             medium_desc = ""
-            high_desc = "Best net accuracy but triggers more retries"
+            high_desc = warning_high if warning_high else "Best net accuracy but triggers more retries"
 
         MenuUtil.options_menu(
             state=state,
@@ -171,7 +168,8 @@ def make_strictness_label(state: State) -> str:
         label="Transcript validation strictness", 
         value=state.project.strictness.label
     )
-    if Strictness.exceeds_recommended_limit(state.project.strictness, state.project.language_code):
+    warning = Tts.get_class().get_strictness_warning(state.project.strictness, state.project, Tts.get_instance_if_exists())
+    if warning:
         label += f"{COL_ERROR}*"
     return label
 

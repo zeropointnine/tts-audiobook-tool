@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 class TtsModelInfo(NamedTuple):
     """
-    App properties of a supported TTS model
+    Hardcoded properties of a supported TTS model
     """
 
     # Module name to test for that implies the TTS model library exists in the current py env
@@ -30,8 +30,6 @@ class TtsModelInfo(NamedTuple):
     # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
     
     batch_size_project_field: str
-    # When True, the "high" setting for strictness is discouraged due to model's poor WER
-    strictness_high_discouraged: bool
     # Should semantic trim at end of last word
     # Doing so is generally redundant and risks unintended partial cropping of end of last word
     # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
@@ -71,7 +69,6 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="",
-        strictness_high_discouraged=True,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -96,7 +93,6 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
-        strictness_high_discouraged=True,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False, # TODO: check this
@@ -124,7 +120,6 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="",
-        strictness_high_discouraged=True,
         semantic_trim_last=True,
         hallucinates_music=False,
         un_all_caps=True,
@@ -151,7 +146,6 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
-        strictness_high_discouraged=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
@@ -178,7 +172,6 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
-        strictness_high_discouraged=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
@@ -205,7 +198,6 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="vibevoice_batch_size",
-        strictness_high_discouraged=True,
         semantic_trim_last=False,
         hallucinates_music=True,
         un_all_caps=True,
@@ -234,7 +226,6 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
-        strictness_high_discouraged=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -262,7 +253,6 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=True,
         batch_size_project_field="",
-        strictness_high_discouraged=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -291,7 +281,6 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="mira_batch_size",
-        strictness_high_discouraged=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # falls down badly with all caps phrases
@@ -320,7 +309,6 @@ class TtsModelInfos(Enum):
         requires_voice=True, # this applies to 'base' model type only
         requires_voice_transcript=True,
         batch_size_project_field="qwen3_batch_size",
-        strictness_high_discouraged=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # is only slightly more error-prone when all-caps

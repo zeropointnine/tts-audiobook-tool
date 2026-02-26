@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from enum import Enum
 
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
@@ -46,6 +47,12 @@ class ChatterboxBaseModel(TtsBaseModel):
                 ]
             else:
                 return []
+
+    @classmethod
+    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
+        if strictness >= Strictness.HIGH:
+            return "Not recommended with current TTS model"
+        return ""
 
 # ---
 

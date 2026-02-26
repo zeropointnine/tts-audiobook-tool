@@ -190,18 +190,6 @@ class Strictness(tuple[str, int, str], Enum):
         else:
             return Strictness.LOW
     
-    @staticmethod
-    def exceeds_recommended_limit(current_strictness: Strictness, language_code: str) -> bool:
-        if language_code != "en":
-            reco_limit = Strictness.LOW
-        else:
-            from tts_audiobook_tool.tts import Tts
-            if Tts.get_type().value.strictness_high_discouraged:
-                reco_limit = Strictness.MODERATE
-            else:
-                reco_limit = Strictness.HIGH
-        return current_strictness.level > reco_limit.level
-
 # ---
 
 FILES_DESC = "Each chapter divider will result in a new, separate audio file"

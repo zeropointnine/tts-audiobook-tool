@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.text_util import TextUtil
@@ -66,3 +67,8 @@ class OuteBaseModel(TtsBaseModel):
         tag = TextUtil.sanitize_for_filename(voice_file_name[:30])
         return tag
 
+    @classmethod
+    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
+        if strictness >= Strictness.HIGH:
+            return "Not recommended with current TTS model"
+        return ""

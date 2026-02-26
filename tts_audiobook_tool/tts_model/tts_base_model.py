@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, Strictness
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -83,14 +83,14 @@ class TtsBaseModel(ABC):
         return text
 
     # ---
-    # Class methods (ie, not instance-dependent)
+    # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 
     @classmethod
     def get_prereq_errors(
             cls, project: Project, instance: TtsBaseModel | None, short_format: bool
     ) -> list[str]:
         """
-        Returns warning messages as to why generate is not possible.
+        Returns error message string as to why generate is not possible.
         Applies to both main gen and realtime gen.
 
         Some prereq errors can only be known with a concrete instance (param `instance`).
@@ -106,13 +106,11 @@ class TtsBaseModel(ABC):
         return [err] if err else []
    
     def get_prereq_warnings(self, project: Project) -> list[str]:
-        """ Returns "non-blocking" warning info based on the state of `project` and `self` """
+        """ Returns warning info based on the state of `project` and `self` """
 
         # Default implementation returns random voice warning if any
         warning = self._get_standard_random_voice_reason(project)
         return [warning] if warning else []
-
-    # ---
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
@@ -181,8 +179,6 @@ class TtsBaseModel(ABC):
 
         return prefix, value
 
-    # ---
-
     @classmethod
     def _get_standard_voice_prereq_error(cls, project: Project, short_format: bool) -> str:
 
@@ -209,3 +205,16 @@ class TtsBaseModel(ABC):
 
         # Voice is not required, and no voice file specified
         return "Model may generate random voices because no voice clone reference has been specified"
+
+    @classmethod
+    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
+        """
+        Reason why the given validation `strictness` is discouraged, if any
+        """
+        return TtsBaseModel.default_strictness_warning_reason(strictness, project)
+        
+    @staticmethod
+    def default_strictness_warning_reason(strictness: Strictness, project: Project) -> str:
+        if strictness >= Strictness.HIGH and project.language_code != "en":
+            return f"Not recommended when language code != en"
+        return ""
