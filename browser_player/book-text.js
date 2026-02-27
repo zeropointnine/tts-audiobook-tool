@@ -7,6 +7,10 @@
  */
 class BookText {
 
+    // TODO: 
+    //  Too many callbacks. Make BookText more of a dumb view. 
+    //  With extra controller layer on top as a new class maybe.
+
     /**
      * @param {Object} config - Configuration object
      * @param {HTMLElement} config.textHolder - The container element for text
@@ -45,24 +49,50 @@ class BookText {
 
         // Internal state
         this.textSegments = [];
+        this.audioIndices = []; // text segment indices that "have audio"
+        this.segmentMap = {}; // key = textSegment index, value = audioIndicies index or null -- ONE MORE level of indirection
+        
         this.spans = [];
-        this.currentIndex = -1;
+        this.currentIndex = -1; // the current segment index
         this.directSelections = [];
         this.hasAdvancedOnce = false;
+        this.lastSeekTime = 0.0; // used for debouncing
     }
 
     /**
      * Initialize the controller with text segments.
-     * Also sets the filename text
      * 
-     * @param {Array} textSegments - Array of segment objects with text, time_start, time_end
-     * @param {boolean} addSectionDividers - Whether to add visual dividers for section breaks
+     * `textSegments` is an array of objects with text, time_start, time_end.
+     * time_start and time_end are monotonically increasing, 
+     * with the exception that that they can both be 0.0.
      */
     init(textSegments, addSectionDividers = false) {
+        
         this.textSegments = textSegments;
         this.currentIndex = -1;
         this.directSelections = [];
         this.hasAdvancedOnce = false;
+
+        // Init 'derived' data structures
+        this.audioIndices = [];
+        for (const [i, segment] of this.textSegments.entries()) {
+            if (segment["time_start"] > 0.0 || segment["time_end"] > 0.0) {
+                this.audioIndices.push(i)
+            }
+        }
+        this.segmentMap = {}
+        for (const [i, audioIndex] of this.audioIndices.entries()) {
+            this.segmentMap[audioIndex] = i
+        }
+        let lastIndex = -1
+        for (let i = 0; i < this.textSegments.length; i++) { // Fill in undefined entries
+            if (this.segmentMap[i] === undefined) {
+                this.segmentMap[i] = lastIndex
+            } else {
+                lastIndex = this.segmentMap[i]
+            }
+        }
+
         this._populateText(addSectionDividers);
     }
 
@@ -74,6 +104,8 @@ class BookText {
         this.textHolder.style.display = "none";
         this.spans = [];
         this.textSegments = [];
+        this.audioIndices = [];
+        this.segmentMap = {};
         this.currentIndex = -1;
         this.directSelections = [];
     }
@@ -143,41 +175,96 @@ class BookText {
     }
 
     /**
-     * Seek to the next playable segment
+     * Seeks to next/previous segment with audio using currentIndex if exists, else using timestamp
      */
-    seekNextSegment() {
-        let index = this.currentIndex;
-        for (let i = index + 1; i <= index + 100; i++) {
-            if (i >= this.textSegments.length) {
-                return;
-            }
-            const segment = this.textSegments[i];
-            const has_time = (segment["time_end"] > 0);
-            if (has_time) {
-                this.seekBySegmentIndex(i);
-                return;
-            }
+    seekAdjacent(currentTime, isForward) {
+        if (this.currentIndex > -1) {
+            this.seekAdjacentFromIndex(this.currentIndex, isForward)
+        } else {
+            this.seekAdjacentFromTime(currentTime, isForward)
         }
     }
 
     /**
-     * Seek to the previous playable segment
+     * 
      */
-    seekPreviousSegment() {
-        if (this.currentIndex <= 0) {
+    seekAdjacentFromIndex(segmentIndex, isForward) {
+        cl("seekadjacentfromindex", segmentIndex, isForward)
+        const audioIndex = this.segmentMap[segmentIndex];
+        const newAudioIndex = audioIndex + (isForward ? 1 : -1);
+        if (newAudioIndex < 0 || newAudioIndex > this.audioIndices.length -1 ) {
             return;
         }
-        for (let i = this.currentIndex - 1; i >= this.currentIndex - 100; i--) {
-            if (i < 0) {
-                return;
+        const newSegmentIndex = this.audioIndices[newAudioIndex];
+        this.seekBySegmentIndex(newSegmentIndex);
+    }
+
+    seekAdjacentFromTime(time, isForward) {
+        const audioIndices = this.findAudioIndex(time)
+        let newAudioIndex;
+        if (audioIndices.length == 1) {
+            newAudioIndex = audioIndices[0] + (isForward ? +1 : -1)
+        } else { // array is two elements - previous and next
+            newAudioIndex = isForward ? audioIndices[1] : audioIndices[0]
+        }
+        if (Number.isNaN(newAudioIndex) || newAudioIndex < 0 || newAudioIndex > this.audioIndices.length - 1) {
+            cl("no.")
+            return
+        }
+        const newSegmentIndex = this.audioIndices[newAudioIndex];
+        cl("seekadjacentfromtime", time, isForward, "audioindices", audioIndices, "newaudioindex", newAudioIndex, "newsegmentindex", newSegmentIndex)
+        this.seekBySegmentIndex(newSegmentIndex)
+    }
+
+    /**
+     * Returns either a one-element array with the segment index containing the target time,
+     * or a two-element array of the nearest indices (that have audio) "enclosing" the target time.
+     */
+    findAudioIndex(targetTime) {
+
+        if (this.textSegments.length == 0 || this.audioIndices.length == 0) {
+            return [NaN, NaN];
+        }
+
+        // Calc starting point for binary search
+        const n = this.audioIndices.length;
+
+        // Helper to get textSegment for an audioIndices entry
+        const getSegment = (ai) => this.textSegments[this.audioIndices[ai]];
+
+        // Edge cases
+        if (targetTime < getSegment(0)["time_start"]) {
+            return [NaN, 0];
+        }
+        if (targetTime > getSegment(n - 1)["time_end"]) {
+            return [n - 1, NaN];
+        }
+
+        // Binary search on audioIndices to find segment enclosing targetTime
+        let iters = -1; // for debugging
+        let lo = 0;
+        let hi = n - 1;
+
+        while (lo <= hi) {
+            
+            iters++;
+            
+            const mid = Math.floor((lo + hi) / 2);
+            const seg = getSegment(mid);
+
+            if (targetTime >= seg["time_start"] && targetTime <= seg["time_end"]) {
+                return [mid];
             }
-            const segment = this.textSegments[i];
-            const has_time = (segment["time_end"] > 0);
-            if (has_time) {
-                this.seekBySegmentIndex(i);
-                return;
+
+            if (targetTime < seg["time_start"]) {
+                hi = mid - 1;
+            } else {
+                lo = mid + 1;
             }
         }
+
+        // targetTime falls between segments at lo-1 and lo
+        return [lo - 1, lo];
     }
 
     /**
@@ -186,6 +273,13 @@ class BookText {
      * @param {boolean} andPlay - Whether to start playback after seeking
      */
     seekBySegmentIndex(i, andPlay = false) {
+        
+        // Prevent frequent seeks bc looks glitchy, not ideal but
+        if (Date.now() - this.lastSeekTime < 200) {
+            return;
+        }
+        this.lastSeekTime = Date.now()
+
         this.unhighlightByIndex(this.currentIndex);
         const targetTime = this.textSegments[i]["time_start"];
         this.onSeek(targetTime);
@@ -344,7 +438,7 @@ class BookText {
                 contentHtml += Util.escapeHtml(o["before"]);
             }
 
-            const hasAudio = segment["time_start"] > 0.0 && segment["time_end"] > 0.0;
+            const hasAudio = segment["time_start"] > 0.0 || segment["time_end"] > 0.0;
             const className = hasAudio ? "hasAudio" : "noAudio";
             const spanString = `<span id="segment-${i}" class="${className}">${Util.escapeHtml(o["content"])}</span>`;
             contentHtml += spanString;

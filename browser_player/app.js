@@ -67,7 +67,7 @@ class App {
         this.bookText = new BookText({
             textHolder: document.getElementById("textHolder"),
             fileNameLabel: document.getElementById("currentFileName"),
-            onSeek: (time) => { this.audio.currentTime = time; },
+            onSeek: (seconds) => this.onSeek(seconds),
             onPlay: () => this.playerPlay(),
             onStorePosition: (time) => this.storePosition(time),
             onShouldUpdateHighlight: () => !this.zombieChecker.isChecking,
@@ -317,10 +317,10 @@ class App {
                 event.preventDefault();
                 break;
             case ",":
-                this.bookText.seekPreviousSegment();
+                this.bookText.seekAdjacent(this.audio.currentTime, false);
                 break;
             case ".":
-                this.bookText.seekNextSegment();
+                this.bookText.seekAdjacent(this.audio.currentTime, true);
                 break;
             case "[":
                 this.audio.currentTime -= 60;
@@ -348,6 +348,19 @@ class App {
             return;
         }
         this.rootAttributer.set("data-player-status", "pause");
+    }
+
+    onSeek(seconds) {
+        let offset = 0.0;
+        if (this.audio.paused) {
+            // Adjustment is required due to seek limitations w/r/t audio frames
+            // (analogous to video seeking limitations w/r/t keyframes).
+            // Without offset, when audio is paused, seeked position may not quite reach
+            // intended sound segment start time, and so subsequent "next segment" commands
+            // will not behave correctly (it would remain "stuck")
+            offset = 0.05; // ... is probably a sufficient offset unless audio is encoded with vbr
+        }
+        this.audio.currentTime = seconds + offset; 
     }
 
     onAudioError(e) {
