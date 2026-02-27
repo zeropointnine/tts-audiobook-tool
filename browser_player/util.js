@@ -123,4 +123,11 @@ class Util {
         }
         return "";
     }
+
+    /**
+     * Is character a letter or number (unicode category 'L' or 'N')
+     */
+    static isLetterOrNumber(char) {
+        return /[\p{L}\p{N}]/u.test(char);
+    }
 }

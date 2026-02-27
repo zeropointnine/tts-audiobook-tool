@@ -28,14 +28,14 @@ class TextUtil:
     @staticmethod
     def is_vocalizable(s: str) -> bool:
         """
-        Does string have "vocalizable" content, as defined by these unicode categories:
+        App's definition of a string that has "vocalizable" content.
         
-        - L = Letter (Lu, Ll, Lt, Lm, Lo) -> All scripts, CJK ideographs
-        - N = Number (Nd, Nl, No)         -> Digits, fractions, Roman numerals
+        Must have a character with one of these high-level unicode categories:
+        - L (Letter) - All scripts, CJK ideographs
+        - N (Number) - Digits, fractions, Roman numerals
         
         Note, we're not considering these by themselves to be sufficient:
-
-        - S = Symbol (Sm, Sc, Sk, So)     -> Currency, math, Emojis
+        - S (Symbol) - Currency, math, Emojis
         """
 
         VOCALIZABLE_CATEGORIES = {'L', 'N'} # NOT using "S" here

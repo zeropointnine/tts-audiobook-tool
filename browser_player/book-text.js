@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * Manages and displays the book text widget.
+ * Manages and displays the "book text.""
  * 
- * Uses multiple callbacks to interacts with <audio> element, etc.
+ * Uses multiple callbacks to interact with <audio> element, etc.
  */
 class BookText {
 
@@ -430,9 +430,12 @@ class BookText {
      * @private
      */
     _populateText(addSectionDividers) {
+    
         let contentHtml = '';
+    
         this.textSegments.forEach((segment, i) => {
-            const o = Util.splitWhitespace(segment.text);
+
+            const o = BookText._splitTextSegment(segment.text);
 
             if (o["before"]) {
                 contentHtml += Util.escapeHtml(o["before"]);
@@ -501,4 +504,42 @@ class BookText {
             await this.onPlay();
         }
     }
+
+    static _splitTextSegment(text) {
+
+        // Special case; not great
+        let o = BookText._splitOrnamentalBreak(text)
+        if (o["after"]) {
+            return o
+        }
+
+        o = Util.splitWhitespace(text);
+        return o;
+    }
+
+    /**
+     * Splits string into two parts if it ends with so-called ornamental line break
+     * (line feed followed by non-number/non-letter characters).
+     * 
+     * This is part of a workaround to account for special case where text segments 
+     * end with a line feed followed by 'ornamental' characters.
+     */
+    static _splitOrnamentalBreak(text) {
+        
+        const regex = /[\r\n][^\p{L}\p{N}]*$/u; // unicode categories "L" and "N"
+        const match = text.match(regex);
+        if (match) {
+            const splitIndex = text.length - match[0].length;
+            return {
+                "content": text.slice(0, splitIndex),
+                "after": match[0]
+            }
+        } else {
+            return {
+                "content": text,
+                "after": ""
+            }
+        }
+    }
+
 }

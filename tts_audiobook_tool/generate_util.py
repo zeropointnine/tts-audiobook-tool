@@ -365,7 +365,7 @@ class GenerateUtil:
                 )
 
         if not skip_reason:
-            message = f"{COL_DEFAULT}Transcribed audio: {(time.time() - val_start_time):.1f}s"
+            message = f"{COL_DEFAULT}Transcribed audio in {(time.time() - val_start_time):.1f}s"
             printt(f"{Ansi.LINE_HOME}{message}")
         if len(indices) > 1:
             printt()
@@ -559,7 +559,7 @@ class GenerateUtil:
 def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
     
     # Elapsed
-    message = f"Generated audio: {gen_elapsed:.1f}s"
+    message = f"Generated audio in {gen_elapsed:.1f}s"
 
     # Cumulative duration, speed
     num_sounds = 0
