@@ -8,9 +8,9 @@ omegaconf
 
 # App dependencies
 faster-whisper==1.2.1
-ctranslate2==4.6.1
-torch==2.6.0
-torchaudio==2.6.0
+ctranslate2==4.7.1
+torch==2.8.0
+torchaudio==2.8.0
 
 audiotsm==0.1.2
 chardet==5.2.0

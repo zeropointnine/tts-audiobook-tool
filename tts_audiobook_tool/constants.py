@@ -37,7 +37,7 @@ MAX_WORDS_PER_SEGMENT_DEFAULT = 40
 MAX_WORDS_PER_SEGMENT_MIN = 20
 MAX_WORDS_PER_SEGMENT_MAX = 80
 
-CTRANSLATE_REQUIRED_CUDNN_VERSION = 90100
+CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 
 OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
@@ -166,11 +166,11 @@ HINT_OUTE_LOUD_NORM = Hint(
     "Oute generations can have considerable variance in loudness.\nConsider using \"stronger.\""
 )
 
-HINT_FISH_FIRST = Hint(
+HINT_FISH_FIRST_COMPILE = Hint(
     "fish_first",
     "Please note...",
 """On the first inference, the Fish model may go through a compilation step
-which may take 1-2 minutes without any feedback shown."""
+which may take a minute or two, with no feedback shown."""
 )
 
 HINT_TEST_REAL_TIME = Hint(
@@ -213,7 +213,7 @@ the second time through, as the audio transcription data has been cached."""
 HINT_LINUX_CUDNN_VERSION = Hint(
     "stt_linux_cudnn_version",
     f"{COL_ERROR}cuDNN version mismatch",
-f"""The installed version of torch is incompatible with faster-whisper for CUDA acceleration.
+f"""The currently installed version of torch may be incompatible with faster-whisper for CUDA acceleration.
 Either downgrade your version of torch (see README file), or change the Whisper 
 device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
 

@@ -23,7 +23,7 @@ class FishModel(FishBaseModel):
     See: https://github.com/fishaudio/fish-speech/blob/main/docs/en/inference.md
     """
 
-    def __init__(self, device: str):
+    def __init__(self, device: str, compile_enabled: bool):
 
         # TODO verify mpc; also mpc + compile? probably not presumably?
         self.device = device
@@ -76,9 +76,10 @@ class FishModel(FishBaseModel):
         dac_path = os.path.join(model_dir, "codec.pth")
         self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, self.device)
 
+        self._compile_enabled = (device == "cuda" and compile_enabled)
         t2s_path = model_dir
         self.t2s_model, self.decode_one_token = init_t2s_model(
-            t2s_path, self.device, torch.float16, compile=(self.device == "cuda")
+            t2s_path, self.device, torch.float16, compile=self._compile_enabled
         )
 
         self._voice_clone: VoiceClone | None = None
@@ -87,7 +88,6 @@ class FishModel(FishBaseModel):
         from loguru import logger
         logger.remove()
         logger.add(sys.stderr, level="WARNING", filter="fish_speech")
-
 
     def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
 

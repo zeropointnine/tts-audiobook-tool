@@ -258,8 +258,8 @@ class AppUtil:
         from tts_audiobook_tool.project import Project
         project: Project = p_project
 
-        if Tts.get_type() == TtsModelInfos.FISH:
-            Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST)
+        if Tts.get_type() == TtsModelInfos.FISH and project.fish_compile_enabled:
+            Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST_COMPILE)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():

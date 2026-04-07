@@ -74,10 +74,10 @@ A separate virtual environment must be created for each model you want to use. P
 
 ### Step 4 (Windows)
 
-To enable torch CUDA acceleration on Windows, run the following commands (Note how the project uses the same version of torch for each TTS model's virtual environments - v2.6.0/cu124). This extra step is not required when using Linux.
+To enable torch CUDA acceleration on Windows, run the following commands (Note how the project uses the same version of torch for each TTS model's virtual environments - v2.8.0/cu128). This extra step is not required when using Linux.
 
     pip uninstall -y torch torchaudio
-    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+    pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 
 ### Step 5
 
@@ -110,7 +110,7 @@ Install [Flash Attention](#installing-flash-attention) if using CUDA (optional b
 
 Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-mira
+    path\to\python3.12\python.exe -m venv venv-mira
 
 Activate the virtual environment:
 
@@ -291,14 +291,16 @@ Use `Backend.LLAMACPP`.
 
 ### Installing Flash Attention
 
-On Windows, the best path is to source a wheel from a trustworthy source. Choose one with the a filename that looks like one of the following, depending on Python version: 
+If instucted, perform this step after successfully running `pip install requirements-[model].txt` without errors.
 
-- flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp311-cp311-win_amd64.whl
-- flash_attn-2.7.4+cu126torch2.6.0cxx11abiFALSE-cp312-cp312-win_amd64.whl
+On Linux, enter:
 
-On Linux, simply enter:
+    pip install flash-attn==2.8.3 --no-build-isolation
 
-    pip install flash-attn==2.7.4.post1 --no-build-isolation
+On Windows, the best path is to source a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). Choose one with a filename that looks something like this, depending on Python version: 
+
+- flash_attn-2.7.4+cu128torch2.8-cp311-cp311-win_amd64.whl
+- flash_attn-2.7.4+cu128torch2.8-cp312-cp312-win_amd64.whl
 
 
 # Usage notes
@@ -352,6 +354,12 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 
 # Update highlights
+
+**2026-04-07**
+
+Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments. 
+
+Fish - Added torch compile toggle
 
 **2025-01-26**
 

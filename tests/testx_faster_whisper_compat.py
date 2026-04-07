@@ -1,21 +1,23 @@
 """
+Use this script to verify faster-whisper is working correctly in the current environment
+
+
 Re: Linux:
 
-faster-whisper must use ctranslate2 4.6.1, which uses cudnn 9.1.0
+    faster-whisper 1.2.1 plays nice with ctranslate2 4.7.1 in tandem with torch 280
 
-    faster-whisper==1.2.1
-    ctranslate2==4.6.1
+    (it used to conflict badly with various versions of cudnn associated with certain versions of torch etc)
 
-the latest version of torch which also uses cudnn 9.1.0 is torch 260, or torch 260 with cuda <= 124
+    done 
 
-    pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
-the order in which ctranslate2 and torch are loaded does not matter
+fyi the order in which ctranslate2 and torch are loaded does not matter
 
 "cudnn version matrix"
 
     ctranslate2 4.6.1     cudnn 9.1.0
-    latest torch          cudnn 9.10
+    
+    torch 280             cudnn 91002 9.10.2
     torch 260+cu126       cudnn 9.5 -- BAD, confirmed 
     torch 260+cu124       cudnn 9.1 -- GOOD
     torch 260             cudnn 9.1 -- GOOD
@@ -32,8 +34,8 @@ print("torch cudnn version:", torch.backends.cudnn.version())
 print("running faster-whisper")
 from faster_whisper import WhisperModel
 import librosa
-path = "something.flac"
-data, sr = librosa.load(path) # would resample this in real use
+PATH = "something.flac"
+data, sr = librosa.load(PATH) # would resample this in real use
 model = WhisperModel("large-v3", device="cuda")
 o = model.transcribe(audio=data, word_timestamps=True, language=None)
 print("did not crash. transcription result:", o)

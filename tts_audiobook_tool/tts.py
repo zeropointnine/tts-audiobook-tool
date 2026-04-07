@@ -82,6 +82,7 @@ class Tts:
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
         model_params["glm_sr"] = project.glm_sr
         model_params["qwen3_target"] = project.qwen3_target
+        model_params["fish_compile_enabled"] = project.fish_compile_enabled
 
         Tts.set_model_params(model_params)
 
@@ -101,6 +102,7 @@ class Tts:
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
         dirty |= new_params.get("qwen3_target", "") != old_params.get("qwen3_target", "")
+        dirty |= new_params.get("fish_compile_enabled", True) != old_params.get("fish_compile_enabled", True)
         if dirty:
             Tts.clear_tts_model()
 
@@ -217,9 +219,10 @@ class Tts:
     def get_fish() -> FishBaseModel:
         if not Tts._fish:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            compile_enabled = Tts._model_params.get("fish_compile_enabled", True)
             print_model_init(device)
             from tts_audiobook_tool.tts_model.fish_model import FishModel
-            Tts._fish = FishModel(device)
+            Tts._fish = FishModel(device, compile_enabled)
             printt()
         return Tts._fish
 

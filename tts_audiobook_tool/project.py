@@ -73,6 +73,7 @@ class Project(Saveable):
     fish_voice_transcript: str = ""
     fish_temperature: float = -1
     fish_seed: int = -1
+    fish_compile_enabled: bool = True
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
@@ -355,6 +356,7 @@ class Project(Saveable):
         if not (-1 <= project.fish_seed <= 2**32 - 1):
             add_warning("fish_seed", -1)
             project.fish_seed = -1
+        project.fish_compile_enabled = d.get("fish_compile_enabled", True)
 
         # Higgs
         project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")
@@ -505,6 +507,7 @@ class Project(Saveable):
             "fish_voice_text": self.fish_voice_transcript,
             "fish_temperature": self.fish_temperature,
             "fish_seed": self.fish_seed,
+            "fish_compile_enabled": self.fish_compile_enabled,
 
             "higgs_voice_file_name": self.higgs_voice_file_name,
             "higgs_voice_text": self.higgs_voice_transcript,
@@ -807,7 +810,7 @@ class Project(Saveable):
     def verify_voice_files_exist(self) -> bool:
         """
         Checks if the voice file/s for the current TTS model exist, and if they don't, 
-        clears the field, prints feedback, and re-saves project, and returns True
+        clears the field, prints feedback, re-saves project, and returns True
         """
         attribs = []
         match Tts.get_type().value:
