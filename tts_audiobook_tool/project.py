@@ -73,7 +73,7 @@ class Project(Saveable):
     fish_voice_transcript: str = ""
     fish_temperature: float = -1
     fish_seed: int = -1
-    fish_compile_enabled: bool = True
+    fish_compile_enabled: bool = False
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
@@ -356,7 +356,10 @@ class Project(Saveable):
         if not (-1 <= project.fish_seed <= 2**32 - 1):
             add_warning("fish_seed", -1)
             project.fish_seed = -1
-        project.fish_compile_enabled = d.get("fish_compile_enabled", True)
+        value = d.get("fish_compile_enabled", None)
+        if not isinstance(value, bool):
+            value = True # legacy compat
+        project.fish_compile_enabled = value
 
         # Higgs
         project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")

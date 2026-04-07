@@ -220,7 +220,8 @@ class Tts:
         if not Tts._fish:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             compile_enabled = Tts._model_params.get("fish_compile_enabled", True)
-            print_model_init(device)
+            s = f"{device}, compile: {compile_enabled}"
+            print_model_init(s)
             from tts_audiobook_tool.tts_model.fish_model import FishModel
             Tts._fish = FishModel(device, compile_enabled)
             printt()
