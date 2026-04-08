@@ -7,6 +7,8 @@ from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationT
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
+from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
@@ -69,11 +71,17 @@ class Project(Saveable):
     chatterbox_exaggeration: float = -1
     chatterbox_seed: int = -1
 
-    fish_voice_file_name: str = ""
-    fish_voice_transcript: str = ""
-    fish_temperature: float = -1
-    fish_seed: int = -1
-    fish_compile_enabled: bool = False
+    fish_s1_voice_file_name: str = ""
+    fish_s1_voice_transcript: str = ""
+    fish_s1_temperature: float = -1
+    fish_s1_seed: int = -1
+    fish_s1_compile_enabled: bool = FishS1BaseModel.DEFAULT_COMPILE_ENABLED
+
+    fish_s2_voice_file_name: str = ""
+    fish_s2_voice_transcript: str = ""
+    fish_s2_temperature: float = -1
+    fish_s2_seed: int = -1
+    fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
@@ -348,18 +356,41 @@ class Project(Saveable):
             add_warning("chatterbox_seed", -1)
             project.chatterbox_seed = -1
 
-        # Fish
-        project.fish_voice_file_name = d.get("fish_voice_file_name", "")
-        project.fish_voice_transcript = d.get("fish_voice_text", "")
-        project.fish_temperature = d.get("fish_temperature", -1)
-        project.fish_seed = d.get("fish_seed", -1)
-        if not (-1 <= project.fish_seed <= 2**32 - 1):
-            add_warning("fish_seed", -1)
-            project.fish_seed = -1
-        value = d.get("fish_compile_enabled", None)
+        # Fish S1
+        # Note check for non-s1-qualified key names (back compat)
+        project.fish_s1_voice_file_name = d.get("fish_s1_voice_file_name", "") or d.get("fish_voice_file_name", "")
+        project.fish_s1_voice_transcript = d.get("fish_s1_voice_text", "") or d.get("fish_voice_text", "")
+        
+        value = d.get("fish_s1_temperature", -1)
+        if value == -1:
+            value = d.get("fish_temperature", -1)
+        project.fish_s1_temperature = value
+        
+        value = d.get("fish_s1_seed", -1)
+        if value == -1:
+            value = d.get("fish_seed", -1)
+        project.fish_s1_seed = value
+        if not (-1 <= value <= 2**32 - 1):
+            add_warning("fish_s1_seed", -1)
+            project.fish_s1_seed = -1
+        
+        value = d.get("fish_s1_compile_enabled", None)
         if not isinstance(value, bool):
             value = True # legacy compat
-        project.fish_compile_enabled = value
+        project.fish_s1_compile_enabled = value
+
+        # Fish S2
+        project.fish_s2_voice_file_name = d.get("fish_s2_voice_file_name", "")
+        project.fish_s2_voice_transcript = d.get("fish_s2_voice_text", "")
+        project.fish_s2_temperature = d.get("fish_s2_temperature", -1)
+        project.fish_s2_seed = d.get("fish_s2_seed", -1)
+        if not (-1 <= project.fish_s2_seed <= 2**32 - 1):
+            add_warning("fish_s2_seed", -1)
+            project.fish_s2_seed = -1
+        value = d.get("fish_s2_compile_enabled", None)
+        if not isinstance(value, bool):
+            value = True # legacy compat
+        project.fish_s2_compile_enabled = value
 
         # Higgs
         project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")
@@ -506,11 +537,17 @@ class Project(Saveable):
             "chatterbox_exaggeration": self.chatterbox_exaggeration,
             "chatterbox_seed": self.chatterbox_seed,
 
-            "fish_voice_file_name": self.fish_voice_file_name,
-            "fish_voice_text": self.fish_voice_transcript,
-            "fish_temperature": self.fish_temperature,
-            "fish_seed": self.fish_seed,
-            "fish_compile_enabled": self.fish_compile_enabled,
+            "fish_s1_voice_file_name": self.fish_s1_voice_file_name,
+            "fish_s1_voice_text": self.fish_s1_voice_transcript,
+            "fish_s1_temperature": self.fish_s1_temperature,
+            "fish_s1_seed": self.fish_s1_seed,
+            "fish_s1_compile_enabled": self.fish_s1_compile_enabled,
+
+            "fish_s2_voice_file_name": self.fish_s2_voice_file_name,
+            "fish_s2_voice_text": self.fish_s2_voice_transcript,
+            "fish_s2_temperature": self.fish_s2_temperature,
+            "fish_s2_seed": self.fish_s2_seed,
+            "fish_s2_compile_enabled": self.fish_s2_compile_enabled,
 
             "higgs_voice_file_name": self.higgs_voice_file_name,
             "higgs_voice_text": self.higgs_voice_transcript,
@@ -632,9 +669,12 @@ class Project(Saveable):
             case TtsModelInfos.CHATTERBOX:
                 self.chatterbox_voice_file_name = dest_file_name
                 # Rem, chatterbox does not require voice sound file's transcription
-            case TtsModelInfos.FISH:
-                self.fish_voice_file_name = dest_file_name
-                self.fish_voice_transcript = transcript
+            case TtsModelInfos.FISH_S1:
+                self.fish_s1_voice_file_name = dest_file_name
+                self.fish_s1_voice_transcript = transcript
+            case TtsModelInfos.FISH_S2:
+                self.fish_s2_voice_file_name = dest_file_name
+                self.fish_s2_voice_transcript = transcript
             case TtsModelInfos.HIGGS:
                 self.higgs_voice_file_name = dest_file_name
                 self.higgs_voice_transcript = transcript
@@ -675,9 +715,12 @@ class Project(Saveable):
         match tts_type:
             case TtsModelInfos.CHATTERBOX:
                 self.chatterbox_voice_file_name = ""
-            case TtsModelInfos.FISH:
-                self.fish_voice_file_name = ""
-                self.fish_voice_transcript = ""
+            case TtsModelInfos.FISH_S1:
+                self.fish_s1_voice_file_name = ""
+                self.fish_s1_voice_transcript = ""
+            case TtsModelInfos.FISH_S2:
+                self.fish_s2_voice_file_name = ""
+                self.fish_s2_voice_transcript = ""
             case TtsModelInfos.HIGGS:
                 self.higgs_voice_file_name = ""
                 self.higgs_voice_transcript = ""
@@ -819,8 +862,10 @@ class Project(Saveable):
         match Tts.get_type().value:
             case TtsModelInfos.CHATTERBOX:
                 attribs = ["chatterbox_voice_file_name"] 
-            case TtsModelInfos.FISH:
-                attribs = ["fish_voice_file_name"] 
+            case TtsModelInfos.FISH_S1:
+                attribs = ["fish_s1_voice_file_name"] 
+            case TtsModelInfos.FISH_S2:
+                attribs = ["fish_s2_voice_file_name"] 
             case TtsModelInfos.HIGGS:
                 attribs = ["higgs_voice_file_name"] 
             case TtsModelInfos.VIBEVOICE:
@@ -860,7 +905,8 @@ class Project(Saveable):
         src_files = [
             PROJECT_TEXT_RAW_FILE_NAME,
             source_project.chatterbox_voice_file_name,
-            source_project.fish_voice_file_name,
+            source_project.fish_s1_voice_file_name,
+            source_project.fish_s2_voice_file_name,
             source_project.higgs_voice_file_name,
             source_project.vibevoice_voice_file_name,
             source_project.indextts2_voice_file_name,

@@ -9,13 +9,13 @@ from huggingface_hub.errors import GatedRepoError
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.fish_base_model import FishBaseModel
+from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.util import *
 
 
-class FishModel(FishBaseModel): 
+class FishS1Model(FishS1BaseModel): 
     """
-    Fish TTS inference logic
+    Fish S1-mini TTS inference logic
 
     Pieced together from the two main fish inference scripts:
     fish_speech/models/dac/inference.py
@@ -26,7 +26,9 @@ class FishModel(FishBaseModel):
     def __init__(self, device: str, compile_enabled: bool):
 
         # TODO verify mpc; also mpc + compile? probably not presumably?
+
         self.device = device
+        self._compile_enabled = (device == "cuda" and compile_enabled)
 
         # ------------------------------------------------------------------------------------------
         # Fish module executes this line upon import
@@ -58,7 +60,7 @@ class FishModel(FishBaseModel):
             printt()
             printt("Make sure you have done the following:")
             printt()
-            printt("[1] Visit https://huggingface.co/fishaudio/openaudio-s1-mini")
+            printt("[1] Visit https://huggingface.co/fishaudio/s1-mini")
             printt("    and authorize access using a logged-in Hugging Face account.")
             printt("[2] Run `hf auth login` and enter valid Hugging Face access token.")
             printt()
@@ -76,7 +78,6 @@ class FishModel(FishBaseModel):
         dac_path = os.path.join(model_dir, "codec.pth")
         self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, self.device)
 
-        self._compile_enabled = (device == "cuda" and compile_enabled)
         t2s_path = model_dir
         self.t2s_model, self.decode_one_token = init_t2s_model(
             t2s_path, self.device, torch.float16, compile=self._compile_enabled
@@ -126,22 +127,22 @@ class FishModel(FishBaseModel):
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        if project.fish_voice_file_name:
-            source_path = os.path.join(project.dir_path, project.fish_voice_file_name)
+        if project.fish_s1_voice_file_name:
+            source_path = os.path.join(project.dir_path, project.fish_s1_voice_file_name)
             self.set_voice_clone_using(
                 source_path=source_path,
-                transcribed_text=project.fish_voice_transcript
+                transcribed_text=project.fish_s1_voice_transcript
             )
         else:
             self.clear_voice_clone()
 
 
-        if project.fish_temperature == -1:
-            temperature = FishBaseModel.DEFAULT_TEMPERATURE
+        if project.fish_s1_temperature == -1:
+            temperature = FishS1BaseModel.DEFAULT_TEMPERATURE
         else:
-            temperature = project.fish_temperature
+            temperature = project.fish_s1_temperature
 
-        seed = -1 if force_random_seed else project.fish_seed
+        seed = -1 if force_random_seed else project.fish_s1_seed
 
         result = self.generate(
             prompt=prompt, 

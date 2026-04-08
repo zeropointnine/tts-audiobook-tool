@@ -2,13 +2,14 @@
 
 This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
-- [MiraTTS](https://github.com/ysharma3501/MiraTTS)
-- [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
-- [VibeVoice 1.5B](https://github.com/microsoft/VibeVoice)
-- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
-- [Fish OpenAudio S1-mini](https://github.com/fishaudio/fish-speech)
+- [VibeVoice](https://github.com/microsoft/VibeVoice)
 - [Chatterbox (Multilingual and Turbo)](https://github.com/resemble-ai/chatterbox)
+- [Fish S2-Pro](https://github.com/fishaudio/fish-speech)
+- [Fish S1-mini](https://github.com/fishaudio/fish-speech)
+- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
+- [GLM-TTS](https://github.com/zai-org/GLM-TTS)
+- [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 
 The app employs a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
@@ -18,7 +19,7 @@ The app employs a number of quality control measures designed to mitigate the in
 - Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
 - Industry standard loudness normalization
 
-Plain-vanilla text interface in the console.
+Plain-vanilla text UI in the console.
 
 ### Browser player:
 
@@ -26,18 +27,20 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 
 **Example outputs**, all using the same source text and using the same 15-second voice clone sample unless otherwise noted, with models' respective default settings:
 
-- [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-qwen3-12hz-1.7b-base.abr.m4a)
-- [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-mira.abr.m4a)
-- [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-glm.abr.m4a)
-- [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2.abr.m4a)
-- [IndexTTS2 (with added emotional guidance voice sample)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-indextts2-plus-emo.abr.m4a)
-- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b.abr.m4a)
-- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-vibevoice-1.5b-lora-klett.abr.m4a) (with a different voice, LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett))
-- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs.abr.m4a)
-- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-higgs-different-voice.abr.m4a) (with a different voice, and at high temperature)
-- [Fish OpenAudio S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-s1-mini.abr.m4a)
-- [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-chatterbox.abr.m4a)
-- [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool/browser_player/waves-oute.abr.m4a)
+- [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a)
+- [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
+- [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (with added emotional guidance voice sample)
+- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a)
+- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett))
+- [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) 
+- [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a)
+- [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
+- [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
+- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
+- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, and at high temperature)
+- [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a)
+- [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
+- [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a)
 
 ### Bonus feature: Enhance existing audiobooks
 
@@ -104,21 +107,119 @@ Install dependencies:
 
 Install [Flash Attention](#installing-flash-attention) if using CUDA (optional but recommended).
 
-## Virtual environment for MiraTTS
+## Virtual environment for IndexTTS2
 
-> **ℹ️ Requires CUDA** 
+Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
 
-Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
-
-    path\to\python3.12\python.exe -m venv venv-mira
+    path\to\python3.11\python.exe -m venv venv-indextts2
 
 Activate the virtual environment:
 
-    venv-mira\Scripts\activate.bat
+    venv-indextts2\Scripts\activate.bat
 
 Install dependencies:
 
-    pip install -r requirements-mira.txt
+    pip install -r requirements-indextts2.txt
+
+
+## Virtual environment for VibeVoice
+
+Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
+
+    path\to\python3.11\python.exe -m venv venv-vibevoice
+
+Activate the virtual environment:
+
+    venv-vibevoice\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-vibevoice.txt
+
+Install [Flash Attention](#installing-flash-attention) if using CUDA (optional but recommended).
+
+Note that because Microsoft famously removed the source code from their github repository, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
+
+## Virtual environment for Chatterbox:
+
+Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
+
+    path\to\python3.11\python.exe -m venv venv-chatterbox
+
+Activate the virtual environment:
+
+    venv-chatterbox\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-chatterbox.txt
+
+
+## Virtual environment for Fish S2-Pro:
+
+> **ℹ️ Note!**
+> For CUDA acceleration, 24 GB VRAM is required (yes really)
+
+Initialize a **Python v3.12** virtual environment named "venv-fish-s2". For example:
+
+    path\to\python3.12\python.exe -m venv venv-fish-s2
+
+Activate the virtual environment:
+
+    venv-fish-s2\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-fish-s2.txt
+
+Authenticate the model on HuggingFace:
+
+1. Be logged into your huggingface account, and accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s2-pro).
+
+2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
+ 
+
+## Virtual environment for Fish S1-mini:
+
+Initialize a **Python v3.12** virtual environment named "venv-fish-s1". For example:
+
+    path\to\python3.12\python.exe -m venv venv-fish-s1
+
+Activate the virtual environment:
+
+    venv-fish-s1\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-fish-s1.txt
+
+Authenticate the model on HuggingFace:
+
+1. 1. Be logged into your huggingface account, and accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s1-mini).
+
+2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
+ 
+
+## Virtual environment for Higgs Audio V2:
+
+> **ℹ️ Note!**
+> For CUDA acceleration, 24 GB VRAM is recommended
+
+On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install portaudio`)
+
+Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
+
+    path\to\python3.12\python.exe -m venv venv-higgs
+
+Activate the virtual environment:
+
+    venv-higgs\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-higgs.txt
+
+Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
 
 
 ## Virtual environment for GLM-TTS
@@ -165,95 +266,21 @@ Install the rest of the project dependencies using pip like normal:
 Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-tts-packaged) that has been refactored for use as an installable package.
 
 
-## Virtual environment for IndexTTS2
+## Virtual environment for MiraTTS
 
-Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
+> **ℹ️ Requires CUDA** 
 
-    path\to\python3.11\python.exe -m venv venv-indextts2
+Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
 
-Activate the virtual environment:
-
-    venv-indextts2\Scripts\activate.bat
-
-Install dependencies:
-
-    pip install -r requirements-indextts2.txt
-
-
-## Virtual environment for VibeVoice
-
-Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
-
-    path\to\python3.11\python.exe -m venv venv-vibevoice
+    path\to\python3.12\python.exe -m venv venv-mira
 
 Activate the virtual environment:
 
-    venv-vibevoice\Scripts\activate.bat
+    venv-mira\Scripts\activate.bat
 
 Install dependencies:
 
-    pip install -r requirements-vibevoice.txt
-
-Install [Flash Attention](#installing-flash-attention) if using CUDA (optional but recommended).
-
-Note that because Microsoft famously removed the source code from their github repository, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
-
-## Virtual environment for Higgs Audio V2:
-
-> **ℹ️ Note!**
-> For CUDA acceleration, 24 GB VRAM is recommended (yes really)
-
-On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install portaudio`)
-
-Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
-
-    path\to\python3.12\python.exe -m venv venv-higgs
-
-Activate the virtual environment:
-
-    venv-higgs\Scripts\activate.bat
-
-Install dependencies:
-
-    pip install -r requirements-higgs.txt
-
-Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
-
-
-## Virtual environment for Fish OpenAudio-S1-mini:
-
-Initialize a **Python v3.12** virtual environment named "venv-fish". For example:
-
-    path\to\python3.12\python.exe -m venv venv-fish
-
-Activate the virtual environment:
-
-    venv-fish\Scripts\activate.bat
-
-Install dependencies:
-
-    pip install -r requirements-fish.txt
-
-Authenticate the model on HuggingFace:
-
-1. Accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/openaudio-s1-mini).
-
-2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
- 
-
-## Virtual environment for Chatterbox-Multilingual:
-
-Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
-
-    path\to\python3.11\python.exe -m venv venv-chatterbox
-
-Activate the virtual environment:
-
-    venv-chatterbox\Scripts\activate.bat
-
-Install dependencies:
-
-    pip install -r requirements-chatterbox.txt
+    pip install -r requirements-mira.txt
 
 
 ## Virtual environment for Oute TTS:
@@ -291,13 +318,13 @@ Use `Backend.LLAMACPP`.
 
 ### Installing Flash Attention
 
-If instucted, perform this step after successfully running `pip install requirements-[model].txt` without errors.
+If instructed to do so, perform this step after successfully running `pip install requirements-[model].txt` without errors.
 
 On Linux, enter:
 
     pip install flash-attn==2.8.3 --no-build-isolation
 
-On Windows, the best path is to source a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). Choose one with a filename that looks something like this, depending on Python version: 
+On Windows, download a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version: 
 
 - flash_attn-2.7.4+cu128torch2.8-cp311-cp311-win_amd64.whl
 - flash_attn-2.7.4+cu128torch2.8-cp312-cp312-win_amd64.whl
@@ -326,30 +353,31 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 
 ### Inference speeds, expectations
 
-These are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux can be significantly faster than on Windows.
+Listed below are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux are usually significantly faster than on Windows.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 300% realtime   | batch size=5
 |                         | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
-| MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime  | batch size=10 (yes really)
-|                         | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
-| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
-| VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10 (default steps)
-| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10 (default steps)
-|                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1 (default steps)
-|                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1 (default steps)
+| VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10, default steps
+| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10, default steps
+|                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
+|                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 |                         | Macbook Pro M1       | ~40% realtime   |
-| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed varies with voice sample duration
-| Fish OpenAudio S1-mini  | GTX 3080 Ti, Windows | 500%+ realtime  | 
-|                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
 | Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
+| Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
+| Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
+|                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
+| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed varies with voice sample duration
+| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
+| MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
+|                         | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
 
 
@@ -357,13 +385,15 @@ These are my anecdotal TTS inference speeds. The app adopts each respective mode
 
 **2026-04-07**
 
+Added support for **Fish S2-Pro**
+
 Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments. 
 
-Fish - Added torch compile toggle
+Fish S1-mini and S2-Pro - Added torch compile toggle
 
 **2025-01-26**
 
-**Qwen3-TTS support** (Base, CustomVoice, and VoiceDesign models)
+Add support for **Qwen3-TTS** (Base, CustomVoice, and VoiceDesign models)
 
 **2025-01-23**
 
@@ -371,7 +401,7 @@ Added new text segmentation method **"multiple sentences"** (`Text` > `Text segm
 
 **2025-01-21**
 
-**VibeVoice LoRA support** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)
+Added support for **VibeVoice LoRAs** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)
 
 **2025-01-18, circa**
 
@@ -425,7 +455,7 @@ Also added option: `Generate` > `Transcript validation max retries`
 
 **2025-12-21**
 
-Simplified and much-improved **speech-to-text validation logic**, which is now able to calculate the number of word errors for an audio generation (rather than simply adjudging "pass" vs "fail" using a patchwork of bespoke functions). 
+Simplified and much-improved **speech-to-text validation logic**, which is now able to calculate the number of word errors for an audio generation (rather than simply adjudging "pass" vs "fail" using a patchwork of bespoke functions).
 
 When a prompt is re-generated due to excessive word errors, the program is able to cherrypick the generation with the least number of errors.
 

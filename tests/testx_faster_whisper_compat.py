@@ -21,6 +21,7 @@ fyi the order in which ctranslate2 and torch are loaded does not matter
     torch 260+cu126       cudnn 9.5 -- BAD, confirmed 
     torch 260+cu124       cudnn 9.1 -- GOOD
     torch 260             cudnn 9.1 -- GOOD
+    torch 280             cudnn 91002
 """
 
 

@@ -135,26 +135,52 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    FISH = TtsModelInfo(
-        module_test="fish_speech",
+    FISH_S1 = TtsModelInfo(
+        module_test="fish_speech", # NB, this module path comes back positive for both S1 ad S2
         file_tag="s1-mini",
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="fish_voice_file_name",
+        voice_file_name_attr="fish_s1_voice_file_name",
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
-        requirements_file_name="requirements-fish.txt",
+        requirements_file_name="requirements-fish-s1.txt",
         ui = {
             "proper_name": "Fish S1-mini",
             "short_name": "S1-mini",
             "voice_path_console": "Enter voice clone audio clip file path (up to 10s): ",
             "voice_path_requestor": "Select voice clone audio clip (up to 10s)"
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
+        ]
+    )
+
+    FISH_S2 = TtsModelInfo(
+        module_test="fish_speech.callbacks", # NB, this module path comes back positive for S2 only (not S1)
+        file_tag="s2-pro",
+        torch_devices = ["cuda", "mps", "cpu"],
+        sample_rate=44100,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_file_name_attr="fish_s2_voice_file_name",
+        requires_voice=False,
+        requires_voice_transcript=True,
+        batch_size_project_field="",
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-fish-s2.txt",
+        ui = {
+            "proper_name": "Fish S2-Pro",
+            "short_name": "S2-Pro",
+            "voice_path_console": "Enter voice clone audio clip file path (10-30s): ",
+            "voice_path_requestor": "Select voice clone audio clip (10-30s)"
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura

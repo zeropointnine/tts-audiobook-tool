@@ -115,11 +115,13 @@ def ask_model_target(project: Project) -> None:
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice/VibeVoice-7B\"; \"/path/to/checkpoint\""
+    if project.vibevoice_target:
+        prompt += f"\n{COL_DIM}(currently: {project.vibevoice_target})"    
 
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.qwen3_target, 
+        current_target=project.vibevoice_target, 
         callback=apply_model_and_validate
     )
 
@@ -152,11 +154,13 @@ def ask_lora_target(project: Project) -> None:
     
     prompt = f"Enter huggingface repo id or local directory path to VibeVoice LoRA"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice-community/klett\", \"/path/to/checkpoint\""
+    if project.vibevoice_lora_target:
+        prompt += f"\n{COL_DIM}(Currently: {project.vibevoice_lora_target})"
 
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.qwen3_target, 
+        current_target=project.vibevoice_lora_target, 
         callback=apply_lora_and_validate
     )
 

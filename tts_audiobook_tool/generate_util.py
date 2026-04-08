@@ -569,7 +569,7 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
             num_sounds += 1
             cum_duration += item.duration
     if num_sounds == len(gen_results):
-        message += f"; sound duration: {cum_duration:.1f}; "
+        message += f"; sound duration: {cum_duration:.1f}s; "
         gen_elapsed = max(gen_elapsed, 0.1)
         speed = cum_duration / gen_elapsed
         speed = min(speed, 99.9)

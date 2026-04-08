@@ -4,9 +4,11 @@ from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
 
-class FishBaseModel(TtsBaseModel):
+class FishS1BaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.FISH.value
+    INFO = TtsModelInfos.FISH_S1.value
+
+    DEFAULT_COMPILE_ENABLED = True
 
     DEFAULT_TEMPERATURE = 0.8 # from fish gradio demo
 

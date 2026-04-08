@@ -5,7 +5,8 @@ import sys
 from typing import Callable
 
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
-from tts_audiobook_tool.tts_model.fish_base_model import FishBaseModel
+from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
+from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
@@ -28,7 +29,8 @@ class Tts:
 
     _oute: OuteBaseModel | None = None
     _chatterbox: ChatterboxBaseModel | None = None
-    _fish: FishBaseModel | None = None
+    _fish: FishS1BaseModel | None = None
+    _fish_s2: FishS2BaseModel | None = None
     _higgs: HiggsBaseModel | None = None
     _vibevoice: VibeVoiceBaseModel | None = None
     _indextts2: IndexTts2BaseModel | None = None
@@ -45,25 +47,43 @@ class Tts:
     def init_model_type() -> tuple[TtsModelInfos, int]:
         """
         Sets the tts model type by checking the installed modules in the python environment.
-        It does not instantiate the TtsModel as such.
-        Must be run first.
+        Does not instantiate the TtsModel as such.
+        Must be run on startup.
 
-        Returns the model type, and num matches (should be either 1 or 0).
+        Returns the model type that was set, and num matches (should be either 1 or 0).
         """
-        num_models_found = 0
-        tts_type = TtsModelInfos.NONE
-        for item in TtsModelInfos:
-            exists = util.find_spec(item.value.module_test) is not None
-            if exists:
-                num_models_found += 1
-                tts_type = item
-        
-        # special case, not cool
-        if num_models_found > 1:
-            tts_type = TtsModelInfos.NONE
 
-        Tts._type = tts_type
-        return tts_type, num_models_found
+        def get_matches() -> list[TtsModelInfos]:
+            model_infos = []
+            for model_info in TtsModelInfos:
+                exists = False
+                try:
+                    exists = util.find_spec(model_info.value.module_test) is not None
+                except:
+                    ...
+                if exists:
+                    model_infos.append(model_info)
+            return model_infos
+        
+        matches = get_matches()
+        
+        # Fish S2 special case
+        if TtsModelInfos.FISH_S1 in matches and TtsModelInfos.FISH_S2 in matches:
+            matches = [TtsModelInfos.FISH_S2]
+
+        match len(matches):
+            case 0:
+                # No match
+                Tts._type = TtsModelInfos.NONE
+                return Tts._type, 0
+            case 1:
+                # Happy path
+                Tts._type = matches[0]
+                return Tts._type, 1
+            case _: # > 1
+                # Not cool
+                Tts._type = matches[0]
+                return Tts._type, len(matches)
 
     @staticmethod
     def get_type() -> TtsModelInfos:
@@ -82,7 +102,8 @@ class Tts:
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
         model_params["glm_sr"] = project.glm_sr
         model_params["qwen3_target"] = project.qwen3_target
-        model_params["fish_compile_enabled"] = project.fish_compile_enabled
+        model_params["fish_s1_compile_enabled"] = project.fish_s1_compile_enabled
+        model_params["fish_s2_compile_enabled"] = project.fish_s2_compile_enabled
 
         Tts.set_model_params(model_params)
 
@@ -102,7 +123,8 @@ class Tts:
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
         dirty |= new_params.get("qwen3_target", "") != old_params.get("qwen3_target", "")
-        dirty |= new_params.get("fish_compile_enabled", True) != old_params.get("fish_compile_enabled", True)
+        dirty |= new_params.get("fish_s1_compile_enabled", False) != old_params.get("fish_s1_compile_enabled", False)
+        dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
         if dirty:
             Tts.clear_tts_model()
 
@@ -122,7 +144,8 @@ class Tts:
             TtsModelInfos.NONE: NoneBaseModel,
             TtsModelInfos.OUTE: OuteBaseModel,
             TtsModelInfos.CHATTERBOX: ChatterboxBaseModel,
-            TtsModelInfos.FISH: FishBaseModel,
+            TtsModelInfos.FISH_S1: FishS1BaseModel,
+            TtsModelInfos.FISH_S2: FishS2BaseModel,
             TtsModelInfos.HIGGS: HiggsBaseModel,
             TtsModelInfos.VIBEVOICE: VibeVoiceBaseModel,
             TtsModelInfos.INDEXTTS2: IndexTts2BaseModel,
@@ -145,6 +168,7 @@ class Tts:
             Tts._oute, 
             Tts._chatterbox, 
             Tts._fish, 
+            Tts._fish_s2, 
             Tts._higgs, 
             Tts._vibevoice, 
             Tts._indextts2, 
@@ -163,7 +187,8 @@ class Tts:
         MAP: dict[TtsModelInfos, Callable] = {
             TtsModelInfos.OUTE: Tts.get_oute,
             TtsModelInfos.CHATTERBOX: Tts.get_chatterbox,
-            TtsModelInfos.FISH: Tts.get_fish,
+            TtsModelInfos.FISH_S1: Tts.get_fish,
+            TtsModelInfos.FISH_S2: Tts.get_fish_s2,
             TtsModelInfos.HIGGS: Tts.get_higgs,
             TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
             TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
@@ -183,7 +208,8 @@ class Tts:
         MAP = {
             TtsModelInfos.OUTE: Tts._oute,
             TtsModelInfos.CHATTERBOX: Tts._chatterbox,
-            TtsModelInfos.FISH: Tts._fish,
+            TtsModelInfos.FISH_S1: Tts._fish,
+            TtsModelInfos.FISH_S2: Tts._fish_s2,
             TtsModelInfos.HIGGS: Tts._higgs,
             TtsModelInfos.VIBEVOICE: Tts._vibevoice,
             TtsModelInfos.INDEXTTS2: Tts._indextts2,
@@ -216,16 +242,32 @@ class Tts:
         return Tts._chatterbox
 
     @staticmethod
-    def get_fish() -> FishBaseModel:
+    def get_fish() -> FishS1BaseModel:
         if not Tts._fish:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             compile_enabled = Tts._model_params.get("fish_compile_enabled", True)
-            s = f"{device}, compile: {compile_enabled}"
+            s = f"{device}"
+            if device == "cuda":
+                s += f", compile: {compile_enabled}"
             print_model_init(s)
-            from tts_audiobook_tool.tts_model.fish_model import FishModel
-            Tts._fish = FishModel(device, compile_enabled)
+            from tts_audiobook_tool.tts_model.fish_s1_model import FishS1Model
+            Tts._fish = FishS1Model(device, compile_enabled)
             printt()
         return Tts._fish
+
+    @staticmethod
+    def get_fish_s2() -> FishS2BaseModel:
+        if not Tts._fish_s2:
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            compile_enabled = Tts._model_params.get("fish_s2_compile_enabled", True)
+            s = f"{device}"
+            if device == "cuda":
+                s += f", compile: {compile_enabled}"
+            print_model_init(s)
+            from tts_audiobook_tool.tts_model.fish_s2_model import FishS2Model
+            Tts._fish_s2 = FishS2Model(device, compile_enabled)
+            printt()
+        return Tts._fish_s2
 
     @staticmethod
     def get_higgs() -> HiggsBaseModel:
@@ -320,6 +362,7 @@ class Tts:
             Tts._oute = None
             Tts._chatterbox = None
             Tts._fish = None
+            Tts._fish_s2 = None
             Tts._higgs = None
             Tts._vibevoice = None
             Tts._indextts2 = None

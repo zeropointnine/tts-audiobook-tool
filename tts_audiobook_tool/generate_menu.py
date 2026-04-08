@@ -42,7 +42,11 @@ class GenerateMenu:
                 num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
                 complete_label = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
 
-            return f"Specify range {range_label} {complete_label}"
+            if not state.project.generate_range_string:
+                label = "Specify line range"
+            else:
+                label = "Line range"
+            return f"{label} {range_label} {complete_label}"
 
         def make_regen_label(_: State) -> str:
             num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
@@ -143,7 +147,7 @@ def ask_item_range(state: State) -> None:
     num_items = len(state.project.phrase_groups)
 
     s = state.project.generate_range_string if state.project.generate_range_string else "all"
-    printt(f"Enter line numbers to generate (currently: {s}):") 
+    printt(f"Enter line numbers to generate {COL_DIM}(currently: {s}):") 
     printt(f"{COL_DIM}For example, \"1-100\" or \"201-210, 215\", or just \"all\"") 
 
     inp = AskUtil.ask()
@@ -299,4 +303,3 @@ RETRIES_DESC = \
 when speech-to-text validation fails due to too many word errors.
 Higher values have diminishing returns.
 """
-

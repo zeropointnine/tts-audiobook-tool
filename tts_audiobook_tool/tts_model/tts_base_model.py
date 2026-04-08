@@ -24,7 +24,7 @@ class TtsBaseModel(ABC):
 
         MyBaseModel(TtsBaseModel) 
             Must not contain any model library imports
-            Implements the @classmethods and holds any other static functionality
+            Implements the @classmethods and related non-instance-dependent static functions
             Gets called for any non-instance-related functionality
 
         MyModel(MyBaseModel)
