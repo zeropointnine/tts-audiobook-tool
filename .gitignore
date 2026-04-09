@@ -8,7 +8,7 @@ venv*/
 .python-version
 package.json
 package-lock.json
-.roo/
+plans/
 
 output/
 checkpoints/

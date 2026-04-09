@@ -266,6 +266,16 @@ class MenuUtil:
         and does stock "ask_number()" action on select.
         """
 
+        if isinstance(min_value, int) and isinstance(max_value, int) and (isinstance(default_value, int) or default_value is None):
+            is_int = True
+        elif isinstance(min_value, float) and isinstance(max_value, float) and (isinstance(default_value, float) or default_value is None):
+            is_int = False
+        else:
+            raise ValueError(f"Ambiguous argument types: {default_value}, {min_value}, {max_value}")
+        
+        if is_int and num_decimals > 0:
+            num_decimals = 0
+
         def on_item(_: State, __: MenuItem) -> None:
             AskUtil.ask_number(
                 state.project,
@@ -273,7 +283,7 @@ class MenuUtil:
                 prompt,
                 min_value, max_value,
                 "Value set:",
-                is_int=(num_decimals == 0)
+                is_int=is_int
             )
 
         label = MenuUtil.make_number_label(
@@ -286,8 +296,6 @@ class MenuUtil:
         )
 
         return MenuItem(label, on_item)
-
-
 
 # ---
 

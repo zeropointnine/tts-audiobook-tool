@@ -26,6 +26,13 @@ class VoiceFishS2Menu:
                     VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.FISH_S2) 
                 )
 
+            items.append(
+                MenuItem(
+                    make_menu_label("Torch compile", state.project.fish_s2_compile_enabled),
+                    lambda _, __: VoiceFishS2Menu.compile_menu(state)
+                )
+            )
+
             items.append( 
                 VoiceMenuShared.make_temperature_item(
                     state=state,
@@ -37,14 +44,35 @@ class VoiceFishS2Menu:
             )
 
             items.append(
-                VoiceMenuShared.make_seed_item(state, "fish_s2_seed")
+                VoiceMenuShared.make_top_p_item(
+                    state=state,
+                    attr="fish_s2_top_p",
+                    default_value=FishS2BaseModel.DEFAULT_TOP_P
+                )
             )
 
             items.append(
-                MenuItem(
-                    make_menu_label("Torch compile", state.project.fish_s2_compile_enabled),
-                    lambda _, __: VoiceFishS2Menu.compile_menu(state)
+                VoiceMenuShared.make_top_k_item(
+                    state=state,
+                    attr="fish_s2_top_k",
+                    default_value=FishS2BaseModel.DEFAULT_TOP_K,
+                    min_value=1,
+                    max_value=100
                 )
+            )
+
+            items.append(
+                VoiceMenuShared.make_repetition_penalty_item(
+                    state=state,
+                    attr="fish_s2_repetition_penalty",
+                    default_value=FishS2BaseModel.DEFAULT_REPETITION_PENALTY,
+                    min_value=1.0,
+                    max_value=2.0
+                )
+            )
+
+            items.append(
+                VoiceMenuShared.make_seed_item(state, "fish_s2_seed")
             )
 
             return items

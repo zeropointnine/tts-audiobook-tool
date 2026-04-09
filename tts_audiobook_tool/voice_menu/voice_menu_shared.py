@@ -248,6 +248,70 @@ class VoiceMenuShared:
         )
 
     @staticmethod
+    def make_top_k_item(
+            state: State,
+            attr: str,
+            default_value: int,
+            min_value: int,
+            max_value: int
+    ) -> MenuItem:
+
+        return MenuUtil.make_number_item(
+            state=state,
+            attr=attr,
+            base_label="Top_K", 
+            default_value=default_value,
+            is_minus_one_default=True,
+            num_decimals=0,
+            prompt=f"Enter Top-K {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            min_value=min_value,
+            max_value=max_value
+        )
+
+    @staticmethod
+    def make_top_p_item(
+            state: State,
+            attr: str,
+            default_value: float
+    ) -> MenuItem:
+
+        min_value = TOP_P_MIN_DEFAULT
+        max_value = TOP_P_MAX_DEFAULT
+
+        return MenuUtil.make_number_item(
+            state=state,
+            attr=attr,
+            base_label="Top-P", 
+            default_value=default_value,
+            is_minus_one_default=True,
+            num_decimals=2,
+            prompt=f"Enter Top-P {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            min_value=min_value,
+            max_value=max_value
+        )
+
+    @staticmethod
+    def make_repetition_penalty_item(
+            state: State,
+            attr: str,
+            default_value: float,
+            min_value: float,
+            max_value: float
+    ) -> MenuItem:
+
+        return MenuUtil.make_number_item(
+            state=state,
+            attr=attr,
+            base_label="Repetition penalty", 
+            default_value=default_value,
+            is_minus_one_default=True,
+            num_decimals=2,
+            prompt=f"Enter repetition penalty {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
+            min_value=min_value,
+            max_value=max_value
+        )
+
+    @staticmethod
     def make_seed_item(state: State, attr: str) -> MenuItem:
         """ Makes "self-contained" menu item for seed setting, including handler """
 

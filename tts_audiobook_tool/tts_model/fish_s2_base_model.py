@@ -9,6 +9,9 @@ class FishS2BaseModel(TtsBaseModel):
     DEFAULT_COMPILE_ENABLED = True
 
     DEFAULT_TEMPERATURE = 0.7 # from gradio demo
+    DEFAULT_TOP_K = 30 # library function default value
+    DEFAULT_TOP_P = 0.9 # library function default value
+    DEFAULT_REPETITION_PENALTY = 1.1 # library function default value
 
     def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
         ...

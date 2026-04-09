@@ -142,11 +142,29 @@ class FishS2Model(FishS2BaseModel):
         else:
             temperature = project.fish_s2_temperature
 
+        if project.fish_s2_top_p == -1:
+            top_p = FishS2BaseModel.DEFAULT_TOP_P
+        else:
+            top_p = project.fish_s2_top_p
+
+        if project.fish_s2_top_k == -1:
+            top_k = FishS2BaseModel.DEFAULT_TOP_K
+        else:
+            top_k = project.fish_s2_top_k
+
+        if project.fish_s2_repetition_penalty == -1:
+            repetition_penalty = FishS2BaseModel.DEFAULT_REPETITION_PENALTY
+        else:
+            repetition_penalty = project.fish_s2_repetition_penalty
+
         seed = -1 if force_random_seed else project.fish_s2_seed
 
         result = self.generate(
-            prompt=prompt, 
+            prompt=prompt,
             temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            repetition_penalty=repetition_penalty,
             seed=seed
         )
 
@@ -156,9 +174,12 @@ class FishS2Model(FishS2BaseModel):
             return result    
 
     def generate(
-            self, 
-            prompt: str, 
+            self,
+            prompt: str,
             temperature: float,
+            top_p: float,
+            top_k: int,
+            repetition_penalty: float,
             seed: int
     ) -> Sound | str:
 
@@ -188,10 +209,6 @@ class FishS2Model(FishS2BaseModel):
 
                 prompt_text = [self._voice_clone.transcribed_text] if self._voice_clone else None
 
-                # Not currently changing these params:
-                # top_p=0.5,
-                # repetition_penalty=1.5
-
                 semantic_tokens = None
                 for response in generate_long(
                     model=self.t2s_model,
@@ -200,7 +217,10 @@ class FishS2Model(FishS2BaseModel):
                     text=prompt,
                     prompt_text=prompt_text,
                     prompt_tokens=prompt_tokens,
-                    temperature=temperature
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    repetition_penalty=repetition_penalty
                 ):
                     if response.action == "sample":
                         if response.codes is None:

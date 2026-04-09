@@ -80,6 +80,9 @@ class Project(Saveable):
     fish_s2_voice_file_name: str = ""
     fish_s2_voice_transcript: str = ""
     fish_s2_temperature: float = -1
+    fish_s2_top_p: float = -1
+    fish_s2_top_k: int = -1
+    fish_s2_repetition_penalty: float = -1
     fish_s2_seed: int = -1
     fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
 
@@ -383,6 +386,9 @@ class Project(Saveable):
         project.fish_s2_voice_file_name = d.get("fish_s2_voice_file_name", "")
         project.fish_s2_voice_transcript = d.get("fish_s2_voice_text", "")
         project.fish_s2_temperature = d.get("fish_s2_temperature", -1)
+        project.fish_s2_top_p = d.get("fish_s2_top_p", -1)
+        project.fish_s2_top_k = d.get("fish_s2_top_k", -1)
+        project.fish_s2_repetition_penalty = d.get("fish_s2_repetition_penalty", -1)
         project.fish_s2_seed = d.get("fish_s2_seed", -1)
         if not (-1 <= project.fish_s2_seed <= 2**32 - 1):
             add_warning("fish_s2_seed", -1)
@@ -546,6 +552,9 @@ class Project(Saveable):
             "fish_s2_voice_file_name": self.fish_s2_voice_file_name,
             "fish_s2_voice_text": self.fish_s2_voice_transcript,
             "fish_s2_temperature": self.fish_s2_temperature,
+            "fish_s2_top_p": self.fish_s2_top_p,
+            "fish_s2_top_k": self.fish_s2_top_k,
+            "fish_s2_repetition_penalty": self.fish_s2_repetition_penalty,
             "fish_s2_seed": self.fish_s2_seed,
             "fish_s2_compile_enabled": self.fish_s2_compile_enabled,
 
