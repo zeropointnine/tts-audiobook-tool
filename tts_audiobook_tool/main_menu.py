@@ -100,11 +100,8 @@ def make_project_label(state: State) -> str:
 
 # Voice
 def make_voice_label(state: State) -> str:
-    
     base_label = f"Voice clone and model settings"
-    
     prefix, value = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
-    
     if not value:
         combined = prefix
     else:

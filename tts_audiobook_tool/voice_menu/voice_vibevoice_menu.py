@@ -40,7 +40,7 @@ class VoiceVibeVoiceMenu:
                 label = make_currently_string(value)
             else:
                 label = f"{COL_DIM}(optional)"
-            return f"LoRA {label}"
+            return f"Select LoRA {label}"
 
         def make_items(_: State) -> list[MenuItem]:
 

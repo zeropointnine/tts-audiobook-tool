@@ -174,7 +174,7 @@ Install dependencies:
 
 Authenticate the model on HuggingFace:
 
-1. Be logged into your huggingface account, and accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s2-pro).
+1. Accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s2-pro).
 
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
  
@@ -195,7 +195,7 @@ Install dependencies:
 
 Authenticate the model on HuggingFace:
 
-1. 1. Be logged into your huggingface account, and accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s1-mini).
+1. Accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s1-mini).
 
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
  
@@ -383,7 +383,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
-**2026-04-07**
+2026-04-07
 
 Added support for **Fish S2-Pro**
 

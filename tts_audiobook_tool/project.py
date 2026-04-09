@@ -744,10 +744,12 @@ class Project(Saveable):
 
     def get_voice_label(self) -> str:
         """
+        UI-facing voice clone label derived from filename
         """
         value = getattr(self, Tts.get_type().value.voice_file_name_attr, "")
         if not value: 
             return "none"
+        value = value.removesuffix(f"_{Tts.get_type().value.file_tag}.flac")
         value = ellipsize_path_for_menu(value)
         return value
 

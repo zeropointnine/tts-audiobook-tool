@@ -161,6 +161,7 @@ class TtsBaseModel(ABC):
             raise Exception("Logic error - must override this method")
         
         voice_file_name = getattr(project, info.voice_file_name_attr, "")
+        voice_file_name = voice_file_name.removesuffix(f"_{info.file_tag}.flac")
         voice_file_name = ellipsize_path_for_menu(voice_file_name)
 
         match (info.requires_voice, bool(voice_file_name)):

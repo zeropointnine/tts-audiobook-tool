@@ -29,6 +29,15 @@ class VibeVoiceBaseModel(TtsBaseModel):
     def has_lora(self) -> bool:
         ...
 
+    @classmethod
+    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None, short_format: bool) -> list[str]:
+        errors = []
+        if instance:
+            assert isinstance(instance, VibeVoiceBaseModel)
+            if project.vibevoice_lora_target and not instance.has_lora:
+                errors.append(f"Couldn't load lora LoRA")
+        return errors
+
     def get_prereq_warnings(self, project: Project) -> list[str]:
         warnings = []
         if not project.vibevoice_voice_file_name and not project.vibevoice_lora_target:
