@@ -65,9 +65,7 @@ class VoiceFishS2Menu:
                 VoiceMenuShared.make_repetition_penalty_item(
                     state=state,
                     attr="fish_s2_repetition_penalty",
-                    default_value=FishS2BaseModel.DEFAULT_REPETITION_PENALTY,
-                    min_value=1.0,
-                    max_value=2.0
+                    default_value=FishS2BaseModel.DEFAULT_REPETITION_PENALTY
                 )
             )
 

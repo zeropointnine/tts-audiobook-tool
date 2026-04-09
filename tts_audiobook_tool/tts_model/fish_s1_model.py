@@ -142,11 +142,23 @@ class FishS1Model(FishS1BaseModel):
         else:
             temperature = project.fish_s1_temperature
 
+        if project.fish_s1_top_p == -1:
+            top_p = FishS1BaseModel.DEFAULT_TOP_P
+        else:
+            top_p = project.fish_s1_top_p
+
+        if project.fish_s1_repetition_penalty == -1:
+            repetition_penalty = FishS1BaseModel.DEFAULT_REPETITION_PENALTY
+        else:
+            repetition_penalty = project.fish_s1_repetition_penalty
+
         seed = -1 if force_random_seed else project.fish_s1_seed
 
         result = self.generate(
-            prompt=prompt, 
+            prompt=prompt,
             temperature=temperature,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
             seed=seed
         )
 
@@ -156,9 +168,11 @@ class FishS1Model(FishS1BaseModel):
             return result    
 
     def generate(
-            self, 
-            prompt: str, 
+            self,
+            prompt: str,
             temperature: float,
+            top_p: float,
+            repetition_penalty: float,
             seed: int
     ) -> Sound | str:
 
@@ -188,9 +202,9 @@ class FishS1Model(FishS1BaseModel):
 
                 prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
 
-                # Not currently changing these params:
-                # top_p=0.5,
-                # repetition_penalty=1.5
+        
+                print("xxx rep", repetition_penalty)
+
 
                 semantic_tokens = None
                 for response in generate_long(
@@ -200,7 +214,9 @@ class FishS1Model(FishS1BaseModel):
                     text=prompt,
                     prompt_text=prompt_text,
                     prompt_tokens=prompt_tokens,
-                    temperature=temperature
+                    temperature=temperature,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty
                 ):
                     if response.action == "sample":
                         if response.codes is None:

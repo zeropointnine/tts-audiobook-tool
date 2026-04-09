@@ -74,6 +74,8 @@ class Project(Saveable):
     fish_s1_voice_file_name: str = ""
     fish_s1_voice_transcript: str = ""
     fish_s1_temperature: float = -1
+    fish_s1_top_p: float = -1 # rem, s1 lib api has no top_k option (but s2 lib does)
+    fish_s1_repetition_penalty: float = -1
     fish_s1_seed: int = -1
     fish_s1_compile_enabled: bool = FishS1BaseModel.DEFAULT_COMPILE_ENABLED
 
@@ -368,7 +370,10 @@ class Project(Saveable):
         if value == -1:
             value = d.get("fish_temperature", -1)
         project.fish_s1_temperature = value
-        
+
+        project.fish_s1_top_p = d.get("fish_s1_top_p", -1)
+        project.fish_s1_repetition_penalty = d.get("fish_s1_repetition_penalty", -1)
+
         value = d.get("fish_s1_seed", -1)
         if value == -1:
             value = d.get("fish_seed", -1)
@@ -546,6 +551,8 @@ class Project(Saveable):
             "fish_s1_voice_file_name": self.fish_s1_voice_file_name,
             "fish_s1_voice_text": self.fish_s1_voice_transcript,
             "fish_s1_temperature": self.fish_s1_temperature,
+            "fish_s1_top_p": self.fish_s1_top_p,
+            "fish_s1_repetition_penalty": self.fish_s1_repetition_penalty,
             "fish_s1_seed": self.fish_s1_seed,
             "fish_s1_compile_enabled": self.fish_s1_compile_enabled,
 

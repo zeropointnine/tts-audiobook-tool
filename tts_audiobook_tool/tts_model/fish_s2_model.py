@@ -219,7 +219,7 @@ class FishS2Model(FishS2BaseModel):
                     prompt_tokens=prompt_tokens,
                     temperature=temperature,
                     top_p=top_p,
-                    top_k=top_k,
+                    top_k=top_k, # type: ignore  # rem, when venv is s1, gets flagged as an error
                     repetition_penalty=repetition_penalty
                 ):
                     if response.action == "sample":
