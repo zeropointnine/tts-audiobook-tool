@@ -33,15 +33,15 @@ class VoiceFishS1Menu:
                 )
             )
 
-            items.append(
-                VoiceMenuShared.make_temperature_item(
-                    state=state,
-                    attr="fish_s1_temperature",
-                    default_value=FishS1BaseModel.DEFAULT_TEMPERATURE,
-                    min_value=0.01,
-                    max_value=2.0
-                )
+            temperature_item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                attr="fish_s1_temperature",
+                default_value=FishS1BaseModel.DEFAULT_TEMPERATURE,
+                min_value=0.01,
+                max_value=2.0
             )
+            temperature_item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(temperature_item)
 
             items.append(
                 VoiceMenuShared.make_top_p_item(

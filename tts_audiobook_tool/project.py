@@ -69,24 +69,27 @@ class Project(Saveable):
     chatterbox_temperature: float = -1
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
+    chatterbox_top_p: float = -1
+    chatterbox_turbo_top_k: int = -1
+    chatterbox_ml_repetition_penalty: float = -1
+    chatterbox_turbo_repetition_penalty: float = -1
     chatterbox_seed: int = -1
 
     fish_s1_voice_file_name: str = ""
     fish_s1_voice_transcript: str = ""
+    fish_s1_compile_enabled: bool = FishS1BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s1_temperature: float = -1
     fish_s1_top_p: float = -1 # rem, s1 lib api has no top_k option (but s2 lib does)
     fish_s1_repetition_penalty: float = -1
     fish_s1_seed: int = -1
-    fish_s1_compile_enabled: bool = FishS1BaseModel.DEFAULT_COMPILE_ENABLED
 
     fish_s2_voice_file_name: str = ""
     fish_s2_voice_transcript: str = ""
+    fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s2_temperature: float = -1
     fish_s2_top_p: float = -1
     fish_s2_top_k: int = -1
-    fish_s2_repetition_penalty: float = -1
     fish_s2_seed: int = -1
-    fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
@@ -353,6 +356,10 @@ class Project(Saveable):
 
         project.chatterbox_voice_file_name = d.get("chatterbox_voice_file_name", "")
         project.chatterbox_temperature = d.get("chatterbox_temperature", -1)
+        project.chatterbox_top_p = d.get("chatterbox_top_p", -1)
+        project.chatterbox_turbo_top_k = d.get("chatterbox_turbo_top_k", -1)
+        project.chatterbox_ml_repetition_penalty = d.get("chatterbox_ml_repetition_penalty", -1)
+        project.chatterbox_turbo_repetition_penalty = d.get("chatterbox_turbo_repetition_penalty", -1)
         project.chatterbox_cfg = d.get("chatterbox_cfg", -1)
         project.chatterbox_exaggeration = d.get("chatterbox_exaggeration", -1)
         
@@ -393,7 +400,6 @@ class Project(Saveable):
         project.fish_s2_temperature = d.get("fish_s2_temperature", -1)
         project.fish_s2_top_p = d.get("fish_s2_top_p", -1)
         project.fish_s2_top_k = d.get("fish_s2_top_k", -1)
-        project.fish_s2_repetition_penalty = d.get("fish_s2_repetition_penalty", -1)
         project.fish_s2_seed = d.get("fish_s2_seed", -1)
         if not (-1 <= project.fish_s2_seed <= 2**32 - 1):
             add_warning("fish_s2_seed", -1)
@@ -544,6 +550,10 @@ class Project(Saveable):
             "chatterbox_type": self.chatterbox_type.id,
             "chatterbox_voice_file_name": self.chatterbox_voice_file_name,
             "chatterbox_temperature": self.chatterbox_temperature,
+            "chatterbox_top_p": self.chatterbox_top_p,
+            "chatterbox_turbo_top_k": self.chatterbox_turbo_top_k,
+            "chatterbox_ml_repetition_penalty": self.chatterbox_ml_repetition_penalty,
+            "chatterbox_turbo_repetition_penalty": self.chatterbox_turbo_repetition_penalty,
             "chatterbox_cfg": self.chatterbox_cfg,
             "chatterbox_exaggeration": self.chatterbox_exaggeration,
             "chatterbox_seed": self.chatterbox_seed,
@@ -561,7 +571,6 @@ class Project(Saveable):
             "fish_s2_temperature": self.fish_s2_temperature,
             "fish_s2_top_p": self.fish_s2_top_p,
             "fish_s2_top_k": self.fish_s2_top_k,
-            "fish_s2_repetition_penalty": self.fish_s2_repetition_penalty,
             "fish_s2_seed": self.fish_s2_seed,
             "fish_s2_compile_enabled": self.fish_s2_compile_enabled,
 

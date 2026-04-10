@@ -26,43 +26,93 @@ class VoiceChatterboxMenu:
                 items.append( 
                     VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) 
                 )
+
             items.append( 
                 MenuItem(make_type_label, lambda _, __: ask_type(state)) 
             )
-            items.append( 
-                VoiceMenuShared.make_temperature_item(
-                    state=state, 
-                    attr="chatterbox_temperature", 
-                    default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
-                    min_value=0.01, max_value=2.0
+
+            if state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+                items.append( 
+                    MenuUtil.make_number_item(
+                        state=state, 
+                        attr="chatterbox_exaggeration",
+                        base_label="Exaggeration",
+                        default_value=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
+                        is_minus_one_default=True,
+                        num_decimals=2,
+                        prompt=f"Enter value for exaggeration {COL_DIM}({0.25} to {2.0}){COL_DEFAULT}:",
+                        min_value=0.25, 
+                        max_value=2.0
+                    )
+                )
+
+            if state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+                items.append( 
+                    MenuUtil.make_number_item(
+                        state=state, 
+                        attr="chatterbox_cfg",
+                        base_label="CFG/pace",
+                        default_value=ChatterboxBaseModel.DEFAULT_CFG,
+                        is_minus_one_default=True,
+                        num_decimals=2,
+                        prompt=f"Enter value for CFG {COL_DIM}({0.2} to {1.0}){COL_DEFAULT}:",
+                        min_value=0.2, 
+                        max_value=1.0
+                    )
+                )
+
+            item = VoiceMenuShared.make_temperature_item(
+                state=state, 
+                attr="chatterbox_temperature", 
+                default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
+                min_value=0.01, max_value=2.0
+            )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
+            items.append(
+                VoiceMenuShared.make_top_p_item(
+                    state=state,
+                    attr="chatterbox_top_p",
+                    default_value=ChatterboxBaseModel.DEFAULT_TOP_P
                 )
             )
-            items.append( 
-                MenuUtil.make_number_item(
-                    state=state, 
-                    attr="chatterbox_exaggeration",
-                    base_label="Exaggeration",
-                    default_value=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
-                    is_minus_one_default=True,
-                    num_decimals=2,
-                    prompt=f"Enter value for exaggeration {COL_DIM}({0.25} to {2.0}){COL_DEFAULT}:",
-                    min_value=0.25, 
-                    max_value=2.0
+
+            if state.project.chatterbox_type == ChatterboxType.TURBO:
+                items.append(
+                    VoiceMenuShared.make_top_k_item(
+                        state=state,
+                        attr="chatterbox_turbo_top_k",
+                        default_value=ChatterboxBaseModel.DEFAULT_TOP_K
+                    )
                 )
+
+            # Repetition penalty - using separate values for each variant
+            match state.project.chatterbox_type:
+                case ChatterboxType.MULTILINGUAL:
+                    qual = "Multilingual"
+                    attr = "chatterbox_ml_repetition_penalty"
+                    default_value = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
+                case ChatterboxType.TURBO:
+                    qual = "Turbo"
+                    attr = "chatterbox_turbo_repetition_penalty"
+                    default_value = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO            
+            rep_min = REPETITION_PENALTY_MIN_DEFAULT
+            rep_max = REPETITION_PENALTY_MAX_DEFAULT
+
+            item = MenuUtil.make_number_item(
+                state=state,
+                attr=attr,
+                base_label=f"Repetition penalty ({qual})", 
+                default_value=default_value,
+                is_minus_one_default=True,
+                num_decimals=2,
+                prompt=f"Enter repetition penalty {COL_DIM}({rep_min} to {rep_max}){COL_DEFAULT}:",
+                min_value=rep_min,
+                max_value=rep_max
             )
-            items.append( 
-                MenuUtil.make_number_item(
-                    state=state, 
-                    attr="chatterbox_cfg",
-                    base_label="CFG/pace",
-                    default_value=ChatterboxBaseModel.DEFAULT_CFG,
-                    is_minus_one_default=True,
-                    num_decimals=2,
-                    prompt=f"Enter value for CFG {COL_DIM}({0.2} to {1.0}){COL_DEFAULT}:",
-                    min_value=0.2, 
-                    max_value=1.0
-                )
-            )
+            items.append(item)
+
             items.append(
                 VoiceMenuShared.make_seed_item(state, "chatterbox_seed")
             )

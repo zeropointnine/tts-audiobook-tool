@@ -16,12 +16,16 @@ class MenuItem:
             handler: MenuHandler,
             data: Any = None,
             sublabel: StringOrMaker | None = None,
-            hotkey: str = ""
+            hotkey: str = "",
+            superlabel: StringOrMaker = "",
     ):
         self.label = label
 
         # Optional extra text printed on second line
         self.sublabel = sublabel
+
+        # Optional visual subheading printed on its own line before the item
+        self.superlabel = superlabel
 
         # handler/callback passes the State object and `data`, if any
         self.handler = handler
@@ -121,14 +125,23 @@ class MenuUtil:
             if hint:
                 Hint.show_hint_if_necessary(state.prefs, hint)
 
+            extra_padding = ""
+            for item in items_list:
+                if item.superlabel:
+                    extra_padding = "  "
+
             # Print items
             for item in items_list:
+                if item.superlabel:
+                    superlabel_text = get_string_from(state, item.superlabel)
+                    if superlabel_text:
+                        printt(f"{COL_DIM}{superlabel_text}")
                 s = get_string_from(state, item.label)
-                s = make_hotkey_string(item.hotkey.upper()) + " " + s
+                s = extra_padding + make_hotkey_string(item.hotkey.upper()) + " " + s
                 if item.sublabel:
                     # Print extra line/s
                     sublabel = get_string_from(state, item.sublabel)
-                    space = "    " if not sublabel.startswith(" ") else ""
+                    space = ("    " + extra_padding) if not sublabel.startswith(" ") else extra_padding
                     s += "\n" + COL_DIM + space + sublabel
                 printt(s)
             printt()
@@ -136,7 +149,7 @@ class MenuUtil:
             # One-time message
             if is_submenu and MenuUtil.is_first_submenu:
                 MenuUtil.is_first_submenu = False
-                printt(f"{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
+                printt(f"{extra_padding}{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
                 printt()
 
             while True:

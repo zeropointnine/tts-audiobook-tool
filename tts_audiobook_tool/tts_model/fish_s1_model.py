@@ -201,11 +201,7 @@ class FishS1Model(FishS1BaseModel):
                 from fish_speech.models.text2semantic.inference import generate_long # type: ignore
 
                 prompt_text = self._voice_clone.transcribed_text if self._voice_clone else None
-
         
-                print("xxx rep", repetition_penalty)
-
-
                 semantic_tokens = None
                 for response in generate_long(
                     model=self.t2s_model,

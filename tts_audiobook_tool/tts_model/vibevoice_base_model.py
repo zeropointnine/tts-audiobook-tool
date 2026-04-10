@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -9,14 +11,14 @@ if TYPE_CHECKING:
 else:
     Project = object
 
-class VibeVoiceBaseModel(TtsBaseModel):
+class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
     INFO = TtsModelInfos.VIBEVOICE.value
 
     DEFAULT_REPO_ID = "microsoft/VibeVoice-1.5b"
 
     # nb, their gradio demo default is 1.3, which is IMO much too low
-    CFG_DEFAULT = 3.0
+    CFG_DEFAULT = 2.0
     CFG_MIN = 1.0
     CFG_MAX = 7.0
 
@@ -26,6 +28,7 @@ class VibeVoiceBaseModel(TtsBaseModel):
     MAX_TOKENS = 250
 
     @property
+    @abstractmethod
     def has_lora(self) -> bool:
         ...
 

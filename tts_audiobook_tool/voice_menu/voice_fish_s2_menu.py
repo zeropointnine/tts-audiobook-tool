@@ -33,15 +33,15 @@ class VoiceFishS2Menu:
                 )
             )
 
-            items.append( 
-                VoiceMenuShared.make_temperature_item(
-                    state=state,
-                    attr="fish_s2_temperature",
-                    default_value=FishS2BaseModel.DEFAULT_TEMPERATURE,
-                    min_value=0.01,
-                    max_value=1.0 # from gradio demo
-                )
+            temperature_item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                attr="fish_s2_temperature",
+                default_value=FishS2BaseModel.DEFAULT_TEMPERATURE,
+                min_value=0.01,
+                max_value=1.0 # from gradio demo
             )
+            temperature_item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(temperature_item)
 
             items.append(
                 VoiceMenuShared.make_top_p_item(
@@ -55,17 +55,7 @@ class VoiceFishS2Menu:
                 VoiceMenuShared.make_top_k_item(
                     state=state,
                     attr="fish_s2_top_k",
-                    default_value=FishS2BaseModel.DEFAULT_TOP_K,
-                    min_value=1,
-                    max_value=100
-                )
-            )
-
-            items.append(
-                VoiceMenuShared.make_repetition_penalty_item(
-                    state=state,
-                    attr="fish_s2_repetition_penalty",
-                    default_value=FishS2BaseModel.DEFAULT_REPETITION_PENALTY
+                    default_value=FishS2BaseModel.DEFAULT_TOP_K
                 )
             )
 

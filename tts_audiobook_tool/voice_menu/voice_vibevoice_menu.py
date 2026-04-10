@@ -75,19 +75,20 @@ class VoiceVibeVoiceMenu:
                 )
 
             # Other config
-            items.append(
-                MenuUtil.make_number_item(
-                    state=state,
-                    attr="vibevoice_cfg",
-                    base_label="CFG", 
-                    default_value=VibeVoiceBaseModel.CFG_DEFAULT,
-                    is_minus_one_default=True,
-                    num_decimals=2,
-                    prompt=f"Enter CFG {COL_DIM}({VibeVoiceBaseModel.CFG_MIN} to {VibeVoiceBaseModel.CFG_MAX}):",
-                    min_value=VibeVoiceBaseModel.CFG_MIN,
-                    max_value=VibeVoiceBaseModel.CFG_MAX
-                )
+            item = MenuUtil.make_number_item(
+                state=state,
+                attr="vibevoice_cfg",
+                base_label="CFG", 
+                default_value=VibeVoiceBaseModel.CFG_DEFAULT,
+                is_minus_one_default=True,
+                num_decimals=2,
+                prompt=f"Enter CFG {COL_DIM}({VibeVoiceBaseModel.CFG_MIN} to {VibeVoiceBaseModel.CFG_MAX}):",
+                min_value=VibeVoiceBaseModel.CFG_MIN,
+                max_value=VibeVoiceBaseModel.CFG_MAX
             )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
             items.append(
                 MenuUtil.make_number_item(
                     state=state,
@@ -101,6 +102,7 @@ class VoiceVibeVoiceMenu:
                     max_value=30
                 )
             )
+            
             items.append(
                 VoiceMenuShared.make_seed_item(state, "vibevoice_seed")
             )

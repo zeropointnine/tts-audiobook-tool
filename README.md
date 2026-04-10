@@ -77,7 +77,7 @@ A separate virtual environment must be created for each model you want to use. P
 
 ### Step 4 (Windows)
 
-To enable torch CUDA acceleration on Windows, run the following commands (Note how the project uses the same version of torch for each TTS model's virtual environments - v2.8.0/cu128). This extra step is not required when using Linux.
+To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128). This extra step is not required when using Linux.
 
     pip uninstall -y torch torchaudio
     pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
@@ -154,6 +154,10 @@ Install dependencies:
 
     pip install -r requirements-chatterbox.txt
 
+Windows CUDA support (unlike the other models, we must use torch 2.6/cu124)
+
+    pip uninstall -y torch torchaudio
+    pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
 ## Virtual environment for Fish S2-Pro:
 

@@ -31,9 +31,11 @@ class VoiceGlmMenu:
                     lambda _, __: samplerate_menu(state)
                 )
             )
-            items.append(
-                VoiceMenuShared.make_seed_item(state, "glm_seed")
-            )
+            
+            item = VoiceMenuShared.make_seed_item(state, "glm_seed")
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+            
             return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)

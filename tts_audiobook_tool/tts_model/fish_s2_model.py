@@ -152,11 +152,6 @@ class FishS2Model(FishS2BaseModel):
         else:
             top_k = project.fish_s2_top_k
 
-        if project.fish_s2_repetition_penalty == -1:
-            repetition_penalty = FishS2BaseModel.DEFAULT_REPETITION_PENALTY
-        else:
-            repetition_penalty = project.fish_s2_repetition_penalty
-
         seed = -1 if force_random_seed else project.fish_s2_seed
 
         result = self.generate(
@@ -164,7 +159,6 @@ class FishS2Model(FishS2BaseModel):
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            repetition_penalty=repetition_penalty,
             seed=seed
         )
 
@@ -179,7 +173,6 @@ class FishS2Model(FishS2BaseModel):
             temperature: float,
             top_p: float,
             top_k: int,
-            repetition_penalty: float,
             seed: int
     ) -> Sound | str:
 
@@ -220,7 +213,6 @@ class FishS2Model(FishS2BaseModel):
                     temperature=temperature,
                     top_p=top_p,
                     top_k=top_k, # type: ignore  # rem, when venv is s1, gets flagged as an error
-                    repetition_penalty=repetition_penalty
                 ):
                     if response.action == "sample":
                         if response.codes is None:

@@ -16,9 +16,13 @@ class ChatterboxBaseModel(TtsBaseModel):
 
     INFO = TtsModelInfos.CHATTERBOX.value
 
-    DEFAULT_EXAGGERATION = 0.5 # from chatterbox library code
-    DEFAULT_CFG = 0.5
+    DEFAULT_EXAGGERATION = 0.5 # ml only, not turbo
+    DEFAULT_CFG = 0.5 # ml only, not turbo
     DEFAULT_TEMPERATURE = 0.8
+    DEFAULT_TOP_P = 0.95 # ml library default is 1.0, turbo library default is 0.95. but anyway.
+    DEFAULT_TOP_K = 1000 # turbo only, not ml
+    DEFAULT_REPETITION_PENALTY_ML = 2.0
+    DEFAULT_REPETITION_PENALTY_TURBO = 1.2
 
     @abstractmethod
     def supported_languages_multi(self) -> list[str]:

@@ -252,8 +252,8 @@ class VoiceMenuShared:
             state: State,
             attr: str,
             default_value: int,
-            min_value: int,
-            max_value: int
+            min_value: int=TOP_K_MIN_DEFAULT,
+            max_value: int=TOP_K_MAX_DEFAULT
     ) -> MenuItem:
 
         return MenuUtil.make_number_item(
@@ -294,11 +294,10 @@ class VoiceMenuShared:
     def make_repetition_penalty_item(
             state: State,
             attr: str,
-            default_value: float
+            default_value: float,
+            min_value = REPETITION_PENALTY_MIN_DEFAULT,
+            max_value = REPETITION_PENALTY_MAX_DEFAULT
     ) -> MenuItem:
-
-        min_value = REPETITION_PENALTY_MIN_DEFAULT
-        max_value = REPETITION_PENALTY_MAX_DEFAULT
 
         return MenuUtil.make_number_item(
             state=state,
