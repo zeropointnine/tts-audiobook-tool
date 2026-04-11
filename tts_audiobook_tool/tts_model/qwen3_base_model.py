@@ -18,8 +18,11 @@ class Qwen3BaseModel(TtsBaseModel):
     DEFAULT_REPO_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 
     TEMPERATURE_FALLBACK_DEFAULT = 0.9 # (Real default is embedded in the loaded model)
-    TEMPERATURE_MIN = 0.01 
+    TEMPERATURE_MIN = 0.01
     TEMPERATURE_MAX = 3.0 # sane max IMO; at high values, gens can fail to terminate for a very long time
+    TOP_K_DEFAULT = 50
+    TOP_P_DEFAULT = 1.0
+    REPETITION_PENALTY_DEFAULT = 1.05
             
     def clear_voice(self) -> None:
         ...

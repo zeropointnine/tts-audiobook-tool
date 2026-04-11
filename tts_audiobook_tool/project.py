@@ -134,6 +134,9 @@ class Project(Saveable):
     qwen3_instructions: str = ""
     qwen3_batch_size: int = 1
     qwen3_temperature: float = -1
+    qwen3_top_k: int = -1
+    qwen3_top_p: float = -1
+    qwen3_repetition_penalty: float = -1
     qwen3_seed: int = -1
 
     def __init__(self, dir_path: str):
@@ -523,6 +526,10 @@ class Project(Saveable):
                 add_warning("qwen3_temperature", value)
         project.qwen3_temperature = value
 
+        project.qwen3_top_k = d.get("qwen3_top_k", -1)
+        project.qwen3_top_p = d.get("qwen3_top_p", -1)
+        project.qwen3_repetition_penalty = d.get("qwen3_repetition_penalty", -1)
+
         seed = d.get("qwen3_seed", -1)
         if not (-1 <= seed <= 2**32 - 1):
             add_warning("qwen3_seed", -1)
@@ -642,6 +649,9 @@ class Project(Saveable):
             "qwen3_instructions": self.qwen3_instructions,
             "qwen3_batch_size": self.qwen3_batch_size,
             "qwen3_temperature": self.qwen3_temperature,
+            "qwen3_top_k": self.qwen3_top_k,
+            "qwen3_top_p": self.qwen3_top_p,
+            "qwen3_repetition_penalty": self.qwen3_repetition_penalty,
             "qwen3_seed": self.qwen3_seed,
         }
 

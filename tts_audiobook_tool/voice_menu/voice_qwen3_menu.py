@@ -126,16 +126,49 @@ class VoiceQwen3Menu:
             default_temp = Tts.get_qwen3().generate_defaults.get(
                 "temperature", Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
             )
-            items.append(
-                VoiceMenuShared.make_temperature_item(
-                    state=state,
-                    attr="qwen3_temperature",
-                    default_value=default_temp,
-                    min_value=Qwen3BaseModel.TEMPERATURE_MIN, 
-                    max_value=Qwen3BaseModel.TEMPERATURE_MAX
-                )
+            item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                attr="qwen3_temperature",
+                default_value=default_temp,
+                min_value=Qwen3BaseModel.TEMPERATURE_MIN,
+                max_value=Qwen3BaseModel.TEMPERATURE_MAX
             )
-            items.append(VoiceMenuShared.make_seed_item(state, "qwen3_seed"))
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
+            default_top_p = Tts.get_qwen3().generate_defaults.get(
+                "top_p", Qwen3BaseModel.TOP_P_DEFAULT
+            )
+            item = VoiceMenuShared.make_top_p_item(
+                state=state,
+                attr="qwen3_top_p",
+                default_value=default_top_p
+            )
+            items.append(item)
+
+            default_top_k = Tts.get_qwen3().generate_defaults.get(
+                "top_k", Qwen3BaseModel.TOP_K_DEFAULT
+            )
+            item = VoiceMenuShared.make_top_k_item(
+                state=state,
+                attr="qwen3_top_k",
+                default_value=default_top_k
+            )
+            items.append(item)
+
+            default_rp = Tts.get_qwen3().generate_defaults.get(
+                "repetition_penalty", Qwen3BaseModel.REPETITION_PENALTY_DEFAULT
+            )
+            item = VoiceMenuShared.make_repetition_penalty_item(
+                state=state,
+                attr="qwen3_repetition_penalty",
+                default_value=default_rp
+            )
+            items.append(item)
+
+            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
+            prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
+            items.append(VoiceMenuShared.make_seed_item(state, "qwen3_seed", prompt_override=prompt))
             return items
         
         # TODO: not using atm; revisit, reword

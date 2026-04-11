@@ -85,6 +85,9 @@ class Qwen3Model(Qwen3BaseModel):
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
         temperature = project.qwen3_temperature
+        top_k = project.qwen3_top_k
+        top_p = project.qwen3_top_p
+        repetition_penalty = project.qwen3_repetition_penalty
         seed = -1 if force_random_seed else project.qwen3_seed
 
         match self.model_type:
@@ -102,6 +105,9 @@ class Qwen3Model(Qwen3BaseModel):
                         voice_info=voice_info,
                         language=language,
                         temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
+                        repetition_penalty=repetition_penalty,
                         seed=seed
                     )
                 else:
@@ -117,23 +123,29 @@ class Qwen3Model(Qwen3BaseModel):
                     speaker_id = speakers[0] # force default
                 if speaker_id not in speakers:
                     result = f"Invalid speaker id for this model: {speaker_id}"
-                else:                            
+                else:
                     result = self.generate_custom_voice(
-                        prompts=prompts, 
+                        prompts=prompts,
                         speaker_id=speaker_id,
                         instruct=project.qwen3_instructions,
                         language=language,
                         temperature=temperature,
+                        top_k=top_k,
+                        top_p=top_p,
+                        repetition_penalty=repetition_penalty,
                         seed=seed
                     )
             
             case "voice_design":
 
                 result = self.generate_voice_design(
-                    prompts=prompts, 
+                    prompts=prompts,
                     instruct=project.qwen3_instructions,
                     language=language,
                     temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty,
                     seed=seed
                 )
             
@@ -143,11 +155,14 @@ class Qwen3Model(Qwen3BaseModel):
         return result
 
     def generate_base(
-          self, 
-          prompts: list[str], 
-          voice_info: tuple[str, str], 
+          self,
+          prompts: list[str],
+          voice_info: tuple[str, str],
           language: str,
           temperature: float = -1,
+          top_k: int = -1,
+          top_p: float = -1,
+          repetition_penalty: float = -1,
           seed: int = -1
     ) -> list[Sound] | str:
         """
@@ -181,14 +196,20 @@ class Qwen3Model(Qwen3BaseModel):
         printt("Generating...", dont_reset=True) 
 
         try:
+            gen_kwargs = self._build_gen_kwargs(
+                temperature=temperature, 
+                top_k=top_k, 
+                top_p=top_p,
+                repetition_penalty=repetition_penalty, 
+                seed=seed
+            )
             wavs, sr = self._model.generate_voice_clone(
                 text=prompts,
                 voice_clone_prompt=voice_clone_prompts,
-                language=languages, 
-                temperature=self._resolve_temperature(temperature),
-                seed=seed,
+                language=languages,
                 non_streaming_mode=True,
-            ) 
+                **gen_kwargs,
+            )
             
             # FYI, this output can be ignored:
             # setting `pad_token_id` to `eos_token_id`:2150 for open-end generation.
@@ -200,12 +221,15 @@ class Qwen3Model(Qwen3BaseModel):
         return sounds
 
     def generate_custom_voice(
-        self, 
-        prompts: list[str], 
-        speaker_id: str, 
-        instruct: str, 
+        self,
+        prompts: list[str],
+        speaker_id: str,
+        instruct: str,
         language: str,
         temperature: float = -1,
+        top_k: int = -1,
+        top_p: float = -1,
+        repetition_penalty: float = -1,
         seed: int = -1
     ) -> list[Sound] | str:
 
@@ -221,15 +245,18 @@ class Qwen3Model(Qwen3BaseModel):
         printt("Generating...", dont_reset=True) 
 
         try:
+            gen_kwargs = self._build_gen_kwargs(
+                temperature=temperature, top_k=top_k, top_p=top_p,
+                repetition_penalty=repetition_penalty, seed=seed
+            )
             wavs, sr = self._model.generate_custom_voice(
                 text=prompts,
                 speaker=speaker_ids,
                 language=languages,
                 instruct = instructs,
-                temperature=self._resolve_temperature(temperature),
-                seed=seed,
                 non_streaming_mode=True,
-            ) 
+                **gen_kwargs,
+            )
         except Exception as e:
             return str(e)
 
@@ -237,11 +264,14 @@ class Qwen3Model(Qwen3BaseModel):
         return sounds
 
     def generate_voice_design(
-        self, 
-        prompts: list[str], 
-        instruct: str, 
+        self,
+        prompts: list[str],
+        instruct: str,
         language: str,
         temperature: float = -1,
+        top_k: int = -1,
+        top_p: float = -1,
+        repetition_penalty: float = -1,
         seed: int = -1
     ) -> list[Sound] | str:
 
@@ -256,25 +286,63 @@ class Qwen3Model(Qwen3BaseModel):
         printt("Generating...", dont_reset=True) 
 
         try:
+            gen_kwargs = self._build_gen_kwargs(
+                temperature=temperature, top_k=top_k, top_p=top_p,
+                repetition_penalty=repetition_penalty, seed=seed
+            )
             wavs, sr = self._model.generate_voice_design(
                 text=prompts,
                 language=languages,
                 instruct = instructs,
-                temperature=self._resolve_temperature(temperature),
-                seed=seed,
                 non_streaming_mode=True,
-            ) 
+                **gen_kwargs,
+            )
         except Exception as e:
             return str(e)
 
         sounds = [Sound(wav, sr) for wav in wavs]
         return sounds
 
-    def _resolve_temperature(self, temperature: float) -> float:
-        if temperature == -1:
-            resolved_temperature = self._model.generate_defaults.get("temperature", None)
-            if resolved_temperature is None:
-                resolved_temperature = Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
+    def _build_gen_kwargs(
+            self,
+            temperature: float = -1,
+            top_k: int = -1,
+            top_p: float = -1,
+            repetition_penalty: float = -1,
+            seed: int = -1
+    ) -> dict[str, Any]:
+        """
+        Build kwargs dict for library generate calls.
+        Only includes parameters where the user has explicitly set a value (not -1 sentinel).
+        The library's _merge_generate_kwargs will apply defaults for any missing params.
+
+        The Qwen3-TTS architecture has two sampling components: a "main talker" that generates
+        the lead codebook token at each step, and a "subtalker" (code_predictor) that generates
+        the remaining codebook tokens. The subtalker has its own parallel sampling parameters
+        (subtalker_top_p, subtalker_top_k, subtalker_temperature) that use the same value ranges
+        as the conventional top_p, top_k, and temperature. Because the subtalker generates
+        (num_code_groups - 1) tokens per step vs the main talker's 1, the subtalker's sampling
+        parameters actually have a greater effect on the output than the conventional ones.
+        To ensure user settings apply uniformly, top_p, top_k, and temperature are mirrored
+        to their subtalker counterparts. repetition_penalty has no subtalker equivalent.
+        """
+        kwargs: dict[str, Any] = {}
+        if temperature != -1:
+            kwargs["temperature"] = temperature
+            kwargs["subtalker_temperature"] = temperature
         else:
-            resolved_temperature = temperature
-        return resolved_temperature
+            resolved = self._model.generate_defaults.get("temperature", None)
+            if resolved is None:
+                resolved = Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
+            kwargs["temperature"] = resolved
+        if top_k != -1:
+            kwargs["top_k"] = top_k
+            kwargs["subtalker_top_k"] = top_k
+        if top_p != -1:
+            kwargs["top_p"] = top_p
+            kwargs["subtalker_top_p"] = top_p
+        if repetition_penalty != -1:
+            kwargs["repetition_penalty"] = repetition_penalty
+        if seed != -1:
+            kwargs["seed"] = seed
+        return kwargs
