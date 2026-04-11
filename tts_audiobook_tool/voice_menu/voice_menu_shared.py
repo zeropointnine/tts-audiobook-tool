@@ -312,14 +312,19 @@ class VoiceMenuShared:
         )
 
     @staticmethod
-    def make_seed_item(state: State, attr: str) -> MenuItem:
+    def make_seed_item(state: State, attr: str, prompt_override: str="") -> MenuItem:
         """ Makes "self-contained" menu item for seed setting, including handler """
+
+        if prompt_override:
+            prompt = prompt_override
+        else:
+            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}: "
 
         def on_item(_: State, __: MenuItem) -> None:
             AskUtil.ask_number(
                 saveable=state.project,
                 attr=attr,
-                prompt=f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}: ",
+                prompt=prompt,
                 lb=-1, 
                 ub=2**32-1,
                 success_prefix="Seed set:",

@@ -8,7 +8,9 @@ venv*/
 .python-version
 package.json
 package-lock.json
+
 plans/
+.roo/rules/python-env.md
 
 output/
 checkpoints/

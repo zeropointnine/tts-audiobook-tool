@@ -119,8 +119,12 @@ class Project(Saveable):
     glm_seed: int = -1
 
     mira_voice_file_name: str = ""
-    mira_temperature: float = MiraBaseModel.TEMPERATURE_DEFAULT # TODO: should use "-1 pattern"
+    mira_temperature: float = -1
+    mira_top_p: float = -1
+    mira_top_k: int = -1
+    mira_repetition_penalty: float = -1
     mira_batch_size: int = 1
+    mira_seed: int = -1
 
     qwen3_target: str = ""
     qwen3_model_type: str = ""
@@ -474,9 +478,13 @@ class Project(Saveable):
         value = d.get("mira_temperature", -1)
         if value != -1:
             if not isinstance(value, (float, int)) or not (MiraBaseModel.TEMPERATURE_MIN <= value <= MiraBaseModel.TEMPERATURE_MAX):
-                value = MiraBaseModel.TEMPERATURE_DEFAULT
+                value = -1
                 add_warning("mira_temperature", value)
         project.mira_temperature = value
+
+        project.mira_top_p = d.get("mira_top_p", -1)
+        project.mira_top_k = d.get("mira_top_k", -1)
+        project.mira_repetition_penalty = d.get("mira_repetition_penalty", -1)
 
         value = d.get("mira_batch_size", -1)
         if value != -1:
@@ -485,6 +493,12 @@ class Project(Saveable):
                 add_warning("mira_batch_size", value)
             value = int(value)
         project.mira_batch_size = value
+
+        seed = d.get("mira_seed", -1)
+        if not (-1 <= seed <= 2**32 - 1):
+            add_warning("mira_seed", -1)
+            seed = -1
+        project.mira_seed = int(seed)
 
         # Qwen3-TTS
         project.qwen3_target = d.get("qwen3_target", "") or d.get("qwen3_path_or_id", "") # legacy key compat
@@ -614,7 +628,11 @@ class Project(Saveable):
 
             "mira_voice_file_name": self.mira_voice_file_name,
             "mira_temperature": self.mira_temperature,
+            "mira_top_p": self.mira_top_p,
+            "mira_top_k": self.mira_top_k,
+            "mira_repetition_penalty": self.mira_repetition_penalty,
             "mira_batch_size": self.mira_batch_size,
+            "mira_seed": self.mira_seed,
 
             "qwen3_target": self.qwen3_target,
             "qwen3_model_type": self.qwen3_model_type,

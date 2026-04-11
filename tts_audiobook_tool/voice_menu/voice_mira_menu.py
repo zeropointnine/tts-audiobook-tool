@@ -29,15 +29,41 @@ class VoiceMiraMenu:
                 items.append( VoiceMenuShared.make_clear_voice_item(
                     state, TtsModelInfos.MIRA, on_clear_voice
                 ))
-            items.append(
-                VoiceMenuShared.make_temperature_item(
-                    state=state,
-                    attr="mira_temperature",
-                    default_value=MiraBaseModel.TEMPERATURE_DEFAULT,
-                    min_value=MiraBaseModel.TEMPERATURE_MIN,
-                    max_value=MiraBaseModel.TEMPERATURE_MAX
-                )
+
+            item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                attr="mira_temperature",
+                default_value=MiraBaseModel.TEMPERATURE_DEFAULT,
+                min_value=MiraBaseModel.TEMPERATURE_MIN,
+                max_value=MiraBaseModel.TEMPERATURE_MAX
             )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
+            item = VoiceMenuShared.make_top_p_item(
+                state=state,
+                attr="mira_top_p",
+                default_value=MiraBaseModel.TOP_P_DEFAULT
+            )
+            items.append(item)
+
+            item = VoiceMenuShared.make_top_k_item(
+                state=state,
+                attr="mira_top_k",
+                default_value=MiraBaseModel.TOP_K_DEFAULT
+            )
+            items.append(item)
+
+            item = VoiceMenuShared.make_repetition_penalty_item(
+                state=state,
+                attr="mira_repetition_penalty",
+                default_value=MiraBaseModel.REPETITION_PENALTY_DEFAULT
+            )
+            items.append(item)
+
+            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
+            prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
+            items.append(VoiceMenuShared.make_seed_item(state, "mira_seed", prompt_override=prompt))
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)
