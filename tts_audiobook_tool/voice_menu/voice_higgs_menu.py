@@ -22,15 +22,34 @@ class VoiceHiggsMenu:
                 items.append( 
                     VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) 
                 )
-            items.append( 
-                VoiceMenuShared.make_temperature_item(
+            
+            item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                attr="higgs_temperature",
+                default_value=HiggsBaseModel.DEFAULT_TEMPERATURE,
+                min_value=0.01,
+                max_value=2.0
+            )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
+            items.append(
+                VoiceMenuShared.make_top_p_item(
                     state=state,
-                    attr="higgs_temperature",
-                    default_value=HiggsBaseModel.DEFAULT_TEMPERATURE,
-                    min_value=0.01,
-                    max_value=2.0
+                    attr="higgs_top_p",
+                    default_value=HiggsBaseModel.DEFAULT_TOP_P
                 )
             )
+
+            items.append(
+                VoiceMenuShared.make_top_k_item(
+                    state=state,
+                    attr="higgs_top_k",
+                    default_value=HiggsBaseModel.DEFAULT_TOP_K
+                )
+            )
+
+            items.append(VoiceMenuShared.make_seed_item(state, "higgs_seed"))
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)

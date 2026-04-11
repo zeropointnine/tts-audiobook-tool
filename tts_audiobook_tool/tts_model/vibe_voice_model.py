@@ -146,7 +146,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             return "model or processor is not initialized" # logic error
 
         if seed <= -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
         try:

@@ -4,9 +4,8 @@ This is a generative-AI audiobook creation tool that supports a growing list of 
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
-- [Chatterbox (Multilingual and Turbo)](https://github.com/resemble-ai/chatterbox)
-- [Fish S2-Pro](https://github.com/fishaudio/fish-speech)
-- [Fish S1-mini](https://github.com/fishaudio/fish-speech)
+- [Chatterbox - Multilingual, Turbo](https://github.com/resemble-ai/chatterbox)
+- [Fish Speech - S2-Pro, S1-mini](https://github.com/fishaudio/fish-speech)
 - [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
@@ -355,6 +354,70 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 - Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
 
 
+### Model-specific features supported by the app 
+(plus configurable hyperparameters)
+
+Voice cloning is supported for all models. 
+
+**Qwen3-TTS**
+
+- CustomVoice and VoiceDesign model variants
+- Batch processing
+- Temperature, seed
+
+**IndexTTS2**
+
+- Emotion voice sample
+- Emotion vector 
+- Emotion alpha
+- FP16 / FP8
+- Temperature, top_p, top_k, seed
+
+**VibeVoice**
+
+- Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
+- LoRAs
+- Batch processing
+- Music detection/rejection
+- CFG, steps, seed
+
+**Chatterbox**
+
+- Chatterbox Multilingual and Chatterbox-Turbo model variants
+- Exaggeration
+- CFG
+- Temperature, top_p, top_k, repetition_penalty, seed
+
+**Fish S2-Pro**
+
+- Emotion tags
+- Torch compile 
+- Temperature, top_p, top_k, seed
+
+**Fish S1-mini**
+
+- Torch compile 
+- Temperature, top_p, repetition penalty, seed
+
+**Higgs Audio V2**
+
+- Temperature, top_p, top_k, seed
+
+**GLM-TTS**
+
+- Samplerate (24khz or 32 khz)
+- Seed
+
+**MiraTTS**
+
+- Batch processing
+- Temperature, top_p, top_k, repetition_penalty, seed
+
+**Oute TTS**
+
+- Temperature
+
+
 ### Inference speeds, expectations
 
 Listed below are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux are usually significantly faster than on Windows.
@@ -387,186 +450,182 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
-2026-04-07
+**2026-04-11**
 
-Added support for **Fish S2-Pro**
+- Added configurable **top-p**, **top-k**, and **repetition penalty** hyperparameters to models where applicable given their architecture.
 
-Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments. 
+**2026-04-07**
 
-Fish S1-mini and S2-Pro - Added torch compile toggle
+- Added support for **Fish S2-Pro**
+
+- Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments. 
+
+- Fish S1-mini and S2-Pro - Added torch compile toggle
 
 **2025-01-26**
 
-Add support for **Qwen3-TTS** (Base, CustomVoice, and VoiceDesign models)
+- Added support for **Qwen3-TTS** (Base, CustomVoice, and VoiceDesign models)
 
 **2025-01-23**
 
-Added new text segmentation method **"multiple sentences"** (`Text` > `Text segmentation strategy`). Probably the ideal way to chunk text in combination with `max_words_per_segment = 80` when the TTS model can handle long prompts with high accuracy and without speeding up.
+- Added new text segmentation method **"multiple sentences"** (`Text` > `Text segmentation strategy`). Probably the ideal way to chunk text in combination with `max_words_per_segment = 80` when the TTS model can handle long prompts with high accuracy and without speeding up.
 
 **2025-01-21**
 
-Added support for **VibeVoice LoRAs** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)
+- Added support for **VibeVoice LoRAs** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)
 
 **2025-01-18, circa**
 
-**Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).
+- **Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).
 
-**VibeVoice batch support** (drastically speeds up inference). 
+- **VibeVoice batch support** (drastically speeds up inference). 
 
-**VibeVoice seed support**
+- **VibeVoice seed support**
 
-**Music detection** - Validator will now reject audio with music hallucinations (VibeVoice)
+- **Music detection** - Validator will now reject audio with music hallucinations (VibeVoice)
 
-Added submenu: `Concat` > `Open audiobook file in the player app`
+- Added submenu: `Concat` > `Open audiobook file in the player app`
 
 **2025-01-12**
 
-Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting the source text.
+- Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting the source text.
 
-Prevent some TTS models from mangling the output of prompts starting with **all-caps phrases** (relevant for MiraTTS in particular, plus some others).
+- Prevent some TTS models from mangling the output of prompts starting with **all-caps phrases** (relevant for MiraTTS in particular, plus some others).
 
 **2025-01-10**
 
-"Chapter dividers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
+- "Chapter dividers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
 
-Note, app now saves AAC files using `.m4b` suffix instead of `.m4a`.
+- Note, app now saves AAC files using `.m4b` suffix instead of `.m4a`.
 
 **2025-01-05**
 
-Added option to **add chapter dividers using regular expressions** (thanks @AntitrustEnthusiast).
+- Added option to **add chapter dividers using regular expressions** (thanks @AntitrustEnthusiast).
 
 **2025-01-04**
 
-Added support for **Chatterbox-Turbo**.
+- Added support for **Chatterbox-Turbo**.
 
-Improved logic for trimming audio generations with spurious words and noises at the beginning or end (important for Chatterbox).
+- Improved logic for trimming audio generations with spurious words and noises at the beginning or end (important for Chatterbox).
 
 **2025-12-31**
 
-Added support for **MiraTTS**, including batch mode. The model is exceptionally fast when running in batch mode.
+- Added support for **MiraTTS**, including batch mode. The model is exceptionally fast when running in batch mode.
 
-Added option: `Generate` > `Transcript validation strictness`
+- Added option: `Generate` > `Transcript validation strictness`
 
-Option to control seed value now available for: Chatterbox, Fish, GLM
+- Option to control seed value now available for: Chatterbox, Fish, GLM
 
 **2025-12-23**
 
-Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce. Requires some experimentation, as you might imagine. 
+- Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce. Requires some experimentation, as you might imagine. 
 
-Relatedly, added: `Project` > `Word substitutions` > `Inspect project text for uncommon words`.
+- Relatedly, added: `Project` > `Word substitutions` > `Inspect project text for uncommon words`.
 
-Also added option: `Generate` > `Transcript validation max retries`
+- Also added option: `Generate` > `Transcript validation max retries`
 
 **2025-12-21**
 
-Simplified and much-improved **speech-to-text validation logic**, which is now able to calculate the number of word errors for an audio generation (rather than simply adjudging "pass" vs "fail" using a patchwork of bespoke functions).
+- Simplified and much-improved **speech-to-text validation logic**, which is now able to calculate the number of word errors for an audio generation (rather than simply adjudging "pass" vs "fail" using a patchwork of bespoke functions).
 
-When a prompt is re-generated due to excessive word errors, the program is able to cherrypick the generation with the least number of errors.
+- When a prompt is re-generated due to excessive word errors, the program is able to cherrypick the generation with the least number of errors.
 
 **2025-12-16**
 
-Added support for **GLM-TTS**.
+- Added support for **GLM-TTS**.
 
-Added option: **`Realtime audio generation` > `Save output`**.
+- Added option: **`Realtime audio generation` > `Save output`**.
 
 **2025-12-13**
 
-Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio would first need be re-generated).
-
-Transferred various app-level preference settings to be project settings.
+- Added option **`Concatenate` > `Subdivide into phrases`**. This allows the player app to highlight text on a "per-phrase" basis by leveraging the STT word-level timing data (Note, on pre-existing projects, all audio would first need be re-generated).
 
 **2025-12-09**
 
-Added option to **clone project** (load an existing project > make new project > "Do you want to carry over the current project's settings?" > "Yes")
+- Added option to **clone project** (load an existing project > make new project > "Do you want to carry over the current project's settings?" > "Yes")
 
-Added option to force use of **CPU torch device** even when CUDA or MPS is available.
+- Added option to force use of **CPU torch device** even when CUDA or MPS is available.
 
 **2025-12-07**
 
-Added **max text segment word length** option, allowing for up to 80 words per text segment prompt. Can be useful with VibeVoice and Fish (other models are best left at the default of 40 words).
+- Added **max text segment word length** option, allowing for up to 80 words per text segment prompt. Can be useful with VibeVoice and Fish (other models are best left at the default of 40 words).
 
-**Resolved Linux CUDA crashes** related to faster-whisper library by changing Linux torch requirements. If you were experiencing this problem, get latest and update your virtual environment (`pip install -r requirements-[modelname].txt`).
-
-Broad code refactor related to handling of text segments.
+- **Resolved Linux CUDA crashes** related to faster-whisper library by changing Linux torch requirements. If you were experiencing this problem, get latest and update your virtual environment (`pip install -r requirements-[modelname].txt`).
 
 **2025-12-06**
 
-**Updated Chatterbox** requirement to v0.1.4, which is multilanguage capable, and **added language code** project setting. Thanks to @JuMGameN, co-author for this update.
+- **Updated Chatterbox** requirement to v0.1.4, which is multilanguage capable, and **added language code** project setting. Thanks to @JuMGameN, co-author for this update.
 
-For existing users, the Chatterbox venv must be recreated using Python v3.11.
+- For existing users, the Chatterbox venv must be recreated using Python v3.11.
 
 **2025-11-11**
 
-Added option to keep the **Whisper** model on the CPU.
+- Added option to keep the **Whisper** model on the CPU.
 
 **2025-11-05**
 
-Player/reader: Added **bookmarks** feature, ability to pin the audio player widget in desktop mode, plus.
+- Player/reader: Added **bookmarks** feature, ability to pin the audio player widget in desktop mode, plus.
 
 **2025-10-24**
 
-Added option to **disable transcription validation** (`Options` > `Whisper model type` > `Disabled`). Doing so is only advisable while using IndexTTS2 (IMO), which generates the least number of inference errors of any of the supported models to date.
-
-FYI, Whisper model type is now an app-wide preference setting rather than a per-project setting.
+- Added option to **disable transcription validation** (`Options` > `Whisper model type` > `Disabled`). Doing so is only advisable while using IndexTTS2 (IMO), which generates the least number of inference errors of any of the supported models to date.
 
 **2025-10-23**
 
-Added option to insert a "page turn" **sound effect at section breaks** (2+ blank lines in the text). I use this or text files converted from epub files using Calibre, which tends to insert two or more blank lines at chapter breaks, etc.
-
-Rearranged some menu items
+- Added option to insert a "page turn" **sound effect at section breaks** (2+ blank lines in the text). I use this or text files converted from epub files using Calibre, which tends to insert two or more blank lines at chapter breaks, etc.
 
 **2025-10-03**
 
-Added support for **IndexTTS2**, including secondary voice reference sample guiding emotion and "emotion vectors".
+- Added support for **IndexTTS2**, including secondary voice reference sample guiding emotion and "emotion vectors".
 
-Added option to **specify Whisper model** (large-v3 or large-v3-turbo)
+- Added option to **specify Whisper model** (large-v3 or large-v3-turbo)
 
 **2025-09-15**
 
-Added support for **VibeVoice alternative models** (ie, large/7B model)
+- Added support for **VibeVoice alternative models** (ie, large/7B model)
 
 **2025-09-12**
 
-Added support for **VibeVoice**.
+- Added support for **VibeVoice**.
 
 **2025-08-10**
 
-Migrated from openai-whisper to **faster-whisper** (faster, less memory, equivalent accuracy).
+- Migrated from openai-whisper to **faster-whisper** (faster, less memory, equivalent accuracy).
 
 **2025-08-06**
 
-Added support for **Higgs Audio V2** (3B base model).
+- Added support for **Higgs Audio V2** (3B base model).
 
 **2025-07-18**
 
-Added support for **Fish OpenAudio S1-mini**
+- Added support for **Fish OpenAudio S1-mini**
 
-Logic to detect dropped phrases at end of generated audio segments (common occurrence with the Fish model)
+- Logic to detect dropped phrases at end of generated audio segments (common occurrence with the Fish model)
 
-Added utility to transcode and concatenate directory of MP3 chapter files to M4A (meant for use with the "Enhance existing audiobook" tool)
+- Added utility to transcode and concatenate directory of MP3 chapter files to M4A (meant for use with the "Enhance existing audiobook" tool)
 
 **2025-07-02**
 
-New feature: **Real-time playback** (`Options > Real-time playback`)
+- New feature: **Real-time playback** (`Options > Real-time playback`)
 
-This serves as a quicker and more "casual" alternative to the regular `Generate audio` UI flow, and allows for more-or-less immediate and uninterrupted audio playback (contingent on system performance, ofc). It employs the same quality control measures except for loudness normalization, and does not save its output.
+    This serves as a quicker and more "casual" alternative to the regular `Generate audio` UI flow, and allows for more-or-less immediate and uninterrupted audio playback (contingent on system performance, ofc). It employs the same quality control measures except for loudness normalization, and does not save its output.
 
 **2025-06-28** (many)
 
-Generated audio segments now have silence trimmed off the ends, and in the concatenation step, stitched-together lines have pauses of varying lengths inserted at paragraph, sentence, and phrase boundaries, resulting in much improved prosody / flow.
+- Generated audio segments now have silence trimmed off the ends, and in the concatenation step, stitched-together lines have pauses of varying lengths inserted at paragraph, sentence, and phrase boundaries, resulting in much improved prosody / flow.
 
-Loudness normalization is now being applied correctly (on the final audio file instead of per audio segment)
+- Loudness normalization is now being applied correctly (on the final audio file instead of per audio segment)
 
-Better detection of undesired repeating phrases (Oute especially)
+- Better detection of undesired repeating phrases (Oute especially)
 
-Better detection and fix for spooky Chatterbox noises at the end of prompts
+- Better detection and fix for spooky Chatterbox noises at the end of prompts
 
-Short 1-2 word sentences now get grouped with adjacent sentences to mitigate Chatterbox and Oute's issues with short prompts
+- Short 1-2 word sentences now get grouped with adjacent sentences to mitigate Chatterbox and Oute's issues with short prompts
 
-Streamlined handling of audio data throughout
+- Streamlined handling of audio data throughout
 
-Encoding audiobook files in AAC/M4A format no longer requires intermediate FLAC step
+- Encoding audiobook files in AAC/M4A format no longer requires intermediate FLAC step
 
-Streamlined some UI
+- Streamlined some UI
 
-Some improvements to the web player/reader
+- Some improvements to the web player/reader

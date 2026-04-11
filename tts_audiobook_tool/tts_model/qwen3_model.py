@@ -189,7 +189,7 @@ class Qwen3Model(Qwen3BaseModel):
         languages = [language for _ in prompts]
 
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
         # Inference code does not print its own feedback, so
@@ -238,7 +238,7 @@ class Qwen3Model(Qwen3BaseModel):
         instructs = [instruct for _ in prompts] if instruct else None
 
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
         # Inference code does not print its own feedback, so
@@ -279,7 +279,7 @@ class Qwen3Model(Qwen3BaseModel):
         instructs = [instruct for _ in prompts] 
 
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
         # Inference code does not print its own feedback, so

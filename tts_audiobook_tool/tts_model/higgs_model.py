@@ -21,8 +21,9 @@ from boson_multimodal.dataset.chatml_dataset import ( # type: ignore
     prepare_chatml_sample,
 )
 from boson_multimodal.model.higgs_audio.utils import revert_delay_pattern # type: ignore
-from transformers import AutoConfig, AutoTokenizer # type: ignore
+from transformers import AutoConfig, AutoModel, AutoTokenizer # type: ignore
 from transformers.cache_utils import StaticCache # type: ignore
+from huggingface_hub import snapshot_download as _hf_snapshot_download # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
@@ -30,6 +31,47 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
+
+# --------------------------------------------------------------------------------------------------
+# Pin HuggingFace model revisions to known-working commits.
+# This prevents breaking changes in upstream model repos from breaking this tool 
+# See: https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/discussions/5
+#
+# To find commit hashes, go to each model's "Commits" tab on HuggingFace and copy the hash
+# of the last known-working commit.
+# --------------------------------------------------------------------------------------------------
+
+_PINNED_REVISIONS = {
+    "bosonai/higgs-audio-v2-tokenizer": "9d4988fbd4ad07b4cac3a5fa462741a41810dbec",
+    "bosonai/higgs-audio-v2-generation-3B-base": "10840182ca4ad5d9d9113b60b9bb3c1ef1ba3f84",
+    "bosonai/hubert_base": "b4b85f1652c16ad63fdc818221b215b79ff55934",
+}
+
+
+def _pinned_snapshot(repo_id: str, revision: str) -> str:
+    """Download (or retrieve from cache) a specific revision of a HuggingFace model.
+
+    Uses the standard HuggingFace cache, so files are deduplicated with any
+    existing downloads. Returns the local snapshot directory path.
+    """
+    print(f"Ensuring pinned model {repo_id} @ {revision[:12]}...")
+    return _hf_snapshot_download(repo_id, revision=revision)
+
+
+# Resolve pinned model paths at import time. snapshot_download is idempotent —
+# if the revision is already in the HF cache it returns immediately.
+_LOCAL_TOKENIZER_PATH = _pinned_snapshot(
+    "bosonai/higgs-audio-v2-tokenizer",
+    _PINNED_REVISIONS["bosonai/higgs-audio-v2-tokenizer"],
+)
+_LOCAL_MODEL_PATH = _pinned_snapshot(
+    "bosonai/higgs-audio-v2-generation-3B-base",
+    _PINNED_REVISIONS["bosonai/higgs-audio-v2-generation-3B-base"],
+)
+_LOCAL_HUBERT_PATH = _pinned_snapshot(
+    "bosonai/hubert_base",
+    _PINNED_REVISIONS["bosonai/hubert_base"],
+)
 
 class HiggsModel(HiggsBaseModel):
     """
@@ -45,7 +87,21 @@ class HiggsModel(HiggsBaseModel):
             device = device
             use_static_kv_cache = False
 
-        self.audio_tokenizer = load_higgs_audio_tokenizer(AUDIO_TOKENIZER_PATH, device=device)
+        # Temporarily patch AutoModel.from_pretrained so the hardcoded
+        # "bosonai/hubert_base" inside HiggsAudioTokenizer.__init__() uses
+        # our pinned local copy instead of downloading from HuggingFace.
+        _orig_from_pretrained = AutoModel.from_pretrained
+
+        def _patched_from_pretrained(pretrained_model_name_or_path, *a, **kw):
+            if pretrained_model_name_or_path == "bosonai/hubert_base":
+                return _orig_from_pretrained(_LOCAL_HUBERT_PATH, *a, **kw)
+            return _orig_from_pretrained(pretrained_model_name_or_path, *a, **kw)
+
+        AutoModel.from_pretrained = staticmethod(_patched_from_pretrained)
+        try:
+            self.audio_tokenizer = load_higgs_audio_tokenizer(AUDIO_TOKENIZER_PATH, device=device)
+        finally:
+            AutoModel.from_pretrained = _orig_from_pretrained
 
         self.model_client = HiggsAudioModelClient(
             model_path=MODEL_PATH,
@@ -83,12 +139,28 @@ class HiggsModel(HiggsBaseModel):
         else:
             temperature = project.higgs_temperature
 
+        if project.higgs_top_k == -1:
+            top_k = HiggsBaseModel.DEFAULT_TOP_K
+        else:
+            top_k = project.higgs_top_k
+
+        if project.higgs_top_p == -1:
+            top_p = HiggsBaseModel.DEFAULT_TOP_P
+        else:
+            top_p = project.higgs_top_p
+
+        seed = -1 if force_random_seed else project.higgs_seed
+        if seed == -1:
+            seed = random.randint(1, sys.maxsize)
+
         result = self.generate(
             p_voice_path=voice_path, # TODO is this loading every gen?
             p_voice_transcript=voice_transcript,
             text=prompt,
-            seed=random.randint(1, sys.maxsize),
-            temperature=temperature
+            seed=seed,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p
         )
 
         if isinstance(result, Sound):
@@ -102,7 +174,9 @@ class HiggsModel(HiggsBaseModel):
             p_voice_transcript: str,
             text: str,
             seed: int,
-            temperature: float = HiggsBaseModel.DEFAULT_TEMPERATURE
+            temperature: float,
+            top_k: int,
+            top_p: float
     ) -> Sound | str:
 
         if p_voice_path:
@@ -113,8 +187,6 @@ class HiggsModel(HiggsBaseModel):
             voice_transcript = None
 
         scene_prompt = text
-        top_k = 50
-        top_p = 0.95
         ras_win_len = 7
         ras_win_max_num_repeat = 2
         ref_audio_in_system_message = False
@@ -552,8 +624,10 @@ def prepare_generation_context(scene_prompt, voice_path, voice_transcript, ref_a
 
 # ---
 
-MODEL_PATH = "bosonai/higgs-audio-v2-generation-3B-base"
-AUDIO_TOKENIZER_PATH = "bosonai/higgs-audio-v2-tokenizer"
+# Use pre-downloaded local paths pinned to known-working commits instead of live HuggingFace repo IDs.
+# See _PINNED_REVISIONS dict above to update commit hashes.
+MODEL_PATH = _LOCAL_MODEL_PATH
+AUDIO_TOKENIZER_PATH = _LOCAL_TOKENIZER_PATH
 MAX_NEW_TOKENS = 2048
 
 AUDIO_PLACEHOLDER_TOKEN = "<|__AUDIO_PLACEHOLDER__|>"

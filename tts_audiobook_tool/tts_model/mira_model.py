@@ -81,7 +81,7 @@ class MiraModel(MiraBaseModel):
         assert(self.mira_tts is not None)
         seed = -1 if force_random_seed else project.mira_seed
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
         self.mira_tts.gen_config.random_seed = seed
 

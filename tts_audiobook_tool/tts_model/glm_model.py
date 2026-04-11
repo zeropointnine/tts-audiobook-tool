@@ -12,6 +12,7 @@ from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -136,7 +137,7 @@ class GlmModel(GlmBaseModel):
         ).to(self.device)
 
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
 
         # Initialize Cache
         cache = {

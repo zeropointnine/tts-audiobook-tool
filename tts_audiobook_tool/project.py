@@ -94,6 +94,9 @@ class Project(Saveable):
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = ""
     higgs_temperature: float = -1
+    higgs_top_k: int = -1
+    higgs_top_p: float = -1
+    higgs_seed: int = -1
 
     vibevoice_voice_file_name: str = ""
     vibevoice_target: str = ""
@@ -374,7 +377,7 @@ class Project(Saveable):
         project.chatterbox_exaggeration = d.get("chatterbox_exaggeration", -1)
         
         project.chatterbox_seed = d.get("chatterbox_seed", -1)
-        if not (-1 <= project.chatterbox_seed <= 2**32 - 1):
+        if not (-1 <= project.chatterbox_seed <= SEED_MAX):
             add_warning("chatterbox_seed", -1)
             project.chatterbox_seed = -1
 
@@ -395,7 +398,7 @@ class Project(Saveable):
         if value == -1:
             value = d.get("fish_seed", -1)
         project.fish_s1_seed = value
-        if not (-1 <= value <= 2**32 - 1):
+        if not (-1 <= value <= SEED_MAX):
             add_warning("fish_s1_seed", -1)
             project.fish_s1_seed = -1
         
@@ -411,7 +414,7 @@ class Project(Saveable):
         project.fish_s2_top_p = d.get("fish_s2_top_p", -1)
         project.fish_s2_top_k = d.get("fish_s2_top_k", -1)
         project.fish_s2_seed = d.get("fish_s2_seed", -1)
-        if not (-1 <= project.fish_s2_seed <= 2**32 - 1):
+        if not (-1 <= project.fish_s2_seed <= SEED_MAX):
             add_warning("fish_s2_seed", -1)
             project.fish_s2_seed = -1
         value = d.get("fish_s2_compile_enabled", None)
@@ -423,6 +426,14 @@ class Project(Saveable):
         project.higgs_voice_file_name = d.get("higgs_voice_file_name", "")
         project.higgs_voice_transcript = d.get("higgs_voice_text", "")
         project.higgs_temperature = d.get("higgs_temperature", -1)
+        project.higgs_top_k = d.get("higgs_top_k", -1)
+        project.higgs_top_p = d.get("higgs_top_p", -1)
+
+        seed = d.get("higgs_seed", -1)
+        if not (-1 <= seed <= SEED_MAX):
+            add_warning("higgs_seed", -1)
+            seed = -1
+        project.higgs_seed = int(seed)
 
         # VibeVoice
         project.vibevoice_voice_file_name = d.get("vibevoice_voice_file_name", "")
@@ -440,7 +451,7 @@ class Project(Saveable):
         project.vibevoice_batch_size = value
 
         project.vibevoice_seed = d.get("vibevoice_seed", -1)
-        if not (-1 <= project.vibevoice_seed <= 2**32 - 1):
+        if not (-1 <= project.vibevoice_seed <= SEED_MAX):
             add_warning("vibevoice_seed", -1)
             project.vibevoice_seed = -1
 
@@ -459,7 +470,7 @@ class Project(Saveable):
         project.indextts2_top_p = d.get("indextts2_top_p", -1)
         project.indextts2_top_k = d.get("indextts2_top_k", -1)
         seed = d.get("indextts2_seed", -1)
-        if not (-1 <= seed <= 2**32 - 1):
+        if not (-1 <= seed <= SEED_MAX):
             add_warning("indextts2_seed", -1)
             seed = -1
         project.indextts2_seed = int(seed)
@@ -498,7 +509,7 @@ class Project(Saveable):
         project.mira_batch_size = value
 
         seed = d.get("mira_seed", -1)
-        if not (-1 <= seed <= 2**32 - 1):
+        if not (-1 <= seed <= SEED_MAX):
             add_warning("mira_seed", -1)
             seed = -1
         project.mira_seed = int(seed)
@@ -531,7 +542,7 @@ class Project(Saveable):
         project.qwen3_repetition_penalty = d.get("qwen3_repetition_penalty", -1)
 
         seed = d.get("qwen3_seed", -1)
-        if not (-1 <= seed <= 2**32 - 1):
+        if not (-1 <= seed <= SEED_MAX):
             add_warning("qwen3_seed", -1)
             project.qwen3_seed = -1
         seed = int(seed)
@@ -608,6 +619,9 @@ class Project(Saveable):
             "higgs_voice_file_name": self.higgs_voice_file_name,
             "higgs_voice_text": self.higgs_voice_transcript,
             "higgs_temperature": self.higgs_temperature,
+            "higgs_top_k": self.higgs_top_k,
+            "higgs_top_p": self.higgs_top_p,
+            "higgs_seed": self.higgs_seed,
 
             "vibevoice_voice_file_name": self.vibevoice_voice_file_name,
             "vibevoice_target": self.vibevoice_target,

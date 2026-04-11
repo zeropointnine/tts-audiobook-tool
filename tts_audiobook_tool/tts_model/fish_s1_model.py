@@ -177,7 +177,7 @@ class FishS1Model(FishS1BaseModel):
     ) -> Sound | str:
 
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)

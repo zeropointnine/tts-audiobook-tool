@@ -117,7 +117,7 @@ class IndexTts2Model(IndexTts2BaseModel):
             return "emo_vector should be either empty or have length of 8"
 
         if seed == -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
         try:

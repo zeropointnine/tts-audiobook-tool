@@ -7,5 +7,7 @@ class HiggsBaseModel(TtsBaseModel):
     INFO = TtsModelInfos.HIGGS.value
 
     DEFAULT_TEMPERATURE = 0.3
+    DEFAULT_TOP_K = 50
+    DEFAULT_TOP_P = 0.95
 
 

@@ -10,6 +10,7 @@ from chatterbox.tts_turbo import ChatterboxTurboTTS # type: ignore
 import logging
 
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -136,7 +137,7 @@ class ChatterboxModel(ChatterboxBaseModel):
             return "Logic error: language_id is not supported for Chatterbox Turbo"
         
         if seed <= -1:
-            seed = random.randrange(0, 2**32 - 1)
+            seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
         dic = {}
