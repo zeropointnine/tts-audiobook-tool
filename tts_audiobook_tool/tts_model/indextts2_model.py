@@ -1,10 +1,12 @@
 import os
+import random
 import huggingface_hub
 from indextts.infer_v2 import IndexTTS2 # type: ignore
 from numpy import ndarray
 import numpy
 
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
@@ -45,9 +47,9 @@ class IndexTts2Model(IndexTts2BaseModel):
         self.model = None
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False
         ) -> list[Sound] | str:
         
@@ -65,13 +67,18 @@ class IndexTts2Model(IndexTts2BaseModel):
         else:
             emo_voice_path = ""
 
+        seed = -1 if force_random_seed else project.indextts2_seed
+
         result = self.generate(
             text=prompt,
             voice_path=voice_path,
             temperature=project.indextts2_temperature,
             emo_alpha=project.indextts2_emo_alpha,
             emo_voice_path=emo_voice_path,
-            emo_vector=project.indextts2_emo_vector
+            emo_vector=project.indextts2_emo_vector,
+            top_p=project.indextts2_top_p,
+            top_k=project.indextts2_top_k,
+            seed=seed
         )
 
         if isinstance(result, Sound):
@@ -86,7 +93,10 @@ class IndexTts2Model(IndexTts2BaseModel):
             temperature: float,
             emo_alpha: float,
             emo_voice_path: str,
-            emo_vector: list[float]
+            emo_vector: list[float],
+            top_p: float = -1,
+            top_k: int = -1,
+            seed: int = -1
     ) -> Sound | str:
         """
         Returns generated audio or error string
@@ -99,17 +109,16 @@ class IndexTts2Model(IndexTts2BaseModel):
             temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
         if emo_alpha == -1:
             emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
+        if top_p == -1:
+            top_p = IndexTts2BaseModel.DEFAULT_TOP_P
+        if top_k == -1:
+            top_k = IndexTts2BaseModel.DEFAULT_TOP_K
         if emo_vector and len(emo_vector) != 8:
             return "emo_vector should be either empty or have length of 8"
 
-        if False:
-            printt()
-            printt("voice path", voice_path)
-            printt("temperature", temperature)
-            printt("emo alpha", emo_alpha)
-            printt("emo voice path", emo_voice_path)
-            printt("emo vector", emo_vector)
-            printt()
+        if seed == -1:
+            seed = random.randrange(0, 2**32 - 1)
+        AppUtil.set_seed(seed)
 
         try:
             # FYI, infer() caches loaded voice sample/s internally
@@ -120,6 +129,8 @@ class IndexTts2Model(IndexTts2BaseModel):
                 emo_alpha=emo_alpha,
                 emo_audio_prompt=emo_voice_path or None,
                 emo_vector=emo_vector or None,
+                top_p=top_p,
+                top_k=top_k,
                 max_text_tokens_per_segment=MAX_TOKENS_PER_SEGMENT,
                 output_path=None,
                 verbose=False

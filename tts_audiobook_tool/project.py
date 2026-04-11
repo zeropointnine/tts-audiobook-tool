@@ -109,6 +109,9 @@ class Project(Saveable):
     indextts2_emo_alpha: float = -1
     indextts2_emo_voice_file_name: str = ""
     indextts2_emo_vector: list[float] = [] # use either 0 or 8 elements
+    indextts2_top_p: float = -1
+    indextts2_top_k: int = -1
+    indextts2_seed: int = -1
 
     glm_voice_file_name: str = ""
     glm_voice_transcript: str = ""
@@ -446,6 +449,13 @@ class Project(Saveable):
         if not isinstance(o, list):
             o = []
         project.indextts2_emo_vector = o
+        project.indextts2_top_p = d.get("indextts2_top_p", -1)
+        project.indextts2_top_k = d.get("indextts2_top_k", -1)
+        seed = d.get("indextts2_seed", -1)
+        if not (-1 <= seed <= 2**32 - 1):
+            add_warning("indextts2_seed", -1)
+            seed = -1
+        project.indextts2_seed = int(seed)
 
         # GLM
         project.glm_voice_file_name = d.get("glm_voice_file_name", "")
@@ -593,6 +603,9 @@ class Project(Saveable):
             "indextts2_emo_alpha": self.indextts2_emo_alpha,
             "indextts2_temperature": self.indextts2_temperature,
             "indextts2_use_fp16": self.indextts2_use_fp16,
+            "indextts2_top_p": self.indextts2_top_p,
+            "indextts2_top_k": self.indextts2_top_k,
+            "indextts2_seed": self.indextts2_seed,
 
             "glm_voice_file_name": self.glm_voice_file_name,
             "glm_voice_text": self.glm_voice_transcript,

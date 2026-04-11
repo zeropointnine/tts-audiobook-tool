@@ -151,6 +151,18 @@ class AppUtil:
         return ""
 
     @staticmethod
+    def set_seed(seed: int):
+        """ Sets random seed across torch, numpy, and random. """
+        import torch
+        import numpy as np
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        random.seed(seed)
+        np.random.seed(seed)
+
+    @staticmethod
     def calc_hash_string(string: str) -> str:
         return xxhash.xxh3_64(string).hexdigest()
 

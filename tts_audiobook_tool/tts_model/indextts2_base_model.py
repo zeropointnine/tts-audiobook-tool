@@ -15,6 +15,8 @@ class IndexTts2BaseModel(TtsBaseModel):
     DEFAULT_EMO_VOICE_ALPHA = 0.65 # project gradio demo default
     DEFAULT_TEMPERATURE = 0.8 # project api default
     DEFAULT_USE_FP16 = False # project api default
+    DEFAULT_TOP_P = 0.8
+    DEFAULT_TOP_K = 30
 
     @classmethod
     def get_voice_display_info(

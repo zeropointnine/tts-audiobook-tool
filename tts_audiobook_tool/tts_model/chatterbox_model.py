@@ -9,6 +9,7 @@ from chatterbox.tts_turbo import ChatterboxTurboTTS # type: ignore
 
 import logging
 
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -136,7 +137,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         
         if seed <= -1:
             seed = random.randrange(0, 2**32 - 1)
-        self._set_seed(seed)
+        AppUtil.set_seed(seed)
 
         dic = {}
         if language_id:
@@ -159,11 +160,3 @@ class ChatterboxModel(ChatterboxBaseModel):
             traceback.print_exc()
             return make_error_string(e)
         
-    def _set_seed(self, seed: int):
-        """Sets the random seed for reproducibility across torch, numpy, and random."""
-        torch.manual_seed(seed)
-        if self._device.startswith("cuda"):
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-        random.seed(seed)
-        np.random.seed(seed)

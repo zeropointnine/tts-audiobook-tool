@@ -72,15 +72,6 @@ class VoiceIndexTts2Menu:
                     VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.INDEXTTS2) 
                 )
             items.append(
-                VoiceMenuShared.make_temperature_item(
-                    state=state,
-                    attr="indextts2_temperature",
-                    default_value=IndexTts2BaseModel.DEFAULT_TEMPERATURE,
-                    min_value=0.01,
-                    max_value=2.0
-                )
-            )
-            items.append(
                 MenuItem(make_emo_voice_label, on_emo_voice)
             )
             if state.project.indextts2_emo_voice_file_name:
@@ -106,6 +97,35 @@ class VoiceIndexTts2Menu:
             items.append(
                 MenuItem(make_fp16_item, lambda _, __: VoiceIndexTts2Menu.fp16_menu(state))
             )
+
+            item = VoiceMenuShared.make_temperature_item(
+                state=state,
+                attr="indextts2_temperature",
+                default_value=IndexTts2BaseModel.DEFAULT_TEMPERATURE,
+                min_value=0.01,
+                max_value=2.0
+            )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
+            items.append(
+                VoiceMenuShared.make_top_p_item(
+                    state=state,
+                    attr="indextts2_top_p",
+                    default_value=IndexTts2BaseModel.DEFAULT_TOP_P
+                )
+            )
+
+            items.append(
+                VoiceMenuShared.make_top_k_item(
+                    state=state,
+                    attr="indextts2_top_k",
+                    default_value=IndexTts2BaseModel.DEFAULT_TOP_K
+                )
+            )
+
+            items.append(VoiceMenuShared.make_seed_item(state, "indextts2_seed"))
+
             return items
 
         VoiceMenuShared.menu_wrapper(state, make_items)

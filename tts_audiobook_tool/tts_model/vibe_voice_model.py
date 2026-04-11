@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tts_audiobook_tool.app_util import AppUtil
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
 from peft import PeftModel  # type: ignore
@@ -146,7 +147,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
 
         if seed <= -1:
             seed = random.randrange(0, 2**32 - 1)
-        self.set_seed(seed)
+        AppUtil.set_seed(seed)
 
         try:
             self.model.set_ddpm_inference_steps(num_steps) # type: ignore
@@ -195,18 +196,5 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             sounds.append(sound)
 
         return sounds
-
-    def set_seed(self, seed: int):
-        """ 
-        Sets various static random seed values 
-        From Chatterbox inference code 
-        """
-        torch.manual_seed(seed)
-        if self._device_map.startswith("cuda"):
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-        random.seed(seed)
-        np.random.seed(seed)
-
 
 SPEAKER_TAG = "Speaker 1: "
