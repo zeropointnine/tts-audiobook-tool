@@ -47,6 +47,10 @@ Using speech-to-text, the app is also able to embed its custom metadata into pre
 
 Select `Options` > `Enhance existing audiobook`, and select your source audiobook file (typically M4A or M4B) and corresponding book text. This feature is experimental.
 
+### Side feature: tts-server-tool
+
+An optional REST server that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device. See [tts_audiobook_tool/server/README.md](tts_audiobook_tool/server/README.md) for setup and API details.
+
 ### How to create an audiobook (quick summary):
 
 1. Assign a working project directory.
@@ -449,6 +453,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 
 # Update highlights
+
+**2026-04-12**
+
+- Added side feature: **tts-server-tool**. View its [README](server/README.md) file.
 
 **2026-04-11**
 

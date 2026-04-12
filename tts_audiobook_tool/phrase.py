@@ -113,7 +113,7 @@ class Reason(tuple[int, str, float], Enum):
     def pause_duration(self) -> float:
         """
         Duration of silence that should be inserted
-        between the given text segment and the one preceding it
+        between the given text segment and the one succeeding it
         """
         return self.value[2]
 
@@ -136,8 +136,8 @@ class PhraseGroup:
     ie, add 'phrase-level granularity' to the timing metadata.
     """
     
-    def __init__(self, segments: list[Phrase] | None = None):
-        self.phrases: list[Phrase] = segments or []
+    def __init__(self, phrases: list[Phrase] | None = None):
+        self.phrases: list[Phrase] = phrases or []
 
     @property
     def num_words(self) -> int:
@@ -148,7 +148,8 @@ class PhraseGroup:
 
     @property
     def text(self) -> str:
-        """ Concatenated phrases text, preserving whitespace"""
+        """ 
+        Concatenated phrases text. Does not modify whitespace."""
         s = ""
         for phrase in self.phrases:
             s += phrase.text

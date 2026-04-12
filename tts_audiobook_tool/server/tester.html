@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TTS Server Test</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px;
+           background: #f0f0f0; color: #333333; }
+    h2 { margin-bottom: 24px; font-size: 24px; font-weight: bold; }
+    .row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 0px; }
+    .row textarea { flex: 1; }
+    .row .buttons { display: flex; flex-direction: column; gap: 8px; }
+    button { padding: 12px 24px; font-family: sans-serif; font-size: 18px; font-weight: bold;
+             cursor: pointer; background: #ffffff; color: #33333394; border: none;
+             border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    textarea { width: 100%; height: 160px; font-family: monospace; font-size: 13px;
+               box-sizing: border-box; resize: vertical; padding: 8px;
+               background: #ffffff; color: #333333; border: 1px solid #33333348; }
+    #status-area { font-size: 10px; height: 150px; }
+    #response-area { font-size: 10px; height: 250px; }
+    label { display: block; margin-top: 16px; margin-bottom: 6px; font-size: 13px;
+            font-family: sans-serif; color: #33333394; }
+  </style>
+</head>
+<body>
+  <h2>TTS Server Tester</h2>
+
+  <div class="row">
+    <textarea id="prompt-input" placeholder="Enter prompt…"></textarea>
+    <div class="buttons">
+      <button id="submit-btn">Submit</button>
+      <button id="random-btn">Random</button>
+      <button id="clear-btn">Clear</button>
+    </div>
+  </div>
+
+  <div style="padding-bottom: 12px; display: flex; gap: 24px;">
+    <label style="font-size: 12px; margin-top: 0;"><input type="checkbox" checked id="segment-checkbox"> Auto-segment text</label>
+    <label id="eager-label" style="font-size: 12px; margin-top: 0;"><input type="checkbox" checked id="eager-checkbox"> Fast-start first phrase when buffer is low</label>
+  </div>
+
+  <label>Status</label>
+  <textarea id="status-area" readonly></textarea>
+
+  <label>Response log</label>
+  <textarea id="response-area" readonly></textarea>
+
+  <script>
+    const RANDOM_PROMPTS = [
+      "The quick brown fox jumps over the lazy dog.",
+      "In a hole in the ground there lived a hobbit.",
+      "It was the best of times, it was the worst of times.",
+      "To be, or not to be, that is the question.",
+      "All happy families are alike; each unhappy family is unhappy in its own way.",
+      "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.",
+      "Call me Ishmael.",
+      "The sky above the port was the color of television, tuned to a dead channel.",
+      "It was a bright cold day in April, and the clocks were striking thirteen.",
+      "Many years later, as he faced the firing squad, Colonel Aureliano Buendía was to remember that distant afternoon when his father took him to discover ice.",
+      "Mother died today. Or maybe yesterday; I can't be sure.",
+      "I am a sick man. I am a spiteful man.",
+      "My name is Mary Katherine Blackwood. I am eighteen years old, and I live with my sister Constance.",
+      "It was love at first sight. The first time Yossarian saw the chaplain, he fell madly in love with him.",
+      "Last night I dreamt I went to Manderley again. It seemed to me I stood by the iron gate leading to the drive.",
+    ];
+
+    const input    = document.getElementById('prompt-input');
+    const submit   = document.getElementById('submit-btn');
+    const random   = document.getElementById('random-btn');
+    const clear    = document.getElementById('clear-btn');
+    const area     = document.getElementById('status-area');
+    const response = document.getElementById('response-area');
+    const segment  = document.getElementById('segment-checkbox');
+    const eager   = document.getElementById('eager-checkbox');
+    const eagerLabel = document.getElementById('eager-label');
+
+    function updateEagerVisibility() {
+      eagerLabel.style.display = segment.checked ? '' : 'none';
+    }
+    segment.addEventListener('change', updateEagerVisibility);
+    updateEagerVisibility();
+
+    submit.addEventListener('click', async () => {
+      const text = input.value.trim();
+      if (!text) return;
+      const body = { prompt: text };
+      if (segment.checked) body.should_segment = true;
+      if (segment.checked && eager.checked) body.eager_first_segment = true;
+      const res = await fetch('/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      response.value += JSON.stringify(data, null, 2) + '\n\n';
+      response.scrollTop = response.scrollHeight;
+      input.value = '';
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) submit.click();
+    });
+
+    random.addEventListener('click', () => {
+      input.value = RANDOM_PROMPTS[Math.floor(Math.random() * RANDOM_PROMPTS.length)];
+    });
+
+    clear.addEventListener('click', async () => {
+      const res = await fetch('/clear', { method: 'POST' });
+      const data = await res.json();
+    });
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        area.value = JSON.stringify(data, null, 2);
+      } catch (e) {
+        area.value = `Error: ${e.message}`;
+      }
+    }
+
+    pollStatus();
+    setInterval(pollStatus, 1000);
+  </script>
+</body>
+</html>

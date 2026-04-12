@@ -1,16 +1,27 @@
 """
 Application entry-point
+
 Does dependency checks, shows one-time warnings, etc, and launches App.
+If argument "server" exists, bypasses interactive app and runs `Server` instead.
 
 Note how imports are done in stages
 """
 
+import argparse
+
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--server", action="store_true")
+_parser.add_argument("--host", type=str, default="127.0.0.1")
+_parser.add_argument("--port", type=int, default=5001)
+_args = _parser.parse_args()
+is_server: bool = _args.server
+server_host: str = _args.host
+server_port: int = _args.port
+
 # --------------------------------------------------------------------------------------------------
 # Must be imported first or else HF_HUB_CACHE can result in returning a relative path
 # due to unknown import side-effect (possibly from a specific model library)
-
 import os
-
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 from huggingface_hub import constants # type: ignore
 
@@ -100,13 +111,13 @@ def main() -> None:
         printt(f"### DEV ###")
 
     # Hard requirement - FFMPEG 
-    if not FfmpegUtil.is_ffmpeg_available():
+    if not is_server and not FfmpegUtil.is_ffmpeg_available():
         printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
         printt(f"{COL_ERROR}Please install it first:")
         printt("https://ffmpeg.org/download.html")
         exit(1)
 
-    # Hard requirement - chatterbox + Python v3.11
+    # Hard requirement - for chatterbox, must be running Python v3.11 (legacy guard)
     if Tts.get_type() == TtsModelInfos.CHATTERBOX:
         if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
             Hint.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
@@ -118,10 +129,10 @@ def main() -> None:
     # Show other one-time startup messages (which are not blockers)
     temp_prefs = Prefs.load(save_if_dirty=False)
 
-    if not does_import_test_pass("tkinter"): # To test for tkinter functionality, must do concrete import
+    if not is_server and not does_import_test_pass("tkinter"): # To test for tkinter functionality, must do concrete import
         Hint.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
 
-    if not is_long_path_enabled():
+    if not is_server and not is_long_path_enabled():
         Hint.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
 
     if Tts.get_type() == TtsModelInfos.OUTE:
@@ -129,4 +140,8 @@ def main() -> None:
 
     # Start
     printt()
-    _ = App()
+    if is_server:
+        from tts_audiobook_tool.server.server import Server
+        Server().run(host=server_host, port=server_port)
+    else:
+        _ = App()

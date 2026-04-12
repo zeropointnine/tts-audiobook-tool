@@ -88,13 +88,7 @@ class SoundUtil:
 
     @staticmethod
     def add_silence(sound: Sound, duration: float) -> Sound:
-        """
-        Returns error message on fail or empty string
-
-        TODO: Consider "dithered"
-        """
         silence = np.zeros(int(sound.sr * duration), dtype=sound.data.dtype) # Match dtype for concatenation
-
         new_data = np.concatenate([sound.data, silence])
         new_sound = Sound(new_data, sound.sr)
         return new_sound

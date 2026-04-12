@@ -286,7 +286,7 @@ class Tts:
 
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
 
-            target = Tts._model_params["vibevoice_target"] or VibeVoiceBaseModel.DEFAULT_REPO_ID
+            target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
             trunc_target = ellipsize_path_middle(target)
             lora_path = Tts._model_params.get("vibevoice_lora_path", "")
             lora_desc = f"LoRA: {lora_path}, " if lora_path else ""
