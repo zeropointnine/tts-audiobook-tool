@@ -1,30 +1,45 @@
-# Description
+# tts-audiobook-tool
 
-This is a generative-AI audiobook creation tool that supports a growing list of text-to-speech models which utilize zero shot voice cloning:
+Generative-AI audiobook creation tool focused on high-quality output which supports a growing list of text-to-speech models:
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
-- [Chatterbox - Multilingual, Turbo](https://github.com/resemble-ai/chatterbox)
-- [Fish Speech - S2-Pro, S1-mini](https://github.com/fishaudio/fish-speech)
+- [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
+- [Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech)
 - [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 
-The app employs a number of quality control measures designed to mitigate the inherently variable nature of generative text-to-speech models:
+The app employs several techniques to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
 
-- Rational segmentation of long text at paragraph/sentence/phrase boundaries, as needed
-- Detection and correction of many inference errors using speech-to-text comparison to the source text
-- Semantically-aware modulation of *caesuras* between concatenated sound segments (think "prosody")
-- Industry standard loudness normalization
+- Intelligent segmentation of long-form text at paragraph/sentence/phrase boundaries
+- Automatic detection and correction of inference errors via STT verification, with retry logic that keeps the most accurate take
+- Silence trimming and semantically-aware pause modulation at segment boundaries to improve prosody
+- Industry-standard loudness normalization
 
-Plain-vanilla text UI in the console.
+The app uses a plain-text interface in the console.
 
-### Browser player:
 
-The app embeds text and timing information into the metadata of the FLAC and M4A files it creates, allowing for the included web app to display the text highlighted in sync with the generated audio (similar to Kindle+Audible or the Google Play Books app). This is a static web page that can be launched directly from the html file `browser_player\index.html` (ie, no need for a web server), or from the [project's mapped github.io page](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
+### How to create an audiobook (quick summary)
 
-**Example outputs**, all using the same source text and using the same 15-second voice clone sample unless otherwise noted, with models' respective default settings:
+1. Assign a working project directory.
+2. Select a short reference audio clip for the voice clone, and adjust related model parameters if desired.
+3. Select the source text, and optionally define file split points.
+4. Generate
+5. Concatenate the generated audio segments to create the final FLAC or M4A file/s.
+6. Use the optional web player to play and read your audiobook.
+
+
+### Browser player
+
+The included web player displays text highlighted in sync with the generated audio — similar to the Kindle Whispersync or Google Play Books read-along experience. This works because the app embeds the text and word-level timing data directly into the metadata of the FLAC and M4B files it produces.
+
+The player is a static HTML page — no web server or install required. Open `browser_player/index.html` directly in any browser, or use the [hosted version](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
+
+**Sample outputs**
+
+All examples use the same source text and a 15-second voice clone sample at each model's default settings, unless noted:
 
 - [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
@@ -36,30 +51,20 @@ The app embeds text and timing information into the metadata of the FLAC and M4A
 - [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
 - [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
-- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, and at high temperature)
+- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, at high temperature)
 - [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a)
 - [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
 - [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a)
 
-### Bonus feature: Enhance existing audiobooks
+### Enhance existing audiobooks
 
-Using speech-to-text, the app is also able to embed its custom metadata into pre-existing (ie, professionally produced) audiobook files so that they can be opened and used with the custom player.
+This feature extends the browser player to work with professionally produced audiobooks — not just ones generated with this tool. It uses speech-to-text to align the existing audio with the corresponding book text, then embeds the same timing metadata the app normally produces during generation.
 
-Select `Options` > `Enhance existing audiobook`, and select your source audiobook file (typically M4A or M4B) and corresponding book text. This feature is experimental.
+Select `Options` > `Enhance existing audiobook`, and choose your source audiobook file (M4A or M4B) and the corresponding book text. This feature is experimental.
 
-### Side feature: tts-server-tool
+### tts-server-tool
 
-An optional REST server that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device. See [tts_audiobook_tool/server/README.md](tts_audiobook_tool/server/README.md) for setup and API details.
-
-### How to create an audiobook (quick summary):
-
-1. Assign a working project directory.
-2. Select a short reference audio clip for the voice clone.
-3. Select the source text. 3b. Optionally define file split points.
-4. Start inferencing, and ... be prepared to wait.
-5. Concatenate the generated audio segments to create the final FLAC or M4A file/s.
-6. Optionally use the aforementioned web player to play and read your audiobook.
-
+The project includes an optional stand-alone REST service that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/README-server.md) for setup and API details.
 
 # Installation
 
@@ -359,9 +364,8 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 
 
 ### Model-specific features supported by the app 
-(plus configurable hyperparameters)
 
-Voice cloning is supported for all models. 
+Voice cloning is a first-class feature, supported for all models. 
 
 **Qwen3-TTS**
 
@@ -424,7 +428,7 @@ Voice cloning is supported for all models.
 
 ### Inference speeds, expectations
 
-Listed below are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note that CUDA inference speeds on Linux are usually significantly faster than on Windows.
+Listed below are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note how CUDA inference speeds on Linux are usually significantly faster than on Windows.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
@@ -454,9 +458,9 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
-**2026-04-12**
+**2026-04-13**
 
-- Added side feature: **tts-server-tool**. View its [README](server/README.md) file.
+- Added side feature: **tts-server-tool**. View [server readme](server/README-server.md). 
 
 **2026-04-11**
 
@@ -576,7 +580,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2025-10-24**
 
-- Added option to **disable transcription validation** (`Options` > `Whisper model type` > `Disabled`). Doing so is only advisable while using IndexTTS2 (IMO), which generates the least number of inference errors of any of the supported models to date.
+- Added option to **disable transcription validation** (`Options` > `Whisper model type` > `Disabled`). Doing so is only advisable while VRAM is at a premium or when using reliably accurate and stable TTS models (eg, IndexTTS2; definitely not VoiceVoice 1.5B or Chatterbox).
 
 **2025-10-23**
 

@@ -1,15 +1,15 @@
 # tts-server-tool
 
-Lightweight REST server that utilizes the tts-audiobook-tool TTS engine to output text-to-speech audio through the default sound device.
+The project now includes a lightweight REST server that utilizes the tts-audiobook-tool TTS engine and outputs text-to-speech audio through either the default sound device or an HTTP audio stream.
 
 
-## Usage
+## How to run
 
 CD into the project directory
 
     cd path\to\tts-audiobook-tool
 
-Activate your pre-existing tts-audiobook-tool virtual environment. Eg:
+Activate one of your pre-existing tts-audiobook-tool virtual environment. Eg:
 
     venv-qwen3tts\Scripts\activate.bat
 
@@ -17,15 +17,25 @@ Run the server (the `host` and `port` arguments are optional, and default to 127
 
     python -m tts_audiobook_tool --server --host 127.0.0.1 --port 5001
 
-As a reminder, to accept connections from other machines on your network, you can bind to all interfaces using `--host 0.0.0.0`
+As a reminder, you can accept connections from other machines on your local network by using `--host 0.0.0.0`
 
-The server will apply the TTS model settings of your current project from the tts-audiobook-tool app (`Voice clone and model settings` submenu).
+The server uses the TTS model settings from your currently loaded project, as configured in the tts-audiobook-tool app under the `Voice clone and model settings` submenu.
+
+
+## Usage notes
 
 Once running, you can test the API in the browser by visiting 
 
-    http://localhost:5001/tester.html
+    http://localhost:5001/api-demo.html
 
-## API
+The server will output TTS audio through the (server computer's) default sound output device. 
+
+A demo client for the audio stream endpoint is available in the browser at
+
+    http://localhost:5001/streaming-client-demo.html
+
+
+# API
 
 ### POST /prompt
 
@@ -66,6 +76,8 @@ Returns the current state of the server.
 | `playing` | string | The prompt whose audio is currently playing, or `""` if silent. |
 | `audio_buffer` | number | Seconds of audio remaining in the playback buffer. |
 | `num_queued` | number | Number of prompts waiting in the queue. |
+| `stream_clients` | number | Number of clients currently connected to the audio HTTP stream. |
+| `local_audio` | boolean | Whether local audio playback (through the default sound device) is enabled. |
 
 ### POST /clear
 
@@ -74,3 +86,19 @@ Clears the prompt queue and audio playback buffer immediately.
 **Request body:** none
 
 **Response:** `{}`
+
+### POST /local-audio
+
+Enables or disables local audio playback through the default sound device. This setting is stateful and persists until changed or the server is restarted.
+
+**Request body (JSON):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `true` | Whether to enable local audio playback. |
+
+**Response (JSON):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `local_audio` | boolean | The updated local audio enabled state. |

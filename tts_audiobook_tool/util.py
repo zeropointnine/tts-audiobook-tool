@@ -129,6 +129,10 @@ def make_url_with_params(base_url: str, params: dict) -> str:
         return f"{base_url}?{query_string}"
     return base_url
 
+def make_terminal_hyperlink(url: str, text: str = "") -> str:
+    display = text or url
+    return f"\x1b]8;;{url}\x1b\\{display}\x1b]8;;\x1b\\"
+
 def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
     """
     Returns error message on fail, else empty string

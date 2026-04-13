@@ -103,7 +103,7 @@ class GenerateMenu:
             if DEV:
                 num_gen = state.project.sound_segments.num_generated()
                 if num_gen > 0:
-                    items.append(MenuItem(f"Delete all", on_delete_all))
+                    items.append(MenuItem(f"Delete all segments", on_delete_all))
 
             return items
         

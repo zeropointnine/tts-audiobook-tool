@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+  <title>Streaming Client Demo</title>
+
+<style>
+    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px;
+           background: #f0f0f0; color: #333333; }
+    h2 { margin: 0 0 12px 0; padding: 0; font-size: 24px; font-weight: bold; }
+    h3 { margin: 0; padding: 0; font-size: 18px; font-weight: bold; color:#33333394; }
+    button { padding: 12px 24px; font-family: sans-serif; font-size: 18px; font-weight: bold;
+             cursor: pointer; background: #ffffff; color: #33333394; border: none;
+             border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    button:disabled { opacity: 0.4; cursor: default; }
+    label { display: block; margin-top: 16px; margin-bottom: 6px; font-size: 13px;
+            color: #33333394; }
+    #status-area { font-size: 10px; height: 150px; width: 100%; box-sizing: border-box;
+                   resize: vertical; padding: 8px; font-family: monospace;
+                   background: #ffffff; color: #333333; border: 1px solid #33333348; }
+  </style>
+</head>
+
+<body>
+
+  <h3>tts-server-tool</h3>
+  <h2>Streaming Client Demo</h2>
+  <p style="margin: 0 0 16px 0; font-size: 15px; color: #33333394;">Connect to listen for audio.<br>The server streams playback whenever a TTS generation job is triggered externally.</p>
+
+  <div style="display: flex; gap: 8px;">
+    <button id="connect-btn">Connect</button>
+    <button id="disconnect-btn" disabled>Disconnect</button>
+  </div>
+
+  <label>Status</label>
+  <textarea id="status-area" readonly></textarea>
+
+  <script>
+    const connectBtn    = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const statusArea    = document.getElementById('status-area');
+
+    let audioCtx      = null;
+    let abortCtrl     = null;
+    let nextStartTime = 0;
+    let scheduleChain = Promise.resolve();
+
+    function setStatus(msg) {
+      const ts = new Date().toLocaleTimeString();
+      statusArea.value += `[${ts}] ${msg}\n`;
+      statusArea.scrollTop = statusArea.scrollHeight;
+    }
+
+    function setConnected(yes) {
+      connectBtn.disabled    = yes;
+      disconnectBtn.disabled = !yes;
+    }
+
+    function concatBuffers(a, b) {
+      const out = new Uint8Array(a.length + b.length);
+      out.set(a, 0);
+      out.set(b, a.length);
+      return out;
+    }
+
+    function scheduleChunk(wavSlice) {
+      // Copy slice to an owned ArrayBuffer — decodeAudioData detaches its input
+      const owned = wavSlice.buffer.slice(
+        wavSlice.byteOffset,
+        wavSlice.byteOffset + wavSlice.byteLength
+      );
+      scheduleChain = scheduleChain
+        .then(() => audioCtx.decodeAudioData(owned))
+        .then(audioBuffer => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(audioCtx.destination);
+          // Schedule gaplessly: at least 50ms from now, or right after previous chunk
+          const t = Math.max(audioCtx.currentTime + 0.05, nextStartTime);
+          src.start(t);
+          nextStartTime = t + audioBuffer.duration;
+          setStatus(`Playing chunk (${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.sampleRate} Hz)`);
+        })
+        .catch(err => {
+          setStatus(`Decode error: ${err.message}`);
+          // Swallow error to keep the chain alive for future chunks
+        });
+    }
+
+    async function runStream(signal) {
+      let accumulator = new Uint8Array(0);
+
+      let response;
+      try {
+        response = await fetch('/stream', { signal });
+      } catch (err) {
+        if (err.name !== 'AbortError') setStatus(`Fetch error: ${err.message}`);
+        setConnected(false);
+        return;
+      }
+
+      if (!response.ok) {
+        setStatus(`Server error: HTTP ${response.status}`);
+        setConnected(false);
+        return;
+      }
+
+      setStatus('Connected — waiting for audio…');
+      const reader = response.body.getReader();
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+
+          accumulator = concatBuffers(accumulator, value);
+
+          // Drain all complete length-prefixed messages from the accumulator
+          while (accumulator.length >= 4) {
+            const view   = new DataView(accumulator.buffer, accumulator.byteOffset, accumulator.byteLength);
+            const msgLen = view.getUint32(0, false); // big-endian
+            if (accumulator.length < 4 + msgLen) break;
+            const wavSlice = accumulator.slice(4, 4 + msgLen);
+            accumulator    = accumulator.slice(4 + msgLen);
+            if (msgLen === 0) continue; // heartbeat frame — skip
+            scheduleChunk(wavSlice);
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') setStatus(`Stream error: ${err.message}`);
+      } finally {
+        reader.releaseLock();
+        setConnected(false);
+        setStatus('Disconnected');
+      }
+    }
+
+    connectBtn.addEventListener('click', () => {
+      // AudioContext must be created/resumed inside a user gesture
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+      } else {
+        audioCtx.resume();
+      }
+
+      // Reset scheduling state for the new connection
+      nextStartTime = 0;
+      scheduleChain = Promise.resolve();
+
+      abortCtrl = new AbortController();
+      setConnected(true);
+      runStream(abortCtrl.signal);
+    });
+
+    disconnectBtn.addEventListener('click', () => {
+      if (abortCtrl) {
+        abortCtrl.abort();
+        abortCtrl = null;
+      }
+      if (audioCtx) {
+        audioCtx.close();
+        audioCtx = null;
+      }
+      setConnected(false);
+    });
+  </script>
+
+</body>
+</html>
