@@ -66,7 +66,7 @@ Select `Options` > `Enhance existing audiobook`, and choose your source audioboo
 
 ### tts-server-tool
 
-The project also includes an optional stand-alone REST service that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/README-server.md) for setup and API details.
+The project also includes an optional stand-alone REST service that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/server-README.md) for setup and API details.
 
 # Installation
 
@@ -462,7 +462,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2026-04-13**
 
-- Added side feature: **tts-server-tool**. View [server readme](server/README-server.md). 
+- Added side feature: **tts-server-tool**. View [server readme](server/server-README.md). 
 
 **2026-04-11**
 
