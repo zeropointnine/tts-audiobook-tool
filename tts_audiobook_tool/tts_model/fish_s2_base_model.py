@@ -9,6 +9,8 @@ class FishS2BaseModel(TtsBaseModel):
     DEFAULT_COMPILE_ENABLED = True
 
     DEFAULT_TEMPERATURE = 0.7 # from gradio demo
+    MIN_TEMPERATURE = 0.01
+    MAX_TEMPERATURE = 1.99 # library asserts temperature < 2
     DEFAULT_TOP_K = 30 # library function default value
     DEFAULT_TOP_P = 0.9 # library function default value
 

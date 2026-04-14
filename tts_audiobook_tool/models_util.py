@@ -1,11 +1,9 @@
-from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
-from yamnet_detector import YamnetDetector
 
 
 class ModelsUtil:

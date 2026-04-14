@@ -267,7 +267,7 @@ class MenuUtil:
         state: State, 
         attr: str,
         base_label: str,
-        default_value: int | float | None,
+        default_value: int | float,
         is_minus_one_default: bool,
         num_decimals: int,
         prompt: str,
@@ -295,6 +295,7 @@ class MenuUtil:
                 attr,
                 prompt,
                 min_value, max_value,
+                default_value,
                 "Value set:",
                 is_int=is_int
             )

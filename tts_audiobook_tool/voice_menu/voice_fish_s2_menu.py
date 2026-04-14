@@ -37,8 +37,8 @@ class VoiceFishS2Menu:
                 state=state,
                 attr="fish_s2_temperature",
                 default_value=FishS2BaseModel.DEFAULT_TEMPERATURE,
-                min_value=0.01,
-                max_value=1.0 # from gradio demo
+                min_value=FishS2BaseModel.MIN_TEMPERATURE,
+                max_value=FishS2BaseModel.MAX_TEMPERATURE
             )
             temperature_item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(temperature_item)

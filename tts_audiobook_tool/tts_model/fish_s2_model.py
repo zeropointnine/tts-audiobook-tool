@@ -136,7 +136,6 @@ class FishS2Model(FishS2BaseModel):
         else:
             self.clear_voice_clone()
 
-
         if project.fish_s2_temperature == -1:
             temperature = FishS2BaseModel.DEFAULT_TEMPERATURE
         else:

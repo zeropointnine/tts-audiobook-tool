@@ -30,8 +30,9 @@ class VoiceOuteMenu:
             AskUtil.ask_number(
                 project,
                 "oute_temperature",
-                "Enter temperature (0.01 to 2.0):",
+                "Enter temperature:",
                 0.01, 2.0,
+                OuteBaseModel.DEFAULT_TEMPERATURE,
                 "Temperature set to:"
             )
 

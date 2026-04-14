@@ -81,7 +81,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
                 value = COL_ACCENT + "lora + voice clone"
             case (True, False):
                 prefix = "current voice clone"
-                value = COL_ACCENT + ellipsize_path_for_menu(project.vibevoice_voice_file_name)
+                value = COL_ACCENT + project.get_voice_label()
             case (False, True):
                 prefix = "current lora"
                 value = COL_ACCENT + ellipsize_path_for_menu(project.vibevoice_lora_target)

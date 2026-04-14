@@ -318,15 +318,16 @@ class VoiceMenuShared:
         if prompt_override:
             prompt = prompt_override
         else:
-            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}: "
+            prompt = "Enter a static seed value (-1 = random): "
 
         def on_item(_: State, __: MenuItem) -> None:
             AskUtil.ask_number(
                 saveable=state.project,
                 attr=attr,
                 prompt=prompt,
-                lb=-1, 
-                ub=2**32-1,
+                min_value=-1,
+                max_value=2**32-1,
+                default_value=-1,
                 success_prefix="Seed set:",
                 is_int=True
             )

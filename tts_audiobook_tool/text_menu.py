@@ -141,12 +141,12 @@ def on_ask_max_size(state: State, _) -> None:
     printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelInfos.recommended_range_string(Tts.get_type().value)}")
     printt()
 
-    prompt = f"Enter max words per segment {COL_DIM}(between {MAX_WORDS_PER_SEGMENT_MIN}-{MAX_WORDS_PER_SEGMENT_MAX}){COL_DEFAULT}:"
     AskUtil.ask_number(
         state.project,
-        prompt=prompt,
-        lb=MAX_WORDS_PER_SEGMENT_MIN, ub=MAX_WORDS_PER_SEGMENT_MAX,
         attr="max_words",
+        prompt="Enter max words per segment:",
+        min_value=MAX_WORDS_PER_SEGMENT_MIN, max_value=MAX_WORDS_PER_SEGMENT_MAX,
+        default_value=MAX_WORDS_PER_SEGMENT_DEFAULT,
         success_prefix="Max words per segment set to:",
         is_int=True
     )

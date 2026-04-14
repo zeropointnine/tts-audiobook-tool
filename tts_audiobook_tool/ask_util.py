@@ -201,8 +201,9 @@ class AskUtil:
         saveable: Saveable,
         attr: str,
         prompt: str,
-        lb: float,
-        ub: float,
+        min_value: float,
+        max_value: float,
+        default_value: float,
         success_prefix: str,
         is_int: bool=False
     ) -> None:
@@ -220,10 +221,16 @@ class AskUtil:
             raise ValueError(f"No such attribute {attr}")
 
         if is_int:
-            lb = int(lb)
-            ub = int(ub)
+            min_value = int(min_value)
+            max_value = int(max_value)
+            default_value = int(default_value)
 
-        value = AskUtil.ask(prompt.strip() + " ")
+        prompt = prompt.strip()
+        if not prompt.endswith(":"):
+            prompt += ":"
+        prompt += " " + f"{COL_DIM}(valid range: {min_value}-{max_value}; default: {default_value})"
+        printt(prompt)
+        value = AskUtil.ask()
         if not value:
             return
         try:
@@ -234,7 +241,7 @@ class AskUtil:
             return
         if is_int:
             value = int(value)
-        if not (lb <= value <= ub):
+        if not (min_value <= value <= max_value):
             print_feedback("Out of range", is_error=True)
             return
 

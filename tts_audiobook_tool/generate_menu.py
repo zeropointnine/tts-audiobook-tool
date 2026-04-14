@@ -231,10 +231,10 @@ def ask_retries(state: State) -> None:
     print_heading(make_retries_label(state))
     printt(RETRIES_DESC)
     AskUtil.ask_number(
-        state.project, 
-        "max_retries", 
-        f"Enter value {COL_DIM}(between {PROJECT_MAX_RETRIES_MIN}-{PROJECT_MAX_RETRIES_MAX}){COL_DEFAULT}:", 
-        PROJECT_MAX_RETRIES_MIN, PROJECT_MAX_RETRIES_MAX, "Max retries set to:", is_int=True
+        state.project,
+        "max_retries",
+        "Enter value:",
+        PROJECT_MAX_RETRIES_MIN, PROJECT_MAX_RETRIES_MAX, PROJECT_MAX_RETRIES_DEFAULT, "Max retries set to:", is_int=True
     )
 
 def ask_batch_size(state: State) -> None:
@@ -245,11 +245,11 @@ def ask_batch_size(state: State) -> None:
 
     Hint.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
-    prompt = f"Enter batch size {COL_DIM}(1 = no batching){COL_DEFAULT}:"
+    prompt = "Enter batch size:"
     AskUtil.ask_number(
-        state.project, field_name, prompt, 
-        1, PROJECT_BATCH_SIZE_MAX, 
-        "Set batch size:", is_int=True
+        state.project, field_name, prompt,
+        1, PROJECT_BATCH_SIZE_MAX,
+        PROJECT_BATCH_SIZE_DEFAULT, "Set batch size:", is_int=True
     )
 
 def do_generate(state: State, is_regen: bool) -> None:
