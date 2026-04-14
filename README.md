@@ -14,7 +14,7 @@ Generative-AI audiobook creation tool focused on high-quality output which suppo
 The app employs several techniques to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
 
 - Intelligent segmentation of long-form text at paragraph/sentence/phrase boundaries
-- Automatic detection and correction of inference errors via STT verification, with retry logic that keeps the most accurate take
+- Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
 - Silence trimming and semantically-aware pause modulation at segment boundaries to improve prosody
 - Industry-standard loudness normalization
 
@@ -27,7 +27,7 @@ The app uses a plain-text interface in the console.
 2. Select a short reference audio clip for the voice clone, and adjust related model parameters if desired.
 3. Select the source text, and optionally define file split points.
 4. Generate
-5. Concatenate the generated audio segments to create the final FLAC or M4A file/s.
+5. Concatenate the generated audio segments to create the finished audiobook file/s.
 6. Use the optional web player to play and read your audiobook.
 
 
@@ -39,7 +39,7 @@ The player is a static HTML page — no web server or install required. Open `br
 
 **Sample outputs**
 
-All examples use the same source text and a 15-second voice clone sample at each model's default settings, unless noted:
+All examples use the same source text and the same 15-second voice clone sample using each model's default settings, unless noted:
 
 - [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
@@ -64,7 +64,7 @@ Select `Options` > `Enhance existing audiobook`, and choose your source audioboo
 
 ### tts-server-tool
 
-The project includes an optional stand-alone REST service that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/README-server.md) for setup and API details.
+The project also includes an optional stand-alone REST service that runs the app's full configured TTS pipeline — your chosen model, voice clone, and project settings — and plays generated audio through the default sound device or serves it as an HTTP audio stream. This is aimed at developers who want to integrate the app's TTS capabilities into their own tools and workflows — for example, triggering spoken audio from a script, a home automation system, a chatbot, or any other application that can issue HTTP requests. See [server readme](tts_audiobook_tool/server/README-server.md) for setup and API details.
 
 # Installation
 

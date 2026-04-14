@@ -9,7 +9,7 @@ CD into the project directory
 
     cd path\to\tts-audiobook-tool
 
-Activate one of your pre-existing tts-audiobook-tool virtual environment. Eg:
+Activate one of your pre-existing tts-audiobook-tool virtual environments. Eg:
 
     venv-qwen3tts\Scripts\activate.bat
 
@@ -19,7 +19,7 @@ Run the server (the `host` and `port` arguments are optional, and default to 127
 
 As a reminder, you can accept connections from other machines on your local network by using `--host 0.0.0.0`
 
-The server uses the TTS model settings from your currently loaded project, as configured in the tts-audiobook-tool app under the `Voice clone and model settings` submenu.
+The server uses the TTS settings from your currently active tts-audiobook-tool project (under the `Voice clone and model settings` submenu).
 
 
 ## Usage notes
