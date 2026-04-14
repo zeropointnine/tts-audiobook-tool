@@ -8,7 +8,6 @@ Note how imports are done in stages
 """
 
 import argparse
-
 _parser = argparse.ArgumentParser()
 _parser.add_argument("--server", action="store_true")
 _parser.add_argument("--host", type=str, default="127.0.0.1")
@@ -95,6 +94,7 @@ from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
+
 def main() -> None:
 
     """
@@ -144,4 +144,5 @@ def main() -> None:
         from tts_audiobook_tool.server.server import Server
         Server().run(host=server_host, port=server_port)
     else:
+        print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK, end="")
         _ = App()

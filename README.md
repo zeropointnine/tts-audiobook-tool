@@ -30,6 +30,8 @@ The app uses a plain-text interface in the console.
 5. Concatenate the generated audio segments to create the finished audiobook file/s.
 6. Use the optional web player to play and read your audiobook.
 
+<video src="https://github.com/user-attachments/assets/5516ce38-ef61-4126-91f5-71861e63eba5" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-full" style="max-height:640px;" autoplay="autoplay" loop="loop">
+</video>
 
 ### Browser player
 

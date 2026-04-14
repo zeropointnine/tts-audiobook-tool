@@ -31,7 +31,14 @@
 <body>
 
   <h3>tts-server-tool</h3>
-  <h2>API Demo</h2>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h2 style="margin: 0;">API Demo</h2>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 13px; color: #33333394; white-space: nowrap;">Server local audio:</span>
+      <button id="local-audio-on-btn"  class="local-audio-btn">On</button>
+      <button id="local-audio-off-btn" class="local-audio-btn">Off</button>
+    </div>
+  </div>
 
   <div class="row">
     <textarea id="prompt-input" placeholder="Enter prompt…"></textarea>
@@ -45,12 +52,6 @@
   <div style="padding-bottom: 12px; display: flex; gap: 24px;">
     <label style="font-size: 12px; margin-top: 0;"><input type="checkbox" checked id="segment-checkbox"> Auto-segment text</label>
     <label id="eager-label" style="font-size: 12px; margin-top: 0;"><input type="checkbox" checked id="eager-checkbox"> Fast-start first phrase when buffer is low</label>
-  </div>
-
-  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 18px;">
-    <span style="font-size: 13px; color: #33333394; white-space: nowrap;">Server local audio:</span>
-    <button id="local-audio-on-btn"  class="local-audio-btn">On</button>
-    <button id="local-audio-off-btn" class="local-audio-btn">Off</button>
   </div>
 
   <label>Status:</label>

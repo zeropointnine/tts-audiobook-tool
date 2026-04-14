@@ -13,7 +13,7 @@ from mira.model import MiraTTS # type: ignore
 
 class MiraModel(MiraBaseModel):
 
-    def __init__(self): 
+    def __init__(self):
         self.mira_tts = MiraTTS('YatharthS/MiraTTS')
         self.context_tokens = None
         self.last_voice_path: str = ""

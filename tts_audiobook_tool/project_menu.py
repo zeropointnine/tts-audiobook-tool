@@ -100,8 +100,9 @@ class ProjectMenu:
             AskUtil.ask_error(err)
             return False
         
-        if AskUtil.ask_confirm("Do you want to carry over the current project's settings?"):
-            state.project.migrate_from(old_project)
+        if old_project.dir_path:
+            if AskUtil.ask_confirm("Do you want to carry over the current project's settings?"):
+                state.project.migrate_from(old_project)
 
         return True
 
