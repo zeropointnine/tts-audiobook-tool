@@ -1,5 +1,5 @@
 import os
-from typing import Callable
+from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -85,6 +85,12 @@ class ProjectSoundSegments:
                 count += 1
         return count
 
+    def get_existing_indices(self) -> set[int]:
+        """
+        Returns the set of indices of existing sound segments
+        """
+        return set(self.sound_segments_map.keys())
+
     def get_failed_indices_in_generate_range(self) -> set[int]:
         """ 
         Within the project's defined 'generate range', 
@@ -151,6 +157,16 @@ class ProjectSoundSegments:
                 delete_silently(str(path))
                 num_deleted += 1
         return num_deleted
+    
+    def delete_by_indices(self, indices: Collection[int]) -> None:
+        """ Returns num deleted and num failed """
+        for index in indices:
+            items = self._sound_segments_map[index]
+            for item in items:
+                sound_file_path = Path(self.project.sound_segments_path) / item.file_name
+                delete_silently(str(sound_file_path))
+                timing_file_path = sound_file_path.with_suffix(".json")
+                delete_silently(str(timing_file_path))
 
 # ---
 

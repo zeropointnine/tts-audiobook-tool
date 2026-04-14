@@ -293,3 +293,11 @@ HINT_VIBEVOICE_LORA = Hint(
 - Train your LoRA using https://github.com/voicepowered-ai/VibeVoice-finetuning with parameter \"voice_prompt_drop_rate 1\"
 - Avoid using a LoRA and a voice clone sample at the same time"""
 )
+
+HINT_DELETE_SEGMENTS = Hint(
+    "delete_segments",
+    "Tip",
+"""Use this to selectively delete audio segments with poor or inaccurate output 
+(or delete the files directly at: %1). 
+Afterwards, generate those items again as desired."""
+)

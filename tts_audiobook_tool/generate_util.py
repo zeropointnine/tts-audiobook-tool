@@ -224,7 +224,7 @@ class GenerateUtil:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         project.sound_segments.delete_redundants_for(index)
-                        save_line = f"Saved: {Ansi.ITALICS}{COL_DIM}{Path(saved_path).name}{Ansi.RESET}"
+                        save_line = f"Saved: {COL_DIM}{make_terminal_hyperlink(saved_path, is_file=True)}{Ansi.RESET}"
                     message_lines.append(save_line)
 
                 printt("\n".join(message_lines))

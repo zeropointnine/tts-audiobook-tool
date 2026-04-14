@@ -878,7 +878,7 @@ class Project(Saveable):
         selected_indices_generated = set( self.sound_segments.sound_segments_map.keys() )
         selected_indices_not_generated = selected_indices_all - selected_indices_generated
         return selected_indices_not_generated
-
+    
     @staticmethod
     def is_valid_project_dir(project_dir: str) -> str:
         """ Returns error feedback text or empty string if is-valid """

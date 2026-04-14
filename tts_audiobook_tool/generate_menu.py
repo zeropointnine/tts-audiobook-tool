@@ -99,11 +99,8 @@ class GenerateMenu:
             # Num retries
             items.append(MenuItem(make_retries_label, lambda _, __: ask_retries(state)))
             
-            # Delete all
-            if DEV:
-                num_gen = state.project.sound_segments.num_generated()
-                if num_gen > 0:
-                    items.append(MenuItem(f"Delete all segments", on_delete_all))
+            if state.project.sound_segments.num_generated() > 0:
+                items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
 
             return items
         
@@ -166,6 +163,52 @@ def ask_item_range(state: State) -> None:
     state.project.save()
 
     print_feedback(f"Range set to: {s}")
+
+def ask_delete_segments(state: State) -> None:
+
+    if state.project.sound_segments.num_generated() == 0:
+        print_feedback("Nothing to delete")
+        return
+    
+    print_heading("Delete segments")
+
+    path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+    hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path))
+    Hint.show_hint_if_necessary(state.prefs, hint)
+
+    printt(f"Enter line numbers to delete:") 
+    printt(f"{COL_DIM}For example, \"3, 5, 21\" or \"201-350, 215\", or just \"all\"") 
+    inp = AskUtil.ask()
+    if not inp:
+        return
+
+    # Make selected indices from input
+    total_num_items = len(state.project.phrase_groups)
+    if inp == "all" or inp == "a":
+        selected_indices = set( [item for item in range(0, total_num_items)] )
+    else:
+        selected_indices, _ = ParseUtil.parse_ranges_string(inp, total_num_items)
+        if not selected_indices:
+            print_feedback("No valid line numbers entered")
+            return
+        
+    existing_indices = state.project.sound_segments.get_existing_indices()
+    indices_to_delete = selected_indices & existing_indices
+    if not indices_to_delete:
+        print_feedback("No valid line numbers entered")
+        return
+
+    if len(indices_to_delete) == len(existing_indices):
+        s = f"All generated segments will be deleted"
+    else:
+        segment_word = make_noun("segment", "segments", len(indices_to_delete))
+        s = f"The following {len(indices_to_delete)} {segment_word} will be deleted: \n"
+        s += ParseUtil.make_ranges_string(selected_indices, total_num_items)
+    printt(s)
+    if not AskUtil.ask_confirm():
+        return
+    
+    state.project.sound_segments.delete_by_indices(indices_to_delete)
 
 def make_strictness_label(state: State) -> str:
     label = make_menu_label(
@@ -283,14 +326,6 @@ def do_generate(state: State, is_regen: bool) -> None:
         printt() # TODO revisit
         if hotkey == "c":
             ConcatMenu.menu(state)
-
-def on_delete_all(state: State, _) -> None:
-    num_gen = state.project.sound_segments.num_generated()
-    message = f"Will delete {num_gen} segments.\n"
-    message += f"Press {make_hotkey_string('Y')} to confirm: "
-    if not AskUtil.ask_confirm(message):
-        return
-    state.project.sound_segments.delete_all()
 
 STRICTNESS_DESC = \
 """Dictates how \"strict\" is the transcript validation.

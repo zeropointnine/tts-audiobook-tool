@@ -82,4 +82,3 @@ class Hint:
         text = text.replace("%2", value2)
         new_hint = replace(source, text=text)
         return new_hint
-    

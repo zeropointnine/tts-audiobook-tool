@@ -22,7 +22,6 @@ class SoundSegmentUtil:
     def make_sound_segments_map(project: Project) -> dict[int, list[SoundSegment]]:
         """
         """
-
         if not project.dir_path:
             return {}
         if not os.path.exists(project.sound_segments_path):

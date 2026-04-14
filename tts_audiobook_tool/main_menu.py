@@ -95,7 +95,8 @@ def make_project_label(state: State) -> str:
     if not state.prefs.project_dir:
         s = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
     else:
-        s = make_currently_string(state.prefs.project_dir)
+        value = make_terminal_hyperlink(state.project.dir_path, is_file=True)
+        s = make_currently_string(value)
     return "Project " + s
 
 # Voice

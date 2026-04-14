@@ -67,9 +67,10 @@ class ProjectMenu:
                 items.append(MenuItem("Show directory in system file explorer", on_view))
             return items
 
+        value = make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
         MenuUtil.menu(
             state, 
-            lambda _: make_menu_label("Project", state.project.dir_path or "none"), 
+            lambda _: make_menu_label("Project", value), 
             items_maker
         )
 
