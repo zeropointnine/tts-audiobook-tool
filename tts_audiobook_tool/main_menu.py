@@ -76,16 +76,8 @@ class MainMenu:
             )
             return items
 
-        if Tts.get_type() == TtsModelInfos.CHATTERBOX:
-            model_name = state.project.chatterbox_type.label
-        else:
-            model_name = Tts.get_type().value.ui['proper_name']
-        if Tts.get_type() == TtsModelInfos.QWEN3TTS:
-            path = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
-            s = ellipsize_path_middle(path)
-            model_name += f" {COL_DIM}{s}"
-
-        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{model_name}{COL_DIM})"        
+        s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
+        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{s}{COL_DIM})"        
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True)
 
 # ---

@@ -53,6 +53,9 @@ class VoiceMenuShared:
                 _ = Tts.get_instance() # Pre-emptively instantiate model (special case for qwen)
                 from tts_audiobook_tool.voice_menu.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
+            case TtsModelInfos.POCKET:
+                from tts_audiobook_tool.voice_menu import VoicePocketMenu
+                VoicePocketMenu.menu(state)
             case _:
                 ...
 
@@ -80,7 +83,7 @@ class VoiceMenuShared:
         elif not state.project.has_voice:
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
-            currently = make_currently_string(state.project.get_voice_label())
+            currently = make_currently_string(state.project.voice_label)
         return f"Select voice clone sample {currently}"
 
     @staticmethod

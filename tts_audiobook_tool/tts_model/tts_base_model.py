@@ -125,9 +125,9 @@ class TtsBaseModel(ABC):
         
         # Get voice filename
         if not cls.INFO.voice_file_name_attr:
-            raise Exception("Logic error - must override this method")        
-        voice_file_name = getattr(project, cls.INFO.voice_file_name_attr, "")
-        if not voice_file_name: 
+            raise Exception("Logic error - must override this method")
+        voice_file_name = cls.get_voice_value(project)
+        if not voice_file_name:
             return "none"
         
         # Remove file suffix
@@ -139,6 +139,16 @@ class TtsBaseModel(ABC):
         tag = TextUtil.sanitize_for_filename(voice_file_name[:30])
         return tag
     
+    @classmethod
+    def get_model_display_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> str:
+        """ 
+        Formatted text describing model including potential 'variant' info, used for main menu, plus.
+        Color formatting convention is: White-Model-Text Gray-Qualification-Text, with no parens
+        """
+        return cls.INFO.ui['proper_name']
+
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
@@ -159,8 +169,8 @@ class TtsBaseModel(ABC):
         info = cls.INFO
         if not info.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
-        
-        voice_file_name = getattr(project, info.voice_file_name_attr, "")
+
+        voice_file_name = cls.get_voice_value(project)
         voice_file_name = voice_file_name.removesuffix(f"_{info.file_tag}.flac")
         voice_file_name = ellipsize_path_for_menu(voice_file_name)
 
@@ -181,13 +191,20 @@ class TtsBaseModel(ABC):
         return prefix, value
 
     @classmethod
+    def get_voice_value(cls, project: Project) -> str:
+        """
+        Returns the active voice reference for this model and project.
+        Override for models that store voice across multiple fields.
+        """
+        return getattr(project, cls.INFO.voice_file_name_attr, "")
+
+    @classmethod
     def _get_standard_voice_prereq_error(cls, project: Project, short_format: bool) -> str:
 
         if not cls.INFO.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
-        voice_file_name = getattr(project, cls.INFO.voice_file_name_attr, "")
-        if cls.INFO.requires_voice and not voice_file_name:
+        if cls.INFO.requires_voice and not cls.get_voice_value(project):
             err = "requires voice sample" if short_format else "Voice sample required"
             return err
         else:
@@ -200,9 +217,8 @@ class TtsBaseModel(ABC):
         if not self.INFO.voice_file_name_attr:
             return ""
 
-        voice_file_name = getattr(project, self.INFO.voice_file_name_attr, "")
-        if voice_file_name:
-            return ""        
+        if self.get_voice_value(project):
+            return ""
 
         # Voice is not required, and no voice file specified
         return "Model may generate random voices because no voice clone reference has been specified"

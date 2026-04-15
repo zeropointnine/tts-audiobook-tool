@@ -29,13 +29,13 @@ class State:
         self._project = None # type: ignore
 
         if not self.prefs.project_dir:
-            self.project = Project("")
+            self.project = Project(dir_path="")
         else:
             result = Project.load_using_dir_path(self.prefs.project_dir)
             if isinstance(result, str):
                 AskUtil.ask_error(result)
                 self.prefs.project_dir = ""
-                self.project = Project("")
+                self.project = Project(dir_path="")
             else:
                 self.project = result
 
@@ -107,7 +107,7 @@ class State:
 
         # Make project 
         self.prefs.project_dir = str(project_dir_path)
-        self.project = Project( str(project_dir_path) )
+        self.project = Project( dir_path=str(project_dir_path) )
 
         if Tts.get_type() == TtsModelInfos.OUTE:
             # Set Oute default voice
@@ -125,12 +125,12 @@ class State:
         result = Project.load_using_dir_path(path)
         if isinstance(result, str):
             AskUtil.ask_error(result)
-            self.project = Project("")
+            self.project = Project(dir_path="")
         else:
             self.project = result
 
     def reset(self):
         self.prefs.project_dir = ""
-        self.project = Project("")
+        self.project = Project(dir_path="")
         self.real_time = RealTimeMenuState()
 

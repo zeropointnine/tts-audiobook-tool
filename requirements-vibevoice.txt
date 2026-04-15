@@ -12,6 +12,7 @@ faster-whisper==1.2.1
 ctranslate2==4.7.1
 torch==2.8.0
 torchaudio==2.8.0
+
 audiotsm==0.1.2
 chardet==5.2.0
 ffmpeg-python==0.2.0
@@ -23,6 +24,7 @@ natsort==8.4.0
 num2words==0.5.14
 nvidia-ml-py
 psutil
+pydantic
 pyloudnorm==0.1.1
 pysbd==0.3.4
 pywin32; sys_platform == 'win32'

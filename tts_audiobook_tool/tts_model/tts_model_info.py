@@ -324,6 +324,32 @@ class TtsModelInfos(Enum):
         ]
     )
 
+    POCKET = TtsModelInfo(
+        module_test="pocket_tts",
+        file_tag="pocket",
+        torch_devices=["cuda", "mps", "cpu"],
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_file_name_attr="pocket_voice_file_name",
+        requires_voice=True,
+        requires_voice_transcript=False,
+        batch_size_project_field="",
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-pocket.txt",
+        ui={
+            "proper_name": "Pocket TTS",
+            "short_name": "Pocket",
+            "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 30s): ",
+            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 30s)"
+        },
+        substitutions=[
+            ("—", ", "), ("─", ", ")
+        ]
+    )
+
     QWEN3TTS = TtsModelInfo(
         module_test="qwen_tts",
         file_tag="qwen3",

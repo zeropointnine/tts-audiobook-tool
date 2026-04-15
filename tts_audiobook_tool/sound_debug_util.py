@@ -1,5 +1,4 @@
 import numpy as np
-from PIL import Image, ImageDraw
 
 from tts_audiobook_tool.app_types import Sound, Word
 
@@ -12,6 +11,8 @@ class SoundDebugUtil:
         For each timestamp pair, a green and red vertical line should be drawn.
         The index number and the corresponding "word" are drawn next to each vertical line.
         """
+        from PIL import Image, ImageDraw # type: ignore
+
         horizontal_padding = 10
 
         # Calculate image dimensions
@@ -76,6 +77,7 @@ class SoundDebugUtil:
         Red line is target_timestamp. Green line is local_minima.
         For use while debugging, etc.
         """
+        from PIL import Image, ImageDraw # type: ignore
 
         # Image parameters
         width, height = 1200, 600

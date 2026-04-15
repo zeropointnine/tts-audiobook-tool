@@ -150,6 +150,15 @@ class Qwen3BaseModel(TtsBaseModel):
     # ---
 
     @classmethod
+    def get_model_display_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+) -> str:
+        path = project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
+        path = ellipsize_path_middle(path)        
+        s = f"{cls.INFO.ui['proper_name']} {COL_DIM}{path}"
+        return s
+
+    @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> tuple[str, str]:

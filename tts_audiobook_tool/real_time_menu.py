@@ -127,7 +127,10 @@ class RealTimeMenu:
             state.project.save()
             print_feedback(f"Set to:", state.project.realtime_save)
 
-        subheading = f"Saves FLAC files to {state.project.realtime_path}\n"
+        if os.path.exists(state.project.realtime_path):
+            subheading = f"Saves FLAC files to {make_terminal_hyperlink(state.project.realtime_path, is_file=True)}\n"
+        else:
+            subheading = f"FLAC files will be saved to {state.project.realtime_path}\n"
 
         MenuUtil.options_menu(
             state=state,

@@ -24,7 +24,7 @@ class VoiceVibeVoiceMenu:
                     col = COL_ERROR
                 currently = make_currently_string("none", color_code=col)
             else:
-                currently = make_currently_string(state.project.get_voice_label())
+                currently = make_currently_string(state.project.voice_label)
             return f"Select voice clone sample {currently}"
 
         def make_model_target_label(_) -> str:
@@ -113,7 +113,7 @@ class VoiceVibeVoiceMenu:
 # ---
 
 def ask_model_target(project: Project) -> None: 
-    
+
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice/VibeVoice-7B\"; \"/path/to/checkpoint\""

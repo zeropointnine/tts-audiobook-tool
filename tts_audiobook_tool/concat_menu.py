@@ -382,8 +382,8 @@ for mobile devices.
 SUBDIVIDE_SUBHEADING = \
 """Affects how text is highlighted in the player/reader app.
 When False, text segments map directly to the TTS prompts used to generate the audio segments.
-When True, text is further sub-segmented by phrase. Requires \"speech-to-text validation\"
-to be enabled during TTS sound generation.
+When True, text is further sub-segmented by phrase  (Requires \"speech-to-text validation\" 
+to be enabled during TTS sound generation).
 """
 
 SECTION_BREAK_SUBHEADING = \
@@ -393,9 +393,9 @@ This can be a useful audible cue, so long as the text is formatted for it.
 """
 
 OPEN_AUDIOBOOK_SUBHEADING = \
-f"""Select file to be opened in the player app using %1,
-which will be launched with a dedicated user profile and the 
-following flags to enable opening local files without user input:
+f"""Select file to be opened in the player app using %1, which will be 
+launched with a dedicated user profile and the following flags 
+to enable opening local audio files without user input:
   {COL_DIM}--allow-file-access-from-files 
   --autoplay-policy=no-user-gesture-required
   --user-data-dir=%2

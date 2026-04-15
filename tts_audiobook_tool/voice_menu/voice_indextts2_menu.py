@@ -19,7 +19,7 @@ class VoiceIndexTts2Menu:
 
         def voice_label(_) -> str:
             if project.indextts2_voice_file_name:
-                currently = make_currently_string(project.get_voice_label())
+                currently = make_currently_string(project.voice_label)
             else:
                 currently = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
             return f"Select voice clone sample {currently}"

@@ -25,7 +25,7 @@ class VoiceQwen3Menu:
             if not state.project.qwen3_voice_file_name:
                 currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
             else:
-                currently = make_currently_string(state.project.get_voice_label())
+                currently = make_currently_string(state.project.voice_label)
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:

@@ -49,8 +49,7 @@ class Server:
         Tts.set_model_params_using_project(self._project) 
 
         s = f"{COL_ACCENT}Loaded tts-audiobook-tool's current active project's settings from:\n"
-        _path = self._project.dir_path
-        s += f"{COL_ACCENT}{make_terminal_hyperlink(f'file://{_path}', str(_path))}"
+        s += f"{COL_ACCENT}{make_terminal_hyperlink(self._project.dir_path, is_file=True)}"
         printt(s)
         printt()
 

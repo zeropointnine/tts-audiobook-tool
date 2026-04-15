@@ -56,7 +56,7 @@ class GenerateMenu:
             return f"Regenerate segments tagged with potential errors {regenerate_label}"
 
         def make_batch_size_label(state: State) -> str:
-            value = state.project.get_batch_size()
+            value = state.project.batch_size
             if value == -1:
                 value = 1
             value_string = "disabled" if value == 1 else str(value)
@@ -173,7 +173,7 @@ def ask_delete_segments(state: State) -> None:
     print_heading("Delete segments")
 
     path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
-    hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path))
+    hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path, is_file=True))
     Hint.show_hint_if_necessary(state.prefs, hint)
 
     printt(f"Enter line numbers to delete:") 
@@ -312,7 +312,7 @@ def do_generate(state: State, is_regen: bool) -> None:
     did_interrupt = GenerateUtil.generate_files(
         state=state,
         indices_set=indices,
-        batch_size=state.project.get_batch_size(),
+        batch_size=state.project.batch_size,
         is_regen=is_regen
     )
 

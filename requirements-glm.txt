@@ -7,11 +7,12 @@ git+https://github.com/zeropointnine/glm-tts-packaged
 
 # App dependencies
 faster-whisper==1.2.1
-chardet==5.2.0
 ctranslate2==4.7.1
 torch==2.8.0
 torchaudio==2.8.0
+
 audiotsm==0.1.2
+chardet==5.2.0
 ffmpeg-python==0.2.0
 librosa==0.11.0
 loguru==0.7.3
@@ -22,6 +23,7 @@ num2words==0.5.14
 nvidia-ml-py
 pyloudnorm==0.1.1
 psutil
+pydantic
 pysbd==0.3.4
 pywin32; sys_platform == 'win32'
 readchar==4.2.1

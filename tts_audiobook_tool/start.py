@@ -143,6 +143,6 @@ def main() -> None:
     if is_server:
         from tts_audiobook_tool.server.server import Server
         Server().run(host=server_host, port=server_port)
-    else:
-        print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK, end="")
+        return
+    else:    
         _ = App()

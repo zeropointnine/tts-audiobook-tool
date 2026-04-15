@@ -6,6 +6,7 @@ Generative-AI audiobook creation tool focused on high-quality output which suppo
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
 - [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
 - [Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech)
+- [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
 - [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
@@ -52,6 +53,8 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a)
 - [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
 - [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
+- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
+- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, at high temperature)
 - [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a)
@@ -213,6 +216,23 @@ Authenticate the model on HuggingFace:
 
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
  
+
+## Virtual environment for Pocket TTS:
+
+Initialize a **Python v3.12** virtual environment named "venv-pocket". For example:
+
+    path\to\python3.12\python.exe -m venv venv-pocket
+
+Activate the virtual environment:
+
+    venv-pocket\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-pocket.txt
+
+Pocket TTS does not use GPU acceleration, so the extra Windows step of installing the CUDA-enabled version of torch is unnecessary. 
+
 
 ## Virtual environment for Higgs Audio V2:
 
@@ -409,6 +429,12 @@ Voice cloning is a first-class feature, supported for all models.
 - Torch compile 
 - Temperature, top_p, repetition penalty, seed
 
+**Pocket TTS**
+
+- Selectable language models (english, french_241, german_241, italian, portuguese, spanish_241)
+- Predefined voices (alba, anna, azelma, etc)
+- Temperature, seed
+
 **Higgs Audio V2**
 
 - Temperature, top_p, top_k, seed
@@ -451,7 +477,9 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 | Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
-| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | inference speed varies with voice sample duration
+| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
+| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | GPU disabled
+| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
 |                         | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
@@ -459,6 +487,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 
 # Update highlights
+
+**2026-04-22**
+
+- Added support for **Pocket TTS**, lightweight model suitable for non-GPU systems.
 
 **2026-04-13**
 

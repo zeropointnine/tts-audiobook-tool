@@ -245,9 +245,7 @@ class SoundUtil:
         Red line is target_timestamp. Green line is local_minima.
         For use while debugging, etc.
         """
-
-        from PIL import Image
-        from PIL import Image, ImageDraw
+        from PIL import Image, ImageDraw # type: ignore
 
         # Image parameters
         width, height = 1200, 600
