@@ -50,7 +50,12 @@ class OptionsMenu:
             )
 
             import torch
-            if Tts.get_type().value.torch_devices and torch.cuda.is_available():
+            _model_devices = Tts.get_type().value.torch_devices
+            _has_gpu = (
+                (torch.cuda.is_available() and "cuda" in _model_devices) or
+                (torch.backends.mps.is_available() and "mps" in _model_devices)
+            )
+            if _model_devices and _has_gpu:
                 items.append(
                     MenuItem(
                         lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 

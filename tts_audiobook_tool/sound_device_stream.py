@@ -1,4 +1,4 @@
-import time
+import signal
 import numpy as np
 import sounddevice as sd
 import threading
@@ -121,16 +121,22 @@ class SoundDeviceStream:
         # Create and start the output stream. We assume a mono output (channels=1).
         # Note big block size and latency=high
         try:
-            self.stream = sd.OutputStream(
-                samplerate=self.sample_rate,
-                channels=1,
-                callback=self._callback,
-                dtype=np.float32,  # We work with float32 internally
-                blocksize=8192,
-                latency="high"
-
-            )
-            self.stream.start()
+            # Block SIGINT before creating the stream so PortAudio's audio thread
+            # inherits the mask — prevents SIGINT from being delivered to that thread
+            # and crashing inside a C++ recursive_mutex.
+            old_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
+            try:
+                self.stream = sd.OutputStream(
+                    samplerate=self.sample_rate,
+                    channels=1,
+                    callback=self._callback,
+                    dtype=np.float32,  # We work with float32 internally
+                    blocksize=8192,
+                    latency="high"
+                )
+                self.stream.start()
+            finally:
+                signal.pthread_sigmask(signal.SIG_SETMASK, old_mask)
         except Exception as e:
             printt(f"{COL_ERROR}Couldn't open sounddevice output stream: {e}")
 
