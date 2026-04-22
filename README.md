@@ -478,7 +478,8 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
-| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | GPU disabled
+| Pocket TTS              | Macbook Pro M1       | 350% realtime   |
+| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU (CUDA disabled)
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
