@@ -63,6 +63,88 @@ class SoundUtil:
         return normalized_arr
 
     @staticmethod
+    def high_shelf_eq(sound: Sound, strength: float, boost_start_hz: float, q_like: float = 1.0) -> Sound:
+        """
+        Applies a simple high-shelf EQ style boost to improve clarity in muffled speech.
+
+        Args:
+            sound: Input sound.
+            strength: Multiplier controlling boost amount (0 = no boost).
+                Practical range is roughly 0.0 to 2.0.
+            boost_start_hz: Frequency at which upper spectrum boosting begins.
+            q_like: Higher values create a steeper, narrower transition band;
+                lower values create a gentler, wider transition. This is
+                Q-inspired behavior, not a strict biquad Q value.
+
+        Returns:
+            A new Sound with boosted treble and peak normalization applied as needed.
+        """
+
+        # Guard rails
+        strength = max(0.0, float(strength))
+        nyquist = sound.sr / 2
+        if nyquist <= 0:
+            return sound
+
+        # Keep start frequency valid and below Nyquist
+        boost_start_hz = max(20.0, float(boost_start_hz))
+        boost_start_hz = min(boost_start_hz, max(25.0, nyquist * 0.98))
+
+        # Q-like control (higher => sharper transition)
+        q_like = max(0.1, float(q_like))
+
+        # No-op path for explicit "disabled"
+        if strength == 0:
+            return sound
+
+        data = sound.data.astype(np.float32, copy=False)
+        is_mono = data.ndim == 1
+        data_2d = data.reshape(-1, 1) if is_mono else data
+
+        n_samples = data_2d.shape[0]
+        if n_samples < 2:
+            return sound
+
+        # Build frequency-domain shelf profile
+        freqs = np.fft.rfftfreq(n_samples, d=1.0 / sound.sr)
+
+        # Maximum shelf gain in dB, controlled by strength.
+        # Example: strength=1.0 => +6 dB; strength=2.0 => +12 dB
+        max_boost_db = 6.0 * strength
+        max_boost_linear = 10 ** (max_boost_db / 20.0)
+
+        shelf = np.ones_like(freqs, dtype=np.float32)
+        # Previous default was roughly boost_start_hz * 0.35.
+        # q_like=1.0 preserves that baseline. Higher q_like narrows the band.
+        transition_width_hz = max(80.0, (boost_start_hz * 0.35) / q_like)
+
+        # Smooth transition into boosted upper band using smoothstep.
+        transition_start = max(20.0, boost_start_hz - transition_width_hz)
+        transition_end = min(nyquist, boost_start_hz + transition_width_hz)
+
+        if transition_end <= transition_start:
+            shelf[freqs >= boost_start_hz] = max_boost_linear
+        else:
+            x = (freqs - transition_start) / (transition_end - transition_start)
+            x = np.clip(x, 0.0, 1.0)
+            smooth = x * x * (3 - 2 * x)
+            shelf = 1.0 + (max_boost_linear - 1.0) * smooth
+
+        # Apply EQ per channel
+        output = np.empty_like(data_2d, dtype=np.float32)
+        for ch in range(data_2d.shape[1]):
+            channel = data_2d[:, ch]
+            spectrum = np.fft.rfft(channel)
+            eq_spectrum = spectrum * shelf
+            output[:, ch] = np.fft.irfft(eq_spectrum, n=n_samples)
+
+        # Normalize 
+        output = SoundUtil.normalize(output, headroom_db=NORMALIZATION_HEADROOM_DB)
+
+        new_data = output[:, 0] if is_mono else output
+        return Sound(new_data.astype(sound.data.dtype, copy=False), sound.sr)
+
+    @staticmethod
     def is_data_invalid(sound: Sound) -> list[str]:
         """ Returns list of 'reasons' why data is invalid """
 

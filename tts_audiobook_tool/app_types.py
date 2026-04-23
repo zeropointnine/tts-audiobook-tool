@@ -92,6 +92,42 @@ class NormalizationType(Enum):
 
 # ---
 
+class HighShelfEq(tuple[str, float, float, float], Enum):
+    """
+    Preset values for high-shelf EQ settings
+    For use with function SoundUtil.high_shelf_eq()
+    Value shape: (id, strength, boost_start_hz, q_like)
+    """
+
+    DISABLED = ("disabled", 0.0, 2800.0, 0.8)
+    MODERATE = ("moderate", 0.6, 4200.0, 1.1)
+    STRONGER = ("stronger", 1.1, 3600.0, 1.2)
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def strength(self) -> float:
+        return self.value[1]
+
+    @property
+    def boost_start_hz(self) -> float:
+        return self.value[2]
+
+    @property
+    def q_like(self) -> float:
+        return self.value[3]
+
+    @staticmethod
+    def get_by_id(id: str) -> HighShelfEq | None:
+        for item in list(HighShelfEq):
+            if id == item.id:
+                return item
+        return None
+
+# ---
+
 class SttVariant(tuple[str, str], Enum):
 
     LARGE_V3 = ("large-v3", "Reference accuracy") # default

@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, Sound
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
@@ -167,23 +167,12 @@ class ConcatUtil:
 
         # [0] Prep data
 
+        high_shelf = HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED
+
         # Make phrase/path list # TODO: Duplicated logic; refactor ChapterInfo and add phrase info etc
         phrases_and_paths = ConcatUtil.make_phrases_and_paths(
             state.project, index_start, index_end
         )
-        phrases_and_paths: list[tuple[Phrase, str]] = []
-        for group_index, group in enumerate(state.project.phrase_groups):            
-            phrase = group.as_flattened_phrase()
-            out_of_range = (group_index < index_start or group_index > index_end)
-            if out_of_range:
-                path = ""
-            else:
-                file_name = state.project.sound_segments.get_best_file_for(group_index)
-                if file_name:
-                    path = os.path.join(state.project.sound_segments_path, file_name)
-                else:
-                    path = ""
-            phrases_and_paths.append((phrase, path))
                     
         # [1] Concatenated audio file
 
@@ -192,6 +181,7 @@ class ConcatUtil:
             phrases_and_paths,
             print_progress=True,
             use_section_sound_effect=state.project.use_section_sound_effect,
+            high_shelf=high_shelf,
             aac_bitrate=state.prefs.aac_bitrate
         )
         if isinstance(result, str): # is error
@@ -314,10 +304,11 @@ class ConcatUtil:
     def make_rendered_sound_segment(
         phrase: Phrase,
         path: str,
-        use_section_sound_effect: bool
+        use_section_sound_effect: bool,
+        high_shelf: HighShelfEq
     ) -> Sound | str:
         """
-        sound_path cannot be empty
+        :param path: cannot be empty
         """
 
         if phrase.reason == Reason.SECTION and use_section_sound_effect:
@@ -333,6 +324,14 @@ class ConcatUtil:
         else:
             sound = result
 
+        # Apply high-shelf EQ to TTS segment before appending any section SFX/silence
+        sound = SoundUtil.high_shelf_eq(
+            sound,
+            strength=high_shelf.strength,
+            boost_start_hz=high_shelf.boost_start_hz,
+            q_like=high_shelf.q_like,
+        )
+
         # Append sound effect or silence 
         if use_appended_sound_effect:
             sound = SoundUtil.append_sound_using_path(sound, SECTION_SOUND_EFFECT_PATH)
@@ -344,7 +343,8 @@ class ConcatUtil:
     @staticmethod
     def get_rendered_sound_segment_durations(
         phrases_and_paths: list[ tuple[Phrase, str] ],
-        use_section_sound_effect: bool
+        use_section_sound_effect: bool,
+        high_shelf: HighShelfEq
     ) -> list[float] | str:
         """
         Calculates the final durations of the sound segments to be concatenated.
@@ -362,7 +362,7 @@ class ConcatUtil:
                 durations.append(0)
                 continue
 
-            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect)
+            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect, high_shelf)
             if isinstance(result, str): # error
                 return result
             
@@ -376,6 +376,7 @@ class ConcatUtil:
         dest_path: str,
         phrases_and_paths: list[ tuple[Phrase, str] ],
         use_section_sound_effect: bool,
+        high_shelf: HighShelfEq,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
     ) -> list[float] | str:
@@ -413,7 +414,7 @@ class ConcatUtil:
                 return "Interrupted by user"
 
             result = ConcatUtil.make_rendered_sound_segment(
-                phrase, path, use_section_sound_effect
+                phrase, path, use_section_sound_effect, high_shelf
             )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user

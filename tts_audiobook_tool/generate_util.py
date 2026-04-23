@@ -436,7 +436,7 @@ class GenerateUtil:
                     result = "Model output is silence, discarding"
                 else:
                     # Do peak normalization
-                    normalized_data = SoundUtil.normalize(sound.data, headroom_db=3.0)
+                    normalized_data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
                     result = Sound(normalized_data, sound.sr)
             
             results.append(result)

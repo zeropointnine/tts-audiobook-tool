@@ -1,6 +1,6 @@
 import os
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
@@ -58,11 +58,6 @@ class ConcatMenu:
                 ),
                 
                 MenuItem(
-                    lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
-                    lambda _, __: ConcatMenu.normalization_menu(state)
-                ),
-                
-                MenuItem(
                     lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 ),
@@ -81,6 +76,23 @@ class ConcatMenu:
                         lambda _, __: ConcatMenu.open_audiobook_menu(state)
                     )
                 )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
+                    lambda _, __: ConcatMenu.normalization_menu(state),
+                    superlabel="Post-processing options"
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Clarity equalization", (HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED).id),
+                    lambda _, __: ConcatMenu.high_shelf_menu(state)
+                )
+            )
+
+
             return items
 
         MenuUtil.menu(state, "Concatenate audio segments:", make_items, subheading=make_chapter_files_subheading)
@@ -121,6 +133,27 @@ class ConcatMenu:
             on_select=on_select,
             subheading=LOUDNORM_SUBHEADING,
             hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelInfos.OUTE else None
+        )
+
+    @staticmethod
+    def high_shelf_menu(state: State) -> None:
+
+        def on_select(value: HighShelfEq) -> None:
+            state.project.high_shelf = value.id
+            state.project.save()
+            print_feedback(f"Clarity equalization set to: {value.id}")
+
+        current = HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Clarity equalization",
+            labels=[item.id.capitalize() for item in list(HighShelfEq)],
+            values=[item for item in list(HighShelfEq)],
+            current_value=current,
+            default_value=HighShelfEq.DISABLED,
+            on_select=on_select,
+            subheading=HIGH_SHELF_SUBHEADING
         )
 
     @staticmethod
@@ -410,4 +443,9 @@ to enable opening local audio files without user input:
   {COL_DIM}--allow-file-access-from-files 
   --autoplay-policy=no-user-gesture-required
   --user-data-dir=%2
+"""
+
+HIGH_SHELF_SUBHEADING = \
+"""Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
+Some TTS models may benefit more from this than others.
 """

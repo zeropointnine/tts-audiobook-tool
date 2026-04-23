@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, NormalizationType, SegmentationStrategy, Sound, Strictness
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, Sound, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
@@ -77,6 +77,7 @@ class Project(BaseModel):
     export_type: ExportType = list(ExportType)[0]
     use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
     normalization_type: NormalizationType = list(NormalizationType)[0]
+    high_shelf: str = HighShelfEq.DISABLED.id
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
     strictness: Strictness = list(Strictness)[0]
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
@@ -210,7 +211,7 @@ class Project(BaseModel):
         use_tl_warnings = getattr(_tl, 'warnings', None) is not None
 
         def add_warning(attr_name: str, defaulting_to: Any) -> None:
-            s = f"Warning: Missing or invalid value for: {attr_name}\n"
+            s = f"{COL_ERROR}Warning/info: {COL_DEFAULT}Missing or invalid value for: {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
             s += "This can occur if a new project property has been added to the app since the last time you opened the project.\n"
             s += f"Setting to default: {defaulting_to}"
             if use_tl_warnings:
@@ -299,6 +300,14 @@ class Project(BaseModel):
         # normalization_type
         s = d.get('normalization_type', '')
         d['normalization_type'] = NormalizationType.from_id(s) or list(NormalizationType)[0]
+
+        # high_shelf
+        s = d.get('high_shelf', HighShelfEq.DISABLED.id)
+        value = HighShelfEq.get_by_id(s)
+        if value is None:
+            value = HighShelfEq.DISABLED
+            add_warning('high_shelf', value.id)
+        d['high_shelf'] = value.id
 
         # strictness (default depends on language_code)
         s = d.get('strictness', '')
@@ -550,6 +559,7 @@ class Project(BaseModel):
             "export_type": self.export_type.id,
             "use_section_sound_effect": self.use_section_sound_effect,
             "normalization_type": self.normalization_type.value.id,
+            "high_shelf": self.high_shelf,
             "realtime_save": self.realtime_save,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,
@@ -708,7 +718,8 @@ class Project(BaseModel):
         target_sr = tts_type.value.sample_rate
         sound = SoundUtil.resample_if_necessary(source_sound, target_sr)
         # Peak normalization
-        sound = Sound( SoundUtil.normalize(sound.data), sound.sr )
+        data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
+        sound = Sound(data, sound.sr )
 
         # Add "_modelname" to filename
         dest_file_name = f"{voice_file_stem}_{tts_type.value.file_tag}.flac"

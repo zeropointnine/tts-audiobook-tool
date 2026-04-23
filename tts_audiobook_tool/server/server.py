@@ -304,7 +304,7 @@ class Server:
                     continue
 
                 # Normalize
-                normalized_data = SoundUtil.normalize(sound.data, headroom_db=3.0)
+                normalized_data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
                 sound = Sound(normalized_data, sound.sr)
 
                 # Pad end with silence using 'phrase reason'

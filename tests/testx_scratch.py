@@ -1,45 +1,48 @@
-import re
+from pathlib import Path
+import soundfile
 
-from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.phrase import Reason
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
-from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
-from tts_audiobook_tool.util import printt
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound_util import SoundUtil
 
 
+def _fmt(v: float) -> str:
+    """Filename-friendly numeric formatting."""
+    s = f"{v:.3f}".rstrip("0").rstrip(".")
+    return s.replace("-", "neg_").replace(".", "p")
 
-if False:
 
-    # Test num2words
-    # --------------
+def main() -> int:
 
-    from num2words import num2words
+    source_path = Path("/d/w/w/goneworld/sample.flac")
 
-    while True:
-        text = input("Enter text: ")
-        text = re.sub(
-                r'\d+', 
-                lambda x: x.group() if int(x.group()) > 999 else num2words(int(x.group()), lang="de"), 
-                text
-            )        
-        print(text)
+    # Suggested defaults for mildly muffled 24kHz TTS
+    strength = 0.8
+    boost_start_hz = 4000.0
+    q_like = 1.2
 
-if True:
+    load_result = SoundFileUtil.load(str(source_path))
+    if isinstance(load_result, str):
+        print(f"Couldn't load {source_path}: {load_result}")
+        return 1
 
-    # Test PhraseGrouper various
+    processed_sound = SoundUtil.high_shelf_eq(
+        load_result,
+        strength=strength,
+        boost_start_hz=boost_start_hz,
+        q_like=q_like,
+    )
 
-    text = """
-hello? yes?
+    suffix = (
+        f"_str_{_fmt(strength)}"
+        f"_boost_start_{_fmt(boost_start_hz)}"
+        f"_qlike_{_fmt(q_like)}"
+    )
+    dest_path = source_path.with_name(f"{source_path.stem}{suffix}{source_path.suffix}")
 
-yes well. so. and so on. plus! plus! plus! plus!
+    soundfile.write(str(dest_path), processed_sound.data, processed_sound.sr)
+    print(f"Saved: {dest_path}")
+    return 0
 
-"""
-    print(text)
-    print()
 
-    groups = PhraseGrouper.text_to_groups(text, 40, SegmentationStrategy.NORMAL)
-
-    groups = PhraseGrouper.merge_short_sentences(groups, 2, 40)
-    printt("")
-    PhraseGrouper.print_groups(groups)
+if __name__ == "__main__":
+    raise SystemExit(main())
