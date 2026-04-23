@@ -62,6 +62,9 @@ class OptionsMenu:
                         lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
                     )
                 )
+            
+            ...
+            
             items.append( MenuItem(make_unload_label, on_unload) )
             items.append( MenuItem("Reset contextual hints", on_hints) )
             items.append( 

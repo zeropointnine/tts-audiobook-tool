@@ -120,16 +120,18 @@ class GenerateMenu:
             low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for current language code {state.project.language_code}"
             medium_desc = ""
             high_desc = ""
+            intolerant_desc = ""
         else:
-            low_desc = ""
-            medium_desc = ""
-            high_desc = warning_high if warning_high else "Best net accuracy but triggers more retries"
+            low_desc = "Allows for more word errors before triggering a retry"
+            medium_desc = "Decent middle ground between accuracy and retries"
+            high_desc = warning_high if warning_high else "Higher net accuracy but triggers more retries"
+            intolerant_desc = "Most strict - no word errors allowed; not recommended for most use cases"
 
         MenuUtil.options_menu(
             state=state,
             heading_text=make_strictness_label(state),
             labels=[item.label for item in list(Strictness)],
-            sublabels=[low_desc, medium_desc, high_desc],
+            sublabels=[low_desc, medium_desc, high_desc, intolerant_desc],
             values=[item for item in list(Strictness)],
             current_value=state.project.strictness,
             default_value=None,

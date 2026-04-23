@@ -94,9 +94,13 @@ class NormalizationType(Enum):
 
 class SttVariant(tuple[str, str], Enum):
 
-    LARGE_V3 = ("large-v3", "Best accuracy") # default
+    LARGE_V3 = ("large-v3", "Reference accuracy") # default
     LARGE_V3_TURBO = ("large-v3-turbo", "Less memory, faster")
     DISABLED = ("disabled", "Skips validation step when generating audio, adds no extra memory")
+
+    @staticmethod
+    def get_default() -> SttVariant:
+        return SttVariant.LARGE_V3_TURBO
 
     @property
     def id(self) -> str:
@@ -163,6 +167,7 @@ class Strictness(tuple[str, int, str], Enum):
     LOW = ("low", 1, "Low") 
     MODERATE = ("moderate", 2, "Moderate")
     HIGH = ("high", 3, "High")
+    INTOLERANT = ("intolerant", 4, "Intolerant")
 
     @property
     def id(self) -> str:

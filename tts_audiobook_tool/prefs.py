@@ -17,7 +17,7 @@ class Prefs(Saveable):
             self,
             project_dir: str = "",
             hints: dict[str, bool] = {},
-            stt_variant: SttVariant = list(SttVariant)[0],
+            stt_variant: SttVariant = SttVariant.get_default(),
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
             last_voice_dir: str = "",

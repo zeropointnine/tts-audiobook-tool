@@ -224,7 +224,10 @@ class ValidateUtil:
             case Strictness.HIGH:
                 # 1-10 words = 0; 11-20 words = 1; etc
                 fail_threshold = math.ceil(num_words / 10) - 1
-
+            case Strictness.INTOLERANT:
+                # 0 word errors allowed regardless of length
+                fail_threshold = 0
+            
         return (num_word_errors > fail_threshold), word_errors, fail_threshold
 
     @staticmethod
