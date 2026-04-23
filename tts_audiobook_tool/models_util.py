@@ -1,5 +1,9 @@
+import torch
+
+from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
@@ -9,8 +13,11 @@ from tts_audiobook_tool.util import *
 class ModelsUtil:
     """
     Multiple-model management util functions
-    Plus YamnetDetector
+    Including YamnetDetector, and Sidonmodel (holds statics instance)
     """
+
+    sidon_upscaler: SidonUtil | None = None
+
 
     @staticmethod
     def warm_up_models(state: State) -> bool:
@@ -72,16 +79,34 @@ class ModelsUtil:
         return False
 
     @staticmethod
-    def clear_all_models() -> None:
-        
+    def clear_all_models(except_sidon: bool = False) -> None:
+
         Stt.clear_stt_model()
-        
+
         Tts.clear_tts_model()
 
         MusicDetector.clear_model()
-        
+
+        if not except_sidon:
+            ModelsUtil.clear_sidon_upscaler()
+
         # For good measure
-        from tts_audiobook_tool.memory_util import MemoryUtil
-        MemoryUtil.gc_ram_vram() 
+        MemoryUtil.gc_ram_vram()
 
+    @staticmethod
+    def get_sidon_upscaler() -> SidonUtil | None:
+        if not torch.cuda.is_available():
+            return None
+        if not SidonUtil.has_sidon():
+            return None
+        if ModelsUtil.sidon_upscaler is None:
+            print_init("Initializing Sidon upscaler (CUDA)...")
+            ModelsUtil.sidon_upscaler = SidonUtil()
+        return ModelsUtil.sidon_upscaler
 
+    @staticmethod
+    def clear_sidon_upscaler() -> None:
+        if ModelsUtil.sidon_upscaler is not None:
+            ModelsUtil.sidon_upscaler.kill()
+            ModelsUtil.sidon_upscaler = None
+            MemoryUtil.gc_ram_vram()

@@ -6,6 +6,7 @@ from numpy import ndarray
 
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.project import Project
@@ -37,7 +38,9 @@ class ConcatUtil:
 
         if chapter_indices and bookmark_indices:
             raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
-        
+
+        ModelsUtil.clear_all_models(except_sidon=True)
+
         # Make subdir
         dest_dir = os.path.join(state.project.concat_path, timestamp_string())
         try:
@@ -90,6 +93,8 @@ class ConcatUtil:
         # Post-concat feedback, prompt
         printt("Finished. \a")
         printt()
+
+        ModelsUtil.clear_sidon_upscaler()
 
         Hint.show_player_hint_if_necessary(state.prefs)
 
@@ -182,7 +187,8 @@ class ConcatUtil:
             print_progress=True,
             use_section_sound_effect=state.project.use_section_sound_effect,
             high_shelf=high_shelf,
-            aac_bitrate=state.prefs.aac_bitrate
+            aac_bitrate=state.prefs.aac_bitrate,
+            use_upscaler=state.project.use_upscaler,
         )
         if isinstance(result, str): # is error
             delete_intermediate_files()
@@ -305,7 +311,8 @@ class ConcatUtil:
         phrase: Phrase,
         path: str,
         use_section_sound_effect: bool,
-        high_shelf: HighShelfEq
+        high_shelf: HighShelfEq,
+        use_upscaler: bool = False
     ) -> Sound | str:
         """
         :param path: cannot be empty
@@ -318,11 +325,25 @@ class ConcatUtil:
             appended_silence_duration = phrase.reason.pause_duration
             use_appended_sound_effect = False
 
-        result = SoundFileUtil.load(path, APP_SAMPLE_RATE)
+        result = SoundFileUtil.load(path)
         if isinstance(result, str): # error
             return result
         else:
             sound = result
+
+        # Apply sidon upscaler if enabled
+        if use_upscaler:
+            upscaler = ModelsUtil.get_sidon_upscaler()
+            if not upscaler:
+                return "\"Generative upscaling\" enabled but not available"
+            else:
+                result = upscaler.process(sound)
+                if isinstance(result, str):
+                    return result
+                sound = result
+
+        # Enforce app sample rate here
+        sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
 
         # Apply high-shelf EQ to TTS segment before appending any section SFX/silence
         sound = SoundUtil.high_shelf_eq(
@@ -344,7 +365,8 @@ class ConcatUtil:
     def get_rendered_sound_segment_durations(
         phrases_and_paths: list[ tuple[Phrase, str] ],
         use_section_sound_effect: bool,
-        high_shelf: HighShelfEq
+        high_shelf: HighShelfEq,
+        use_upscaler: bool = False
     ) -> list[float] | str:
         """
         Calculates the final durations of the sound segments to be concatenated.
@@ -362,10 +384,10 @@ class ConcatUtil:
                 durations.append(0)
                 continue
 
-            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect, high_shelf)
+            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect, high_shelf, use_upscaler)
             if isinstance(result, str): # error
                 return result
-            
+
             sound = result
             durations.append(sound.duration)
 
@@ -379,6 +401,7 @@ class ConcatUtil:
         high_shelf: HighShelfEq,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
+        use_upscaler: bool = False,
     ) -> list[float] | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -414,7 +437,7 @@ class ConcatUtil:
                 return "Interrupted by user"
 
             result = ConcatUtil.make_rendered_sound_segment(
-                phrase, path, use_section_sound_effect, high_shelf
+                phrase, path, use_section_sound_effect, high_shelf, use_upscaler
             )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
@@ -423,6 +446,12 @@ class ConcatUtil:
             sound = result
             durations.append(sound.duration)
             duration_sum += sound.duration
+
+            if SigIntHandler().did_interrupt:
+                SigIntHandler().clear()
+                ConcatUtil.close_ffmpeg_stream(process)
+                delete_silently(dest_path) # TODO delete parent dir silently if empty
+                return "Interrupted by user"
 
             ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
 
@@ -481,7 +510,10 @@ class ConcatUtil:
         # if audio_data.dtype is not float, raise ValueError("Expecting float")
         pcm_data = (audio_data * 32767).astype(np.int16)
 
-        process.stdin.write(pcm_data.tobytes()) # type: ignore
+        try:
+            process.stdin.write(pcm_data.tobytes()) # type: ignore
+        except BrokenPipeError:
+            pass
 
     @staticmethod
     def close_ffmpeg_stream(process: subprocess.Popen):

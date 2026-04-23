@@ -125,7 +125,7 @@ class GenerateMenu:
             low_desc = "Allows for more word errors before triggering a retry"
             medium_desc = "Decent middle ground between accuracy and retries"
             high_desc = warning_high if warning_high else "Higher net accuracy but triggers more retries"
-            intolerant_desc = "Most strict - no word errors allowed; not recommended for most use cases"
+            intolerant_desc = "Any word error triggers a retry; many false positives likely; for the time/compute unconstrained"
 
         MenuUtil.options_menu(
             state=state,

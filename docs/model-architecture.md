@@ -97,7 +97,7 @@ Classmethods with default implementations (override when the defaults don't appl
 - `get_voice_display_info(project, instance) -> tuple[str, str]`
 - `get_strictness_warning(strictness, project, instance) -> str`
 
-### Level 2 — `XxxBaseModel(TtsBaseModel)`
+### Level 2 — `AbcBaseModel(TtsBaseModel)`
 
 Example: [tts_audiobook_tool/tts_model/glm_base_model.py](tts_audiobook_tool/tts_model/glm_base_model.py)
 
@@ -112,7 +112,7 @@ class GlmBaseModel(TtsBaseModel):
     SAMPLE_RATES = [24000, 32000]
 ```
 
-### Level 3 — `XxxModel(XxxBaseModel)`
+### Level 3 — `AbcModel(AbcBaseModel)`
 
 Example: [tts_audiobook_tool/tts_model/glm_model.py](tts_audiobook_tool/tts_model/glm_model.py)
 
@@ -121,7 +121,7 @@ Example: [tts_audiobook_tool/tts_model/glm_model.py](tts_audiobook_tool/tts_mode
 - Implements `generate_using_project()` — reads voice file path, transcript, seed, etc. from `project`, then delegates to a more parameter-explicit internal method
 - Implements `kill()`
 
-The split exists so that `XxxBaseModel` can be imported and its classmethods called without loading the heavy model library — which matters both for startup speed and for running the app outside the model's venv.
+The split exists so that `AbcBaseModel` can be imported and its classmethods called without loading the heavy model library — which matters both for startup speed and for running the app outside the model's venv.
 
 ---
 
@@ -160,7 +160,7 @@ Contains shared operations used by most model menus:
 
 ### Per-model menu pattern
 
-Each `VoiceXxxMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2) are added inline alongside the shared voice clone item. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelInfos` argument rather than being baked into the menu class.
+Each `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2) are added inline alongside the shared voice clone item. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelInfos` argument rather than being baked into the menu class.
 
 ---
 
@@ -176,9 +176,9 @@ Add a new `TtsModelInfos` enum member with a fully populated `TtsModelInfo`.
 
 Three `dict` maps must each gain a new entry:
 
-- **`Tts.get_class()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.XXX` → `XxxBaseModel`
-- **`Tts.get_instance()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.XXX` → a factory function (e.g. `Tts.get_xxx`) that lazily instantiates `XxxModel`
-- **`Tts.get_instance_if_exists()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.XXX` → the cached instance variable `Tts._xxx`
+- **`Tts.get_class()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.ABC` → `AbcBaseModel`
+- **`Tts.get_instance()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.ABC` → a factory function (e.g. `Tts.get_abc`) that lazily instantiates `AbcModel`
+- **`Tts.get_instance_if_exists()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.ABC` → the cached instance variable `Tts._abc`
 
 If the model has any constructor parameters sourced from `Project` (device flags, sample rate, variant type, etc.), also update:
 
@@ -187,7 +187,7 @@ If the model has any constructor parameters sourced from `Project` (device flags
 
 ### `tts_audiobook_tool/voice_menu/voice_menu_shared.py`
 
-Add a `case TtsModelInfos.XXX:` branch to `VoiceMenuShared.menu()` ([voice_menu_shared.py](tts_audiobook_tool/voice_menu/voice_menu_shared.py)) that imports and calls the new `VoiceXxxMenu.menu(state)`.
+Add a `case TtsModelInfos.ABC:` branch to `VoiceMenuShared.menu()` ([voice_menu_shared.py](tts_audiobook_tool/voice_menu/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`.
 
 ### `tts_audiobook_tool/voice_menu/__init__.py`
 

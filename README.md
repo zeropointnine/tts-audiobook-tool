@@ -17,7 +17,7 @@ The app employs several techniques to manage and improve on the inherently nonde
 - Intelligent segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
 - Silence trimming and semantically-aware pause modulation at segment boundaries to improve prosody
-- Industry-standard loudness normalization
+- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upscaling and loudness normalization
 
 The app uses a plain-text interface in the console.
 
@@ -102,6 +102,12 @@ Run the app by entering:
     python -m tts_audiobook_tool
 
 Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
+
+### Optional (CUDA only)
+
+To use [Sidon](https://github.com/sarulab-speech/Sidon) 48 khz upscaler, enter:
+
+    pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
 
 
 ## Virtual environment for Qwen3-TTS 
@@ -488,6 +494,16 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 
 # Update highlights
+
+**2026-04-24**
+
+- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upscaler** post-processing option
+
+**2026-04-23**
+
+- Added **high shelf filter** post-processing option
+- Added strictness level "intolerant"
+- Added AAC bitrate setting
 
 **2026-04-22**
 

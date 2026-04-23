@@ -1,5 +1,7 @@
 import os
 
+import torch
+
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
@@ -11,6 +13,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -87,11 +90,17 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Clarity equalization", (HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED).id),
-                    lambda _, __: ConcatMenu.high_shelf_menu(state)
+                    lambda _: make_menu_label("Generative upscaling", state.project.use_upscaler),
+                    lambda _, __: ConcatMenu.upscaler_menu(state)
                 )
             )
 
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Treble lift", (HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED).id),
+                    lambda _, __: ConcatMenu.high_shelf_menu(state)
+                )
+            )
 
             return items
 
@@ -141,19 +150,46 @@ class ConcatMenu:
         def on_select(value: HighShelfEq) -> None:
             state.project.high_shelf = value.id
             state.project.save()
-            print_feedback(f"Clarity equalization set to: {value.id}")
+            print_feedback(f"Treble lift set to: {value.id}")
 
         current = HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Clarity equalization",
+            heading_text="Treble lift",
             labels=[item.id.capitalize() for item in list(HighShelfEq)],
             values=[item for item in list(HighShelfEq)],
             current_value=current,
             default_value=HighShelfEq.DISABLED,
             on_select=on_select,
             subheading=HIGH_SHELF_SUBHEADING
+        )
+
+    @staticmethod
+    def upscaler_menu(state: State) -> None:
+        
+        def on_select(value: bool) -> None:
+            state.project.use_upscaler = value
+            state.project.save()
+            print_feedback(f"Generative upscaling set to: {value}")
+
+        if not torch.cuda.is_available():
+            subheading = "Requires CUDA, which is not available on this system.\n"
+        elif not SidonUtil.has_sidon():
+            subheading = "Sidon upscaler not installed.\n"
+            subheading += "Please see the README for installation instructions.\n"
+        else: 
+            subheading = UPSCALE_SUBHEADING
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Generative upscaling",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.use_upscaler,
+            default_value=False,
+            on_select=on_select
         )
 
     @staticmethod
@@ -418,8 +454,8 @@ def launch_player_with_chromium(
 chromium_info = AppUtil.get_chromium_info()
 
 LOUDNORM_SUBHEADING = \
-"""Performs an extra pass after concatenating audio segments to minimize volume disparities
-between TTS generations. The \"Stronger\" profile is a more aggressive setting, suitable 
+"""Performs an extra pass after concatenation to minimize volume disparities between
+TTS generations. The \"Stronger\" profile is a more aggressive setting, suitable 
 for mobile devices.
 """
 
@@ -448,4 +484,9 @@ to enable opening local audio files without user input:
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
 Some TTS models may benefit more from this than others.
+"""
+
+UPSCALE_SUBHEADING = \
+"""Uses Sidon generative model to upscale audio to 48kHz.
+Enhances audio quality and clarity; affects timbre and tonality.
 """

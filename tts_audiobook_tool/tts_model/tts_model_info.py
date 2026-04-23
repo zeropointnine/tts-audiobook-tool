@@ -342,8 +342,8 @@ class TtsModelInfos(Enum):
         ui={
             "proper_name": "Pocket TTS",
             "short_name": "Pocket",
-            "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 30s): ",
-            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 30s)"
+            "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)"
         },
         substitutions=[
             ("—", ", "), ("─", ", ")

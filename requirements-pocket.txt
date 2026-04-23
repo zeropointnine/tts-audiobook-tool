@@ -5,6 +5,10 @@
 # Model dependencies
 pocket-tts==2.0.0
 
+# Sidon speech restoration — install with --no-deps to avoid heavy training stack:
+# pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
+sidon @ git+https://github.com/sarulab-speech/Sidon
+
 # App dependencies
 faster-whisper==1.2.1
 ctranslate2==4.7.1

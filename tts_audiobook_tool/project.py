@@ -78,6 +78,7 @@ class Project(BaseModel):
     use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
     normalization_type: NormalizationType = list(NormalizationType)[0]
     high_shelf: str = HighShelfEq.DISABLED.id
+    use_upscaler: bool = False
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
     strictness: Strictness = list(Strictness)[0]
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
@@ -308,6 +309,12 @@ class Project(BaseModel):
             value = HighShelfEq.DISABLED
             add_warning('high_shelf', value.id)
         d['high_shelf'] = value.id
+
+        # use_upscaler
+        value = d.get('use_upscaler', False)
+        if not isinstance(value, bool):
+            value = False
+        d['use_upscaler'] = value
 
         # strictness (default depends on language_code)
         s = d.get('strictness', '')
@@ -560,6 +567,7 @@ class Project(BaseModel):
             "use_section_sound_effect": self.use_section_sound_effect,
             "normalization_type": self.normalization_type.value.id,
             "high_shelf": self.high_shelf,
+            "use_upscaler": self.use_upscaler,
             "realtime_save": self.realtime_save,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,
