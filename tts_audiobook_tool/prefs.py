@@ -20,6 +20,7 @@ class Prefs(Saveable):
             stt_variant: SttVariant = SttVariant.get_default(),
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
+            aac_bitrate: str = AAC_BITRATE_DEFAULT,
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
@@ -31,6 +32,7 @@ class Prefs(Saveable):
         self._stt_variant = stt_variant
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
+        self._aac_bitrate = aac_bitrate
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
@@ -112,6 +114,13 @@ class Prefs(Saveable):
             tts_force_cpu = False
             dirty = True
 
+        # AAC/M4B bitrate
+        # Back-compat: support legacy key "aac_bitrate"
+        aac_bitrate = prefs_dict.get("aac_bitrate", prefs_dict.get("aac_m4b_bitrate", AAC_BITRATE_DEFAULT))
+        if not isinstance(aac_bitrate, str) or aac_bitrate not in AAC_BITRATES:
+            aac_bitrate = AAC_BITRATE_DEFAULT
+            dirty = True
+
         # Max retries
         max_retries = prefs_dict.get("max_retries", PROJECT_MAX_RETRIES_DEFAULT)
         if not isinstance(max_retries, int) or not (PROJECT_MAX_RETRIES_MIN <= max_retries <= PROJECT_MAX_RETRIES_MAX):
@@ -163,6 +172,7 @@ class Prefs(Saveable):
             stt_variant=stt_variant,
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
+            aac_bitrate=aac_bitrate,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
@@ -250,6 +260,17 @@ class Prefs(Saveable):
         Tts.set_force_cpu(value)
 
     @property
+    def aac_bitrate(self) -> str:
+        return self._aac_bitrate
+
+    @aac_bitrate.setter
+    def aac_bitrate(self, value: str) -> None:
+        if value not in AAC_BITRATES:
+            value = AAC_BITRATE_DEFAULT
+        self._aac_bitrate = value
+        self.save()
+
+    @property
     def last_voice_dir(self) -> str:
         return self._last_voice_dir
 
@@ -288,6 +309,7 @@ class Prefs(Saveable):
             "stt_variant": self._stt_variant.id,
             "stt_config": self._stt_config.id,
             "tts_force_cpu": self._tts_force_cpu,
+            "aac_bitrate": self._aac_bitrate,
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,

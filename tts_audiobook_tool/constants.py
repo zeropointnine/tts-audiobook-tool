@@ -66,13 +66,24 @@ FFMPEG_ARGUMENTS_OUTPUT_FLAC = [
     "-frame_size", "4096",
     "-compression_level", "6"
 ]
-FFMPEG_ARGUMENTS_OUTPUT_AAC = [
+AAC_BITRATES = ["64k", "96k"]
+AAC_BITRATE_DEFAULT = "96k"
+
+FFMPEG_ARGUMENTS_OUTPUT_AAC_TEMPLATE = [
     "-c:a", "aac",
-    "-b:a", f"96k",
+    "-b:a", "%1",
     "-movflags", "+faststart", # moves metadata to the front, for streaming, which we want
     '-vn',                    # No video (important when input is mp3 for some reason)
     # Do not use "-sample_fmt s16" here
 ]
+
+def make_ffmpeg_arguments_output_aac(bitrate: str=AAC_BITRATE_DEFAULT) -> list[str]:
+    if bitrate not in AAC_BITRATES:
+        bitrate = AAC_BITRATE_DEFAULT
+    return [item.replace("%1", bitrate) for item in FFMPEG_ARGUMENTS_OUTPUT_AAC_TEMPLATE]
+
+# Backwards-compatible default AAC args
+FFMPEG_ARGUMENTS_OUTPUT_AAC = make_ffmpeg_arguments_output_aac()
 
 APP_META_FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
 APP_META_MP4_MEAN = "tts-audiobook-tool"
@@ -82,7 +93,7 @@ AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 
 COL_ACCENT = Ansi.hex("ffaa44")
 COL_ERROR = Ansi.hex("ff0000")
-COL_DIM = Ansi.hex("666666")
+COL_DIM = Ansi.hex("888888")
 COL_INPUT = Ansi.hex("aaaaaa")
 COL_OK = Ansi.hex("00ff00")
 COL_DEFAULT = Ansi.RESET

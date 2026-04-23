@@ -41,21 +41,32 @@ class ConcatMenu:
             return label
 
         def make_items(_: State) -> list[MenuItem]:
+            
+            file_type_value = state.project.export_type.label
+            if state.project.export_type == ExportType.AAC:
+                file_type_value += f" {COL_DIM}{state.prefs.aac_bitrate}"
+
             items = [
+                
                 MenuItem(make_start_label, lambda _, __: ask_chapter_indices_and_make(state)),
+                
                 MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
+
                 MenuItem(
-                    lambda _: make_menu_label("File type", state.project.export_type.label), 
+                    lambda _: make_menu_label("File type", file_type_value), 
                     lambda _, __: ConcatMenu.file_type_menu(state)
                 ),
+                
                 MenuItem(
                     lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
                     lambda _, __: ConcatMenu.normalization_menu(state)
                 ),
+                
                 MenuItem(
                     lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 ),
+                
                 MenuItem(
                     lambda _: make_menu_label("Section break sound effect", state.project.use_section_sound_effect),
                     lambda _, __: ConcatMenu.section_break_menu(state)

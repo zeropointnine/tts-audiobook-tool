@@ -191,7 +191,8 @@ class ConcatUtil:
             concat_path,
             phrases_and_paths,
             print_progress=True,
-            use_section_sound_effect=state.project.use_section_sound_effect
+            use_section_sound_effect=state.project.use_section_sound_effect,
+            aac_bitrate=state.prefs.aac_bitrate
         )
         if isinstance(result, str): # is error
             delete_intermediate_files()
@@ -207,7 +208,8 @@ class ConcatUtil:
             err = LoudnessNormalizationUtil.normalize_file(
                 source_flac=last_path, 
                 specs=state.project.normalization_type.value, 
-                dest_path=norm_path
+                dest_path=norm_path,
+                aac_bitrate=state.prefs.aac_bitrate
             )
             if err:
                 delete_intermediate_files()
@@ -375,10 +377,15 @@ class ConcatUtil:
         phrases_and_paths: list[ tuple[Phrase, str] ],
         use_section_sound_effect: bool,
         print_progress: bool,
+        aac_bitrate: str=AAC_BITRATE_DEFAULT,
     ) -> list[float] | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
         Adds silence or sound effect between adjacent segments based on phrase "reason".
+
+        :param aac_bitrate: 
+            Only relevant if dest_path suffix is .m4a/.m4b; ignored otherwise. 
+            Must be a valid AAC bitrate string like "128k".
 
         Returns list of float durations of each added segment to be used for app metadata .
 
@@ -389,7 +396,7 @@ class ConcatUtil:
         durations = []
 
         to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
-        process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac)
+        process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate)
 
         SigIntHandler().set("concat")
 
@@ -431,7 +438,11 @@ class ConcatUtil:
         return durations
 
     @staticmethod
-    def init_ffmpeg_stream(dest_path: str, is_aac_not_flac: bool) -> subprocess.Popen:
+    def init_ffmpeg_stream(
+            dest_path: str,
+            is_aac_not_flac: bool,
+            aac_bitrate: str=AAC_BITRATE_DEFAULT
+    ) -> subprocess.Popen:
         """
         Initializes and returns an ffmpeg process for streaming FLAC encoding.
         """
@@ -449,7 +460,7 @@ class ConcatUtil:
 
         # Output stream related
         if is_aac_not_flac:
-            args.extend(FFMPEG_ARGUMENTS_OUTPUT_AAC)
+            args.extend(make_ffmpeg_arguments_output_aac(aac_bitrate))
         else:
             args.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
         args.append(dest_path)

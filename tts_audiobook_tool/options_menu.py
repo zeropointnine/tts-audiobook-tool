@@ -35,11 +35,14 @@ class OptionsMenu:
             print_feedback(s)
 
         def item_maker(_: State) -> list[MenuItem]:
+
             items = []
+
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id),
-                    lambda _, __: OptionsMenu.stt_model_menu(state)
+                    lambda _, __: OptionsMenu.stt_model_menu(state),
+                    superlabel="Model options"
                 )
             )
             items.append(
@@ -63,10 +66,17 @@ class OptionsMenu:
                     )
                 )
             
-            ...
-            
             items.append( MenuItem(make_unload_label, on_unload) )
+
+            items.append(
+                MenuItem(
+                    make_menu_label("AAC/M4B bitrate", state.prefs.aac_bitrate, AAC_BITRATE_DEFAULT),
+                    lambda _, __: OptionsMenu.aac_bitrate_menu(state),
+                    superlabel="Various"
+                )
+            )
             items.append( MenuItem("Reset contextual hints", on_hints) )
+
             items.append( 
                 MenuItem(
                     make_menu_label("Save debug files", state.prefs.save_debug_files, False),
@@ -161,6 +171,24 @@ class OptionsMenu:
             values=[True, False],
             current_value=state.prefs.save_debug_files,
             default_value=False,
+            on_select=on_select
+        )
+
+    @staticmethod
+    def aac_bitrate_menu(state: State) -> None:
+
+        def on_select(value: str) -> None:
+            if state.prefs.aac_bitrate != value:
+                state.prefs.aac_bitrate = value
+            print_feedback(f"Set AAC/M4B bitrate to:", state.prefs.aac_bitrate)
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="AAC/M4B bitrate",
+            labels=AAC_BITRATES,
+            values=AAC_BITRATES,
+            current_value=state.prefs.aac_bitrate,
+            default_value=AAC_BITRATE_DEFAULT,
             on_select=on_select
         )
 

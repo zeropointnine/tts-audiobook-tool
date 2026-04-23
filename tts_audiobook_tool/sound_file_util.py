@@ -129,7 +129,7 @@ class SoundFileUtil:
 
         partial_command = FFMPEG_TYPICAL_OPTIONS[:]
         partial_command.extend(["-i", source_file_path])
-        partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_AAC[:])
+        partial_command.extend(make_ffmpeg_arguments_output_aac())
         partial_command.append("-")
 
         err = FfmpegUtil.make_file(partial_command, dest_file_path, False)

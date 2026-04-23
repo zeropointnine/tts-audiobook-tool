@@ -21,7 +21,8 @@ class LoudnessNormalizationUtil:
     def normalize_file(
             source_flac: str,
             specs: NormalizationSpecs,
-            dest_path: str=""
+            dest_path: str="",
+            aac_bitrate: str=AAC_BITRATE_DEFAULT
     ) -> str:
         """
         Source file must be FLAC.
@@ -51,7 +52,7 @@ class LoudnessNormalizationUtil:
         printt("Pass 2/2")
         printt()
         err = LoudnessNormalizationUtil.do_loudness_transform_and_save(
-            source_flac, dest_path, loudness_stats, specs.i, specs.lra, specs.tp)
+            source_flac, dest_path, loudness_stats, specs.i, specs.lra, specs.tp, aac_bitrate)
         print()
 
         return err
@@ -136,7 +137,8 @@ class LoudnessNormalizationUtil:
         loudness_stats: dict,
         target_i: float,
         target_lra: float,
-        target_tp: float
+        target_tp: float,
+        aac_bitrate: str=AAC_BITRATE_DEFAULT
     ) -> str:
         """
         Returns error message on failure else empty string.
@@ -201,7 +203,7 @@ class LoudnessNormalizationUtil:
         if output_suffix == ".flac":
             partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)
         elif output_suffix in AAC_SUFFIXES:
-            partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_AAC)
+            partial_command.extend(make_ffmpeg_arguments_output_aac(aac_bitrate))
         else:
             return "Unsupported output type"
 

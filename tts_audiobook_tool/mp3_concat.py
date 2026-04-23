@@ -117,7 +117,7 @@ class SoundConcatTranscodeUtil:
             '-i', temp_text_file_path,  # Input file list
         ])
 
-        rest = FFMPEG_ARGUMENTS_OUTPUT_FLAC[:] if is_flac else FFMPEG_ARGUMENTS_OUTPUT_AAC[:]
+        rest = FFMPEG_ARGUMENTS_OUTPUT_FLAC[:] if is_flac else make_ffmpeg_arguments_output_aac()
         partial_command.extend(rest)
 
         err = FfmpegUtil.make_file(partial_command, dest_file_path, False)
