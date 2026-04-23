@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
 
@@ -39,15 +40,17 @@ class ProjectUtil:
         return result
     
     @staticmethod
-    def get_latest_concat_files(project: Project, limit=10) -> list[str]:
+    def get_latest_concat_files(project: Project, limit=10) -> list[tuple[str, str]]:
         """
-        Finds the latest concatenated audio files within the project's concat directory.
+        Finds latest concatenated audio files within the project's concat directory,
+        returning tuples of (path, modified_date) where modified_date is
+        YYYY-MM-DD HH:MM.
         """
         concat_dir = project.concat_path
         if not concat_dir or not os.path.exists(concat_dir):
             return []
         
-        # Get subdirectories, revchron sorted
+        # Get subdirectories, revchron-sorted
         subdirs = []
         for item in os.listdir(concat_dir):
             item_path = os.path.join(concat_dir, item)
@@ -57,7 +60,7 @@ class ProjectUtil:
                 
         # Iterate through subdirectories
         DEBUG_TAGS = ["[concat]", "[norm]", "[chaptermeta]"] 
-        paths = []
+        results = []
         for subdir in subdirs:
             try:
                 file_names = sorted(os.listdir(subdir)) # alpha-sorted
@@ -68,9 +71,13 @@ class ProjectUtil:
                 hit = hit and not any(sub in file_name for sub in DEBUG_TAGS)
                 if hit:
                     path = os.path.join(subdir, file_name)
-                    paths.append(path)
+                    try:
+                        modified_date = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M")
+                    except (OSError, PermissionError, ValueError):
+                        modified_date = "unknown"
+                    results.append((path, modified_date))
                     break
-            if len(paths) > limit:
+            if len(results) >= limit:
                 break
         
-        return paths
+        return results

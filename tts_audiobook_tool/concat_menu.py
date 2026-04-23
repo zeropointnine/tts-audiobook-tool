@@ -169,8 +169,8 @@ class ConcatMenu:
             return
 
         MAX = 35 # TODO parameterize menu-max-items
-        file_paths = ProjectUtil.get_latest_concat_files(state.project, MAX)
-        if not file_paths:
+        file_infos = ProjectUtil.get_latest_concat_files(state.project, MAX)
+        if not file_infos:
             print_feedback("No files found")
             return
         
@@ -186,8 +186,8 @@ class ConcatMenu:
 
         def make_items(_: State) -> list[MenuItem]:
             items = []
-            for file_path in file_paths:
-                label = Path(file_path).name
+            for file_path, modified_date in file_infos:
+                label = f"{Path(file_path).name}\n    {COL_DIM}{modified_date}{COL_DEFAULT}"
                 item = MenuItem(label, on_item, file_path)
                 items.append(item)
             return items
