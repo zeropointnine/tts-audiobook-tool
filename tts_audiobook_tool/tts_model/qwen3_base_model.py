@@ -15,7 +15,12 @@ class Qwen3BaseModel(TtsBaseModel):
 
     INFO = TtsModelInfos.QWEN3TTS.value
 
-    DEFAULT_REPO_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    PRESET_REPO_IDS = [
+        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+        "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+    ]
+    DEFAULT_REPO_ID = PRESET_REPO_IDS[0]
 
     TEMPERATURE_FALLBACK_DEFAULT = 0.9 # (Real default is embedded in the loaded model)
     TEMPERATURE_MIN = 0.01

@@ -53,8 +53,12 @@ CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
+MENU_CLEARS_SCREEN_DEFAULT = False
+
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)
 NORMALIZATION_HEADROOM_DB = 1.0
+
+PRINT_FEEDBACK_PAUSE_SECONDS = 0.33
 
 # App's typical ffmpeg options wrt console output, etc
 FFMPEG_TYPICAL_OPTIONS = [

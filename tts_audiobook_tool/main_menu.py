@@ -8,7 +8,6 @@ from tts_audiobook_tool.project_menu import ProjectMenu
 from tts_audiobook_tool.tools_menu import ToolsMenu
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.text_menu import TextMenu
-from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -154,5 +153,5 @@ def on_realtime(state: State, _: MenuItem) -> None:
 
 # Quit
 def on_quit(_: State, __: MenuItem):
-    print_feedback("State saved.", extra_line=False)
+    print_feedback("State saved.", extra_line=False, no_enter=True, no_pause=True)
     exit(0)

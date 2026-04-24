@@ -84,6 +84,12 @@ class OptionsMenu:
                     superlabel="Various"
                 )
             )
+            items.append(
+                MenuItem(
+                    make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
+                    lambda _, __: OptionsMenu.menu_clears_screen_menu(state)
+                )
+            )
             items.append( MenuItem("Reset contextual hints", on_hints) )
 
             items.append( 
@@ -179,6 +185,28 @@ class OptionsMenu:
             labels=["True", "False"],
             values=[True, False],
             current_value=state.prefs.save_debug_files,
+            default_value=False,
+            on_select=on_select
+        )
+
+    @staticmethod
+    def menu_clears_screen_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            if state.prefs.menu_clears_screen != value:
+                state.prefs.menu_clears_screen = value
+            print_feedback(f"Set to:", str(state.prefs.menu_clears_screen))
+
+        subheading = f"When enabled, clears the terminal screen between menus\n"
+        subheading += f"and prompts to press Enter after feedback messages.\n"
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Menu clears screen",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.prefs.menu_clears_screen,
             default_value=False,
             on_select=on_select
         )

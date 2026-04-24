@@ -25,7 +25,8 @@ class Prefs(Saveable):
             last_project_dir: str = "",
             last_text_dir: str = "",
             save_debug_files: bool = False,
-            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE
+            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
+            menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -38,6 +39,7 @@ class Prefs(Saveable):
         self._last_text_dir = last_text_dir
         self._save_debug_files = save_debug_files
         self._play_on_generate = play_on_generate
+        self._menu_clears_screen = menu_clears_screen
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -166,6 +168,12 @@ class Prefs(Saveable):
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
             dirty = True
 
+        # Menu clears screen
+        menu_clears_screen = prefs_dict.get("menu_clears_screen", MENU_CLEARS_SCREEN_DEFAULT)
+        if not isinstance(menu_clears_screen, bool):
+            menu_clears_screen = MENU_CLEARS_SCREEN_DEFAULT
+            dirty = True
+
         # Make prefs instance
         prefs = Prefs(
             project_dir=project_dir,
@@ -178,8 +186,12 @@ class Prefs(Saveable):
             last_text_dir=last_text_dir,
             save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
+            menu_clears_screen=menu_clears_screen,
             hints=hints
         )
+
+        from tts_audiobook_tool.util import set_menu_clears_screen
+        set_menu_clears_screen(prefs._menu_clears_screen)
 
         if dirty and save_if_dirty:
             prefs.save()
@@ -211,6 +223,17 @@ class Prefs(Saveable):
     def play_on_generate(self, value: bool):
         self._play_on_generate = value
         self.save()
+
+    @property
+    def menu_clears_screen(self) -> bool:
+        return self._menu_clears_screen
+
+    @menu_clears_screen.setter
+    def menu_clears_screen(self, value: bool) -> None:
+        self._menu_clears_screen = value
+        self.save()
+        from tts_audiobook_tool.util import set_menu_clears_screen
+        set_menu_clears_screen(value)
 
     def get_hint(self, key: str) -> bool:
         return bool(self._hints.get(key, False))
@@ -314,7 +337,8 @@ class Prefs(Saveable):
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
             "save_debug_files": self._save_debug_files,
-            "play_on_generate": self._play_on_generate
+            "play_on_generate": self._play_on_generate,
+            "menu_clears_screen": self._menu_clears_screen
         }
         try:
             with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:

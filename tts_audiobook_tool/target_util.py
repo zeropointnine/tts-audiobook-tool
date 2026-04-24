@@ -10,7 +10,7 @@ class TargetUtil:
     """
 
     @staticmethod
-    def is_hf_repo_id_syntax_valid(s: str) -> bool:
+    def is_hf_repo_id_syntax(s: str) -> bool:
         
         from huggingface_hub.utils._validators import validate_repo_id
         from huggingface_hub.errors import HFValidationError
@@ -51,7 +51,7 @@ class TargetUtil:
         error = "No such local directory;\n"
 
         # Test for correct hf repo id string format
-        if not TargetUtil.is_hf_repo_id_syntax_valid(target):
+        if not TargetUtil.is_hf_repo_id_syntax(target):
             error += "Invalid string format for hf repo id"
             return "", error
 
@@ -75,7 +75,7 @@ class TargetUtil:
     @staticmethod
     def is_same_target(a: str, b: str) -> bool:
         
-        if TargetUtil.is_hf_repo_id_syntax_valid(b):
+        if TargetUtil.is_hf_repo_id_syntax(b):
             is_same = (a == b)
         else:
             # Treat as dir path

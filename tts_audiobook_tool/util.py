@@ -21,6 +21,13 @@ from tts_audiobook_tool.text_util import TextUtil
 Various small util functions, both app-specific and general
 """
 
+# 'Global; variable
+_menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT
+
+def set_menu_clears_screen(value: bool) -> None:
+    global _menu_clears_screen
+    _menu_clears_screen = value
+
 def printt(s: str="", end=None, dont_reset=False) -> None:
     """
     App-standard way of printing to the console.
@@ -35,11 +42,16 @@ def print_feedback(
         end_value: Any = None,
         is_error=False,
         no_preformat=False,
-        extra_line=True
+        extra_line=True,
+        no_pause=False,
+        no_enter=False
 ) -> None:
     """
     Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
     and submenu is about to be re-printed.
+
+    :param no_enter: if True, doesn't ask user to press enter to continue when "menu_clears_screen" is True
+    :param no_pause: if True, doesn't do the slight pause when there is no enter prompt
     """
     if not no_preformat:
         message = Ansi.ITALICS + (COL_ERROR if is_error else COL_DIM) + message
@@ -49,17 +61,21 @@ def print_feedback(
 
     if extra_line:
         printt()
-    if MENU_CLEARS_SCREEN:
+    if _menu_clears_screen and not no_enter:
         from tts_audiobook_tool.ask_util import AskUtil
         AskUtil.ask_enter_to_continue()
+    elif not no_pause:
+        # Just enough of a pause to make feedback more noticeable
+        time.sleep(PRINT_FEEDBACK_PAUSE_SECONDS)
     else:
-        # Just enough of a pause to make noticeable
-        time.sleep(0.5)
+        # No slight pause and no enter prompt
+        pass 
+        
 
 
 def print_heading(s: str, dont_clear: bool=False, non_menu: bool=False) -> None:
     """ """
-    if MENU_CLEARS_SCREEN and not dont_clear:
+    if _menu_clears_screen and not dont_clear:
         os.system('cls' if os.name == 'nt' else 'clear')
 
     if non_menu:

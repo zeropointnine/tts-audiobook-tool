@@ -50,7 +50,11 @@ class VoiceMenuShared:
                 from tts_audiobook_tool.voice_menu import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
             case TtsModelInfos.QWEN3TTS:
-                _ = Tts.get_instance() # Pre-emptively instantiate model (special case for qwen)
+                # Pre-emptively instantiate model (special case for qwen)
+                _ = Tts.get_instance() 
+                if state.prefs.menu_clears_screen:
+                    print_feedback("Model loaded", no_enter=True)
+                    time.sleep(PRINT_FEEDBACK_PAUSE_SECONDS)
                 from tts_audiobook_tool.voice_menu.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
             case TtsModelInfos.POCKET:
