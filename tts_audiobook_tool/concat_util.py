@@ -11,6 +11,7 @@ from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalization
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
@@ -152,16 +153,6 @@ class ConcatUtil:
         final_path = stem_path + ".abr" + suffix
         last_path = ""
 
-        if False:
-            print()
-            print("chapters    ", bookmark_indices)
-            print()
-            print("concated    ", concat_path)
-            print("normed      ", norm_path)
-            print("chapter meta", chapter_meta_path)
-            print("app meta    ", final_path)
-            print()
-
         def delete_intermediate_files(keep_final: bool=False) -> None:
             # TODO: add delete-as-you-go logic instead
             if state.prefs.save_debug_files:
@@ -192,6 +183,7 @@ class ConcatUtil:
             high_shelf=high_shelf,
             aac_bitrate=state.prefs.aac_bitrate,
             use_upscaler=state.project.use_upscaler,
+            limit_silence_gaps=state.project.limit_silence_gaps
         )
         if isinstance(result, str): # is error
             delete_intermediate_files()
@@ -315,9 +307,11 @@ class ConcatUtil:
         path: str,
         use_section_sound_effect: bool,
         high_shelf: HighShelfEq,
-        use_upscaler: bool = False
+        use_upscaler: bool = False,
+        limit_silence_gaps: bool = False
     ) -> Sound | str:
         """
+        Renders a sound segment by applying necessary transformations to the source audio file at `path`
         :param path: cannot be empty
         """
 
@@ -334,6 +328,12 @@ class ConcatUtil:
         else:
             sound = result
 
+        # Limit silence gaps if enabled
+        if limit_silence_gaps:
+            new_sound = SilenceUtil.limit_silence_gaps(sound, LIMIT_SILENCE_GAPS_DURATION)
+            if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
+                sound = new_sound
+
         # Apply sidon upscaler if enabled
         if use_upscaler:
             upscaler = ModelsUtil.get_sidon_upscaler()
@@ -343,12 +343,12 @@ class ConcatUtil:
                 result = upscaler.process(sound)
                 if isinstance(result, str):
                     return result
-                sound = result
+                sound = result # rem, this is 48khz
 
         # Enforce app sample rate here
         sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
 
-        # Apply high-shelf EQ to TTS segment before appending any section SFX/silence
+        # Apply high-shelf EQ to TTS segment before appending any sound effect
         sound = SoundUtil.high_shelf_eq(
             sound,
             strength=high_shelf.strength,
@@ -405,6 +405,7 @@ class ConcatUtil:
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
         use_upscaler: bool = False,
+        limit_silence_gaps: bool = False
     ) -> list[float] | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -440,7 +441,7 @@ class ConcatUtil:
                 return "Interrupted by user"
 
             result = ConcatUtil.make_rendered_sound_segment(
-                phrase, path, use_section_sound_effect, high_shelf, use_upscaler
+                phrase, path, use_section_sound_effect, high_shelf, use_upscaler, limit_silence_gaps
             )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user

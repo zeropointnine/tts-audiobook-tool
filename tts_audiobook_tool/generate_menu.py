@@ -326,12 +326,15 @@ def do_generate(state: State, is_regen: bool) -> None:
         AskUtil.ask_enter_to_continue()
         return
 
-    if not is_regen:
-        s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
-        hotkey = AskUtil.ask_hotkey(s)
-        printt() # TODO revisit
-        if hotkey == "c":
-            ConcatMenu.menu(state)
+    if is_regen:
+        AskUtil.ask_enter_to_continue()
+        return
+    
+    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
+    hotkey = AskUtil.ask_hotkey(s)
+    printt() # TODO revisit
+    if hotkey == "c":
+        ConcatMenu.menu(state)
 
 STRICTNESS_DESC = \
 """Dictates how \"strict\" is the transcript validation.

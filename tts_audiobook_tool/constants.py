@@ -28,7 +28,7 @@ VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
 # App uses a single sample rate for any sound transformations up until outputting final audio
 # This is useful because a single project can use different models which may have different native
 # output sample rates.
-APP_SAMPLE_RATE = 48000 # xxx
+APP_SAMPLE_RATE = 48000
 
 # Samplerate required for whisper audio input
 WHISPER_SAMPLERATE = 16000

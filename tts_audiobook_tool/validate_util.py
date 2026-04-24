@@ -118,7 +118,7 @@ class ValidateUtil:
 
 
             new_sound = SoundUtil.trim(word_error_result.sound, start, end)
-            new_sound, trim_start, _ = SilenceUtil.trim_silence(new_sound) 
+            new_sound, trim_start, _ = SilenceUtil.trim_silence_ends(new_sound) 
 
             # Adjust Word timing data # TODO: Untested
             start_offset = start + trim_start
@@ -155,7 +155,7 @@ class ValidateUtil:
         end = SoundUtil.get_local_minima(sound, end)
 
         new_sound = SoundUtil.trim(sound, 0, end)
-        new_sound = SilenceUtil.trim_silence(new_sound, end_only=True)[0]
+        new_sound = SilenceUtil.trim_silence_ends(new_sound, end_only=True)[0]
 
         # Even after adding 'offset' above, we may have landed in-between phonemes/syllables/words, so
         if not ValidateUtil._is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):

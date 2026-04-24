@@ -102,6 +102,13 @@ class ConcatMenu:
                 )
             )
 
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Limit silence gaps", state.project.limit_silence_gaps),
+                    lambda _, __: ConcatMenu.limit_silence_gaps_menu(state)
+                )
+            )
+
             return items
 
         MenuUtil.menu(state, "Concatenate audio segments:", make_items, subheading=make_chapter_files_subheading)
@@ -228,6 +235,27 @@ class ConcatMenu:
             values=[True, False],
             current_value=state.project.use_section_sound_effect,
             default_value=False,
+            on_select=on_select
+        )
+
+    @staticmethod
+    def limit_silence_gaps_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.limit_silence_gaps = value
+            state.project.save()
+            print_feedback(f"Limit silence gaps set to: {value}")
+
+        subheading = LIMIT_SILENCE_GAPS_SUBHEADING.replace("%1", f"{LIMIT_SILENCE_GAPS_DURATION:.1f}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Limit silence gaps",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.limit_silence_gaps,
+            default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
             on_select=on_select
         )
 
@@ -489,4 +517,9 @@ Some TTS models may benefit more from this than others.
 UPSCALE_SUBHEADING = \
 """Uses Sidon generative model to upscale audio to 48kHz.
 Enhances audio quality and clarity; affects timbre and tonality.
+"""
+
+LIMIT_SILENCE_GAPS_SUBHEADING = \
+"""Prevents awkwardly long pauses. Limits silences within 
+generated sound segments to a max duration of %1 seconds.
 """

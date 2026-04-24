@@ -298,7 +298,7 @@ class Server:
                     continue
 
                 # Trim silence
-                sound = SilenceUtil.trim_silence(sound)[0]
+                sound = SilenceUtil.trim_silence_ends(sound)[0]
                 if sound.data.size == 0:
                     printt(f"* Model output is empty or silence")
                     continue

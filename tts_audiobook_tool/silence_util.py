@@ -7,7 +7,7 @@ from tts_audiobook_tool.sound_util import SoundUtil
 class SilenceUtil:
 
     @staticmethod
-    def trim_silence(sound, end_only=False) -> tuple[Sound, float, float]:
+    def trim_silence_ends(sound, end_only=False) -> tuple[Sound, float, float]:
         """
         Returns trimmed Sound and the start and end times of the trim
         """
@@ -251,17 +251,53 @@ class SilenceUtil:
             return []
 
     @staticmethod
-    def is_silent_around(
-        sound: Sound,
-        target_timestamp_s: float,
-        width: float = 0.10,
-        silence_threshold_db: float = -40
-    ) -> bool:
+    def limit_silence_gaps(sound: Sound, max_silence_seconds: float) -> Sound:
         """
-        Calculates the smallest RMS of a contiguous `width` that encompasses `target_timestamp_s`,
-        and returns True if that value is less than `silence_threshold_db`. 
+        Trims silence segments in the audio to ensure no silence exceeds max_silence_seconds.
+
+        Args:
+            sound (Sound): The input audio clip.
+            max_silence_seconds (float): Maximum allowed duration for any silence segment in seconds.
+
+        Returns:
+            Sound: The audio clip with excessive silence trimmed.
         """
-        ...
+        if sound.data.size == 0 or max_silence_seconds <= 0:
+            return sound
+
+        silences = SilenceUtil.detect_silences(sound)
+        if not silences:
+            return sound
+
+        pieces: list[Sound] = []
+        last_end = 0.0
+
+        for s_start, s_end in silences:
+            # Add non-silent audio from before this silence segment
+            if last_end < s_start:
+                pieces.append(SoundUtil.trim(sound, last_end, s_start))
+
+            # Trim or keep the silence
+            silence_duration = s_end - s_start
+            if silence_duration > max_silence_seconds:
+                mid = (s_start + s_end) / 2.0
+                new_start = mid - max_silence_seconds / 2.0
+                new_end = mid + max_silence_seconds / 2.0
+                pieces.append(SoundUtil.trim(sound, new_start, new_end))
+            else:
+                pieces.append(SoundUtil.trim(sound, s_start, s_end))
+
+            last_end = s_end
+
+        # Add trailing non-silent audio
+        if last_end < sound.duration:
+            pieces.append(SoundUtil.trim(sound, last_end, sound.duration))
+
+        # Concatenate all pieces into one sound
+        data_arrays = [p.data for p in pieces]
+        data_arrays = [arr.astype(pieces[0].data.dtype, copy=False) for arr in data_arrays]
+        combined_data = np.concatenate(data_arrays)
+        return Sound(combined_data, sound.sr)
 
 def ms_to_samples(ms, sr):
     """Converts milliseconds to samples"""

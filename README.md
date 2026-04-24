@@ -499,7 +499,8 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2026-04-24**
 
-- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upscaler** post-processing option
+- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upscaler** post-processing option. 
+- Added `Concat` > **`Limit silence gaps`** (prevents long silences in sound generations, keeps narration flowing)
 
 **2026-04-23**
 

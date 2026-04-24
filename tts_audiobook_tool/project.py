@@ -80,6 +80,7 @@ class Project(BaseModel):
     high_shelf: str = HighShelfEq.DISABLED.id
     use_upscaler: bool = False
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
+    limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     strictness: Strictness = list(Strictness)[0]
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: ChapterMode = list(ChapterMode)[0]
@@ -569,6 +570,7 @@ class Project(BaseModel):
             "high_shelf": self.high_shelf,
             "use_upscaler": self.use_upscaler,
             "realtime_save": self.realtime_save,
+            "limit_silence_gaps": self.limit_silence_gaps,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,
             "chapter_mode": self.chapter_mode.id,

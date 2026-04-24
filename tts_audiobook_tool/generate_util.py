@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ast import If
 import os
 import time
 
@@ -429,7 +430,7 @@ class GenerateUtil:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
                 # Trim silence from ends of audio clip
-                sound = SilenceUtil.trim_silence(sound)[0]
+                sound = SilenceUtil.trim_silence_ends(sound)[0]
 
                 # Re-check size
                 if sound.data.size == 0:
