@@ -77,7 +77,8 @@ class TtsModelInfos(Enum):
             "proper_name": "None",
             "short_name": "none",
             "voice_path_console": "",
-            "voice_path_requestor": ""
+            "voice_path_requestor": "",
+            "project_links": ["https://www.example.com"]
         },
         substitutions=[]
     )
@@ -101,7 +102,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Oute TTS",
             "short_name": "Oute",
             "voice_path_console": "Enter voice clone audio clip file path (up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (up to 15s)"
+            "voice_path_requestor": "Select voice clone audio clip (up to 15s)",
+            "project_links": ["https://github.com/edwko/OuteTTS", "https://huggingface.co/OuteAI"]
         },
         substitutions=[
             # fyi u2500 = "box drawing light horizontal". have seen it in the wild used as an em-dash.
@@ -128,7 +130,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Chatterbox TTS",
             "short_name": "Chatterbox",
             "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/resemble-ai/chatterbox", "https://huggingface.co/ResembleAI"]
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ")
@@ -154,7 +157,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Fish S1-mini",
             "short_name": "S1-mini",
             "voice_path_console": "Enter voice clone audio clip file path (up to 10s): ",
-            "voice_path_requestor": "Select voice clone audio clip (up to 10s)"
+            "voice_path_requestor": "Select voice clone audio clip (up to 10s)",
+            "project_links": ["https://github.com/fishaudio/fish-speech", "https://huggingface.co/fishaudio/s1-mini"]
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
@@ -180,7 +184,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Fish S2-Pro",
             "short_name": "S2-Pro",
             "voice_path_console": "Enter voice clone audio clip file path (10-30s): ",
-            "voice_path_requestor": "Select voice clone audio clip (10-30s)"
+            "voice_path_requestor": "Select voice clone audio clip (10-30s)",
+            "project_links": ["https://github.com/fishaudio/fish-speech", "https://huggingface.co/fishaudio/s2-pro"]
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
@@ -206,7 +211,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Higgs Audio V2",
             "short_name": "higgs",
             "voice_path_console": "Enter voice clone audio clip file path (~15 seconds recommended): ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/boson-ai/higgs-audio", "https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base"]
         },
         substitutions=[ (
             "\u2014", ", "), ("\u2500", ", ")
@@ -232,7 +238,8 @@ class TtsModelInfos(Enum):
             "proper_name": "VibeVoice",
             "short_name": "VibeVoice",
             "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/vibevoice-community/VibeVoice"]
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
@@ -260,7 +267,8 @@ class TtsModelInfos(Enum):
             "proper_name": "IndexTTS2",
             "short_name": "IndexTTS2",
             "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/index-tts/index-tts", "https://huggingface.co/IndexTeam/IndexTTS-2"]
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", "), # em-dash oftentimes doesn't create caesura
@@ -287,7 +295,8 @@ class TtsModelInfos(Enum):
             "proper_name": "GLM-TTS",
             "short_name": "GLM",
             "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/zai-org/GLM-TTS", "https://huggingface.co/zai-org/GLM-TTS"]
         },
         substitutions=[
             (";", ","), # semicolon generates random syllable
@@ -315,7 +324,8 @@ class TtsModelInfos(Enum):
             "proper_name": "MiraTTS",
             "short_name": "Mira",
             "voice_path_console": "Enter voice clone audio clip file path (recommended up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (recommended up to 15s)"
+            "voice_path_requestor": "Select voice clone audio clip (recommended up to 15s)",
+            "project_links": ["https://github.com/ysharma3501/MiraTTS", "https://huggingface.co/YatharthS/MiraTTS"]
         },
         substitutions=[
             # semicolon doesn't create caesura, but neither does comma reliably
@@ -343,7 +353,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Pocket TTS",
             "short_name": "Pocket",
             "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)"
+            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)",
+            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"]
         },
         substitutions=[
             ("—", ", "), ("─", ", ")
@@ -369,7 +380,8 @@ class TtsModelInfos(Enum):
             "proper_name": "Qwen3-TTS",
             "short_name": "Qwen3-TTS",
             "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip"
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/QwenLM/Qwen3-TTS", "https://huggingface.co/collections/Qwen/qwen3-tts"]
         },
         substitutions=[
             # Does rly well w/ various punctuation

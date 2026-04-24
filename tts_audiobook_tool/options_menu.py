@@ -5,6 +5,7 @@ from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class OptionsMenu:
@@ -65,8 +66,16 @@ class OptionsMenu:
                         lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
                     )
                 )
-            
+                
             items.append( MenuItem(make_unload_label, on_unload) )
+
+            if Tts.get_type() != TtsModelInfos.NONE:
+                items.append(
+                    MenuItem(
+                        lambda _: f"About {Tts.get_type().value.ui['proper_name']} model",
+                        lambda _, __: print_about_model()
+                    )
+                )
 
             items.append(
                 MenuItem(

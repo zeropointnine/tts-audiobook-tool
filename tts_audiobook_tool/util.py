@@ -90,6 +90,18 @@ def print_model_init(description: str = "", model_name: str = "") -> None:
     s += "..."
     print_init(s)
 
+def print_about_model() -> None:
+    from tts_audiobook_tool.tts import Tts
+    from tts_audiobook_tool.ask_util import AskUtil
+    ui = Tts.get_type().value.ui
+    model_name = ui["proper_name"]
+    print_heading(f"About {model_name}")
+    for link in ui.get("project_links", []):
+        printt(make_terminal_hyperlink(link))
+    printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
+    printt()
+    AskUtil.ask_enter_to_continue()
+
 def strip_quotes_from_ends(s: str) -> str:
     if len(s) >= 2:
         first = s[0]

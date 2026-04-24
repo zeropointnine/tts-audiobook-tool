@@ -38,8 +38,11 @@ class ConcatUtil:
 
         if chapter_indices and bookmark_indices:
             raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
-
-        ModelsUtil.clear_all_models(except_sidon=True)
+        
+        if state.project.use_upscaler:
+            printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upscaling...{COL_DEFAULT}")
+            printt()
+            ModelsUtil.clear_all_models(except_sidon=True)
 
         # Make subdir
         dest_dir = os.path.join(state.project.concat_path, timestamp_string())
