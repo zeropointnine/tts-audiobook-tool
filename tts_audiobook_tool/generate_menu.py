@@ -201,7 +201,8 @@ def ask_delete_segments(state: State) -> None:
         return
 
     if len(indices_to_delete) == len(existing_indices):
-        s = f"All generated segments will be deleted"
+        noun = make_noun("segment", "segments", len(indices_to_delete))
+        s = f"All {len(indices_to_delete)} generated {noun} will be deleted"
     else:
         segment_word = make_noun("segment", "segments", len(indices_to_delete))
         s = f"The following {len(indices_to_delete)} {segment_word} will be deleted: \n"
@@ -211,6 +212,9 @@ def ask_delete_segments(state: State) -> None:
         return
     
     state.project.sound_segments.delete_by_indices(indices_to_delete)
+
+    # NB, without this delay, directory watcher may not update in time for next menu printout
+    print_feedback(f"Deleted {len(indices_to_delete)} segments")
 
 def make_strictness_label(state: State) -> str:
     label = make_menu_label(

@@ -93,14 +93,14 @@ class Prefs(Saveable):
         # Speech-to-text variant
         s = prefs_dict.get("stt_variant", "")
         if not s:
-            stt_variant = list(SttVariant)[0]
+            stt_variant = SttVariant.get_default()
             dirty = True
         else:
             result = SttVariant.get_by_id(s)
             if result is not None:
                 stt_variant = result
             else:
-                stt_variant = list(SttVariant)[0]
+                stt_variant = SttVariant.get_default()
                 dirty = True
 
         # STT config (device + quantization)

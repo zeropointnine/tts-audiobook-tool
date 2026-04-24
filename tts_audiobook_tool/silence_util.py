@@ -28,36 +28,146 @@ class SilenceUtil:
     @staticmethod
     def get_start_and_end_silence(sound: Sound) -> tuple[float | None, float | None]:
         # eats errors
-        start_silence = SilenceUtil.get_start_silence_end_time(sound) or None
-        end_silence = SilenceUtil.get_end_silence_start_time(sound) or None
+        start_silence = SilenceUtil.get_start_silence(sound) or None
+        end_silence = SilenceUtil.get_end_silence(sound) or None
         return start_silence, end_silence
 
     @staticmethod
-    def get_start_silence_end_time(sound: Sound) -> float | None:
-        segments = SilenceUtil.detect_silences(sound)
-        if not segments:
+    def get_start_silence(
+        sound: Sound,
+        max_seconds: float = 5.0,
+        threshold_db_relative_to_peak: float = -42.0,
+        min_silence_duration_ms: int = 100,
+        frame_length_ms: int = 30,
+        hop_length_ms: int = 10
+    ) -> float | None:
+        """
+        Optimized version of get_start_silence_end_time that only processes
+        the first `max_seconds` of audio and breaks early.
+
+        Args:
+            sound: The audio clip
+            max_seconds: Maximum duration to analyze (in seconds)
+            threshold_db_relative_to_peak:
+                Threshold in dB relative to the audio's peak RMS.
+                Segments below this are considered silent.
+            min_silence_duration_ms:
+                Minimum duration (in ms) for a segment to be
+                classified as silence. Shorter silences are ignored.
+            frame_length_ms:
+                The length of each frame for analysis (in ms).
+            hop_length_ms:
+                The step size between frames (in ms).
+
+        Returns:
+            The end time of the initial silence, or None if no start
+            silence detected.
+        """
+        try:
+            if sound.data.size == 0:
+                return None
+
+            # Truncate data to only process the first max_seconds
+            max_samples = int(max_seconds * sound.sr)
+            truncated_data = sound.data[:max_samples]
+            truncated_duration = len(truncated_data) / sound.sr
+
+            # Convert ms to samples
+            frame_length = ms_to_samples(frame_length_ms, sound.sr)
+            hop_length = ms_to_samples(hop_length_ms, sound.sr)
+
+            # Calculate RMS energy for each frame
+            rms_frames = librosa.feature.rms(
+                y=truncated_data,
+                frame_length=frame_length,
+                hop_length=hop_length
+            )[0]
+
+            if rms_frames.size == 0:
+                return None
+
+            # Calculate peak RMS and the silence threshold
+            peak_rms = np.max(rms_frames)
+            if peak_rms == 0:  # Complete silence in the truncated window
+                return min(truncated_duration, sound.duration)
+
+            threshold = peak_rms * (10 ** (threshold_db_relative_to_peak / 20))
+
+            # Identify frames below the threshold
+            is_silent = rms_frames < threshold
+
+            # Check if the first frame is silent
+            if not is_silent[0]:
+                return None
+
+            # Minimum silence duration in frames (use ms ratio to avoid samplerate-dependent truncation errors)
+            min_silence_frames = min_silence_duration_ms / hop_length_ms
+
+            # Find first non-silent frame (early break)
+            silent_run_end = 1  # Start from frame 1 since frame 0 is silent
+            while silent_run_end < len(is_silent) and is_silent[silent_run_end]:
+                silent_run_end += 1
+
+            # Convert the end index to time
+            end_time = float(librosa.frames_to_time(silent_run_end, sr=sound.sr, hop_length=hop_length))
+            end_time = min(end_time, sound.duration)
+
+            # Check if the silence duration meets the minimum
+            silence_duration_frames = float(silent_run_end)
+            if silence_duration_frames >= min_silence_frames:
+                return end_time
+
             return None
-        if segments[0][0] > 0.0:
+        except Exception:
             return None
-        return segments[0][1]
 
     @staticmethod
-    def get_end_silence_start_time(sound) -> float | None:
+    def get_end_silence(
+        sound: Sound,
+        max_seconds: float = 5.0,
+        threshold_db_relative_to_peak: float = -42.0,
+        min_silence_duration_ms: int = 100,
+        frame_length_ms: int = 30,
+        hop_length_ms: int = 10
+    ) -> float | None:
+        """
+        Detects trailing silence by reversing the tail of the audio and
+        delegating to get_start_silence.
 
-        segments = SilenceUtil.detect_silences(sound)
-        if not segments:
+        Accepts the same parameters as get_start_silence.
+        Returns the start time of the trailing silence in the original
+        audio, or None if no qualifying trailing silence is found.
+        """
+        try:
+            if sound.data.size == 0:
+                return None
+
+            # Truncate and reverse the last max_seconds of audio
+            max_samples = int(max_seconds * sound.sr)
+            tail_samples = min(max_samples, len(sound.data))
+            tail_data = sound.data[-tail_samples:]
+            reversed_tail_data = tail_data[::-1]
+            reversed_sound = Sound(reversed_tail_data, sound.sr)
+
+            # Use get_start_silence to find silence at the "start" (originally the end)
+            result = SilenceUtil.get_start_silence(
+                reversed_sound,
+                max_seconds=max_seconds,
+                threshold_db_relative_to_peak=threshold_db_relative_to_peak,
+                min_silence_duration_ms=min_silence_duration_ms,
+                frame_length_ms=frame_length_ms,
+                hop_length_ms=hop_length_ms,
+            )
+
+            if result is None:
+                return None
+
+            # Convert the silence duration from the reversed domain back to
+            # the original: silence_start = sound.duration - silence_duration
+            silence_start = sound.duration - result
+            return silence_start
+        except Exception:
             return None
-
-        last_segment = segments[-1]
-
-        end_segment_end = last_segment[1]
-        if end_segment_end < sound.duration:
-            return None
-
-        end_segment_start = last_segment[0]
-        if end_segment_start >= sound.duration:
-            return None
-        return end_segment_start
 
     @staticmethod
     def detect_silences(
@@ -119,8 +229,8 @@ class SilenceUtil:
             silence_starts_indices = np.where(diff == 1)[0]
             silence_ends_indices = np.where(diff == -1)[0]
 
-            # Minimum silence duration in frames
-            min_silence_frames = ms_to_samples(min_silence_duration_ms, sound.sr) / hop_length
+            # Minimum silence duration in frames (use ms ratio to avoid samplerate-dependent truncation errors)
+            min_silence_frames = min_silence_duration_ms / hop_length_ms
 
             silence_segments: list[tuple[float, float]] = []
             for start_frame, end_frame in zip(silence_starts_indices, silence_ends_indices):

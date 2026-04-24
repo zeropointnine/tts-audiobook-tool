@@ -11,7 +11,7 @@ class Stt:
     """
 
     _whisper: WhisperModel | None = None
-    _variant = list(SttVariant)[0]
+    _variant = SttVariant.get_default()
     _config = SttConfig.CUDA_FLOAT16
 
     @staticmethod

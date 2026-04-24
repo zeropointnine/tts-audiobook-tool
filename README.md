@@ -54,6 +54,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
 - [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
+- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upscaled to 48khz with Sidon)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, at high temperature)
@@ -386,7 +387,7 @@ When prepping reference audio for voice cloning, it's worthwhile to prepare thre
 
 The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
 
-- Choose the Whisper turbo model (saves about 1 GB of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
+- Use large-v3-turbo instead of large-v3 (saves about 1 GB of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
 - Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
 - Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
 
@@ -398,7 +399,7 @@ Voice cloning is a first-class feature, supported for all models.
 **Qwen3-TTS**
 
 - CustomVoice and VoiceDesign model variants
-- Batch processing
+- Batch processing support
 - Temperature, seed
 
 **IndexTTS2**
@@ -412,8 +413,8 @@ Voice cloning is a first-class feature, supported for all models.
 **VibeVoice**
 
 - Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
-- LoRAs
-- Batch processing
+- LoRA support!
+- Batch processing support
 - Music detection/rejection
 - CFG, steps, seed
 
@@ -439,6 +440,7 @@ Voice cloning is a first-class feature, supported for all models.
 
 - Selectable language models (english, french_241, german_241, italian, portuguese, spanish_241)
 - Predefined voices (alba, anna, azelma, etc)
+- Supports CUDA acceleration (this is not mentioned in the project page)
 - Temperature, seed
 
 **Higgs Audio V2**
@@ -447,12 +449,12 @@ Voice cloning is a first-class feature, supported for all models.
 
 **GLM-TTS**
 
-- Samplerate (24khz or 32 khz)
+- Samplerate selection (24khz or 32 khz)
 - Seed
 
 **MiraTTS**
 
-- Batch processing
+- Batch processing support
 - Temperature, top_p, top_k, repetition_penalty, seed
 
 **Oute TTS**
@@ -483,9 +485,9 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 | Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
-| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
-| Pocket TTS              | Macbook Pro M1       | 350% realtime   |
-| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU (CUDA disabled)
+| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | CUDA enabled
+| Pocket TTS              | Macbook Pro M1       | 350% realtime   | CPU
+| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
