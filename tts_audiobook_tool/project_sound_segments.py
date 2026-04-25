@@ -3,7 +3,6 @@ from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.text_normalizer import TextNormalizer
@@ -22,28 +21,65 @@ class ProjectSoundSegments:
         self.project = project # TODO: circular reference, ng
         self._sound_segments_map: dict[int, list[SoundSegment]] = {}
         self._dirty = True
+        self._segments_dir: str | None = None
 
         event_handler = DirHandler(self.on_dir_contents_change)
         self.observer = Observer()
 
         if project.dir_path:
-            dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
-            self.observer.schedule(event_handler, dir, recursive=False)
+            self._segments_dir = os.path.join(project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
+            # Watch the project directory (parent) instead of segments/ directly.
+            # This is more reliable: watchdog can miss self-deletion events for the
+            # watched directory itself, but child events (segments dir being deleted,
+            # files created/deleted within segments/) are reliably delivered.
+            self.observer.schedule(event_handler, project.dir_path, recursive=True)
             self.observer.start()
 
     def force_invalidate(self) -> None:
         # TODO: add logic "if am at some important point like GenMenu etc, and is WSL or MacOS, call this"
         self._dirty = True
 
-    def on_dir_contents_change(self, event):        
+    def on_dir_contents_change(self, event):
+        if not self._segments_dir:
+            return
+
+        # The parent project dir is being watched, so events for the segments/
+        # subdirectory and its contents come through here.
+        # We only care about things inside or equal to the segments/ directory path.
+
+        # --- Directory-level events (segments/ itself) ---
+        # Detect when the segments/ subdirectory is created, deleted, or moved.
+        if event.is_directory:
+            # Disappeared (deleted or moved/renamed away)
+            if event.event_type in ('deleted', 'moved') and event.src_path == self._segments_dir:
+                self._sound_segments_map = {}
+                self._dirty = False
+                return
+            # Appeared (created or moved/renamed back to "segments")
+            if event.event_type in ('created', 'moved'):
+                dest = getattr(event, 'dest_path', None)
+                if event.src_path == self._segments_dir or dest == self._segments_dir:
+                    self._dirty = True
+                    return
+
+        # --- File-level events within segments/ ---
         # Eg: FileCreatedEvent(src_path='/xyz.flac', dest_path='', event_type='created', is_directory=False, is_synthetic=False)
-        if event.src_path:
-            # Don't make dirty if new file is not a sound segment file (ie, debug files)
-            path = Path(event.src_path)
-            if path.suffix != ".flac":
-                return
-            if not bool(SoundSegment.from_file_name(event.src_path)):
-                return
+        if not event.src_path:
+            return
+        if event.is_directory:
+            # Not interested in sub-subdirectory creation etc.
+            return
+        # Only handle events inside the segments/ directory
+        if not event.src_path.startswith(self._segments_dir + os.sep):
+            return
+
+        # Don't make dirty if new file is not a sound segment file (ie, debug files)
+        path = Path(event.src_path)
+        if path.suffix != ".flac":
+            return
+        if not bool(SoundSegment.from_file_name(event.src_path)):
+            return
+
         self._dirty = True
         
     @property
