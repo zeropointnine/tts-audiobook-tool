@@ -10,3 +10,4 @@ from .voice_glm_menu import VoiceGlmMenu
 from .voice_mira_menu import VoiceMiraMenu
 from .voice_qwen3_menu import VoiceQwen3Menu
 from .voice_pocket_menu import VoicePocketMenu
+from .voice_omnivoice_menu import VoiceOmniVoiceMenu

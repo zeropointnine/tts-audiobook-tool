@@ -18,6 +18,7 @@ from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.tts_model.vibevoice_base_model import VibeVoiceBaseModel
+from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -39,6 +40,7 @@ class Tts:
     _mira: MiraBaseModel | None = None
     _qwen3: Qwen3BaseModel | None = None
     _pocket: PocketBaseModel | None = None
+    _omnivoice: OmniVoiceBaseModel | None = None
 
     _type: TtsModelInfos
 
@@ -107,6 +109,10 @@ class Tts:
         model_params["fish_s1_compile_enabled"] = project.fish_s1_compile_enabled
         model_params["fish_s2_compile_enabled"] = project.fish_s2_compile_enabled
         model_params["pocket_model_code"] = project.pocket_model_code
+        model_params["omnivoice_target"]   = project.omnivoice_target
+        model_params["omnivoice_dtype"]    = project.omnivoice_dtype
+        model_params["omnivoice_instruct"] = project.omnivoice_instruct
+        model_params["omnivoice_speed"]    = project.omnivoice_speed
 
         Tts.set_model_params(model_params)
 
@@ -129,6 +135,8 @@ class Tts:
         dirty |= new_params.get("fish_s1_compile_enabled", False) != old_params.get("fish_s1_compile_enabled", False)
         dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
+        dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
+        dirty |= new_params.get("omnivoice_dtype",  "") != old_params.get("omnivoice_dtype",  "")
         if dirty:
             Tts.clear_tts_model()
 
@@ -157,6 +165,7 @@ class Tts:
             TtsModelInfos.MIRA: MiraBaseModel,
             TtsModelInfos.QWEN3TTS: Qwen3BaseModel,
             TtsModelInfos.POCKET: PocketBaseModel,
+            TtsModelInfos.OMNIVOICE: OmniVoiceBaseModel,
         }
         cls = MAP.get(Tts._type, None)
         if cls is None:
@@ -181,6 +190,7 @@ class Tts:
             Tts._mira,
             Tts._qwen3,
             Tts._pocket,
+            Tts._omnivoice,
         ]
         for item in items:
             if item is not None:
@@ -202,6 +212,7 @@ class Tts:
             TtsModelInfos.MIRA: Tts.get_mira,
             TtsModelInfos.QWEN3TTS: Tts.get_qwen3,
             TtsModelInfos.POCKET: Tts.get_pocket,
+            TtsModelInfos.OMNIVOICE: Tts.get_omnivoice,
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -224,6 +235,7 @@ class Tts:
             TtsModelInfos.MIRA: Tts._mira,
             TtsModelInfos.QWEN3TTS: Tts._qwen3,
             TtsModelInfos.POCKET: Tts._pocket,
+            TtsModelInfos.OMNIVOICE: Tts._omnivoice,
         }
         return MAP.get(Tts._type, None)
 
@@ -371,6 +383,23 @@ class Tts:
             Tts._pocket = PocketModel(device=device, language=language)
             printt()
         return Tts._pocket
+    
+    @staticmethod
+    def get_omnivoice() -> OmniVoiceBaseModel:
+        if not Tts._omnivoice:
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            model_target = Tts._model_params.get("omnivoice_target", "") \
+                        or OmniVoiceBaseModel.DEFAULT_REPO_ID
+            dtype_str = Tts._model_params.get("omnivoice_dtype", "float16")
+            print_model_init(f"{device}, dtype={dtype_str}")
+            from tts_audiobook_tool.tts_model.omnivoice_model import OmniVoiceModel
+            Tts._omnivoice = OmniVoiceModel(
+                device=device,
+                model_target=model_target,
+                dtype_str=dtype_str,
+            )
+            printt()
+        return Tts._omnivoice
 
     @staticmethod
     def clear_tts_model() -> None:
@@ -389,6 +418,7 @@ class Tts:
             Tts._mira = None
             Tts._qwen3 = None
             Tts._pocket = None
+            Tts._omnivoice = None
 
         from tts_audiobook_tool.memory_util import MemoryUtil
         MemoryUtil.gc_ram_vram()
