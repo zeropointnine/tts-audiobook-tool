@@ -342,6 +342,13 @@ class AppUtil:
             used, total = result
             vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
 
+        shared_result = MemoryUtil.get_shared_gpu_memory()
+        if shared_result is None:
+            shared_string = ""
+        else:
+            _, shared = shared_result
+            shared_string = f"{base_color}shared VRAM: {COL_ACCENT}{make_gb_string(shared)}"
+
         result = MemoryUtil.get_system_ram()
         if result is None:
             ram_string = ""
@@ -349,11 +356,7 @@ class AppUtil:
             used, total = result
             ram_string = f"{base_color}RAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
 
-        if not vram_string and not ram_string:
+        parts = [s for s in [vram_string, shared_string, ram_string] if s]
+        if not parts:
             return ""
-        elif not vram_string:
-            return ram_string
-        elif not ram_string:
-            return vram_string
-        else:
-            return f"{vram_string}{base_color}, {ram_string}"
+        return f"{base_color}, ".join(parts)
