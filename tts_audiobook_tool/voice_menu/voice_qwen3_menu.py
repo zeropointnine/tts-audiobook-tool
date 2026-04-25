@@ -202,7 +202,7 @@ def target_submenu(state: State) -> None:
     items = []
     for t in Qwen3BaseModel.PRESET_REPO_IDS:
         items.append(MenuItem(make_preset_label(t), lambda _, __, t=t: apply_model_and_validate(state.project, t)))
-    items.append(MenuItem("Manually enter hf repo id or local path", lambda _, __: ask_target(state.project)))
+    items.append(MenuItem("Enter hf repo id or local path manually", lambda _, __: ask_target(state.project)))
 
     MenuUtil.menu(
         state=state,

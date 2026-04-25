@@ -316,6 +316,6 @@ HINT_DELETE_SEGMENTS = Hint(
     "delete_segments",
     "Tip",
 """Use this to selectively delete audio segments with poor or inaccurate output 
-(or delete the files directly at: %1). 
+(You can also just delete the files directly at: %1). 
 Afterwards, generate those items again as desired."""
 )

@@ -89,26 +89,31 @@ Clone the repository and cd into it:
 
 A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. 
 
-### Step 4 (Windows)
+### Step 4 (Windows only)
 
 To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128). This extra step is not required when using Linux.
 
     pip uninstall -y torch torchaudio
     pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 
-### Step 5
+### Step 5 (optional)
+
+To enable the [Sidon](https://github.com/sarulab-speech/Sidon) 48 khz upscaler feature, enter:
+
+    pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
+
+### Step 6
 
 Run the app by entering:
 
     python -m tts_audiobook_tool
 
+Or, if you have multiple virtual environments installed, launch.py lets you pick one and start the app:
+
+    python launch.py # searches project root for venv subdirectories, or...
+    python launch.py path/to/venvs-parent-dir
+
 Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
-
-### Optional (CUDA only)
-
-To use [Sidon](https://github.com/sarulab-speech/Sidon) 48 khz upscaler, enter:
-
-    pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
 
 
 ## Virtual environment for Qwen3-TTS 
@@ -496,6 +501,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 
 # Update highlights
+
+**2026-04-25**
+
+- Added **virtual environment convenience launcher** (`python launch.py`)
 
 **2026-04-24**
 
