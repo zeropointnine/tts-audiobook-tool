@@ -120,11 +120,23 @@ Note that any settings and features that are specific to a given TTS model will 
 
 Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-qwen3tts
+- Linux/Mac
+
+        python -m venv venv-qwen3-tts
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-qwen3tts 
 
 Activate the virtual environment:
 
-    venv-qwen3tts\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-qwent3tts/bin/activate
+
+- Windows
+
+        venv-qwen3tts\Scripts\activate.bat
 
 Install dependencies:
 
@@ -136,11 +148,23 @@ Install [Flash Attention](#installing-flash-attention) if using CUDA (optional b
 
 Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-indextts2
+- Linux/Mac
+
+        python -m venv venv-indextts2
+
+- Windows
+
+        C:\path\to\python3.11\python.exe -m venv venv-indextts2
 
 Activate the virtual environment:
 
-    venv-indextts2\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-indextts2/bin/activate
+
+- Windows
+
+        venv-indextts2\Scripts\activate.bat
 
 Install dependencies:
 
@@ -151,11 +175,23 @@ Install dependencies:
 
 Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-vibevoice
+- Linux/Mac
+
+        python -m venv venv-vibevoice
+
+- Windows
+
+        C:\path\to\python3.11\python.exe -m venv venv-vibevoice
 
 Activate the virtual environment:
 
-    venv-vibevoice\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-vibevoice/bin/activate
+
+- Windows
+
+        venv-vibevoice\Scripts\activate.bat
 
 Install dependencies:
 
@@ -169,17 +205,29 @@ Note that because Microsoft famously removed the source code from their github r
 
 Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
 
-    path\to\python3.11\python.exe -m venv venv-chatterbox
+- Linux/Mac
+
+        python -m venv venv-chatterbox
+
+- Windows
+
+        C:\path\to\python3.11\python.exe -m venv venv-chatterbox
 
 Activate the virtual environment:
 
-    venv-chatterbox\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-chatterbox/bin/activate
+
+- Windows
+
+        venv-chatterbox\Scripts\activate.bat
 
 Install dependencies:
 
     pip install -r requirements-chatterbox.txt
 
-Windows CUDA support (unlike the other models, we must use torch 2.6/cu124)
+Windows CUDA support (unlike the other models, we must use torch 2.6/cu124 here)
 
     pip uninstall -y torch torchaudio
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
@@ -191,11 +239,23 @@ Windows CUDA support (unlike the other models, we must use torch 2.6/cu124)
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s2". For example:
 
-    path\to\python3.12\python.exe -m venv venv-fish-s2
+- Linux/Mac
+
+        python -m venv venv-fish-s2
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-fish-s2
 
 Activate the virtual environment:
 
-    venv-fish-s2\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-fish-s2/bin/activate
+
+- Windows
+
+        venv-fish-s2\Scripts\activate.bat
 
 Install dependencies:
 
@@ -212,11 +272,23 @@ Authenticate the model on HuggingFace:
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s1". For example:
 
-    path\to\python3.12\python.exe -m venv venv-fish-s1
+- Linux/Mac
+
+        python -m venv venv-fish-s1
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-fish-s1
 
 Activate the virtual environment:
 
-    venv-fish-s1\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-fish-s1/bin/activate
+
+- Windows
+
+        venv-fish-s1\Scripts\activate.bat
 
 Install dependencies:
 
@@ -233,17 +305,27 @@ Authenticate the model on HuggingFace:
 
 Initialize a **Python v3.12** virtual environment named "venv-pocket". For example:
 
-    path\to\python3.12\python.exe -m venv venv-pocket
+- Linux/Mac
+
+        python -m venv venv-pocket
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-pocket
 
 Activate the virtual environment:
 
-    venv-pocket\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-pocket/bin/activate
+
+- Windows
+
+        venv-pocket\Scripts\activate.bat
 
 Install dependencies:
 
     pip install -r requirements-pocket.txt
-
-Pocket TTS does not use GPU acceleration, so the extra Windows step of installing the CUDA-enabled version of torch is unnecessary. 
 
 
 ## Virtual environment for Higgs Audio V2:
@@ -255,11 +337,23 @@ On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install porta
 
 Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
 
-    path\to\python3.12\python.exe -m venv venv-higgs
+- Linux/Mac
+
+        python -m venv venv-higgs
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-higgs
 
 Activate the virtual environment:
 
-    venv-higgs\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-higgs/bin/activate
+
+- Windows
+
+        venv-higgs\Scripts\activate.bat
 
 Install dependencies:
 
@@ -276,12 +370,15 @@ Note that the above `requirements` file draws from a personal fork of the `higgs
 
 Initialize a **Python v3.11** virtual environment named `venv-glm`. For example:
 
-    pyenv local 3.11
-    python -m venv venv-glm
+- Linux
+
+        python -m venv venv-glm
 
 Activate the virtual environment:
 
-    source venv-glm/bin/activate
+- Linux/Mac
+
+        source venv-glm/bin/activate
 
 Install dependencies:
 
@@ -318,11 +415,23 @@ Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-
 
 Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
 
-    path\to\python3.12\python.exe -m venv venv-mira
+- Linux/Mac
+
+        python -m venv venv-mira
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-mira
 
 Activate the virtual environment:
 
-    venv-mira\Scripts\activate.bat
+- Linux
+
+        source venv-mira/bin/activate
+
+- Windows
+
+        venv-mira\Scripts\activate.bat
 
 Install dependencies:
 
@@ -333,11 +442,23 @@ Install dependencies:
 
 Initialize a **Python v3.12** virtual environment named "venv-oute". For example:
 
-    path\to\python3.12\python.exe -m venv venv-oute
+- Linux/Mac
+
+        python -m venv venv-oute
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-oute
 
 Activate the virtual environment:
 
-    venv-oute\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-oute/bin/activate
+
+- Windows
+
+        venv-oute\Scripts\activate.bat
 
 Install dependencies:
 
