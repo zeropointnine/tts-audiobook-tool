@@ -82,16 +82,20 @@ class ModelsUtil:
     def clear_all_models(except_sidon: bool = False) -> None:
 
         Stt.clear_stt_model()
-
         Tts.clear_tts_model()
-
         MusicDetector.clear_model()
-
         if not except_sidon:
             ModelsUtil.clear_sidon_upscaler()
 
         # For good measure
         MemoryUtil.gc_ram_vram()
+
+    @staticmethod
+    def is_any_model_loaded() -> bool:
+        return Stt.has_instance() or \
+            Tts.instance_exists() or \
+            MusicDetector.has_instance() or \
+            ModelsUtil.sidon_upscaler is not None
 
     @staticmethod
     def get_sidon_upscaler() -> SidonUtil | None:

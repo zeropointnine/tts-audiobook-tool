@@ -82,17 +82,15 @@ class SoundSegmentUtil:
         else:
             num_fails_tag = ""
         
-        fail_tag = " [fail]" if validation_result.is_fail else ""
-
         if is_debug_json:
             suffix = ".debug.json"
 
         if is_real_time:
             timestamp = SoundSegmentUtil.make_timestamp_string()
-            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{num_fails_tag}{fail_tag}{text}{suffix}"
+            path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{num_fails_tag}{text}{suffix}"
         else:
             hash_string = SoundSegmentUtil.calc_segment_hash(index, phrase_group.text)
-            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{num_fails_tag}{fail_tag}{text}{suffix}"
+            path = f"[{idx}] [{hash_string}] [{model}] [{voice}]{num_fails_tag}{text}{suffix}"
 
         return path
         
@@ -205,7 +203,6 @@ class SoundSegment(NamedTuple):
     # Hash of the source text used to generate the sound file
     hash: str
     num_errors: int
-    is_fail: bool
     model: str
     voice: str
 
@@ -215,7 +212,7 @@ class SoundSegment(NamedTuple):
         Expecting:
             [0] index, [1] hash, [2] model, [3] voice, [4] num-fails (optional), ...
         Eg:
-            [00024] [3ae0f21b9de65a3c] [vibevoice] [sy_even_if_ch1_c] [5] [fail] With_Lord_knows_what_s_beyond.flac
+            [00024] [3ae0f21b9de65a3c] [vibevoice] [sy_even_if_ch1_c] [5] With_Lord_knows_what_s_beyond.flac
         """
 
         # In case argument is a full file path
@@ -244,10 +241,9 @@ class SoundSegment(NamedTuple):
         model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
         voice = tags[3] if len(tags) >= 4 else ""
         num_errors = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
-        is_fail = ("[fail]" in file_name)
 
         return SoundSegment(
-            file_name=file_name, idx=index_0b, hash=hash, is_fail=is_fail, 
+            file_name=file_name, idx=index_0b, hash=hash,
             voice=voice, model=model, num_errors=num_errors
         )
 

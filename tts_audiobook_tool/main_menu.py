@@ -124,7 +124,13 @@ def on_text(state: State, __) -> None:
 
 # Gen
 def make_gen_label(state: State) -> str:
-    return AppUtil.get_label_with_prereq_error(state.project, "Generate audio")
+    error = AppUtil.get_combined_prereq_error(state.project, short_format=True)
+    if error:
+        return f"Generate audio {COL_DIM}({COL_ERROR}{error}{COL_DIM})"
+    total_segments_generated = state.project.sound_segments.num_generated()
+    total_lines = len(state.project.phrase_groups)
+    num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{total_lines}{COL_DIM} total lines complete)"
+    return f"Generate audio {num_complete_label}"
 
 def on_generate(state: State, _: MenuItem) -> None:
     # Note, not blocking on other missing prereq types

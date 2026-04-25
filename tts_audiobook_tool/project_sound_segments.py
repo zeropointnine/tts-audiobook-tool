@@ -3,10 +3,14 @@ from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.text_normalizer import TextNormalizer
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.validate_util import ValidateUtil
 
 class ProjectSoundSegments:
     """
@@ -91,10 +95,31 @@ class ProjectSoundSegments:
         """
         return set(self.sound_segments_map.keys())
 
+    def is_segment_failed(self, index: int, item: SoundSegment) -> bool:
+        """
+        Determines whether a sound segment should be considered 'failed' 
+        based on its num_errors and the project's current strictness setting.
+        
+        Unknown error count (num_errors == -1) is treated as not-failed.
+        """
+        if item.num_errors == -1:
+            # Unknown error count — treat as not-failed
+            return False
+        if item.num_errors == 99:
+            # Music-fail sentinel — always considered failed
+            return True
+        phrase_group = self.project.phrase_groups[index]
+        normalized_source = TextNormalizer.normalize_source(phrase_group.text, self.project.language_code)
+        num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
+        threshold = ValidateUtil.compute_threshold(num_words, self.project.strictness)
+        return item.num_errors > threshold
+
     def get_failed_indices_in_generate_range(self) -> set[int]:
         """ 
         Within the project's defined 'generate range', 
-        returns the indices of sound segments that exist but are all tagged as fails.
+        returns the indices of sound segments that exist but are all failed.
+        
+        Uses dynamic failure detection based on num_errors and project strictness.
         """
         all_indices = self.project.get_indices_to_generate()
         failed_indices = set()
@@ -102,13 +127,10 @@ class ProjectSoundSegments:
             items = self.sound_segments_map.get(index, [])
             if not items:
                 continue
-            is_fail = False
             for item in items:
-                if item.is_fail:
-                    is_fail = True
+                if self.is_segment_failed(index, item):
+                    failed_indices.add(index)
                     break
-            if is_fail:
-                failed_indices.add(index)
         return failed_indices
     
     def get_word_error_counts_in_generate_range(self) -> dict[int, int]:

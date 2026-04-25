@@ -196,6 +196,27 @@ class ValidateUtil:
         return True
 
     @staticmethod
+    def compute_threshold(num_words: int, strictness: Strictness) -> int:
+        """
+        Computes the word-error fail threshold for a given word count and strictness level.
+        
+        Returns the number of word errors allowed before a segment is considered failed.
+        """
+        match strictness:
+            case Strictness.LOW:
+                # 1-10 words = 2, 11-20 words = 3, etc
+                return math.ceil(num_words / 10) + 1
+            case Strictness.MODERATE:
+                # 1-10 words = 1, 11-20 words = 2, etc
+                return math.ceil(num_words / 10)
+            case Strictness.HIGH:
+                # 1-10 words = 0; 11-20 words = 1; etc
+                return max(0, math.ceil(num_words / 10) - 1)
+            case Strictness.INTOLERANT:
+                # 0 word errors allowed regardless of length
+                return 0
+
+    @staticmethod
     def get_word_error_fail(
         source: str,
         transcript: str,
@@ -214,19 +235,7 @@ class ValidateUtil:
         num_word_errors = len(word_errors)
         num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
         
-        match strictness:
-            case Strictness.LOW:
-                # 1-10 words = 2, 11-20 words = 3, etc
-                fail_threshold = math.ceil(num_words / 10) + 1
-            case Strictness.MODERATE:
-                # 1-10 words = 1, 11-20 words = 2, etc
-                fail_threshold = math.ceil(num_words / 10)
-            case Strictness.HIGH:
-                # 1-10 words = 0; 11-20 words = 1; etc
-                fail_threshold = math.ceil(num_words / 10) - 1
-            case Strictness.INTOLERANT:
-                # 0 word errors allowed regardless of length
-                fail_threshold = 0
+        fail_threshold = ValidateUtil.compute_threshold(num_words, strictness)
             
         return (num_word_errors > fail_threshold), word_errors, fail_threshold
 

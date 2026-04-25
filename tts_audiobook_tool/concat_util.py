@@ -5,6 +5,7 @@ import numpy as np
 from numpy import ndarray
 
 from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, Sound
+from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
@@ -40,7 +41,7 @@ class ConcatUtil:
         if chapter_indices and bookmark_indices:
             raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
         
-        if state.project.use_upscaler:
+        if state.project.use_upscaler and ModelsUtil.is_any_model_loaded():
             printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upscaling...{COL_DEFAULT}")
             printt()
             ModelsUtil.clear_all_models(except_sidon=True)
@@ -95,7 +96,9 @@ class ConcatUtil:
             printt()
 
         # Post-concat feedback, prompt
-        printt("Finished. \a")
+        
+        AppUtil.play_done_sound()
+        printt("Finished.")
         printt()
 
         ModelsUtil.clear_sidon_upscaler()

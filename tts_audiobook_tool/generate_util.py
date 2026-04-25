@@ -256,7 +256,7 @@ class GenerateUtil:
         warnings_string += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
         if num_failed:
-            warnings_string += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT} "
+            warnings_string += f"Num lines saved, but with word errors: {col}{num_failed}{COL_DEFAULT} "
             if is_regen and num_failed_but_improved > 0:
                 warnings_string += f"(num improved: {num_failed_but_improved})"
             warnings_string += "\n"

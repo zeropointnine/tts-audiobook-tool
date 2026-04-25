@@ -166,10 +166,10 @@ HINT_LINE_BREAKS = Hint(
 
 HINT_REGEN = Hint(
     "regenerate",
-    "About regenerating segments tagged as failed...",
-"""Some lines tagged as having excessive errors may not be easily correctable --
-even after multiple attempts -- due to the TTS model being unable to render the audio correctly
-or (just as likely) due to the validation algorithm producing false positives for various reasons."""
+    "About re-generating segments with word errors...",
+"""Some segments with excessive word errors may not be easily correctable —
+even after multiple attempts — due to the TTS model being unable to render
+the audio correctly, or due to the speech-to-text validator producing false positives."""
 )
 
 HINT_REAL_TIME = Hint(
@@ -285,7 +285,7 @@ If a .txt file with the same base file name exists, it will use that instead."""
 HINT_FORCED_STRICTNESS_LOW = Hint(
     "",
     "Note",
-f"""Because the language code is not en, the setting \"Transcript validation strictness\" 
+f"""Because the language code is not en, the setting \"Word error tolerance\"
 has been automatically set to \"Low\""""
 )
 

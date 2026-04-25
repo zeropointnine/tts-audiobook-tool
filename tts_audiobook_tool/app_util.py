@@ -11,6 +11,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -323,6 +324,11 @@ class AppUtil:
                 return item
         
         return None
+
+    @staticmethod
+    def play_done_sound() -> None:
+        done_wav_path = os.path.join(os.path.dirname(package_dir), ASSETS_DIR_NAME, "done.wav")
+        SoundFileUtil.play_sound_file_async(done_wav_path)
 
     @staticmethod
     def make_memory_string(base_color=COL_DIM) -> str:
