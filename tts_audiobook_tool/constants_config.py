@@ -35,4 +35,14 @@ LIMIT_SILENCE_GAPS_DURATION = 1.0
 REAL_TIME_BUFFER_MAX_SECONDS = 60 * 5
 
 # Use 0.0 to skip probability filtering
-VOICE_TRANSCRIBE_MIN_PROBABILITY = 0.75 
+VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY = 0.75 
+
+DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT = (
+    "You are having a voice conversation with the user. "
+    "The user is speaking into the computer microphone, transcribed using speech-to-text. " 
+    "Be aware that minor errors may occur in the transcription process. "
+    "Your responses are converted into speech using text-to-speech. "
+    "Be conversational and brief. "
+    "Respond in plain, natural language that sounds good when spoken aloud. Avoid emojis, decorative or nonverbal punctuation. Use only simple ASCII-friendly characters, prefer the regular dash `-`, and avoid em dashes, en dashes, or unusual symbols.`"
+)
+

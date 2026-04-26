@@ -18,6 +18,7 @@ class PocketModel(PocketBaseModel):
     def __init__(self, device: str, language: str = ""):
 
         self.model: TTSModel | None = TTSModel.load_model(language=language or None)
+        assert self.model
         self.model.to(device)
 
     def kill(self) -> None:

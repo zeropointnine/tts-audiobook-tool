@@ -1,4 +1,3 @@
-import time
 from typing import Iterable, TYPE_CHECKING # type: ignore
 
 import librosa
@@ -40,10 +39,11 @@ class WhisperUtil:
             language_code = ""
 
         try:
-            segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
+            with Stt.inference_lock:
+                segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
 
-            # Convert generator to concrete list (does the actual inference)
-            segments = list(segments)
+                # Convert generator to concrete list (does the actual inference)
+                segments = list(segments)
 
         except Exception as e:
             return make_error_string(e)
@@ -64,7 +64,6 @@ class WhisperUtil:
             if segment.words:  # Ensure the words list exists and is not empty
                 words.extend(segment.words)
         return words
-
 
     @staticmethod
     def get_flat_text_from_segments(segments: Iterable[Segment]) -> str:

@@ -48,7 +48,7 @@ class RealTimeMenu:
                 lambda _, __: RealTimeMenu.save_menu(state)
             )
         ]
-        MenuUtil.menu(state, "Real-time audio generation", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Realtime audio playback", items, hint=HINT_REAL_TIME)
 
     @staticmethod
     def ask_line_range(state: State) -> None:

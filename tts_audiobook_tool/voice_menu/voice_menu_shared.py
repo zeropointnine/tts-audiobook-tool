@@ -137,7 +137,8 @@ class VoiceMenuShared:
             return
         sound = sound_result
 
-        printt(f"{COL_DIM}Playing selected sound sample...")
+        duration_s = len(sound.data) / sound.sr
+        printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
         printt()
         SoundFileUtil.play_sound_async(sound)
 
@@ -175,7 +176,7 @@ class VoiceMenuShared:
                     return
 
                 words = sound_result
-                transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+                transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
                 print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
                 printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
                 printt()

@@ -2,6 +2,7 @@ import os
 import random
 import traceback
 import numpy as np
+from regex import match
 import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
@@ -51,62 +52,38 @@ class ChatterboxModel(ChatterboxBaseModel):
         
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
-        prompt = prompts[0]
 
-        if project.chatterbox_voice_file_name:
-            voice_path = os.path.join(project.dir_path, project.chatterbox_voice_file_name)
-        else:
-            voice_path = ""
+        # Parameters common to both model types
+        dic = {
+            "text": prompts[0],
+            "voice_path": os.path.join(project.dir_path, project.chatterbox_voice_file_name)
+                if project.chatterbox_voice_file_name else "",
+            "temperature": project.chatterbox_temperature
+                if project.chatterbox_temperature != -1 else ChatterboxBaseModel.DEFAULT_TEMPERATURE,
+            "top_p": project.chatterbox_top_p
+                if project.chatterbox_top_p != -1 else ChatterboxBaseModel.DEFAULT_TOP_P,
+            "seed": -1 if force_random_seed else project.chatterbox_seed,
+        }
+        match self._model_type:
+            case ChatterboxType.MULTILINGUAL:
+                dic.update({
+                    "language_id": project.language_code,
+                    "exaggeration": project.chatterbox_exaggeration
+                        if project.chatterbox_exaggeration != -1 else ChatterboxBaseModel.DEFAULT_EXAGGERATION,
+                    "cfg": project.chatterbox_cfg
+                        if project.chatterbox_cfg != -1 else ChatterboxBaseModel.DEFAULT_CFG,
+                    "repetition_penalty": project.chatterbox_ml_repetition_penalty
+                        if project.chatterbox_ml_repetition_penalty != -1 else ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
+                })
+            case ChatterboxType.TURBO:
+                dic.update({
+                    "turbo_top_k": project.chatterbox_turbo_top_k,
+                    "repetition_penalty": project.chatterbox_turbo_repetition_penalty
+                        if project.chatterbox_turbo_repetition_penalty != -1 else ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO,
+                })
+            # Note how each model has an independent repetition penalty value b/c the values behave differently on each
 
-        if project.chatterbox_type == ChatterboxType.MULTILINGUAL:
-            language_id = project.language_code 
-        else:
-            language_id = ""
-
-        exaggeration = project.chatterbox_exaggeration
-        if exaggeration == -1:
-            exaggeration = ChatterboxBaseModel.DEFAULT_EXAGGERATION
-
-        cfg = project.chatterbox_cfg
-        if cfg == -1:
-            cfg = ChatterboxBaseModel.DEFAULT_CFG
-
-        temperature = project.chatterbox_temperature
-        if temperature == -1:
-            temperature = ChatterboxBaseModel.DEFAULT_TEMPERATURE
-
-        top_p = project.chatterbox_top_p
-        if top_p == -1:
-            top_p = ChatterboxBaseModel.DEFAULT_TOP_P
-
-        if project.chatterbox_type == ChatterboxType.TURBO:
-            turbo_top_k = project.chatterbox_turbo_top_k
-        else:
-            turbo_top_k = -1
-
-        if project.chatterbox_type == ChatterboxType.MULTILINGUAL:
-            repetition_penalty = project.chatterbox_ml_repetition_penalty
-            if repetition_penalty == -1:
-                repetition_penalty = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
-        else:
-            repetition_penalty = project.chatterbox_turbo_repetition_penalty
-            if repetition_penalty == -1:
-                repetition_penalty = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
-
-        seed = -1 if force_random_seed else project.chatterbox_seed
-
-        result = self.generate(
-            text=prompt,
-            voice_path=voice_path,
-            exaggeration=exaggeration,
-            cfg=cfg,
-            temperature=temperature,
-            top_p=top_p,
-            turbo_top_k=turbo_top_k,
-            repetition_penalty=repetition_penalty,
-            seed=seed,
-            language_id=language_id
-        )
+        result = self.generate(**dic)
 
         if isinstance(result, Sound):
             return [result]
@@ -117,14 +94,14 @@ class ChatterboxModel(ChatterboxBaseModel):
         self,
         text: str,
         voice_path: str,
-        exaggeration: float,
-        cfg: float,
-        temperature: float,
-        top_p: float,
-        turbo_top_k: int,
-        repetition_penalty: float,
-        seed: int,
-        language_id: str
+        exaggeration: float = -1,
+        cfg: float = -1,
+        temperature: float = ChatterboxBaseModel.DEFAULT_TEMPERATURE,
+        top_p: float = ChatterboxBaseModel.DEFAULT_TOP_P,
+        turbo_top_k: int = -1,
+        repetition_penalty: float = -1,
+        seed: int = -1,
+        language_id: str = ""
     ) -> Sound | str:
         """
         :param seed: If -1, is set to random int
@@ -140,18 +117,33 @@ class ChatterboxModel(ChatterboxBaseModel):
             seed = random.randrange(0, SEED_MAX)
         AppUtil.set_seed(seed)
 
+        if repetition_penalty == -1:
+            match self._model_type:
+                case ChatterboxType.MULTILINGUAL:
+                    repetition_penalty = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
+                case ChatterboxType.TURBO:
+                    repetition_penalty = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
+
         dic = {}
-        if language_id:
-            dic["language_id"] = language_id
         if voice_path:
             dic["audio_prompt_path"] = voice_path        
-        dic["exaggeration"] = exaggeration
-        dic["cfg_weight"] = cfg
         dic["temperature"] = temperature
         dic["top_p"] = top_p
-        if turbo_top_k != -1:
-            dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
         dic["repetition_penalty"] = repetition_penalty
+
+        match self._model_type:
+            case ChatterboxType.MULTILINGUAL:
+                if language_id:
+                    dic["language_id"] = language_id
+                if exaggeration == -1:
+                    exaggeration = ChatterboxBaseModel.DEFAULT_EXAGGERATION
+                if cfg == -1:
+                    cfg = ChatterboxBaseModel.DEFAULT_CFG
+                dic["exaggeration"] = exaggeration
+                dic["cfg_weight"] = cfg
+            case ChatterboxType.TURBO:
+                if turbo_top_k != -1:
+                    dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
 
         try:
             data = self._chatterbox.generate(text, **dic)

@@ -20,7 +20,7 @@ class ModelsUtil:
 
 
     @staticmethod
-    def warm_up_models(state: State) -> bool:
+    def warm_up_models(state: State, never_yamnet: bool=False) -> bool:
         """
         Instantiates required models for main inference flow, prints updates.
 
@@ -34,7 +34,7 @@ class ModelsUtil:
 
         should_tts = not Tts.instance_exists()        
         should_stt = not Stt.should_skip(state) and not Stt.has_instance()
-        should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance()
+        should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance() and not never_yamnet
         
         shoulds = [should_tts, should_stt, should_yamnet]
         num_shoulds = sum(1 for item in shoulds if item)

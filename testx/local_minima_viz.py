@@ -4,7 +4,7 @@ from tts_audiobook_tool.sound_debug_util import SoundDebugUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 
-# Test "find_local_minima()"
+# Tests "SoundUtil.find_local_minima()"
 
 file_path = "/home/lee/Documents/w/w/succession/segments-test/[00692] [01767548142799] [raw].flac"
 target_timestamp = 3.18 + 0.2

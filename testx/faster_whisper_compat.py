@@ -39,5 +39,4 @@ PATH = "something.flac"
 data, sr = librosa.load(PATH) # would resample this in real use
 model = WhisperModel("large-v3", device="cuda")
 o = model.transcribe(audio=data, word_timestamps=True, language=None)
-print("did not crash. transcription result:", o)
-
+print("survived. transcription result:", o)

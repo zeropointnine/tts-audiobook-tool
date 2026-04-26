@@ -15,7 +15,6 @@ from urllib.parse import urlencode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.text_util import TextUtil
 
 """
 Various small util functions, both app-specific and general
@@ -128,6 +127,8 @@ def strip_quotes_from_ends(s: str) -> str:
 
 def strip_ansi_codes(s: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    osc_hyperlink_escape = re.compile(r'\x1b]8;;.*?\x1b\\')
+    s = osc_hyperlink_escape.sub('', s)
     return ansi_escape.sub('', s)
 
 def make_random_hex_string(num_hex_chars: int=32) -> str:
@@ -257,10 +258,10 @@ def estimated_wav_seconds(file_path: str) -> float:
         return 0
     return num_bytes / (44_100 * 2)
 
-def make_hotkey_string(hotkey: str, color: str="") -> str:
+def make_hotkey_string(hotkey: str, color: str="", outer_color: str=Ansi.RESET) -> str:
     if not color:
         color = COL_ACCENT
-    return f"[{color}{hotkey}{Ansi.RESET}]"
+    return f"{outer_color}[{color}{hotkey}{outer_color}]"
 
 def make_menu_label(
         label: str, 
@@ -274,6 +275,9 @@ def make_menu_label(
         value, value_prefix, default, color_code, num_decimals
     )
     return f"{label} {currently}"
+
+def make_menu_label_optional(label: str) -> str:
+    return f"{label} {COL_DIM}(optional{COL_DIM})"
 
 def make_currently_string(
         value: Any, 
@@ -540,9 +544,11 @@ def get_string_printable_len(string: str) -> int:
     # [ -/]* (zero or more intermediate characters in the range 0x20-0x2F)
     # [@-~] (final character in the range 0x40-0x7E, which indicates the end of the sequence)
     ansi_escape_pattern = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+    osc_hyperlink_escape_pattern = re.compile(r'\x1b]8;;.*?\x1b\\')
 
     # Remove ANSI escape codes
-    clean_string = ansi_escape_pattern.sub('', string)
+    clean_string = osc_hyperlink_escape_pattern.sub('', string)
+    clean_string = ansi_escape_pattern.sub('', clean_string)
 
     return len(clean_string)
 

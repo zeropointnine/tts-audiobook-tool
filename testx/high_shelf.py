@@ -5,6 +5,11 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 
 
+"""
+SoundUtil.high_shelf_eq() 
+Test script
+"""
+
 def _fmt(v: float) -> str:
     """Filename-friendly numeric formatting."""
     s = f"{v:.3f}".rstrip("0").rstrip(".")

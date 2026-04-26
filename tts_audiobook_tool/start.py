@@ -53,17 +53,19 @@ if tts_model_infos == TtsModelInfos.NONE:
             exit(0)
         
 # --------------------------------------------------------------------------------------------------
-# Hard requirement - updated dependencies
+# Hard requirement - Dependencies that have been added since launch
 
 import sys
 from tts_audiobook_tool.hint import Hint
 from importlib import util
 
-new_packages = ["faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer"]
+new_packages = [
+    "faster_whisper", "audiotsm", "readchar", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", "pydantic", "requests"
+]
 
-# win32
+# win32-specific
 if sys.platform == "win32":
-    new_packages.append("win32")
+    new_packages.append("win32api") # ie, pywin32
 
 # chatterbox update
 if Tts.get_type() == TtsModelInfos.CHATTERBOX:

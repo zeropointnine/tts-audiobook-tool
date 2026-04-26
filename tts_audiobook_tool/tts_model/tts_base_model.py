@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from tts_audiobook_tool.app_types import Sound, Strictness
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *

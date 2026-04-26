@@ -18,8 +18,6 @@ class PhraseSegmenter:
         """
         Returns list of Phrases with 'reasons', ready to be grouped as needed
         """
-        print()
-
         phrases: list[Phrase] = []
 
         # Text to sentence strings
@@ -201,7 +199,6 @@ class PhraseSegmenter:
             else:
                 # Merge
                 results[-1].text += phrase.text
-                print("merged:", results[-1].text)
 
         return results
 

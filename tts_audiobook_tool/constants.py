@@ -101,9 +101,10 @@ AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 COL_ACCENT = Ansi.hex("ffaa44")
 COL_ERROR = Ansi.hex("ff0000")
 COL_DIM = Ansi.hex("888888")
+COL_MEDIUM = Ansi.hex("cccccc")
 COL_INPUT = Ansi.hex("aaaaaa")
 COL_OK = Ansi.hex("00ff00")
-COL_DEFAULT = Ansi.RESET
+COL_DEFAULT = Ansi.RESET # default text color being that of the terminal; we're assuming this is probably a light color
 
 PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/"
 

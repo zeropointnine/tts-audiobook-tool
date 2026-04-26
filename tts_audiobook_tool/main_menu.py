@@ -149,7 +149,7 @@ def make_concat_label(state: State) -> str:
 
 # Realtime
 def make_realtime_label(state: State) -> str:
-    return AppUtil.get_label_with_prereq_error(state.project, "Realtime audio generation")
+    return AppUtil.get_label_with_prereq_error(state.project, "Realtime audio playback")
 
 def on_realtime(state: State, _: MenuItem) -> None:
     if not state.project.phrase_groups:

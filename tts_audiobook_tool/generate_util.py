@@ -158,7 +158,7 @@ class GenerateUtil:
                 message_lines = []
 
                 retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
-                text_string = f"{COL_DIM}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
+                text_string = f"{COL_DEFAULT}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
                 item_line = f"{COL_DEFAULT}Line {index + 1}{retry_string}: {text_string}"
                 message_lines.append(item_line)
                 

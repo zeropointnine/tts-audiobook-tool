@@ -1,3 +1,5 @@
+import threading
+
 from faster_whisper import WhisperModel
 import torch
 
@@ -13,6 +15,14 @@ class Stt:
     _whisper: WhisperModel | None = None
     _variant = SttVariant.get_default()
     _config = SttConfig.CUDA_FLOAT16
+
+    # Serializes all faster-whisper transcribe() calls. The underlying
+    # CTranslate2 model is not safe for concurrent access from multiple
+    # threads on a single instance — concurrent calls crash natively
+    # (segfault, no Python traceback). Every call site must take this lock
+    # for the duration of transcribe() AND the iteration that materializes
+    # the returned generator.
+    inference_lock = threading.Lock()
 
     @staticmethod
     def get_variant() -> SttVariant:

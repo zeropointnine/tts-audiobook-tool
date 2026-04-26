@@ -1,6 +1,8 @@
 import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.llm_config_menu import LlmConfigMenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
@@ -27,7 +29,9 @@ class OptionsMenu:
             after_string = AppUtil.make_memory_string()
             if after_string:
                 printt(f"After:  {after_string}")
-            printt()
+            if state.prefs.menu_clears_screen:
+                printt()
+                AskUtil.ask_enter_to_continue()
 
         def on_hints(_: State, __: MenuItem) -> None:
             state.prefs.reset_hints()
@@ -62,26 +66,38 @@ class OptionsMenu:
             if _model_devices and _has_gpu:
                 items.append(
                     MenuItem(
-                        lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 
+                        lambda _: make_menu_label("TTS model - Force CPU", state.prefs.tts_force_cpu), 
                         lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
                     )
                 )
                 
-            items.append( MenuItem(make_unload_label, on_unload) )
-
             if Tts.get_type() != TtsModelInfos.NONE:
                 items.append(
                     MenuItem(
-                        lambda _: f"About {Tts.get_type().value.ui['proper_name']} model",
+                        lambda _: f"TTS model - About {Tts.get_type().value.ui['proper_name']}",
                         lambda _, __: print_about_model()
                     )
                 )
 
+            items.append( MenuItem(make_unload_label, on_unload) )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label(
+                        "LLM configuration",
+                        make_terminal_hyperlink(
+                            state.prefs.llm_url,
+                            ellipsize(state.prefs.llm_url, 50)
+                        ) if state.prefs.llm_url else "none"
+                    ),
+                    lambda _, __: LlmConfigMenu.menu(state),
+                    superlabel="Various"
+                )
+            )
             items.append(
                 MenuItem(
                     make_menu_label("AAC/M4B bitrate", state.prefs.aac_bitrate, AAC_BITRATE_DEFAULT),
-                    lambda _, __: OptionsMenu.aac_bitrate_menu(state),
-                    superlabel="Various"
+                    lambda _, __: OptionsMenu.aac_bitrate_menu(state)
                 )
             )
             items.append(

@@ -178,7 +178,10 @@ def print_list(state: State) -> None:
         text = ellipsize(state.project.phrase_groups[info.segment_index_start].presentable_text, 50)
         printt(f"{' ' * len_prefix}{qual}{COL_DIM}{text}")
     
-    printt()
+    if state.prefs.menu_clears_screen:
+        AskUtil.ask_enter_to_continue()
+    else:
+        printt()
 
 def mode_menu(state: State) -> None:
 

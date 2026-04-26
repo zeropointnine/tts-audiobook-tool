@@ -21,6 +21,11 @@ class Prefs(Saveable):
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
+            llm_url: str = "",
+            llm_token: str = "",
+            llm_model: str = "",
+            llm_system_prompt: str = "",
+            llm_extra_params: dict = {},
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
@@ -34,6 +39,11 @@ class Prefs(Saveable):
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
         self._aac_bitrate = aac_bitrate
+        self._llm_url = llm_url
+        self._llm_token = llm_token
+        self._llm_model = llm_model
+        self._llm_system_prompt = llm_system_prompt
+        self._llm_extra_params = llm_extra_params
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
@@ -123,6 +133,32 @@ class Prefs(Saveable):
             aac_bitrate = AAC_BITRATE_DEFAULT
             dirty = True
 
+        # LLM config
+        llm_url = prefs_dict.get("llm_url", "")
+        if not isinstance(llm_url, str):
+            llm_url = ""
+            dirty = True
+
+        llm_token = prefs_dict.get("llm_token", "")
+        if not isinstance(llm_token, str):
+            llm_token = ""
+            dirty = True
+
+        llm_model = prefs_dict.get("llm_model", "")
+        if not isinstance(llm_model, str):
+            llm_model = ""
+            dirty = True
+
+        llm_system_prompt = prefs_dict.get("llm_system_prompt", "")
+        if not isinstance(llm_system_prompt, str):
+            llm_system_prompt = ""
+            dirty = True
+
+        llm_extra_params = prefs_dict.get("llm_extra_params", {})
+        if not isinstance(llm_extra_params, dict):
+            llm_extra_params = {}
+            dirty = True
+
         # Max retries
         max_retries = prefs_dict.get("max_retries", PROJECT_MAX_RETRIES_DEFAULT)
         if not isinstance(max_retries, int) or not (PROJECT_MAX_RETRIES_MIN <= max_retries <= PROJECT_MAX_RETRIES_MAX):
@@ -181,6 +217,11 @@ class Prefs(Saveable):
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
             aac_bitrate=aac_bitrate,
+            llm_url=llm_url,
+            llm_token=llm_token,
+            llm_model=llm_model,
+            llm_system_prompt=llm_system_prompt,
+            llm_extra_params=llm_extra_params,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
@@ -294,6 +335,53 @@ class Prefs(Saveable):
         self.save()
 
     @property
+    def llm_url(self) -> str:
+        return self._llm_url
+
+    @llm_url.setter
+    def llm_url(self, value: str) -> None:
+        self._llm_url = value
+        self.save()
+
+    @property
+    def llm_token(self) -> str:
+        return self._llm_token
+
+    @llm_token.setter
+    def llm_token(self, value: str) -> None:
+        self._llm_token = value
+        self.save()
+
+    @property
+    def llm_model(self) -> str:
+        return self._llm_model
+
+    @llm_model.setter
+    def llm_model(self, value: str) -> None:
+        self._llm_model = value
+        self.save()
+
+    @property
+    def llm_system_prompt(self) -> str:
+        return self._llm_system_prompt
+
+    @llm_system_prompt.setter
+    def llm_system_prompt(self, value: str) -> None:
+        self._llm_system_prompt = value
+        self.save()
+
+    @property
+    def llm_extra_params(self) -> dict:
+        return self._llm_extra_params
+
+    @llm_extra_params.setter
+    def llm_extra_params(self, value: dict) -> None:
+        if not isinstance(value, dict):
+            value = {}
+        self._llm_extra_params = value
+        self.save()
+
+    @property
     def last_voice_dir(self) -> str:
         return self._last_voice_dir
 
@@ -333,6 +421,11 @@ class Prefs(Saveable):
             "stt_config": self._stt_config.id,
             "tts_force_cpu": self._tts_force_cpu,
             "aac_bitrate": self._aac_bitrate,
+            "llm_url": self._llm_url,
+            "llm_token": self._llm_token,
+            "llm_model": self._llm_model,
+            "llm_system_prompt": self._llm_system_prompt,
+            "llm_extra_params": self._llm_extra_params,
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
