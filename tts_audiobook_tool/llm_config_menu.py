@@ -14,8 +14,10 @@ class LlmConfigMenu:
 
         def item_maker(_: State) -> list[MenuItem]:
             prefs = state.prefs
+            items: list[MenuItem] = []
 
             sys_prompt_label = make_menu_label("System prompt", ellipsize(prefs.llm_system_prompt, 50) or "none")
+            required = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
 
             if prefs.llm_extra_params:
                 extra_params_label = ellipsize(json.dumps(prefs.llm_extra_params), 50)
@@ -23,28 +25,52 @@ class LlmConfigMenu:
             else:
                 extra_params_label = make_menu_label_optional("Extra params")
 
-            return [
+            items.append(
                 MenuItem(
-                    lambda _: make_menu_label("LLM endpoint URL", ellipsize(prefs.llm_url or "none", 50)),
+                    lambda _: make_menu_label("LLM endpoint URL", ellipsize(prefs.llm_url, 50)) if prefs.llm_url else f"LLM endpoint URL {required}",
                     lambda _, __: LlmConfigMenu.llm_url_menu(state)
-                ),
+                )
+            )
+            if prefs.llm_url:
+                items.append(MenuItem("Clear LLM endpoint URL", lambda _, __: LlmConfigMenu.clear_llm_url(state)))
+
+            items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Access token", ellipsize(prefs.llm_token, 9) if prefs.llm_token else "none"),
-                    lambda _, __: LlmConfigMenu.llm_token_menu(state)
-                ),
+                    lambda _: make_menu_label("API key", ellipsize(prefs.api_key, 9)) if prefs.api_key else f"API key {required}",
+                    lambda _, __: LlmConfigMenu.api_key_menu(state)
+                )
+            )
+            if prefs.api_key:
+                items.append(MenuItem("Clear API key", lambda _, __: LlmConfigMenu.clear_api_key(state)))
+
+            items.append(
                 MenuItem(
                     lambda _: make_menu_label("LLM model name", prefs.llm_model or "none"),
                     lambda _, __: LlmConfigMenu.llm_model_menu(state)
-                ),
+                )
+            )
+            if prefs.llm_model:
+                items.append(MenuItem("Clear LLM model name", lambda _, __: LlmConfigMenu.clear_llm_model(state)))
+
+            items.append(
                 MenuItem(
                     sys_prompt_label,
                     lambda _, __: LlmConfigMenu.llm_system_prompt_options_menu(state)
-                ),
+                )
+            )
+            if prefs.llm_system_prompt:
+                items.append(MenuItem("Clear system prompt", lambda _, __: LlmConfigMenu.clear_system_prompt(state)))
+
+            items.append(
                 MenuItem(
                     extra_params_label,
                     lambda _, __: LlmConfigMenu.llm_extra_params_menu(state)
                 )
-            ]
+            )
+            if prefs.llm_extra_params:
+                items.append(MenuItem("Clear extra params", lambda _, __: LlmConfigMenu.clear_llm_extra_params(state)))
+
+            return items
 
         subheading = (
             "Configuration for the app's LLM integration, currently used for the\n"
@@ -74,7 +100,7 @@ class LlmConfigMenu:
         )
 
     @staticmethod
-    def llm_token_menu(state: State) -> None:
+    def api_key_menu(state: State) -> None:
 
         def validator(value: str) -> str:
             if not value.strip():
@@ -84,10 +110,20 @@ class LlmConfigMenu:
         AskUtil.ask_string_and_save(
             state.prefs,
             "Enter LLM token:",
-            "llm_token",
+            "api_key",
             "Set LLM token to:",
             validator=validator
         )
+
+    @staticmethod
+    def clear_llm_url(state: State) -> None:
+        state.prefs.llm_url = ""
+        print_feedback("Cleared LLM endpoint URL")
+
+    @staticmethod
+    def clear_api_key(state: State) -> None:
+        state.prefs.api_key = ""
+        print_feedback("Cleared LLM token")
 
     @staticmethod
     def llm_model_menu(state: State) -> None:
@@ -104,6 +140,11 @@ class LlmConfigMenu:
             "Set LLM model name to:",
             validator=validator
         )
+
+    @staticmethod
+    def clear_llm_model(state: State) -> None:
+        state.prefs.llm_model = ""
+        print_feedback("Cleared LLM model name")
 
     @staticmethod
     def llm_system_prompt_menu(state: State) -> None:
@@ -188,10 +229,9 @@ class LlmConfigMenu:
     @staticmethod
     def llm_extra_params_menu(state: State) -> None:
         printt("Enter extra params as a JSON object:")
-        printt(f"{COL_DIM}These values are merged directly into the request payload as-is.")
-        printt(f"{COL_DIM}For OpenAI-style endpoints they get inserted alongside keys like \"model\", \"messages\", and \"temperature\".")
-        printt(f"{COL_DIM}For Anthropic-style endpoints they get inserted alongside keys like \"model\", \"messages\", \"max_tokens\", and \"temperature\".")
-        printt(f"{COL_DIM}Use this for provider-specific request fields such as reasoning or thinking options.{COL_DEFAULT}")
+        printt(f"{COL_DIM}These values are merged into the LLM request payload as-is.")
+        printt(f"{COL_DIM}Use this for provider-specific fields not covered by the app.")
+        printt(f'{COL_DIM}For example, using DeepSeek: {COL_MEDIUM}{{"thinking": {{"type": "disabled"}}}}')
         printt()
         value = AskUtil.ask(lower=False)
         if not value:
@@ -209,3 +249,8 @@ class LlmConfigMenu:
 
         state.prefs.llm_extra_params = parsed
         print_feedback("Set LLM extra params to:", json.dumps(parsed, ensure_ascii=False))
+
+    @staticmethod
+    def clear_llm_extra_params(state: State) -> None:
+        state.prefs.llm_extra_params = {}
+        print_feedback("Cleared LLM extra params")

@@ -7,12 +7,16 @@ TTS model libraries each venv has installed, and lets the user pick one
 to launch the app with.
 
 Duplicates some app code and logic to avoid importing cascade of app dependencies.
+
+Optional venvs base directory can be passed as first argument.
 """
 
 import json
 import os
 import subprocess
 import sys
+import signal
+import time
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +193,7 @@ def make_bracket(num: int, width: int) -> str:
     return f"[{COL_ACCENT}{num:>{width}}{Ansi.RESET}]"
 
 
-def show_menu(venvs: list[tuple[str, str, list[str]]]) -> int | None:
+def show_menu(venvs: list[tuple[str, str, list[str]]], auto_choice: int | None = None) -> int | None:
     """Print a colored numbered menu and return the chosen index (0-based), or None on no match."""
     if len(venvs) >= 10:
         width = len(str(len(venvs)))
@@ -211,9 +215,14 @@ def show_menu(venvs: list[tuple[str, str, list[str]]]) -> int | None:
         print(f"  {make_bracket(i, width)} {name}  {COL_DIM}({models_str}){Ansi.RESET}")
 
     print()
-    print(f"{COL_INPUT}Selection", end="")
-    print(f": {Ansi.RESET}", end="")
-    choice = input().strip()
+    prompt = f"{COL_INPUT}Selection: {Ansi.RESET}"
+    if auto_choice is not None and 1 <= auto_choice <= len(venvs):
+        print(prompt, end="")
+        print(auto_choice)
+        return auto_choice - 1
+
+    choice = input(prompt).strip()
+    
     try:
         idx = int(choice)
         if 1 <= idx <= len(venvs):
@@ -224,9 +233,13 @@ def show_menu(venvs: list[tuple[str, str, list[str]]]) -> int | None:
 
 
 def main() -> None:
-    
+    auto_choice: int | None = None
     if len(sys.argv) > 1:
-        base_dir = sys.argv[1]
+        try:
+            auto_choice = int(sys.argv[1])
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        except ValueError:
+            base_dir = sys.argv[1]
     elif env_dir := os.environ.get("TTS_LAUNCH_BASE_DIR"):
         base_dir = env_dir
     else:
@@ -248,7 +261,7 @@ def main() -> None:
         print()
         sys.exit(1)
 
-    choice_idx = show_menu(venvs)
+    choice_idx = show_menu(venvs, auto_choice=auto_choice)
     if choice_idx is None:
         return
     venv_path = venvs[choice_idx][0]
@@ -263,15 +276,12 @@ def main() -> None:
 
     args = [python_exe, "-m", "tts_audiobook_tool"]
     if sys.platform == "win32":
-        proc = subprocess.Popen(args)
-        while True:
-            try:
-                sys.exit(proc.wait())
-            except KeyboardInterrupt:
-                # Windows broadcasts CTRL_C_EVENT to every process in the
-                # console, so the launcher gets it too. Let the child handle
-                # its own shutdown and keep waiting.
-                continue
+        old_sigint = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        try:
+            proc = subprocess.Popen(args)
+            sys.exit(proc.wait())
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
     os.execv(python_exe, args)
 
 

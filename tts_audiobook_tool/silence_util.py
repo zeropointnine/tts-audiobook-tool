@@ -1,10 +1,26 @@
 import librosa
 import numpy as np
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.constants import NORMALIZATION_HEADROOM_DB
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.sound_util import SoundUtil
 
 class SilenceUtil:
+
+    @staticmethod
+    def trim_silence_ends_and_normalize(sound: Sound) -> Sound:
+        """
+        Standard post-processing for TTS-generated audio: trims silence
+        from both ends and applies peak normalization with the project's
+        configured headroom. If the input is entirely silence, the
+        returned Sound's data.size will be 0 (callers decide how to
+        report that).
+        """
+        sound = SilenceUtil.trim_silence_ends(sound)[0]
+        if sound.data.size == 0:
+            return sound
+        data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
+        return Sound(data, sound.sr)
 
     @staticmethod
     def trim_silence_ends(sound, end_only=False) -> tuple[Sound, float, float]:

@@ -7,6 +7,7 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import make_error_string, printt
+from tts_audiobook_tool.phrase import Reason
 
 class SoundUtil:
     """
@@ -198,6 +199,18 @@ class SoundUtil:
 
         new_data = numpy.concatenate((base_sound.data, appended_sound.data))
         return Sound(new_data, base_sound.sr)
+
+    @staticmethod
+    def append_pause_or_section_effect(
+        sound: Sound,
+        reason: Reason,
+        use_section_sound_effect: bool,
+    ) -> Sound:
+        if reason == Reason.SECTION and use_section_sound_effect:
+            return SoundUtil.append_sound_using_path(sound, SECTION_SOUND_EFFECT_PATH)
+        if reason.pause_duration:
+            return SoundUtil.add_silence(sound, reason.pause_duration)
+        return sound
 
 
     @staticmethod

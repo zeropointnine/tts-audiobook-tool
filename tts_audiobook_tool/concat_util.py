@@ -59,7 +59,7 @@ class ConcatUtil:
 
         for i, chapter_index in enumerate(chapter_indices):
 
-            message = "Creating concatenated audio file"
+            message = "Creating concatenated audiobook file"
             if len(chapter_indices) > 1:
                 message += f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
             message += "..."
@@ -318,52 +318,70 @@ class ConcatUtil:
         :param path: cannot be empty
         """
 
-        if phrase.reason == Reason.SECTION and use_section_sound_effect:
-            appended_silence_duration = 0
-            use_appended_sound_effect = True
-        else:
-            appended_silence_duration = phrase.reason.pause_duration
-            use_appended_sound_effect = False
-
         result = SoundFileUtil.load(path)
         if isinstance(result, str): # error
             return result
-        else:
-            sound = result
+        sound = result
 
-        # Limit silence gaps if enabled
+        result = ConcatUtil.apply_segment_post_processing(
+            sound,
+            high_shelf=high_shelf,
+            limit_silence_gaps=limit_silence_gaps,
+            use_upscaler=use_upscaler,
+        )
+        if isinstance(result, str):
+            return result
+        sound = result
+
+        sound = SoundUtil.append_pause_or_section_effect(
+            sound, reason=phrase.reason, use_section_sound_effect=use_section_sound_effect
+        )
+
+        return sound
+
+    @staticmethod
+    def apply_segment_post_processing(
+        sound: Sound,
+        high_shelf: HighShelfEq,
+        limit_silence_gaps: bool = False,
+        use_upscaler: bool = False,
+    ) -> Sound | str:
+        """
+        Standard audio post-processing chain shared by the audiobook concat
+        flow and the conversation TTS flow. Applied to a TTS-generated Sound
+        already in memory (no file IO).
+
+        Order:
+          1. Optional silence-gap limiting
+          2. Optional generative upscaling (sidon)
+          3. Resample to APP_SAMPLE_RATE
+          4. High-shelf EQ (no-op if `high_shelf` is DISABLED)
+
+        Returns the processed Sound, or an error string if upscaling was
+        requested but failed.
+        """
         if limit_silence_gaps:
             new_sound = SilenceUtil.limit_silence_gaps(sound, LIMIT_SILENCE_GAPS_DURATION)
             if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
                 sound = new_sound
 
-        # Apply sidon upscaler if enabled
         if use_upscaler:
             upscaler = ModelsUtil.get_sidon_upscaler()
             if not upscaler:
                 return "\"Generative upscaling\" enabled but not available"
-            else:
-                result = upscaler.process(sound)
-                if isinstance(result, str):
-                    return result
-                sound = result # rem, this is 48khz
+            result = upscaler.process(sound)
+            if isinstance(result, str):
+                return result
+            sound = result # rem, this is 48khz
 
-        # Enforce app sample rate here
         sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
 
-        # Apply high-shelf EQ to TTS segment before appending any sound effect
         sound = SoundUtil.high_shelf_eq(
             sound,
             strength=high_shelf.strength,
             boost_start_hz=high_shelf.boost_start_hz,
             q_like=high_shelf.q_like,
         )
-
-        # Append sound effect or silence 
-        if use_appended_sound_effect:
-            sound = SoundUtil.append_sound_using_path(sound, SECTION_SOUND_EFFECT_PATH)
-        elif appended_silence_duration:
-            sound = SoundUtil.add_silence(sound, appended_silence_duration)
 
         return sound
 

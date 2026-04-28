@@ -83,6 +83,27 @@ class TtsBaseModel(ABC):
             text = text.replace(before, after)
         return text
 
+    def prepare_text_for_inference(self, project: Project, text: str) -> str:
+        """
+        Standard pre-inference text pipeline applied to any string before
+        handing it to generate(). Order matters:
+          1. Project word substitutions (case/plural-aware)
+          2. Generic prompt normalization (numbers->words, ellipsis cleanup,
+             optional un-all-caps per model)
+          3. Model-specific massage_for_inference (overridable per model)
+        """
+        from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
+        text = PromptNormalizer.apply_prompt_word_substitutions(
+            text, project.word_substitutions, project.language_code
+        )
+        text = PromptNormalizer.normalize_prompt(
+            text=text,
+            language_code=project.language_code,
+            un_all_caps=self.INFO.un_all_caps,
+        )
+        text = self.massage_for_inference(text)
+        return text
+
     # ---
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 

@@ -342,10 +342,10 @@ def do_generate(state: State, is_regen: bool) -> None:
         AskUtil.ask_enter_to_continue()
         return
     
-    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
+    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('A')} to assemble audiobook files now: \a"
     hotkey = AskUtil.ask_hotkey(s)
     printt() # TODO revisit
-    if hotkey == "c":
+    if hotkey == "a":
         ConcatMenu.menu(state)
 
 STRICTNESS_DESC = \

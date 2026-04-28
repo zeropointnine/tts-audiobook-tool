@@ -1,12 +1,9 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.conversation.conversation import ConversationStatic
-from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.mp3_concat import SoundConcatTranscodeUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.stt_flow import SttFlow
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
 
@@ -21,17 +18,6 @@ class ToolsMenu:
 
         def item_maker(_: State) -> list[MenuItem]:
 
-            convo_label = "Realtime LLM conversation tool"
-            if not SoundInputDeviceInfo.has_input_device():
-                convo_label += f" {COL_DIM}(requires microphone)"
-            else:
-                convo_label += f" {COL_DIM}(uses microphone)"
-
-            enhance_item = MenuItem(
-                f"Enhance existing audiobook file {COL_DIM}(experimental)",
-                lambda _, __: SttFlow.ask_and_make(state.prefs),
-                superlabel="Audiobook-related"
-            )
             mp3s_item = MenuItem(
                 "Concatenate a directory of audio files",
                 lambda _, __: SoundConcatTranscodeUtil.ask_and_concat_audio_files()
@@ -41,12 +27,8 @@ class ToolsMenu:
                 lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
             )
             speed_item = MenuItem("Speed up voice sample", speed_handler)
-            convo_item = MenuItem(
-                convo_label, lambda _, __: ConversationStatic.start(state),
-                superlabel="Bonus"
-            ) 
             
-            return [enhance_item, mp3s_item, transcode_item, speed_item, convo_item]
+            return [mp3s_item, transcode_item, speed_item]
         
         MenuUtil.menu(state, "Tools:", item_maker)
 

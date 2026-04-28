@@ -20,6 +20,7 @@ from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
 from tts_audiobook_tool.conversation.console_session import ConsoleSession
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
+from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 
 
 class Conversation:
@@ -32,7 +33,12 @@ class Conversation:
     state on exit or Ctrl-C.
     """
 
-    def __init__(self, state: State, phrase_stt_enabled: bool = True) -> None:
+    def __init__(
+        self,
+        state: State,
+        phrase_stt_enabled: bool = True,
+        stt_immediate: bool | None = None,
+    ) -> None:
         # phrase_stt_enabled: runs a secondary STT pass over the TTS output audio to
         # produce phrase-level timing segments (via make_phrase_spoken_segments). When
         # disabled, each response chunk is treated as a single unsegmented span. The
@@ -40,6 +46,15 @@ class Conversation:
         # code falls back gracefully, but bad timing data can cause subtle sync issues.
         self.state = state
         self.phrase_stt_enabled = phrase_stt_enabled
+        self.stt_immediate = state.prefs.conversation_stt_immediate if stt_immediate is None else stt_immediate
+
+    @staticmethod
+    def has_llm_config(state: State) -> bool:
+        return bool(
+            state.prefs.llm_url.strip()
+            and state.prefs.api_key.strip()
+            and state.prefs.llm_model.strip()
+        )
 
     @staticmethod
     def _run_preflight_checks(state: State) -> bool:
@@ -56,11 +71,11 @@ class Conversation:
         missing: list[str] = []
         if not state.prefs.llm_url.strip():
             missing.append("LLM endpoint URL")
-        if not state.prefs.llm_token.strip():
+        if not state.prefs.api_key.strip():
             missing.append("LLM token")
         if not state.prefs.llm_model.strip():
             missing.append("LLM model name")
-        if missing:
+        if not Conversation.has_llm_config(state):
             print_feedback(
                 "LLM Conversation Tool requires the following preferences to be set:\n- " + "\n- ".join(missing),
                 is_error=True,
@@ -106,14 +121,11 @@ class Conversation:
             self.teardown()
 
     def print_intro(self) -> None:
-        print_heading("LLM Conversation Tool")
+        print_heading("Realtime LLM Chat Tool")
         printt(f"Speak into the microphone to build your prompt.")
         printt()
         printt(f"Hotkeys:")
-        printt(f"  {make_hotkey_string('Left', outer_color=COL_DIM)} / {make_hotkey_string('Right', outer_color=COL_DIM)} to select transcribed phrases")
-        printt(f"  {make_hotkey_string('Delete', outer_color=COL_DIM)} to remove selected phrase")
-        printt(f"  {make_hotkey_string('Enter', outer_color=COL_DIM)} to submit prompt")
-        printt(f"  {make_hotkey_string('Ctrl-C', outer_color=COL_DIM)} to exit")
+        printt(f"  {make_hotkey_string('Ctrl-C', outer_color=COL_DIM)} to interrupt audio or exit")
         printt()
 
     def print_input_device_info(self) -> None:
@@ -124,7 +136,7 @@ class Conversation:
         state = self.state
         self.llm = LlmUtil(
             api_endpoint_url=state.prefs.llm_url,
-            token=state.prefs.llm_token,
+            token=state.prefs.api_key,
             model=state.prefs.llm_model,
             system_prompt=state.prefs.llm_system_prompt.strip(),
             extra_params=state.prefs.llm_extra_params,
@@ -143,12 +155,14 @@ class Conversation:
             ui=self.ui,
             console=self.console,
             ctrl_c_requested=self.ctrl_c_requested,
+            stt_immediate=self.stt_immediate,
         )
         self.util = WhisperRealTimeUtil(
             prefs=self.prefs,
             on_transcription=self.prompt_builder.on_transcription,
         )
 
+        self.sound_stream = SoundDeviceStream(APP_SAMPLE_RATE)
         self.session: ResponseSession | None = None
         self.in_response = False
         self.old_input_sigint = None
@@ -167,6 +181,7 @@ class Conversation:
         self.real_stdout.write(Ansi.CURSOR_HIDE)
         self.real_stdout.flush()
         self.util.start()
+        self.sound_stream.start()
         self.ui.println()
 
     def on_sigint(self, *_: object) -> None:
@@ -191,6 +206,7 @@ class Conversation:
             fd2_redirect_lock=self.fd2_redirect_lock,
             ctrl_c_requested=self.ctrl_c_requested,
             phrase_stt_enabled=self.phrase_stt_enabled,
+            sound_stream=self.sound_stream,
         )
         self.in_response = True
         try:
@@ -200,17 +216,12 @@ class Conversation:
             # transcribed as the next user prompt. Flush both before and
             # after the settle window to discard buffered STT state.
             self.util.flush()
-            settle_s = 0.25  # Extra padding to account for various factors
-            if self.session.sound_stream is not None:
-                settle_s = max(settle_s, min(0.6, self.session.sound_stream.output_latency + 0.1))
+            settle_s = max(0.25, min(0.6, self.sound_stream.output_latency + 0.1))
             time.sleep(settle_s)
             self.util.flush()
         finally:
             self.in_response = False
             self.util.resume()
-            if self.session.sound_stream is not None:
-                self.session.sound_stream.shut_down()
-                self.session.sound_stream = None
         self.prompt_builder.resume()
 
     def handle_top_level_interrupt(self) -> None:
@@ -236,8 +247,7 @@ class Conversation:
         self.restore_console()
         self.ui.stop()
         self.stop_capture()
-        if self.session is not None and self.session.sound_stream is not None:
-            self.session.sound_stream.shut_down()
+        self.sound_stream.shut_down()
 
     def restore_console(self) -> None:
         if self.console_restored:
@@ -269,5 +279,13 @@ class Conversation:
 class ConversationStatic:
 
     @staticmethod
-    def start(state: State, phrase_stt_enabled: bool = True) -> None:
-        Conversation(state, phrase_stt_enabled=phrase_stt_enabled).start()
+    def start(
+        state: State,
+        phrase_stt_enabled: bool = True,
+        stt_immediate: bool | None = None,
+    ) -> None:
+        Conversation(
+            state,
+            phrase_stt_enabled=phrase_stt_enabled,
+            stt_immediate=stt_immediate,
+        ).start()

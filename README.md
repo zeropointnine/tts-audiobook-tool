@@ -12,14 +12,14 @@ Generative-AI audiobook creation tool focused on high-quality output which suppo
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 
-The app employs several techniques to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
+The app employs various techniques, many of them configurable, to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
 
-- Intelligent segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
-- Silence trimming and semantically-aware pause modulation at segment boundaries to improve prosody
-- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upscaling and loudness normalization
+- Segmentation of long-form text at paragraph/sentence/phrase boundaries
+- Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
+- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upscaling, plus EBU R128 loudness normalization
 
-The app uses a plain-text interface in the console.
+The app uses a plain-text interface in the console. It also includes optional realtime modes for low-latency audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
 
 ### How to create an audiobook (quick summary)
@@ -108,10 +108,10 @@ Run the app by entering:
 
     python -m tts_audiobook_tool
 
-Or, if you have multiple virtual environments installed, launch.py lets you pick one and start the app:
+Or, if you have multiple virtual environments installed, you can use `launch.py` to pick a venv and then start the app:
 
-    python launch.py # searches project root for venv subdirectories, or...
-    python launch.py path/to/venvs-parent-dir
+    python launch.py # searches the project root for venv subdirectories by default
+    python launch.py path/to/venvs-parent-dir # searches for venv subdirectories from the given path
 
 Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
 
@@ -622,6 +622,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 
 # Update highlights
+
+**2026-04-28**
+
+- Added side feature: **Realtime LLM chat**
 
 **2026-04-25**
 

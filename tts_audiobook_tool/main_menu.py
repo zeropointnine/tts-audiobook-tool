@@ -1,5 +1,7 @@
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_menu import ConcatMenu
+from tts_audiobook_tool.conversation_menu import ConversationMenu
+from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.real_time_menu import RealTimeMenu
 from tts_audiobook_tool.options_menu import OptionsMenu
@@ -38,7 +40,10 @@ class MainMenu:
         def make_items(_) -> list[MenuItem]:
             items = []
             items.append(
-                MenuItem(make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p")
+                MenuItem(
+                    make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p",
+                    superlabel="Main"
+                )
             )
             if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
                 items.append(
@@ -56,16 +61,24 @@ class MainMenu:
                 )
             if state.prefs.project_dir:
                 items.append(
-                    MenuItem(make_concat_label, lambda _, __: ConcatMenu.menu(state), hotkey="c")
+                    MenuItem(make_concat_label, lambda _, __: ConcatMenu.menu(state), hotkey="a")
                 )
+
             if state.prefs.project_dir:
                 items.append(
                     MenuItem(
-                        make_realtime_label, on_realtime, hotkey="r"
+                        make_realtime_label, on_realtime, hotkey="r",
+                        superlabel="Voicelab"
                     )
                 )
+                items.append(
+                    MenuItem("Realtime LLM chat", on_conversation, hotkey="l")
+                )
             items.append(
-                MenuItem("Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z")
+                MenuItem(
+                    "Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z",
+                    superlabel="Tools and options"
+                )
             )
             items.append(
                 MenuItem("Options", lambda _, __: OptionsMenu.menu(state), hotkey="o")
@@ -142,20 +155,23 @@ def on_generate(state: State, _: MenuItem) -> None:
 # Concat
 def make_concat_label(state: State) -> str:
     num_generated = state.project.sound_segments.num_generated()
-    s = "Concatenate audiobook lines to create audiobook file "
+    s = "Assemble audiobook "
     if num_generated == 0:
         s += f"{COL_DIM}({COL_ERROR}requires generated audio{COL_DIM})"
     return s
 
 # Realtime
 def make_realtime_label(state: State) -> str:
-    return AppUtil.get_label_with_prereq_error(state.project, "Realtime audio playback")
+    return AppUtil.get_label_with_prereq_error(state.project, "Realtime audiobook playback")
 
 def on_realtime(state: State, _: MenuItem) -> None:
     if not state.project.phrase_groups:
         print_feedback("Requires text", is_error=True)
     else:
         RealTimeMenu.menu(state)
+
+def on_conversation(state: State, _: MenuItem) -> None:
+    ConversationMenu.menu(state)
 
 # Quit
 def on_quit(_: State, __: MenuItem):

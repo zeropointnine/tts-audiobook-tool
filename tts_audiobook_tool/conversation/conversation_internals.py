@@ -12,7 +12,8 @@ import unicodedata
 from faster_whisper.transcribe import Segment
 
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import HighShelfEq, Sound, SttConfig, SttVariant
+from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_MEDIUM, COL_OK
 from tts_audiobook_tool.conversation.console_session import (
     ConsoleSession,
@@ -29,7 +30,10 @@ from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.llm_util import LlmUtil
 from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.phrase import Reason
+from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.timed_phrase import TimedPhrase
@@ -233,10 +237,12 @@ class PromptBuilder:
         ui: Ui,
         console: ConsoleSession,
         ctrl_c_requested: threading.Event,
+        stt_immediate: bool = False,
     ) -> None:
         self.ui = ui
         self.console = console
         self.ctrl_c_requested = ctrl_c_requested
+        self.stt_immediate = stt_immediate
         self.chunk_queue: queue.Queue[str] = queue.Queue()
         self.prompt_chunks: list[str] = []
         self.selected_idx: int | None = None
@@ -270,8 +276,13 @@ class PromptBuilder:
                 self.prompt_chunks.append(chunk)
                 self.selected_idx = len(self.prompt_chunks) - 1
                 updated = True
+
             if updated:
                 self.render()
+                if self.stt_immediate and self.prompt_chunks:
+                    assembled = " ".join(self.prompt_chunks)
+                    self.commit_finalized_prompt(assembled)
+                    return assembled
 
             key = self.console.read_key()
             if key is None:
@@ -424,8 +435,8 @@ class MuteCurrentThreadOutput:
 class ResponseSession:
     """
     Handles one LLM→TTS response turn. Construct fresh per Enter-press.
-    Owns all per-turn threading state. Exposes sound_stream so the outer
-    finally can shut it down if the session is interrupted mid-turn.
+    Owns all per-turn threading state. The sound_stream is injected by
+    the caller (Conversation) and persists across response turns.
     """
 
     RESPONSE_PLACEHOLDER = "..."
@@ -441,6 +452,7 @@ class ResponseSession:
         real_stderr: object,
         fd2_redirect_lock: threading.Lock,
         ctrl_c_requested: threading.Event,
+        sound_stream: SoundDeviceStream,
         phrase_stt_enabled: bool = True,
     ) -> None:
         self.ui = ui
@@ -453,10 +465,10 @@ class ResponseSession:
         self.fd2_redirect_lock = fd2_redirect_lock
         self.ctrl_c_requested = ctrl_c_requested
         self.phrase_stt_enabled = phrase_stt_enabled
-        self.sound_stream: SoundDeviceStream | None = None
+        self.sound_stream: SoundDeviceStream = sound_stream
 
     def run(self, assembled: str) -> None:
-        self.tts_q: queue.Queue[str | None] = queue.Queue()
+        self.tts_q: queue.Queue[tuple[str, Reason] | None] = queue.Queue()
         self.tts_buffer = ""
         self.render_buffer = ResponseSession.RESPONSE_PLACEHOLDER
         self.spoken_segments: list[tuple[str, int, int]] = []
@@ -492,12 +504,11 @@ class ResponseSession:
                 self.tts_buffer = ""
                 self.render_buffer = ""
             if final_text:
-                self.tts_q.put(final_text)
+                self.tts_q.put((final_text, Reason.SENTENCE))
             self.tts_q.put(None)
             self.worker.join()
-            if self.sound_stream is not None:
-                while not self.sound_stream.is_playback_complete and not self.interrupt_requested.is_set():
-                    time.sleep(0.02)
+            while not self.sound_stream.is_playback_complete and not self.interrupt_requested.is_set():
+                time.sleep(0.02)
         except KeyboardInterrupt:
             self.ctrl_c_requested.clear()
             response_cancelled = True
@@ -523,16 +534,16 @@ class ResponseSession:
 
         self.playback_done = True
         self.last_render_key = None
-        if not self.response_aborted.is_set():
-            self.render_response()
+        self.render_response(force=True)
         self.ui.commit_render(1)
         self.ui.wait_idle()
 
     def tts_worker(self) -> None:
         while True:
-            text = self.tts_q.get()
-            if text is None:
+            item = self.tts_q.get()
+            if item is None:
                 break
+            text, reason = item
             if self.interrupt_requested.is_set() or self.response_aborted.is_set():
                 continue
             if not text.strip():
@@ -543,7 +554,7 @@ class ResponseSession:
                 continue
             try:
                 tts_instance = Tts.get_instance()
-                massaged = tts_instance.massage_for_inference(text)
+                massaged = tts_instance.prepare_text_for_inference(self.project, text)
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
                     result = tts_instance.generate_using_project(self.project, [massaged])
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
@@ -565,9 +576,39 @@ class ResponseSession:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     continue
-                if self.sound_stream is None:
-                    self.sound_stream = SoundDeviceStream(sound.sr)
-                    self.sound_stream.start()
+                
+                # Trim silence ends and peak-normalize
+                sound = SilenceUtil.trim_silence_ends_and_normalize(sound)
+                if sound.data.size == 0:
+                    if not self.response_aborted.is_set():
+                        self.ui.println(f"[TTS error: empty/silent output]")
+                    with self.state_lock:
+                        if self.pending_sentences and self.pending_sentences[0] == text:
+                            self.pending_sentences.pop(0)
+                    self.render_response()
+                    continue
+                
+                # Apply project's segment post-processing chain (limit-silence-gaps,
+                # resample to APP_SAMPLE_RATE, high-shelf EQ). No upscaler in conversation.
+                high_shelf = HighShelfEq.get_by_id(self.project.high_shelf) or HighShelfEq.DISABLED
+                pp_result = ConcatUtil.apply_segment_post_processing(
+                    sound,
+                    high_shelf=high_shelf,
+                    limit_silence_gaps=self.project.limit_silence_gaps,
+                )
+                if isinstance(pp_result, str):
+                    if not self.response_aborted.is_set():
+                        self.ui.println(f"[TTS error: {pp_result}]")
+                    with self.state_lock:
+                        if self.pending_sentences and self.pending_sentences[0] == text:
+                            self.pending_sentences.pop(0)
+                    self.render_response()
+                    continue                
+                sound = pp_result
+                sound = SoundUtil.append_pause_or_section_effect(
+                    sound, reason=reason, use_section_sound_effect=False,
+                )
+
                 if not self.interrupt_requested.is_set() and not self.response_aborted.is_set():
                     start, end = self.sound_stream.add_data(sound.data)
                     is_first_tts_chunk = not self.spoken_segments
@@ -582,6 +623,7 @@ class ResponseSession:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     self.render_response()
+                    
             except Exception as e:
                 if not self.response_aborted.is_set():
                     self.ui.println(f"[TTS exception: {e}]")
@@ -590,15 +632,17 @@ class ResponseSession:
                         self.pending_sentences.pop(0)
                 self.render_response()
 
-    def render_response(self) -> None:
-        if self.response_aborted.is_set():
+    def render_response(self, force: bool = False) -> None:
+        
+        if self.response_aborted.is_set() and not force:
             return
+        
         with self.render_lock:
             with self.state_lock:
                 segs = list(self.spoken_segments)
                 pending = list(self.pending_sentences)
                 buf = self.render_buffer
-            pos = self.sound_stream.play_position_samples if self.sound_stream else 0
+            pos = self.sound_stream.play_position_samples
             active_idx = None if self.playback_done else next(
                 (i for i, (_, start, end) in enumerate(segs) if start <= pos < end),
                 None,
@@ -623,7 +667,10 @@ class ResponseSession:
                     parts.append(f"{COL_DIM}{display_text}{Ansi.RESET}")
             for i, text in enumerate(pending):
                 display_text = ResponseSession.make_display_text(text)
-                parts.append(f"{COL_MEDIUM}{Ansi.ITALICS}{display_text}{Ansi.RESET}" if i == 0 else f"{COL_DIM}{display_text}{Ansi.RESET}")
+                if force or i > 0:
+                    parts.append(f"{COL_DIM}{display_text}{Ansi.RESET}")
+                else:
+                    parts.append(f"{COL_MEDIUM}{Ansi.ITALICS}{display_text}{Ansi.RESET}")
             if buf:
                 parts.append(f"{COL_DIM}{ResponseSession.make_display_text(buf)}{Ansi.RESET}")
             content = "".join(parts)
@@ -637,7 +684,7 @@ class ResponseSession:
         if self.interrupt_requested.is_set() or self.response_aborted.is_set():
             return
 
-        to_send: list[str] = []
+        to_send: list[tuple[str, Reason]] = []
         with self.state_lock:
             if not self.llm_content_received and self.render_buffer == ResponseSession.RESPONSE_PLACEHOLDER:
                 self.render_buffer = ""
@@ -649,14 +696,14 @@ class ResponseSession:
                 has_pending_sentences=bool(self.pending_sentences),
                 has_spoken_segments=bool(self.spoken_segments),
             )
-            for s in complete_chunks:
+            for s, reason in complete_chunks:
                 self.pending_sentences.append(s)
-                to_send.append(s)
+                to_send.append((s, reason))
             if to_send:
                 self.render_buffer = ""
         self.render_response()
-        for s in to_send:
-            self.tts_q.put(s)
+        for s, reason in to_send:
+            self.tts_q.put((s, reason))
 
     def render_ticker(self) -> None:
         while not self.render_stop.wait(0.05):
@@ -671,9 +718,7 @@ class ResponseSession:
             except queue.Empty:
                 break
         self.tts_q.put(None)
-        if self.sound_stream is not None:
-            self.sound_stream.shut_down()
-            self.sound_stream = None
+        self.sound_stream.clear_buffer()
         self.render_stop.set()
         ticker.join(timeout=1.0)
         if self.worker is not None:
@@ -779,17 +824,17 @@ class ResponseSession:
         return text.replace("\r\n", "\n").replace("\r", "\n")
 
     @staticmethod
-    def segment_text_to_chunks(text: str, config: ChunkingConfig) -> list[str]:
+    def segment_text_to_chunks(text: str, config: ChunkingConfig) -> list[tuple[str, Reason]]:
         groups = PhraseGrouper.text_to_groups(
             text=text,
             max_words=config.max_words,
             strategy=config.strategy,
             pysbd_lang=config.language_code,
         )
-        return [group.text for group in groups if group.text.strip()]
+        return [(group.text, group.last_reason) for group in groups if group.text.strip()]
 
     @staticmethod
-    def extract_complete_chunks(text: str, config: ChunkingConfig) -> tuple[list[str], str]:
+    def extract_complete_chunks(text: str, config: ChunkingConfig) -> tuple[list[tuple[str, Reason]], str]:
         sentences = PhraseSegmenter.string_to_sentence_strings(text, config.language_code)
         if len(sentences) < 2:
             return [], text
@@ -801,7 +846,7 @@ class ResponseSession:
     def make_stable_chunk_preview(text: str, config: ChunkingConfig) -> str:
         chunks = ResponseSession.segment_text_to_chunks(text, config)
         if len(chunks) >= 2:
-            return "".join(chunks[:-1])
+            return "".join(t for t, _ in chunks[:-1])
         return ""
 
     @staticmethod
@@ -811,12 +856,12 @@ class ResponseSession:
         config: ChunkingConfig,
         has_pending_sentences: bool,
         has_spoken_segments: bool,
-    ) -> tuple[list[str], str, str]:
+    ) -> tuple[list[tuple[str, Reason]], str, str]:
         """
         Fold a newly streamed LLM delta into the TTS buffer.
 
         Returns:
-        - chunks ready to send to TTS
+        - chunks ready to send to TTS (each paired with its Reason for pause/silence)
         - updated tts_buffer remainder
         - render_buffer preview text
 
@@ -832,7 +877,7 @@ class ResponseSession:
         is_first_chunk = not has_pending_sentences and not has_spoken_segments
 
         if to_send:
-            if is_first_chunk and sum(len(c.split()) for c in to_send) < 5:
+            if is_first_chunk and sum(len(t.split()) for t, _ in to_send) < 5:
                 # First chunk must be >= 5 words. Hold the boundary, restore full buffer.
                 to_send = []
                 next_buffer = full_buffer
@@ -858,7 +903,7 @@ class ResponseSession:
                     if cumulative_words >= 5:
                         remainder = "".join(p.text for p in phrases[i + 1:])
                         if remainder.strip():
-                            return [cumulative_text], remainder, ""
+                            return [(cumulative_text, phrases[i].reason)], remainder, ""
                         break
 
         render_buffer = ResponseSession.make_stable_chunk_preview(next_buffer, config)

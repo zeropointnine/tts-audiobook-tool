@@ -22,13 +22,14 @@ class Prefs(Saveable):
             tts_force_cpu: bool = False,
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
             llm_url: str = "",
-            llm_token: str = "",
+            api_key: str = "",
             llm_model: str = "",
             llm_system_prompt: str = "",
             llm_extra_params: dict = {},
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
+            conversation_stt_immediate: bool = False,
             save_debug_files: bool = False,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
             menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT
@@ -40,13 +41,14 @@ class Prefs(Saveable):
         self._tts_force_cpu = tts_force_cpu
         self._aac_bitrate = aac_bitrate
         self._llm_url = llm_url
-        self._llm_token = llm_token
+        self._api_key = api_key
         self._llm_model = llm_model
         self._llm_system_prompt = llm_system_prompt
         self._llm_extra_params = llm_extra_params
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
+        self._conversation_stt_immediate = conversation_stt_immediate
         self._save_debug_files = save_debug_files
         self._play_on_generate = play_on_generate
         self._menu_clears_screen = menu_clears_screen
@@ -139,9 +141,9 @@ class Prefs(Saveable):
             llm_url = ""
             dirty = True
 
-        llm_token = prefs_dict.get("llm_token", "")
-        if not isinstance(llm_token, str):
-            llm_token = ""
+        api_key = prefs_dict.get("api_key", "")
+        if not isinstance(api_key, str):
+            api_key = ""
             dirty = True
 
         llm_model = prefs_dict.get("llm_model", "")
@@ -192,6 +194,12 @@ class Prefs(Saveable):
             last_text_dir = ""
             dirty = True
 
+        # Conversation STT immediate submit
+        conversation_stt_immediate = prefs_dict.get("conversation_stt_immediate", False)
+        if not isinstance(conversation_stt_immediate, bool):
+            conversation_stt_immediate = False
+            dirty = True
+
         # Play on generate
         save_debug_files = prefs_dict.get("save_debug_files", False)
         if not isinstance(save_debug_files, bool):
@@ -218,13 +226,14 @@ class Prefs(Saveable):
             tts_force_cpu=tts_force_cpu,
             aac_bitrate=aac_bitrate,
             llm_url=llm_url,
-            llm_token=llm_token,
+            api_key=api_key,
             llm_model=llm_model,
             llm_system_prompt=llm_system_prompt,
             llm_extra_params=llm_extra_params,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
+            conversation_stt_immediate=conversation_stt_immediate,
             save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
             menu_clears_screen=menu_clears_screen,
@@ -344,12 +353,12 @@ class Prefs(Saveable):
         self.save()
 
     @property
-    def llm_token(self) -> str:
-        return self._llm_token
+    def api_key(self) -> str:
+        return self._api_key
 
-    @llm_token.setter
-    def llm_token(self, value: str) -> None:
-        self._llm_token = value
+    @api_key.setter
+    def api_key(self, value: str) -> None:
+        self._api_key = value
         self.save()
 
     @property
@@ -409,6 +418,15 @@ class Prefs(Saveable):
         self.save()
 
     @property
+    def conversation_stt_immediate(self) -> bool:
+        return self._conversation_stt_immediate
+
+    @conversation_stt_immediate.setter
+    def conversation_stt_immediate(self, value: bool) -> None:
+        self._conversation_stt_immediate = value
+        self.save()
+
+    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
@@ -422,13 +440,14 @@ class Prefs(Saveable):
             "tts_force_cpu": self._tts_force_cpu,
             "aac_bitrate": self._aac_bitrate,
             "llm_url": self._llm_url,
-            "llm_token": self._llm_token,
+            "api_key": self._api_key,
             "llm_model": self._llm_model,
             "llm_system_prompt": self._llm_system_prompt,
             "llm_extra_params": self._llm_extra_params,
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
+            "conversation_stt_immediate": self._conversation_stt_immediate,
             "save_debug_files": self._save_debug_files,
             "play_on_generate": self._play_on_generate,
             "menu_clears_screen": self._menu_clears_screen

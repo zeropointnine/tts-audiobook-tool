@@ -12,6 +12,7 @@ package-lock.json
 plans/
 .clinerules
 CLAUDE.md
+.claude/
 
 output/
 checkpoints/

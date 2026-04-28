@@ -7,7 +7,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_util import SoundUtil
@@ -297,19 +296,17 @@ class Server:
                 if self._generation_id != generation_id:
                     continue
 
-                # Trim silence
-                sound = SilenceUtil.trim_silence_ends(sound)[0]
+                # Trim silence ends and peak-normalize
+                sound = SilenceUtil.trim_silence_ends_and_normalize(sound)
                 if sound.data.size == 0:
                     printt(f"* Model output is empty or silence")
                     continue
 
-                # Normalize
-                normalized_data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
-                sound = Sound(normalized_data, sound.sr)
-
                 # Pad end with silence using 'phrase reason'
                 if prompt_item.phrase_group.last_reason != Reason.UNDEFINED:
-                    sound = SoundUtil.add_silence(sound, prompt_item.phrase_group.last_reason.pause_duration)
+                    sound = SoundUtil.append_pause_or_section_effect(
+                        sound, reason=prompt_item.phrase_group.last_reason, use_section_sound_effect=False
+                    )
 
                 # Done, add to audio stream buffer.
                 # HTTP clients are fed automatically via the playback listener.

@@ -13,7 +13,6 @@ from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
@@ -21,7 +20,6 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -429,16 +427,13 @@ class GenerateUtil:
                 if save_debug_files:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
-                # Trim silence from ends of audio clip
-                sound = SilenceUtil.trim_silence_ends(sound)[0]
+                # Trim silence ends and peak-normalize
+                sound = SilenceUtil.trim_silence_ends_and_normalize(sound)
 
-                # Re-check size
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"
                 else:
-                    # Do peak normalization
-                    normalized_data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
-                    result = Sound(normalized_data, sound.sr)
+                    result = sound
             
             results.append(result)
 
@@ -448,15 +443,7 @@ class GenerateUtil:
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
         
         prompt = phrase_group.as_flattened_phrase().text
-        prompt = PromptNormalizer.apply_prompt_word_substitutions(
-            prompt, project.word_substitutions, project.language_code
-        )
-        prompt = PromptNormalizer.normalize_prompt(
-            text=prompt, 
-            language_code=project.language_code,
-            un_all_caps=Tts.get_type().value.un_all_caps
-        )
-        prompt = Tts.get_instance().massage_for_inference(prompt)
+        prompt = Tts.get_instance().prepare_text_for_inference(project, prompt)
         return prompt
 
     @staticmethod

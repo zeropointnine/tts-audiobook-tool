@@ -187,6 +187,24 @@ class SoundDeviceStream:
         except Exception as e:
             printt(f"{COL_ERROR}Couldn't open sounddevice output stream: {e}")
 
+    def clear_buffer(self) -> None:
+        """
+        Drops all queued audio without closing the stream. Use to abort
+        playback mid-response (e.g. Ctrl-C) while keeping the stream
+        alive for the next response.
+
+        Resets position-tracking state so play_position_samples returns
+        0 again until the next callback fires, and resets
+        total_samples_added so sample indices from add_data() restart
+        from 0 for the next response.
+        """
+        with self.lock:
+            self.buffer = np.array([], dtype=np.float32)
+            self.total_samples_added = 0
+            self.last_dac_time = float('inf')
+            self.last_dac_consumed = 0
+            self.last_audio_dac_end = 0.0
+
     def shut_down(self) -> None:
         """
         Stops and closes the audio stream, releasing all resources.
@@ -196,13 +214,7 @@ class SoundDeviceStream:
             self.stream.stop()
             self.stream.close()
             self.stream = None
-            # Also clear the buffer on shutdown
-            with self.lock:
-                self.buffer = np.array([], dtype=np.float32)
-                self.total_samples_added = 0
-                self.last_dac_time = float('inf')
-                self.last_dac_consumed = 0
-                self.last_audio_dac_end = 0.0
+            self.clear_buffer()
 
     @property
     def output_latency(self) -> float:
