@@ -5,7 +5,6 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.real_time_util import RealTimeUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.stt_flow import SttFlow
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
@@ -41,21 +40,15 @@ class RealTimeMenu:
 
         # Menu        
         items = [
-            MenuItem(make_start_label, lambda _, __: do_start(state), hotkey="s"),
-            MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state), hotkey="t"),
-            MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state), hotkey="l"),
-            MenuItem(
-                f"Enhance existing audiobook file {COL_DIM}(experimental)",
-                lambda _, __: SttFlow.ask_and_make(state.prefs),
-                hotkey="c"
-            ),
+            MenuItem(make_start_label, lambda _, __: do_start(state)),
+            MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state)),
+            MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state)),
             MenuItem(
                 lambda _: make_menu_label("Save output", state.project.realtime_save),
-                lambda _, __: RealTimeMenu.save_menu(state),
-                hotkey="o"
+                lambda _, __: RealTimeMenu.save_menu(state)
             )
         ]
-        MenuUtil.menu(state, "Realtime audio playback", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Realtime audiobook playback", items, hint=HINT_REAL_TIME)
 
     @staticmethod
     def ask_line_range(state: State) -> None:
