@@ -570,7 +570,8 @@ class ResponseSession:
                     self.sound_stream.start()
                 if not self.interrupt_requested.is_set() and not self.response_aborted.is_set():
                     start, end = self.sound_stream.add_data(sound.data)
-                    spoken_segments = self.make_spoken_segments(text, sound, start, end)
+                    is_first_tts_chunk = not self.spoken_segments
+                    spoken_segments = self.make_spoken_segments(text, sound, start, end, is_first_tts_chunk)
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
@@ -689,8 +690,9 @@ class ResponseSession:
         sound: Sound,
         stream_start: int,
         stream_end: int,
+        is_first_tts_chunk: bool = False,
     ) -> list[tuple[str, int, int]]:
-        if self.phrase_stt_enabled:
+        if self.phrase_stt_enabled and not is_first_tts_chunk:
             phrase_segments = self.make_phrase_spoken_segments(text, sound, stream_start, stream_end)
             if phrase_segments:
                 return phrase_segments
@@ -824,17 +826,40 @@ class ResponseSession:
         to be spoken/displayed as "toask".
         """
         next_buffer = tts_buffer + delta
+        full_buffer = next_buffer
         to_send, next_buffer = ResponseSession.extract_complete_chunks(next_buffer, config)
 
-        if to_send:
-            return to_send, next_buffer, ""
+        is_first_chunk = not has_pending_sentences and not has_spoken_segments
 
-        if not has_pending_sentences and not has_spoken_segments:
-            chunks = ResponseSession.segment_text_to_chunks(next_buffer, config)
-            if len(chunks) >= 2 and len(next_buffer.split()) >= 6:
-                first = chunks[0]
-                if first.strip():
-                    return [first], "".join(chunks[1:]), ""
+        if to_send:
+            if is_first_chunk and sum(len(c.split()) for c in to_send) < 5:
+                # First chunk must be >= 5 words. Hold the boundary, restore full buffer.
+                to_send = []
+                next_buffer = full_buffer
+            else:
+                return to_send, next_buffer, ""
+
+        if is_first_chunk:
+            # Use phrase-level boundaries (commas, semicolons, etc.) rather than
+            # PhraseGrouper, which merges short sentences and would hide the
+            # boundary inside a single group. Cut at the smallest phrase prefix
+            # with >= 5 words, leaving a non-empty remainder.
+            phrases = PhraseSegmenter.text_to_phrases(
+                next_buffer,
+                max_words=config.max_words,
+                pysbd_lang=config.language_code,
+            )
+            if len(phrases) >= 2:
+                cumulative_text = ""
+                cumulative_words = 0
+                for i in range(len(phrases) - 1):
+                    cumulative_text += phrases[i].text
+                    cumulative_words += phrases[i].num_words
+                    if cumulative_words >= 5:
+                        remainder = "".join(p.text for p in phrases[i + 1:])
+                        if remainder.strip():
+                            return [cumulative_text], remainder, ""
+                        break
 
         render_buffer = ResponseSession.make_stable_chunk_preview(next_buffer, config)
         return [], next_buffer, render_buffer

@@ -23,8 +23,21 @@ from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDe
 
 
 class Conversation:
+    """
+    Manages a single interactive voice-to-LLM conversation session.
+
+    Orchestrates the full lifecycle: preflight checks, mic capture via
+    WhisperRealTimeUtil, prompt assembly (PromptBuilder), LLM streaming and
+    TTS playback (ResponseSession), and clean teardown of the terminal/audio
+    state on exit or Ctrl-C.
+    """
 
     def __init__(self, state: State, phrase_stt_enabled: bool = True) -> None:
+        # phrase_stt_enabled: runs a secondary STT pass over the TTS output audio to
+        # produce phrase-level timing segments (via make_phrase_spoken_segments). When
+        # disabled, each response chunk is treated as a single unsegmented span. The
+        # extra STT pass adds latency and a failure path — if it returns no segments the
+        # code falls back gracefully, but bad timing data can cause subtle sync issues.
         self.state = state
         self.phrase_stt_enabled = phrase_stt_enabled
 

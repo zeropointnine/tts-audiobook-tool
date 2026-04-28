@@ -189,9 +189,8 @@ def make_bracket(num: int, width: int) -> str:
     return f"[{COL_ACCENT}{num:>{width}}{Ansi.RESET}]"
 
 
-def show_menu(venvs: list[tuple[str, str, list[str]]]) -> int:
-    """Print a colored numbered menu and return the chosen index (0-based)."""
-    # Determine padding width for alignment when >= 10 items
+def show_menu(venvs: list[tuple[str, str, list[str]]]) -> int | None:
+    """Print a colored numbered menu and return the chosen index (0-based), or None on no match."""
     if len(venvs) >= 10:
         width = len(str(len(venvs)))
     else:
@@ -211,28 +210,17 @@ def show_menu(venvs: list[tuple[str, str, list[str]]]) -> int:
             models_str = ", ".join(models)
         print(f"  {make_bracket(i, width)} {name}  {COL_DIM}({models_str}){Ansi.RESET}")
 
-    print(f"  {make_quit_bracket(width)} {COL_DIM}Quit{Ansi.RESET}")
     print()
-
-    while True:
-        print(f"{COL_INPUT}Selection", end="")
-        print(f": {Ansi.RESET}", end="")
-        choice = input().strip().lower()
-        if choice == "q":
-            sys.exit(0)
-        try:
-            idx = int(choice)
-            if 1 <= idx <= len(venvs):
-                return idx - 1
-        except ValueError:
-            pass
-        print(f"{COL_ERROR}Invalid choice.{Ansi.RESET} Enter a number between 1 and {len(venvs)}, or 'q'.")
-        print()
-
-
-def make_quit_bracket(width: int) -> str:
-    """Return a quit bracket that matches width of the number brackets."""
-    return f"[{COL_ACCENT}{'q':>{width}}{Ansi.RESET}]"
+    print(f"{COL_INPUT}Selection", end="")
+    print(f": {Ansi.RESET}", end="")
+    choice = input().strip()
+    try:
+        idx = int(choice)
+        if 1 <= idx <= len(venvs):
+            return idx - 1
+    except ValueError:
+        pass
+    return None
 
 
 def main() -> None:
@@ -261,6 +249,8 @@ def main() -> None:
         sys.exit(1)
 
     choice_idx = show_menu(venvs)
+    if choice_idx is None:
+        return
     venv_path = venvs[choice_idx][0]
     python_exe = get_venv_python(venv_path)
     if python_exe is None:
@@ -273,8 +263,15 @@ def main() -> None:
 
     args = [python_exe, "-m", "tts_audiobook_tool"]
     if sys.platform == "win32":
-        subprocess.call(args)
-        sys.exit()
+        proc = subprocess.Popen(args)
+        while True:
+            try:
+                sys.exit(proc.wait())
+            except KeyboardInterrupt:
+                # Windows broadcasts CTRL_C_EVENT to every process in the
+                # console, so the launcher gets it too. Let the child handle
+                # its own shutdown and keep waiting.
+                continue
     os.execv(python_exe, args)
 
 

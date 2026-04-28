@@ -12,18 +12,17 @@ from tts_audiobook_tool.util import make_error_string
 
 class SoundInputDeviceInfo:
     """
-    Convenience class for detection and user-facing description of the sound input device
-    used by the conversation tool.
-
-    Is not used for the actual device selection or audio capture, 
-    which is still done directly through sounddevice / PortAudio. 
+    Convenience class for user-facing description of the sound input device.
 
     The base source of truth is sounddevice / PortAudio. Platform-specific
     helpers are used only to improve the displayed name of the default input
     device when the OS can provide a friendlier label:
     - Linux: pactl / wpctl
-    - Windows: PowerShell query
     - macOS: SwitchAudioSource, if available
+
+    On Windows we instead pick a preferred host API (WASAPI > DirectSound >
+    WDM-KS > MME) and use its default input device, since MME's default is the
+    virtual "Microsoft Sound Mapper - Input" rather than the real hardware mic.
 
     All OS-specific lookups are best-effort and must fail safely so microphone
     availability and app behavior continue to work even when those commands are
@@ -87,10 +86,45 @@ class SoundInputDeviceInfo:
 
     @staticmethod
     def _get_default_input_device_index() -> int | None:
+        if sys.platform == "win32":
+            idx = SoundInputDeviceInfo._get_windows_preferred_default_input_index()
+            if idx is not None:
+                return idx
+
         default_device = sd.default.device
         if isinstance(default_device, (list, tuple)) and default_device:
             default_input = default_device[0]
             return default_input if isinstance(default_input, int) else None
+        return None
+
+    @staticmethod
+    def _get_windows_preferred_default_input_index() -> int | None:
+        preferred_order = ["Windows WASAPI", "Windows DirectSound", "Windows WDM-KS", "MME"]
+        try:
+            hostapis = sd.query_hostapis()
+        except Exception:
+            return None
+
+        by_name: dict[str, dict[str, object]] = {}
+        for api in hostapis:
+            if isinstance(api, dict):
+                api_name = api.get("name")
+                if isinstance(api_name, str):
+                    by_name[api_name] = cast(dict[str, object], api)
+
+        for name in preferred_order:
+            api = by_name.get(name)
+            if api is None:
+                continue
+            idx = api.get("default_input_device")
+            if not isinstance(idx, int) or idx < 0:
+                continue
+            try:
+                info = sd.query_devices(idx)
+            except Exception:
+                continue
+            if SoundInputDeviceInfo._is_input_device(info):
+                return idx
         return None
 
     @staticmethod
@@ -112,8 +146,6 @@ class SoundInputDeviceInfo:
     def _get_os_default_input_device_name() -> str | None:
         if sys.platform == "linux":
             return SoundInputDeviceInfo._get_linux_default_source_display_name()
-        if sys.platform == "win32":
-            return SoundInputDeviceInfo._get_windows_default_input_device_name()
         if sys.platform == "darwin":
             return SoundInputDeviceInfo._get_macos_default_input_device_name()
         return None
@@ -153,25 +185,6 @@ class SoundInputDeviceInfo:
                     if name:
                         return name
 
-        return None
-
-    @staticmethod
-    def _get_windows_default_input_device_name() -> str | None:
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            (
-                "$device = Get-CimInstance Win32_SoundDevice | "
-                "Select-Object -First 1 -ExpandProperty Name; "
-                "if ($device) { $device }"
-            ),
-        ]
-        lines = SoundInputDeviceInfo._run_command_lines(command)
-        for line in lines:
-            name = line.strip()
-            if name:
-                return name
         return None
 
     @staticmethod

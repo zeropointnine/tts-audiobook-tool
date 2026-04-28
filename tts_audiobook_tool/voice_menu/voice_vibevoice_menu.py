@@ -28,11 +28,9 @@ class VoiceVibeVoiceMenu:
             return f"Select voice clone sample {currently}"
 
         def make_model_target_label(_) -> str:
-            if project.vibevoice_target:
-                label = make_currently_string(project.vibevoice_target)
-            else:
-                label = f"{COL_DIM}(optional)"
-            return f"Custom model {label}"
+            value = project.vibevoice_target or VibeVoiceBaseModel.DEFAULT_REPO_ID
+            label = make_currently_string(value, default=VibeVoiceBaseModel.DEFAULT_REPO_ID)
+            return f"Select model {label}"
 
         def make_lora_target_label(_) -> str:
             if project.vibevoice_lora_target:
@@ -67,7 +65,7 @@ class VoiceVibeVoiceMenu:
 
             # Model
             items.append(
-                MenuItem(make_model_target_label, lambda _, __: ask_model_target(state.project))
+                MenuItem(make_model_target_label, lambda _, __: target_submenu(state))
             )
             if state.project.vibevoice_target:
                 items.append(
@@ -111,6 +109,27 @@ class VoiceVibeVoiceMenu:
         VoiceMenuShared.menu_wrapper(state, make_items)
 
 # ---
+
+def target_submenu(state: State) -> None:
+
+    def make_preset_label(target: str) -> str:
+        label = target
+        if target == VibeVoiceBaseModel.DEFAULT_REPO_ID:
+            label += f" {COL_DIM}(default)"
+        if target == state.project.vibevoice_target:
+            label += f" {COL_ACCENT}(selected)"
+        return label
+
+    items = []
+    for t in VibeVoiceBaseModel.PRESET_REPO_IDS:
+        items.append(MenuItem(make_preset_label(t), lambda _, __, t=t: apply_model_and_validate(state.project, t)))
+    items.append(MenuItem("Enter hf repo id or local path manually", lambda _, __: ask_model_target(state.project)))
+    MenuUtil.menu(
+        state=state,
+        heading="Select VibeVoice model",
+        items=items,
+        one_shot=True
+    )
 
 def ask_model_target(project: Project) -> None: 
 

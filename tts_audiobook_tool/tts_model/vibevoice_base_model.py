@@ -17,6 +17,10 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     INFO = TtsModelInfos.VIBEVOICE.value
 
     DEFAULT_REPO_ID = "microsoft/VibeVoice-1.5b"
+    PRESET_REPO_IDS = [
+        "microsoft/VibeVoice-1.5b",
+        "vibevoice/VibeVoice-7B",
+    ]
 
     # nb, their gradio demo default is 1.3, which is IMO much too low
     CFG_DEFAULT = 2.0

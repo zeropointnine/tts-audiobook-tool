@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import util
+import os
 import sys
 from typing import Callable
 
@@ -355,8 +356,16 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             print_model_init(f"{s}, {device}")
 
+            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
+            if looks_like_path and not os.path.exists(target):
+                raise ValueError(f"Qwen3 model path not found: '{target}'")
+
             from tts_audiobook_tool.tts_model.qwen3_model import Qwen3Model
-            Tts._qwen3 = Qwen3Model(target, device)
+            try:
+                Tts._qwen3 = Qwen3Model(target, device)
+            except Exception as e:
+                Tts._qwen3 = None
+                raise RuntimeError(f"Failed to load Qwen3 model from '{target}': {e}") from e
             printt()
 
         return Tts._qwen3
