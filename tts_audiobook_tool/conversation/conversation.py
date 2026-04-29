@@ -8,12 +8,13 @@ import time
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.conversation.conversation_internals import PromptBuilder, ResponseSession, Ui
+from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.llm_util import LlmUtil
+from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
@@ -25,7 +26,7 @@ from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 
 class Conversation:
     """
-    Manages a single interactive voice-to-LLM conversation session.
+    "Realtime LLM Chat"
 
     Orchestrates the full lifecycle: preflight checks, mic capture via
     WhisperRealTimeUtil, prompt assembly (PromptBuilder), LLM streaming and
@@ -48,69 +49,13 @@ class Conversation:
         self.phrase_stt_enabled = phrase_stt_enabled
         self.stt_immediate = state.prefs.conversation_stt_immediate if stt_immediate is None else stt_immediate
 
-    @staticmethod
-    def has_llm_config(state: State) -> bool:
-        return bool(
-            state.prefs.llm_url.strip()
-            and state.prefs.api_key.strip()
-            and state.prefs.llm_model.strip()
-        )
-
-    @staticmethod
-    def _run_preflight_checks(state: State) -> bool:
-        """
-        Runs preflight checks
-        Prints feedback messages along the way (errors, warnings, and info).
-        Returns True for success
-        """
-        mic_err = SoundInputDeviceInfo.get_check_error()
-        if mic_err:
-            print_feedback(mic_err, is_error=True)
-            return False
-
-        missing: list[str] = []
-        if not state.prefs.llm_url.strip():
-            missing.append("LLM endpoint URL")
-        if not state.prefs.api_key.strip():
-            missing.append("LLM token")
-        if not state.prefs.llm_model.strip():
-            missing.append("LLM model name")
-        if not Conversation.has_llm_config(state):
-            print_feedback(
-                "LLM Conversation Tool requires the following preferences to be set:\n- " + "\n- ".join(missing),
-                is_error=True,
-            )
-            return False
-
-        if state.prefs.stt_variant == SttVariant.DISABLED:
-            print_feedback("Speech-to-text must be enabled (see Options menu)", is_error=True)
-            return False
-
-        did_interrupt = ModelsUtil.warm_up_models(state, never_yamnet=True)
-        if did_interrupt:
-            print_feedback("\nCancelled")
-            return False
-
-        prereq_errors = Tts.get_class().get_prereq_errors(
-            state.project,
-            Tts.get_instance_if_exists(),
-            short_format=False,
-        )
-        if prereq_errors:
-            print_feedback("\n\n".join(prereq_errors), is_error=True)
-            return False
-
-        warnings = Tts.get_instance().get_prereq_warnings(state.project)
-        if warnings:
-            print_feedback(Ansi.ITALICS + "\n".join(warnings), no_preformat=True)
-
-        return True
-
     def start(self) -> None:
-        self.print_intro()
+
         if not Conversation._run_preflight_checks(self.state):
             return
-        self.print_input_device_info()
+
+        self.print_various()
+
         self.init_session_state()
         try:
             self.install_runtime()
@@ -120,24 +65,68 @@ class Conversation:
         finally:
             self.teardown()
 
-    def print_intro(self) -> None:
-        print_heading("Realtime LLM Chat Tool")
-        printt(f"Speak into the microphone to build your prompt.")
+    def print_various(self) -> None:
+
+        # Warnings
+        warnings = Tts.get_instance().get_prereq_warnings(self.state.project)
+        if warnings:
+            s = "\n".join(warnings)
+            printt(f"{COL_DIM}{Ansi.ITALICS}{s}")
+            printt()
+
+        # Mic info
+        printt(f"{COL_DIM}{Ansi.ITALICS}Using sound input device:")
+        printt(f"{COL_DIM}{Ansi.ITALICS}  {SoundInputDeviceInfo.get_input_device_description()}")
         printt()
-        printt(f"Hotkeys:")
+
+        # Instructions
+        if not self.stt_immediate:
+            printt(f"Speak into the microphone to build your prompt:")
+            printt(f"  {make_hotkey_string('Left/Right', outer_color=COL_DIM)} - select transcribed phrase")
+            printt(f"  {make_hotkey_string('Delete', outer_color=COL_DIM)} - delete selected phrase")
+            printt(f"  {make_hotkey_string('Enter', outer_color=COL_DIM)} - submit phrase")
+            printt()
         printt(f"  {make_hotkey_string('Ctrl-C', outer_color=COL_DIM)} to interrupt audio or exit")
         printt()
 
-    def print_input_device_info(self) -> None:
-        printt(f"{COL_DIM}{Ansi.ITALICS}Using sound input device:")
-        printt(f"{COL_DIM}{SoundInputDeviceInfo.get_input_device_description()}")
+    @staticmethod
+    def _run_preflight_checks(state: State) -> bool:
+        """
+        Runs preflight checks
+        Prints feedback messages along the way (errors, warnings, and info).
+        Returns True for success
+        """
+
+        # Get prereq errors
+        errors = PrereqUtil.get_chat_prereq_errors(state)
+        if errors:
+            lines = [item.verbose for item in errors]
+            s = "\n".join(lines)
+            print_feedback(s, is_error=True)
+            return False
+
+        # Warm up models
+        did_interrupt = ModelsUtil.warm_up_models(state, skip_yamnet=True)
+        printt()
+        if did_interrupt:
+            print_feedback("Cancelled")
+            return False
+
+        # Must check for TTS Model prereq errors again b/c instance is guaranteed to exist now
+        model_errors = Tts.get_class().get_prereq_errors(state.project, Tts.get_instance_if_exists()) 
+        if model_errors:
+            model_error_string = PrereqUtil.prereq_errors_to_string(model_errors, verbose=True)
+            print_feedback(model_error_string, is_error=True)
+            return False
+
+        return True
 
     def init_session_state(self) -> None:
         state = self.state
         system_prompt = DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT if state.prefs.llm_system_prompt_default else state.prefs.llm_system_prompt.strip()
         self.llm = LlmUtil(
             api_endpoint_url=state.prefs.llm_url,
-            token=state.prefs.api_key,
+            token=state.prefs.llm_api_key,
             model=state.prefs.llm_model,
             system_prompt=system_prompt,
             extra_params=state.prefs.llm_extra_params,

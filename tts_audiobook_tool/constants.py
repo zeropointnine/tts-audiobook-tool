@@ -53,12 +53,10 @@ CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
-MENU_CLEARS_SCREEN_DEFAULT = False
+MENU_CLEARS_SCREEN_DEFAULT = True
 
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)
 NORMALIZATION_HEADROOM_DB = 1.0
-
-PRINT_FEEDBACK_PAUSE_SECONDS = 0.33
 
 # App's typical ffmpeg options wrt console output, etc
 FFMPEG_TYPICAL_OPTIONS = [
@@ -130,6 +128,13 @@ HASH_PATTERN = re.compile(pattern)
 
 VOICE_ADVANCED_SUPERLABEL = "Advanced:"
 
+OPT_IN_INSTRUCTIONS = (
+    "[1] Visit %1\n"
+    "    and authorize access using a logged-in Hugging Face account.\n"
+    "[2] Run `hf auth login` and enter valid Hugging Face access token.\n"
+    "[3] Restart the app"
+)
+
 # ---
 
 from tts_audiobook_tool.hint import Hint
@@ -198,10 +203,10 @@ HINT_OUTE_LOUD_NORM = Hint(
     "Oute generations can have considerable variance in loudness.\nConsider using \"stronger.\""
 )
 
-HINT_FISH_FIRST_COMPILE = Hint(
+HINT_FISH_S1_FIRST_COMPILE = Hint(
     "fish_first",
     "Please note...",
-"""On the first inference, the Fish model may go through a compilation step
+"""On the first inference, the Fish S1-mini model may go through a compilation step
 which may take a minute or two, with no feedback shown."""
 )
 
@@ -319,4 +324,17 @@ HINT_DELETE_SEGMENTS = Hint(
 """Use this to selectively delete audio segments with poor or inaccurate output 
 (You can also just delete the files directly at: %1). 
 Afterwards, generate those items again as desired."""
+)
+
+HINT_LLM_CHAT = Hint(
+    "llm_chat",
+    "Tip",
+"""Works best when TTS model inferences faster (or ideally much faster) than realtime"""
+)
+
+HINT_UPDATED_UI = Hint(
+    "updated_ui",
+    "Updated UI",
+"""The app's menu system has been updated. Menus now always appear on a cleared screen. 
+You can revert this change the Options menu if you prefer the old behavior."""
 )

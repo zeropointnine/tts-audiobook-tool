@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
@@ -59,3 +62,64 @@ class PocketBaseModel(TtsBaseModel):
     ) -> str:
         s = f"{cls.INFO.ui['proper_name']} {COL_DIM}{project.pocket_model_code}"
         return s
+
+    @classmethod
+    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None) -> list[PrereqError]:
+        errors = []
+        
+        if instance:
+            assert isinstance(instance, PocketBaseModel)
+            if PocketBaseModel.get_gated_error_message(project, instance):
+                verbose_ui_message = cls.make_gated_error_message_ui()
+                errors.append(PrereqError("ungated model", verbose_ui_message))
+                return errors # don't bother adding any other errors at this point
+        
+        if not project.pocket_voice_file_name and not project.pocket_predefined_voice:
+            errors.append(PrereqError("voice clone", "Setting a voice clone file or predefined voice is required"))
+
+        return errors
+
+    # ---
+
+    @classmethod
+    def get_gated_error_message(cls, project: Project, instance: TtsBaseModel) -> str:
+        """
+        Returns error string if has voice clone and Pocket voice-clone-specific model is gated.
+        Empty string means validation passed or no voice clone sample is set.
+
+        Rem, use "make_gated_error_message_ui" for user-facing error message with remediation info
+        """
+        voice_file_name = project.pocket_voice_file_name
+        if not voice_file_name:
+            return ""
+
+        assert isinstance(instance, PocketBaseModel)
+        
+        # We're avoiding referencing PocketModel directly here...
+        validate_method = getattr(instance, "get_voice_clone_access_error_for_path", None)
+        assert validate_method
+
+        voice_path = os.path.join(project.dir_path, voice_file_name)
+        result = validate_method(voice_path)
+        
+        return result if isinstance(result, str) else str(result)
+
+    @classmethod
+    def is_opt_in_error_string(cls, error: str) -> bool:
+        error_lower = error.lower()
+        return (
+            "accept the terms" in error_lower
+            or "voice cloning" in error_lower and "hf auth login" in error_lower
+            or "model with voice cloning" in error_lower
+        )
+
+    @classmethod
+    def make_gated_error_message_ui(cls) -> str:
+        url = cls.INFO.ui["project_links"][1]
+        return (
+            "-----------------------------------------------------------------------------------\n"
+            f"{COL_ERROR}{Ansi.ITALICS}Pocket voice cloning requires Hugging Face opt-in.{COL_DEFAULT}\n"
+            "-----------------------------------------------------------------------------------\n"
+            f"{OPT_IN_INSTRUCTIONS.replace('%1', url)}\n"
+            "-----------------------------------------------------------------------------------"
+        )

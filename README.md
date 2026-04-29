@@ -327,6 +327,12 @@ Install dependencies:
 
     pip install -r requirements-pocket.txt
 
+Authenticate the model on HuggingFace:
+
+    Accept the license terms on the [HuggingFace Pocket TTS model page](https://huggingface.co/kyutai/pocket-tts).
+
+    Authenticate locally using your access token by running hf auth login
+
 
 ## Virtual environment for Higgs Audio V2:
 

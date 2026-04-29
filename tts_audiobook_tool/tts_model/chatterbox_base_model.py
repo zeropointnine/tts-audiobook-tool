@@ -4,6 +4,7 @@ from enum import Enum
 
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.constants import COL_DIM
+from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
@@ -31,25 +32,14 @@ class ChatterboxBaseModel(TtsBaseModel):
         ...
 
     @classmethod
-    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None, short_format: bool) -> list[str]:
+    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None) -> list[PrereqError]:
 
-        verbose_list = ChatterboxBaseModel.get_prereq_errors_verbose(project, instance)
-        return ["current language code not supported by model"] if verbose_list else []
-
-    @classmethod
-    def get_prereq_errors_verbose(cls, project: Project, instance: TtsBaseModel | None) -> list[str]:
-
-        if project.chatterbox_type != ChatterboxType.MULTILINGUAL: 
-            return []
-        
         if not instance:
             return [] # Can't know if language is invalid w/o loading model code
         else:
             assert(isinstance(instance, ChatterboxBaseModel))
             if not project.language_code in instance.supported_languages_multi():
-                return [
-                    f"Incompatible project language code. Chatterbox-Multilingual requires: {instance.supported_languages_multi}"
-                ]
+                return [PrereqError("supported language code", f"Language code {project.language_code} not supported by current model")]
             else:
                 return []
 

@@ -7,6 +7,7 @@ from tts_audiobook_tool.concat_menu import ConcatMenu
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
@@ -19,12 +20,11 @@ class GenerateMenu:
     def menu(state: State) -> None:
 
         def make_start_label(_: State) -> str:
+            prereq = PrereqUtil.get_generate_prereq_error_string(state, verbose=False)
             label = "Start"
-            err = AppUtil.get_combined_prereq_error(state.project, short_format=True)
-            if err:
-                return make_menu_label(label, err, value_prefix="", color_code=COL_ERROR)
-            else:
-                return label
+            if prereq:
+                label += f" {COL_DIM}({COL_ERROR}{prereq}{COL_DIM})"
+            return label
 
         def make_range_label(_: State) -> str:
             if not state.project.generate_range_string:
@@ -54,7 +54,7 @@ class GenerateMenu:
             qualifier = " in specified range" if state.project.generate_range_string else ""
             strictness_info = f"{state.project.strictness.label}"
             regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier}, tolerance: {strictness_info})"
-            return f"Re-generate segments with errors {regenerate_label}"
+            return f"Regenerate segments with errors {regenerate_label}"
 
         def make_batch_size_label(state: State) -> str:
             value = state.project.batch_size
@@ -70,7 +70,7 @@ class GenerateMenu:
         def heading_maker(_: State) -> str:
             total_segments_generated = state.project.sound_segments.num_generated()
             num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
-            return f"Generate audio {num_complete_label}"
+            return f"Generate audio segments {num_complete_label}"
 
         def items_maker(_: State) -> list[MenuItem]:
             items = []
@@ -82,11 +82,6 @@ class GenerateMenu:
             items.append(
                 MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
             )
-            # Batch size
-            if Tts.get_type().value.can_batch:
-                items.append(
-                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state))
-                )
             # Re-generate
             items.append(
                 MenuItem(
@@ -98,10 +93,14 @@ class GenerateMenu:
                 items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
             
             # Strictness/tolerance
+            # Batch size
+            if Tts.get_type().value.can_batch:
+                items.append(
+                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state), superlabel="Options")
+                )
             items.append(
                 MenuItem(
-                    make_tolerance_label, lambda _, __: GenerateMenu.strictness_menu(state),
-                    superlabel="Advanced"
+                    make_tolerance_label, lambda _, __: GenerateMenu.strictness_menu(state)
                 )
             )
             
@@ -126,15 +125,15 @@ class GenerateMenu:
         warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, Tts.get_instance_if_exists())
 
         if state.project.language_code != "en":
-            low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for {state.project.language_code} (STT accuracy varies by language — lower threshold prevents false positives in retries and re-generation detection)"
+            low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for {state.project.language_code} (STT accuracy varies by language — lower threshold prevents false positives in retries and regeneration detection)"
             medium_desc = ""
             high_desc = ""
             intolerant_desc = ""
         else:
             low_desc = "Allows more word errors; segments pass unless severely off"
             medium_desc = "Balanced; typical choice for most languages"
-            high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for re-generation"
-            intolerant_desc = "Zero tolerance; segments with even one word error are flagged for re-generation"
+            high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration"
+            intolerant_desc = "Zero tolerance; segments with even one word error are flagged for regeneration"
 
         MenuUtil.options_menu(
             state=state,
@@ -181,7 +180,7 @@ def ask_delete_segments(state: State) -> None:
         print_feedback("Nothing to delete")
         return
     
-    print_heading("Delete segments")
+    MenuUtil.print_heading(state, "Delete segments")
 
     path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
     hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path, is_file=True))
@@ -237,13 +236,13 @@ def make_tolerance_label(state: State) -> str:
 
 def make_retries_label(state: State) -> str:
     return make_menu_label(
-        label="Re-generation max retries",
+        label="generation max retries",
         value=state.project.max_retries, 
         default=PROJECT_MAX_RETRIES_DEFAULT
     )
 
 def ask_retries(state: State) -> None:
-    print_heading(make_retries_label(state))
+    MenuUtil.print_heading(state, make_retries_label(state))
     printt(RETRIES_DESC)
     AskUtil.ask_number(
         state.project,
@@ -269,6 +268,12 @@ def ask_batch_size(state: State) -> None:
 
 def do_generate(state: State, is_regen: bool) -> None:
 
+    # Check prereqs
+    error = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+    if error:
+        print_feedback(error, is_error=True)
+        return
+
     # Get indices to generate, and check if already generated
     if is_regen:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
@@ -278,16 +283,10 @@ def do_generate(state: State, is_regen: bool) -> None:
     if not indices:
         qualifier = " in currently selected range" if state.project.generate_range_string else ""
         if is_regen:
-            message = f"No segments with errors to re-generate{qualifier}."
+            message = f"No segments with errors to regenerate{qualifier}."
         else:
             message = f"All items{qualifier} already generated."            
         print_feedback(message)
-        return
-
-    # Check model and other app prereqs
-    error = AppUtil.get_combined_prereq_error(state.project, short_format=False)
-    if error:
-        print_feedback(error, is_error=True)
         return
 
     # Show pre-inference hint/warning if necessary
@@ -319,7 +318,7 @@ def do_generate(state: State, is_regen: bool) -> None:
     message = f"{word} {len(indices)} audio segment/s..."
     if state.prefs.stt_variant == SttVariant.DISABLED:
         message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
-    print_heading(message, dont_clear=True)
+    MenuUtil.print_heading(state, message, dont_clear=True)
     printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
     printt()
 
@@ -342,16 +341,16 @@ def do_generate(state: State, is_regen: bool) -> None:
         AskUtil.ask_enter_to_continue()
         return
     
-    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('A')} to assemble audiobook files now: \a"
+    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to create audiobook file now: \a"
     hotkey = AskUtil.ask_hotkey(s)
     printt() # TODO revisit
-    if hotkey == "a":
+    if hotkey == "c":
         ConcatMenu.menu(state)
 
 STRICTNESS_DESC = \
 """Controls how many word errors are acceptable per segment.
 Applies during generation (auto-retry) and when identifying
-existing segments for re-generation.
+existing segments for regeneration.
 """
 
 RETRIES_DESC = \

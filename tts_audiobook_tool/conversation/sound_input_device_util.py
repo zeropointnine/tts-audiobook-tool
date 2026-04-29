@@ -43,10 +43,10 @@ class SoundInputDeviceInfo:
                 return ""
             devices = sd.query_devices()
             if not devices:
-                return "No audio devices found."
-            return "No microphone / input audio device is available."
+                return "No sound input devices found."
+            return "No microphone / sound input device is available."
         except Exception as e:
-            return f"Couldn't verify microphone input device: {make_error_string(e)}"
+            return f"Couldn't verify sound input device: {make_error_string(e)}"
 
     @staticmethod
     def get_input_device_description() -> str:

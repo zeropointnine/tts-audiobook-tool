@@ -2,7 +2,7 @@ import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.llm_config_menu import LlmConfigMenu
+from tts_audiobook_tool.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
@@ -47,7 +47,7 @@ class OptionsMenu:
                 MenuItem(
                     lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id),
                     lambda _, __: OptionsMenu.stt_model_menu(state),
-                    superlabel="Model options"
+                    superlabel="Model options", superlabel_no_blank_line=True
                 )
             )
             items.append(
@@ -84,13 +84,13 @@ class OptionsMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
-                        "LLM configuration",
+                        "LLM settings",
                         make_terminal_hyperlink(
                             state.prefs.llm_url,
                             ellipsize(state.prefs.llm_url, 50)
                         ) if state.prefs.llm_url else "none"
                     ),
-                    lambda _, __: LlmConfigMenu.menu(state),
+                    lambda _, __: LlmSettingsMenu.menu(state),
                     superlabel="Various"
                 )
             )

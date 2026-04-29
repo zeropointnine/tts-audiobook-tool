@@ -3,22 +3,23 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
-from tts_audiobook_tool.real_time_util import RealTimeUtil
+from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool.real_time_playback_util import RealTimeUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 
-class RealTimeMenu:
+class RealTimePlaybackMenu:
 
     @staticmethod
     def menu(state: State):
 
         def make_start_label(_: State) -> str:
             label = "Start"
-            warning = AppUtil.get_combined_prereq_error(state.project, short_format=True)
-            if warning:
-                return make_menu_label(label, warning, value_prefix="", color_code=COL_ERROR)
+            err = PrereqUtil.get_generate_prereq_error_string(state, verbose=False)
+            if err:
+                return make_menu_label(label, err, value_prefix="", color_code=COL_ERROR)
             else:
                 return label
 
@@ -41,11 +42,11 @@ class RealTimeMenu:
         # Menu        
         items = [
             MenuItem(make_start_label, lambda _, __: do_start(state)),
-            MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state)),
-            MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state)),
+            MenuItem(make_text_label, lambda _, __: RealTimePlaybackMenu.text_menu(state)),
+            MenuItem(make_range_label, lambda _, __: RealTimePlaybackMenu.ask_line_range(state)),
             MenuItem(
                 lambda _: make_menu_label("Save output", state.project.realtime_save),
-                lambda _, __: RealTimeMenu.save_menu(state)
+                lambda _, __: RealTimePlaybackMenu.save_menu(state)
             )
         ]
         MenuUtil.menu(state, "Realtime audiobook playback", items, hint=HINT_REAL_TIME)
@@ -117,7 +118,7 @@ class RealTimeMenu:
 
         # Menu
         items = [project_item, custom_file_item, custom_manual_item]
-        MenuUtil.menu(state, "Real-time - Set text source", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Realtime audiobook playback - Set text source", items, hint=HINT_REAL_TIME)
 
     @staticmethod
     def save_menu(state: State) -> None:
@@ -156,16 +157,16 @@ def do_start(state: State) -> None:
         return
 
     # Check model and other app prereqs
-    error = AppUtil.get_combined_prereq_error(state.project, short_format=False)
-    if error:
-        print_feedback(error, is_error=True)
+    err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+    if err:
+        print_feedback(err, is_error=True)
         return
 
     # Show pre-inference hint/warning if necessary
     AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
     # Confirm and start proper
-    if AskUtil.is_readchar:
+    if AskUtil.can_hotkey:
         b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
         if not b:
             return

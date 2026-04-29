@@ -27,7 +27,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
 
 API_ENDPOINT_URL = "https://api.deepseek.com/v1/chat/completions"
-TOKEN  = "xxx"
+TOKEN  = "###"
 MODEL  = "deepseek-v4-flash"
 PARAMS = {"thinking": {"type": "disabled"}}
 
@@ -111,7 +111,7 @@ def main() -> None:
         print(display, end="", flush=True)
         render_prev_lines = new_lines
 
-    util = WhisperRealTimeUtil(prefs=prefs, on_transcription=on_transcription)
+    util = WhisperRealTimeUtil(prefs=prefs, on_transcription=on_transcription) # type: ignore
     util.start()
     print("Listening...  ←→ select chunk  Del remove  Enter send  Ctrl-C quit\n")
     render()

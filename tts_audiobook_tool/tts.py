@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib import util
 import os
-import sys
 from typing import Callable
 
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
@@ -29,6 +29,8 @@ class Tts:
     and remains unchanged during the app's runtime.
     """
 
+    _type: TtsModelInfos
+
     _oute: OuteBaseModel | None = None
     _chatterbox: ChatterboxBaseModel | None = None
     _fish: FishS1BaseModel | None = None
@@ -41,10 +43,12 @@ class Tts:
     _qwen3: Qwen3BaseModel | None = None
     _pocket: PocketBaseModel | None = None
 
-    _type: TtsModelInfos
+    # Salient details of the current instance for display
+    _instance_display_info: InstanceDisplayInfo | None = None
 
     _model_params: dict = {}
     _force_cpu: bool = False
+    
 
     @staticmethod
     def init_model_type() -> tuple[TtsModelInfos, int]:
@@ -231,7 +235,7 @@ class Tts:
     @staticmethod
     def get_oute() -> OuteBaseModel:
         if not Tts._oute:
-            print_model_init()
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
             from tts_audiobook_tool.tts_model.oute_model import OuteModel
             Tts._oute = OuteModel()
             printt()
@@ -240,13 +244,13 @@ class Tts:
     @staticmethod
     def get_chatterbox() -> ChatterboxBaseModel:
         if not Tts._chatterbox:
-            typ = Tts._model_params.get("chatterbox_type")
-            assert isinstance(typ, ChatterboxType), "chatterbox_type not set"
+            model_type = Tts._model_params.get("chatterbox_type")
+            assert isinstance(model_type, ChatterboxType), "chatterbox_type not set"
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            s = f"{typ.label}, {device}"            
-            print_model_init(s)
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(model_type.label, device))
+            
             from tts_audiobook_tool.tts_model.chatterbox_model import ChatterboxModel
-            Tts._chatterbox = ChatterboxModel(typ, device)
+            Tts._chatterbox = ChatterboxModel(model_type, device)
             printt()
         return Tts._chatterbox
 
@@ -254,38 +258,58 @@ class Tts:
     def get_fish() -> FishS1BaseModel:
         if not Tts._fish:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            compile_enabled = Tts._model_params.get("fish_compile_enabled", True)
-            s = f"{device}"
+
             if device == "cuda":
-                s += f", compile: {compile_enabled}"
-            print_model_init(s)
+                compile_enabled = Tts._model_params.get("fish_compile_enabled", True) # TODO: needs to be hooked up
+            else:
+                compile_enabled = False
+            
+            if device == "cuda":
+                extra = f"compile: {compile_enabled}"
+            else:
+                extra = ""
+            
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
+            
             from tts_audiobook_tool.tts_model.fish_s1_model import FishS1Model
             Tts._fish = FishS1Model(device, compile_enabled)
             printt()
+
         return Tts._fish
 
     @staticmethod
     def get_fish_s2() -> FishS2BaseModel:
         if not Tts._fish_s2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            compile_enabled = Tts._model_params.get("fish_s2_compile_enabled", True)
-            s = f"{device}"
+
             if device == "cuda":
-                s += f", compile: {compile_enabled}"
-            print_model_init(s)
+                compile_enabled = Tts._model_params.get("fish_s2_compile_enabled", True)
+            else:
+                compile_enabled = False
+            
+            if device == "cuda":
+                extra = f"compile: {compile_enabled}"
+            else:
+                extra = ""
+            
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
+            
             from tts_audiobook_tool.tts_model.fish_s2_model import FishS2Model
             Tts._fish_s2 = FishS2Model(device, compile_enabled)
             printt()
+
         return Tts._fish_s2
 
     @staticmethod
     def get_higgs() -> HiggsBaseModel:
         if not Tts._higgs:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(device)
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
+            
             from tts_audiobook_tool.tts_model.higgs_model import HiggsModel
             Tts._higgs = HiggsModel(device)
             printt()
+
         return Tts._higgs
 
     @staticmethod
@@ -296,11 +320,16 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
 
             target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
-            trunc_target = ellipsize_path_middle(target)
+            
+            target_string = target
+            target_string = target_string.removeprefix("microsoft/")
+            target_string = target_string.removeprefix("vibevoice/")
+            target_string = ellipsize_path_for_menu(target_string)
+            
             lora_path = Tts._model_params.get("vibevoice_lora_path", "")
-            lora_desc = f"LoRA: {lora_path}, " if lora_path else ""
-            desc = f"{lora_desc}{device}"
-            print_model_init(desc, trunc_target)
+            extra = "with lora" if lora_path else ""
+
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device, extra))
 
             from tts_audiobook_tool.tts_model.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
@@ -318,7 +347,7 @@ class Tts:
         if not Tts._indextts2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
-            print_model_init(f"{device}, fp16: {use_fp16}")
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
 
             from tts_audiobook_tool.tts_model.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
@@ -330,7 +359,7 @@ class Tts:
         if not Tts._glm:
             device = "cuda" # cpu not currently supported
             sr = Tts._model_params["glm_sr"]
-            print_model_init(f"{device}, {sr}hz")
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
 
             from tts_audiobook_tool.tts_model.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
@@ -340,7 +369,8 @@ class Tts:
     @staticmethod
     def get_mira() -> MiraBaseModel:
         if not Tts._mira:
-            print_model_init(f"cuda")
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
+            
             from tts_audiobook_tool.tts_model.mira_model import MiraModel
             Tts._mira = MiraModel()
             printt()
@@ -351,14 +381,19 @@ class Tts:
         
         if not Tts._qwen3:
 
-            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
-            s = ellipsize_path_middle(target)
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(f"{s}, {device}")
+
+            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
+
+            target_string = target
+            target_string = target_string.removeprefix("Qwen/")
+            target_string = ellipsize_path_for_menu(target_string)
 
             looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
             if looks_like_path and not os.path.exists(target):
                 raise ValueError(f"Qwen3 model path not found: '{target}'")
+
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device))
 
             from tts_audiobook_tool.tts_model.qwen3_model import Qwen3Model
             try:
@@ -375,7 +410,8 @@ class Tts:
         if not Tts._pocket:
             language = Tts._model_params.get("pocket_model_code", "")
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            print_model_init(device)
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
+            
             from tts_audiobook_tool.tts_model.pocket_model import PocketModel
             Tts._pocket = PocketModel(device=device, language=language)
             printt()
@@ -386,7 +422,6 @@ class Tts:
         model = Tts.get_instance_if_exists()
         if model:
             model.kill()
-
             Tts._oute = None
             Tts._chatterbox = None
             Tts._fish = None
@@ -398,6 +433,7 @@ class Tts:
             Tts._mira = None
             Tts._qwen3 = None
             Tts._pocket = None
+            Tts._instance_display_info = None
 
         from tts_audiobook_tool.memory_util import MemoryUtil
         MemoryUtil.gc_ram_vram()
@@ -418,3 +454,33 @@ class Tts:
         supported_devices = Tts.get_type().value.torch_devices
         intersection = [item for item in available_devices if item in supported_devices]
         return intersection[0] if intersection else ""
+
+    @staticmethod
+    def _set_and_print_instance_info(info: InstanceDisplayInfo) -> None:
+        
+        Tts._instance_display_info = info
+
+        if not info.device and not info.extra:
+            extra = ""
+        elif info.device and info.extra:
+            extra = f"{info.device}, {info.extra}"
+        elif info.device:
+            extra = info.device
+        else: # extra
+            extra = info.extra        
+        print_model_init(model_description=info.model_description, extra=extra)
+
+
+@dataclass
+class InstanceDisplayInfo:
+    """ Info about the instantiated TTS model used for UI """
+    
+    # Short descriptor of model instance; required
+    # Could be name of model or something more specific, like the model's hf repo id
+    model_description: str
+    
+    # Should usually be populated, depending on model
+    device: str = ""
+
+    # Extra info (eg, "fp16: True", etc)
+    extra: str = ""

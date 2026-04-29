@@ -17,6 +17,8 @@ import tty
 import logging
 from pathlib import Path
 
+from tts_audiobook_tool.menu_util import MenuUtil
+
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -98,8 +100,6 @@ def main() -> None:
     _real_stdout, _real_stderr = sys.stdout, sys.stderr
 
     print()
-    print_heading("Real-time STT → LLM → TTS Demo")  
-    print()
 
     # Init:
 
@@ -119,9 +119,9 @@ def main() -> None:
     ModelsUtil.warm_up_models(state)
 
     # TTS prereq check
-    prereq_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance(), short_format=False) 
+    prereq_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance()) 
     if prereq_errors:
-        print("Prerequisite errors:")
+        print("Errors:")
         for err in prereq_errors:
             print(f"  - {err}")
         print("Please fix these issues and try again.")
@@ -186,7 +186,7 @@ def main() -> None:
 
     util = WhisperRealTimeUtil(
         prefs=prefs,
-        on_transcription=on_transcription,
+        on_transcription=on_transcription, # type: ignore  # TODO: revisit if needed
         debug_vad=DEBUG_VAD,
     )
     util.start()

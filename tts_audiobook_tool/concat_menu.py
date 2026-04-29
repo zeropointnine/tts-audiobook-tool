@@ -57,7 +57,8 @@ class ConcatMenu:
 
                 MenuItem(
                     lambda _: make_menu_label("File type", file_type_value), 
-                    lambda _, __: ConcatMenu.file_type_menu(state)
+                    lambda _, __: ConcatMenu.file_type_menu(state),
+                    superlabel="Options"
                 ),
                 
                 MenuItem(
@@ -70,15 +71,6 @@ class ConcatMenu:
                     lambda _, __: ConcatMenu.section_break_menu(state)
                 )
             ]
-
-            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
-            if can_and_haz:
-                items.append(
-                    MenuItem(
-                        f"Open audiobook file in the player app", 
-                        lambda _, __: ConcatMenu.open_audiobook_menu(state)
-                    )
-                )
 
             items.append(
                 MenuItem(
@@ -109,9 +101,19 @@ class ConcatMenu:
                 )
             )
 
+            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
+            if can_and_haz:
+                items.append(
+                    MenuItem(
+                        f"Open audiobook file in the player app", 
+                        lambda _, __: ConcatMenu.open_audiobook_menu(state),
+                        superlabel=" ", superlabel_no_blank_line=True # yes rly
+                    )
+                )
+
             return items
 
-        MenuUtil.menu(state, "Assemble audiobook:", make_items, subheading=make_chapter_files_subheading)
+        MenuUtil.menu(state, "Create audiobook file/s:", make_items, subheading=make_chapter_files_subheading)
 
     @staticmethod
     def file_type_menu(state: State) -> None:

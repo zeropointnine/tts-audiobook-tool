@@ -3,7 +3,7 @@ from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
+from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -56,9 +56,7 @@ class VoiceMenuShared:
                 has_instance = bool( Tts.get_instance_if_exists() )
                 if not has_instance:
                     _ = Tts.get_instance() 
-                    if state.prefs.menu_clears_screen:
-                        print_feedback("Model loaded", no_enter=True)
-                        time.sleep(PRINT_FEEDBACK_PAUSE_SECONDS)
+                    print_feedback("Model loaded")
 
                 from tts_audiobook_tool.voice_menu.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
@@ -91,8 +89,12 @@ class VoiceMenuShared:
         if Tts.get_type().value.requires_voice and not state.project.has_voice:
             currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
         elif not state.project.has_voice:
+            if not should_show_menu_status_details(state):
+                return "Select voice clone sample"
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
+            if not should_show_menu_status_details(state):
+                return "Select voice clone sample"
             currently = make_currently_string(state.project.voice_label)
         return f"Select voice clone sample {currently}"
 

@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
@@ -22,12 +23,18 @@ class NoneBaseModel(TtsBaseModel):
     def set_params(self, temperature: float, max_new_tokens: int) -> None:
         ...
 
+
+    @classmethod
+    def get_voice_display_info(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> tuple[str, str]:
+        return "N/A", ""
+
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
-    ) -> list[str]:
-        err = "requires TTS model" if short_format else "No TTS model; the app must be launched from a properly configured virtual environment"
-        return [err]
+            cls, project: Project, instance: TtsBaseModel | None
+    ) -> list[PrereqError]:
+        return [ PrereqError("TTS model", "A TTS model is required") ]
 
 class NoneModel(NoneBaseModel):
 

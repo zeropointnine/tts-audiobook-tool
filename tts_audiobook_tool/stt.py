@@ -36,8 +36,8 @@ class MlxWhisperAdapter:
     }
 
     def __init__(self, model: str):
-        import mlx_whisper
-        from mlx_whisper.tokenizer import LANGUAGES
+        import mlx_whisper # type: ignore
+        from mlx_whisper.tokenizer import LANGUAGES # type: ignore
 
         self._mlx_whisper = mlx_whisper
         self._model = self.MODEL_MAP.get(model, model)

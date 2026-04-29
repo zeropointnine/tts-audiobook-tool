@@ -1,40 +1,48 @@
 from tts_audiobook_tool.conversation.conversation import Conversation, ConversationStatic
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 
-class ConversationMenu:
+class ChatMenu:
 
     @staticmethod
     def menu(state: State) -> None:
+
+        def make_start_label(state: State) -> str:
+            prereq = PrereqUtil.get_chat_prereq_error_string(state, verbose=False)
+            label = "Start"
+            if prereq:
+                label += f" {COL_DIM}({COL_ERROR}{prereq}{COL_DIM})"
+            return label
+
         subheading = (
-            f"{COL_DIM}Speak into your microphone to build prompts for a realtime back-and-forth\n"
-            "conversation with an LLM, with spoken responses generated through the app's\n"
-            "TTS pipeline.\n\n"
-            "Works best when the TTS model inferences faster than 100% realtime speed\n"
-            "(or ideally much faster).\n"
+            f"{COL_DIM}Realtime back-and-forth chat with LLM using microphone input.\n"
+            "Your speech is transcribed into prompts, with spoken responses\n"
+            "generated using the app's TTS pipeline.\n"
         )
-        if not Conversation.has_llm_config(state):
-            subheading += f"\n{COL_DEFAULT}LLM settings must first be configured from the Options menu.\n"
 
         items = [
-            MenuItem("Start", lambda _, __: ConversationStatic.start(state)),
+            MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
+            
             MenuItem(
                 lambda _: make_menu_label(
                     "Submit prompt immediately after transcription",
                     state.prefs.conversation_stt_immediate,
                     False,
                 ),
-                lambda _, __: ConversationMenu.conversation_stt_immediate_menu(state),
-            ),
+                lambda _, __: ChatMenu.conversation_stt_immediate_menu(state),
+            )
+            # TODO: Add "Options" superlabel when more than one option item exists
         ]
 
         MenuUtil.menu(
             state,
-            f"Realtime LLM Chat {COL_DIM}(experimental){COL_DEFAULT}",
+            f"LLM voice chat {COL_DIM}(experimental){COL_DEFAULT}",
             items,
             subheading=subheading,
+            hint=HINT_LLM_CHAT
         )
 
     @staticmethod

@@ -12,6 +12,7 @@ from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
@@ -61,9 +62,9 @@ class GenerateUtil:
         if did_cancel:
             print_feedback("\nCancelled")
             return True
-                
+
         # Do model prereq check now that model instance exists
-        err = AppUtil.get_combined_prereq_error(state.project, short_format=False) 
+        err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
         if err:
             print_feedback(err, is_error=True)
             return True

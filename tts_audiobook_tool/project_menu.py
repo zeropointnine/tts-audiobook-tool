@@ -3,7 +3,7 @@ from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_util import TextUtil
@@ -68,9 +68,10 @@ class ProjectMenu:
             return items
 
         value = make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
+        heading = make_menu_label("Project", value) if should_show_menu_status_details(state) else "Project"
         MenuUtil.menu(
             state, 
-            lambda _: make_menu_label("Project", value), 
+            heading,
             items_maker
         )
 
@@ -165,14 +166,14 @@ class ProjectMenu:
             print_feedback("Cleared")
 
         def on_print(_, __) -> None:
-            print_heading("Current word substitutions")
+            MenuUtil.print_heading(state, "Current word substitutions")
             s = str(state.project.word_substitutions)
             printt(s)
             print_feedback("", extra_line=False)
             return 
         
         def on_inspect(_, __) -> None:
-            print_heading("Uncommon words")
+            MenuUtil.print_heading(state, "Uncommon words")
             printt(UNCOMMON_WORDS_DESC)
             
             # Make list of project text words (unfiltered, still including whitespace)
@@ -232,7 +233,7 @@ def make_subst_label(state: State) -> str:
 
 def on_language(state: State, __: MenuItem) -> None:
 
-    print_heading("Language code")
+    MenuUtil.print_heading(state, "Language code")
     printt(LANGUAGE_CODE_DESC)
     printt()
 

@@ -22,6 +22,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.phrase import Phrase, Reason
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:
@@ -63,7 +64,7 @@ class ConcatUtil:
             if len(chapter_indices) > 1:
                 message += f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
             message += "..."
-            print_heading(message, dont_clear=True, non_menu=True)
+            MenuUtil.print_heading(None, message, dont_clear=True, non_menu=True)
 
             if state.project.chapter_mode == ChapterMode.FILES:
                 ranges = make_chapter_ranges(state.project.section_dividers, len(state.project.phrase_groups))

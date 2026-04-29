@@ -1,6 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 
+from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -112,16 +113,16 @@ class Qwen3BaseModel(TtsBaseModel):
 
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
-    ) -> list[str]:
+            cls, project: Project, instance: TtsBaseModel | None
+    ) -> list[PrereqError]:
 
         if instance:
             assert(isinstance(instance, Qwen3BaseModel))
 
-        errors = []
+        items = []
 
         if instance and not instance.is_model_type_supported:
-            return ["unsupported model type"]
+            return [ PrereqError("supported model type", f"Model type {instance.model_type} is unsupported") ]
 
         match project.qwen3_model_type:            
             case "custom_voice":
@@ -130,16 +131,15 @@ class Qwen3BaseModel(TtsBaseModel):
                 else:
                     is_valid = instance.get_resolved_speaker_info(project)[1]
                     if not is_valid:
-                        err = "requires speaker" if short_format else "A valid speaker id is required"
-                        errors.append(err)
+                        items.append( PrereqError("valid speaker id", "A valid speaker id is required") )
             case "voice_design":
                 ... # # has no requirements bc "instruction" is optional
             case "base" | _:
-                if not project.qwen3_voice_file_name:
-                    err = "requires voice sample" if short_format else "Voice sample required"
-                    errors.append(err)
+                err = cls._get_standard_prereq_error(project)
+                if err:
+                    items.append(err)
         
-        return errors
+        return items
 
     def get_prereq_warnings(self, project: Project) -> list[str]:
         

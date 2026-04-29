@@ -15,6 +15,7 @@ from tts_audiobook_tool.stt_util import SttUtil
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.menu_util import MenuUtil
 
 from tts_audiobook_tool.util import *
 
@@ -26,7 +27,7 @@ class SttFlow:
     @staticmethod
     def ask_and_make(prefs: Prefs) -> None:
 
-        print_heading("Enhance existing audiobook")
+        MenuUtil.print_heading(None, "Enhance existing audiobook")
 
         Hint.show_hint_if_necessary(prefs, HINT_STT_ENHANCE)
 
@@ -164,7 +165,7 @@ class SttFlow:
 
         else:
 
-            print_heading(f"Transcribing audio... {COL_DIM}(This may take some time)", dont_clear=True, non_menu=True)
+            MenuUtil.print_heading(None, f"Transcribing audio... {COL_DIM}(This may take some time)", dont_clear=True, non_menu=True)
             printt()
 
             # Always use best whisper model
@@ -194,7 +195,7 @@ class SttFlow:
 
         # [3] "Merge" source text and transcribed text data
 
-        print_heading("Merging data...", dont_clear=True, non_menu=True)
+        MenuUtil.print_heading(None, "Merging data...", dont_clear=True, non_menu=True)
 
         timed_phrases, did_interrupt = SttUtil.make_timed_phrases(phrases, words)
 
@@ -248,7 +249,7 @@ def make_transcription_pickle_file_path(hash: str) -> str:
 
 def print_discontinuity_info(timed_text_segments: list[TimedPhrase]):
 
-    print_heading("Unmatched text segments:", dont_clear=True, non_menu=True)
+    MenuUtil.print_heading(None, "Unmatched text segments:", dont_clear=True, non_menu=True)
     printt()
 
     discon_ranges = TimedPhrase.get_discontinuities(timed_text_segments)

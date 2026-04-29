@@ -28,7 +28,6 @@ psutil
 pydantic
 pyloudnorm==0.1.1
 pysbd==0.3.4
-readchar==4.2.1
 requests
 pywin32; sys_platform == 'win32'
 sounddevice==0.5.2

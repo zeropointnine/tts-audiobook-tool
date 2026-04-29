@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.pocket_base_model import PocketBaseModel
@@ -21,18 +21,21 @@ class VoicePocketMenu:
                 label = make_currently_string(PocketBaseModel.DEFAULT_LANGUAGE)
             return f"Pocket model {label}"
 
+        def make_voice_file_label(_: State) -> str:
+            label = "Select voice clone sample"
+            if not state.project.pocket_voice_file_name and not state.project.pocket_predefined_voice:
+                label += f" {COL_DIM}({COL_ERROR}voice clone or predefined voice required{COL_DIM})"
+            else:
+                value = state.project.pocket_voice_file_name
+                if value:
+                    currently = make_currently_string(ellipsize_path_for_menu(value.removesuffix("_pocket.flac")))
+                    label += currently
+            return label
+
         def make_predefined_voice_label(_: State) -> str:
             name = state.project.pocket_predefined_voice
             currently = make_currently_string(name) if name else ""
             return f"Select predefined voice {currently}".strip()
-
-        def make_voice_file_label(_: State) -> str:
-            value = state.project.pocket_voice_file_name
-            if value:
-                currently = make_currently_string(ellipsize_path_for_menu(value.removesuffix("_pocket.flac")))
-            else:
-                currently = ""
-            return f"Select voice clone sample {currently}".strip()
 
         def make_items(_: State) -> list[MenuItem]:
 
@@ -41,7 +44,7 @@ class VoicePocketMenu:
             items.append(
                 MenuItem(
                     make_voice_file_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.POCKET)
+                    on_voice_file
                 )
             )
 
@@ -53,9 +56,17 @@ class VoicePocketMenu:
             items.append(
                 MenuItem(
                     make_predefined_voice_label,
-                    lambda _, __: predefined(state),
+                    lambda _, __: select_predefined_voice(state),
                 )
             )
+
+            if state.project.pocket_predefined_voice:
+                items.append(
+                    MenuItem(
+                        "Clear predefined voice",
+                        lambda _, __: clear_predefined_voice(state),
+                    )
+                )
 
             items.append(MenuItem(make_language_label, lambda _, __: ask_language(state)))
 
@@ -79,7 +90,7 @@ class VoicePocketMenu:
 
 # ---
 
-def predefined(state: State) -> None:
+def select_predefined_voice(state: State) -> None:
     voices = PocketBaseModel.PREDEFINED_VOICES
 
     current = state.project.pocket_predefined_voice or None
@@ -98,6 +109,11 @@ def predefined(state: State) -> None:
         default_value=None,
         on_select=on_select,
     )
+
+def clear_predefined_voice(state: State) -> None:
+    state.project.pocket_predefined_voice = ""
+    state.project.save()
+    print_feedback("Cleared")
 
 def ask_language(state: State) -> None:
 
@@ -137,3 +153,25 @@ def ask_language(state: State) -> None:
         default_value=default,
         on_select=on_select,
     )
+
+def on_voice_file(state: State, _) -> None:
+
+    VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.POCKET)
+
+    if state.project.pocket_voice_file_name:
+
+        printt(f"{COL_DIM}{Ansi.ITALICS}Validating Pocket voice cloning access...")
+        printt()
+
+        instance = Tts.get_instance()
+        
+        error = PocketBaseModel.get_gated_error_message(state.project, instance)
+        if error:
+            message = error
+            if PocketBaseModel.is_opt_in_error_string(error):
+                message = PocketBaseModel.make_gated_error_message_ui()
+                # TMI: message += f"\n\n{COL_DIM}Underlying Pocket error:{COL_DEFAULT}\n{error}"
+            message += "\n"
+            print_feedback(message, is_error=True, no_preformat=True)
+        else:
+            print_feedback("Validated")

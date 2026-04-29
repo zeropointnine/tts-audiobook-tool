@@ -85,6 +85,9 @@ class Project(BaseModel):
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: ChapterMode = list(ChapterMode)[0]
 
+    # Placeholder attribute used when no TTS model exists
+    none_voice_file_name: str = "" 
+
     oute_voice_file_name: str = ""
     oute_voice_json: dict = Field(default_factory=dict)
     oute_temperature: float = -1
@@ -575,6 +578,8 @@ class Project(BaseModel):
             "max_retries": self.max_retries,
             "chapter_mode": self.chapter_mode.id,
 
+            "none_voice_file_name": self.none_voice_file_name,
+
             "oute_voice_file_name": self.oute_voice_file_name,
             "oute_temperature": self.oute_temperature,
 
@@ -997,6 +1002,7 @@ class Project(BaseModel):
         # Copy 'internal' files
         src_files = [
             PROJECT_TEXT_RAW_FILE_NAME,
+            source_project.none_voice_file_name,
             source_project.chatterbox_voice_file_name,
             source_project.fish_s1_voice_file_name,
             source_project.fish_s2_voice_file_name,

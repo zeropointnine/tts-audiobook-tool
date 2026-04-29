@@ -5,6 +5,8 @@ import select
 import sys
 from abc import ABC, abstractmethod
 
+from tts_audiobook_tool.ask_util import AskUtil
+
 
 KEY_LEFT = "\x1b[D"
 KEY_RIGHT = "\x1b[C"
@@ -96,24 +98,14 @@ class WindowsConsoleSession(ConsoleSession):
             self.kernel32.SetConsoleMode(handle, mode)
 
     def read_key(self) -> str | None:
-        if not self.msvcrt.kbhit(): # type: ignore
-            return None
-
-        ch = self.msvcrt.getwch() # type: ignore
-        if ch in ("\x00", "\xe0"):
-            special = self.msvcrt.getwch() # type: ignore
-            return {
-                "K": KEY_LEFT,
-                "M": KEY_RIGHT,
-                "S": KEY_FWDDEL,
-            }.get(special)
-        if ch == "\r":
+        key = AskUtil.read_hotkey_windows(block=False)
+        if key == "\r":
             return KEY_ENTER
-        if ch == "\x08":
+        if key == "\x08":
             return KEY_DEL2
-        if ch == "\x03":
+        if key == "\x03":
             return KEY_CTRL_C
-        return ch
+        return key
 
     def _enable_vt_mode(self, stream: object) -> None:
         fileno = getattr(stream, "fileno", None)

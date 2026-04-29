@@ -86,7 +86,7 @@ def main() -> None:
 
     util = WhisperRealTimeUtil(
         prefs=prefs,
-        on_transcription=on_transcription,
+        on_transcription=on_transcription,  # type: ignore  # TODO: revisit if needed
         on_chunk_dispatched=on_chunk_dispatched,
         debug_vad=DEBUG_VAD,
     )

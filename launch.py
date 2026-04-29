@@ -202,9 +202,7 @@ def show_menu(venvs: list[tuple[str, str, list[str]]], auto_choice: int | None =
 
     print()
     heading = "tts-audiobook-tool - Virtual environment convenience launcher"
-    print(f"{COL_DIM}{'-' * len(heading)}{Ansi.RESET}")
     print(f"{COL_ACCENT}{heading}{Ansi.RESET}")
-    print(f"{COL_DIM}{'-' * len(heading)}{Ansi.RESET}")
     print()
 
     for i, (_, name, models) in enumerate(venvs, start=1):

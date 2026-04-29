@@ -1,5 +1,7 @@
 from __future__ import annotations
 from typing import Callable
+from tts_audiobook_tool.app_types import SttVariant
+import tts_audiobook_tool.util as util_module
 
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.project import Project
@@ -18,14 +20,16 @@ class MenuItem:
             sublabel: StringOrMaker | None = None,
             hotkey: str = "",
             superlabel: StringOrMaker = "",
+            superlabel_no_blank_line: bool = False
     ):
         self.label = label
 
         # Optional extra text printed on second line
         self.sublabel = sublabel
 
-        # Optional visual subheading printed on its own line before the item
+        # Optional label printed on its own line above the item
         self.superlabel = superlabel
+        self.superlabel_no_blank_line = superlabel_no_blank_line
 
         # handler/callback passes the State object and `data`, if any
         self.handler = handler
@@ -72,7 +76,7 @@ class MenuUtil:
         """
         Prints a menu of items, waits for input, and executes mapped callback.
 
-        When readchar is enabled, it blocks until recognized hotkey is pressed.
+        When single-key hotkey input is enabled, it blocks until recognized hotkey is pressed.
         Otherwise, it repeats until unrecognized key is entered or enter is pressed
 
         param one_shot:
@@ -113,7 +117,7 @@ class MenuUtil:
 
             # Print heading
             s = get_string_from(state, heading)
-            print_heading(s)
+            MenuUtil.print_heading(state, s)
 
             # Print optional subheading
             if subheading:
@@ -125,23 +129,22 @@ class MenuUtil:
             if hint:
                 Hint.show_hint_if_necessary(state.prefs, hint)
 
-            extra_padding = ""
-            for item in items_list:
-                if item.superlabel:
-                    extra_padding = "  "
+            left_padding = "  "
 
             # Print items
             for item in items_list:
                 if item.superlabel:
                     superlabel_text = get_string_from(state, item.superlabel)
                     if superlabel_text:
-                        printt(f"{COL_DIM}{superlabel_text}")
+                        if not item.superlabel_no_blank_line:
+                            printt()
+                        printt(f"{left_padding}{COL_DIM}{superlabel_text}")
                 s = get_string_from(state, item.label)
-                s = extra_padding + make_hotkey_string(item.hotkey.upper()) + " " + s
+                s = left_padding + make_hotkey_string(item.hotkey.upper()) + " " + s
                 if item.sublabel:
                     # Print extra line/s
                     sublabel = get_string_from(state, item.sublabel)
-                    space = ("    " + extra_padding) if not sublabel.startswith(" ") else extra_padding
+                    space = ("    " + left_padding) if not sublabel.startswith(" ") else left_padding
                     s += "\n" + COL_DIM + space + sublabel
                 printt(s)
             printt()
@@ -149,16 +152,20 @@ class MenuUtil:
             # One-time message
             if is_submenu and MenuUtil.is_first_submenu:
                 MenuUtil.is_first_submenu = False
-                printt(f"{extra_padding}{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
+                printt(
+                    f"{left_padding}{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} or "
+                    f"{COL_DEFAULT}{make_hotkey_string('Esc')}{COL_DIM} to go back one level"
+                )
                 printt()
 
             while True:
                 # Prompt
                 hotkey = AskUtil.ask_hotkey()
 
-                if AskUtil.is_readchar:
-                    # enter (windows), enter (mac), backspace, escape
-                    should_return = hotkey in ["\r", "\n", "\x08", "\x1b"] and is_submenu
+                if AskUtil.can_hotkey:
+                    # enter (windows), enter (mac/linux), backspace, escape
+                    # Some terminals/readchar combos can return double-escape for Esc.
+                    should_return = hotkey in ["\r", "\n", "\x08", "\x1b", "\x1b\x1b"] and is_submenu
                 else: # can't readchar
                     should_return = not hotkey
                 if should_return:
@@ -176,7 +183,7 @@ class MenuUtil:
                 if selected_item:
                     break
                 else:
-                    if AskUtil.is_readchar:
+                    if AskUtil.can_hotkey:
                         continue # wait for next hotkey
                     else:
                         return
@@ -192,6 +199,105 @@ class MenuUtil:
                 if on_exit:
                     on_exit()
                 return
+
+    @staticmethod
+    def print_heading(
+        state: State | None,
+        text: str,
+        dont_clear: bool=False,
+        non_menu: bool=False,
+    ) -> None:
+        """
+        :param dont_clear: Doesn't clear screen even when settings are "menu clears screen"
+
+        TODO: Params are a mess at this point
+        """
+
+        if state and state.prefs.menu_clears_screen and not dont_clear and not non_menu:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            MenuUtil._print_status_block(state)
+            printt()
+        elif util_module._menu_clears_screen and not dont_clear:
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+        if state and not state.prefs.menu_clears_screen:
+            length = len(strip_ansi_codes(text))
+            print("-" * length)
+
+        color = COL_DEFAULT if non_menu else COL_ACCENT                
+        printt(f"{color}{text}")
+        printt()
+
+    @staticmethod
+    def _print_status_block(state: State) -> None:
+        
+        from tts_audiobook_tool.app_util import AppUtil
+        from tts_audiobook_tool.stt import Stt
+        from tts_audiobook_tool.tts import Tts
+
+        label_color = COL_DIM
+        value_color = COL_MEDIUM
+
+        if state.project.dir_path:
+            path_string = value_color + make_terminal_hyperlink(state.project.dir_path)
+        else:
+            path_string = value_color + "none"
+
+        if Tts._instance_display_info:
+            tts_model_text = value_color + Tts._instance_display_info.model_description
+            match (bool(Tts._instance_display_info.device), bool(Tts._instance_display_info.extra)):
+                case (True, True):
+                    s = f"{Tts._instance_display_info.device}, {Tts._instance_display_info.extra}"
+                case (True, False):
+                    s = Tts._instance_display_info.device
+                case (False, True):
+                    s = Tts._instance_display_info.extra
+                case (False, False):
+                    s = ""
+            if s:
+                tts_model_text += f" {COL_DIM}({s})"
+            tts_loaded = "(loaded)"
+        else:
+            tts_model_text = value_color + Tts.get_class().INFO.ui['proper_name']
+            tts_loaded = "(not loaded)"
+
+        voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
+            state.project,
+            Tts.get_instance_if_exists()
+        )
+        voice_prefix = strip_ansi_codes(voice_prefix).strip().rstrip(":")
+        voice_value = strip_ansi_codes(voice_value).strip()
+        voice_text = value_color + (voice_value or voice_prefix or "none")
+
+        total_lines = len(state.project.phrase_groups)
+        num_complete = state.project.sound_segments.num_generated()
+        text_text = value_color + f"{total_lines} lines"
+        text_text += f" {COL_DIM}({num_complete} segments generated)"
+
+        stt_model = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
+        stt_desc = value_color + stt_model
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            stt_desc += f" disabled" # not dim
+        else:
+            if Stt.has_instance():
+                stt_variant = Stt.get_variant().id
+                fw_config = state.prefs.stt_config.description if not Stt.should_use_mlx_whisper() else ""
+                stt_desc += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"            
+            else:
+                stt_desc += f" {COL_DIM}(not loaded)"
+
+        memory_text = strip_ansi_codes(AppUtil.make_memory_string())
+        memory_text = memory_text.replace(":", "") # careful
+        memory_text = value_color + memory_text if memory_text else ""
+
+        printt(f"{label_color}Project:     {path_string}")
+        printt(f"{label_color}TTS model:   {tts_model_text} {COL_DIM}{tts_loaded}")
+        printt(f"{label_color}Voice clone: {voice_text}")
+        printt(f"{label_color}Text:        {text_text}")
+        printt(f"{label_color}STT model:   {stt_desc}")
+        if memory_text:
+            printt(f"{label_color}Memory:      {memory_text}")
+
 
     @staticmethod
     def options_menu(
@@ -312,6 +418,9 @@ class MenuUtil:
         return MenuItem(label, on_item)
 
 # ---
+
+def should_show_menu_status_details(state: State) -> bool:
+    return not state.prefs.menu_clears_screen
 
 def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
     if isinstance(string_or_maker, str):

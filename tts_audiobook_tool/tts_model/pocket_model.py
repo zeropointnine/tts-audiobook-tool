@@ -17,12 +17,21 @@ class PocketModel(PocketBaseModel):
 
     def __init__(self, device: str, language: str = ""):
 
+        # Rem, "language" dictates model
         self.model: TTSModel | None = TTSModel.load_model(language=language or None)
         assert self.model
         self.model.to(device)
 
     def kill(self) -> None:
         self.model = None
+
+    def get_voice_clone_access_error_for_path(self, voice_path: str) -> str:
+        try:
+            assert self.model
+            _ = self.model.get_state_for_audio_prompt(voice_path)
+            return ""
+        except Exception as e:
+            return make_error_string(e)
 
     def generate_using_project(
             self, project: Project, prompts: list[str], force_random_seed: bool = False

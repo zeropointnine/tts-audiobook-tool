@@ -10,9 +10,8 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -66,7 +65,7 @@ class AppUtil:
     @staticmethod
     def print_text_groups(groups: list[PhraseGroup]) -> None:
         s = f"Text segments ({COL_DIM}{len(groups)}{COL_DEFAULT}):"
-        print_heading(s, non_menu=True)
+        MenuUtil.print_heading(None, s, non_menu=True)
         printt()
 
         for i, group in enumerate(groups):
@@ -89,7 +88,7 @@ class AppUtil:
         """        
 
         heading = "Text segments" if extant_indices else "Text segments preview"
-        print_heading(heading, non_menu=True)
+        MenuUtil.print_heading(None, heading, non_menu=True)
 
         if len(phrase_groups) > 0:
             index_width = len(str(len(phrase_groups)))
@@ -227,43 +226,6 @@ class AppUtil:
         return str(new_path)
 
     @staticmethod
-    def get_label_with_prereq_error(project: Project, base_label: str) -> str:
-        error = AppUtil.get_combined_prereq_error(project, short_format=True)
-        if error:
-            return base_label + f" {COL_DIM}({COL_ERROR}{error}{COL_DIM})"
-        else:
-            return base_label
-
-    @staticmethod
-    def get_combined_prereq_error(project: Project, short_format: bool) -> str: 
-        """ 
-        Returns project prerequisites' error string (both non-model-related and model-related)
-        """
-        all_errors = []
-        
-        if not project.phrase_groups:
-            err = "requires text" if short_format else "Text must be defined"
-            all_errors.append(err)
-
-        model_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance_if_exists(), short_format) 
-        if model_errors:
-            all_errors.extend(model_errors)
-
-        if short_format:
-            if len(all_errors) > 2:
-                all_errors = all_errors[:2]
-                did_truncate = True
-            else:
-                did_truncate = False
-            combined_string = "" if not all_errors else "; ".join(all_errors)
-            if did_truncate:
-                combined_string += "; ..." if did_truncate else ""
-        else:
-            combined_string = "" if not all_errors else "\n\n".join(all_errors)
-
-        return combined_string
-        
-    @staticmethod
     def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
         """ Shows one-time hints or warnings related to doing inference """
         
@@ -272,7 +234,7 @@ class AppUtil:
         project: Project = p_project
 
         if Tts.get_type() == TtsModelInfos.FISH_S1 and project.fish_s1_compile_enabled:
-            Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST_COMPILE)
+            Hint.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():

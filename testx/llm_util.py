@@ -8,7 +8,7 @@ LlmUtil class - minimal functionality test
 """
 
 API_ENDPOINT_URL = "https://api.deepseek.com/v1/chat/completions"
-TOKEN = "xxx"
+TOKEN = "###"
 MODEL = "deepseek-v4-flash" # "deepseek-v4-pro"
 SYSTEM_PROMPT = ""
 # PARAMS = {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}

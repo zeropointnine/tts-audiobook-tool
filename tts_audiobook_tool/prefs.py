@@ -22,7 +22,7 @@ class Prefs(Saveable):
             tts_force_cpu: bool = False,
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
             llm_url: str = "",
-            api_key: str = "",
+            llm_api_key: str = "",
             llm_model: str = "",
             llm_system_prompt: str = "",
             llm_system_prompt_default: bool = True,
@@ -33,7 +33,8 @@ class Prefs(Saveable):
             conversation_stt_immediate: bool = False,
             save_debug_files: bool = False,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT
+            menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT,
+            source_dict_keys: set[str] | None = None
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -42,7 +43,7 @@ class Prefs(Saveable):
         self._tts_force_cpu = tts_force_cpu
         self._aac_bitrate = aac_bitrate
         self._llm_url = llm_url
-        self._api_key = api_key
+        self._llm_api_key = llm_api_key
         self._llm_model = llm_model
         self._llm_system_prompt = llm_system_prompt
         self._llm_system_prompt_default = llm_system_prompt_default
@@ -53,7 +54,16 @@ class Prefs(Saveable):
         self._conversation_stt_immediate = conversation_stt_immediate
         self._save_debug_files = save_debug_files
         self._play_on_generate = play_on_generate
+
+        # When True: 
+        # - Menu clears screen, feedback text is always followed by a keypress prompt
+        # - Menu always leads with a status text block
         self._menu_clears_screen = menu_clears_screen
+
+        # Top-level keys that were present in the source prefs JSON when this instance
+        # was loaded. This lets callers distinguish persisted keys from values that
+        # were filled in from defaults/back-compat logic during load().
+        self.source_dict_keys = source_dict_keys if source_dict_keys is not None else set()
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -143,9 +153,10 @@ class Prefs(Saveable):
             llm_url = ""
             dirty = True
 
-        api_key = prefs_dict.get("api_key", "")
-        if not isinstance(api_key, str):
-            api_key = ""
+        # Back-compat: support legacy key "api_key"
+        llm_api_key = prefs_dict.get("llm_api_key", prefs_dict.get("api_key", ""))
+        if not isinstance(llm_api_key, str):
+            llm_api_key = ""
             dirty = True
 
         llm_model = prefs_dict.get("llm_model", "")
@@ -233,7 +244,7 @@ class Prefs(Saveable):
             tts_force_cpu=tts_force_cpu,
             aac_bitrate=aac_bitrate,
             llm_url=llm_url,
-            api_key=api_key,
+            llm_api_key=llm_api_key,
             llm_model=llm_model,
             llm_system_prompt=llm_system_prompt,
             llm_system_prompt_default=llm_system_prompt_default,
@@ -245,7 +256,8 @@ class Prefs(Saveable):
             save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
             menu_clears_screen=menu_clears_screen,
-            hints=hints
+            hints=hints,
+            source_dict_keys=set(prefs_dict.keys())
         )
 
         from tts_audiobook_tool.util import set_menu_clears_screen
@@ -361,12 +373,12 @@ class Prefs(Saveable):
         self.save()
 
     @property
-    def api_key(self) -> str:
-        return self._api_key
+    def llm_api_key(self) -> str:
+        return self._llm_api_key
 
-    @api_key.setter
-    def api_key(self, value: str) -> None:
-        self._api_key = value
+    @llm_api_key.setter
+    def llm_api_key(self, value: str) -> None:
+        self._llm_api_key = value
         self.save()
 
     @property
@@ -457,7 +469,7 @@ class Prefs(Saveable):
             "tts_force_cpu": self._tts_force_cpu,
             "aac_bitrate": self._aac_bitrate,
             "llm_url": self._llm_url,
-            "api_key": self._api_key,
+            "llm_api_key": self._llm_api_key,
             "llm_model": self._llm_model,
             "llm_system_prompt": self._llm_system_prompt,
             "llm_system_prompt_default": self._llm_system_prompt_default,

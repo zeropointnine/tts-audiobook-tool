@@ -2,6 +2,7 @@ import json
 import math
 import re
 import os
+import shutil
 import random
 import importlib
 from datetime import datetime
@@ -9,7 +10,7 @@ from pathlib import Path
 import platform
 import subprocess
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlencode
 
 from tts_audiobook_tool.constants import *
@@ -41,76 +42,74 @@ def print_feedback(
         end_value: Any = None,
         is_error=False,
         no_preformat=False,
-        extra_line=True,
-        no_pause=False,
-        no_enter=False
+        extra_line=True, # TODO: revisit
+        skip_pause=False
 ) -> None:
     """
     Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
     and submenu is about to be re-printed.
 
-    :param no_enter: if True, doesn't ask user to press enter to continue when "menu_clears_screen" is True
-    :param no_pause: if True, doesn't do the slight pause when there is no enter prompt
+    :param is_error: if True, prints message in red, and shows an enter prompt
+    :param no_pause: if True, doesn't do the typical slight pause
     """
     if not no_preformat:
         message = Ansi.ITALICS + (COL_ERROR if is_error else COL_DIM) + message
     if end_value is not None:
         message = message.strip() + " " + COL_ACCENT + str(end_value)
     printt(message)
-
-    if extra_line:
-        printt()
-    if _menu_clears_screen and not no_enter:
+    
+    if is_error:
         from tts_audiobook_tool.ask_util import AskUtil
         AskUtil.ask_enter_to_continue()
-    elif not no_pause:
-        # Just enough of a pause to make feedback more noticeable
-        time.sleep(PRINT_FEEDBACK_PAUSE_SECONDS)
     else:
-        # No slight pause and no enter prompt
-        pass 
+        if skip_pause:
+            sleep_duration = 0.0
+        else:        
+            sleep_duration = PRINT_FEEDBACK_PAUSE_NO_CLEAR_SCREEN if _menu_clears_screen else PRINT_FEEDBACK_PAUSE_CLEAR_SCREEN
+            if is_error:
+                sleep_duration *= 2.0
+        time.sleep(sleep_duration)
         
+    if extra_line:
+        printt()
+
+def get_terminal_width(fallback: int=80) -> int:
+    """Returns terminal width with a safe cross-platform fallback."""
+    try:
+        width = shutil.get_terminal_size(fallback=(fallback, 20)).columns
+    except Exception:
+        width = fallback
+    return max(20, width)
 
 
-def print_heading(s: str, dont_clear: bool=False, non_menu: bool=False) -> None:
-    """ """
-    if _menu_clears_screen and not dont_clear:
-        os.system('cls' if os.name == 'nt' else 'clear')
-
-    if non_menu:
-        color_a = COL_DIM
-        color_b = COL_DEFAULT
-    else:
-        color_a = COL_DEFAULT
-        color_b = COL_ACCENT
-
-    length = get_string_printable_len(s)
-    printt(color_a  +  ("-" * length))
-    printt(f"{color_b}{s}")
-    printt(color_a  +  ("-" * length))
+def make_terminal_divider(width: int | None = None, char: str = "-") -> str:
+    width = width or get_terminal_width()
+    return char * max(1, width)
 
 def print_init(s: str) -> None:
     """ App style for initializing a thing which may take some time """
     printt(f"{Ansi.ITALICS}{COL_DIM}{s}")
     print()
 
-def print_model_init(description: str = "", model_name: str = "") -> None:
-    """ Prints model init message in a consistent style """
-    from tts_audiobook_tool.tts import Tts
-    if not model_name:
-        model_name = Tts.get_type().value.ui["proper_name"]
-    s = f"Initializing {model_name} model"
-    if description:
-        s += f" {COL_DIM}({description})"
+def print_model_init(model_description: str, extra: str = "") -> str:
+    """ 
+    Prints model init message in a consistent style 
+    Also returns plain text concated string value yes rly
+    """
+    s = f"Initializing {model_description} model"
+    if extra:
+        s += f" {COL_DIM}({extra})"
     s += "..."
     print_init(s)
+    return f"{model_description} {extra}"
 
 def print_about_model() -> None:
     from tts_audiobook_tool.tts import Tts
     from tts_audiobook_tool.ask_util import AskUtil
+    from tts_audiobook_tool.menu_util import MenuUtil
     ui = Tts.get_type().value.ui
     model_name = ui["proper_name"]
-    print_heading(f"About {model_name}")
+    MenuUtil.print_heading(None, f"About {model_name}")
     for link in ui.get("project_links", []):
         printt(make_terminal_hyperlink(link))
     printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
@@ -269,10 +268,11 @@ def make_menu_label(
         default: Any=None, 
         value_prefix: str="currently: ", 
         color_code=COL_ACCENT,
-        num_decimals=0
+        num_decimals=0,
+        required_predicate: Callable[[], bool] | None = None
     ) -> str:
     currently = make_currently_string(
-        value, value_prefix, default, color_code, num_decimals
+        value, value_prefix, default, color_code, num_decimals, required_predicate
     )
     return f"{label} {currently}"
 
@@ -284,12 +284,20 @@ def make_currently_string(
         value_prefix: str="currently: ", 
         default: Any=None, 
         color_code=COL_ACCENT,
-        num_decimals=0
+        num_decimals=0,
+        required_predicate: Callable[[], bool] | None = None,
+        required_label="required"
     ) -> str:
     """
     Used for presenting the current value for a menu item in a consistent style
     Ex: `(currently: 666)`
+
+    If "required_predicate" is provided and returns True, 
+    returns "(required)" to indicate missing value is required.
     """
+    if required_predicate and required_predicate():
+        return f"{COL_DIM}({COL_ERROR}{required_label}{COL_DIM})"
+
     value_string = make_parameter_value_string(
         value=value, default=default, num_decimals=num_decimals
     )
@@ -421,9 +429,9 @@ def time_stamp(seconds: float, with_tenth: bool=True) -> str:
 def ellipsize(s: str, length: int, from_start:bool = False) -> str:
     if len(s) > length:
         if from_start:
-            s = "..." + s[-(length - 3):]
-        else:
             s = s[:length - 3] + "..."
+        else:
+            s = "..." + s[-(length - 3):]
     return s
 
 def get_package_dir() -> str | None:

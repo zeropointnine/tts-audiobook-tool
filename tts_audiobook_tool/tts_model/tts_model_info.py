@@ -354,7 +354,8 @@ class TtsModelInfos(Enum):
             "short_name": "Pocket",
             "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 15s): ",
             "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)",
-            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"]
+            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"],
+            "opt_in_url": "https://github.com/kyutai-labs/pocket-tts" # special case
         },
         substitutions=[
             ("—", ", "), ("─", ", ")

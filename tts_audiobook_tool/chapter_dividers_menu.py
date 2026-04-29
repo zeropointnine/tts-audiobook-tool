@@ -117,7 +117,7 @@ def ask_cut_points_regex(state: State) -> None:
             s += f" {Ansi.ITALICS}(implicit)"
         print(s)
 
-    print_heading("Matched chapter dividers:", non_menu=True)
+    MenuUtil.print_heading(None, "Matched chapter dividers:", non_menu=True)
     printt()
     if first_item_implicit:
         print_line(0)
@@ -146,7 +146,7 @@ def print_cut_points(section_dividers: list[int], num_items: int) -> None:
 
 def print_list(state: State) -> None:
 
-    print_heading("Chapter info:")
+    MenuUtil.print_heading(state, "Chapter info:")
     printt()
 
     infos = ChapterInfo.make_chapter_infos(state.project)

@@ -145,6 +145,7 @@ class HighShelfEq(tuple[str, float, float, float], Enum):
 # ---
 
 class SttVariant(tuple[str, str], Enum):
+    """ Applies to both whisper implementations (faster-whisper and mlx-whisper) """
 
     LARGE_V3 = ("large-v3", "Reference accuracy") # default
     LARGE_V3_TURBO = ("large-v3-turbo", "Less memory, faster")
@@ -253,7 +254,7 @@ class Strictness(tuple[str, int, str], Enum):
 # ---
 
 FILES_DESC = "Each chapter divider will result in a new, separate audio file"
-METADATA_DESC = "Always outputs to a single file\n    Chapter dividers are used for M4B chapter metadata and player bookmark metadata"
+METADATA_DESC = "Always outputs to a single file\n      Chapter dividers are used for M4B chapter metadata and player bookmark metadata"
 
 class ChapterMode(tuple[str, str, str], Enum):
 

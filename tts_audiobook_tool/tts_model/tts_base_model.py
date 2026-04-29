@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from tts_audiobook_tool.app_types import Sound, Strictness
+from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
@@ -109,23 +110,16 @@ class TtsBaseModel(ABC):
 
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
-    ) -> list[str]:
+            cls, project: Project, instance: TtsBaseModel | None
+    ) -> list[PrereqError]:
         """
-        Returns error message string as to why generate is not possible.
-        Applies to both main gen and realtime gen.
-
-        Some prereq errors can only be known with a concrete instance (param `instance`).
-
-        :param short_format:
-            When true, should return very short phrase, meant to be concatenated on a single line
-            Else, should return full messages meant to be displayed on separate lines
+        Returns list of unfulfilled prereq items describing why generate is not possible.
+        Some prereqs can only be known with a concrete instance (param `instance`).
         """
 
-        # Default implementation is for model whose only possible requirement is voice clone-related
-        
-        err = cls._get_standard_voice_prereq_error(project, short_format)
-        return [err] if err else []
+        # Default implementation is for model whose only potential requirement is voice clone-related
+        item = cls._get_standard_prereq_error(project)
+        return [item] if item else []
    
     def get_prereq_warnings(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
@@ -168,6 +162,8 @@ class TtsBaseModel(ABC):
         """ 
         Formatted text describing model including potential 'variant' info, used for main menu, plus.
         Color formatting convention is: White-Model-Text Gray-Qualification-Text, with no parens
+
+        TODO: No longer used; revisit
         """
         return cls.INFO.ui['proper_name']
 
@@ -221,16 +217,15 @@ class TtsBaseModel(ABC):
         return getattr(project, cls.INFO.voice_file_name_attr, "")
 
     @classmethod
-    def _get_standard_voice_prereq_error(cls, project: Project, short_format: bool) -> str:
+    def _get_standard_prereq_error(cls, project: Project) -> PrereqError | None:
 
         if not cls.INFO.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
         if cls.INFO.requires_voice and not cls.get_voice_value(project):
-            err = "requires voice sample" if short_format else "Voice sample required"
-            return err
+            return PrereqError("voice sample", "A voice clone sample is required")
         else:
-            return ""
+            return None
 
     def _get_standard_random_voice_reason(self, project: Project) -> str:
 

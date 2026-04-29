@@ -7,7 +7,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
 
-class LlmConfigMenu:
+class LlmSettingsMenu:
 
     @staticmethod
     def get_system_prompt_label_value(state: State) -> str:
@@ -29,7 +29,7 @@ class LlmConfigMenu:
             prefs = state.prefs
             items: list[MenuItem] = []
 
-            sys_prompt_label = make_menu_label("System prompt", LlmConfigMenu.get_system_prompt_label_value(state))
+            sys_prompt_label = make_menu_label("System prompt", LlmSettingsMenu.get_system_prompt_label_value(state))
             required = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
 
             if prefs.llm_extra_params:
@@ -41,47 +41,47 @@ class LlmConfigMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("LLM endpoint URL", ellipsize(prefs.llm_url, 50)) if prefs.llm_url else f"LLM endpoint URL {required}",
-                    lambda _, __: LlmConfigMenu.llm_url_menu(state)
+                    lambda _, __: LlmSettingsMenu.llm_url_menu(state)
                 )
             )
             if prefs.llm_url:
-                items.append(MenuItem("Clear LLM endpoint URL", lambda _, __: LlmConfigMenu.clear_llm_url(state)))
+                items.append(MenuItem("Clear LLM endpoint URL", lambda _, __: LlmSettingsMenu.clear_llm_url(state)))
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("API key", ellipsize(prefs.api_key, 9)) if prefs.api_key else f"API key {required}",
-                    lambda _, __: LlmConfigMenu.api_key_menu(state)
+                    lambda _: make_menu_label("API key", ellipsize(prefs.llm_api_key, 9)) if prefs.llm_api_key else f"API key {required}",
+                    lambda _, __: LlmSettingsMenu.api_key_menu(state)
                 )
             )
-            if prefs.api_key:
-                items.append(MenuItem("Clear API key", lambda _, __: LlmConfigMenu.clear_api_key(state)))
+            if prefs.llm_api_key:
+                items.append(MenuItem("Clear API key", lambda _, __: LlmSettingsMenu.clear_api_key(state)))
 
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("LLM model name", prefs.llm_model or "none"),
-                    lambda _, __: LlmConfigMenu.llm_model_menu(state)
+                    lambda _, __: LlmSettingsMenu.llm_model_menu(state)
                 )
             )
             if prefs.llm_model:
-                items.append(MenuItem("Clear LLM model name", lambda _, __: LlmConfigMenu.clear_llm_model(state)))
+                items.append(MenuItem("Clear LLM model name", lambda _, __: LlmSettingsMenu.clear_llm_model(state)))
 
             items.append(
                 MenuItem(
                     sys_prompt_label,
-                    lambda _, __: LlmConfigMenu.llm_system_prompt_options_menu(state)
+                    lambda _, __: LlmSettingsMenu.llm_system_prompt_options_menu(state)
                 )
             )
             if prefs.llm_system_prompt or prefs.llm_system_prompt_default:
-                items.append(MenuItem("Clear system prompt", lambda _, __: LlmConfigMenu.clear_system_prompt(state)))
+                items.append(MenuItem("Clear system prompt", lambda _, __: LlmSettingsMenu.clear_system_prompt(state)))
 
             items.append(
                 MenuItem(
                     extra_params_label,
-                    lambda _, __: LlmConfigMenu.llm_extra_params_menu(state)
+                    lambda _, __: LlmSettingsMenu.llm_extra_params_menu(state)
                 )
             )
             if prefs.llm_extra_params:
-                items.append(MenuItem("Clear extra params", lambda _, __: LlmConfigMenu.clear_llm_extra_params(state)))
+                items.append(MenuItem("Clear extra params", lambda _, __: LlmSettingsMenu.clear_llm_extra_params(state)))
 
             return items
 
@@ -123,7 +123,7 @@ class LlmConfigMenu:
         AskUtil.ask_string_and_save(
             state.prefs,
             "Enter LLM token:",
-            "api_key",
+            "llm_api_key",
             "Set LLM token to:",
             validator=validator
         )
@@ -135,7 +135,7 @@ class LlmConfigMenu:
 
     @staticmethod
     def clear_api_key(state: State) -> None:
-        state.prefs.api_key = ""
+        state.prefs.llm_api_key = ""
         print_feedback("Cleared LLM token")
 
     @staticmethod
@@ -193,7 +193,7 @@ class LlmConfigMenu:
             items: list[MenuItem] = [
                 MenuItem(
                     edit_label,
-                    lambda _, __: LlmConfigMenu.llm_system_prompt_menu(state)
+                    lambda _, __: LlmSettingsMenu.llm_system_prompt_menu(state)
                 )
             ]
 
@@ -204,7 +204,7 @@ class LlmConfigMenu:
             items.append(
                 MenuItem(
                     default_label,
-                    lambda _, __: LlmConfigMenu.use_default_system_prompt(state)
+                    lambda _, __: LlmSettingsMenu.use_default_system_prompt(state)
                 )
             )
 
@@ -212,14 +212,14 @@ class LlmConfigMenu:
                 items.append(
                     MenuItem(
                         "Clear system prompt",
-                        lambda _, __: LlmConfigMenu.clear_system_prompt(state)
+                        lambda _, __: LlmSettingsMenu.clear_system_prompt(state)
                     )
                 )
 
             items.append(
                 MenuItem(
                     "Print current system prompt",
-                    lambda _, __: LlmConfigMenu.print_current_system_prompt(state)
+                    lambda _, __: LlmSettingsMenu.print_current_system_prompt(state)
                 )
             )
 
@@ -244,7 +244,7 @@ class LlmConfigMenu:
 
     @staticmethod
     def print_current_system_prompt(state: State) -> None:
-        system_prompt = LlmConfigMenu.get_effective_system_prompt(state) or "None"
+        system_prompt = LlmSettingsMenu.get_effective_system_prompt(state) or "None"
         s = f"{COL_DIM}Current LLM system prompt:\n"
         s += f"{COL_DEFAULT}{system_prompt}"
         printt(s)

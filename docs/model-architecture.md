@@ -102,7 +102,7 @@ Classmethods with default implementations (override when the defaults don't appl
 Example: [tts_audiobook_tool/tts_model/glm_base_model.py](tts_audiobook_tool/tts_model/glm_base_model.py)
 
 - Must **not** import any model library at module level
-- Assigns `INFO = TtsModelInfos.XXX.value`
+- Assigns `INFO = TtsModelInfos.###.value`
 - Implements classmethods and any model-specific constants or static helpers
 - This is the class registered in `Tts.get_class()` and used for all non-instance operations (prereq checks, voice display info, etc.)
 

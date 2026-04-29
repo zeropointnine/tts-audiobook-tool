@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.target_util import TargetUtil
@@ -26,6 +26,8 @@ class VoiceQwen3Menu:
             if not state.project.qwen3_voice_file_name:
                 currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
             else:
+                if not should_show_menu_status_details(state):
+                    return "Select voice clone sample"
                 currently = make_currently_string(state.project.voice_label)
             return f"Select voice clone sample {currently}"
 
