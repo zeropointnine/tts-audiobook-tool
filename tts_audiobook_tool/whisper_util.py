@@ -3,10 +3,9 @@ from typing import Iterable, TYPE_CHECKING # type: ignore
 import librosa
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, Word
+from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant, Word
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.stt import Stt
-from faster_whisper.transcribe import Segment
 
 from tts_audiobook_tool.util import make_error_string
 
@@ -57,7 +56,7 @@ class WhisperUtil:
     @staticmethod
     def get_words_from_segments(segments: Iterable[Segment]) -> list[Word]:
         """
-        Converts an interable of faster-whisper Segments into a flattened list of Words.
+        Converts an iterable of whisper segments into a flattened list of Words.
         """
         words = []
         for segment in segments:

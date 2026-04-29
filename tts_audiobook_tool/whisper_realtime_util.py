@@ -8,8 +8,8 @@ from typing import Callable, Iterator
 
 import numpy as np
 import sounddevice as sd
-from faster_whisper.transcribe import Segment
 
+from tts_audiobook_tool.app_types import Segment
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt

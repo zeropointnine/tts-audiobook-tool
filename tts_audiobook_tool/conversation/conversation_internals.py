@@ -9,10 +9,8 @@ import threading
 import time
 import unicodedata
 
-from faster_whisper.transcribe import Segment
-
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_types import HighShelfEq, Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import HighShelfEq, Segment, Sound, SttConfig, SttVariant
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_MEDIUM, COL_OK
 from tts_audiobook_tool.conversation.console_session import (

@@ -44,14 +44,18 @@ class VoicePocketMenu:
                     lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.POCKET)
                 )
             )
+
+            if state.project.pocket_voice_file_name or state.project.pocket_predefined_voice:
+                items.append(
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.POCKET)
+                )
+
             items.append(
                 MenuItem(
                     make_predefined_voice_label,
                     lambda _, __: predefined(state),
                 )
             )
-            if state.project.pocket_voice_file_name or state.project.pocket_predefined_voice:
-                items.append(VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.POCKET))
 
             items.append(MenuItem(make_language_label, lambda _, __: ask_language(state)))
 

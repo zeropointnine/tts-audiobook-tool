@@ -56,6 +56,7 @@ if tts_model_infos == TtsModelInfos.NONE:
 # Hard requirement - Dependencies that have been added since launch
 
 import sys
+import platform
 from tts_audiobook_tool.hint import Hint
 from importlib import util
 
@@ -66,6 +67,10 @@ new_packages = [
 # win32-specific
 if sys.platform == "win32":
     new_packages.append("win32api") # ie, pywin32
+
+# mac-m-specific
+if sys.platform == "darwin" and platform.machine() == "arm64":
+    new_packages.append("mlx_whisper")
 
 # chatterbox update
 if Tts.get_type() == TtsModelInfos.CHATTERBOX:
@@ -119,7 +124,7 @@ def main() -> None:
         printt("https://ffmpeg.org/download.html")
         exit(1)
 
-    # Hard requirement - for chatterbox, must be running Python v3.11 (legacy guard)
+    # Hard requirement - Chatterbox special case, Python v3.11, legacy guard
     if Tts.get_type() == TtsModelInfos.CHATTERBOX:
         if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
             Hint.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)

@@ -6,8 +6,10 @@
 git+https://github.com/QwenLM/Qwen3-TTS.git@1ab0dd75353392f28a0d05d9ca960c9954b13c83
 
 # App dependencies
-faster-whisper==1.2.1
-ctranslate2==4.7.1
+faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
+
 torch==2.8.0
 torchaudio==2.8.0
 

@@ -134,11 +134,12 @@ class Conversation:
 
     def init_session_state(self) -> None:
         state = self.state
+        system_prompt = DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT if state.prefs.llm_system_prompt_default else state.prefs.llm_system_prompt.strip()
         self.llm = LlmUtil(
             api_endpoint_url=state.prefs.llm_url,
             token=state.prefs.api_key,
             model=state.prefs.llm_model,
-            system_prompt=state.prefs.llm_system_prompt.strip(),
+            system_prompt=system_prompt,
             extra_params=state.prefs.llm_extra_params,
             verbose=False,
         )
@@ -165,6 +166,7 @@ class Conversation:
         self.sound_stream = SoundDeviceStream(APP_SAMPLE_RATE)
         self.session: ResponseSession | None = None
         self.in_response = False
+        self.exiting = False
         self.old_input_sigint = None
         self.console_restored = False
         self.capture_stopped = False
@@ -186,7 +188,10 @@ class Conversation:
 
     def on_sigint(self, *_: object) -> None:
         self.ctrl_c_requested.set()
-        raise KeyboardInterrupt
+        if self.exiting:
+            return
+        if self.in_response:
+            raise KeyboardInterrupt
 
     def run_main_loop(self) -> None:
         while True:
@@ -225,22 +230,26 @@ class Conversation:
         self.prompt_builder.resume()
 
     def handle_top_level_interrupt(self) -> None:
+        self.exiting = True
         if self.in_response:
             # Ctrl-C raised after ResponseSession already cleaned up its
             # own interrupt (or during the post-playback settle). Swallow
             # it and exit start() cleanly via the finally block.
             self.ctrl_c_requested.clear()
             return
-        # Stop the mic/input stream immediately on exit so the device is
-        # released before any remaining UI cleanup or terminal restore.
-        self.stop_capture()
+        # The realtime STT worker may currently be inside a blocking
+        # transcribe() call, so stopping capture can take a noticeable
+        # amount of time while its worker thread unwinds. Restore the
+        # console and show exit feedback first so Ctrl-C feels immediate.
         self.ui.commit_render(1)
         self.ui.wait_idle()
         self.restore_console()
         print_feedback("Exited")
         print("", end="", flush=True)
+        self.stop_capture()
 
     def teardown(self) -> None:
+        self.exiting = True
         # Restore stdio first so any further prints (from util.stop,
         # sound_stream.shut_down, etc.) bypass the queue and don't risk
         # deadlocking ui.wait_idle() on never-processed task_done.

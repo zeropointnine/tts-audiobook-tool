@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import cache
 import platform
-from typing import NamedTuple, Protocol
+from typing import NamedTuple, Protocol, Sequence
 
 from numpy import ndarray
 
@@ -59,6 +59,22 @@ class ConcreteWord(Word):
         self.end = end
         self.word = word
         self.probability = probability
+
+class Segment(Protocol):
+    start: float
+    end: float
+    text: str
+    words: Sequence[Word]
+
+class ConcreteSegment(Segment):
+    """
+    Instantiatable `Segment`-compatible object for app-owned Whisper adapters.
+    """
+    def __init__(self, start: float, end: float, text: str, words: Sequence[Word]):
+        self.start = start
+        self.end = end
+        self.text = text
+        self.words = words
 
 # ---
 
@@ -157,8 +173,11 @@ class SttVariant(tuple[str, str], Enum):
 
 class SttConfig(tuple[str, str, str], Enum):
     """
-    Supported combinations of device + compute_type for the faster-whisper model
-    Rem, no MPS, I think
+    Preferred runtime configuration for STT backends that expose
+    device/precision-style execution controls.
+
+    Currently this is used by faster-whisper and ignored when mlx-whisper
+    is active on Apple Silicon.
     """
 
     CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8_float32") # default

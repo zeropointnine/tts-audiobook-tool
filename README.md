@@ -626,6 +626,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 **2026-04-28**
 
 - Added side feature: **Realtime LLM chat**
+- Added **mlx-whisper** for Mac Apple Silicon (MLX acceleration for Whisper)
 
 **2026-04-25**
 

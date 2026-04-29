@@ -10,13 +10,26 @@ from tts_audiobook_tool.util import *
 class LlmConfigMenu:
 
     @staticmethod
+    def get_system_prompt_label_value(state: State) -> str:
+        prefs = state.prefs
+        if prefs.llm_system_prompt_default:
+            return "app default"
+        return ellipsize(prefs.llm_system_prompt, 50) or "none"
+
+    @staticmethod
+    def get_effective_system_prompt(state: State) -> str:
+        if state.prefs.llm_system_prompt_default:
+            return DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT
+        return state.prefs.llm_system_prompt.strip()
+
+    @staticmethod
     def menu(state: State) -> None:
 
         def item_maker(_: State) -> list[MenuItem]:
             prefs = state.prefs
             items: list[MenuItem] = []
 
-            sys_prompt_label = make_menu_label("System prompt", ellipsize(prefs.llm_system_prompt, 50) or "none")
+            sys_prompt_label = make_menu_label("System prompt", LlmConfigMenu.get_system_prompt_label_value(state))
             required = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
 
             if prefs.llm_extra_params:
@@ -58,7 +71,7 @@ class LlmConfigMenu:
                     lambda _, __: LlmConfigMenu.llm_system_prompt_options_menu(state)
                 )
             )
-            if prefs.llm_system_prompt:
+            if prefs.llm_system_prompt or prefs.llm_system_prompt_default:
                 items.append(MenuItem("Clear system prompt", lambda _, __: LlmConfigMenu.clear_system_prompt(state)))
 
             items.append(
@@ -154,27 +167,38 @@ class LlmConfigMenu:
                 return "Value cannot be empty"
             return ""
 
-        AskUtil.ask_string_and_save(
-            state.prefs,
-            "Enter LLM system prompt:",
-            "llm_system_prompt",
-            "Set LLM system prompt to:",
-            validator=validator
-        )
+        printt("Enter LLM system prompt:")
+        value = AskUtil.ask(lower=False)
+        if not value:
+            return
+        err = validator(value)
+        if err:
+            print_feedback(err, is_error=True)
+            return
+        state.prefs.llm_system_prompt = value
+        state.prefs.llm_system_prompt_default = False
+        print_feedback("Set LLM system prompt to:", value)
 
     @staticmethod
     def llm_system_prompt_options_menu(state: State) -> None:
 
         def item_maker(_: State) -> list[MenuItem]:
+            edit_label = "Edit system prompt"
+            if not state.prefs.llm_system_prompt_default:
+                edit_label = make_menu_label(
+                    edit_label,
+                    ellipsize(state.prefs.llm_system_prompt, 40) or "none"
+                )
+
             items: list[MenuItem] = [
                 MenuItem(
-                    "Edit system prompt",
+                    edit_label,
                     lambda _, __: LlmConfigMenu.llm_system_prompt_menu(state)
                 )
             ]
 
             default_label = "Use app default system prompt"
-            if state.prefs.llm_system_prompt == DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT:
+            if state.prefs.llm_system_prompt_default:
                 default_label += f" {COL_ACCENT}(selected)"
 
             items.append(
@@ -184,7 +208,7 @@ class LlmConfigMenu:
                 )
             )
 
-            if state.prefs.llm_system_prompt:
+            if state.prefs.llm_system_prompt or state.prefs.llm_system_prompt_default:
                 items.append(
                     MenuItem(
                         "Clear system prompt",
@@ -209,17 +233,18 @@ class LlmConfigMenu:
 
     @staticmethod
     def use_default_system_prompt(state: State) -> None:
-        state.prefs.llm_system_prompt = DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT
+        state.prefs.llm_system_prompt_default = True
         print_feedback("Set LLM system prompt to app default")
 
     @staticmethod
     def clear_system_prompt(state: State) -> None:
         state.prefs.llm_system_prompt = ""
+        state.prefs.llm_system_prompt_default = False
         print_feedback("Cleared LLM system prompt")
 
     @staticmethod
     def print_current_system_prompt(state: State) -> None:
-        system_prompt = state.prefs.llm_system_prompt or "None"
+        system_prompt = LlmConfigMenu.get_effective_system_prompt(state) or "None"
         s = f"{COL_DIM}Current LLM system prompt:\n"
         s += f"{COL_DEFAULT}{system_prompt}"
         printt(s)

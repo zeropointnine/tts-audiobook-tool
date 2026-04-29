@@ -25,6 +25,7 @@ class Prefs(Saveable):
             api_key: str = "",
             llm_model: str = "",
             llm_system_prompt: str = "",
+            llm_system_prompt_default: bool = True,
             llm_extra_params: dict = {},
             last_voice_dir: str = "",
             last_project_dir: str = "",
@@ -44,6 +45,7 @@ class Prefs(Saveable):
         self._api_key = api_key
         self._llm_model = llm_model
         self._llm_system_prompt = llm_system_prompt
+        self._llm_system_prompt_default = llm_system_prompt_default
         self._llm_extra_params = llm_extra_params
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
@@ -156,6 +158,11 @@ class Prefs(Saveable):
             llm_system_prompt = ""
             dirty = True
 
+        llm_system_prompt_default = prefs_dict.get("llm_system_prompt_default", True)
+        if not isinstance(llm_system_prompt_default, bool):
+            llm_system_prompt_default = True
+            dirty = True
+
         llm_extra_params = prefs_dict.get("llm_extra_params", {})
         if not isinstance(llm_extra_params, dict):
             llm_extra_params = {}
@@ -229,6 +236,7 @@ class Prefs(Saveable):
             api_key=api_key,
             llm_model=llm_model,
             llm_system_prompt=llm_system_prompt,
+            llm_system_prompt_default=llm_system_prompt_default,
             llm_extra_params=llm_extra_params,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
@@ -380,6 +388,15 @@ class Prefs(Saveable):
         self.save()
 
     @property
+    def llm_system_prompt_default(self) -> bool:
+        return self._llm_system_prompt_default
+
+    @llm_system_prompt_default.setter
+    def llm_system_prompt_default(self, value: bool) -> None:
+        self._llm_system_prompt_default = value
+        self.save()
+
+    @property
     def llm_extra_params(self) -> dict:
         return self._llm_extra_params
 
@@ -443,6 +460,7 @@ class Prefs(Saveable):
             "api_key": self._api_key,
             "llm_model": self._llm_model,
             "llm_system_prompt": self._llm_system_prompt,
+            "llm_system_prompt_default": self._llm_system_prompt_default,
             "llm_extra_params": self._llm_extra_params,
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,

@@ -7,8 +7,10 @@ git+https://github.com/index-tts/index-tts@db5b39bb6ad903c219b2dd33d60b0f0bdaede
 ninja
 
 # App dependencies
-faster-whisper==1.2.1
-ctranslate2==4.7.1
+faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
+
 torch==2.8.0
 
 audiotsm==0.1.2

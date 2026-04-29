@@ -5,8 +5,10 @@
 chatterbox-tts==0.1.7
 
 # App dependencies
-faster-whisper==1.2.1
-ctranslate2==4.6.1
+faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
+
 torch==2.6.0
 torchaudio==2.6.0
 

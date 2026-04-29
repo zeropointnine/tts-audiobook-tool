@@ -38,8 +38,10 @@ descript-audiotools
 triton-windows==3.3.1.post19; sys_platform == 'win32'
 
 # App dependencies
-faster-whisper==1.2.1
-ctranslate2==4.7.1
+faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
+
 torch==2.8.0
 torchaudio==2.8.0
 
