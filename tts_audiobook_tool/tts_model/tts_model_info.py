@@ -388,6 +388,33 @@ class TtsModelInfos(Enum):
         ]
     )
 
+    OMNIVOICE = TtsModelInfo(
+        module_test="omnivoice",
+        file_tag="omnivoice",
+        torch_devices=["cuda", "mps", "cpu"],
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_file_name_attr="omnivoice_voice_file_name",
+        requires_voice=False,              # supports Voice Design and Auto Voice without ref_audio
+        requires_voice_transcript=False,   # OmniVoice already uses Whisper internally for voice cloning
+        batch_size_project_field="",
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        un_all_caps=True,                  # slightly more error-prone when all-caps
+        requirements_file_name="requirements-omnivoice.txt",
+        ui={
+            "proper_name": "OmniVoice",
+            "short_name": "OmniVoice",
+            "voice_path_console": "Enter voice clone audio clip file path (3-10s recommended): ",   #tested with 10-20s and can produce better results...
+            "voice_path_requestor": "Select voice clone audio clip (3-10s recommended)",
+            "project_links": ["https://github.com/k2-fsa/OmniVoice", "https://huggingface.co/k2-fsa/OmniVoice"]
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ")  # em-dash and box-drawing
+        ]
+    )
+
     @staticmethod
     def recommended_range_string(info: TtsModelInfo) -> str:
         if info.max_words_reco_range[1] == info.max_words_reco_range[0]:

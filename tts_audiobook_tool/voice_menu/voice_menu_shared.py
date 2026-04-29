@@ -66,6 +66,9 @@ class VoiceMenuShared:
             case TtsModelInfos.POCKET:
                 from tts_audiobook_tool.voice_menu import VoicePocketMenu
                 VoicePocketMenu.menu(state)
+            case TtsModelInfos.OMNIVOICE:
+                from tts_audiobook_tool.voice_menu import VoiceOmniVoiceMenu
+                VoiceOmniVoiceMenu.menu(state)
             case _:
                 ...
 
