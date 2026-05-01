@@ -286,7 +286,7 @@ class ConcatMenu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
             for file_path, modified_date in file_infos:
-                label = f"{Path(file_path).name}\n    {COL_DIM}{modified_date}{COL_DEFAULT}"
+                label = f"{Path(file_path).name}\n      {COL_DIM}{modified_date}{COL_DEFAULT}"
                 item = MenuItem(label, on_item, file_path)
                 items.append(item)
             return items

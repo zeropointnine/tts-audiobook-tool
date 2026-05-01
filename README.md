@@ -96,13 +96,7 @@ To enable torch CUDA acceleration on Windows, run the following commands (The pr
     pip uninstall -y torch torchaudio
     pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 
-### Step 5 (optional)
-
-To enable the [Sidon](https://github.com/sarulab-speech/Sidon) 48 khz upscaler feature, enter:
-
-    pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
-
-### Step 6
+### Step 5
 
 Run the app by entering:
 

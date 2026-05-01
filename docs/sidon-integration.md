@@ -63,19 +63,22 @@ Pre-trained weights are published at [sarulab-speech/sidon-v0.1](https://hugging
 
 ## Dependencies
 
-Sidon is installed from git into the pocket virtual environment:
+Sidon is installed from a project-specific fork into the pocket virtual environment:
 
 ```
-sidon @ git+https://github.com/sarulab-speech/Sidon
+sidon @ git+https://github.com/zeropointnine/tts-audiobook-tool-sidon
 ```
 
-Its full `pyproject.toml` dependency tree includes training-only packages (hydra, wandb, ray, lightning, peft, etc.) that are not needed for inference. Install with `--no-deps` to avoid pulling in several GB of training stack:
+Fork repo: [zeropointnine/tts-audiobook-tool-sidon](https://github.com/zeropointnine/tts-audiobook-tool-sidon)
 
-```bash
-pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
-```
+This fork exists because `tts-audiobook-tool` only uses Sidon for inference, not training. The upstream package includes training-oriented dependencies and import paths that are unnecessary for this app's Sidon usage.
 
-The only runtime dependencies for inference are `torch`, `torchaudio`, and `numpy` — all already present in `requirements-pocket.txt`.
+The fork makes two project-specific changes:
+
+- It trims install dependencies so they only cover the Sidon inference code path used by `tts-audiobook-tool`.
+- It removes eager training-module imports from `src/sidon/model/__init__.py`, making the package safer to install and import in a lightweight inference environment.
+
+The only runtime dependencies for inference are `torch`, `torchaudio`, and `numpy` — all already present in the various `requirements-*.txt` files.
 
 ---
 

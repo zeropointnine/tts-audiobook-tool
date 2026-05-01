@@ -8,6 +8,7 @@ from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
@@ -30,13 +31,13 @@ class GenerateMenu:
             if not state.project.generate_range_string:
                 range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}all{COL_DIM})"
             else:
-                line_word = make_noun("line", "lines", len(state.project.get_indices_to_generate()))
+                line_word = make_noun("line", "lines", len(ProjectUtil.get_indices_to_generate(state.project)))
                 range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}{line_word} {state.project.generate_range_string}{COL_DIM})"
 
             if not state.project.generate_range_string:
                 complete_label = ""
             else:
-                selected_indices = state.project.get_indices_to_generate()
+                selected_indices = ProjectUtil.get_indices_to_generate(state.project)
                 all_generated_indices = state.project.sound_segments.sound_segments_map.keys()
                 selected_indices_not_generated = selected_indices - all_generated_indices
                 num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
@@ -279,7 +280,7 @@ def do_generate(state: State, is_regen: bool) -> None:
     if is_regen:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
     else:
-        indices = state.project.get_selected_indices_not_generated()
+        indices = ProjectUtil.get_selected_indices_not_generated(state.project)
     
     if not indices:
         qualifier = " in currently selected range" if state.project.generate_range_string else ""

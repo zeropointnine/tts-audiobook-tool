@@ -1,6 +1,7 @@
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
@@ -171,7 +172,7 @@ def ask_vector(project: Project) -> None:
     if inp == "none":
         value = []
     else:
-        value = Project.parse_emo_vector_string(inp)
+        value = ProjectUtil.parse_emo_vector_string(inp)
         if isinstance(value, str):
             AskUtil.ask_error(value)
             return

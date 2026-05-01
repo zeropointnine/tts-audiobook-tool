@@ -120,28 +120,32 @@ class Startup:
             "The app's dependencies have changed",
             f"The following packages were not found: {COL_ERROR}{', '.join(missing_packages)}{COL_DEFAULT}\n"
             "You may have updated the app from the repository without updating its dependencies.\n"
-            "Either manually install the missing packages or, preferably, update your virtual environment by re-running:\n"
-            f"`pip install -r {Tts.get_type().value.requirements_file_name}`."
+            "Update your virtual environment by re-running:\n"
+            f"`{Ansi.BOLD}pip install -r {Tts.get_type().value.requirements_file_name}{Ansi.RESET}`."
         )
         Hint.print_hint(hint)
         exit(1)
 
     def get_new_packages(self) -> list[str]:
         """
-        Packages that have been added to the requirements files since early release.
+        Packages that have been added to the requirements files since first release.
         """
         
         new_packages = [
             "faster_whisper", "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", "pydantic", "requests"
         ]
 
+        # cuda-related (ie, win+linux)
+        if sys.platform in ("win32", "linux"):
+            new_packages.append("sidon")
+
+        # mac apple silicon-specific
+        if sys.platform == "darwin" and platform.machine() == "arm64":
+            new_packages.append("mlx_whisper")
+
         # win32-specific
         if sys.platform == "win32":
             new_packages.append("win32api") # ie, pywin32
-
-        # mac-m-specific
-        if sys.platform == "darwin" and platform.machine() == "arm64":
-            new_packages.append("mlx_whisper")
 
         # chatterbox update
         if Tts.get_type() == TtsModelInfos.CHATTERBOX:

@@ -119,7 +119,7 @@ class ProjectMenu:
         dir = AskUtil.ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
         if not dir:
             return False
-        err = Project.is_valid_project_dir(dir)
+        err = ProjectUtil.is_valid_project_dir(dir)
         if err:
             AskUtil.ask_error(err)
             return False

@@ -18,7 +18,6 @@ from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_model.oute_util import OuteUtil
-from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
@@ -871,76 +870,6 @@ class Project(BaseModel):
             return ""
         return os.path.join(self.dir_path, PROJECT_REALTIME_SUBDIR)
 
-    def get_indices_to_generate(self) -> set[int]:
-        """
-        Returns the set of indices to be generated,
-        derived from the (human readable) "generate_range_string"
-        """
-        range_string = self.generate_range_string
-        is_all = not range_string or range_string == "all" or range_string == "a"
-        if is_all:
-            result = set(range(len(self.phrase_groups)))
-        else:
-            result, _ = ParseUtil.parse_ranges_string(range_string, len(self.phrase_groups))
-        return result
-
-    def get_selected_indices_not_generated(self) -> set[int]:
-        """
-        From the currently selected range of indices,
-        returns the indicies for which no sound segment exists.
-        """
-        selected_indices_all = self.get_indices_to_generate()
-        selected_indices_generated = set( self.sound_segments.sound_segments_map.keys() )
-        selected_indices_not_generated = selected_indices_all - selected_indices_generated
-        return selected_indices_not_generated
-
-    @staticmethod
-    def is_valid_project_dir(project_dir: str) -> str:
-        """ Returns error feedback text or empty string if is-valid """
-
-        if not os.path.exists(project_dir):
-            return f"Doesn't exist: {project_dir}"
-
-        items = os.listdir(project_dir)
-
-        # Empty directory is considered valid
-        if not items:
-            return ""
-
-        # Directory with a voice and/or text json file considered valid
-        if PROJECT_JSON_FILE_NAME in items:
-            return ""
-
-        return f"{project_dir} does not appear to be a project directory"
-
-    @staticmethod
-    def parse_emo_vector_string(string: str) -> list[float] | str:
-        """
-        Returns error string on parse fail
-        Returns empty list to represent list of all zeroes
-        """
-
-        string = string.strip()
-        if not string:
-            return []
-        if string.lower() == "none":
-            return []
-
-        strings = string.split(",")
-        if len(strings) != 8:
-            return "Requires 8 comma-delimited numbers between 0-1"
-
-        floats = []
-        for string in strings:
-            try:
-                flt = float(string)
-            except:
-                return f"Bad value: {string} - must be a number between 0-1"
-            if not (0 <= flt <= 1):
-                return f"Out of range: {flt} - must be between 0-1"
-            floats.append(flt)
-        return floats
-
     def emo_vector_to_string(self) -> str:
         if not self.indextts2_emo_vector or sum(self.indextts2_emo_vector) == 0:
             return "none"
@@ -950,47 +879,10 @@ class Project(BaseModel):
             strings.append(string)
         return ",".join(strings)
 
-    def verify_voice_files_exist(self) -> bool:
-        """
-        Checks if the voice file/s for the current TTS model exist, and if they don't,
-        clears the field, prints feedback, re-saves project, and returns True
-        """
-        attribs = []
-        match Tts.get_type().value:
-            case TtsModelInfos.CHATTERBOX:
-                attribs = ["chatterbox_voice_file_name"]
-            case TtsModelInfos.FISH_S1:
-                attribs = ["fish_s1_voice_file_name"]
-            case TtsModelInfos.FISH_S2:
-                attribs = ["fish_s2_voice_file_name"]
-            case TtsModelInfos.HIGGS:
-                attribs = ["higgs_voice_file_name"]
-            case TtsModelInfos.VIBEVOICE:
-                attribs = ["vibevoice_voice_file_name"]
-            case TtsModelInfos.INDEXTTS2:
-                attribs = ["indextts2_voice_file_name", "indextts2_emo_voice_file_name"]
-            case TtsModelInfos.GLM:
-                attribs = ["glm_voice_file_name"]
-            case TtsModelInfos.MIRA:
-                attribs = ["mira_voice_file_name"]
-            case TtsModelInfos.POCKET:
-                attribs = ["pocket_voice_file_name"]
-        if not attribs:
-            return False
-
-        did_delete = False
-        for attrib in attribs:
-            file_name = getattr(self, attrib)
-            if file_name and not os.path.exists(os.path.join(self.dir_path, file_name)):
-                printt(f"{COL_ERROR}Missing voice file: {COL_DEFAULT}{file_name}")
-                setattr(self, attrib, "")
-                did_delete = True
-        return did_delete
-
     def migrate_from(self, source_project: Project) -> None:
         """
-        Copies settings from pre-existing project except directory path, and also copies 'active' internal files.
-        Returns error string on fail
+        Copies settings from another project instance  to self (except directory path), 
+        and also copies 'active' internal files.
         """
 
         SKIP = {'dir_path', 'sound_segments', 'oute_voice_json'}

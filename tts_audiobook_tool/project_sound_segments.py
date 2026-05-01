@@ -5,6 +5,7 @@ from watchdog.events import FileSystemEventHandler
 
 from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
@@ -117,7 +118,7 @@ class ProjectSoundSegments:
         return len( self.sound_segments_map.keys() )
 
     def num_generated_in_current_range(self) -> int:
-        sett = self.project.get_indices_to_generate()
+        sett = ProjectUtil.get_indices_to_generate(self.project)
         dic = self.sound_segments_map
         count = 0
         for key in dic.keys():
@@ -157,7 +158,7 @@ class ProjectSoundSegments:
         
         Uses dynamic failure detection based on num_errors and project strictness.
         """
-        all_indices = self.project.get_indices_to_generate()
+        all_indices = ProjectUtil.get_indices_to_generate(self.project)
         failed_indices = set()
         for index in all_indices:
             items = self.sound_segments_map.get(index, [])
@@ -174,7 +175,7 @@ class ProjectSoundSegments:
         Within the project's defined 'generate range', 
         returns the fail counts of existing sound segment items
         """
-        all_indices = self.project.get_indices_to_generate()
+        all_indices = ProjectUtil.get_indices_to_generate(self.project)
         fail_counts = {}
         for index in all_indices:
             items = self.sound_segments_map.get(index, [])
