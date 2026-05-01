@@ -587,7 +587,7 @@ class ResponseSession:
                     continue
                 
                 # Apply project's segment post-processing chain (limit-silence-gaps,
-                # resample to APP_SAMPLE_RATE, high-shelf EQ). No upscaler in conversation.
+                # resample to APP_SAMPLE_RATE, optionally high-shelf EQ; no upsampler)
                 high_shelf = HighShelfEq.get_by_id(self.project.high_shelf) or HighShelfEq.DISABLED
                 pp_result = ConcatUtil.apply_segment_post_processing(
                     sound,

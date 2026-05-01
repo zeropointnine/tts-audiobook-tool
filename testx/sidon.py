@@ -25,7 +25,7 @@ assert not isinstance(result, str), f"Sidon failed: {result}"
 print(f"output: {result.sr} Hz, {result.duration:.2f}s")
 
 base, ext = os.path.splitext(INPUT_PATH)
-output_path = f"{base}_upscaled{ext}"
+output_path = f"{base}_upsampled{ext}"
 sf.write(output_path, result.data, result.sr)
 print(f"saved: {output_path}")
 

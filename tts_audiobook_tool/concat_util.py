@@ -42,8 +42,8 @@ class ConcatUtil:
         if chapter_indices and bookmark_indices:
             raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
         
-        if state.project.use_upscaler and ModelsUtil.is_any_model_loaded():
-            printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upscaling...{COL_DEFAULT}")
+        if state.project.use_upsampler and ModelsUtil.is_any_model_loaded():
+            printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
             printt()
             ModelsUtil.clear_all_models(except_sidon=True)
 
@@ -102,7 +102,7 @@ class ConcatUtil:
         printt("Finished.")
         printt()
 
-        ModelsUtil.clear_sidon_upscaler()
+        ModelsUtil.clear_sidon_upsampler()
 
         Hint.show_player_hint_if_necessary(state.prefs)
 
@@ -186,7 +186,7 @@ class ConcatUtil:
             use_section_sound_effect=state.project.use_section_sound_effect,
             high_shelf=high_shelf,
             aac_bitrate=state.prefs.aac_bitrate,
-            use_upscaler=state.project.use_upscaler,
+            use_upsampler=state.project.use_upsampler,
             limit_silence_gaps=state.project.limit_silence_gaps
         )
         if isinstance(result, str): # is error
@@ -311,7 +311,7 @@ class ConcatUtil:
         path: str,
         use_section_sound_effect: bool,
         high_shelf: HighShelfEq,
-        use_upscaler: bool = False,
+        use_upsampler: bool = False,
         limit_silence_gaps: bool = False
     ) -> Sound | str:
         """
@@ -328,7 +328,7 @@ class ConcatUtil:
             sound,
             high_shelf=high_shelf,
             limit_silence_gaps=limit_silence_gaps,
-            use_upscaler=use_upscaler,
+            use_upsampler=use_upsampler,
         )
         if isinstance(result, str):
             return result
@@ -345,7 +345,7 @@ class ConcatUtil:
         sound: Sound,
         high_shelf: HighShelfEq,
         limit_silence_gaps: bool = False,
-        use_upscaler: bool = False,
+        use_upsampler: bool = False,
     ) -> Sound | str:
         """
         Standard audio post-processing chain shared by the audiobook concat
@@ -354,11 +354,11 @@ class ConcatUtil:
 
         Order:
           1. Optional silence-gap limiting
-          2. Optional generative upscaling (sidon)
+          2. Optional generative upsampler (sidon)
           3. Resample to APP_SAMPLE_RATE
           4. High-shelf EQ (no-op if `high_shelf` is DISABLED)
 
-        Returns the processed Sound, or an error string if upscaling was
+        Returns the processed Sound, or an error string if upsampling was
         requested but failed.
         """
         if limit_silence_gaps:
@@ -366,11 +366,11 @@ class ConcatUtil:
             if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
                 sound = new_sound
 
-        if use_upscaler:
-            upscaler = ModelsUtil.get_sidon_upscaler()
-            if not upscaler:
-                return "\"Generative upscaling\" enabled but not available"
-            result = upscaler.process(sound)
+        if use_upsampler:
+            upsampler = ModelsUtil.get_sidon_upsampler()
+            if not upsampler:
+                return "\"Generative upsampling\" enabled but not available"
+            result = upsampler.process(sound)
             if isinstance(result, str):
                 return result
             sound = result # rem, this is 48khz
@@ -391,7 +391,7 @@ class ConcatUtil:
         phrases_and_paths: list[ tuple[Phrase, str] ],
         use_section_sound_effect: bool,
         high_shelf: HighShelfEq,
-        use_upscaler: bool = False
+        use_upsampler: bool = False
     ) -> list[float] | str:
         """
         Calculates the final durations of the sound segments to be concatenated.
@@ -409,7 +409,7 @@ class ConcatUtil:
                 durations.append(0)
                 continue
 
-            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect, high_shelf, use_upscaler)
+            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect, high_shelf, use_upsampler)
             if isinstance(result, str): # error
                 return result
 
@@ -426,7 +426,7 @@ class ConcatUtil:
         high_shelf: HighShelfEq,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
-        use_upscaler: bool = False,
+        use_upsampler: bool = False,
         limit_silence_gaps: bool = False
     ) -> list[float] | str:
         """
@@ -463,7 +463,7 @@ class ConcatUtil:
                 return "Interrupted by user"
 
             result = ConcatUtil.make_rendered_sound_segment(
-                phrase, path, use_section_sound_effect, high_shelf, use_upscaler, limit_silence_gaps
+                phrase, path, use_section_sound_effect, high_shelf, use_upsampler, limit_silence_gaps
             )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user

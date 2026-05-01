@@ -82,8 +82,8 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Generative upscaling", state.project.use_upscaler),
-                    lambda _, __: ConcatMenu.upscaler_menu(state)
+                    lambda _: make_menu_label("Generative upsampling", state.project.use_upsampler),
+                    lambda _, __: ConcatMenu.upsample_menu(state)
                 )
             )
 
@@ -175,28 +175,27 @@ class ConcatMenu:
         )
 
     @staticmethod
-    def upscaler_menu(state: State) -> None:
+    def upsample_menu(state: State) -> None:
         
         def on_select(value: bool) -> None:
-            state.project.use_upscaler = value
+            state.project.use_upsampler = value
             state.project.save()
-            print_feedback(f"Generative upscaling set to: {value}")
+            print_feedback(f"Generative upsampling set to: {value}")
 
         if not torch.cuda.is_available():
             subheading = "Requires CUDA, which is not available on this system.\n"
         elif not SidonUtil.has_sidon():
-            subheading = "Sidon upscaler not installed.\n"
-            subheading += "Please see the README for installation instructions.\n"
+            subheading = f"{Ansi.ITALICS}Sidon upsampler not installed\n"
         else: 
-            subheading = UPSCALE_SUBHEADING
+            subheading = UPSAMPLE_SUBHEADING
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Generative upscaling",
+            heading_text="Generative upsampling",
             subheading=subheading,
             labels=["True", "False"],
             values=[True, False],
-            current_value=state.project.use_upscaler,
+            current_value=state.project.use_upsampler,
             default_value=False,
             on_select=on_select
         )
@@ -516,8 +515,8 @@ HIGH_SHELF_SUBHEADING = \
 Some TTS models may benefit more from this than others.
 """
 
-UPSCALE_SUBHEADING = \
-"""Uses Sidon generative model to upscale audio to 48kHz.
+UPSAMPLE_SUBHEADING = \
+"""Uses Sidon generative model to upsample audio to 48kHz.
 Enhances audio quality and clarity; affects timbre and tonality.
 """
 

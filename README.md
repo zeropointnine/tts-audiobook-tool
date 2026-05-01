@@ -17,7 +17,7 @@ The app employs various techniques, many of them configurable, to manage and imp
 - Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
 - Segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
-- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upscaling, plus EBU R128 loudness normalization
+- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling, plus EBU R128 loudness normalization
 
 The app uses a plain-text interface in the console. It also includes optional realtime modes for low-latency audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
@@ -54,7 +54,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
 - [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
-- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upscaled to 48khz with Sidon)
+- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upsampled to 48khz with Sidon)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, at high temperature)
@@ -634,7 +634,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2026-04-24**
 
-- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upscaler** post-processing option. 
+- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upsampler** post-processing option. 
 - Added `Concat` > **`Limit silence gaps`** (prevents long silences in sound generations, keeps narration flowing)
 
 **2026-04-23**
