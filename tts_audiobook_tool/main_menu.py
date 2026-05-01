@@ -86,7 +86,7 @@ class MainMenu:
             heading = f"{APP_NAME} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
         else:
             heading = APP_NAME
-        MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True)
+        MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
 
 # ---
 

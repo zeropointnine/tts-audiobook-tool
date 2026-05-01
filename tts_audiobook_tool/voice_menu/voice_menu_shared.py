@@ -81,7 +81,8 @@ class VoiceMenuShared:
             heading="Voice clone and model settings",
             items=items,
             subheading=subheading,
-            on_exit=lambda: SoundFileUtil.stop_sound_async()
+            on_exit=lambda: SoundFileUtil.stop_sound_async(),
+            breadcrumb="Voice",
         )
 
     @staticmethod

@@ -49,7 +49,7 @@ class RealTimePlaybackMenu:
                 lambda _, __: RealTimePlaybackMenu.save_menu(state)
             )
         ]
-        MenuUtil.menu(state, "Realtime audiobook playback", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Realtime audiobook playback", items, hint=HINT_REAL_TIME, breadcrumb="Realtime playback")
 
     @staticmethod
     def ask_line_range(state: State) -> None:
@@ -118,7 +118,7 @@ class RealTimePlaybackMenu:
 
         # Menu
         items = [project_item, custom_file_item, custom_manual_item]
-        MenuUtil.menu(state, "Realtime audiobook playback - Set text source", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Text source", items, hint=HINT_REAL_TIME, breadcrumb="Text source")
 
     @staticmethod
     def save_menu(state: State) -> None:
@@ -141,7 +141,8 @@ class RealTimePlaybackMenu:
             values=[True, False],
             current_value=state.project.realtime_save,
             default_value=PROJECT_DEFAULT_REALTIME_SAVE,
-            on_select=on_select
+            on_select=on_select,
+            breadcrumb="Save output",
         )
 
 # ---

@@ -30,7 +30,7 @@ class ToolsMenu:
             
             return [mp3s_item, transcode_item, speed_item]
         
-        MenuUtil.menu(state, "Tools:", item_maker)
+        MenuUtil.menu(state, "Tools:", item_maker, breadcrumb="Tools")
 
     @staticmethod
     def ask_save_speed_up_audio() -> None:

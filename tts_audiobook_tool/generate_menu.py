@@ -112,7 +112,7 @@ class GenerateMenu:
             )
             return items
         
-        MenuUtil.menu(state, heading_maker, items_maker)
+        MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
 
     @staticmethod
     def strictness_menu(state: State) -> None:
@@ -144,7 +144,8 @@ class GenerateMenu:
             current_value=state.project.strictness,
             default_value=None,
             on_select=on_select,
-            subheading=STRICTNESS_DESC
+            subheading=STRICTNESS_DESC,
+            breadcrumb="Word error tolerance",
         )
 
 # ---

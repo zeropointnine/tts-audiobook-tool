@@ -90,7 +90,7 @@ class TextMenu:
                 lambda _, __: TextMenu.strategy_menu(state)   
             )
         )
-        MenuUtil.menu(state, make_heading, items, hint=HINT_LINE_BREAKS)
+        MenuUtil.menu(state, make_heading, items, hint=HINT_LINE_BREAKS, breadcrumb="Text")
 
     @staticmethod
     def strategy_menu(state: State) -> None:
@@ -109,7 +109,8 @@ class TextMenu:
             current_value=state.project.segmentation_strategy,
             default_value=list(SegmentationStrategy)[0],
             on_select=on_select,
-            subheading=SEG_STRATEGY_SUBHEADING
+            subheading=SEG_STRATEGY_SUBHEADING,
+            breadcrumb="Text segmentation strategy",
         )
 
 def on_set_text(state: State, item: MenuItem) -> bool:
@@ -175,7 +176,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
 def on_ask_max_size(state: State, _) -> None:
 
-    MenuUtil.print_heading(state, "Max words per segment")
+    MenuUtil.print_screen_heading(state, "Max words per segment")
 
     printt("This is the maximum number of words that will be used for a single TTS prompt.")
     printt("This value is applied at the point text is imported into the project.")

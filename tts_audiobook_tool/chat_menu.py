@@ -42,7 +42,8 @@ class ChatMenu:
             f"LLM voice chat {COL_DIM}(experimental){COL_DEFAULT}",
             items,
             subheading=subheading,
-            hint=HINT_LLM_CHAT
+            hint=HINT_LLM_CHAT,
+            breadcrumb="LLM voice chat",
         )
 
     @staticmethod
@@ -63,4 +64,5 @@ class ChatMenu:
             current_value=state.prefs.conversation_stt_immediate,
             default_value=False,
             on_select=on_select,
+            breadcrumb="Submit prompt immediately",
         )

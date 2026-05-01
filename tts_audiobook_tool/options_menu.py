@@ -75,7 +75,7 @@ class OptionsMenu:
                 items.append(
                     MenuItem(
                         lambda _: f"TTS model - About {Tts.get_type().value.ui['proper_name']}",
-                        lambda _, __: print_about_model()
+                        lambda _, __: print_about_model(state)
                     )
                 )
 
@@ -116,7 +116,7 @@ class OptionsMenu:
             )
             return items
         
-        MenuUtil.menu(state, "Options:", item_maker)
+        MenuUtil.menu(state, "Options:", item_maker, breadcrumb="Options")
 
     @staticmethod
     def stt_model_menu(state: State) -> None:
@@ -134,7 +134,8 @@ class OptionsMenu:
             current_value=state.prefs.stt_variant,
             default_value=SttVariant.get_default(),
             on_select=on_select,
-            hint=HINT_TRANSCRIPTION
+            hint=HINT_TRANSCRIPTION,
+            breadcrumb="Whisper model",
         )
 
     @staticmethod
@@ -159,7 +160,8 @@ class OptionsMenu:
             values=[item for item in list(SttConfig)],
             current_value=state.prefs.stt_config,
             default_value=None,
-            on_select=on_select
+            on_select=on_select,
+            breadcrumb="Whisper device",
         )
 
     @staticmethod
@@ -213,8 +215,8 @@ class OptionsMenu:
                 state.prefs.menu_clears_screen = value
             print_feedback(f"Set to:", str(state.prefs.menu_clears_screen))
 
-        subheading = f"When enabled, clears the terminal screen between menus\n"
-        subheading += f"and prompts to press Enter after feedback messages.\n"
+        subheading = f"When enabled, clears screen between menus\n"
+        subheading += f"and shows persistent status info.\n"
 
         MenuUtil.options_menu(
             state=state,
@@ -246,6 +248,24 @@ class OptionsMenu:
         )
 
 # ---
+
+def print_about_model(state: State) -> None:
+
+    from tts_audiobook_tool.tts import Tts
+    from tts_audiobook_tool.ask_util import AskUtil
+    from tts_audiobook_tool.menu_util import MenuUtil
+
+    ui = Tts.get_type().value.ui
+    model_name = ui["proper_name"]
+    MenuUtil.print_screen_heading(state, f"About {model_name}")
+
+    for link in ui.get("project_links", []):
+        printt(make_terminal_hyperlink(link))
+    printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
+    printt()
+    AskUtil.ask_enter_to_continue()
+
+
 
 DEBUG_SUBHEADING = \
 """Saves intermediate sound segment files and diagnostic json data

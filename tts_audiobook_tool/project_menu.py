@@ -72,7 +72,8 @@ class ProjectMenu:
         MenuUtil.menu(
             state, 
             heading,
-            items_maker
+            items_maker,
+            breadcrumb="Project",
         )
 
     @staticmethod
@@ -217,7 +218,8 @@ class ProjectMenu:
             state, 
             heading=make_subst_label,
             items=items_maker,
-            subheading=SUBSTITUTIONS_DESC
+            subheading=SUBSTITUTIONS_DESC,
+            breadcrumb="Word substitutions",
         )
 
 # ---
@@ -233,7 +235,7 @@ def make_subst_label(state: State) -> str:
 
 def on_language(state: State, __: MenuItem) -> None:
 
-    MenuUtil.print_heading(state, "Language code")
+    MenuUtil.print_screen_heading(state, "Language code", breadcrumb="Language code")
     printt(LANGUAGE_CODE_DESC)
     printt()
 

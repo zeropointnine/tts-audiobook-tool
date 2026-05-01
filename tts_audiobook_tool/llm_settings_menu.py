@@ -227,7 +227,7 @@ class LlmSettingsMenu:
 
         MenuUtil.menu(
             state,
-            "LLM system prompt:",
+            "System prompt:",
             item_maker
         )
 
