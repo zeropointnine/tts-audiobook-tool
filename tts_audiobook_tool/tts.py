@@ -215,6 +215,23 @@ class Tts:
         return instance
 
     @staticmethod
+    def generate_using_project(project, prompts: list[str], force_random_seed: bool = False):
+        """
+        Shared high-level TTS generation entrypoint for app features.
+
+        Applies the standard project/model text-preparation pipeline to each
+        prompt exactly once, then delegates to the active concrete model's own
+        `generate_using_project()` implementation.
+
+        This keeps audiobook generation, realtime playback, server/API usage,
+        and LLM chat consistent wrt prompt normalization and model-specific
+        transforms such as VibeVoice speaker tagging.
+        """
+        instance = Tts.get_instance()
+        prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
+        return instance.generate_using_project(project, prepared_prompts, force_random_seed)
+
+    @staticmethod
     def get_instance_if_exists() -> TtsBaseModel | None:
         # Returns instance only if it already exists, else none
         MAP = {

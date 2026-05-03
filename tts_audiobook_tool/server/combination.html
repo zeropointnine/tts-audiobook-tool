@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Combination demo</title>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 640px;
+      margin: 40px auto;
+      padding: 0 16px;
+      background: #f0f0f0;
+      color: #333333;
+      box-sizing: border-box;
+      height: calc(100vh - 80px);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px 0;
+      padding: 0;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    h3 {
+      margin: 0;
+      padding: 0;
+      font-size: 18px;
+      font-weight: bold;
+      color: #33333394;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-family: sans-serif;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #ffffff;
+      color: #33333394;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .small-button {
+      font-size: 14px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 8px 0;
+      padding: 0;
+      font-size: 13px;
+      font-family: sans-serif;
+      color: #33333394;
+    }
+
+    textarea {
+      width: 100%;
+      font-family: monospace;
+      font-size: 13px;
+      box-sizing: border-box;
+      resize: vertical;
+      padding: 8px;
+      background: #ffffff;
+      color: #333333;
+      border: 1px solid #33333348;
+    }
+
+    .connect-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .mode-row {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 12px;
+    }
+
+    .mode-row label {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .input-row textarea {
+      flex: 1;
+      height: 160px;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .divider {
+      border: 0;
+      border-top: 1px solid #33333324;
+      width: 100%;
+      margin: 0 0 12px 0;
+    }
+
+    #status-line {
+      height: 42px;
+      margin-bottom: 12px;
+      color: #33333394;
+      font-family: sans-serif;
+      font-size: 13px;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: normal;
+    }
+
+    .log-wrap {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #playback-log {
+      flex: 1;
+      min-height: 180px;
+      padding: 8px;
+      background: #ffffff;
+      color: #333333;
+      border: 1px solid #33333348;
+      box-sizing: border-box;
+      overflow-y: auto;
+      font-family: sans-serif;
+      font-size: 13px;
+    }
+
+    #playback-log-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    #playback-log-list li {
+      margin: 0 0 6px 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h3>tts-server-tool</h3>
+  <h2>Combination demo</h2>
+
+  <div class="connect-row">
+    <button id="connect-btn" class="small-button" disabled>Connect</button>
+    <button id="disconnect-btn" class="small-button">Disconnected</button>
+  </div>
+
+  <div class="mode-row">
+    <label><input type="checkbox" id="echo-mode-checkbox"> Echo mode</label>
+    <label><input type="checkbox" id="llm-mode-checkbox"> LLM mode</label>
+  </div>
+
+  <div class="input-row">
+    <textarea id="prompt-input" placeholder="Enter prompt…"></textarea>
+    <div class="buttons">
+      <button id="submit-btn">Submit</button>
+      <button id="stop-btn">Stop</button>
+    </div>
+  </div>
+
+  <label>Status:</label>
+  <div id="status-line"></div>
+
+  <div class="log-wrap">
+    <div id="playback-log">
+      <ul id="playback-log-list"></ul>
+    </div>
+  </div>
+
+  <script>
+    const input = document.getElementById('prompt-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const echoModeCheckbox = document.getElementById('echo-mode-checkbox');
+    const llmModeCheckbox = document.getElementById('llm-mode-checkbox');
+    const statusLine = document.getElementById('status-line');
+    const playbackLog = document.getElementById('playback-log');
+    const playbackLogList = document.getElementById('playback-log-list');
+
+    let audioCtx = null;
+    let abortCtrl = null;
+    let nextStartTime = 0;
+    let scheduleChain = Promise.resolve();
+    let streamConnected = false;
+    let streamConnecting = false;
+    let submittedLines = [];
+    let playedLineCount = 0;
+    let hasPendingGeneration = false;
+
+    function setStatus(message) {
+      statusLine.textContent = message.trim();
+    }
+
+    function updateConnectionButtons() {
+      connectBtn.disabled = streamConnected || streamConnecting;
+      disconnectBtn.disabled = !streamConnected && !streamConnecting;
+      disconnectBtn.textContent = streamConnected || streamConnecting ? 'Disconnect' : 'Disconnected';
+    }
+
+    function setConnected(yes) {
+      streamConnected = yes;
+      streamConnecting = false;
+      updateConnectionButtons();
+    }
+
+    function setConnecting() {
+      streamConnected = false;
+      streamConnecting = true;
+      updateConnectionButtons();
+    }
+
+    function concatBuffers(a, b) {
+      const out = new Uint8Array(a.length + b.length);
+      out.set(a, 0);
+      out.set(b, a.length);
+      return out;
+    }
+
+    function appendPlayedLine() {
+      if (playedLineCount >= submittedLines.length) return;
+      const line = submittedLines[playedLineCount].trim();
+      playedLineCount += 1;
+      const item = document.createElement('li');
+      item.textContent = line;
+      playbackLogList.appendChild(item);
+      playbackLog.scrollTop = playbackLog.scrollHeight;
+    }
+
+    function scheduleChunk(wavSlice) {
+      const owned = wavSlice.buffer.slice(
+        wavSlice.byteOffset,
+        wavSlice.byteOffset + wavSlice.byteLength
+      );
+
+      scheduleChain = scheduleChain
+        .then(() => audioCtx.decodeAudioData(owned))
+        .then(audioBuffer => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(audioCtx.destination);
+          const t = Math.max(audioCtx.currentTime + 0.05, nextStartTime);
+          src.start(t);
+          nextStartTime = t + audioBuffer.duration;
+          appendPlayedLine();
+        })
+        .catch(err => {
+          setStatus(`Decode error: ${err.message}`);
+        });
+    }
+
+    async function ensureLocalAudioOff() {
+      const res = await fetch('/local-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        if (data.inferencing) {
+          hasPendingGeneration = true;
+          setStatus(`Generating ${data.inferencing}`);
+          return;
+        }
+
+        const hasAudioBuffered = typeof data.audio_buffer === 'number' && data.audio_buffer > 0.05;
+        const hasQueued = typeof data.num_queued === 'number' && data.num_queued > 0;
+
+        if (hasPendingGeneration && !hasQueued && !hasAudioBuffered) {
+          hasPendingGeneration = false;
+          setStatus('Done');
+          return;
+        }
+
+        if (streamConnecting) {
+          setStatus('Connecting...');
+          return;
+        }
+
+        setStatus(streamConnected ? 'Connected' : 'Disconnected');
+      } catch (err) {
+        setStatus(`Error: ${err.message}`);
+      }
+    }
+
+    async function runStream(signal) {
+      let accumulator = new Uint8Array(0);
+
+      let response;
+      try {
+        response = await fetch('/stream', { signal });
+      } catch (err) {
+        if (err.name !== 'AbortError') setStatus(`Fetch error: ${err.message}`);
+        streamConnecting = false;
+        setConnected(false);
+        return;
+      }
+
+      if (!response.ok) {
+        setStatus(`Server error: HTTP ${response.status}`);
+        streamConnecting = false;
+        setConnected(false);
+        return;
+      }
+
+      setConnected(true);
+      setStatus('Connected');
+
+      try {
+        await ensureLocalAudioOff();
+      } catch (err) {
+        setStatus(`Error: ${err.message}`);
+      }
+
+      const reader = response.body.getReader();
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+
+          accumulator = concatBuffers(accumulator, value);
+
+          while (accumulator.length >= 4) {
+            const view = new DataView(accumulator.buffer, accumulator.byteOffset, accumulator.byteLength);
+            const msgLen = view.getUint32(0, false);
+            if (accumulator.length < 4 + msgLen) break;
+            const wavSlice = accumulator.slice(4, 4 + msgLen);
+            accumulator = accumulator.slice(4 + msgLen);
+            if (msgLen === 0) continue;
+            scheduleChunk(wavSlice);
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') setStatus(`Stream error: ${err.message}`);
+      } finally {
+        reader.releaseLock();
+        setConnected(false);
+        setStatus('Disconnected');
+      }
+    }
+
+    async function connectStream() {
+      if (streamConnected || streamConnecting) return;
+
+      setConnecting();
+      setStatus('Connecting...');
+
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+      } else {
+        await audioCtx.resume();
+      }
+
+      nextStartTime = 0;
+      scheduleChain = Promise.resolve();
+      abortCtrl = new AbortController();
+      runStream(abortCtrl.signal);
+    }
+
+    function disconnectStream() {
+      if (abortCtrl) {
+        abortCtrl.abort();
+        abortCtrl = null;
+      }
+      if (audioCtx) {
+        audioCtx.close();
+        audioCtx = null;
+      }
+      nextStartTime = 0;
+      scheduleChain = Promise.resolve();
+      streamConnecting = false;
+      setConnected(false);
+      setStatus('Disconnected');
+    }
+
+    async function submitPrompt() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      try {
+        await ensureLocalAudioOff();
+
+        const res = await fetch('/prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: text,
+            should_segment: true,
+            eager_first_segment: true,
+          }),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        submittedLines = Array.isArray(data.prompts)
+          ? data.prompts.map(item => String(item).trim()).filter(Boolean)
+          : [text.trim()].filter(Boolean);
+        playedLineCount = 0;
+        playbackLogList.innerHTML = '';
+        hasPendingGeneration = true;
+        setStatus(`Generating ${text}`);
+        input.value = '';
+      } catch (err) {
+        setStatus(`Error: ${err.message}`);
+      }
+    }
+
+    async function stopGeneration() {
+      try {
+        const res = await fetch('/clear', { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        submittedLines = [];
+        playedLineCount = 0;
+        playbackLogList.innerHTML = '';
+        hasPendingGeneration = false;
+        setStatus(streamConnected ? 'Connected' : 'Disconnected');
+      } catch (err) {
+        setStatus(`Error: ${err.message}`);
+      }
+    }
+
+    function makeMutuallyExclusive(active, other) {
+      active.addEventListener('change', () => {
+        if (active.checked) other.checked = false;
+      });
+    }
+
+    makeMutuallyExclusive(echoModeCheckbox, llmModeCheckbox);
+    makeMutuallyExclusive(llmModeCheckbox, echoModeCheckbox);
+
+    connectBtn.addEventListener('click', () => {
+      connectStream();
+    });
+
+    disconnectBtn.addEventListener('click', () => {
+      disconnectStream();
+    });
+
+    submitBtn.addEventListener('click', () => {
+      submitPrompt();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      stopGeneration();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) submitPrompt();
+    });
+
+    setConnected(false);
+    connectStream();
+    pollStatus();
+    setInterval(pollStatus, 1000);
+  </script>
+
+</body>
+</html>

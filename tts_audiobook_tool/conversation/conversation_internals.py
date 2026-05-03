@@ -550,10 +550,8 @@ class ResponseSession:
                 self.render_response()
                 continue
             try:
-                tts_instance = Tts.get_instance()
-                massaged = tts_instance.prepare_text_for_inference(self.project, text)
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                    result = tts_instance.generate_using_project(self.project, [massaged])
+                    result = Tts.generate_using_project(self.project, [text])
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:

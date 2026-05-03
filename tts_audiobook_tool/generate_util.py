@@ -407,7 +407,7 @@ class GenerateUtil:
         if Tts.get_type() == TtsModelInfos.NONE:
             result = "No active TTS model"
         else:
-            result = Tts.get_instance().generate_using_project(project, prompts, force_random_seed)
+            result = Tts.generate_using_project(project, prompts, force_random_seed)
 
         # `result` is either n generated Sounds or a single error string
         if isinstance(result, str): 
@@ -444,7 +444,6 @@ class GenerateUtil:
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
         
         prompt = phrase_group.as_flattened_phrase().text
-        prompt = Tts.get_instance().prepare_text_for_inference(project, prompt)
         return prompt
 
     @staticmethod

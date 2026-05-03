@@ -109,6 +109,13 @@ class Server:
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
+                elif self.path == "/combination.html":
+                    body = (_HERE / "combination.html").read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
                 elif self.path == "/stream":
                     q = _server._audio_http_stream.connect()
                     self.send_response(200)
@@ -173,14 +180,15 @@ class Server:
             base_url = f"http://{host}:{port}"
             demo_url_1 = f"{base_url}/{API_DEMO_HTML_FILE_NAME}"
             demo_url_2 = f"{base_url}/{STREAMING_CLIENT_DEMO_HTML_FILE_NAME}"
+            demo_url_3 = f"{base_url}/{COMBINATION_DEMO_HTML_FILE_NAME}"
 
-            printt("-" * 80)
             printt(f"{COL_ACCENT}Server listening on {make_terminal_hyperlink(base_url)}")
             printt()
             printt(f"API demo page:\n{make_terminal_hyperlink(demo_url_1)}")
             printt()
-            printt(f"Streaming client demo page:\n {make_terminal_hyperlink(demo_url_2)}")
-            printt("-" * 80)
+            printt(f"Streaming client demo page:\n{make_terminal_hyperlink(demo_url_2)}")
+            printt()
+            printt(f"Combination demo page:\n{make_terminal_hyperlink(demo_url_3)}")
             printt()
 
             # Initialize the TTS model
@@ -286,7 +294,7 @@ class Server:
             try:
 
                 # Generate
-                result = Tts.get_instance().generate_using_project(
+                result = Tts.generate_using_project(
                     self._project, [prompt_text], force_random_seed=False
                 )
                 if isinstance(result, str):
@@ -335,5 +343,6 @@ EAGER_THRESHOLD = 1.0
 # Maximum audio buffer duration (seconds) before the worker pauses inferencing
 BUFFER_MAX_SECONDS = 60 * 10
 
-API_DEMO_HTML_FILE_NAME = "/api-demo.html"
-STREAMING_CLIENT_DEMO_HTML_FILE_NAME = "/streaming-client-demo.html"
+API_DEMO_HTML_FILE_NAME = "api-demo.html"
+STREAMING_CLIENT_DEMO_HTML_FILE_NAME = "streaming-client-demo.html"
+COMBINATION_DEMO_HTML_FILE_NAME = "combination.html"
