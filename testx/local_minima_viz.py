@@ -1,8 +1,8 @@
 from pathlib import Path
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.sound_debug_util import SoundDebugUtil
+from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 
 # Tests "SoundUtil.find_local_minima()"
 
@@ -15,7 +15,7 @@ if not isinstance(sound_or_error, Sound):
     exit(0)
 sound = sound_or_error
 
-result = SoundUtil.find_local_minima(sound, target_timestamp)
+result = SoundExtraUtil.find_local_minima(sound, target_timestamp)
 if isinstance(result, str):
     print("error:", result)
     exit(0)

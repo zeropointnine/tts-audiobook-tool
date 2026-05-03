@@ -1,6 +1,7 @@
 from pathlib import Path
 import soundfile
 
+from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 
@@ -30,7 +31,7 @@ def main() -> int:
         print(f"Couldn't load {source_path}: {load_result}")
         return 1
 
-    processed_sound = SoundUtil.high_shelf_eq(
+    processed_sound = SoundExtraUtil.high_shelf_eq(
         load_result,
         strength=strength,
         boost_start_hz=boost_start_hz,

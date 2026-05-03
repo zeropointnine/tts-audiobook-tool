@@ -9,6 +9,7 @@ from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
@@ -115,6 +116,14 @@ class RealTimeUtil:
             else:
                 sound = sound_opt
 
+            sound = SoundAppUtil.apply_segment_post_processing(
+                sound=sound,
+                high_shelf=state.project.get_high_shelf(),
+                limit_silence_gaps=state.project.limit_silence_gaps,
+                use_upsampler=False # no upsampling on realtime for now 
+            )
+            assert isinstance(sound, Sound)
+
             # Add appended sound
             if index == end_index:
                 appended_sound = None
@@ -134,11 +143,7 @@ class RealTimeUtil:
 
             # Start stream lazy
             if not stream:
-                if Tts.get_type() == TtsModelInfos.GLM: # special case
-                    sr = state.project.glm_sr
-                else:
-                    sr = Tts.get_type().value.sample_rate
-                stream = SoundDeviceStream(sr)
+                stream = SoundDeviceStream()
                 stream.start()
 
             # Add sound to the stream
@@ -177,7 +182,7 @@ class RealTimeUtil:
             printt()
             AskUtil.ask_enter_to_continue()
         if stream:
-            stream.shut_down
+            stream.shut_down()
 
         if not should_prompt_before_shutdown:
             printt()
@@ -226,6 +231,8 @@ class RealTimeUtil:
                 printt()
             else:
                 printt(f"Transcript validation: {gen_result.get_ui_message()}")
+
+
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True

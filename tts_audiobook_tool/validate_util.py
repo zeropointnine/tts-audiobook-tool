@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.dictionary_en import DictionaryEn
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
@@ -101,7 +102,7 @@ class ValidateUtil:
                 start = 0
             else:
                 start = (first_minus_one.end + first.start) / 2
-                start = SoundUtil.get_local_minima(word_error_result.sound, start)
+                start = SoundExtraUtil.get_local_minima(word_error_result.sound, start)
 
             if i + source_word_count == len(transcript_words):
                 end = word_error_result.sound.duration
@@ -111,7 +112,7 @@ class ValidateUtil:
                 else:
                     end = last.end
                 end = min(end, word_error_result.sound.duration)
-                end = SoundUtil.get_local_minima(word_error_result.sound, end)
+                end = SoundExtraUtil.get_local_minima(word_error_result.sound, end)
 
             if start == end: # TODO: revisit
                 return None
@@ -152,7 +153,7 @@ class ValidateUtil:
         if end + 0.1 >= sound.duration:
             return trimmed_result
         
-        end = SoundUtil.get_local_minima(sound, end)
+        end = SoundExtraUtil.get_local_minima(sound, end)
 
         new_sound = SoundUtil.trim(sound, 0, end)
         new_sound = SilenceUtil.trim_silence_ends(new_sound, end_only=True)[0]

@@ -15,11 +15,11 @@ from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
-from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
@@ -284,9 +284,9 @@ class GenerateUtil:
         is_skip_reason_buffer: bool=False
     ) -> list[ ValidationResult | str ]:
         """
-        Generates and validates a batch of prompts
-        Prints updates
-        Returns list of sounds etc
+        Generates and validates a batch of prompts from the Project text.
+        Prints updates.
+        Returns list of sounds etc.
 
         :param indices:
             When length is 1, batch mode is disabled
@@ -429,7 +429,7 @@ class GenerateUtil:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
                 # Trim silence ends and peak-normalize
-                sound = SilenceUtil.trim_silence_ends_and_normalize(sound)
+                sound = SoundAppUtil.apply_generate_post_processing(sound)
 
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"

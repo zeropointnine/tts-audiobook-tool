@@ -14,7 +14,6 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.llm_util import LlmUtil
-from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil

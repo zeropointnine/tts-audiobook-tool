@@ -51,6 +51,9 @@ class Project(BaseModel):
     def sound_segments(self):
         return self._sound_segments
 
+    def get_high_shelf(self) -> HighShelfEq:
+        return HighShelfEq.get_by_id(self.high_shelf) or HighShelfEq.DISABLED
+
     # --- Fields ---
 
     dir_path: str = ""

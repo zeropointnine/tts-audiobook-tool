@@ -80,16 +80,17 @@ class ConcatMenu:
                 )
             )
 
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label("Generative upsampling", state.project.use_upsampler),
-                    lambda _, __: ConcatMenu.upsample_menu(state)
+            if torch.cuda.is_available() and SidonUtil.has_sidon():
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("Generative upsampling", state.project.use_upsampler),
+                        lambda _, __: ConcatMenu.upsample_menu(state)
+                    )
                 )
-            )
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Treble lift", (HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED).id),
+                    lambda _: make_menu_label("Treble lift", state.project.get_high_shelf().id),
                     lambda _, __: ConcatMenu.high_shelf_menu(state)
                 )
             )
@@ -161,7 +162,7 @@ class ConcatMenu:
             state.project.save()
             print_feedback(f"Treble lift set to: {value.id}")
 
-        current = HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED
+        current = state.project.get_high_shelf()
 
         MenuUtil.options_menu(
             state=state,
@@ -513,6 +514,9 @@ to enable opening local audio files without user input:
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
 Some TTS models may benefit more from this than others.
+
+This setting also applies to: 
+Realtime playback, LLM voice chat, and stand-alone server
 """
 
 UPSAMPLE_SUBHEADING = \
@@ -523,4 +527,7 @@ Enhances audio quality and clarity; affects timbre and tonality.
 LIMIT_SILENCE_GAPS_SUBHEADING = \
 """Prevents awkwardly long pauses. Limits silences within 
 generated sound segments to a max duration of %1 seconds.
+
+This setting also applies to: 
+Realtime playback, LLM voice chat, and stand-alone server
 """

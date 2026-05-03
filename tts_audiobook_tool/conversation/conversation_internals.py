@@ -10,9 +10,8 @@ import time
 import unicodedata
 
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_types import HighShelfEq, Segment, Sound, SttConfig, SttVariant
-from tts_audiobook_tool.concat_util import ConcatUtil
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_MEDIUM, COL_OK
+from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.conversation.console_session import (
     ConsoleSession,
     KEY_CTRL_C,
@@ -29,9 +28,9 @@ from tts_audiobook_tool.llm_util import LlmUtil
 from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.phrase import Reason
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.timed_phrase import TimedPhrase
@@ -332,7 +331,7 @@ class PromptBuilder:
                 parts.append(f"{COL_MEDIUM}{Ansi.ITALICS}{chunk}{Ansi.RESET}")
             else:
                 parts.append(f"{COL_DIM}{chunk}{Ansi.RESET}")
-        content = " ".join(parts) if parts else f"{COL_OK}{Ansi.ITALICS}Speak into the mic...{Ansi.RESET}"
+        content = " ".join(parts) if parts else f"{COL_OK}{Ansi.ITALICS}Speak into the mic... {COL_DIM}(Ctrl-C to exit){Ansi.RESET}"
         self.ui.render(f"> {content}")
 
 
@@ -576,7 +575,7 @@ class ResponseSession:
                     continue
                 
                 # Trim silence ends and peak-normalize
-                sound = SilenceUtil.trim_silence_ends_and_normalize(sound)
+                sound = SoundAppUtil.apply_generate_post_processing(sound)
                 if sound.data.size == 0:
                     if not self.response_aborted.is_set():
                         self.ui.println(f"[TTS error: empty/silent output]")
@@ -586,12 +585,9 @@ class ResponseSession:
                     self.render_response()
                     continue
                 
-                # Apply project's segment post-processing chain (limit-silence-gaps,
-                # resample to APP_SAMPLE_RATE, optionally high-shelf EQ; no upsampler)
-                high_shelf = HighShelfEq.get_by_id(self.project.high_shelf) or HighShelfEq.DISABLED
-                pp_result = ConcatUtil.apply_segment_post_processing(
+                pp_result = SoundAppUtil.apply_segment_post_processing(
                     sound,
-                    high_shelf=high_shelf,
+                    high_shelf=self.project.get_high_shelf(),
                     limit_silence_gaps=self.project.limit_silence_gaps,
                 )
                 if isinstance(pp_result, str):

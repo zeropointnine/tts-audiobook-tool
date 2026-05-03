@@ -7,8 +7,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import make_terminal_hyperlink, printt
 
@@ -177,7 +179,7 @@ class Server:
             printt()
             printt(f"API demo page:\n{make_terminal_hyperlink(demo_url_1)}")
             printt()
-            printt(f"Streaming client demo page:\n {make_terminal_hyperlink(demo_url_1)}")
+            printt(f"Streaming client demo page:\n {make_terminal_hyperlink(demo_url_2)}")
             printt("-" * 80)
             printt()
 
@@ -297,10 +299,18 @@ class Server:
                     continue
 
                 # Trim silence ends and peak-normalize
-                sound = SilenceUtil.trim_silence_ends_and_normalize(sound)
+                sound = SoundAppUtil.apply_generate_post_processing(sound)
                 if sound.data.size == 0:
                     printt(f"* Model output is empty or silence")
                     continue
+
+                sound = SoundAppUtil.apply_segment_post_processing(
+                    sound=sound,
+                    high_shelf=self._project.get_high_shelf(),
+                    limit_silence_gaps=self._project.limit_silence_gaps,
+                    use_upsampler=False
+                )
+                assert isinstance(sound, Sound)
 
                 # Pad end with silence using 'phrase reason'
                 if prompt_item.phrase_group.last_reason != Reason.UNDEFINED:

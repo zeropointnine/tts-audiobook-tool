@@ -12,14 +12,14 @@ from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalization
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.phrase import Phrase, Reason
+from tts_audiobook_tool.phrase import Phrase
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.menu_util import MenuUtil
@@ -42,6 +42,13 @@ class ConcatUtil:
         if chapter_indices and bookmark_indices:
             raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
         
+        # Preflight checks
+        if state.project.use_upsampler:
+            import torch
+            if not torch.cuda.is_available():
+                AskUtil.ask_error("Sidon generative upsampler requires CUDA")
+                return
+
         if state.project.use_upsampler and ModelsUtil.is_any_model_loaded():
             printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
             printt()
@@ -324,7 +331,7 @@ class ConcatUtil:
             return result
         sound = result
 
-        result = ConcatUtil.apply_segment_post_processing(
+        result = SoundAppUtil.apply_segment_post_processing(
             sound,
             high_shelf=high_shelf,
             limit_silence_gaps=limit_silence_gaps,
@@ -339,84 +346,6 @@ class ConcatUtil:
         )
 
         return sound
-
-    @staticmethod
-    def apply_segment_post_processing(
-        sound: Sound,
-        high_shelf: HighShelfEq,
-        limit_silence_gaps: bool = False,
-        use_upsampler: bool = False,
-    ) -> Sound | str:
-        """
-        Standard audio post-processing chain shared by the audiobook concat
-        flow and the conversation TTS flow. Applied to a TTS-generated Sound
-        already in memory (no file IO).
-
-        Order:
-          1. Optional silence-gap limiting
-          2. Optional generative upsampler (sidon)
-          3. Resample to APP_SAMPLE_RATE
-          4. High-shelf EQ (no-op if `high_shelf` is DISABLED)
-
-        Returns the processed Sound, or an error string if upsampling was
-        requested but failed.
-        """
-        if limit_silence_gaps:
-            new_sound = SilenceUtil.limit_silence_gaps(sound, LIMIT_SILENCE_GAPS_DURATION)
-            if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
-                sound = new_sound
-
-        if use_upsampler:
-            upsampler = ModelsUtil.get_sidon_upsampler()
-            if not upsampler:
-                return "\"Generative upsampling\" enabled but not available"
-            result = upsampler.process(sound)
-            if isinstance(result, str):
-                return result
-            sound = result # rem, this is 48khz
-
-        sound = SoundUtil.resample_if_necessary(sound, APP_SAMPLE_RATE)
-
-        sound = SoundUtil.high_shelf_eq(
-            sound,
-            strength=high_shelf.strength,
-            boost_start_hz=high_shelf.boost_start_hz,
-            q_like=high_shelf.q_like,
-        )
-
-        return sound
-
-    @staticmethod
-    def get_rendered_sound_segment_durations(
-        phrases_and_paths: list[ tuple[Phrase, str] ],
-        use_section_sound_effect: bool,
-        high_shelf: HighShelfEq,
-        use_upsampler: bool = False
-    ) -> list[float] | str:
-        """
-        Calculates the final durations of the sound segments to be concatenated.
-
-        Currently uses the same concrete sound transform operations as the main concat function
-        to ensure same duration results.
-        TODO: Optimize that 
-        """
-
-        durations = []
-
-        for (phrase, path) in phrases_and_paths:
-
-            if not path:
-                durations.append(0)
-                continue
-
-            result = ConcatUtil.make_rendered_sound_segment(phrase, path, use_section_sound_effect, high_shelf, use_upsampler)
-            if isinstance(result, str): # error
-                return result
-
-            sound = result
-            durations.append(sound.duration)
-
-        return durations
 
     @staticmethod
     def concatenate_sound_segments(

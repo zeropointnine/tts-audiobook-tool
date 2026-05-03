@@ -25,9 +25,7 @@ FFMPEG_COMMAND = "ffmpeg"
 STT_TEMP_TRANSCRIBED_WORDS = "temp_words.pkl"
 VALIDATION_UNSUPPORTED_LANGUAGES = ["zh", "ja", "ko"]
 
-# App uses a single sample rate for any sound transformations up until outputting final audio
-# This is useful because a single project can use different models which may have different native
-# output sample rates.
+# App's samplerate for final outputs (post-processed sound segments, sound output stream, etc).
 APP_SAMPLE_RATE = 48000
 
 # Samplerate required for whisper audio input

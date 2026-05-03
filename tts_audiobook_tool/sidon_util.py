@@ -17,6 +17,9 @@ _OVERLAP_OUT      = int(_OVERLAP_DURATION * _OUTPUT_SR)   # 9,600   — overlap 
 
 
 class SidonUtil:
+    """ 
+    Is safe to import w/o sidon package installed
+    """
 
     @staticmethod
     def has_sidon() -> bool:
@@ -92,6 +95,7 @@ class SidonUtil:
             return str(e)
 
     def process_chunk(self, chunk_waveform: torch.Tensor) -> np.ndarray:
+        
         from sidon.cleansing.audio import extract_seamless_m4t_features # type: ignore
 
         assert self.feature_extractor is not None

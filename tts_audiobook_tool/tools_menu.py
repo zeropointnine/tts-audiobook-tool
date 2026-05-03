@@ -1,8 +1,8 @@
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.mp3_concat import SoundConcatTranscodeUtil
+from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
@@ -62,7 +62,7 @@ class ToolsMenu:
         percent = float(inp)
         if not (50 <= percent <= 200):
             AskUtil.ask_error("Out of range")
-        result = SoundUtil.speed_up_audio(sound, percent / 100)
+        result = SoundExtraUtil.speed_up_audio(sound, percent / 100)
         if isinstance(result, str):
             AskUtil.ask_error(result)
             cleanup()

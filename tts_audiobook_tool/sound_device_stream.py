@@ -37,7 +37,7 @@ class SoundDeviceStream:
         finally:
             pthread_sigmask(signal.SIG_SETMASK, old_mask)
 
-    def __init__(self, sample_rate: int):
+    def __init__(self, sample_rate: int=APP_SAMPLE_RATE):
         """
         Initializes the AudioStreamer.
 
