@@ -26,13 +26,13 @@ The server uses the TTS settings from your currently active tts-audiobook-tool p
 
 Once running, you can test the API in the browser by visiting 
 
-    http://localhost:5001/api-demo.html
+    http://localhost:5001/
 
 The server will output TTS audio through the (server computer's) default sound output device. 
 
 A demo client for the audio stream endpoint is available in the browser at
 
-    http://localhost:5001/streaming-client-demo.html
+    http://localhost:5001/demos/streaming-client.html
 
 
 # API
@@ -47,7 +47,7 @@ Enqueues a text prompt for TTS inference and playback.
 |-------------------------|---------|---------|-------------|
 | `prompt`                | string  | —       | The text to synthesize. |
 | `should_segment`        | boolean | `false` | If `true`, the prompt is split into multiple segments using the loaded project settings' text segmentation settings, and each segment is enqueued separately.<br><br>Setting this to true allows for inputting (potentially very) large blocks of text, with audio output which should be functionally identical to rendering the same text using the main tts-audiobook-tool "Realtime mode". |
-| `eager_first_segment`  | boolean | `false` | Only relevant when `should_segment` is `true`. If `true` and the audio buffer is empty or near empty (< 1.0s), the first phrase of the first segment is enqueued immediately as its own item so playback can start sooner, with the remainder of that segment enqueued after. |
+| `eager_first_segment`  | boolean | `false` | Only relevant when `should_segment` is `true`. If `true` and the audio buffer is empty or near empty (< 1.0s), the first phrase of the next queued segment may be generated immediately as its own playback unit so audio can start sooner, with the remainder queued after. |
 
 **Response (JSON):**
 
@@ -55,7 +55,7 @@ Enqueues a text prompt for TTS inference and playback.
 |------------------------|----------|-------------|
 | `input`                | string   | The input prompt from the request body. |
 | `prompts`              | string[] | The prompt(s) that were enqueued. |
-| `current_queue_length` | number   | Number of prompts now waiting in the queue. |
+| `queue_length` | number   | Number of prompts now waiting in the queue. |
 
 On error (e.g. empty prompt):
 
@@ -73,11 +73,13 @@ Returns the current state of the server.
 |---|---|---|
 | `status` | string | `"initializing"` while the TTS model is loading, `"ready"` when available. |
 | `inferencing` | string | The prompt currently being processed by the TTS model, or `""` if idle. |
-| `playing` | string | The prompt whose audio is currently playing, or `""` if silent. |
+| `playing` | string | The text whose audio is currently being emitted by `AudioStream`, or `""` if silent. |
 | `audio_buffer` | number | Seconds of audio remaining in the playback buffer. |
 | `num_queued` | number | Number of prompts waiting in the queue. |
 | `stream_clients` | number | Number of clients currently connected to the audio HTTP stream. |
 | `local_audio` | boolean | Whether local audio playback (through the default sound device) is enabled. |
+
+`inferencing` and `playing` are intentionally text-based status fields, not stable segment IDs. This keeps the API accurate even when eager splitting dynamically changes the playback unit at runtime.
 
 ### POST /clear
 

@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
@@ -15,6 +16,8 @@ from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import make_terminal_hyperlink, printt
 
 _HERE = pathlib.Path(__file__).parent
+_DEMOS_DIR = _HERE / "demos"
+_DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
@@ -100,23 +103,27 @@ class Server:
                     self.send_error(404)
 
             def do_GET(self):
-                if self.path == "/status":
+                parsed = urlparse(self.path)
+
+                if parsed.path == "/status":
                     self._respond(_server.status())
-                elif self.path == "/streaming-client-demo.html":
-                    body = (_HERE / "streaming-client-demo.html").read_bytes()
+                elif parsed.path.startswith("/demos/") and parsed.path.endswith(".html"):
+                    demo_path = _DEMOS_DIR / pathlib.PurePosixPath(parsed.path.removeprefix("/demos/"))
+                    try:
+                        resolved_demo_path = demo_path.resolve()
+                    except OSError:
+                        self.send_error(404)
+                        return
+                    if not resolved_demo_path.is_file() or _DEMOS_DIR_RESOLVED not in resolved_demo_path.parents:
+                        self.send_error(404)
+                        return
+                    body = resolved_demo_path.read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
-                elif self.path == "/combination.html":
-                    body = (_HERE / "combination.html").read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                elif self.path == "/stream":
+                elif parsed.path == "/stream":
                     q = _server._audio_http_stream.connect()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/octet-stream")
@@ -145,8 +152,8 @@ class Server:
                         pass
                     finally:
                         _server._audio_http_stream.disconnect(q)
-                elif self.path in ("/", "/api-demo.html"):
-                    body = (_HERE / "api-demo.html").read_bytes()
+                elif parsed.path == "/":
+                    body = (_DEMOS_DIR / API_DEMO_HTML_FILE_NAME).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))
@@ -173,22 +180,23 @@ class Server:
             Tts.get_instance()
             self._is_initializing = False
             self._tts_ready.set()
+            printt(f"{COL_DIM}{Ansi.ITALICS}Ready")
+            printt()
 
         with ThreadingHTTPServer((host, port), _Handler) as httpd:
             
             # Print some useful info
             base_url = f"http://{host}:{port}"
-            demo_url_1 = f"{base_url}/{API_DEMO_HTML_FILE_NAME}"
-            demo_url_2 = f"{base_url}/{STREAMING_CLIENT_DEMO_HTML_FILE_NAME}"
-            demo_url_3 = f"{base_url}/{COMBINATION_DEMO_HTML_FILE_NAME}"
+            demo_url_1 = f"{base_url}/demos/{API_DEMO_HTML_FILE_NAME}"
+            demo_url_2 = f"{base_url}/demos/{STREAMING_CLIENT_DEMO_HTML_FILE_NAME}"
+            demo_url_3 = f"{base_url}/demos/{COMBINATION_DEMO_HTML_FILE_NAME}"
 
             printt(f"{COL_ACCENT}Server listening on {make_terminal_hyperlink(base_url)}")
             printt()
-            printt(f"API demo page:\n{make_terminal_hyperlink(demo_url_1)}")
-            printt()
-            printt(f"Streaming client demo page:\n{make_terminal_hyperlink(demo_url_2)}")
-            printt()
-            printt(f"Combination demo page:\n{make_terminal_hyperlink(demo_url_3)}")
+            printt("Demo pages:")
+            printt(f"- API demo: {make_terminal_hyperlink(demo_url_1)}")
+            printt(f"- Streaming client demo: {make_terminal_hyperlink(demo_url_2)}")
+            printt(f"- Combination demo: {make_terminal_hyperlink(demo_url_3)}")
             printt()
 
             # Initialize the TTS model
@@ -200,14 +208,12 @@ class Server:
         return {
             "status": "initializing" if self._is_initializing else "ready",
             "inferencing": self._prompt_currently_inferencing,
+            "playing": self._audio_stream.get_currently_playing(),
             "audio_buffer": self._audio_stream.get_seconds_left(),
             "num_queued": self._queue.qsize(),
             "stream_clients": self._audio_http_stream.client_count(),
             "local_audio": self._local_audio_enabled,
         }
-        # TODO: 
-        # "playing": self._prompt_currently_playing
-        # Requires extra logic in AudioStream
 
     def local_audio(self, enabled: bool) -> dict:
         self._local_audio_enabled = enabled
@@ -239,7 +245,7 @@ class Server:
         return {
             "input": prompt,
             "prompts": prompt_texts,
-            "current_queue_length": self._queue.qsize(),
+            "queue_length": self._queue.qsize(),
         }
 
     def clear(self) -> dict:
@@ -258,8 +264,6 @@ class Server:
         """Background thread: pulls prompts from the queue and runs TTS inference."""
 
         while True:
-            
-            ...
             
             _, _, prompt_item = self._queue.get()
             self._tts_ready.wait()
@@ -328,7 +332,7 @@ class Server:
 
                 # Done, add to audio stream buffer.
                 # HTTP clients are fed automatically via the playback listener.
-                self._audio_stream.append(sound)
+                self._audio_stream.append(sound, prompt_text)
 
             finally:
                 self._prompt_currently_inferencing = ""
@@ -343,6 +347,6 @@ EAGER_THRESHOLD = 1.0
 # Maximum audio buffer duration (seconds) before the worker pauses inferencing
 BUFFER_MAX_SECONDS = 60 * 10
 
-API_DEMO_HTML_FILE_NAME = "api-demo.html"
-STREAMING_CLIENT_DEMO_HTML_FILE_NAME = "streaming-client-demo.html"
+API_DEMO_HTML_FILE_NAME = "api.html"
+STREAMING_CLIENT_DEMO_HTML_FILE_NAME = "streaming-client.html"
 COMBINATION_DEMO_HTML_FILE_NAME = "combination.html"

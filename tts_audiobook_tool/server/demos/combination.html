@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Combination demo</title>
+  <title>Combination Demo</title>
 
   <style>
     body {
@@ -86,17 +86,6 @@
       margin-bottom: 12px;
     }
 
-    .mode-row {
-      display: flex;
-      gap: 24px;
-      margin-bottom: 12px;
-    }
-
-    .mode-row label {
-      margin: 0;
-      font-size: 12px;
-    }
-
     .input-row {
       display: flex;
       gap: 8px;
@@ -115,6 +104,36 @@
       gap: 8px;
     }
 
+    .played-prompts-section {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .played-prompts-panel {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      background: #ffffff;
+      border: 1px solid #33333324;
+      border-radius: 8px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .played-prompts-list {
+      margin: 0;
+      padding-left: 20px;
+      color: #333333;
+      font-size: 13px;
+    }
+
+    .played-prompts-list li {
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+
     .divider {
       border: 0;
       border-top: 1px solid #33333324;
@@ -123,83 +142,63 @@
     }
 
     #status-line {
-      height: 42px;
       margin-bottom: 12px;
       color: #33333394;
       font-family: sans-serif;
       font-size: 13px;
       line-height: 1.3;
+    }
+
+    .status-entry {
       display: -webkit-box;
       -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      line-clamp: 2;
+      -webkit-line-clamp: 1;
+      line-clamp: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: normal;
+      word-break: break-word;
+      min-height: 1.3em;
+      margin-bottom: 2px;
     }
 
-    .log-wrap {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
+    .status-message {
+      white-space: normal;
+      word-break: break-word;
     }
 
-    #playback-log {
-      flex: 1;
-      min-height: 180px;
-      padding: 8px;
-      background: #ffffff;
-      color: #333333;
-      border: 1px solid #33333348;
-      box-sizing: border-box;
-      overflow-y: auto;
-      font-family: sans-serif;
-      font-size: 13px;
-    }
-
-    #playback-log-list {
-      margin: 0;
-      padding-left: 20px;
-    }
-
-    #playback-log-list li {
-      margin: 0 0 6px 0;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
   </style>
 </head>
 
 <body>
 
   <h3>tts-server-tool</h3>
-  <h2>Combination demo</h2>
+  <h2>Combination Demo</h2>
+
+  <p style="margin: 0 0 16px 0; font-size: 14px; color: #33333394;">
+    This page combines the two other demos: it calls the server API to submit and clear prompts, while also using the streaming endpoint to receive audio chunks and play them back in the browser as they arrive.
+  </p>
 
   <div class="connect-row">
     <button id="connect-btn" class="small-button" disabled>Connect</button>
     <button id="disconnect-btn" class="small-button">Disconnected</button>
   </div>
 
-  <div class="mode-row">
-    <label><input type="checkbox" id="echo-mode-checkbox"> Echo mode</label>
-    <label><input type="checkbox" id="llm-mode-checkbox"> LLM mode</label>
-  </div>
-
   <div class="input-row">
     <textarea id="prompt-input" placeholder="Enter prompt…"></textarea>
     <div class="buttons">
       <button id="submit-btn">Submit</button>
-      <button id="stop-btn">Stop</button>
+      <button id="stop-btn" class="small-button">Stop</button>
     </div>
   </div>
 
-  <label>Status:</label>
+  <label id="status-label">Disconnected · 0 queued</label>
   <div id="status-line"></div>
 
-  <div class="log-wrap">
-    <div id="playback-log">
-      <ul id="playback-log-list"></ul>
+  <div class="played-prompts-section">
+    <label for="played-prompts-list">Played prompts:</label>
+    <div id="played-prompts-panel" class="played-prompts-panel">
+      <ul id="played-prompts-list" class="played-prompts-list"></ul>
     </div>
   </div>
 
@@ -209,11 +208,10 @@
     const stopBtn = document.getElementById('stop-btn');
     const connectBtn = document.getElementById('connect-btn');
     const disconnectBtn = document.getElementById('disconnect-btn');
-    const echoModeCheckbox = document.getElementById('echo-mode-checkbox');
-    const llmModeCheckbox = document.getElementById('llm-mode-checkbox');
+    const statusLabel = document.getElementById('status-label');
     const statusLine = document.getElementById('status-line');
-    const playbackLog = document.getElementById('playback-log');
-    const playbackLogList = document.getElementById('playback-log-list');
+    const playedPromptsPanel = document.getElementById('played-prompts-panel');
+    const playedPromptsList = document.getElementById('played-prompts-list');
 
     let audioCtx = null;
     let abortCtrl = null;
@@ -221,18 +219,61 @@
     let scheduleChain = Promise.resolve();
     let streamConnected = false;
     let streamConnecting = false;
-    let submittedLines = [];
-    let playedLineCount = 0;
     let hasPendingGeneration = false;
+    let lastGeneratingText = '';
+    let lastPlayingText = '';
+    let lastObservedPlayingText = '';
 
-    function setStatus(message) {
-      statusLine.textContent = message.trim();
+    function appendPlayedPrompt(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      const item = document.createElement('li');
+      item.textContent = trimmed;
+      playedPromptsList.appendChild(item);
+      playedPromptsPanel.scrollTop = playedPromptsPanel.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function setStatus({ generating = '', playing = '', message = '' } = {}) {
+      const generatingTrimmed = generating.trim();
+      const playingTrimmed = playing.trim();
+      const messageTrimmed = message.trim();
+
+      const lines = [
+        `<div class="status-entry"><strong>Generating:</strong> ${escapeHtml(generatingTrimmed || 'None')}</div>`,
+        `<div class="status-entry"><strong>Playing:</strong> ${escapeHtml(playingTrimmed || 'None')}</div>`,
+      ];
+      if (messageTrimmed) {
+        lines.push(`<div class="status-message">${escapeHtml(messageTrimmed)}</div>`);
+      }
+      statusLine.innerHTML = lines.join('');
+    }
+
+    function setStatusLabel(message, isConnectedState = false) {
+      const trimmed = message.trim();
+      if (isConnectedState) {
+        const parts = trimmed.split(/(\s+-\s+|\s+·\s+)/, 2);
+        const state = parts[0] || '';
+        const rest = trimmed.slice(state.length);
+        statusLabel.innerHTML = `<strong>${escapeHtml(state)}</strong>${escapeHtml(rest)}`;
+      } else {
+        statusLabel.textContent = trimmed;
+      }
     }
 
     function updateConnectionButtons() {
       connectBtn.disabled = streamConnected || streamConnecting;
       disconnectBtn.disabled = !streamConnected && !streamConnecting;
       disconnectBtn.textContent = streamConnected || streamConnecting ? 'Disconnect' : 'Disconnected';
+      input.disabled = !streamConnected;
+      submitBtn.disabled = !streamConnected;
+      stopBtn.disabled = !streamConnected;
     }
 
     function setConnected(yes) {
@@ -254,14 +295,23 @@
       return out;
     }
 
-    function appendPlayedLine() {
-      if (playedLineCount >= submittedLines.length) return;
-      const line = submittedLines[playedLineCount].trim();
-      playedLineCount += 1;
-      const item = document.createElement('li');
-      item.textContent = line;
-      playbackLogList.appendChild(item);
-      playbackLog.scrollTop = playbackLog.scrollHeight;
+    function parseStreamMessage(messageBytes) {
+      if (messageBytes.length < 4) {
+        throw new Error('Message too short for header length');
+      }
+
+      const view = new DataView(messageBytes.buffer, messageBytes.byteOffset, messageBytes.byteLength);
+      const headerLen = view.getUint32(0, false);
+      if (messageBytes.length < 4 + headerLen) {
+        throw new Error('Incomplete message header');
+      }
+
+      const headerBytes = messageBytes.slice(4, 4 + headerLen);
+      const headerText = new TextDecoder().decode(headerBytes);
+      const header = JSON.parse(headerText);
+      const wavSlice = messageBytes.slice(4 + headerLen);
+
+      return { header, wavSlice };
     }
 
     function scheduleChunk(wavSlice) {
@@ -279,10 +329,9 @@
           const t = Math.max(audioCtx.currentTime + 0.05, nextStartTime);
           src.start(t);
           nextStartTime = t + audioBuffer.duration;
-          appendPlayedLine();
         })
         .catch(err => {
-          setStatus(`Decode error: ${err.message}`);
+          setStatus({ message: `Decode error: ${err.message}` });
         });
     }
 
@@ -304,29 +353,55 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        if (data.inferencing) {
-          hasPendingGeneration = true;
-          setStatus(`Generating ${data.inferencing}`);
-          return;
-        }
+        const queuedCount = typeof data.num_queued === 'number' ? data.num_queued : 0;
+        const currentCount = data.inferencing ? 1 : 0;
+        const totalCount = queuedCount + currentCount;
+        setStatusLabel(`${streamConnected ? 'Connected' : 'Disconnected'} - ${totalCount} queued`, true);
 
+        const inferencing = typeof data.inferencing === 'string' ? data.inferencing : '';
+        const playing = typeof data.playing === 'string' ? data.playing : '';
         const hasAudioBuffered = typeof data.audio_buffer === 'number' && data.audio_buffer > 0.05;
         const hasQueued = typeof data.num_queued === 'number' && data.num_queued > 0;
 
+        if (inferencing) {
+          hasPendingGeneration = true;
+          lastGeneratingText = inferencing;
+        } else if (!hasQueued) {
+          lastGeneratingText = '';
+        }
+
+        if (playing) {
+          if (playing !== lastObservedPlayingText) {
+            appendPlayedPrompt(playing);
+            lastObservedPlayingText = playing;
+          }
+          lastPlayingText = playing;
+        } else if (!hasAudioBuffered) {
+          lastPlayingText = '';
+          lastObservedPlayingText = '';
+        }
+
+        if (inferencing) {
+          setStatus({ generating: lastGeneratingText, playing: lastPlayingText });
+          return;
+        }
+
+        if (lastPlayingText) {
+          setStatus({ generating: lastGeneratingText, playing: lastPlayingText });
+          return;
+        }
+
         if (hasPendingGeneration && !hasQueued && !hasAudioBuffered) {
           hasPendingGeneration = false;
-          setStatus('Done');
+          lastGeneratingText = '';
+          lastPlayingText = '';
+          setStatus();
           return;
         }
 
-        if (streamConnecting) {
-          setStatus('Connecting...');
-          return;
-        }
-
-        setStatus(streamConnected ? 'Connected' : 'Disconnected');
+        setStatus();
       } catch (err) {
-        setStatus(`Error: ${err.message}`);
+        setStatus({ message: `Error: ${err.message}` });
       }
     }
 
@@ -337,27 +412,29 @@
       try {
         response = await fetch('/stream', { signal });
       } catch (err) {
-        if (err.name !== 'AbortError') setStatus(`Fetch error: ${err.message}`);
+        if (err.name !== 'AbortError') setStatus({ message: `Fetch error: ${err.message}` });
         streamConnecting = false;
         setConnected(false);
         return;
       }
 
       if (!response.ok) {
-        setStatus(`Server error: HTTP ${response.status}`);
+        setStatus({ message: `Server error: HTTP ${response.status}` });
         streamConnecting = false;
         setConnected(false);
+        setStatusLabel('Disconnected - 0 queued', true);
         return;
       }
 
       setConnected(true);
-      setStatus('Connected');
+      setStatusLabel('Connected - 0 queued', true);
+      setStatus();
 
-      try {
-        await ensureLocalAudioOff();
-      } catch (err) {
-        setStatus(`Error: ${err.message}`);
-      }
+      // try {
+      //   await ensureLocalAudioOff();
+      // } catch (err) {
+      //   setStatus({ message: `Error: ${err.message}` });
+      // }
 
       const reader = response.body.getReader();
 
@@ -373,18 +450,27 @@
             const view = new DataView(accumulator.buffer, accumulator.byteOffset, accumulator.byteLength);
             const msgLen = view.getUint32(0, false);
             if (accumulator.length < 4 + msgLen) break;
-            const wavSlice = accumulator.slice(4, 4 + msgLen);
+            const messageBytes = accumulator.slice(4, 4 + msgLen);
             accumulator = accumulator.slice(4 + msgLen);
             if (msgLen === 0) continue;
+            const { header, wavSlice } = parseStreamMessage(messageBytes);
+            if (header?.type !== 'audio') {
+              setStatus({ message: `Skipping message of type: ${header?.type ?? 'unknown'}` });
+              continue;
+            }
             scheduleChunk(wavSlice);
           }
         }
       } catch (err) {
-        if (err.name !== 'AbortError') setStatus(`Stream error: ${err.message}`);
+        if (err.name !== 'AbortError') setStatus({ message: `Stream error: ${err.message}` });
       } finally {
         reader.releaseLock();
         setConnected(false);
-        setStatus('Disconnected');
+        setStatusLabel('Disconnected - 0 queued', true);
+        lastGeneratingText = '';
+        lastPlayingText = '';
+        lastObservedPlayingText = '';
+        setStatus();
       }
     }
 
@@ -392,7 +478,7 @@
       if (streamConnected || streamConnecting) return;
 
       setConnecting();
-      setStatus('Connecting...');
+      setStatus();
 
       if (!audioCtx) {
         audioCtx = new AudioContext();
@@ -418,8 +504,12 @@
       nextStartTime = 0;
       scheduleChain = Promise.resolve();
       streamConnecting = false;
+      lastGeneratingText = '';
+      lastPlayingText = '';
+      lastObservedPlayingText = '';
       setConnected(false);
-      setStatus('Disconnected');
+      setStatusLabel('Disconnected - 0 queued', true);
+      setStatus();
     }
 
     async function submitPrompt() {
@@ -427,8 +517,6 @@
       if (!text) return;
 
       try {
-        await ensureLocalAudioOff();
-
         const res = await fetch('/prompt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -438,21 +526,16 @@
             eager_first_segment: true,
           }),
         });
-
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        submittedLines = Array.isArray(data.prompts)
-          ? data.prompts.map(item => String(item).trim()).filter(Boolean)
-          : [text.trim()].filter(Boolean);
-        playedLineCount = 0;
-        playbackLogList.innerHTML = '';
         hasPendingGeneration = true;
-        setStatus(`Generating ${text}`);
+        lastGeneratingText = text;
+        setStatus({ generating: text });
         input.value = '';
       } catch (err) {
-        setStatus(`Error: ${err.message}`);
+        setStatus({ message: `Error: ${err.message}` });
       }
     }
 
@@ -460,24 +543,16 @@
       try {
         const res = await fetch('/clear', { method: 'POST' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        submittedLines = [];
-        playedLineCount = 0;
-        playbackLogList.innerHTML = '';
         hasPendingGeneration = false;
-        setStatus(streamConnected ? 'Connected' : 'Disconnected');
+        lastGeneratingText = '';
+        lastPlayingText = '';
+        lastObservedPlayingText = '';
+        setStatusLabel(`${streamConnected ? 'Connected' : 'Disconnected'} - 0 queued`, true);
+        setStatus();
       } catch (err) {
-        setStatus(`Error: ${err.message}`);
+        setStatus({ message: `Error: ${err.message}` });
       }
     }
-
-    function makeMutuallyExclusive(active, other) {
-      active.addEventListener('change', () => {
-        if (active.checked) other.checked = false;
-      });
-    }
-
-    makeMutuallyExclusive(echoModeCheckbox, llmModeCheckbox);
-    makeMutuallyExclusive(llmModeCheckbox, echoModeCheckbox);
 
     connectBtn.addEventListener('click', () => {
       connectStream();
@@ -500,7 +575,6 @@
     });
 
     setConnected(false);
-    connectStream();
     pollStatus();
     setInterval(pollStatus, 1000);
   </script>

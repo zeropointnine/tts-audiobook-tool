@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import threading
 from collections import deque
 from typing import Callable
@@ -9,6 +10,12 @@ from tts_audiobook_tool.app_types import Sound
 
 SAMPLE_RATE = 48000
 BLOCKSIZE = 4096 # ~85ms latency
+
+
+@dataclass
+class AudioBufferItem:
+    data: np.ndarray
+    text: str
 
 class AudioStream:
     """
@@ -26,9 +33,10 @@ class AudioStream:
     """
 
     def __init__(self):
-        self._data_buffer: deque[np.ndarray] = deque()
+        self._data_buffer: deque[AudioBufferItem] = deque()
         self._lock = threading.Lock()
         self._playback_listener: Callable[[np.ndarray, int], None] | None = None
+        self._currently_playing = ""
         self._is_mute: bool = False
         self._stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
@@ -53,15 +61,19 @@ class AudioStream:
         write_pos = 0
         with self._lock:
             while remaining > 0 and self._data_buffer:
-                chunk = self._data_buffer[0]
+                item = self._data_buffer[0]
+                chunk = item.data
                 take = min(len(chunk), remaining)
                 outdata[write_pos:write_pos + take, 0] = chunk[:take]
+                self._currently_playing = item.text
                 write_pos += take
                 remaining -= take
                 if take == len(chunk):
                     self._data_buffer.popleft()
                 else:
-                    self._data_buffer[0] = chunk[take:]
+                    self._data_buffer[0] = AudioBufferItem(chunk[take:], item.text)
+            if write_pos == 0:
+                self._currently_playing = ""
         # Notify HTTP feed outside the lock — copy the slice of outdata that was filled.
         # Do this before zeroing outdata so the HTTP stream always receives real audio.
         if write_pos > 0 and self._playback_listener is not None:
@@ -69,7 +81,7 @@ class AudioStream:
         if self._is_mute:
             outdata.fill(0)
 
-    def append(self, sound: Sound):
+    def append(self, sound: Sound, text: str = ""):
         data = sound.data
         if data.ndim > 1:
             data = data.mean(axis=0)  # mix to mono (channel-first)
@@ -83,12 +95,17 @@ class AudioStream:
                 data,
             ).astype(np.float32)
         with self._lock:
-            self._data_buffer.append(data)
+            self._data_buffer.append(AudioBufferItem(data, text))
+
+    def get_currently_playing(self) -> str:
+        with self._lock:
+            return self._currently_playing
 
     def get_seconds_left(self) -> float:
         with self._lock:
-            return sum(len(chunk) for chunk in self._data_buffer) / SAMPLE_RATE
+            return sum(len(item.data) for item in self._data_buffer) / SAMPLE_RATE
 
     def clear(self):
         with self._lock:
             self._data_buffer.clear()
+            self._currently_playing = ""

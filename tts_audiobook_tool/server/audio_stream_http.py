@@ -1,7 +1,9 @@
 import io
+import json
 import queue
 import struct
 import threading
+import time
 
 import numpy as np
 import soundfile as sf
@@ -15,8 +17,7 @@ _ENCODE_BLOCK_SAMPLES = 24000
 def _encode_pcm(data: np.ndarray, sr: int) -> bytes:
     buf = io.BytesIO()
     sf.write(buf, data, sr, format='WAV', subtype='FLOAT')
-    wav_bytes = buf.getvalue()
-    return struct.pack('>I', len(wav_bytes)) + wav_bytes
+    return buf.getvalue()
 
 
 class AudioStreamHttp:
@@ -27,6 +28,8 @@ class AudioStreamHttp:
         self._pcm_queue: queue.SimpleQueue = queue.SimpleQueue()
         self._accumulator = np.empty(0, dtype=np.float32)
         self._accum_sr: int = 48000
+        self._sequence = 0
+        self._timeline_sample_index = 0
         threading.Thread(target=self._encode_worker, daemon=True).start()
 
     # ── called from AudioStream._callback (audio thread) ──────────────────
@@ -57,7 +60,21 @@ class AudioStreamHttp:
     def _flush(self) -> None:
         if len(self._accumulator) == 0:
             return
-        encoded = _encode_pcm(self._accumulator, self._accum_sr)
+        wav_bytes = _encode_pcm(self._accumulator, self._accum_sr)
+        sample_count = len(self._accumulator)
+        header = {
+            "type": "audio",
+            "sequence": self._sequence,
+            "sampleRate": self._accum_sr,
+            "timelineStartSample": self._timeline_sample_index,
+            "sampleCount": sample_count,
+            "serverTime": time.time(),
+        }
+        header_bytes = json.dumps(header, separators=(",", ":")).encode("utf-8")
+        body = struct.pack('>I', len(header_bytes)) + header_bytes + wav_bytes
+        encoded = struct.pack('>I', len(body)) + body
+        self._sequence += 1
+        self._timeline_sample_index += sample_count
         self._accumulator = np.empty(0, dtype=np.float32)
         with self._lock:
             snapshot = list(self._clients)
