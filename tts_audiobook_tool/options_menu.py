@@ -45,7 +45,7 @@ class OptionsMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id),
+                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
                     lambda _, __: OptionsMenu.stt_model_menu(state),
                     superlabel="Model options", superlabel_no_blank_line=True
                 )
@@ -66,7 +66,7 @@ class OptionsMenu:
             if _model_devices and _has_gpu:
                 items.append(
                     MenuItem(
-                        lambda _: make_menu_label("TTS model - Force CPU", state.prefs.tts_force_cpu), 
+                        make_menu_label("TTS model - Force CPU", state.prefs.tts_force_cpu, False),
                         lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
                     )
                 )
@@ -102,7 +102,7 @@ class OptionsMenu:
             )
             items.append(
                 MenuItem(
-                    make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
+                    lambda _: make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
                     lambda _, __: OptionsMenu.menu_clears_screen_menu(state)
                 )
             )

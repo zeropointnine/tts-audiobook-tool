@@ -9,7 +9,6 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
-
 class RealTimePlaybackMenu:
 
     @staticmethod
@@ -49,7 +48,13 @@ class RealTimePlaybackMenu:
                 lambda _, __: RealTimePlaybackMenu.save_menu(state)
             )
         ]
-        MenuUtil.menu(state, "Realtime audiobook playback", items, hint=HINT_REAL_TIME, breadcrumb="Realtime playback")
+        MenuUtil.menu(
+            state,
+            "Realtime audiobook playback",
+            items,
+            subheading=REAL_TIME_SUBHEADING,
+            breadcrumb="Realtime playback"
+        )
 
     @staticmethod
     def ask_line_range(state: State) -> None:
@@ -118,7 +123,7 @@ class RealTimePlaybackMenu:
 
         # Menu
         items = [project_item, custom_file_item, custom_manual_item]
-        MenuUtil.menu(state, "Text source", items, hint=HINT_REAL_TIME, breadcrumb="Text source")
+        MenuUtil.menu(state, "Text source", items, breadcrumb="Text source")
 
     @staticmethod
     def save_menu(state: State) -> None:
@@ -177,3 +182,11 @@ def do_start(state: State) -> None:
         phrase_groups=text_groups,
         line_range=state.real_time.line_range
     )
+
+REAL_TIME_SUBHEADING = (
+    'Uses the same quality checks as the normal audiobook creation workflow,\n'
+    'except loudness normalization and generative upsampling.\n\n'
+    'Smooth playback requires faster-than-realtime inference and a 60-second\n'
+    'buffer for validation/retries.\n'
+)
+

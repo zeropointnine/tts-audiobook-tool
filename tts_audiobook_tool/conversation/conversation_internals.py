@@ -8,6 +8,9 @@ import sys
 import threading
 import time
 import unicodedata
+from typing import Callable
+
+import numpy as np
 
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant
@@ -25,6 +28,7 @@ from tts_audiobook_tool.conversation.console_session import (
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream, UiOp
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.llm_util import LlmUtil
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.phrase import Reason
@@ -429,6 +433,88 @@ class MuteCurrentThreadOutput:
         self.muted.clear()
 
 
+class ConversationStreamingTts:
+    @staticmethod
+    def generate_to_sound_stream(
+        project: Project,
+        text: str,
+        reason: Reason,
+        sound_stream: SoundDeviceStream,
+        interrupt_requested: threading.Event,
+        response_aborted: threading.Event,
+        on_segment_range: Callable[[int, int], None] | None = None,
+    ) -> tuple[tuple[int, int] | None, str | None]:
+        """
+        Stream one TTS chunk directly into the conversation output stream.
+
+        Returns:
+            ((start_sample, end_sample), None) on success, where the range covers
+            the full streamed audio plus any appended trailing silence.
+            (None, error_string) on failure.
+        """
+        info = Tts.get_info()
+        if sound_stream.sample_rate != info.sample_rate:
+            return None, (
+                f"Streaming sample rate mismatch: output stream={sound_stream.sample_rate}, "
+                f"tts={info.sample_rate}"
+            )
+
+        stream_start: int | None = None
+        stream_end: int | None = None
+        speech_end: int | None = None
+
+        def append_chunk(data: np.ndarray) -> None:
+            nonlocal stream_start, stream_end, speech_end
+            if interrupt_requested.is_set() or response_aborted.is_set():
+                return
+            start, end = sound_stream.add_data(data)
+            if stream_start is None:
+                stream_start = start
+            stream_end = end
+            speech_end = end
+            if on_segment_range is not None and stream_start is not None and speech_end is not None:
+                on_segment_range(stream_start, speech_end)
+
+        def on_stream_end() -> None:
+            nonlocal stream_start, stream_end
+            if interrupt_requested.is_set() or response_aborted.is_set():
+                return
+
+            # Streaming path intentionally appends only silence here. We do not
+            # support the normal full-sound post-processing/effect path, and we
+            # intentionally do not play section sound effects on this branch.
+            if reason.pause_duration <= 0:
+                return
+
+            silence_sound = SoundUtil.make_silence_sound(
+                seconds=reason.pause_duration,
+                sr=sound_stream.sample_rate,
+                dtype=np.dtype(np.float32),
+            )
+            start, end = sound_stream.add_data(silence_sound.data)
+            if stream_start is None:
+                stream_start = start
+            stream_end = end
+
+        try:
+            result = Tts.generate_using_project(
+                project,
+                [text],
+                on_stream_chunk=append_chunk,
+                on_stream_end=on_stream_end,
+            )
+        finally:
+            model = Tts.get_instance_if_exists()
+            if model is not None:
+                model.clear_stream_state()
+
+        if isinstance(result, str):
+            return None, result
+        if stream_start is None or speech_end is None or speech_end <= stream_start:
+            return None, "No streamed audio output"
+        return (stream_start, speech_end), None
+
+
 class ResponseSession:
     """
     Handles one LLM→TTS response turn. Construct fresh per Enter-press.
@@ -479,6 +565,10 @@ class ResponseSession:
         self.interrupt_requested = threading.Event()
         self.response_aborted = threading.Event()
         self.llm_content_received = False
+        self.first_audio_latency_logged = False
+        self.output_turn_tts_started_at: float | None = None
+        self.output_turn_tts_mode: str | None = None
+        self.output_turn_tts_preview_text: str = ""
 
         self.worker = threading.Thread(target=self.tts_worker, daemon=True)
         self.worker.start()
@@ -550,6 +640,74 @@ class ResponseSession:
                 self.render_response()
                 continue
             try:
+                if self.output_turn_tts_started_at is None:
+                    self.output_turn_tts_started_at = time.monotonic()
+
+                if Tts.get_info().can_stream and self.project.streaming_chat:
+                    streamed_segment_idx: int | None = None
+                    first_audio_callback_registered = False
+                    self.log_tts_inference_start(mode="streaming", text=text)
+
+                    def on_segment_range(start: int, end: int) -> None:
+                        nonlocal streamed_segment_idx, first_audio_callback_registered
+                        if not first_audio_callback_registered and not self.first_audio_latency_logged:
+                            first_audio_callback_registered = True
+                            self.output_turn_tts_mode = "streaming"
+                            if not self.output_turn_tts_preview_text:
+                                self.output_turn_tts_preview_text = text
+                            self.sound_stream.set_first_audio_output_callback(
+                                start,
+                                self.log_tts_first_audio_latency,
+                            )
+                        with self.state_lock:
+                            if self.pending_sentences and self.pending_sentences[0] == text:
+                                self.pending_sentences.pop(0)
+                            if streamed_segment_idx is None:
+                                self.spoken_segments.append((text, start, end))
+                                streamed_segment_idx = len(self.spoken_segments) - 1
+                            else:
+                                self.spoken_segments[streamed_segment_idx] = (text, start, end)
+                        self.render_response()
+
+                    with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
+                        stream_range, err = ConversationStreamingTts.generate_to_sound_stream(
+                            project=self.project,
+                            text=text,
+                            reason=reason,
+                            sound_stream=self.sound_stream,
+                            interrupt_requested=self.interrupt_requested,
+                            response_aborted=self.response_aborted,
+                            on_segment_range=on_segment_range,
+                        )
+
+                    if self.interrupt_requested.is_set() or self.response_aborted.is_set():
+                        with self.state_lock:
+                            if self.pending_sentences and self.pending_sentences[0] == text:
+                                self.pending_sentences.pop(0)
+                        continue
+
+                    if err is not None:
+                        if not self.response_aborted.is_set():
+                            self.ui.println(f"[TTS error: {err}]")
+                        with self.state_lock:
+                            if self.pending_sentences and self.pending_sentences[0] == text:
+                                self.pending_sentences.pop(0)
+                        self.render_response()
+                        continue
+
+                    assert stream_range is not None
+                    start, end = stream_range
+                    with self.state_lock:
+                        if self.pending_sentences and self.pending_sentences[0] == text:
+                            self.pending_sentences.pop(0)
+                        if streamed_segment_idx is None:
+                            self.spoken_segments.append((text, start, end))
+                        else:
+                            self.spoken_segments[streamed_segment_idx] = (text, start, end)
+                    self.render_response()
+                    continue
+
+                self.log_tts_inference_start(mode="non-streaming", text=text)
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
                     result = Tts.generate_using_project(self.project, [text])
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
@@ -603,6 +761,14 @@ class ResponseSession:
 
                 if not self.interrupt_requested.is_set() and not self.response_aborted.is_set():
                     start, end = self.sound_stream.add_data(sound.data)
+                    if not self.first_audio_latency_logged:
+                        self.output_turn_tts_mode = "non-streaming"
+                        if not self.output_turn_tts_preview_text:
+                            self.output_turn_tts_preview_text = text
+                        self.sound_stream.set_first_audio_output_callback(
+                            start,
+                            self.log_tts_first_audio_latency,
+                        )
                     is_first_tts_chunk = not self.spoken_segments
                     spoken_segments = self.make_spoken_segments(text, sound, start, end, is_first_tts_chunk)
                     with self.state_lock:
@@ -623,6 +789,27 @@ class ResponseSession:
                     if self.pending_sentences and self.pending_sentences[0] == text:
                         self.pending_sentences.pop(0)
                 self.render_response()
+
+    def log_tts_first_audio_latency(self) -> None:
+        if self.first_audio_latency_logged or self.output_turn_tts_started_at is None:
+            return
+        self.first_audio_latency_logged = True
+        elapsed_ms = (time.monotonic() - self.output_turn_tts_started_at) * 1000.0
+        preview = re.sub(r"\s+", " ", self.output_turn_tts_preview_text).strip()
+        if len(preview) > 80:
+            preview = preview[:80] + "..."
+        L.i(
+            f"TTS first-audio latency ({self.output_turn_tts_mode or 'unknown'}): {elapsed_ms:.1f} ms | "
+            f"chars={len(self.output_turn_tts_preview_text)} | text='{preview}'"
+        )
+
+    def log_tts_inference_start(self, mode: str, text: str) -> None:
+        preview = re.sub(r"\s+", " ", text).strip()
+        if len(preview) > 80:
+            preview = preview[:80] + "..."
+        L.i(
+            f"TTS inference start ({mode}) | chars={len(text)} | text='{preview}'"
+        )
 
     def render_response(self, force: bool = False) -> None:
         
@@ -677,6 +864,7 @@ class ResponseSession:
             return
 
         to_send: list[tuple[str, Reason]] = []
+        use_streaming_tts = Tts.get_info().can_stream and self.project.streaming_chat
         with self.state_lock:
             if not self.llm_content_received and self.render_buffer == ResponseSession.RESPONSE_PLACEHOLDER:
                 self.render_buffer = ""
@@ -687,6 +875,7 @@ class ResponseSession:
                 config=self.chunking_config,
                 has_pending_sentences=bool(self.pending_sentences),
                 has_spoken_segments=bool(self.spoken_segments),
+                allow_first_chunk_latency_split=not use_streaming_tts,
             )
             for s, reason in complete_chunks:
                 self.pending_sentences.append(s)
@@ -704,6 +893,9 @@ class ResponseSession:
     def abort_response(self, ticker: threading.Thread) -> None:
         self.interrupt_requested.set()
         self.response_aborted.set()
+        model = Tts.get_instance_if_exists()
+        if model is not None:
+            model.clear_stream_state()
         while not self.tts_q.empty():
             try:
                 self.tts_q.get_nowait()
@@ -848,6 +1040,7 @@ class ResponseSession:
         config: ChunkingConfig,
         has_pending_sentences: bool,
         has_spoken_segments: bool,
+        allow_first_chunk_latency_split: bool = True,
     ) -> tuple[list[tuple[str, Reason]], str, str]:
         """
         Fold a newly streamed LLM delta into the TTS buffer.
@@ -876,7 +1069,7 @@ class ResponseSession:
             else:
                 return to_send, next_buffer, ""
 
-        if is_first_chunk:
+        if is_first_chunk and allow_first_chunk_latency_split:
             # Use phrase-level boundaries (commas, semicolons, etc.) rather than
             # PhraseGrouper, which merges short sentences and would hide the
             # boundary inside a single group. Cut at the smallest phrase prefix

@@ -1,3 +1,5 @@
+import numpy as np
+
 import sys
 import langid # type: ignore
 import jieba # type: ignore
@@ -25,7 +27,7 @@ from transformers import AutoConfig, AutoModel, AutoTokenizer # type: ignore
 from transformers.cache_utils import StaticCache # type: ignore
 from huggingface_hub import snapshot_download as _hf_snapshot_download # type: ignore
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
@@ -120,7 +122,9 @@ class HiggsModel(HiggsBaseModel):
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:

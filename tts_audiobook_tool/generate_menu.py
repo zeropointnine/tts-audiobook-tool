@@ -333,7 +333,8 @@ def do_generate(state: State, is_regen: bool) -> None:
     )
 
     # Done
-    AppUtil.play_done_sound()
+    if not did_interrupt:
+        AppUtil.play_done_sound()
 
     if did_interrupt:
         AskUtil.ask_enter_to_continue()

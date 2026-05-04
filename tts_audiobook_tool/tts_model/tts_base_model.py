@@ -1,14 +1,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import Sound, Strictness
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, Strictness
 from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -38,6 +38,11 @@ class TtsBaseModel(ABC):
     # Gets assigned by concrete class
     INFO: TtsModelInfo
 
+    # Optional persistent callback for streamed audio chunks
+    stream_chunk_callback: StreamChunkCallback | None = None
+    # Optional persistent callback invoked when a streaming generation finishes
+    stream_end_callback: StreamEndCallback | None = None
+
     def __init_subclass__(cls, **kwargs):
         # Called whenever a new subclass is created
         super().__init_subclass__(**kwargs)
@@ -54,7 +59,12 @@ class TtsBaseModel(ABC):
 
     @abstractmethod
     def generate_using_project(
-            self, project: Project, prompts: list[str], force_random_seed: bool=False
+            self,
+            project: Project,
+            prompts: list[str],
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
     ) -> list[Sound] | str:
         """
         Generates Sound/s using the relevant TTS model attributes in the `project` object.
@@ -64,6 +74,12 @@ class TtsBaseModel(ABC):
             List of one or more prompts to process
         :param force_random_seed:
             Is ignored if implementation does not support seed
+        :param on_stream_chunk:
+            Optional callback for streaming audio chunks in the same format as
+            `Sound.data`: a 1d `np.ndarray` with dtype `float32`
+        :param on_stream_end:
+            Optional callback invoked once when streaming generation completes
+            (ie, after the last chunk)
 
         Returns:
             A list of Sounds (one per prompt), or error string
@@ -71,6 +87,17 @@ class TtsBaseModel(ABC):
 
         """
         ...
+
+    def clear_stream_state(self) -> None:
+        """
+        Clears any transient stream callback/state references left over from a
+        streaming generation.
+
+        Concrete models with additional streaming-related state (custom
+        streamer objects, etc.) may override-and-super.
+        """
+        self.stream_chunk_callback = None
+        self.stream_end_callback = None
 
     def massage_for_inference(self, text: str) -> str:
         """

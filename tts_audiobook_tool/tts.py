@@ -5,6 +5,8 @@ from importlib import util
 import os
 from typing import Callable
 
+from tts_audiobook_tool.app_types import StreamChunkCallback, StreamEndCallback
+
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
@@ -215,7 +217,13 @@ class Tts:
         return instance
 
     @staticmethod
-    def generate_using_project(project, prompts: list[str], force_random_seed: bool = False):
+    def generate_using_project(
+            project,
+            prompts: list[str],
+            force_random_seed: bool = False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
+    ):
         """
         Shared high-level TTS generation entrypoint for app features.
 
@@ -229,7 +237,13 @@ class Tts:
         """
         instance = Tts.get_instance()
         prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
-        return instance.generate_using_project(project, prepared_prompts, force_random_seed)
+        return instance.generate_using_project(
+            project,
+            prepared_prompts,
+            force_random_seed,
+            on_stream_chunk=on_stream_chunk,
+            on_stream_end=on_stream_end if on_stream_end is not None else project.on_stream_end,
+        )
 
     @staticmethod
     def get_instance_if_exists() -> TtsBaseModel | None:

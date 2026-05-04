@@ -623,6 +623,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
+**2026-05-05**
+
+- Added **streaming** option for LLM chat feature (applies to Vibevoice and Pocket TTS), which minimizes "time to first audio".
+
 **2026-04-28**
 
 - Added side feature: **Realtime LLM chat**

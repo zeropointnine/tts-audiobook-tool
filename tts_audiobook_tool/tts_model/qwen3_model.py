@@ -4,7 +4,7 @@ import torch
 from qwen_tts import Qwen3TTSModel # type: ignore
 from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: ignore
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
@@ -80,7 +80,9 @@ class Qwen3Model(Qwen3BaseModel):
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]

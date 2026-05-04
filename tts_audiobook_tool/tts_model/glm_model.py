@@ -1,3 +1,5 @@
+import numpy as np
+
 import logging
 import os
 import random
@@ -11,7 +13,7 @@ from glm_tts.llm.glmtts import GLMTTS # type: ignore
 from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
@@ -87,7 +89,9 @@ class GlmModel(GlmBaseModel):
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:

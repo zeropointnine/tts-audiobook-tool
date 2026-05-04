@@ -151,7 +151,11 @@ class Conversation:
             on_transcription=self.prompt_builder.on_transcription,
         )
 
-        self.sound_stream = SoundDeviceStream(APP_SAMPLE_RATE)
+        # Note, when streaming, output sound device samplerate is that of the 
+        # native samplerate of the TTS engine because we skip any post-processing.
+        sr = Tts.get_info().sample_rate if self.state.project.streaming_chat else APP_SAMPLE_RATE
+        self.sound_stream = SoundDeviceStream(sr)
+
         self.session: ResponseSession | None = None
         self.in_response = False
         self.exiting = False
@@ -242,6 +246,9 @@ class Conversation:
         # sound_stream.shut_down, etc.) bypass the queue and don't risk
         # deadlocking ui.wait_idle() on never-processed task_done.
         self.restore_console()
+        model = Tts.get_instance_if_exists()
+        if model is not None:
+            model.clear_stream_state()
         self.ui.stop()
         self.stop_capture()
         self.sound_stream.shut_down()

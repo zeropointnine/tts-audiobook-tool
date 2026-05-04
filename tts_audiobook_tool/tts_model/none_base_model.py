@@ -1,4 +1,5 @@
-from tts_audiobook_tool.app_types import Sound
+import numpy as np
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -42,7 +43,12 @@ class NoneModel(NoneBaseModel):
         ...
 
     def generate_using_project(
-            self, project: Project, prompts: list[str], force_random_seed: bool=False
+            self,
+            project: Project,
+            prompts: list[str],
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
     ) -> list[Sound] | str:
         return "No TTS model"
 

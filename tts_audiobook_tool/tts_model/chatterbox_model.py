@@ -16,7 +16,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import make_error_string
 
@@ -47,7 +47,9 @@ class ChatterboxModel(ChatterboxBaseModel):
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:

@@ -4,7 +4,7 @@ import numpy as np
 import sounddevice as sd
 import threading
 from numpy import ndarray
-from typing import Iterator, Optional
+from typing import Callable, Iterator, Optional
 from tts_audiobook_tool.util import *
 
 
@@ -75,6 +75,8 @@ class SoundDeviceStream:
 
         # State flags
         self.is_paused = False
+        self.first_audio_output_callback: Callable[[], None] | None = None
+        self.first_audio_output_sample_index: int | None = None
 
     def _callback(self, outdata: ndarray, frames: int, time, status: sd.CallbackFlags) -> None:
         """
@@ -90,6 +92,7 @@ class SoundDeviceStream:
             # It's good practice to log or print a warning.
             print("Warning: Output underflow")
 
+        first_audio_output_callback: Callable[[], None] | None = None
         with self.lock:
             if self.is_paused:
                 # If paused, stream silence.
@@ -113,9 +116,26 @@ class SoundDeviceStream:
             # Anchor playback position to the stream clock so play_position_samples
             # advances continuously and is accurate regardless of audio backend.
             if chunk_size > 0:
-                self.last_dac_consumed = self.total_samples_added - len(self.buffer) - chunk_size
+                chunk_start = self.total_samples_added - len(self.buffer) - chunk_size
+                chunk_end = chunk_start + chunk_size
+                self.last_dac_consumed = chunk_start
                 self.last_dac_time = time.outputBufferDacTime
                 self.last_audio_dac_end = time.outputBufferDacTime + chunk_size / self.sample_rate
+                callback_sample_index = self.first_audio_output_sample_index
+                if (
+                    self.first_audio_output_callback is not None
+                    and callback_sample_index is not None
+                    and chunk_start <= callback_sample_index < chunk_end
+                ):
+                    first_audio_output_callback = self.first_audio_output_callback
+                    self.first_audio_output_callback = None
+                    self.first_audio_output_sample_index = None
+
+        if first_audio_output_callback is not None:
+            try:
+                first_audio_output_callback()
+            except Exception:
+                pass
 
     def add_data(self, data: ndarray) -> tuple[int, int]:
         """
@@ -204,6 +224,13 @@ class SoundDeviceStream:
             self.last_dac_time = float('inf')
             self.last_dac_consumed = 0
             self.last_audio_dac_end = 0.0
+            self.first_audio_output_callback = None
+            self.first_audio_output_sample_index = None
+
+    def set_first_audio_output_callback(self, sample_index: int, callback: Callable[[], None] | None) -> None:
+        with self.lock:
+            self.first_audio_output_sample_index = sample_index
+            self.first_audio_output_callback = callback
 
     def shut_down(self) -> None:
         """

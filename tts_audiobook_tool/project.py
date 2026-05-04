@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, Sound, Strictness
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, Sound, StreamEndCallback, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
@@ -46,10 +46,19 @@ class Project(BaseModel):
 
     _autosave: bool = PrivateAttr(default=False)
     _sound_segments: Any = PrivateAttr(default=None)
+    _on_stream_end: StreamEndCallback | None = PrivateAttr(default=None)
 
     @property
     def sound_segments(self):
         return self._sound_segments
+
+    @property
+    def on_stream_end(self) -> StreamEndCallback | None:
+        return self._on_stream_end
+
+    @on_stream_end.setter
+    def on_stream_end(self, value: StreamEndCallback | None) -> None:
+        self._on_stream_end = value
 
     def get_high_shelf(self) -> HighShelfEq:
         return HighShelfEq.get_by_id(self.high_shelf) or HighShelfEq.DISABLED
@@ -83,6 +92,7 @@ class Project(BaseModel):
     use_upsampler: bool = False
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
+    streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
     strictness: Strictness = list(Strictness)[0]
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: ChapterMode = list(ChapterMode)[0]
@@ -321,6 +331,13 @@ class Project(BaseModel):
         if not isinstance(value, bool):
             value = False
         d['use_upsampler'] = value
+
+        # streaming_chat
+        value = d.get('streaming_chat', None)
+        if not isinstance(value, bool):
+            value = True
+            add_warning('streaming_chat', value)
+        d['streaming_chat'] = value
 
         # strictness (default depends on language_code)
         s = d.get('strictness', '')
@@ -576,6 +593,7 @@ class Project(BaseModel):
             "use_upsampler": self.use_upsampler,
             "realtime_save": self.realtime_save,
             "limit_silence_gaps": self.limit_silence_gaps,
+            "streaming_chat": self.streaming_chat,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,
             "chapter_mode": self.chapter_mode.id,

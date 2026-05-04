@@ -5,7 +5,7 @@ from indextts.infer_v2 import IndexTTS2 # type: ignore
 from numpy import ndarray
 import numpy
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
@@ -50,7 +50,9 @@ class IndexTts2Model(IndexTts2BaseModel):
             self,
             project: Project,
             prompts: list[str],
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
@@ -161,6 +163,6 @@ REPO_ID = "IndexTeam/IndexTTS-2"
 
 # Upper bound of recommended range as per project gradio demo
 # App ofc always segments the text well within this range but yea
-# FYI, WER is outstanding when limited to app's default word limit,
+# FYI, WER is outstanding when limited to app's default word limit (40),
 # but increasingly starts dropping phrases as num tokens increases.
 MAX_TOKENS_PER_SEGMENT = 200

@@ -2,6 +2,7 @@ from tts_audiobook_tool.conversation.conversation import Conversation, Conversat
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 
@@ -18,10 +19,11 @@ class ChatMenu:
             return label
 
         subheading = (
-            f"{COL_DIM}Realtime back-and-forth chat with LLM using microphone input.\n"
-            "Your speech is transcribed into prompts, with spoken responses\n"
-            "generated using the app's TTS pipeline.\n"
+            f"{COL_DIM}Mic input is transcribed and sent to the configured LLM, and the text\n"
+            "response is generated as speech using the current TTS model settings.\n"
         )
+
+        has_more_than_one_option = Tts.get_info().can_stream
 
         items = [
             MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
@@ -30,12 +32,20 @@ class ChatMenu:
                 lambda _: make_menu_label(
                     "Submit prompt immediately after transcription",
                     state.prefs.conversation_stt_immediate,
-                    False,
+                    False
                 ),
                 lambda _, __: ChatMenu.conversation_stt_immediate_menu(state),
+                superlabel="Options" if has_more_than_one_option else ""
             )
-            # TODO: Add "Options" superlabel when more than one option item exists
         ]
+
+        if Tts.get_info().can_stream:
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Streaming", state.project.streaming_chat, True),
+                    lambda _, __: ChatMenu.streaming_menu(state),
+                )
+            )
 
         MenuUtil.menu(
             state,
@@ -65,4 +75,29 @@ class ChatMenu:
             default_value=False,
             on_select=on_select,
             breadcrumb="Submit prompt immediately",
+        )
+
+    @staticmethod
+    def streaming_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.streaming_chat = value
+            print_feedback("Streaming set to:", state.project.streaming_chat)
+
+        subheading = (
+            f"{COL_DIM}Streaming outputs audio as it is generated, instead of\n"
+            "waiting for the normal full generation path to finish. This gives\n"
+            "minimal response latency, but skips the usual post-processing.\n"
+        )
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Streaming",
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.streaming_chat,
+            default_value=True,
+            on_select=on_select,
+            subheading=subheading,
+            breadcrumb="Streaming",
         )

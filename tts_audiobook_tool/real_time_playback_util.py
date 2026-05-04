@@ -17,7 +17,6 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import ValidationResult
@@ -198,7 +197,7 @@ class RealTimeUtil:
             has_runway: bool
     ) -> tuple[Sound | None, bool]:
         """
-        Similar to `GenerateUtil.generate_full_flow()` but slightly different control flow, simpler.
+        Similar to `GenerateUtil.generate_full_flow()` but simpler control flow.
         Returns tuple: Sound or no-sound if problem, and if user interrupted
         """
 

@@ -176,19 +176,6 @@ even after multiple attempts — due to the TTS model being unable to render
 the audio correctly, or due to the speech-to-text validator producing false positives."""
 )
 
-HINT_REAL_TIME = Hint(
-    "real_time",
-    "About",
-f"""This uses the same quality-control steps as the normal "Generate" workflow,
-aside from loudness normalization.
-
-To achieve uninterrupted playback, your system must be able to
-do the audio inference faster-than-realtime.
-
-Note that lines get validated and potentially re-generated only when there is
-enough buffered audio to allow for uninterrupted playback (60 seconds)."""
-)
-
 HINT_MULTIPLE_MP3S = Hint(
     "multiple_mp3s",
     "Multiple MP3 files?",

@@ -51,6 +51,11 @@ class PocketBaseModel(TtsBaseModel):
         "spanish_24l",
     ]
     DEFAULT_LANGUAGE = "english_2026-04"
+    # Cache the gated/opt-in validation result per resolved voice prompt path so
+    # repeated prereq checks (eg, menu label rendering) do not keep re-encoding
+    # the same audio prompt through pocket_tts. This is intentionally process-
+    # lifetime cache; changing voice path naturally uses a different key.
+    gated_error_message_cache: dict[str, str] = {}
 
     @classmethod
     def get_voice_value(cls, project: Project) -> str:
@@ -94,15 +99,19 @@ class PocketBaseModel(TtsBaseModel):
             return ""
 
         assert isinstance(instance, PocketBaseModel)
+        voice_path = os.path.join(project.dir_path, voice_file_name)
+        cached = cls.gated_error_message_cache.get(voice_path, None)
+        if cached is not None:
+            return cached
         
         # We're avoiding referencing PocketModel directly here...
         validate_method = getattr(instance, "get_voice_clone_access_error_for_path", None)
         assert validate_method
 
-        voice_path = os.path.join(project.dir_path, voice_file_name)
         result = validate_method(voice_path)
-        
-        return result if isinstance(result, str) else str(result)
+        message = result if isinstance(result, str) else str(result)
+        cls.gated_error_message_cache[voice_path] = message
+        return message
 
     @classmethod
     def is_opt_in_error_string(cls, error: str) -> bool:

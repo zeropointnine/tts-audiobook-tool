@@ -1,3 +1,5 @@
+import numpy as np
+
 import importlib
 from pathlib import Path
 import sys
@@ -6,7 +8,7 @@ import torchaudio # type: ignore
 import huggingface_hub
 from huggingface_hub.errors import GatedRepoError
 
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
@@ -120,7 +122,9 @@ class FishS2Model(FishS2BaseModel):
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:

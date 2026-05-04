@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import cache
 import platform
-from typing import NamedTuple, Protocol, Sequence
+from typing import Callable, NamedTuple, Protocol, Sequence
 
 from numpy import ndarray
 
@@ -40,6 +40,10 @@ class Sound(NamedTuple):
     @property
     def duration(self) -> float:
         return len(self.data) / self.sr
+
+
+StreamChunkCallback = Callable[[ndarray], None]
+StreamEndCallback = Callable[[], None]
 
 class Word(Protocol):
     """

@@ -32,13 +32,17 @@ class AppUtil:
         L.init(APP_NAME)
         L.i("START " + "-" * 60)
 
-        # Squelch various 3p lib output
+        # Squelch various noisey 3p lib output
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("filelock").setLevel(logging.WARNING)
         logging.getLogger('numba').setLevel(logging.WARNING)
-        # Used by oute lib
+        logging.getLogger("faster_whisper").setLevel(logging.WARNING)
+        logging.getLogger("watchdog.observers.inotify_buffer").setLevel(logging.WARNING)
+        
+        # TTS libs (target only noisey parts)
+        logging.getLogger("pocket_tts.models.tts_model").setLevel(logging.WARNING)        
         import warnings
-        warnings.filterwarnings("ignore", module="pyloud")
+        warnings.filterwarnings("ignore", module="pyloud") # used by oute
 
     @staticmethod
     def delete_project_sound_files(dir: str) -> str:
