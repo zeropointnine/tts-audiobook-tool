@@ -62,7 +62,7 @@ class TextMenu:
             )
 
             if not state.real_time.custom_phrase_groups:
-                state.real_time.line_range = None
+                state.real_time.project_text_line_range = None
 
             print_feedback("Project text cleared")
 
@@ -169,7 +169,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     )
 
     if not state.real_time.custom_phrase_groups:
-        state.real_time.line_range = None
+        state.real_time.project_text_line_range = None
 
     print_feedback("Project text has been set")
     return True

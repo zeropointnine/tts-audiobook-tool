@@ -12,6 +12,12 @@ from tts_audiobook_tool.util import *
 class RealTimePlaybackMenu:
 
     @staticmethod
+    def get_active_line_range(state: State) -> tuple[int, int] | None:
+        if state.real_time.custom_phrase_groups:
+            return state.real_time.custom_text_line_range
+        return state.real_time.project_text_line_range
+
+    @staticmethod
     def menu(state: State):
 
         def make_start_label(_: State) -> str:
@@ -31,7 +37,7 @@ class RealTimePlaybackMenu:
             return make_menu_label("Text source", value)
 
         def make_range_label(_) -> str:
-            line_range = state.real_time.line_range
+            line_range = RealTimePlaybackMenu.get_active_line_range(state)
             if line_range:
                 value = f"{line_range[0]}-{line_range[1]}"
             else:
@@ -75,7 +81,11 @@ class RealTimePlaybackMenu:
             AskUtil.ask_error(result)
             return
 
-        state.real_time.line_range = result
+        if state.real_time.custom_phrase_groups:
+            state.real_time.custom_text_line_range = result
+        else:
+            state.real_time.project_text_line_range = result
+            state.project.realtime_line_range = result
 
         # Print feedback
         is_all = (result[0] == 0 and result[1] == 0) or (result[0] == 1 and result[1] == len(text_groups))
@@ -92,9 +102,11 @@ class RealTimePlaybackMenu:
 
         # 1
         def on_project(_: State, __: MenuItem) -> bool:
-            if state.real_time.custom_phrase_groups:
+            if state.real_time.custom_phrase_groups or state.real_time.custom_text_line_range or state.real_time.project_text_line_range:
                 state.real_time.custom_phrase_groups = []
-                state.real_time.line_range = None
+                state.real_time.custom_text_line_range = None
+                state.real_time.project_text_line_range = None
+                state.project.realtime_line_range = None
             print_feedback("Text source set to", "project")
             return True
 
@@ -102,6 +114,7 @@ class RealTimePlaybackMenu:
 
         # 2, 3
         def on_custom(_: State, item: MenuItem) -> bool:
+            printt("Note, custom text source does not persist.")
             if item.data == "file":
                 phrase_groups, __ = PhraseGroupAskUtil.get_from_text_file(
                     state.project.max_words, 
@@ -114,7 +127,7 @@ class RealTimePlaybackMenu:
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             if phrase_groups:
                 state.real_time.custom_phrase_groups = phrase_groups
-                state.real_time.line_range = None
+                state.real_time.custom_text_line_range = None
                 print_feedback("Text source set to: custom", f"{len(phrase_groups)} {make_noun('line', 'lines', len(phrase_groups))}")
             return bool(phrase_groups)
 
@@ -156,8 +169,10 @@ def do_start(state: State) -> None:
     
     if state.real_time.custom_phrase_groups:
         text_groups = state.real_time.custom_phrase_groups
+        line_range = state.real_time.custom_text_line_range
     else:
         text_groups = state.project.phrase_groups
+        line_range = state.real_time.project_text_line_range
     if not text_groups:
         print_feedback("No text segments specified")
         return
@@ -180,7 +195,7 @@ def do_start(state: State) -> None:
     RealTimeUtil.start(
         state=state,
         phrase_groups=text_groups,
-        line_range=state.real_time.line_range
+        line_range=line_range
     )
 
 REAL_TIME_SUBHEADING = (

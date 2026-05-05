@@ -91,6 +91,7 @@ class Project(BaseModel):
     high_shelf: str = HighShelfEq.DISABLED.id
     use_upsampler: bool = False
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
+    realtime_line_range: tuple[int, int] | None = None
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
     strictness: Strictness = list(Strictness)[0]
@@ -331,6 +332,13 @@ class Project(BaseModel):
         if not isinstance(value, bool):
             value = False
         d['use_upsampler'] = value
+
+        # realtime_line_range
+        value = d.get('realtime_line_range', None)
+        if isinstance(value, (list, tuple)) and len(value) == 2 and all(isinstance(item, int) for item in value):
+            d['realtime_line_range'] = (value[0], value[1])
+        else:
+            d['realtime_line_range'] = None
 
         # streaming_chat
         value = d.get('streaming_chat', None)
@@ -592,6 +600,7 @@ class Project(BaseModel):
             "high_shelf": self.high_shelf,
             "use_upsampler": self.use_upsampler,
             "realtime_save": self.realtime_save,
+            "realtime_line_range": self.realtime_line_range,
             "limit_silence_gaps": self.limit_silence_gaps,
             "streaming_chat": self.streaming_chat,
             "strictness": self.strictness.id,
@@ -716,6 +725,7 @@ class Project(BaseModel):
             # Setting this invalidates some things
             self.section_dividers = []
             self.generate_range_string = ""
+            self.realtime_line_range = None
 
         self.save_raw_text(raw_text)  # saved for reference
 

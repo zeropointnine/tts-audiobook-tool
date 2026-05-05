@@ -54,8 +54,7 @@ class State:
 
         # Sync static values
         Tts.set_model_params_using_project(self.project)
-        if not self.real_time.custom_phrase_groups:
-            self.real_time.line_range = None
+        self.real_time.project_text_line_range = self.project.realtime_line_range
 
     @property
     def prefs(self) -> Prefs:

@@ -359,4 +359,5 @@ class RealTimeMenuState:
     """ Values related to the real-time playback feature """
     from tts_audiobook_tool.phrase import PhraseGroup
     custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
-    line_range: tuple[int, int] | None = None
+    custom_text_line_range: tuple[int, int] | None = None
+    project_text_line_range: tuple[int, int] | None = None
