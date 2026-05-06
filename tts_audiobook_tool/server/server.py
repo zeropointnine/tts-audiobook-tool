@@ -13,7 +13,6 @@ import numpy as np
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import make_terminal_hyperlink, printt

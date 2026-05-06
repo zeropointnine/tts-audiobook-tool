@@ -132,22 +132,25 @@ class Startup:
         """
         
         new_packages = [
-            "faster_whisper", "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", "pydantic", "requests"
+            "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", "pydantic", "requests"
         ]
 
-        # cuda-related (ie, win+linux)
+        # win32 + linux
         if sys.platform in ("win32", "linux"):
             new_packages.append("sidon")
 
-        # mac apple silicon-specific
-        if sys.platform == "darwin" and platform.machine() == "arm64":
+        # apple silicon vs not
+        is_apple_silicon = ("darwin" and platform.machine() == "arm64")
+        if is_apple_silicon:
             new_packages.append("mlx_whisper")
+        else:
+            new_packages.append("faster-whisper")
 
-        # win32-specific
+        # win32
         if sys.platform == "win32":
             new_packages.append("win32api") # ie, pywin32
 
-        # chatterbox update
+        # chatterbox 
         if Tts.get_type() == TtsModelInfos.CHATTERBOX:
             new_packages.append("chatterbox.tts_turbo")
 
