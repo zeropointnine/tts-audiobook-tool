@@ -1,15 +1,42 @@
 import numpy as np
 import torch
+from typing import Callable
+
 from tts_audiobook_tool.app_util import AppUtil
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
+from vibevoice.modular.streamer import AudioStreamer # type: ignore
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
 from peft import PeftModel  # type: ignore
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_model.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.util import *
+
+
+class CallbackAudioStreamer(AudioStreamer):
+    def __init__(
+            self,
+            batch_size: int,
+            on_chunk: Callable[[int, torch.Tensor], None],
+            on_end: Callable[[], None] | None = None,
+    ):
+        super().__init__(batch_size=batch_size)
+        self.on_chunk = on_chunk
+        self.on_end = on_end
+        self.did_notify_end = False
+
+    def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
+        super().put(audio_chunks, sample_indices)
+        for i, sample_idx in enumerate(sample_indices):
+            self.on_chunk(int(sample_idx.item()), audio_chunks[i].detach().cpu())
+
+    def end(self, sample_indices=None):
+        super().end(sample_indices)
+        if sample_indices is None and self.on_end is not None and not self.did_notify_end:
+            self.did_notify_end = True
+            self.on_end()
 
 
 class VibeVoiceModel(VibeVoiceBaseModel):
@@ -30,6 +57,9 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         if not model_target:
             model_target = VibeVoiceBaseModel.DEFAULT_REPO_ID
         self.max_new_tokens = max_new_tokens
+        self.audio_streamer: AudioStreamer | None = None
+        self.stream_chunk_callback: StreamChunkCallback | None = None
+        self.stream_end_callback: StreamEndCallback | None = None
 
         self.processor = VibeVoiceProcessor.from_pretrained(model_target)
 
@@ -92,8 +122,14 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             self.processor.tokenizer = None
             self.processor.audio_processor = None
             self.processor.audio_normalizer = None
+        self.audio_streamer = None
+        self.clear_stream_state()
         self.processor = None
         self.model = None
+
+    def clear_stream_state(self) -> None:
+        super().clear_stream_state()
+        self.audio_streamer = None
 
     def massage_for_inference(self, text: str) -> str:
         text = super().massage_for_inference(text)
@@ -101,11 +137,26 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         text = f"{SPEAKER_TAG}{text}" 
         return text
 
+    def on_audio_chunk_received(self, sample_idx: int, chunk: torch.Tensor) -> None:
+        if chunk.dtype == torch.bfloat16:
+            chunk = chunk.to(torch.float32)
+
+        chunk_data = chunk.numpy().astype(np.float32, copy=False).reshape(-1)
+
+        if self.stream_chunk_callback is not None:
+            self.stream_chunk_callback(chunk_data)
+
+    def on_stream_end(self) -> None:
+        if self.stream_end_callback is not None:
+            self.stream_end_callback()
+
     def generate_using_project(
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
         
         if project.vibevoice_voice_file_name:
@@ -124,7 +175,9 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             voice_path=voice_path,
             cfg_scale=cfg_scale,
             num_steps=num_steps,
-            seed=seed
+            seed=seed,
+            on_stream_chunk=on_stream_chunk,
+            on_stream_end=on_stream_end,
         )
         return result
 
@@ -134,7 +187,9 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             voice_path: str,
             cfg_scale: float=VibeVoiceBaseModel.CFG_DEFAULT,
             num_steps: int=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
-            seed: int = -1
+            seed: int = -1,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
     ) -> list[Sound] | str:
         """
         Returns list[Sound] or error string
@@ -151,6 +206,10 @@ class VibeVoiceModel(VibeVoiceBaseModel):
 
         try:
             self.model.set_ddpm_inference_steps(num_steps) # type: ignore
+            if on_stream_chunk is not None:
+                self.stream_chunk_callback = on_stream_chunk
+            if on_stream_end is not None:
+                self.stream_end_callback = on_stream_end
 
             # Ensure text is a list
             texts = texts if isinstance(texts, list) else [texts]
@@ -165,12 +224,19 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 return_attention_mask=True,
             )
 
+            self.audio_streamer = CallbackAudioStreamer(
+                batch_size=len(texts),
+                on_chunk=self.on_audio_chunk_received,
+                on_end=self.on_stream_end,
+            )
+
             # Generate audio
             outputs = self.model.generate(
                 **inputs, # type: ignore
                 max_new_tokens=self.max_new_tokens,
                 cfg_scale=cfg_scale,
                 tokenizer=self.processor.tokenizer,
+                audio_streamer=self.audio_streamer,
                 # generation_config={'do_sample': False, 'temperature': 0.95, 'top_p': 0.95, 'top_k': 0},
                 generation_config={'do_sample': False}, # type: ignore
                 verbose=True,

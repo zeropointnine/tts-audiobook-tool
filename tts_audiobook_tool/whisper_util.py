@@ -1,13 +1,11 @@
-import time
 from typing import Iterable, TYPE_CHECKING # type: ignore
 
 import librosa
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, Word
+from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant, Word
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.stt import Stt
-from faster_whisper.transcribe import Segment
 
 from tts_audiobook_tool.util import make_error_string
 
@@ -40,10 +38,11 @@ class WhisperUtil:
             language_code = ""
 
         try:
-            segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
+            with Stt.inference_lock:
+                segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
 
-            # Convert generator to concrete list (does the actual inference)
-            segments = list(segments)
+                # Convert generator to concrete list (does the actual inference)
+                segments = list(segments)
 
         except Exception as e:
             return make_error_string(e)
@@ -57,14 +56,13 @@ class WhisperUtil:
     @staticmethod
     def get_words_from_segments(segments: Iterable[Segment]) -> list[Word]:
         """
-        Converts an interable of faster-whisper Segments into a flattened list of Words.
+        Converts an iterable of whisper segments into a flattened list of Words.
         """
         words = []
         for segment in segments:
             if segment.words:  # Ensure the words list exists and is not empty
                 words.extend(segment.words)
         return words
-
 
     @staticmethod
     def get_flat_text_from_segments(segments: Iterable[Segment]) -> str:

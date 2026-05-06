@@ -10,8 +10,9 @@ package.json
 package-lock.json
 
 plans/
-.roo/rules/python-env.md
+.clinerules
 CLAUDE.md
+.claude/
 
 output/
 checkpoints/

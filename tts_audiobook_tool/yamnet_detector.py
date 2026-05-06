@@ -1,6 +1,7 @@
+import platform
+
 import numpy as np
 import librosa
-import onnxruntime as ort
 from huggingface_hub import hf_hub_download
 
 from tts_audiobook_tool.app_types import Sound
@@ -8,9 +9,28 @@ from tts_audiobook_tool.app_types import Sound
 class YamnetDetector:
     """
     Wraps YAMNet model
+
+    Rem, has dependency on onnxruntime, which is brought in transitively by 
+    faster-whisper but otherwise needs to be added explicitly to requirements.
     """
 
     def __init__(self):
+
+        try:
+            import onnxruntime as ort
+        except ModuleNotFoundError as exc:
+            system = platform.system()
+            machine = platform.machine()
+            extra = ""
+            if system == "Darwin" and machine in {"arm64", "aarch64"}:
+                extra = (
+                    "Detected Apple Silicon; make sure your active Python environment "
+                    "has an arm64-compatible `onnxruntime` wheel installed."
+                )
+            raise ModuleNotFoundError(
+                "YAMNet requires the optional dependency `onnxruntime`, but it is not "
+                f"installed for this Python environment.{extra}"
+            ) from exc
 
         # Onnx conversion of the Google YAMNet tensorflow model
         # See: https://huggingface.co/zeropointnine/yamnet-onnx
@@ -19,7 +39,7 @@ class YamnetDetector:
             filename="yamnet.onnx"
         )
         
-        # Initialize ONNX Runtime for x64 CPU
+        # Initialize ONNX Runtime for CPU inference
         options = ort.SessionOptions()
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self._session = ort.InferenceSession(

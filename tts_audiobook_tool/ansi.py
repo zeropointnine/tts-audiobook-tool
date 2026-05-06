@@ -39,6 +39,7 @@ class Ansi:
     CURSOR_HIDE: str = "\033[?25l"
     CURSOR_SHOW: str = "\033[?25h"
 
+    BOLD: str = "\x1b[1m"
     ITALICS: str = "\x1b[3m"
     STRIKETHROUGH: str = "\x1b[9m"
 

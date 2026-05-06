@@ -1,6 +1,8 @@
 import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
@@ -27,7 +29,9 @@ class OptionsMenu:
             after_string = AppUtil.make_memory_string()
             if after_string:
                 printt(f"After:  {after_string}")
-            printt()
+            if state.prefs.menu_clears_screen:
+                printt()
+                AskUtil.ask_enter_to_continue()
 
         def on_hints(_: State, __: MenuItem) -> None:
             state.prefs.reset_hints()
@@ -41,9 +45,9 @@ class OptionsMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id),
+                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
                     lambda _, __: OptionsMenu.stt_model_menu(state),
-                    superlabel="Model options"
+                    superlabel="Model options", superlabel_no_blank_line=True
                 )
             )
             items.append(
@@ -62,31 +66,43 @@ class OptionsMenu:
             if _model_devices and _has_gpu:
                 items.append(
                     MenuItem(
-                        lambda _: make_menu_label("TTS model - CPU override", state.prefs.tts_force_cpu), 
+                        make_menu_label("TTS model - Force CPU", state.prefs.tts_force_cpu, False),
                         lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
                     )
                 )
                 
-            items.append( MenuItem(make_unload_label, on_unload) )
-
             if Tts.get_type() != TtsModelInfos.NONE:
                 items.append(
                     MenuItem(
-                        lambda _: f"About {Tts.get_type().value.ui['proper_name']} model",
-                        lambda _, __: print_about_model()
+                        lambda _: f"TTS model - About {Tts.get_type().value.ui['proper_name']}",
+                        lambda _, __: print_about_model(state)
                     )
                 )
 
+            items.append( MenuItem(make_unload_label, on_unload) )
+
             items.append(
                 MenuItem(
-                    make_menu_label("AAC/M4B bitrate", state.prefs.aac_bitrate, AAC_BITRATE_DEFAULT),
-                    lambda _, __: OptionsMenu.aac_bitrate_menu(state),
+                    lambda _: make_menu_label(
+                        "LLM settings",
+                        make_terminal_hyperlink(
+                            state.prefs.llm_url,
+                            ellipsize(state.prefs.llm_url, 50)
+                        ) if state.prefs.llm_url else "none"
+                    ),
+                    lambda _, __: LlmSettingsMenu.menu(state),
                     superlabel="Various"
                 )
             )
             items.append(
                 MenuItem(
-                    make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
+                    make_menu_label("AAC/M4B bitrate", state.prefs.aac_bitrate, AAC_BITRATE_DEFAULT),
+                    lambda _, __: OptionsMenu.aac_bitrate_menu(state)
+                )
+            )
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
                     lambda _, __: OptionsMenu.menu_clears_screen_menu(state)
                 )
             )
@@ -100,7 +116,7 @@ class OptionsMenu:
             )
             return items
         
-        MenuUtil.menu(state, "Options:", item_maker)
+        MenuUtil.menu(state, "Options:", item_maker, breadcrumb="Options")
 
     @staticmethod
     def stt_model_menu(state: State) -> None:
@@ -118,7 +134,8 @@ class OptionsMenu:
             current_value=state.prefs.stt_variant,
             default_value=SttVariant.get_default(),
             on_select=on_select,
-            hint=HINT_TRANSCRIPTION
+            hint=HINT_TRANSCRIPTION,
+            breadcrumb="Whisper model",
         )
 
     @staticmethod
@@ -143,7 +160,8 @@ class OptionsMenu:
             values=[item for item in list(SttConfig)],
             current_value=state.prefs.stt_config,
             default_value=None,
-            on_select=on_select
+            on_select=on_select,
+            breadcrumb="Whisper device",
         )
 
     @staticmethod
@@ -197,8 +215,8 @@ class OptionsMenu:
                 state.prefs.menu_clears_screen = value
             print_feedback(f"Set to:", str(state.prefs.menu_clears_screen))
 
-        subheading = f"When enabled, clears the terminal screen between menus\n"
-        subheading += f"and prompts to press Enter after feedback messages.\n"
+        subheading = f"When enabled, clears screen between menus\n"
+        subheading += f"and shows persistent status info.\n"
 
         MenuUtil.options_menu(
             state=state,
@@ -230,6 +248,24 @@ class OptionsMenu:
         )
 
 # ---
+
+def print_about_model(state: State) -> None:
+
+    from tts_audiobook_tool.tts import Tts
+    from tts_audiobook_tool.ask_util import AskUtil
+    from tts_audiobook_tool.menu_util import MenuUtil
+
+    ui = Tts.get_type().value.ui
+    model_name = ui["proper_name"]
+    MenuUtil.print_screen_heading(state, f"About {model_name}")
+
+    for link in ui.get("project_links", []):
+        printt(make_terminal_hyperlink(link))
+    printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
+    printt()
+    AskUtil.ask_enter_to_continue()
+
+
 
 DEBUG_SUBHEADING = \
 """Saves intermediate sound segment files and diagnostic json data

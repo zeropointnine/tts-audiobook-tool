@@ -21,12 +21,20 @@ class Prefs(Saveable):
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
+            llm_url: str = "",
+            llm_api_key: str = "",
+            llm_model: str = "",
+            llm_system_prompt: str = "",
+            llm_system_prompt_default: bool = True,
+            llm_extra_params: dict = {},
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
+            conversation_stt_immediate: bool = False,
             save_debug_files: bool = False,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT
+            menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT,
+            source_dict_keys: set[str] | None = None
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -34,12 +42,28 @@ class Prefs(Saveable):
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
         self._aac_bitrate = aac_bitrate
+        self._llm_url = llm_url
+        self._llm_api_key = llm_api_key
+        self._llm_model = llm_model
+        self._llm_system_prompt = llm_system_prompt
+        self._llm_system_prompt_default = llm_system_prompt_default
+        self._llm_extra_params = llm_extra_params
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
+        self._conversation_stt_immediate = conversation_stt_immediate
         self._save_debug_files = save_debug_files
         self._play_on_generate = play_on_generate
+
+        # When True: 
+        # - Menu clears screen, feedback text is always followed by a keypress prompt
+        # - Menu always leads with a status text block
         self._menu_clears_screen = menu_clears_screen
+
+        # Top-level keys that were present in the source prefs JSON when this instance
+        # was loaded. This lets callers distinguish persisted keys from values that
+        # were filled in from defaults/back-compat logic during load().
+        self.source_dict_keys = source_dict_keys if source_dict_keys is not None else set()
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -123,6 +147,38 @@ class Prefs(Saveable):
             aac_bitrate = AAC_BITRATE_DEFAULT
             dirty = True
 
+        # LLM config
+        llm_url = prefs_dict.get("llm_url", "")
+        if not isinstance(llm_url, str):
+            llm_url = ""
+            dirty = True
+
+        # Back-compat: support legacy key "api_key"
+        llm_api_key = prefs_dict.get("llm_api_key", prefs_dict.get("api_key", ""))
+        if not isinstance(llm_api_key, str):
+            llm_api_key = ""
+            dirty = True
+
+        llm_model = prefs_dict.get("llm_model", "")
+        if not isinstance(llm_model, str):
+            llm_model = ""
+            dirty = True
+
+        llm_system_prompt = prefs_dict.get("llm_system_prompt", "")
+        if not isinstance(llm_system_prompt, str):
+            llm_system_prompt = ""
+            dirty = True
+
+        llm_system_prompt_default = prefs_dict.get("llm_system_prompt_default", True)
+        if not isinstance(llm_system_prompt_default, bool):
+            llm_system_prompt_default = True
+            dirty = True
+
+        llm_extra_params = prefs_dict.get("llm_extra_params", {})
+        if not isinstance(llm_extra_params, dict):
+            llm_extra_params = {}
+            dirty = True
+
         # Max retries
         max_retries = prefs_dict.get("max_retries", PROJECT_MAX_RETRIES_DEFAULT)
         if not isinstance(max_retries, int) or not (PROJECT_MAX_RETRIES_MIN <= max_retries <= PROJECT_MAX_RETRIES_MAX):
@@ -156,6 +212,12 @@ class Prefs(Saveable):
             last_text_dir = ""
             dirty = True
 
+        # Conversation STT immediate submit
+        conversation_stt_immediate = prefs_dict.get("conversation_stt_immediate", False)
+        if not isinstance(conversation_stt_immediate, bool):
+            conversation_stt_immediate = False
+            dirty = True
+
         # Play on generate
         save_debug_files = prefs_dict.get("save_debug_files", False)
         if not isinstance(save_debug_files, bool):
@@ -181,13 +243,21 @@ class Prefs(Saveable):
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
             aac_bitrate=aac_bitrate,
+            llm_url=llm_url,
+            llm_api_key=llm_api_key,
+            llm_model=llm_model,
+            llm_system_prompt=llm_system_prompt,
+            llm_system_prompt_default=llm_system_prompt_default,
+            llm_extra_params=llm_extra_params,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
+            conversation_stt_immediate=conversation_stt_immediate,
             save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
             menu_clears_screen=menu_clears_screen,
-            hints=hints
+            hints=hints,
+            source_dict_keys=set(prefs_dict.keys())
         )
 
         from tts_audiobook_tool.util import set_menu_clears_screen
@@ -294,6 +364,62 @@ class Prefs(Saveable):
         self.save()
 
     @property
+    def llm_url(self) -> str:
+        return self._llm_url
+
+    @llm_url.setter
+    def llm_url(self, value: str) -> None:
+        self._llm_url = value
+        self.save()
+
+    @property
+    def llm_api_key(self) -> str:
+        return self._llm_api_key
+
+    @llm_api_key.setter
+    def llm_api_key(self, value: str) -> None:
+        self._llm_api_key = value
+        self.save()
+
+    @property
+    def llm_model(self) -> str:
+        return self._llm_model
+
+    @llm_model.setter
+    def llm_model(self, value: str) -> None:
+        self._llm_model = value
+        self.save()
+
+    @property
+    def llm_system_prompt(self) -> str:
+        return self._llm_system_prompt
+
+    @llm_system_prompt.setter
+    def llm_system_prompt(self, value: str) -> None:
+        self._llm_system_prompt = value
+        self.save()
+
+    @property
+    def llm_system_prompt_default(self) -> bool:
+        return self._llm_system_prompt_default
+
+    @llm_system_prompt_default.setter
+    def llm_system_prompt_default(self, value: bool) -> None:
+        self._llm_system_prompt_default = value
+        self.save()
+
+    @property
+    def llm_extra_params(self) -> dict:
+        return self._llm_extra_params
+
+    @llm_extra_params.setter
+    def llm_extra_params(self, value: dict) -> None:
+        if not isinstance(value, dict):
+            value = {}
+        self._llm_extra_params = value
+        self.save()
+
+    @property
     def last_voice_dir(self) -> str:
         return self._last_voice_dir
 
@@ -321,6 +447,15 @@ class Prefs(Saveable):
         self.save()
 
     @property
+    def conversation_stt_immediate(self) -> bool:
+        return self._conversation_stt_immediate
+
+    @conversation_stt_immediate.setter
+    def conversation_stt_immediate(self, value: bool) -> None:
+        self._conversation_stt_immediate = value
+        self.save()
+
+    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
@@ -333,9 +468,16 @@ class Prefs(Saveable):
             "stt_config": self._stt_config.id,
             "tts_force_cpu": self._tts_force_cpu,
             "aac_bitrate": self._aac_bitrate,
+            "llm_url": self._llm_url,
+            "llm_api_key": self._llm_api_key,
+            "llm_model": self._llm_model,
+            "llm_system_prompt": self._llm_system_prompt,
+            "llm_system_prompt_default": self._llm_system_prompt_default,
+            "llm_extra_params": self._llm_extra_params,
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
+            "conversation_stt_immediate": self._conversation_stt_immediate,
             "save_debug_files": self._save_debug_files,
             "play_on_generate": self._play_on_generate,
             "menu_clears_screen": self._menu_clears_screen

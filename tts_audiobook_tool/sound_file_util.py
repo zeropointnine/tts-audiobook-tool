@@ -139,62 +139,6 @@ class SoundFileUtil:
         return dest_file_path, ""
 
     @staticmethod
-    def play_flac_async(file_path: str):
-        """
-        Plays a FLAC file asynchronously using a streaming approach.
-        A new playback will cancel the previous one.
-        Eats exceptions and prints them.
-
-        # TODO play in-memory sound data
-        """
-        # Signal previous thread to stop if it exists and is alive
-        if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
-            SoundFileUtil._stop_playback_event.set() # Set the event to signal stopping
-            SoundFileUtil._current_playback_thread.join(timeout=0.5) # Wait a short time for it to stop
-
-        # Clear the event for the new playback
-        SoundFileUtil._stop_playback_event.clear()
-
-        def _play_stream(stop_event: threading.Event):
-            try:
-                with soundfile.SoundFile(file_path, 'r') as flac_file:
-                    stream_finished_event = threading.Event()
-
-                    def callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags):
-                        if stop_event.is_set():
-                            raise sd.CallbackStop
-
-                        data_read = flac_file.read(frames, dtype='float32', always_2d=True)
-
-                        if data_read.shape[0] > 0:
-                            outdata[:data_read.shape[0]] = data_read
-                            if data_read.shape[0] < frames:
-                                outdata[data_read.shape[0]:] = 0
-                        else:
-                            raise sd.CallbackStop
-
-                    def set_event_on_finish():
-                        stream_finished_event.set()
-
-                    with sd.OutputStream(
-                        samplerate=flac_file.samplerate,
-                        channels=flac_file.channels,
-                        callback=callback,
-                        dtype='float32',
-                        finished_callback=set_event_on_finish
-                    ):
-                        stream_finished_event.wait() # Wait for playback to complete or be cancelled
-
-            except sd.CallbackStop:
-                pass # Normal exit from the stream
-            except Exception as e:
-                printt(f"Couldn't play FLAC audio file via stream: {file_path} - {e}")
-
-        new_thread = threading.Thread(target=_play_stream, args=(SoundFileUtil._stop_playback_event,), daemon=True)
-        new_thread.start()
-        SoundFileUtil._current_playback_thread = new_thread
-
-    @staticmethod
     def stop_sound_async() -> bool:
         """
         Stops a sound that is playing using `play_sound_async()`.
@@ -210,11 +154,28 @@ class SoundFileUtil:
             return False
 
     @staticmethod
-    def play_sound_async(sound: Sound):
+    def play_sound_file_async(path: str) -> None:
+        """ Plays sound file. Returns error string on failure. """
+        try:
+            data, sr = soundfile.read(path, dtype='float32', always_2d=False)
+            sr = int(sr)
+            # Ensure mono
+            if data.ndim > 1:
+                data = data.mean(axis=1)
+            sound = Sound(data, sr)
+            # Resample to app sample rate so audio plays at the correct pitch/speed
+            if sr != APP_SAMPLE_RATE:
+                sound = Sound(librosa.resample(sound.data, orig_sr=sr, target_sr=APP_SAMPLE_RATE), APP_SAMPLE_RATE)
+            SoundFileUtil.play_sound_async(sound)
+        except Exception as e:
+            pass
+
+    @staticmethod
+    def play_sound_async(sound: Sound) -> None:
         """
         Plays in-memory sound data asynchronously.
         A new playback will cancel the previous one.
-        Eats exceptions and prints them.
+        Eats errors.
         """
         SoundFileUtil.stop_sound_async()
 
@@ -260,8 +221,8 @@ class SoundFileUtil:
             except sd.CallbackStop:
                 pass # Normal exit from the stream
             except Exception as e:
-                printt(f"Couldn't play in-memory audio data: {e}")
-
+                pass # Ignore other errors for now
+            
         # Ensure sound_data is 2D for sounddevice (frames, channels)
         # If it's 1D (mono), convert it to 2D
         sound_data_2d = sound.data.reshape(-1, 1) if sound.data.ndim == 1 else sound.data

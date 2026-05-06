@@ -27,7 +27,7 @@
 
   <h3>tts-server-tool</h3>
   <h2>Streaming Client Demo</h2>
-  <p style="margin: 0 0 16px 0; font-size: 15px; color: #33333394;">Connect to listen for audio.<br>The server streams playback whenever a TTS generation job is triggered externally.</p>
+  <p style="margin: 0 0 16px 0; font-size: 15px; color: #33333394;">Connect to listen for audio.<br>Whenever the server has audio to play, you'll hear that playback here too.</p>
 
   <div style="display: flex; gap: 8px;">
     <button id="connect-btn">Connect</button>
@@ -63,6 +63,25 @@
       out.set(a, 0);
       out.set(b, a.length);
       return out;
+    }
+
+    function parseStreamMessage(messageBytes) {
+      if (messageBytes.length < 4) {
+        throw new Error('Message too short for header length');
+      }
+
+      const view = new DataView(messageBytes.buffer, messageBytes.byteOffset, messageBytes.byteLength);
+      const headerLen = view.getUint32(0, false);
+      if (messageBytes.length < 4 + headerLen) {
+        throw new Error('Incomplete message header');
+      }
+
+      const headerBytes = messageBytes.slice(4, 4 + headerLen);
+      const headerText = new TextDecoder().decode(headerBytes);
+      const header = JSON.parse(headerText);
+      const wavSlice = messageBytes.slice(4 + headerLen);
+
+      return { header, wavSlice };
     }
 
     function scheduleChunk(wavSlice) {
@@ -123,9 +142,14 @@
             const view   = new DataView(accumulator.buffer, accumulator.byteOffset, accumulator.byteLength);
             const msgLen = view.getUint32(0, false); // big-endian
             if (accumulator.length < 4 + msgLen) break;
-            const wavSlice = accumulator.slice(4, 4 + msgLen);
+            const messageBytes = accumulator.slice(4, 4 + msgLen);
             accumulator    = accumulator.slice(4 + msgLen);
             if (msgLen === 0) continue; // heartbeat frame — skip
+            const { header, wavSlice } = parseStreamMessage(messageBytes);
+            if (header?.type !== 'audio') {
+              setStatus(`Skipping message of type: ${header?.type ?? 'unknown'}`);
+              continue;
+            }
             scheduleChunk(wavSlice);
           }
         }

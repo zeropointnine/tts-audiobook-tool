@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import threading
 from collections import deque
 from typing import Callable
@@ -9,6 +10,12 @@ from tts_audiobook_tool.app_types import Sound
 
 SAMPLE_RATE = 48000
 BLOCKSIZE = 4096 # ~85ms latency
+
+
+@dataclass
+class AudioBufferItem:
+    data: np.ndarray
+    text: str
 
 class AudioStream:
     """
@@ -26,9 +33,14 @@ class AudioStream:
     """
 
     def __init__(self):
-        self._data_buffer: deque[np.ndarray] = deque()
+        self._data_buffer: deque[AudioBufferItem] = deque()
         self._lock = threading.Lock()
         self._playback_listener: Callable[[np.ndarray, int], None] | None = None
+        self._first_audio_output_callback: Callable[[], None] | None = None
+        self._first_audio_output_sample_index: int | None = None
+        self._total_samples_enqueued = 0
+        self._total_samples_played = 0
+        self._currently_playing = ""
         self._is_mute: bool = False
         self._stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
@@ -51,44 +63,87 @@ class AudioStream:
         outdata.fill(0)
         remaining = frames
         write_pos = 0
+        first_audio_output_callback: Callable[[], None] | None = None
         with self._lock:
             while remaining > 0 and self._data_buffer:
-                chunk = self._data_buffer[0]
+                item = self._data_buffer[0]
+                chunk = item.data
                 take = min(len(chunk), remaining)
                 outdata[write_pos:write_pos + take, 0] = chunk[:take]
+                self._currently_playing = item.text
                 write_pos += take
                 remaining -= take
                 if take == len(chunk):
                     self._data_buffer.popleft()
                 else:
-                    self._data_buffer[0] = chunk[take:]
+                    self._data_buffer[0] = AudioBufferItem(chunk[take:], item.text)
+            if write_pos == 0:
+                self._currently_playing = ""
+            else:
+                chunk_start = self._total_samples_played
+                chunk_end = chunk_start + write_pos
+                callback_sample_index = self._first_audio_output_sample_index
+                if (
+                    self._first_audio_output_callback is not None
+                    and callback_sample_index is not None
+                    and chunk_start <= callback_sample_index < chunk_end
+                ):
+                    first_audio_output_callback = self._first_audio_output_callback
+                    self._first_audio_output_callback = None
+                    self._first_audio_output_sample_index = None
+                self._total_samples_played = chunk_end
         # Notify HTTP feed outside the lock — copy the slice of outdata that was filled.
         # Do this before zeroing outdata so the HTTP stream always receives real audio.
         if write_pos > 0 and self._playback_listener is not None:
             self._playback_listener(outdata[:write_pos, 0].copy(), SAMPLE_RATE)
+        if first_audio_output_callback is not None:
+            try:
+                first_audio_output_callback()
+            except Exception:
+                pass
         if self._is_mute:
             outdata.fill(0)
 
-    def append(self, sound: Sound):
-        data = sound.data
+    def append_data(self, data: np.ndarray, sr: int, text: str = "") -> tuple[int, int]:
         if data.ndim > 1:
             data = data.mean(axis=0)  # mix to mono (channel-first)
         data = data.astype(np.float32)
-        if sound.sr != SAMPLE_RATE:
+        if sr != SAMPLE_RATE:
             old_len = len(data)
-            new_len = int(old_len * SAMPLE_RATE / sound.sr)
+            new_len = int(old_len * SAMPLE_RATE / sr)
             data = np.interp(
                 np.linspace(0, old_len - 1, new_len),
                 np.arange(old_len),
                 data,
             ).astype(np.float32)
         with self._lock:
-            self._data_buffer.append(data)
+            start = self._total_samples_enqueued
+            self._data_buffer.append(AudioBufferItem(data, text))
+            self._total_samples_enqueued += len(data)
+            end = self._total_samples_enqueued
+        return start, end
+
+    def append(self, sound: Sound, text: str = "") -> tuple[int, int]:
+        return self.append_data(sound.data, sound.sr, text)
+
+    def set_first_audio_output_callback(self, sample_index: int, callback: Callable[[], None] | None) -> None:
+        with self._lock:
+            self._first_audio_output_sample_index = sample_index
+            self._first_audio_output_callback = callback
+
+    def get_currently_playing(self) -> str:
+        with self._lock:
+            return self._currently_playing
 
     def get_seconds_left(self) -> float:
         with self._lock:
-            return sum(len(chunk) for chunk in self._data_buffer) / SAMPLE_RATE
+            return sum(len(item.data) for item in self._data_buffer) / SAMPLE_RATE
 
     def clear(self):
         with self._lock:
             self._data_buffer.clear()
+            self._currently_playing = ""
+            self._first_audio_output_callback = None
+            self._first_audio_output_sample_index = None
+            self._total_samples_enqueued = 0
+            self._total_samples_played = 0

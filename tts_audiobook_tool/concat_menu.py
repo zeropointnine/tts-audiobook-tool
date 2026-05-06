@@ -57,11 +57,12 @@ class ConcatMenu:
 
                 MenuItem(
                     lambda _: make_menu_label("File type", file_type_value), 
-                    lambda _, __: ConcatMenu.file_type_menu(state)
+                    lambda _, __: ConcatMenu.file_type_menu(state),
+                    superlabel="Options"
                 ),
                 
                 MenuItem(
-                    lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
+                    lambda _: make_menu_label("Reader phrase subdivision", state.project.subdivide_phrases), 
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 ),
                 
@@ -71,15 +72,6 @@ class ConcatMenu:
                 )
             ]
 
-            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
-            if can_and_haz:
-                items.append(
-                    MenuItem(
-                        f"Open audiobook file in the player app", 
-                        lambda _, __: ConcatMenu.open_audiobook_menu(state)
-                    )
-                )
-
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
@@ -88,16 +80,17 @@ class ConcatMenu:
                 )
             )
 
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label("Generative upscaling", state.project.use_upscaler),
-                    lambda _, __: ConcatMenu.upscaler_menu(state)
+            if torch.cuda.is_available() and SidonUtil.has_sidon():
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("Generative upsampling", state.project.use_upsampler),
+                        lambda _, __: ConcatMenu.upsample_menu(state)
+                    )
                 )
-            )
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Treble lift", (HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED).id),
+                    lambda _: make_menu_label("Treble lift", state.project.get_high_shelf().id),
                     lambda _, __: ConcatMenu.high_shelf_menu(state)
                 )
             )
@@ -109,9 +102,19 @@ class ConcatMenu:
                 )
             )
 
+            can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
+            if can_and_haz:
+                items.append(
+                    MenuItem(
+                        f"Open audiobook file in the player app", 
+                        lambda _, __: ConcatMenu.open_audiobook_menu(state),
+                        superlabel=" ", superlabel_no_blank_line=True # yes rly
+                    )
+                )
+
             return items
 
-        MenuUtil.menu(state, "Concatenate audio segments:", make_items, subheading=make_chapter_files_subheading)
+        MenuUtil.menu(state, "Create audiobook file/s:", make_items, subheading=make_chapter_files_subheading, breadcrumb="Create audiobook")
 
     @staticmethod
     def file_type_menu(state: State) -> None:
@@ -159,7 +162,7 @@ class ConcatMenu:
             state.project.save()
             print_feedback(f"Treble lift set to: {value.id}")
 
-        current = HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED
+        current = state.project.get_high_shelf()
 
         MenuUtil.options_menu(
             state=state,
@@ -173,28 +176,27 @@ class ConcatMenu:
         )
 
     @staticmethod
-    def upscaler_menu(state: State) -> None:
+    def upsample_menu(state: State) -> None:
         
         def on_select(value: bool) -> None:
-            state.project.use_upscaler = value
+            state.project.use_upsampler = value
             state.project.save()
-            print_feedback(f"Generative upscaling set to: {value}")
+            print_feedback(f"Generative upsampling set to: {value}")
 
         if not torch.cuda.is_available():
             subheading = "Requires CUDA, which is not available on this system.\n"
         elif not SidonUtil.has_sidon():
-            subheading = "Sidon upscaler not installed.\n"
-            subheading += "Please see the README for installation instructions.\n"
+            subheading = f"{Ansi.ITALICS}Sidon upsampler not installed\n"
         else: 
-            subheading = UPSCALE_SUBHEADING
+            subheading = UPSAMPLE_SUBHEADING
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Generative upscaling",
+            heading_text="Generative upsampling",
             subheading=subheading,
             labels=["True", "False"],
             values=[True, False],
-            current_value=state.project.use_upscaler,
+            current_value=state.project.use_upsampler,
             default_value=False,
             on_select=on_select
         )
@@ -205,7 +207,7 @@ class ConcatMenu:
         def on_select(value: bool) -> None:
             state.project.subdivide_phrases = value
             state.project.save()
-            print_feedback(f"Subdivide into phrases set to: {state.project.subdivide_phrases}")
+            print_feedback(f"Reader phrase subdivision set to: {state.project.subdivide_phrases}")
 
         MenuUtil.options_menu(
             state=state,
@@ -284,7 +286,7 @@ class ConcatMenu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
             for file_path, modified_date in file_infos:
-                label = f"{Path(file_path).name}\n    {COL_DIM}{modified_date}{COL_DEFAULT}"
+                label = f"{Path(file_path).name}\n      {COL_DIM}{modified_date}{COL_DEFAULT}"
                 item = MenuItem(label, on_item, file_path)
                 items.append(item)
             return items
@@ -512,14 +514,20 @@ to enable opening local audio files without user input:
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
 Some TTS models may benefit more from this than others.
+
+This setting also applies to: 
+Realtime playback, LLM voice chat, and stand-alone server
 """
 
-UPSCALE_SUBHEADING = \
-"""Uses Sidon generative model to upscale audio to 48kHz.
+UPSAMPLE_SUBHEADING = \
+"""Uses Sidon generative model to upsample audio to 48kHz.
 Enhances audio quality and clarity; affects timbre and tonality.
 """
 
 LIMIT_SILENCE_GAPS_SUBHEADING = \
 """Prevents awkwardly long pauses. Limits silences within 
 generated sound segments to a max duration of %1 seconds.
+
+This setting also applies to: 
+Realtime playback, LLM voice chat, and stand-alone server
 """

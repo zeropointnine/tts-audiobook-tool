@@ -30,6 +30,8 @@ class TtsModelInfo(NamedTuple):
     # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
     
     batch_size_project_field: str
+    # Whether the model supports streaming chunk callbacks
+    can_stream: bool
     # Should semantic trim at end of last word
     # Doing so is generally redundant and risks unintended partial cropping of end of last word
     # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
@@ -69,6 +71,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -94,6 +97,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False, # TODO: check this
@@ -122,6 +126,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=True,
         hallucinates_music=False,
         un_all_caps=True,
@@ -149,6 +154,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
@@ -176,6 +182,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -203,6 +210,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=True,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
@@ -230,6 +238,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         requires_voice_transcript=False,
         batch_size_project_field="vibevoice_batch_size",
+        can_stream=True,
         semantic_trim_last=False,
         hallucinates_music=True,
         un_all_caps=True,
@@ -259,6 +268,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -287,6 +297,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=True,
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -316,6 +327,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="mira_batch_size",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # falls down badly with all caps phrases
@@ -345,6 +357,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         requires_voice_transcript=False,
         batch_size_project_field="",
+        can_stream=True,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=False,
@@ -354,7 +367,8 @@ class TtsModelInfos(Enum):
             "short_name": "Pocket",
             "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 15s): ",
             "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)",
-            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"]
+            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"],
+            "opt_in_url": "https://github.com/kyutai-labs/pocket-tts" # special case
         },
         substitutions=[
             ("—", ", "), ("─", ", ")
@@ -372,6 +386,7 @@ class TtsModelInfos(Enum):
         requires_voice=True, # this applies to 'base' model type only
         requires_voice_transcript=True,
         batch_size_project_field="qwen3_batch_size",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         un_all_caps=True, # is only slightly more error-prone when all-caps

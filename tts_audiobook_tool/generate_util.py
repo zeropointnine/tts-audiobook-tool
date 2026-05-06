@@ -12,16 +12,15 @@ from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
-from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
@@ -63,9 +62,9 @@ class GenerateUtil:
         if did_cancel:
             print_feedback("\nCancelled")
             return True
-                
+
         # Do model prereq check now that model instance exists
-        err = AppUtil.get_combined_prereq_error(state.project, short_format=False) 
+        err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
         if err:
             print_feedback(err, is_error=True)
             return True
@@ -158,7 +157,7 @@ class GenerateUtil:
                 message_lines = []
 
                 retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
-                text_string = f"{COL_DIM}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
+                text_string = f"{COL_DEFAULT}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
                 item_line = f"{COL_DEFAULT}Line {index + 1}{retry_string}: {text_string}"
                 message_lines.append(item_line)
                 
@@ -256,7 +255,7 @@ class GenerateUtil:
         warnings_string += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
         if num_failed:
-            warnings_string += f"Num lines saved, but tagged as failed: {col}{num_failed}{COL_DEFAULT} "
+            warnings_string += f"Num lines saved, but with word errors: {col}{num_failed}{COL_DEFAULT} "
             if is_regen and num_failed_but_improved > 0:
                 warnings_string += f"(num improved: {num_failed_but_improved})"
             warnings_string += "\n"
@@ -285,9 +284,9 @@ class GenerateUtil:
         is_skip_reason_buffer: bool=False
     ) -> list[ ValidationResult | str ]:
         """
-        Generates and validates a batch of prompts
-        Prints updates
-        Returns list of sounds etc
+        Generates and validates a batch of prompts from the Project text.
+        Prints updates.
+        Returns list of sounds etc.
 
         :param indices:
             When length is 1, batch mode is disabled
@@ -408,7 +407,7 @@ class GenerateUtil:
         if Tts.get_type() == TtsModelInfos.NONE:
             result = "No active TTS model"
         else:
-            result = Tts.get_instance().generate_using_project(project, prompts, force_random_seed)
+            result = Tts.generate_using_project(project, prompts, force_random_seed)
 
         # `result` is either n generated Sounds or a single error string
         if isinstance(result, str): 
@@ -429,16 +428,13 @@ class GenerateUtil:
                 if save_debug_files:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
-                # Trim silence from ends of audio clip
-                sound = SilenceUtil.trim_silence_ends(sound)[0]
+                # Trim silence ends and peak-normalize
+                sound = SoundAppUtil.apply_generate_post_processing(sound)
 
-                # Re-check size
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"
                 else:
-                    # Do peak normalization
-                    normalized_data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
-                    result = Sound(normalized_data, sound.sr)
+                    result = sound
             
             results.append(result)
 
@@ -448,15 +444,6 @@ class GenerateUtil:
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
         
         prompt = phrase_group.as_flattened_phrase().text
-        prompt = PromptNormalizer.apply_prompt_word_substitutions(
-            prompt, project.word_substitutions, project.language_code
-        )
-        prompt = PromptNormalizer.normalize_prompt(
-            text=prompt, 
-            language_code=project.language_code,
-            un_all_caps=Tts.get_type().value.un_all_caps
-        )
-        prompt = Tts.get_instance().massage_for_inference(prompt)
         return prompt
 
     @staticmethod

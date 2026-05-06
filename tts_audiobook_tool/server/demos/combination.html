@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Combination Demo</title>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 16px;
+      background: #f0f0f0;
+      color: #333333;
+      box-sizing: border-box;
+      height: calc(100vh - 80px);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px 0;
+      padding: 0;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    h3 {
+      margin: 0;
+      padding: 0;
+      font-size: 18px;
+      font-weight: bold;
+      color: #33333394;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-family: sans-serif;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #ffffff;
+      color: #33333394;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .small-button {
+      font-size: 14px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    .toggle-btn {
+      padding: 6px 18px;
+      font-size: 14px;
+    }
+
+    .toggle-btn.active {
+      background: #333333;
+      color: #ffffff;
+    }
+
+    label {
+      display: block;
+      margin: 0 0 8px 0;
+      padding: 0;
+      font-size: 13px;
+      font-family: sans-serif;
+      color: #33333394;
+    }
+
+    textarea {
+      width: 100%;
+      font-family: monospace;
+      font-size: 13px;
+      box-sizing: border-box;
+      resize: vertical;
+      padding: 8px;
+      background: #ffffff;
+      color: #333333;
+      border: 1px solid #33333348;
+    }
+
+    .connect-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .input-row textarea {
+      flex: 1;
+      height: 160px;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .played-prompts-section {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .played-prompts-panel {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      background: #ffffff;
+      border: 1px solid #33333324;
+      border-radius: 8px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .played-prompts-list {
+      margin: 0;
+      padding-left: 20px;
+      color: #333333;
+      font-size: 13px;
+    }
+
+    .played-prompts-list li {
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+
+    .divider {
+      border: 0;
+      border-top: 1px solid #33333324;
+      width: 100%;
+      margin: 0 0 12px 0;
+    }
+
+    #status-line {
+      margin-bottom: 12px;
+      color: #33333394;
+      font-family: sans-serif;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .status-entry {
+      min-height: 1.3em;
+      margin-bottom: 2px;
+    }
+
+    .status-entry-line {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+      min-width: 0;
+    }
+
+    .status-entry-label {
+      flex: 0 0 auto;
+      margin-right: 4px;
+    }
+
+    .status-entry-main {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-entry-suffix {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .status-message {
+      white-space: normal;
+      word-break: break-word;
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <h3>tts-server-tool</h3>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px;">
+    <h2 style="margin: 0;">Combination Demo</h2>
+    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; color: #33333394; white-space: nowrap;">Server local audio:</span>
+        <button id="local-audio-on-btn" class="toggle-btn">On</button>
+        <button id="local-audio-off-btn" class="toggle-btn">Off</button>
+      </div>
+      <div id="tts-streaming-controls" style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; color: #33333394; white-space: nowrap;">TTS streaming:</span>
+        <button id="tts-streaming-on-btn" class="toggle-btn">On</button>
+        <button id="tts-streaming-off-btn" class="toggle-btn">Off</button>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin: 0 0 16px 0; font-size: 14px; color: #33333394;">
+    This page combines the two other demos: it calls the server API to submit and clear prompts, while also using the streaming endpoint to receive audio chunks and play them back in the browser as they arrive. You can also toggle model-side TTS streaming independently of the HTTP audio stream client.
+  </p>
+
+  <div class="connect-row">
+    <button id="connect-btn" class="small-button" disabled>Connect</button>
+    <button id="disconnect-btn" class="small-button">Disconnected</button>
+  </div>
+
+  <div class="input-row">
+    <textarea id="prompt-input"></textarea>
+    <div class="buttons">
+      <button id="submit-btn">Submit</button>
+      <button id="stop-btn" class="small-button">Stop</button>
+    </div>
+  </div>
+
+  <div id="status-line"></div>
+
+  <div class="played-prompts-section">
+    <label for="played-prompts-list">Played prompts:</label>
+    <div id="played-prompts-panel" class="played-prompts-panel">
+      <ul id="played-prompts-list" class="played-prompts-list"></ul>
+    </div>
+  </div>
+
+  <script>
+    const input = document.getElementById('prompt-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const localAudioOnBtn = document.getElementById('local-audio-on-btn');
+    const localAudioOffBtn = document.getElementById('local-audio-off-btn');
+    const ttsStreamingControls = document.getElementById('tts-streaming-controls');
+    const ttsStreamingOnBtn = document.getElementById('tts-streaming-on-btn');
+    const ttsStreamingOffBtn = document.getElementById('tts-streaming-off-btn');
+    const statusLine = document.getElementById('status-line');
+    const playedPromptsPanel = document.getElementById('played-prompts-panel');
+    const playedPromptsList = document.getElementById('played-prompts-list');
+
+    let audioCtx = null;
+    let abortCtrl = null;
+    let nextStartTime = 0;
+    let scheduleChain = Promise.resolve();
+    let streamConnected = false;
+    let streamConnecting = false;
+    let hasPendingGeneration = false;
+    let lastGeneratingText = '';
+    let lastPlayingText = '';
+    let lastObservedPlayingText = '';
+
+    function appendPlayedPrompt(text) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      const item = document.createElement('li');
+      item.textContent = trimmed;
+      playedPromptsList.appendChild(item);
+      playedPromptsPanel.scrollTop = playedPromptsPanel.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function setStatus({ generating = '', playing = '', message = '', queued = 0 } = {}) {
+      const generatingTrimmed = generating.trim();
+      const playingTrimmed = playing.trim();
+      const messageTrimmed = message.trim();
+      const errorPrefix = 'Error: ';
+      const queuedSuffix = queued > 0 ? ` (${queued} queued)` : '';
+
+      const lines = [
+        `<div class="status-entry"><div class="status-entry-line"><strong class="status-entry-label">Generating:</strong><span class="status-entry-main">${escapeHtml(generatingTrimmed || 'None')}</span><span class="status-entry-suffix">${escapeHtml(queuedSuffix)}</span></div></div>`,
+        `<div class="status-entry"><div class="status-entry-line"><strong class="status-entry-label">Playing:</strong><span class="status-entry-main">${escapeHtml(playingTrimmed || 'None')}</span></div></div>`,
+      ];
+      if (messageTrimmed) {
+        if (messageTrimmed.startsWith(errorPrefix)) {
+          lines.push(`<div class="status-message"><strong>${escapeHtml(errorPrefix)}</strong>${escapeHtml(messageTrimmed.slice(errorPrefix.length))}</div>`);
+        } else {
+          lines.push(`<div class="status-message">${escapeHtml(messageTrimmed)}</div>`);
+        }
+      }
+      statusLine.innerHTML = lines.join('');
+    }
+
+    function updateConnectionButtons() {
+      connectBtn.disabled = streamConnected || streamConnecting;
+      disconnectBtn.disabled = !streamConnected && !streamConnecting;
+      disconnectBtn.textContent = streamConnected || streamConnecting ? 'Disconnect' : 'Disconnected';
+      input.disabled = !streamConnected;
+      input.placeholder = streamConnecting ? 'Connecting...' : (streamConnected ? 'Enter prompt…' : '');
+      submitBtn.disabled = !streamConnected;
+      stopBtn.disabled = !streamConnected;
+    }
+
+    function setConnected(yes) {
+      streamConnected = yes;
+      streamConnecting = false;
+      updateConnectionButtons();
+    }
+
+    function setConnecting() {
+      streamConnected = false;
+      streamConnecting = true;
+      updateConnectionButtons();
+    }
+
+    function concatBuffers(a, b) {
+      const out = new Uint8Array(a.length + b.length);
+      out.set(a, 0);
+      out.set(b, a.length);
+      return out;
+    }
+
+    function parseStreamMessage(messageBytes) {
+      if (messageBytes.length < 4) {
+        throw new Error('Message too short for header length');
+      }
+
+      const view = new DataView(messageBytes.buffer, messageBytes.byteOffset, messageBytes.byteLength);
+      const headerLen = view.getUint32(0, false);
+      if (messageBytes.length < 4 + headerLen) {
+        throw new Error('Incomplete message header');
+      }
+
+      const headerBytes = messageBytes.slice(4, 4 + headerLen);
+      const headerText = new TextDecoder().decode(headerBytes);
+      const header = JSON.parse(headerText);
+      const wavSlice = messageBytes.slice(4 + headerLen);
+
+      return { header, wavSlice };
+    }
+
+    function scheduleChunk(wavSlice) {
+      const owned = wavSlice.buffer.slice(
+        wavSlice.byteOffset,
+        wavSlice.byteOffset + wavSlice.byteLength
+      );
+
+      scheduleChain = scheduleChain
+        .then(() => audioCtx.decodeAudioData(owned))
+        .then(audioBuffer => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(audioCtx.destination);
+          const t = Math.max(audioCtx.currentTime + 0.05, nextStartTime);
+          src.start(t);
+          nextStartTime = t + audioBuffer.duration;
+        })
+        .catch(err => {
+          setStatus({ message: `Decode error: ${err.message}` });
+        });
+    }
+
+    function setLocalAudioActive(enabled) {
+      localAudioOnBtn.classList.toggle('active', enabled);
+      localAudioOffBtn.classList.toggle('active', !enabled);
+    }
+
+    function setTtsStreamingActive(enabled, supported = true) {
+      ttsStreamingControls.style.display = supported ? 'flex' : 'none';
+      ttsStreamingOnBtn.classList.toggle('active', enabled);
+      ttsStreamingOffBtn.classList.toggle('active', !enabled);
+      ttsStreamingOnBtn.disabled = !supported;
+      ttsStreamingOnBtn.title = supported ? '' : 'Current TTS engine does not support model-side streaming';
+    }
+
+    async function postLocalAudio(enabled) {
+      const res = await fetch('/local-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (typeof data.local_audio === 'boolean') {
+        setLocalAudioActive(data.local_audio);
+      }
+      return data;
+    }
+
+    async function postTtsStreaming(enabled) {
+      const res = await fetch('/tts-streaming', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setTtsStreamingActive(data.tts_streaming, data.tts_streaming_supported);
+      return data;
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (typeof data.local_audio === 'boolean') {
+          setLocalAudioActive(data.local_audio);
+        }
+        if (typeof data.tts_streaming === 'boolean') {
+          setTtsStreamingActive(data.tts_streaming, data.tts_streaming_supported);
+        }
+
+        const queuedCount = typeof data.num_queued === 'number' ? data.num_queued : 0;
+        const inferencing = typeof data.inferencing === 'string' ? data.inferencing : '';
+        const playing = typeof data.playing === 'string' ? data.playing : '';
+        const hasAudioBuffered = typeof data.audio_buffer === 'number' && data.audio_buffer > 0.05;
+        const hasQueued = queuedCount > 0;
+
+        if (inferencing) {
+          hasPendingGeneration = true;
+          lastGeneratingText = inferencing;
+        } else if (!hasQueued) {
+          lastGeneratingText = '';
+        }
+
+        if (playing) {
+          if (playing !== lastObservedPlayingText) {
+            appendPlayedPrompt(playing);
+            lastObservedPlayingText = playing;
+          }
+          lastPlayingText = playing;
+        } else if (!hasAudioBuffered) {
+          lastPlayingText = '';
+          lastObservedPlayingText = '';
+        }
+
+        if (inferencing) {
+          setStatus({ generating: lastGeneratingText, playing: lastPlayingText, queued: queuedCount });
+          return;
+        }
+
+        if (lastPlayingText) {
+          setStatus({ generating: lastGeneratingText, playing: lastPlayingText, queued: queuedCount });
+          return;
+        }
+
+        if (hasPendingGeneration && !hasQueued && !hasAudioBuffered) {
+          hasPendingGeneration = false;
+          lastGeneratingText = '';
+          lastPlayingText = '';
+          setStatus();
+          return;
+        }
+
+        setStatus();
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    }
+
+    async function runStream(signal) {
+      let accumulator = new Uint8Array(0);
+
+      let response;
+      try {
+        response = await fetch('/stream', { signal });
+      } catch (err) {
+        if (err.name !== 'AbortError') setStatus({ message: `Fetch error: ${err.message}` });
+        streamConnecting = false;
+        setConnected(false);
+        return;
+      }
+
+      if (!response.ok) {
+        setStatus({ message: `Server error: HTTP ${response.status}` });
+        streamConnecting = false;
+        setConnected(false);
+        return;
+      }
+
+      setConnected(true);
+      setStatus();
+
+      const reader = response.body.getReader();
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+
+          accumulator = concatBuffers(accumulator, value);
+
+          while (accumulator.length >= 4) {
+            const view = new DataView(accumulator.buffer, accumulator.byteOffset, accumulator.byteLength);
+            const msgLen = view.getUint32(0, false);
+            if (accumulator.length < 4 + msgLen) break;
+            const messageBytes = accumulator.slice(4, 4 + msgLen);
+            accumulator = accumulator.slice(4 + msgLen);
+            if (msgLen === 0) continue;
+            const { header, wavSlice } = parseStreamMessage(messageBytes);
+            if (header?.type !== 'audio') {
+              setStatus({ message: `Skipping message of type: ${header?.type ?? 'unknown'}` });
+              continue;
+            }
+            scheduleChunk(wavSlice);
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') setStatus({ message: `Stream error: ${err.message}` });
+      } finally {
+        reader.releaseLock();
+        setConnected(false);
+        lastGeneratingText = '';
+        lastPlayingText = '';
+        lastObservedPlayingText = '';
+        setStatus();
+      }
+    }
+
+    async function connectStream() {
+      if (streamConnected || streamConnecting) return;
+
+      setConnecting();
+      setStatus();
+
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+      } else {
+        await audioCtx.resume();
+      }
+
+      nextStartTime = 0;
+      scheduleChain = Promise.resolve();
+      abortCtrl = new AbortController();
+      runStream(abortCtrl.signal);
+    }
+
+    function disconnectStream() {
+      if (abortCtrl) {
+        abortCtrl.abort();
+        abortCtrl = null;
+      }
+      if (audioCtx) {
+        audioCtx.close();
+        audioCtx = null;
+      }
+      nextStartTime = 0;
+      scheduleChain = Promise.resolve();
+      streamConnecting = false;
+      lastGeneratingText = '';
+      lastPlayingText = '';
+      lastObservedPlayingText = '';
+      setConnected(false);
+      setStatus();
+    }
+
+    async function submitPrompt() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      try {
+        const res = await fetch('/prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: text,
+            should_segment: true,
+            eager_first_segment: true,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        hasPendingGeneration = true;
+        lastGeneratingText = text;
+        setStatus({ generating: text });
+        input.value = '';
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    }
+
+    async function stopGeneration() {
+      try {
+        const res = await fetch('/clear', { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        hasPendingGeneration = false;
+        lastGeneratingText = '';
+        lastPlayingText = '';
+        lastObservedPlayingText = '';
+        setStatus();
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    }
+
+    connectBtn.addEventListener('click', () => {
+      connectStream();
+    });
+
+    disconnectBtn.addEventListener('click', () => {
+      disconnectStream();
+    });
+
+    localAudioOnBtn.addEventListener('click', async () => {
+      try {
+        await postLocalAudio(true);
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    localAudioOffBtn.addEventListener('click', async () => {
+      try {
+        await postLocalAudio(false);
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    ttsStreamingOnBtn.addEventListener('click', async () => {
+      try {
+        const data = await postTtsStreaming(true);
+        if (data.warning) {
+          setStatus({ message: data.warning });
+        }
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    ttsStreamingOffBtn.addEventListener('click', async () => {
+      try {
+        await postTtsStreaming(false);
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    submitBtn.addEventListener('click', () => {
+      submitPrompt();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      stopGeneration();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) submitPrompt();
+    });
+
+    setConnected(false);
+    pollStatus();
+    setInterval(pollStatus, 1000);
+  </script>
+
+</body>
+</html>

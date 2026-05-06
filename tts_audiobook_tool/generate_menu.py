@@ -7,6 +7,8 @@ from tts_audiobook_tool.concat_menu import ConcatMenu
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
@@ -19,24 +21,23 @@ class GenerateMenu:
     def menu(state: State) -> None:
 
         def make_start_label(_: State) -> str:
+            prereq = PrereqUtil.get_generate_prereq_error_string(state, verbose=False)
             label = "Start"
-            err = AppUtil.get_combined_prereq_error(state.project, short_format=True)
-            if err:
-                return make_menu_label(label, err, value_prefix="", color_code=COL_ERROR)
-            else:
-                return label
+            if prereq:
+                label += f" {COL_DIM}({COL_ERROR}{prereq}{COL_DIM})"
+            return label
 
         def make_range_label(_: State) -> str:
             if not state.project.generate_range_string:
                 range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}all{COL_DIM})"
             else:
-                line_word = make_noun("line", "lines", len(state.project.get_indices_to_generate()))
+                line_word = make_noun("line", "lines", len(ProjectUtil.get_indices_to_generate(state.project)))
                 range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}{line_word} {state.project.generate_range_string}{COL_DIM})"
 
             if not state.project.generate_range_string:
                 complete_label = ""
             else:
-                selected_indices = state.project.get_indices_to_generate()
+                selected_indices = ProjectUtil.get_indices_to_generate(state.project)
                 all_generated_indices = state.project.sound_segments.sound_segments_map.keys()
                 selected_indices_not_generated = selected_indices - all_generated_indices
                 num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
@@ -52,8 +53,9 @@ class GenerateMenu:
             num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
             failed_items_label = f"{num_fails} {make_noun('item', 'items', num_fails)}"
             qualifier = " in specified range" if state.project.generate_range_string else ""
-            regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier})"
-            return f"Regenerate segments tagged with potential errors {regenerate_label}"
+            strictness_info = f"{state.project.strictness.label}"
+            regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier}, tolerance: {strictness_info})"
+            return f"Regenerate segments with errors {regenerate_label}"
 
         def make_batch_size_label(state: State) -> str:
             value = state.project.batch_size
@@ -69,7 +71,7 @@ class GenerateMenu:
         def heading_maker(_: State) -> str:
             total_segments_generated = state.project.sound_segments.num_generated()
             num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
-            return f"Generate audio {num_complete_label}"
+            return f"Generate audio segments {num_complete_label}"
 
         def items_maker(_: State) -> list[MenuItem]:
             items = []
@@ -83,28 +85,35 @@ class GenerateMenu:
             )
             # Re-generate
             items.append(
-                MenuItem(make_regen_label, lambda _, __: do_generate(state, is_regen=True))
+                MenuItem(
+                    make_regen_label, 
+                    lambda _, __: do_generate(state, is_regen=True)
+                )
             )
+            if state.project.sound_segments.num_generated() > 0:
+                items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
+            
+            # Strictness/tolerance
             # Batch size
             if Tts.get_type().value.can_batch:
                 items.append(
-                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state))
+                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state), superlabel="Options")
                 )
-            elif Tts.get_type() == TtsModelInfos.VIBEVOICE:
-                items.append(
-                    MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state))
+            items.append(
+                MenuItem(
+                    make_tolerance_label, lambda _, __: GenerateMenu.strictness_menu(state)
                 )
-            # Strictness
-            items.append(MenuItem(make_strictness_label, lambda _, __: GenerateMenu.strictness_menu(state)))
-            # Num retries
-            items.append(MenuItem(make_retries_label, lambda _, __: ask_retries(state)))
+            )
             
-            if state.project.sound_segments.num_generated() > 0:
-                items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
-
+            # Max retries
+            items.append(
+                MenuItem(
+                    make_retries_label, lambda _, __: ask_retries(state), 
+                )
+            )
             return items
         
-        MenuUtil.menu(state, heading_maker, items_maker)
+        MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
 
     @staticmethod
     def strictness_menu(state: State) -> None:
@@ -112,31 +121,32 @@ class GenerateMenu:
         def on_select(value: Strictness) -> None:
             state.project.strictness = value
             state.project.save()
-            print_feedback(f"Strictness set to:", state.project.strictness.label)
+            print_feedback(f"Word error tolerance set to:", state.project.strictness.label)
 
         warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, Tts.get_instance_if_exists())
 
         if state.project.language_code != "en":
-            low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for current language code {state.project.language_code}"
+            low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for {state.project.language_code} (STT accuracy varies by language — lower threshold prevents false positives in retries and regeneration detection)"
             medium_desc = ""
             high_desc = ""
             intolerant_desc = ""
         else:
-            low_desc = "Allows for more word errors before triggering a retry"
-            medium_desc = "Decent middle ground between accuracy and retries"
-            high_desc = warning_high if warning_high else "Higher net accuracy but triggers more retries"
-            intolerant_desc = "Any word error triggers a retry; many false positives likely; for the time/compute unconstrained"
+            low_desc = "Allows more word errors; segments pass unless severely off"
+            medium_desc = "Balanced; typical choice for most languages"
+            high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration"
+            intolerant_desc = "Zero tolerance; segments with even one word error are flagged for regeneration"
 
         MenuUtil.options_menu(
             state=state,
-            heading_text=make_strictness_label(state),
+            heading_text=make_tolerance_label(state),
             labels=[item.label for item in list(Strictness)],
             sublabels=[low_desc, medium_desc, high_desc, intolerant_desc],
             values=[item for item in list(Strictness)],
             current_value=state.project.strictness,
             default_value=None,
             on_select=on_select,
-            subheading=STRICTNESS_DESC
+            subheading=STRICTNESS_DESC,
+            breadcrumb="Word error tolerance",
         )
 
 # ---
@@ -172,7 +182,7 @@ def ask_delete_segments(state: State) -> None:
         print_feedback("Nothing to delete")
         return
     
-    print_heading("Delete segments")
+    MenuUtil.print_heading(state, "Delete segments")
 
     path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
     hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path, is_file=True))
@@ -216,9 +226,9 @@ def ask_delete_segments(state: State) -> None:
     # NB, without this delay, directory watcher may not update in time for next menu printout
     print_feedback(f"Deleted {len(indices_to_delete)} segments")
 
-def make_strictness_label(state: State) -> str:
+def make_tolerance_label(state: State) -> str:
     label = make_menu_label(
-        label="Transcript validation strictness", 
+        label="Word error tolerance",
         value=state.project.strictness.label
     )
     warning = Tts.get_class().get_strictness_warning(state.project.strictness, state.project, Tts.get_instance_if_exists())
@@ -228,13 +238,13 @@ def make_strictness_label(state: State) -> str:
 
 def make_retries_label(state: State) -> str:
     return make_menu_label(
-        label="Transcript validation max retries", 
+        label="generation max retries",
         value=state.project.max_retries, 
         default=PROJECT_MAX_RETRIES_DEFAULT
     )
 
 def ask_retries(state: State) -> None:
-    print_heading(make_retries_label(state))
+    MenuUtil.print_heading(state, make_retries_label(state))
     printt(RETRIES_DESC)
     AskUtil.ask_number(
         state.project,
@@ -260,25 +270,25 @@ def ask_batch_size(state: State) -> None:
 
 def do_generate(state: State, is_regen: bool) -> None:
 
+    # Check prereqs
+    error = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+    if error:
+        print_feedback(error, is_error=True)
+        return
+
     # Get indices to generate, and check if already generated
     if is_regen:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
     else:
-        indices = state.project.get_selected_indices_not_generated()
+        indices = ProjectUtil.get_selected_indices_not_generated(state.project)
     
     if not indices:
         qualifier = " in currently selected range" if state.project.generate_range_string else ""
         if is_regen:
-            message = f"No failed items to regenerate{qualifier}."
+            message = f"No segments with errors to regenerate{qualifier}."
         else:
             message = f"All items{qualifier} already generated."            
         print_feedback(message)
-        return
-
-    # Check model and other app prereqs
-    error = AppUtil.get_combined_prereq_error(state.project, short_format=False)
-    if error:
-        print_feedback(error, is_error=True)
         return
 
     # Show pre-inference hint/warning if necessary
@@ -310,7 +320,7 @@ def do_generate(state: State, is_regen: bool) -> None:
     message = f"{word} {len(indices)} audio segment/s..."
     if state.prefs.stt_variant == SttVariant.DISABLED:
         message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
-    print_heading(message, dont_clear=True)
+    MenuUtil.print_heading(state, message, dont_clear=True)
     printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
     printt()
 
@@ -322,6 +332,10 @@ def do_generate(state: State, is_regen: bool) -> None:
         is_regen=is_regen
     )
 
+    # Done
+    if not did_interrupt:
+        AppUtil.play_done_sound()
+
     if did_interrupt:
         AskUtil.ask_enter_to_continue()
         return
@@ -330,16 +344,16 @@ def do_generate(state: State, is_regen: bool) -> None:
         AskUtil.ask_enter_to_continue()
         return
     
-    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to concatenate files now: \a"
+    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to create audiobook file now: \a"
     hotkey = AskUtil.ask_hotkey(s)
     printt() # TODO revisit
     if hotkey == "c":
         ConcatMenu.menu(state)
 
 STRICTNESS_DESC = \
-"""Dictates how \"strict\" is the transcript validation.
-A low strictness value allows for more word errors before 
-an audio generation is marked as failed, triggering a retry.
+"""Controls how many word errors are acceptable per segment.
+Applies during generation (auto-retry) and when identifying
+existing segments for regeneration.
 """
 
 RETRIES_DESC = \

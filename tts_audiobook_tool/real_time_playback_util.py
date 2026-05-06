@@ -7,7 +7,9 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
@@ -15,7 +17,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import ValidationResult
 
@@ -43,7 +45,7 @@ class RealTimeUtil:
             return
         
         # Do model prereq check now that model instance exists
-        err = AppUtil.get_combined_prereq_error(state.project, short_format=False) 
+        err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True, is_realtime_playback=True)
         if err:
             print_feedback(err, is_error=True)
             return
@@ -59,7 +61,7 @@ class RealTimeUtil:
         s = "Starting real-time playback..."
         if state.prefs.stt_variant == SttVariant.DISABLED:
             s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
-        print_heading(s, dont_clear=True, non_menu=True)
+        MenuUtil.print_heading(None, s, dont_clear=True, non_menu=True)
         printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
         printt()
 
@@ -113,6 +115,14 @@ class RealTimeUtil:
             else:
                 sound = sound_opt
 
+            sound = SoundAppUtil.apply_segment_post_processing(
+                sound=sound,
+                high_shelf=state.project.get_high_shelf(),
+                limit_silence_gaps=state.project.limit_silence_gaps,
+                use_upsampler=False # no upsampling on realtime for now 
+            )
+            assert isinstance(sound, Sound)
+
             # Add appended sound
             if index == end_index:
                 appended_sound = None
@@ -132,11 +142,7 @@ class RealTimeUtil:
 
             # Start stream lazy
             if not stream:
-                if Tts.get_type() == TtsModelInfos.GLM: # special case
-                    sr = state.project.glm_sr
-                else:
-                    sr = Tts.get_type().value.sample_rate
-                stream = SoundDeviceStream(sr)
+                stream = SoundDeviceStream()
                 stream.start()
 
             # Add sound to the stream
@@ -168,12 +174,19 @@ class RealTimeUtil:
 
         # Finished
         SigIntHandler().clear()
+
+        should_prompt_before_shutdown = stream and stream.buffer_duration > 0
+        if should_prompt_before_shutdown:
+            # Prompt allows buffer to play until enter pressed
+            printt()
+            AskUtil.ask_enter_to_continue()
         if stream:
-            if stream.buffer_duration > 0:
-                # Gives opportunity for remaining buffer data to play through before killing stream
-                printt()
-                AskUtil.ask_enter_to_continue()
             stream.shut_down()
+
+        if not should_prompt_before_shutdown:
+            printt()
+            AskUtil.ask_enter_to_continue()
+
         printt()
 
     @staticmethod
@@ -184,7 +197,7 @@ class RealTimeUtil:
             has_runway: bool
     ) -> tuple[Sound | None, bool]:
         """
-        Similar to `GenerateUtil.generate_full_flow()` but slightly different control flow, simpler.
+        Similar to `GenerateUtil.generate_full_flow()` but simpler control flow.
         Returns tuple: Sound or no-sound if problem, and if user interrupted
         """
 
@@ -217,6 +230,8 @@ class RealTimeUtil:
                 printt()
             else:
                 printt(f"Transcript validation: {gen_result.get_ui_message()}")
+
+
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True

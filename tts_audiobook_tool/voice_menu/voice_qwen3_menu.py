@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.target_util import TargetUtil
@@ -26,6 +26,8 @@ class VoiceQwen3Menu:
             if not state.project.qwen3_voice_file_name:
                 currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
             else:
+                if not should_show_menu_status_details(state):
+                    return "Select voice clone sample"
                 currently = make_currently_string(state.project.voice_label)
             return f"Select voice clone sample {currently}"
 
@@ -202,7 +204,7 @@ def target_submenu(state: State) -> None:
     items = []
     for t in Qwen3BaseModel.PRESET_REPO_IDS:
         items.append(MenuItem(make_preset_label(t), lambda _, __, t=t: apply_model_and_validate(state.project, t)))
-    items.append(MenuItem("Manually enter hf repo id or local path", lambda _, __: ask_target(state.project)))
+    items.append(MenuItem("Enter hf repo id or local path manually", lambda _, __: ask_target(state.project)))
 
     MenuUtil.menu(
         state=state,
@@ -215,7 +217,7 @@ def ask_target(project: Project) -> None:
 
     model_name = Tts.get_type().value.ui["short_name"],
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
-    prompt += f"\n{COL_DIM}Eg, \"Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice\"; \"Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign\"; \"/path/to/checkpoint\""
+    prompt += f"\n{COL_DIM}Eg, \"Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice\" or \"/path/to/checkpoint\""
 
     VoiceMenuShared.ask_target(
         project=project,

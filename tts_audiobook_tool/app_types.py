@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import cache
 import platform
-from typing import NamedTuple, Protocol
+from typing import Callable, NamedTuple, Protocol, Sequence
 
 from numpy import ndarray
 
@@ -41,6 +41,10 @@ class Sound(NamedTuple):
     def duration(self) -> float:
         return len(self.data) / self.sr
 
+
+StreamChunkCallback = Callable[[ndarray], None]
+StreamEndCallback = Callable[[], None]
+
 class Word(Protocol):
     """
     Duck-typed data structure for use with the `Word` objects returned by faster-whisper `generate()`
@@ -59,6 +63,22 @@ class ConcreteWord(Word):
         self.end = end
         self.word = word
         self.probability = probability
+
+class Segment(Protocol):
+    start: float
+    end: float
+    text: str
+    words: Sequence[Word]
+
+class ConcreteSegment(Segment):
+    """
+    Instantiatable `Segment`-compatible object for app-owned Whisper adapters.
+    """
+    def __init__(self, start: float, end: float, text: str, words: Sequence[Word]):
+        self.start = start
+        self.end = end
+        self.text = text
+        self.words = words
 
 # ---
 
@@ -129,6 +149,7 @@ class HighShelfEq(tuple[str, float, float, float], Enum):
 # ---
 
 class SttVariant(tuple[str, str], Enum):
+    """ Applies to both whisper implementations (faster-whisper and mlx-whisper) """
 
     LARGE_V3 = ("large-v3", "Reference accuracy") # default
     LARGE_V3_TURBO = ("large-v3-turbo", "Less memory, faster")
@@ -157,8 +178,11 @@ class SttVariant(tuple[str, str], Enum):
 
 class SttConfig(tuple[str, str, str], Enum):
     """
-    Supported combinations of device + compute_type for the faster-whisper model
-    Rem, no MPS, I think
+    Preferred runtime configuration for STT backends that expose
+    device/precision-style execution controls.
+
+    Currently this is used by faster-whisper and ignored when mlx-whisper
+    is active on Apple Silicon.
     """
 
     CPU_INT8FLOAT32 = ("cpu", "int8_float32", "CPU, int8_float32") # default
@@ -234,7 +258,7 @@ class Strictness(tuple[str, int, str], Enum):
 # ---
 
 FILES_DESC = "Each chapter divider will result in a new, separate audio file"
-METADATA_DESC = "Always outputs to a single file\n    Chapter dividers are used for M4B chapter metadata and player bookmark metadata"
+METADATA_DESC = "Always outputs to a single file\n      Chapter dividers are used for M4B chapter metadata and player bookmark metadata"
 
 class ChapterMode(tuple[str, str, str], Enum):
 
@@ -335,4 +359,5 @@ class RealTimeMenuState:
     """ Values related to the real-time playback feature """
     from tts_audiobook_tool.phrase import PhraseGroup
     custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
-    line_range: tuple[int, int] | None = None
+    custom_text_line_range: tuple[int, int] | None = None
+    project_text_line_range: tuple[int, int] | None = None

@@ -262,6 +262,7 @@ class SilenceUtil:
         Returns:
             Sound: The audio clip with excessive silence trimmed.
         """
+        
         if sound.data.size == 0 or max_silence_seconds <= 0:
             return sound
 

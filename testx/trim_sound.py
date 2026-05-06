@@ -10,10 +10,9 @@ from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.validation_result import TrimmedResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
-print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK)
-
-# DIR = "/home/lee/Documents/w/w/_tests/trim"
 DIR = "/home/lee/Documents/w/w/_tests/trim_trailing"
+
+print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK)
 
 Tts.init_model_type()
 

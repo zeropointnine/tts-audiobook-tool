@@ -10,8 +10,8 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -32,13 +32,17 @@ class AppUtil:
         L.init(APP_NAME)
         L.i("START " + "-" * 60)
 
-        # Squelch various 3p lib output
+        # Squelch various noisey 3p lib output
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("filelock").setLevel(logging.WARNING)
         logging.getLogger('numba').setLevel(logging.WARNING)
-        # Used by oute lib
+        logging.getLogger("faster_whisper").setLevel(logging.WARNING)
+        logging.getLogger("watchdog.observers.inotify_buffer").setLevel(logging.WARNING)
+        
+        # TTS libs (target only noisey parts)
+        logging.getLogger("pocket_tts.models.tts_model").setLevel(logging.WARNING)        
         import warnings
-        warnings.filterwarnings("ignore", module="pyloud")
+        warnings.filterwarnings("ignore", module="pyloud") # used by oute
 
     @staticmethod
     def delete_project_sound_files(dir: str) -> str:
@@ -65,7 +69,7 @@ class AppUtil:
     @staticmethod
     def print_text_groups(groups: list[PhraseGroup]) -> None:
         s = f"Text segments ({COL_DIM}{len(groups)}{COL_DEFAULT}):"
-        print_heading(s, non_menu=True)
+        MenuUtil.print_heading(None, s, non_menu=True)
         printt()
 
         for i, group in enumerate(groups):
@@ -88,7 +92,7 @@ class AppUtil:
         """        
 
         heading = "Text segments" if extant_indices else "Text segments preview"
-        print_heading(heading, non_menu=True)
+        MenuUtil.print_heading(None, heading, non_menu=True)
 
         if len(phrase_groups) > 0:
             index_width = len(str(len(phrase_groups)))
@@ -226,43 +230,6 @@ class AppUtil:
         return str(new_path)
 
     @staticmethod
-    def get_label_with_prereq_error(project: Project, base_label: str) -> str:
-        error = AppUtil.get_combined_prereq_error(project, short_format=True)
-        if error:
-            return base_label + f" {COL_DIM}({COL_ERROR}{error}{COL_DIM})"
-        else:
-            return base_label
-
-    @staticmethod
-    def get_combined_prereq_error(project: Project, short_format: bool) -> str: 
-        """ 
-        Returns project prerequisites' error string (both non-model-related and model-related)
-        """
-        all_errors = []
-        
-        if not project.phrase_groups:
-            err = "requires text" if short_format else "Text must be defined"
-            all_errors.append(err)
-
-        model_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance_if_exists(), short_format) 
-        if model_errors:
-            all_errors.extend(model_errors)
-
-        if short_format:
-            if len(all_errors) > 2:
-                all_errors = all_errors[:2]
-                did_truncate = True
-            else:
-                did_truncate = False
-            combined_string = "" if not all_errors else "; ".join(all_errors)
-            if did_truncate:
-                combined_string += "; ..." if did_truncate else ""
-        else:
-            combined_string = "" if not all_errors else "\n\n".join(all_errors)
-
-        return combined_string
-        
-    @staticmethod
     def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
         """ Shows one-time hints or warnings related to doing inference """
         
@@ -271,7 +238,7 @@ class AppUtil:
         project: Project = p_project
 
         if Tts.get_type() == TtsModelInfos.FISH_S1 and project.fish_s1_compile_enabled:
-            Hint.show_hint_if_necessary(prefs, HINT_FISH_FIRST_COMPILE)
+            Hint.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():
@@ -325,6 +292,11 @@ class AppUtil:
         return None
 
     @staticmethod
+    def play_done_sound() -> None:
+        done_wav_path = os.path.join(os.path.dirname(package_dir), ASSETS_DIR_NAME, "done.wav")
+        SoundFileUtil.play_sound_file_async(done_wav_path)
+
+    @staticmethod
     def make_memory_string(base_color=COL_DIM) -> str:
         
         from tts_audiobook_tool.memory_util import MemoryUtil
@@ -336,6 +308,13 @@ class AppUtil:
             used, total = result
             vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
 
+        shared_result = MemoryUtil.get_shared_gpu_memory()
+        if shared_result is None:
+            shared_string = ""
+        else:
+            _, shared = shared_result
+            shared_string = f"{base_color}shared VRAM: {COL_ACCENT}{make_gb_string(shared)}"
+
         result = MemoryUtil.get_system_ram()
         if result is None:
             ram_string = ""
@@ -343,11 +322,7 @@ class AppUtil:
             used, total = result
             ram_string = f"{base_color}RAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
 
-        if not vram_string and not ram_string:
+        parts = [s for s in [vram_string, shared_string, ram_string] if s]
+        if not parts:
             return ""
-        elif not vram_string:
-            return ram_string
-        elif not ram_string:
-            return vram_string
-        else:
-            return f"{vram_string}{base_color}, {ram_string}"
+        return f"{base_color}, ".join(parts)

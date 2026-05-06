@@ -1,6 +1,8 @@
+import numpy as np
+
 import random
 from itertools import cycle
-from tts_audiobook_tool.app_types import Sound
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
@@ -45,7 +47,9 @@ class MiraModel(MiraBaseModel):
             self, 
             project: Project, 
             prompts: list[str], 
-            force_random_seed: bool=False
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
         ) -> list[Sound] | str:
 
         voice_path = os.path.join(project.dir_path, project.mira_voice_file_name)

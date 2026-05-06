@@ -3,7 +3,7 @@ from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
+from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -49,14 +49,18 @@ class VoiceMenuShared:
             case TtsModelInfos.MIRA:
                 from tts_audiobook_tool.voice_menu import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
+
             case TtsModelInfos.QWEN3TTS:
-                # Pre-emptively instantiate model (special case for qwen)
-                _ = Tts.get_instance() 
-                if state.prefs.menu_clears_screen:
-                    print_feedback("Model loaded", no_enter=True)
-                    time.sleep(PRINT_FEEDBACK_PAUSE_SECONDS)
+
+                # Special case for Qwen: Pre-emptively instantiate model 
+                has_instance = bool( Tts.get_instance_if_exists() )
+                if not has_instance:
+                    _ = Tts.get_instance() 
+                    print_feedback("Model loaded")
+
                 from tts_audiobook_tool.voice_menu.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
+
             case TtsModelInfos.POCKET:
                 from tts_audiobook_tool.voice_menu import VoicePocketMenu
                 VoicePocketMenu.menu(state)
@@ -80,7 +84,8 @@ class VoiceMenuShared:
             heading="Voice clone and model settings",
             items=items,
             subheading=subheading,
-            on_exit=lambda: SoundFileUtil.stop_sound_async()
+            on_exit=lambda: SoundFileUtil.stop_sound_async(),
+            breadcrumb="Voice",
         )
 
     @staticmethod
@@ -88,8 +93,12 @@ class VoiceMenuShared:
         if Tts.get_type().value.requires_voice and not state.project.has_voice:
             currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
         elif not state.project.has_voice:
+            if not should_show_menu_status_details(state):
+                return "Select voice clone sample"
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
+            if not should_show_menu_status_details(state):
+                return "Select voice clone sample"
             currently = make_currently_string(state.project.voice_label)
         return f"Select voice clone sample {currently}"
 
@@ -134,7 +143,8 @@ class VoiceMenuShared:
             return
         sound = sound_result
 
-        printt(f"{COL_DIM}Playing selected sound sample...")
+        duration_s = len(sound.data) / sound.sr
+        printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
         printt()
         SoundFileUtil.play_sound_async(sound)
 
@@ -172,7 +182,7 @@ class VoiceMenuShared:
                     return
 
                 words = sound_result
-                transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_TRANSCRIBE_MIN_PROBABILITY)
+                transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
                 print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
                 printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
                 printt()

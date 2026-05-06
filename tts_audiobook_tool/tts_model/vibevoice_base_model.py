@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 
 from tts_audiobook_tool.app_types import Strictness
+from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -16,6 +18,10 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     INFO = TtsModelInfos.VIBEVOICE.value
 
     DEFAULT_REPO_ID = "microsoft/VibeVoice-1.5b"
+    PRESET_REPO_IDS = [
+        "microsoft/VibeVoice-1.5b",
+        "vibevoice/VibeVoice-7B",
+    ]
 
     # nb, their gradio demo default is 1.3, which is IMO much too low
     CFG_DEFAULT = 2.0
@@ -33,12 +39,12 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         ...
 
     @classmethod
-    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None, short_format: bool) -> list[str]:
+    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None) -> list[PrereqError]:
         errors = []
         if instance:
             assert isinstance(instance, VibeVoiceBaseModel)
             if project.vibevoice_lora_target and not instance.has_lora:
-                errors.append(f"Couldn't load lora LoRA")
+                errors.append( PrereqError("valid LoRA", "Couldn't load LoRA") )
         return errors
 
     def get_prereq_warnings(self, project: Project) -> list[str]:

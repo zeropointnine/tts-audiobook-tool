@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 import json
 import pathlib
 import itertools
@@ -6,19 +7,25 @@ import queue
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
+
+import numpy as np
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import make_terminal_hyperlink, printt
 
 _HERE = pathlib.Path(__file__).parent
+_DEMOS_DIR = _HERE / "demos"
+_DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp
 from tts_audiobook_tool.tts import Tts
@@ -28,6 +35,7 @@ from tts_audiobook_tool.tts import Tts
 class PromptItem:
     phrase_group: PhraseGroup
     can_eager: bool
+    use_tts_streaming: bool
 
 
 class Server:
@@ -66,6 +74,7 @@ class Server:
 
         self._is_initializing = True
         self._local_audio_enabled = True
+        self._tts_streaming_enabled = Tts.get_info().can_stream
         self._tts_ready = threading.Event()
 
         self._worker_thread = threading.Thread(target=self._worker, daemon=True)
@@ -84,7 +93,7 @@ class Server:
                     self._respond(
                         _server.prompt(
                             data.get("prompt", ""), 
-                            should_segment=data.get("should_segment", False),
+                            should_segment=data.get("should_segment", True),
                             can_eager=data.get("eager_first_segment", False)
                         )
                     )
@@ -95,20 +104,36 @@ class Server:
                     body = self.rfile.read(length)
                     data = json.loads(body) if body else {}
                     self._respond(_server.local_audio(data.get("enabled", True)))
+                elif self.path == "/tts-streaming":
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length)
+                    data = json.loads(body) if body else {}
+                    self._respond(_server.tts_streaming(data.get("enabled", True)))
                 else:
                     self.send_error(404)
 
             def do_GET(self):
-                if self.path == "/status":
+                parsed = urlparse(self.path)
+
+                if parsed.path == "/status":
                     self._respond(_server.status())
-                elif self.path == "/streaming-client-demo.html":
-                    body = (_HERE / "streaming-client-demo.html").read_bytes()
+                elif parsed.path.startswith("/demos/") and parsed.path.endswith(".html"):
+                    demo_path = _DEMOS_DIR / pathlib.PurePosixPath(parsed.path.removeprefix("/demos/"))
+                    try:
+                        resolved_demo_path = demo_path.resolve()
+                    except OSError:
+                        self.send_error(404)
+                        return
+                    if not resolved_demo_path.is_file() or _DEMOS_DIR_RESOLVED not in resolved_demo_path.parents:
+                        self.send_error(404)
+                        return
+                    body = resolved_demo_path.read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
-                elif self.path == "/stream":
+                elif parsed.path == "/stream":
                     q = _server._audio_http_stream.connect()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/octet-stream")
@@ -137,8 +162,8 @@ class Server:
                         pass
                     finally:
                         _server._audio_http_stream.disconnect(q)
-                elif self.path in ("/", "/api-demo.html"):
-                    body = (_HERE / "api-demo.html").read_bytes()
+                elif parsed.path == "/":
+                    body = (_DEMOS_DIR / API_DEMO_HTML_FILE_NAME).read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))
@@ -165,21 +190,23 @@ class Server:
             Tts.get_instance()
             self._is_initializing = False
             self._tts_ready.set()
+            printt(f"{COL_DIM}{Ansi.ITALICS}Ready")
+            printt()
 
         with ThreadingHTTPServer((host, port), _Handler) as httpd:
             
             # Print some useful info
             base_url = f"http://{host}:{port}"
-            demo_url_1 = f"{base_url}/{API_DEMO_HTML_FILE_NAME}"
-            demo_url_2 = f"{base_url}/{STREAMING_CLIENT_DEMO_HTML_FILE_NAME}"
+            demo_url_1 = f"{base_url}/demos/{API_DEMO_HTML_FILE_NAME}"
+            demo_url_2 = f"{base_url}/demos/{STREAMING_CLIENT_DEMO_HTML_FILE_NAME}"
+            demo_url_3 = f"{base_url}/demos/{COMBINATION_DEMO_HTML_FILE_NAME}"
 
-            printt("-" * 80)
             printt(f"{COL_ACCENT}Server listening on {make_terminal_hyperlink(base_url)}")
             printt()
-            printt(f"API demo page:\n{make_terminal_hyperlink(demo_url_1)}")
-            printt()
-            printt(f"Streaming client demo page:\n {make_terminal_hyperlink(demo_url_1)}")
-            printt("-" * 80)
+            printt("Demo pages:")
+            printt(f"- API demo: {make_terminal_hyperlink(demo_url_1)}")
+            printt(f"- Streaming client demo: {make_terminal_hyperlink(demo_url_2)}")
+            printt(f"- Combination demo: {make_terminal_hyperlink(demo_url_3)}")
             printt()
 
             # Initialize the TTS model
@@ -190,23 +217,37 @@ class Server:
     def status(self) -> dict:
         return {
             "status": "initializing" if self._is_initializing else "ready",
+            "tts_model": Tts.get_type().value.ui["proper_name"],
             "inferencing": self._prompt_currently_inferencing,
+            "playing": self._audio_stream.get_currently_playing(),
             "audio_buffer": self._audio_stream.get_seconds_left(),
             "num_queued": self._queue.qsize(),
             "stream_clients": self._audio_http_stream.client_count(),
             "local_audio": self._local_audio_enabled,
+            "tts_streaming": self._tts_streaming_enabled,
+            "tts_streaming_supported": Tts.get_info().can_stream,
         }
-        # TODO: 
-        # "playing": self._prompt_currently_playing
-        # Requires extra logic in AudioStream
 
     def local_audio(self, enabled: bool) -> dict:
         self._local_audio_enabled = enabled
         self._audio_stream.set_is_mute(not enabled)
         return {"local_audio": self._local_audio_enabled}
 
+    def tts_streaming(self, enabled: bool) -> dict:
+        supported = Tts.get_info().can_stream
+        effective_enabled = enabled and supported
+        self._tts_streaming_enabled = effective_enabled
 
-    def prompt(self, prompt: str, should_segment: bool = False, can_eager: bool = False) -> dict:
+        response: dict[str, bool | str] = {
+            "tts_streaming": self._tts_streaming_enabled,
+            "tts_streaming_supported": supported,
+        }
+        if enabled and not supported:
+            response["warning"] = "Current TTS engine does not support TTS streaming; using non-streaming inference."
+        return response
+
+
+    def prompt(self, prompt: str, should_segment: bool = True, can_eager: bool = False) -> dict:
         """
         Queues text prompt for TTS inference
         """
@@ -216,21 +257,22 @@ class Server:
 
         # Used for convenience response output feedback
         prompt_texts = []
+        use_tts_streaming = self._tts_streaming_enabled and Tts.get_info().can_stream
 
         if should_segment:
             phrase_groups = PhraseGrouper.text_to_groups(prompt, self._project.max_words, self._project.segmentation_strategy, self._project.language_code)
             for phrase_group in phrase_groups:
                 prompt_texts.append(phrase_group.text)
-                self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, can_eager)))
+                self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, can_eager, use_tts_streaming)))
         else:
             phrase_group = PhraseGroup( [Phrase(text=prompt, reason=Reason.UNDEFINED)] )
             prompt_texts.append(prompt)
-            self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, False)))
+            self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, False, use_tts_streaming)))
        
         return {
             "input": prompt,
             "prompts": prompt_texts,
-            "current_queue_length": self._queue.qsize(),
+            "queue_length": self._queue.qsize(),
         }
 
     def clear(self) -> dict:
@@ -245,12 +287,145 @@ class Server:
         self._audio_http_stream.clear()
         return {}
 
+    def generate_streaming_output(
+        self,
+        prompt_text: str,
+        phrase_group: PhraseGroup,
+        generation_id: int,
+    ) -> bool:
+        info = Tts.get_info()
+        stream_started_at = time.monotonic()
+        self.log_tts_inference_start(mode="streaming", text=prompt_text)
+        first_audio_callback_registered = False
+        streamed_audio_sample_count = 0
+
+        def log_first_audio_latency() -> None:
+            self.log_tts_first_audio_latency(
+                mode="streaming",
+                text=prompt_text,
+                started_at=stream_started_at,
+            )
+
+        def on_stream_chunk(data) -> None:
+            nonlocal first_audio_callback_registered, streamed_audio_sample_count
+            if self._generation_id != generation_id:
+                return
+            start, end = self._audio_stream.append_data(data, info.sample_rate, prompt_text)
+            streamed_audio_sample_count += end - start
+            if not first_audio_callback_registered:
+                first_audio_callback_registered = True
+                self._audio_stream.set_first_audio_output_callback(start, log_first_audio_latency)
+
+        def on_stream_end() -> None:
+            nonlocal streamed_audio_sample_count
+            if self._generation_id != generation_id:
+                return
+            if phrase_group.last_reason.pause_duration <= 0:
+                return
+            silence_sample_count = int(round(phrase_group.last_reason.pause_duration * info.sample_rate))
+            if silence_sample_count <= 0:
+                return
+            silence = np.zeros(silence_sample_count, dtype=np.float32)
+            start, end = self._audio_stream.append_data(silence, info.sample_rate, prompt_text)
+            streamed_audio_sample_count += end - start
+
+        try:
+            result = Tts.generate_using_project(
+                self._project,
+                [prompt_text],
+                force_random_seed=False,
+                on_stream_chunk=on_stream_chunk,
+                on_stream_end=on_stream_end,
+            )
+        finally:
+            model = Tts.get_instance_if_exists()
+            if model is not None:
+                model.clear_stream_state()
+
+        if self._generation_id != generation_id:
+            return False
+        if isinstance(result, str):
+            printt(f"* TTS error: {result}")
+            return False
+        if streamed_audio_sample_count <= 0:
+            printt("* No streamed audio output")
+            return False
+        return True
+
+    def generate_non_streaming_output(
+        self,
+        prompt_text: str,
+        phrase_group: PhraseGroup,
+        generation_id: int,
+    ) -> bool:
+        started_at = time.monotonic()
+        self.log_tts_inference_start(mode="non-streaming", text=prompt_text)
+        result = Tts.generate_using_project(
+            self._project,
+            [prompt_text],
+            force_random_seed=False,
+        )
+        if isinstance(result, str):
+            printt(f"* TTS error: {result}")
+            return False
+        sound = result[0]
+
+        if self._generation_id != generation_id:
+            return False
+
+        sound = SoundAppUtil.apply_generate_post_processing(sound)
+        if sound.data.size == 0:
+            printt("* Model output is empty or silence")
+            return False
+
+        sound = SoundAppUtil.apply_segment_post_processing(
+            sound=sound,
+            high_shelf=self._project.get_high_shelf(),
+            limit_silence_gaps=self._project.limit_silence_gaps,
+            use_upsampler=False,
+        )
+        assert isinstance(sound, Sound)
+
+        if phrase_group.last_reason != Reason.UNDEFINED:
+            sound = SoundUtil.append_pause_or_section_effect(
+                sound, reason=phrase_group.last_reason, use_section_sound_effect=False
+            )
+
+        if self._generation_id != generation_id:
+            return False
+
+        start, _ = self._audio_stream.append(sound, prompt_text)
+        self._audio_stream.set_first_audio_output_callback(
+            start,
+            lambda: self.log_tts_first_audio_latency(
+                mode="non-streaming",
+                text=prompt_text,
+                started_at=started_at,
+            ),
+        )
+        return True
+
+    def log_tts_inference_start(self, mode: str, text: str) -> None:
+        preview = re.sub(r"\s+", " ", text).strip()
+        if len(preview) > 80:
+            preview = preview[:80] + "..."
+        L.i(
+            f"TTS inference start ({mode}) | chars={len(text)} | text='{preview}'"
+        )
+
+    def log_tts_first_audio_latency(self, mode: str, text: str, started_at: float) -> None:
+        elapsed_ms = (time.monotonic() - started_at) * 1000.0
+        preview = re.sub(r"\s+", " ", text).strip()
+        if len(preview) > 80:
+            preview = preview[:80] + "..."
+        L.i(
+            f"TTS first-audio latency ({mode}): {elapsed_ms:.1f} ms | chars={len(text)} | text='{preview}'"
+        )
+
     def _worker(self):
         """Background thread: pulls prompts from the queue and runs TTS inference."""
 
         while True:
-            
-            ...
             
             _, _, prompt_item = self._queue.get()
             self._tts_ready.wait()
@@ -270,12 +445,17 @@ class Server:
 
             phrase_group = prompt_item.phrase_group
 
-            if self._audio_stream.get_seconds_left() < EAGER_THRESHOLD and prompt_item.can_eager and len(phrase_group.phrases) > 1:
+            if (
+                not prompt_item.use_tts_streaming
+                and self._audio_stream.get_seconds_left() < EAGER_THRESHOLD
+                and prompt_item.can_eager
+                and len(phrase_group.phrases) > 1
+            ):
                 # Extract first phrase
                 prompt_text = phrase_group.phrases[0].text
                 # And put remainder back in the "queue", at the front
                 remainder = PhraseGroup(phrase_group.phrases[1:])
-                self._queue.put((0, next(self._queue_counter), PromptItem(remainder, True)))
+                self._queue.put((0, next(self._queue_counter), PromptItem(remainder, True, prompt_item.use_tts_streaming)))
 
             else:
                 prompt_text = prompt_item.phrase_group.text
@@ -283,37 +463,10 @@ class Server:
             self._prompt_currently_inferencing = prompt_text
 
             try:
-
-                # Generate
-                result = Tts.get_instance().generate_using_project(
-                    self._project, [prompt_text], force_random_seed=False
-                )
-                if isinstance(result, str):
-                    printt(f"* TTS error: {result}")
-                    continue
-                sound = result[0]
-
-                # Discard result if clear() was called during inference
-                if self._generation_id != generation_id:
-                    continue
-
-                # Trim silence
-                sound = SilenceUtil.trim_silence_ends(sound)[0]
-                if sound.data.size == 0:
-                    printt(f"* Model output is empty or silence")
-                    continue
-
-                # Normalize
-                normalized_data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
-                sound = Sound(normalized_data, sound.sr)
-
-                # Pad end with silence using 'phrase reason'
-                if prompt_item.phrase_group.last_reason != Reason.UNDEFINED:
-                    sound = SoundUtil.add_silence(sound, prompt_item.phrase_group.last_reason.pause_duration)
-
-                # Done, add to audio stream buffer.
-                # HTTP clients are fed automatically via the playback listener.
-                self._audio_stream.append(sound)
+                if prompt_item.use_tts_streaming and Tts.get_info().can_stream:
+                    self.generate_streaming_output(prompt_text, phrase_group, generation_id)
+                else:
+                    self.generate_non_streaming_output(prompt_text, phrase_group, generation_id)
 
             finally:
                 self._prompt_currently_inferencing = ""
@@ -328,5 +481,6 @@ EAGER_THRESHOLD = 1.0
 # Maximum audio buffer duration (seconds) before the worker pauses inferencing
 BUFFER_MAX_SECONDS = 60 * 10
 
-API_DEMO_HTML_FILE_NAME = "/api-demo.html"
-STREAMING_CLIENT_DEMO_HTML_FILE_NAME = "/streaming-client-demo.html"
+API_DEMO_HTML_FILE_NAME = "api.html"
+STREAMING_CLIENT_DEMO_HTML_FILE_NAME = "streaming-client.html"
+COMBINATION_DEMO_HTML_FILE_NAME = "combination.html"

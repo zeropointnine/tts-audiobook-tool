@@ -1,10 +1,9 @@
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.mp3_concat import SoundConcatTranscodeUtil
+from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.stt_flow import SttFlow
 from tts_audiobook_tool.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
 
@@ -13,29 +12,25 @@ class ToolsMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        enhance_item = MenuItem(
-            f"Enhance existing audiobook file {COL_DIM}(experimental)",
-            lambda _, __: SttFlow.ask_and_make(state.prefs)
-        )
-
-        mp3s_item = MenuItem(
-            "Concatenate a directory of audio files",
-            lambda _, __: SoundConcatTranscodeUtil.ask_and_concat_audio_files()
-        )
-
-        transcode_item = MenuItem(
-            "Transcode an app-created FLAC to M4B, preserving custom metadata",
-            lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
-        )
-
         def speed_handler(_: State, __: MenuItem):
             Hint.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
             ToolsMenu.ask_save_speed_up_audio()
 
-        speed_item = MenuItem("Speed up voice sample", speed_handler)
+        def item_maker(_: State) -> list[MenuItem]:
 
-        items = [enhance_item, mp3s_item, transcode_item, speed_item]
-        MenuUtil.menu(state, "Tools:", items)
+            mp3s_item = MenuItem(
+                "Concatenate a directory of audio files",
+                lambda _, __: SoundConcatTranscodeUtil.ask_and_concat_audio_files()
+            )
+            transcode_item = MenuItem(
+                "Transcode an app-created FLAC to M4B, preserving custom metadata",
+                lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
+            )
+            speed_item = MenuItem("Speed up voice sample", speed_handler)
+            
+            return [mp3s_item, transcode_item, speed_item]
+        
+        MenuUtil.menu(state, "Tools:", item_maker, breadcrumb="Tools")
 
     @staticmethod
     def ask_save_speed_up_audio() -> None:
@@ -67,7 +62,7 @@ class ToolsMenu:
         percent = float(inp)
         if not (50 <= percent <= 200):
             AskUtil.ask_error("Out of range")
-        result = SoundUtil.speed_up_audio(sound, percent / 100)
+        result = SoundExtraUtil.speed_up_audio(sound, percent / 100)
         if isinstance(result, str):
             AskUtil.ask_error(result)
             cleanup()

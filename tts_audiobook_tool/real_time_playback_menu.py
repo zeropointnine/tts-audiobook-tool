@@ -3,22 +3,28 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
-from tts_audiobook_tool.real_time_util import RealTimeUtil
+from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool.real_time_playback_util import RealTimeUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
+class RealTimePlaybackMenu:
 
-class RealTimeMenu:
+    @staticmethod
+    def get_active_line_range(state: State) -> tuple[int, int] | None:
+        if state.real_time.custom_phrase_groups:
+            return state.real_time.custom_text_line_range
+        return state.real_time.project_text_line_range
 
     @staticmethod
     def menu(state: State):
 
         def make_start_label(_: State) -> str:
             label = "Start"
-            warning = AppUtil.get_combined_prereq_error(state.project, short_format=True)
-            if warning:
-                return make_menu_label(label, warning, value_prefix="", color_code=COL_ERROR)
+            err = PrereqUtil.get_generate_prereq_error_string(state, verbose=False)
+            if err:
+                return make_menu_label(label, err, value_prefix="", color_code=COL_ERROR)
             else:
                 return label
 
@@ -31,7 +37,7 @@ class RealTimeMenu:
             return make_menu_label("Text source", value)
 
         def make_range_label(_) -> str:
-            line_range = state.real_time.line_range
+            line_range = RealTimePlaybackMenu.get_active_line_range(state)
             if line_range:
                 value = f"{line_range[0]}-{line_range[1]}"
             else:
@@ -41,14 +47,20 @@ class RealTimeMenu:
         # Menu        
         items = [
             MenuItem(make_start_label, lambda _, __: do_start(state)),
-            MenuItem(make_text_label, lambda _, __: RealTimeMenu.text_menu(state)),
-            MenuItem(make_range_label, lambda _, __: RealTimeMenu.ask_line_range(state)),
+            MenuItem(make_text_label, lambda _, __: RealTimePlaybackMenu.text_menu(state)),
+            MenuItem(make_range_label, lambda _, __: RealTimePlaybackMenu.ask_line_range(state)),
             MenuItem(
                 lambda _: make_menu_label("Save output", state.project.realtime_save),
-                lambda _, __: RealTimeMenu.save_menu(state)
+                lambda _, __: RealTimePlaybackMenu.save_menu(state)
             )
         ]
-        MenuUtil.menu(state, "Real-time audio generation", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(
+            state,
+            "Realtime audiobook playback",
+            items,
+            subheading=REAL_TIME_SUBHEADING,
+            breadcrumb="Realtime playback"
+        )
 
     @staticmethod
     def ask_line_range(state: State) -> None:
@@ -69,7 +81,11 @@ class RealTimeMenu:
             AskUtil.ask_error(result)
             return
 
-        state.real_time.line_range = result
+        if state.real_time.custom_phrase_groups:
+            state.real_time.custom_text_line_range = result
+        else:
+            state.real_time.project_text_line_range = result
+            state.project.realtime_line_range = result
 
         # Print feedback
         is_all = (result[0] == 0 and result[1] == 0) or (result[0] == 1 and result[1] == len(text_groups))
@@ -86,9 +102,11 @@ class RealTimeMenu:
 
         # 1
         def on_project(_: State, __: MenuItem) -> bool:
-            if state.real_time.custom_phrase_groups:
+            if state.real_time.custom_phrase_groups or state.real_time.custom_text_line_range or state.real_time.project_text_line_range:
                 state.real_time.custom_phrase_groups = []
-                state.real_time.line_range = None
+                state.real_time.custom_text_line_range = None
+                state.real_time.project_text_line_range = None
+                state.project.realtime_line_range = None
             print_feedback("Text source set to", "project")
             return True
 
@@ -96,6 +114,7 @@ class RealTimeMenu:
 
         # 2, 3
         def on_custom(_: State, item: MenuItem) -> bool:
+            printt("Note, custom text source does not persist.")
             if item.data == "file":
                 phrase_groups, __ = PhraseGroupAskUtil.get_from_text_file(
                     state.project.max_words, 
@@ -108,7 +127,7 @@ class RealTimeMenu:
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             if phrase_groups:
                 state.real_time.custom_phrase_groups = phrase_groups
-                state.real_time.line_range = None
+                state.real_time.custom_text_line_range = None
                 print_feedback("Text source set to: custom", f"{len(phrase_groups)} {make_noun('line', 'lines', len(phrase_groups))}")
             return bool(phrase_groups)
 
@@ -117,7 +136,7 @@ class RealTimeMenu:
 
         # Menu
         items = [project_item, custom_file_item, custom_manual_item]
-        MenuUtil.menu(state, "Real-time - Set text source", items, hint=HINT_REAL_TIME)
+        MenuUtil.menu(state, "Text source", items, breadcrumb="Text source")
 
     @staticmethod
     def save_menu(state: State) -> None:
@@ -140,7 +159,8 @@ class RealTimeMenu:
             values=[True, False],
             current_value=state.project.realtime_save,
             default_value=PROJECT_DEFAULT_REALTIME_SAVE,
-            on_select=on_select
+            on_select=on_select,
+            breadcrumb="Save output",
         )
 
 # ---
@@ -149,23 +169,25 @@ def do_start(state: State) -> None:
     
     if state.real_time.custom_phrase_groups:
         text_groups = state.real_time.custom_phrase_groups
+        line_range = state.real_time.custom_text_line_range
     else:
         text_groups = state.project.phrase_groups
+        line_range = state.real_time.project_text_line_range
     if not text_groups:
         print_feedback("No text segments specified")
         return
 
     # Check model and other app prereqs
-    error = AppUtil.get_combined_prereq_error(state.project, short_format=False)
-    if error:
-        print_feedback(error, is_error=True)
+    err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+    if err:
+        print_feedback(err, is_error=True)
         return
 
     # Show pre-inference hint/warning if necessary
     AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
     # Confirm and start proper
-    if AskUtil.is_readchar:
+    if AskUtil.can_hotkey:
         b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
         if not b:
             return
@@ -173,5 +195,13 @@ def do_start(state: State) -> None:
     RealTimeUtil.start(
         state=state,
         phrase_groups=text_groups,
-        line_range=state.real_time.line_range
+        line_range=line_range
     )
+
+REAL_TIME_SUBHEADING = (
+    'Uses the same quality checks as the normal audiobook creation workflow,\n'
+    'except loudness normalization and generative upsampling.\n\n'
+    'Smooth playback requires faster-than-realtime inference and a 60-second\n'
+    'buffer for validation/retries.\n'
+)
+

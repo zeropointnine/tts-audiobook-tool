@@ -7,8 +7,11 @@ git+https://github.com/ysharma3501/MiraTTS.git@6e1bd672326293ad27f5c6d65156ae400
 omegaconf
 
 # App dependencies
-faster-whisper==1.2.1
-ctranslate2==4.7.1
+faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
+mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
+git+https://github.com/zeropointnine/tts-audiobook-tool-sidon; sys_platform == 'linux' and platform_machine == 'x86_64'
+
 torch==2.8.0
 torchaudio==2.8.0
 
@@ -27,7 +30,7 @@ psutil
 pydantic
 pysbd==0.3.4
 pywin32; sys_platform == 'win32'
-readchar==4.2.1
+requests
 sounddevice==0.5.2
 soundfile==0.13.1
 watchdog==6.0.0

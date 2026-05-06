@@ -1,7 +1,7 @@
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.concat_menu import ConcatMenu
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.real_time_menu import RealTimeMenu
+from tts_audiobook_tool.chat_menu import ChatMenu
+from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.real_time_playback_menu import RealTimePlaybackMenu
 from tts_audiobook_tool.options_menu import OptionsMenu
 from tts_audiobook_tool.generate_menu import GenerateMenu
 from tts_audiobook_tool.project_menu import ProjectMenu
@@ -38,34 +38,40 @@ class MainMenu:
         def make_items(_) -> list[MenuItem]:
             items = []
             items.append(
-                MenuItem(make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p")
+                MenuItem(
+                    make_project_label, lambda _, __: ProjectMenu.menu(state), hotkey="p",
+                    superlabel="Main", superlabel_no_blank_line=True
+                )
             )
-            if state.prefs.project_dir and Tts.get_type() != TtsModelInfos.NONE:
-                items.append(
-                    MenuItem(make_voice_label, on_voice, hotkey="v")
-                )
-            if state.prefs.project_dir:
-                items.append(
-                    MenuItem(make_text_label, on_text, hotkey="t")
-                )
-            if state.prefs.project_dir:
-                items.append(
-                    MenuItem(
-                        make_gen_label, on_generate, hotkey="g"
-                    )
-                )
-            if state.prefs.project_dir:
-                items.append(
-                    MenuItem(make_concat_label, lambda _, __: ConcatMenu.menu(state), hotkey="c")
-                )
-            if state.prefs.project_dir:
-                items.append(
-                    MenuItem(
-                        make_realtime_label, on_realtime, hotkey="r"
-                    )
-                )
             items.append(
-                MenuItem("Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z")
+                MenuItem(make_voice_label, on_voice, hotkey="v")
+            )
+            items.append(
+                MenuItem(make_text_label, on_text, hotkey="t")
+            )
+            items.append(
+                MenuItem(
+                    "Generate audio segments", on_generate, hotkey="g"
+                )
+            )
+            items.append(
+                MenuItem("Create audiobook file", on_concat, hotkey="c")
+            )
+
+            items.append(
+                MenuItem(
+                    "Realtime playback", on_realtime_audiobook, hotkey="r",
+                    superlabel="Voicelab"
+                )
+            )
+            items.append(
+                MenuItem("LLM voice chat", on_chat, hotkey="l")
+            )
+            items.append(
+                MenuItem(
+                    "Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z",
+                    superlabel="Tools and options"
+                )
             )
             items.append(
                 MenuItem("Options", lambda _, __: OptionsMenu.menu(state), hotkey="o")
@@ -75,24 +81,32 @@ class MainMenu:
             )
             return items
 
-        s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
-        heading = f"{APP_NAME} {COL_DIM}(active model: {COL_ACCENT}{s}{COL_DIM})"        
-        MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True)
+        if should_show_menu_status_details(state):
+            s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
+            heading = f"{APP_NAME} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
+        else:
+            heading = APP_NAME
+        MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
 
 # ---
 
 # Project
 def make_project_label(state: State) -> str:
-    if not state.prefs.project_dir:
-        s = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
+    if should_show_menu_status_details(state):
+        currently = make_currently_string(
+            state.project.dir_path, 
+            required_predicate=lambda: not bool(state.project.dir_path),
+            required_label="required - set this first"
+        )
     else:
-        value = make_terminal_hyperlink(state.project.dir_path, is_file=True)
-        s = make_currently_string(value)
-    return "Project " + s
+        currently = ""
+    return f"Project {currently}"
 
 # Voice
 def make_voice_label(state: State) -> str:
     base_label = f"Voice clone and model settings"
+    if not should_show_menu_status_details(state):
+        return base_label
     prefix, value = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
     if not value:
         combined = prefix
@@ -102,56 +116,69 @@ def make_voice_label(state: State) -> str:
     return f"{base_label} {COL_DIM}({combined}{COL_DIM})"
 
 def on_voice(state: State, __) -> None:
-    if not state.prefs.project_dir:
+    if Tts.get_type() == TtsModelInfos.NONE:
+        print_feedback("Requires TTS model", is_error=True)
+        return
+    if not state.project.dir_path:
+        print_feedback(REQUIRES_PROJECT, is_error=True)
         return
     VoiceMenuShared.menu(state)
 
 # Text
 def make_text_label(state: State) -> str:
     if state.project.phrase_groups:
-        num = len(state.project.phrase_groups)
-        lines = make_noun("line", "lines", num)
-        current = make_currently_string(f"{num} {lines}")
+        if state.prefs.menu_clears_screen:
+            current = ""
+        else:
+            num = len(state.project.phrase_groups)
+            lines = make_noun("line", "lines", num)
+            current = make_currently_string(f"{num} {lines}")
     else:
-        current = f"{COL_DIM}({COL_ERROR}required{COL_DIM})"
+        current = ""
     return f"Text {current}"
 
 def on_text(state: State, __) -> None:
-    if not state.prefs.project_dir:
-        print_feedback("Requires project", is_error=True)
+    if not state.project.dir_path:
+        print_feedback(REQUIRES_PROJECT, is_error=True)
         return
     TextMenu.menu(state)
 
-# Gen
-def make_gen_label(state: State) -> str:
-    return AppUtil.get_label_with_prereq_error(state.project, "Generate audio")
-
 def on_generate(state: State, _: MenuItem) -> None:
-    # Note, not blocking on other missing prereq types
-    if not state.project.phrase_groups:
-        print_feedback("Requires text", is_error=True)
-    else:
-        GenerateMenu.menu(state)
+    if Tts.get_type() == TtsModelInfos.NONE:
+        print_feedback("Requires TTS model", is_error=True)
+        return
+    if not state.project.dir_path:
+        print_feedback(REQUIRES_PROJECT, is_error=True)
+        return
+    GenerateMenu.menu(state)
 
-# Concat
-def make_concat_label(state: State) -> str:
-    num_generated = state.project.sound_segments.num_generated()
-    s = "Concatenate audiobook lines to create audiobook file "
-    if num_generated == 0:
-        s += f"{COL_DIM}({COL_ERROR}requires generated audio{COL_DIM})"
-    return s
+def on_concat(state: State, _: MenuItem) -> None:
+    if not state.project.dir_path:
+        print_feedback(REQUIRES_PROJECT, is_error=True)
+        return
+    ConcatMenu.menu(state)
 
-# Realtime
-def make_realtime_label(state: State) -> str:
-    return AppUtil.get_label_with_prereq_error(state.project, "Realtime audio generation")
+def on_realtime_audiobook(state: State, _: MenuItem) -> None:
+    if Tts.get_type() == TtsModelInfos.NONE:
+        print_feedback("Requires TTS model", is_error=True)
+        return
+    if not state.project.dir_path:
+        print_feedback(REQUIRES_PROJECT, is_error=True)
+        return
+    RealTimePlaybackMenu.menu(state)
 
-def on_realtime(state: State, _: MenuItem) -> None:
-    if not state.project.phrase_groups:
-        print_feedback("Requires text", is_error=True)
-    else:
-        RealTimeMenu.menu(state)
+def on_chat(state: State, _: MenuItem) -> None:
+    if Tts.get_type() == TtsModelInfos.NONE:
+        print_feedback("Requires TTS model", is_error=True)
+        return
+    if not state.project.dir_path:
+        print_feedback(REQUIRES_PROJECT, is_error=True)
+        return
+    ChatMenu.menu(state)
 
 # Quit
 def on_quit(_: State, __: MenuItem):
-    print_feedback("State saved.", extra_line=False, no_enter=True, no_pause=True)
+    print_feedback("State saved.", extra_line=False, skip_pause=True)
     exit(0)
+
+REQUIRES_PROJECT = "Requires a project"

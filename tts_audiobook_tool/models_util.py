@@ -16,11 +16,11 @@ class ModelsUtil:
     Including YamnetDetector, and Sidonmodel (holds statics instance)
     """
 
-    sidon_upscaler: SidonUtil | None = None
+    sidon_upsampler: SidonUtil | None = None
 
 
     @staticmethod
-    def warm_up_models(state: State) -> bool:
+    def warm_up_models(state: State, skip_yamnet: bool=False) -> bool:
         """
         Instantiates required models for main inference flow, prints updates.
 
@@ -34,7 +34,7 @@ class ModelsUtil:
 
         should_tts = not Tts.instance_exists()        
         should_stt = not Stt.should_skip(state) and not Stt.has_instance()
-        should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance()
+        should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance() and not skip_yamnet
         
         shoulds = [should_tts, should_stt, should_yamnet]
         num_shoulds = sum(1 for item in shoulds if item)
@@ -82,31 +82,35 @@ class ModelsUtil:
     def clear_all_models(except_sidon: bool = False) -> None:
 
         Stt.clear_stt_model()
-
         Tts.clear_tts_model()
-
         MusicDetector.clear_model()
-
         if not except_sidon:
-            ModelsUtil.clear_sidon_upscaler()
+            ModelsUtil.clear_sidon_upsampler()
 
         # For good measure
         MemoryUtil.gc_ram_vram()
 
     @staticmethod
-    def get_sidon_upscaler() -> SidonUtil | None:
+    def is_any_model_loaded() -> bool:
+        return Stt.has_instance() or \
+            Tts.instance_exists() or \
+            MusicDetector.has_instance() or \
+            ModelsUtil.sidon_upsampler is not None
+
+    @staticmethod
+    def get_sidon_upsampler() -> SidonUtil | None:
         if not torch.cuda.is_available():
             return None
         if not SidonUtil.has_sidon():
             return None
-        if ModelsUtil.sidon_upscaler is None:
-            print_init("Initializing Sidon upscaler (CUDA)...")
-            ModelsUtil.sidon_upscaler = SidonUtil()
-        return ModelsUtil.sidon_upscaler
+        if ModelsUtil.sidon_upsampler is None:
+            print_init("Initializing Sidon upsampler (CUDA)...")
+            ModelsUtil.sidon_upsampler = SidonUtil()
+        return ModelsUtil.sidon_upsampler
 
     @staticmethod
-    def clear_sidon_upscaler() -> None:
-        if ModelsUtil.sidon_upscaler is not None:
-            ModelsUtil.sidon_upscaler.kill()
-            ModelsUtil.sidon_upscaler = None
+    def clear_sidon_upsampler() -> None:
+        if ModelsUtil.sidon_upsampler is not None:
+            ModelsUtil.sidon_upsampler.kill()
+            ModelsUtil.sidon_upsampler = None
             MemoryUtil.gc_ram_vram()

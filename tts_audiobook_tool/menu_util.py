@@ -1,5 +1,9 @@
 from __future__ import annotations
+from dataclasses import dataclass
+import re
 from typing import Callable
+from tts_audiobook_tool.app_types import SttVariant
+import tts_audiobook_tool.util as util_module
 
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.project import Project
@@ -8,6 +12,12 @@ from tts_audiobook_tool.util import *
 from typing import TypeVar, Callable, Any
 
 T = TypeVar("T")
+
+
+@dataclass
+class MenuFrame:
+    heading: StringOrMaker
+    breadcrumb: StringOrMaker | None = None
 
 class MenuItem:
     def __init__(
@@ -18,14 +28,16 @@ class MenuItem:
             sublabel: StringOrMaker | None = None,
             hotkey: str = "",
             superlabel: StringOrMaker = "",
+            superlabel_no_blank_line: bool = False
     ):
         self.label = label
 
         # Optional extra text printed on second line
         self.sublabel = sublabel
 
-        # Optional visual subheading printed on its own line before the item
+        # Optional label printed on its own line above the item
         self.superlabel = superlabel
+        self.superlabel_no_blank_line = superlabel_no_blank_line
 
         # handler/callback passes the State object and `data`, if any
         self.handler = handler
@@ -57,6 +69,7 @@ MenuHandler = Callable[[State, MenuItem], bool | None]
 class MenuUtil:
 
     is_first_submenu = True
+    menu_frames: list[MenuFrame] = []
 
     @staticmethod
     def menu(
@@ -67,12 +80,13 @@ class MenuUtil:
         subheading: StringOrMaker | None = None,
         hint: Hint | None = None,
         one_shot: bool = False,
-        on_exit: Callable | None = None
+        on_exit: Callable | None = None,
+        breadcrumb: StringOrMaker | None = None,
     ):
         """
         Prints a menu of items, waits for input, and executes mapped callback.
 
-        When readchar is enabled, it blocks until recognized hotkey is pressed.
+        When single-key hotkey input is enabled, it blocks until recognized hotkey is pressed.
         Otherwise, it repeats until unrecognized key is entered or enter is pressed
 
         param one_shot:
@@ -83,115 +97,277 @@ class MenuUtil:
             Gets called when menu exits (ie, when app goes *back* to previous menu)
         """
 
-        while True:
+        MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
+        try:
+            while True:
 
-            # Initialize items list
-            if isinstance(items, list):
-                items_list: list[MenuItem] = items
-            else:
-                items_list = items(state)
+                # Initialize items list
+                if isinstance(items, list):
+                    items_list: list[MenuItem] = items
+                else:
+                    items_list = items(state)
 
-            is_all_hotkeys = all(item.hotkey for item in items_list)
-            is_no_hotkeys = all(not item.hotkey for item in items_list)
+                is_all_hotkeys = all(item.hotkey for item in items_list)
+                is_no_hotkeys = all(not item.hotkey for item in items_list)
 
-            if not is_all_hotkeys and not is_no_hotkeys:
-                raise ValueError("All MenuItems must have hotkeys or no MenuItems must have hotkeys")
+                if not is_all_hotkeys and not is_no_hotkeys:
+                    raise ValueError("All MenuItems must have hotkeys or no MenuItems must have hotkeys")
 
-            if is_no_hotkeys:
-                # Assign hotkeys to items
-                HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
-                items_list = items_list[:len(HOTKEYS_AUTO)] # Silently clamp
-                for i, item in enumerate(items_list):
-                    item.hotkey = HOTKEYS_AUTO[i]
-            else:
-                # Verify no dupes
-                hotkeys = set[str]()
+                if is_no_hotkeys:
+                    # Assign hotkeys to items
+                    HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')
+                    items_list = items_list[:len(HOTKEYS_AUTO)] # Silently clamp
+                    for i, item in enumerate(items_list):
+                        item.hotkey = HOTKEYS_AUTO[i]
+                else:
+                    # Verify no dupes
+                    hotkeys = set[str]()
+                    for item in items_list:
+                        if item.hotkey in hotkeys:
+                            raise ValueError(f"Duplicate hotkey {item.hotkey}")
+                        hotkeys.add(item.hotkey)
+
+                # Print heading
+                s = get_string_from(state, heading)
+                breadcrumb_text = MenuUtil.make_breadcrumb_text(state)
+                MenuUtil.print_heading(state, s, breadcrumb_text=breadcrumb_text)
+
+                # Print optional subheading
+                if subheading:
+                    s = get_string_from(state, subheading)
+                    if s:
+                        printt(s)
+
+                # Print optional hint
+                if hint:
+                    Hint.show_hint_if_necessary(state.prefs, hint)
+
+                left_padding = "  "
+
+                # Print items
                 for item in items_list:
-                    if item.hotkey in hotkeys:
-                        raise ValueError(f"Duplicate hotkey {item.hotkey}")
-                    hotkeys.add(item.hotkey)
-
-            # Print heading
-            s = get_string_from(state, heading)
-            print_heading(s)
-
-            # Print optional subheading
-            if subheading:
-                s = get_string_from(state, subheading)
-                if s:
+                    if item.superlabel:
+                        superlabel_text = get_string_from(state, item.superlabel)
+                        if superlabel_text:
+                            if not item.superlabel_no_blank_line:
+                                printt()
+                            printt(f"{left_padding}{COL_DIM}{superlabel_text}")
+                    s = get_string_from(state, item.label)
+                    s = left_padding + make_hotkey_string(item.hotkey.upper()) + " " + s
+                    if item.sublabel:
+                        # Print extra line/s
+                        sublabel = get_string_from(state, item.sublabel)
+                        space = ("    " + left_padding) if not sublabel.startswith(" ") else left_padding
+                        s += "\n" + COL_DIM + space + sublabel
                     printt(s)
-
-            # Print optional hint
-            if hint:
-                Hint.show_hint_if_necessary(state.prefs, hint)
-
-            extra_padding = ""
-            for item in items_list:
-                if item.superlabel:
-                    extra_padding = "  "
-
-            # Print items
-            for item in items_list:
-                if item.superlabel:
-                    superlabel_text = get_string_from(state, item.superlabel)
-                    if superlabel_text:
-                        printt(f"{COL_DIM}{superlabel_text}")
-                s = get_string_from(state, item.label)
-                s = extra_padding + make_hotkey_string(item.hotkey.upper()) + " " + s
-                if item.sublabel:
-                    # Print extra line/s
-                    sublabel = get_string_from(state, item.sublabel)
-                    space = ("    " + extra_padding) if not sublabel.startswith(" ") else extra_padding
-                    s += "\n" + COL_DIM + space + sublabel
-                printt(s)
-            printt()
-
-            # One-time message
-            if is_submenu and MenuUtil.is_first_submenu:
-                MenuUtil.is_first_submenu = False
-                printt(f"{extra_padding}{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} to go back one level")
                 printt()
 
-            while True:
-                # Prompt
-                hotkey = AskUtil.ask_hotkey()
+                # One-time message
+                if is_submenu and MenuUtil.is_first_submenu:
+                    MenuUtil.is_first_submenu = False
+                    printt(
+                        f"{left_padding}{COL_DIM}Press {COL_DEFAULT}{make_hotkey_string('Enter')}{COL_DIM} or "
+                        f"{COL_DEFAULT}{make_hotkey_string('Esc')}{COL_DIM} to go back one level"
+                    )
+                    printt()
 
-                if AskUtil.is_readchar:
-                    # enter (windows), enter (mac), backspace, escape
-                    should_return = hotkey in ["\r", "\n", "\x08", "\x1b"] and is_submenu
-                else: # can't readchar
-                    should_return = not hotkey
-                if should_return:
+                while True:
+                    # Prompt
+                    hotkey = AskUtil.ask_hotkey()
+
+                    if AskUtil.can_hotkey:
+                        # enter (windows), enter (mac/linux), backspace, escape
+                        # Some terminals/readchar combos can return double-escape for Esc.
+                        should_return = hotkey in ["\r", "\n", "\x08", "\x1b", "\x1b\x1b"] and is_submenu
+                    else: # can't readchar
+                        should_return = not hotkey
+                    if should_return:
+                        if on_exit:
+                            on_exit()
+                        return
+
+                    # Handle hotkey
+                    selected_item = None
+                    for item in items_list:
+                        if item.hotkey == hotkey:
+                            selected_item = item
+                            break
+
+                    if selected_item:
+                        break
+                    else:
+                        if AskUtil.can_hotkey:
+                            continue # wait for next hotkey
+                        else:
+                            return
+
+                # Execute mapped callback function
+                should_return = selected_item.handler(state, selected_item)
+                if should_return is True:
                     if on_exit:
                         on_exit()
                     return
 
-                # Handle hotkey
-                selected_item = None
-                for item in items_list:
-                    if item.hotkey == hotkey:
-                        selected_item = item
-                        break
+                if one_shot:
+                    if on_exit:
+                        on_exit()
+                    return
+        finally:
+            MenuUtil.menu_frames.pop()
 
-                if selected_item:
-                    break
-                else:
-                    if AskUtil.is_readchar:
-                        continue # wait for next hotkey
-                    else:
-                        return
+    @staticmethod
+    def make_breadcrumb_text(state: State) -> str:
+        if not state.prefs.menu_clears_screen:
+            return ""
 
-            # Execute mapped callback function
-            should_return = selected_item.handler(state, selected_item)
-            if should_return is True:
-                if on_exit:
-                    on_exit()
-                return
+        ancestor_frames = MenuUtil.menu_frames[:-1]
+        if not ancestor_frames:
+            return ""
 
-            if one_shot:
-                if on_exit:
-                    on_exit()
-                return
+        segments = [
+            segment
+            for segment in [MenuUtil.make_breadcrumb_segment(state, frame) for frame in ancestor_frames]
+            if segment
+        ]
+        if not segments:
+            return ""
+
+        return " > ".join(segments) + " >"
+
+    @staticmethod
+    def make_breadcrumb_segment(state: State, frame: MenuFrame) -> str:
+        string_or_maker = frame.breadcrumb if frame.breadcrumb is not None else frame.heading
+        segment = get_string_from(state, string_or_maker)
+        segment = strip_ansi_codes(segment).strip().rstrip(":")
+
+        if frame.breadcrumb is None:
+            segment = re.sub(r"\s*\([^)]*\)\s*$", "", segment).strip()
+
+        return segment
+
+    @staticmethod
+    def print_screen_heading(
+        state: State,
+        heading: StringOrMaker,
+        breadcrumb: StringOrMaker | None = None,
+    ) -> None:
+        """
+        Prints a heading for a blocking prompt/screen that is not a full menu,
+        but should still participate in the current breadcrumb trail.
+
+        This temporarily pushes a MenuFrame so existing ancestor-only
+        breadcrumb rendering works the same way as MenuUtil.menu(...), while
+        keeping direct print_heading(...) calls breadcrumb-free by default.
+        """
+        MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
+        try:
+            heading_text = get_string_from(state, heading)
+            breadcrumb_text = MenuUtil.make_breadcrumb_text(state)
+            MenuUtil.print_heading(state, heading_text, breadcrumb_text=breadcrumb_text)
+        finally:
+            MenuUtil.menu_frames.pop()
+
+    @staticmethod
+    def print_heading(
+        state: State | None,
+        text: str,
+        dont_clear: bool=False,
+        non_menu: bool=False,
+        breadcrumb_text: str="",
+    ) -> None:
+        """
+        :param dont_clear: Doesn't clear screen even when settings are "menu clears screen"
+
+        TODO: Params are a mess at this point
+        """
+
+        if state and state.prefs.menu_clears_screen and not dont_clear and not non_menu:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            MenuUtil._print_status_block(state)
+            printt()
+        elif util_module._menu_clears_screen and not dont_clear:
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+        if state and not state.prefs.menu_clears_screen:
+            length = len(strip_ansi_codes(text))
+            print("-" * length)
+
+        color = COL_DEFAULT if non_menu else COL_ACCENT
+        if breadcrumb_text:
+            printt(f"{COL_DIM}{breadcrumb_text}")
+        printt(f"{color}{text}")
+        printt()
+
+    @staticmethod
+    def _print_status_block(state: State) -> None:
+        
+        from tts_audiobook_tool.app_util import AppUtil
+        from tts_audiobook_tool.stt import Stt
+        from tts_audiobook_tool.tts import Tts
+
+        label_color = COL_DIM
+        value_color = COL_MEDIUM
+
+        if state.project.dir_path:
+            path_string = value_color + make_terminal_hyperlink(state.project.dir_path)
+        else:
+            path_string = value_color + "none"
+
+        if Tts._instance_display_info:
+            tts_model_text = value_color + Tts._instance_display_info.model_description
+            match (bool(Tts._instance_display_info.device), bool(Tts._instance_display_info.extra)):
+                case (True, True):
+                    s = f"{Tts._instance_display_info.device}, {Tts._instance_display_info.extra}"
+                case (True, False):
+                    s = Tts._instance_display_info.device
+                case (False, True):
+                    s = Tts._instance_display_info.extra
+                case (False, False):
+                    s = ""
+            if s:
+                tts_model_text += f" {COL_DIM}({s})"
+            tts_loaded = "(loaded)"
+        else:
+            tts_model_text = value_color + Tts.get_class().INFO.ui['proper_name']
+            tts_loaded = "(not loaded)"
+
+        voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
+            state.project,
+            Tts.get_instance_if_exists()
+        )
+        voice_prefix = strip_ansi_codes(voice_prefix).strip().rstrip(":")
+        voice_value = strip_ansi_codes(voice_value).strip()
+        voice_text = value_color + (voice_value or voice_prefix or "none")
+
+        total_lines = len(state.project.phrase_groups)
+        num_complete = state.project.sound_segments.num_generated()
+        text_text = value_color + f"{total_lines} lines"
+        text_text += f" {COL_DIM}({num_complete} segments generated)"
+
+        stt_model = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
+        stt_desc = value_color + stt_model
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            stt_desc += f" disabled" # not dim
+        else:
+            if Stt.has_instance():
+                stt_variant = Stt.get_variant().id
+                fw_config = state.prefs.stt_config.description if not Stt.should_use_mlx_whisper() else ""
+                stt_desc += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"            
+            else:
+                stt_desc += f" {COL_DIM}(not loaded)"
+
+        memory_text = strip_ansi_codes(AppUtil.make_memory_string())
+        memory_text = memory_text.replace(":", "") # careful
+        memory_text = value_color + memory_text if memory_text else ""
+
+        printt(f"{label_color}Project:     {path_string}")
+        printt(f"{label_color}TTS model:   {tts_model_text} {COL_DIM}{tts_loaded}")
+        printt(f"{label_color}Voice clone: {voice_text}")
+        printt(f"{label_color}Text:        {text_text}")
+        printt(f"{label_color}STT model:   {stt_desc}")
+        if memory_text:
+            printt(f"{label_color}Memory:      {memory_text}")
+
 
     @staticmethod
     def options_menu(
@@ -204,7 +380,8 @@ class MenuUtil:
         on_select: Callable[[T], None],
         sublabels: list[str] | None = None,
         hint: Hint | None=None,
-        subheading: str=""
+        subheading: str="",
+        breadcrumb: StringOrMaker | None = None,
     ) -> None:
         """
         Displays a menu with a list of values.
@@ -239,7 +416,8 @@ class MenuUtil:
             items=items,
             hint=hint,
             subheading=subheading,
-            one_shot=True
+            one_shot=True,
+            breadcrumb=breadcrumb,
         )
 
     @staticmethod
@@ -312,6 +490,9 @@ class MenuUtil:
         return MenuItem(label, on_item)
 
 # ---
+
+def should_show_menu_status_details(state: State) -> bool:
+    return not state.prefs.menu_clears_screen
 
 def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
     if isinstance(string_or_maker, str):

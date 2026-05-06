@@ -1,12 +1,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import Sound, Strictness
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, Strictness
+from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -36,6 +38,11 @@ class TtsBaseModel(ABC):
     # Gets assigned by concrete class
     INFO: TtsModelInfo
 
+    # Optional persistent callback for streamed audio chunks
+    stream_chunk_callback: StreamChunkCallback | None = None
+    # Optional persistent callback invoked when a streaming generation finishes
+    stream_end_callback: StreamEndCallback | None = None
+
     def __init_subclass__(cls, **kwargs):
         # Called whenever a new subclass is created
         super().__init_subclass__(**kwargs)
@@ -52,7 +59,12 @@ class TtsBaseModel(ABC):
 
     @abstractmethod
     def generate_using_project(
-            self, project: Project, prompts: list[str], force_random_seed: bool=False
+            self,
+            project: Project,
+            prompts: list[str],
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
     ) -> list[Sound] | str:
         """
         Generates Sound/s using the relevant TTS model attributes in the `project` object.
@@ -62,6 +74,12 @@ class TtsBaseModel(ABC):
             List of one or more prompts to process
         :param force_random_seed:
             Is ignored if implementation does not support seed
+        :param on_stream_chunk:
+            Optional callback for streaming audio chunks in the same format as
+            `Sound.data`: a 1d `np.ndarray` with dtype `float32`
+        :param on_stream_end:
+            Optional callback invoked once when streaming generation completes
+            (ie, after the last chunk)
 
         Returns:
             A list of Sounds (one per prompt), or error string
@@ -69,6 +87,17 @@ class TtsBaseModel(ABC):
 
         """
         ...
+
+    def clear_stream_state(self) -> None:
+        """
+        Clears any transient stream callback/state references left over from a
+        streaming generation.
+
+        Concrete models with additional streaming-related state (custom
+        streamer objects, etc.) may override-and-super.
+        """
+        self.stream_chunk_callback = None
+        self.stream_end_callback = None
 
     def massage_for_inference(self, text: str) -> str:
         """
@@ -82,28 +111,42 @@ class TtsBaseModel(ABC):
             text = text.replace(before, after)
         return text
 
+    def prepare_text_for_inference(self, project: Project, text: str) -> str:
+        """
+        Standard pre-inference text pipeline applied to any string before
+        handing it to generate(). Order matters:
+          1. Project word substitutions (case/plural-aware)
+          2. Generic prompt normalization (numbers->words, ellipsis cleanup,
+             optional un-all-caps per model)
+          3. Model-specific massage_for_inference (overridable per model)
+        """
+        from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
+        text = PromptNormalizer.apply_prompt_word_substitutions(
+            text, project.word_substitutions, project.language_code
+        )
+        text = PromptNormalizer.normalize_prompt(
+            text=text,
+            language_code=project.language_code,
+            un_all_caps=self.INFO.un_all_caps,
+        )
+        text = self.massage_for_inference(text)
+        return text
+
     # ---
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 
     @classmethod
     def get_prereq_errors(
-            cls, project: Project, instance: TtsBaseModel | None, short_format: bool
-    ) -> list[str]:
+            cls, project: Project, instance: TtsBaseModel | None
+    ) -> list[PrereqError]:
         """
-        Returns error message string as to why generate is not possible.
-        Applies to both main gen and realtime gen.
-
-        Some prereq errors can only be known with a concrete instance (param `instance`).
-
-        :param short_format:
-            When true, should return very short phrase, meant to be concatenated on a single line
-            Else, should return full messages meant to be displayed on separate lines
+        Returns list of unfulfilled prereq items describing why generate is not possible.
+        Some prereqs can only be known with a concrete instance (param `instance`).
         """
 
-        # Default implementation is for model whose only possible requirement is voice clone-related
-        
-        err = cls._get_standard_voice_prereq_error(project, short_format)
-        return [err] if err else []
+        # Default implementation is for model whose only potential requirement is voice clone-related
+        item = cls._get_standard_prereq_error(project)
+        return [item] if item else []
    
     def get_prereq_warnings(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
@@ -146,6 +189,8 @@ class TtsBaseModel(ABC):
         """ 
         Formatted text describing model including potential 'variant' info, used for main menu, plus.
         Color formatting convention is: White-Model-Text Gray-Qualification-Text, with no parens
+
+        TODO: No longer used; revisit
         """
         return cls.INFO.ui['proper_name']
 
@@ -199,16 +244,15 @@ class TtsBaseModel(ABC):
         return getattr(project, cls.INFO.voice_file_name_attr, "")
 
     @classmethod
-    def _get_standard_voice_prereq_error(cls, project: Project, short_format: bool) -> str:
+    def _get_standard_prereq_error(cls, project: Project) -> PrereqError | None:
 
         if not cls.INFO.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
         if cls.INFO.requires_voice and not cls.get_voice_value(project):
-            err = "requires voice sample" if short_format else "Voice sample required"
-            return err
+            return PrereqError("voice sample", "A voice clone sample is required")
         else:
-            return ""
+            return None
 
     def _get_standard_random_voice_reason(self, project: Project) -> str:
 

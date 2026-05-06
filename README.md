@@ -12,14 +12,14 @@ Generative-AI audiobook creation tool focused on high-quality output which suppo
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 
-The app employs several techniques to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
+The app employs various techniques, many of them configurable, to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
 
-- Intelligent segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
-- Silence trimming and semantically-aware pause modulation at segment boundaries to improve prosody
-- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upscaling and loudness normalization
+- Segmentation of long-form text at paragraph/sentence/phrase boundaries
+- Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
+- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling, plus EBU R128 loudness normalization
 
-The app uses a plain-text interface in the console.
+The app uses a plain-text interface in the console. It also includes optional realtime modes for low-latency audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
 
 ### How to create an audiobook (quick summary)
@@ -54,7 +54,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
 - [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
-- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upscaled to 48khz with Sidon)
+- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upsampled to 48khz with Sidon)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, at high temperature)
@@ -89,7 +89,7 @@ Clone the repository and cd into it:
 
 A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. 
 
-### Step 4 (Windows)
+### Step 4 (Windows only)
 
 To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128). This extra step is not required when using Linux.
 
@@ -102,24 +102,35 @@ Run the app by entering:
 
     python -m tts_audiobook_tool
 
+Or, if you have multiple virtual environments installed, you can use `launch.py` to pick a venv and then start the app:
+
+    python launch.py # searches the project root for venv subdirectories by default
+    python launch.py path/to/venvs-parent-dir # searches for venv subdirectories from the given path
+
 Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
-
-### Optional (CUDA only)
-
-To use [Sidon](https://github.com/sarulab-speech/Sidon) 48 khz upscaler, enter:
-
-    pip install --no-deps "sidon @ git+https://github.com/sarulab-speech/Sidon"
 
 
 ## Virtual environment for Qwen3-TTS 
 
 Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-qwen3tts
+- Linux/Mac
+
+        python -m venv venv-qwen3-tts
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-qwen3tts 
 
 Activate the virtual environment:
 
-    venv-qwen3tts\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-qwent3tts/bin/activate
+
+- Windows
+
+        venv-qwen3tts\Scripts\activate.bat
 
 Install dependencies:
 
@@ -131,11 +142,23 @@ Install [Flash Attention](#installing-flash-attention) if using CUDA (optional b
 
 Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-indextts2
+- Linux/Mac
+
+        python -m venv venv-indextts2
+
+- Windows
+
+        C:\path\to\python3.11\python.exe -m venv venv-indextts2
 
 Activate the virtual environment:
 
-    venv-indextts2\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-indextts2/bin/activate
+
+- Windows
+
+        venv-indextts2\Scripts\activate.bat
 
 Install dependencies:
 
@@ -146,11 +169,23 @@ Install dependencies:
 
 Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
 
-    path\to\python3.11\python.exe -m venv venv-vibevoice
+- Linux/Mac
+
+        python -m venv venv-vibevoice
+
+- Windows
+
+        C:\path\to\python3.11\python.exe -m venv venv-vibevoice
 
 Activate the virtual environment:
 
-    venv-vibevoice\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-vibevoice/bin/activate
+
+- Windows
+
+        venv-vibevoice\Scripts\activate.bat
 
 Install dependencies:
 
@@ -164,17 +199,29 @@ Note that because Microsoft famously removed the source code from their github r
 
 Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
 
-    path\to\python3.11\python.exe -m venv venv-chatterbox
+- Linux/Mac
+
+        python -m venv venv-chatterbox
+
+- Windows
+
+        C:\path\to\python3.11\python.exe -m venv venv-chatterbox
 
 Activate the virtual environment:
 
-    venv-chatterbox\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-chatterbox/bin/activate
+
+- Windows
+
+        venv-chatterbox\Scripts\activate.bat
 
 Install dependencies:
 
     pip install -r requirements-chatterbox.txt
 
-Windows CUDA support (unlike the other models, we must use torch 2.6/cu124)
+Windows CUDA support (unlike the other models, we must use torch 2.6/cu124 here)
 
     pip uninstall -y torch torchaudio
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
@@ -186,11 +233,23 @@ Windows CUDA support (unlike the other models, we must use torch 2.6/cu124)
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s2". For example:
 
-    path\to\python3.12\python.exe -m venv venv-fish-s2
+- Linux/Mac
+
+        python -m venv venv-fish-s2
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-fish-s2
 
 Activate the virtual environment:
 
-    venv-fish-s2\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-fish-s2/bin/activate
+
+- Windows
+
+        venv-fish-s2\Scripts\activate.bat
 
 Install dependencies:
 
@@ -207,11 +266,23 @@ Authenticate the model on HuggingFace:
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s1". For example:
 
-    path\to\python3.12\python.exe -m venv venv-fish-s1
+- Linux/Mac
+
+        python -m venv venv-fish-s1
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-fish-s1
 
 Activate the virtual environment:
 
-    venv-fish-s1\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-fish-s1/bin/activate
+
+- Windows
+
+        venv-fish-s1\Scripts\activate.bat
 
 Install dependencies:
 
@@ -228,17 +299,33 @@ Authenticate the model on HuggingFace:
 
 Initialize a **Python v3.12** virtual environment named "venv-pocket". For example:
 
-    path\to\python3.12\python.exe -m venv venv-pocket
+- Linux/Mac
+
+        python -m venv venv-pocket
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-pocket
 
 Activate the virtual environment:
 
-    venv-pocket\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-pocket/bin/activate
+
+- Windows
+
+        venv-pocket\Scripts\activate.bat
 
 Install dependencies:
 
     pip install -r requirements-pocket.txt
 
-Pocket TTS does not use GPU acceleration, so the extra Windows step of installing the CUDA-enabled version of torch is unnecessary. 
+Authenticate the model on HuggingFace:
+
+    Accept the license terms on the [HuggingFace Pocket TTS model page](https://huggingface.co/kyutai/pocket-tts).
+
+    Authenticate locally using your access token by running hf auth login
 
 
 ## Virtual environment for Higgs Audio V2:
@@ -250,11 +337,23 @@ On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install porta
 
 Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
 
-    path\to\python3.12\python.exe -m venv venv-higgs
+- Linux/Mac
+
+        python -m venv venv-higgs
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-higgs
 
 Activate the virtual environment:
 
-    venv-higgs\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-higgs/bin/activate
+
+- Windows
+
+        venv-higgs\Scripts\activate.bat
 
 Install dependencies:
 
@@ -271,12 +370,15 @@ Note that the above `requirements` file draws from a personal fork of the `higgs
 
 Initialize a **Python v3.11** virtual environment named `venv-glm`. For example:
 
-    pyenv local 3.11
-    python -m venv venv-glm
+- Linux
+
+        python -m venv venv-glm
 
 Activate the virtual environment:
 
-    source venv-glm/bin/activate
+- Linux/Mac
+
+        source venv-glm/bin/activate
 
 Install dependencies:
 
@@ -313,11 +415,23 @@ Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-
 
 Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
 
-    path\to\python3.12\python.exe -m venv venv-mira
+- Linux/Mac
+
+        python -m venv venv-mira
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-mira
 
 Activate the virtual environment:
 
-    venv-mira\Scripts\activate.bat
+- Linux
+
+        source venv-mira/bin/activate
+
+- Windows
+
+        venv-mira\Scripts\activate.bat
 
 Install dependencies:
 
@@ -328,11 +442,23 @@ Install dependencies:
 
 Initialize a **Python v3.12** virtual environment named "venv-oute". For example:
 
-    path\to\python3.12\python.exe -m venv venv-oute
+- Linux/Mac
+
+        python -m venv venv-oute
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-oute
 
 Activate the virtual environment:
 
-    venv-oute\Scripts\activate.bat
+- Linux/Mac
+
+        source venv-oute/bin/activate
+
+- Windows
+
+        venv-oute\Scripts\activate.bat
 
 Install dependencies:
 
@@ -479,6 +605,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 |                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 |                         | Macbook Pro M1       | ~40% realtime   |
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
+|                         | Macbook Pro M1       | ~70% realtime   |
 | Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
@@ -486,8 +613,8 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | CUDA enabled
-| Pocket TTS              | Macbook Pro M1       | 350% realtime   | CPU
-| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
+|                         | Macbook Pro M1       | 350% realtime   | 
+|                         | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
@@ -497,9 +624,23 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
+**2026-05-05/06**
+
+- Added **streaming** option for LLM chat feature (applies to Vibevoice and Pocket TTS), which minimizes "time to first audio".
+- Added equivalent model-side streaming option for standalone server
+
+**2026-04-28**
+
+- Added side feature: **Realtime LLM chat**
+- Added **mlx-whisper** for Mac Apple Silicon (MLX acceleration for Whisper)
+
+**2026-04-25**
+
+- Added **virtual environment convenience launcher** (`python launch.py`)
+
 **2026-04-24**
 
-- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upscaler** post-processing option. 
+- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upsampler** post-processing option. 
 - Added `Concat` > **`Limit silence gaps`** (prevents long silences in sound generations, keeps narration flowing)
 
 **2026-04-23**

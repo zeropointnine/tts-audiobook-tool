@@ -1,17 +1,36 @@
+import os
 import sys
 from typing import Callable
 from tts_audiobook_tool.app_types import Saveable
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.util import *
+
+
+def clear_input_buffer() -> None:
+    """Use before input reads to prevent buffered keystrokes from being consumed."""
+    try:
+        import msvcrt
+        while msvcrt.kbhit(): # type: ignore
+            msvcrt.getch() # type: ignore
+    except ImportError:
+        if not sys.stdin.isatty():
+            return
+        import termios
+        try:
+            termios.tcflush(sys.stdin, termios.TCIFLUSH) # type: ignore
+        except termios.error:
+            return
 
 class AskUtil:
     """
     "Ask" == "get text input from user"
     """
 
-    # Gets set to False if using readchar in ask_hotkey() fails
-    is_readchar = True
+    # Whether single-key hotkey input is currently available.
+    # This starts from the TTY capability check, and can later be downgraded
+    # to False if a low-level hotkey read fails unexpectedly.
+    can_hotkey = sys.stdin.isatty()
 
     @staticmethod
     def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
@@ -40,7 +59,7 @@ class AskUtil:
         message = "Press enter: "
         if prefix_line:
             message = f"{prefix_line}\n{message}"
-        if AskUtil.is_readchar:
+        if AskUtil.can_hotkey:
             while True:
                 key = AskUtil.ask_hotkey(message)
                 if key in ["\r", "\n"]:
@@ -55,7 +74,7 @@ class AskUtil:
         if not message:
             message = f"Press {make_hotkey_string('Y')} to confirm: "
         inp = AskUtil.ask_hotkey(message)
-        if AskUtil.is_readchar:
+        if AskUtil.can_hotkey:
             printt()
         return inp == "y"
 
@@ -68,20 +87,10 @@ class AskUtil:
     @staticmethod
     def ask_hotkey(message: str="", lower: bool=True) -> str:
         """
-        Uses `readchar` to block and return next keypress.
+        Blocks until a single hotkey press is read.
         Falls back to vanilla input()-based input if necessary.
         """
-        if not AskUtil.is_readchar:
-            return AskUtil.ask_hotkey_vanilla(message, lower)
-
-        try:
-            import readchar
-        except ImportError:
-            AskUtil.is_readchar = False
-            return AskUtil.ask_hotkey_vanilla(message, lower)
-
-        if not sys.stdin.isatty():
-            AskUtil.is_readchar = False
+        if not AskUtil.can_hotkey:
             return AskUtil.ask_hotkey_vanilla(message, lower)
 
         if message:
@@ -91,12 +100,15 @@ class AskUtil:
             clear_input_buffer()
 
         try:
-            s = readchar.readkey()
+            if os.name == 'nt':
+                s = AskUtil.read_hotkey_windows()
+            else:
+                s = AskUtil.read_hotkey_posix()
         except KeyboardInterrupt:
             # This happens on control-c in windows but not linux/macos
             return "\x03" # ie, control-c
         except Exception as e:
-            AskUtil.is_readchar = False
+            AskUtil.can_hotkey = False
             return AskUtil.ask_hotkey_vanilla("", lower)
 
         if False:
@@ -109,6 +121,82 @@ class AskUtil:
             s = s.lower()
 
         return s
+
+    @staticmethod
+    def read_hotkey_windows(block: bool=True) -> str | None:
+        """
+        Read one hotkey on Windows and normalize common special keys.
+
+        When `block` is False, returns None if no key is waiting.
+        """
+        import msvcrt
+
+        if not block and not msvcrt.kbhit(): # type: ignore
+            return None
+
+        ch = msvcrt.getwch() # type: ignore
+        if ch in ("\x00", "\xe0"):
+            special = msvcrt.getwch() # type: ignore
+            mapped = {
+                "H": "\x1b[A",
+                "P": "\x1b[B",
+                "K": "\x1b[D",
+                "M": "\x1b[C",
+                "S": "\x1b[3~",
+                "G": "\x1b[H",
+                "O": "\x1b[F",
+                "I": "\x1b[5~",
+                "Q": "\x1b[6~",
+            }.get(special)
+            if mapped is not None:
+                return mapped
+            return ch + special
+
+        if ch == "\r":
+            return "\r"
+        if ch == "\x08":
+            return "\x08"
+        if ch == "\x03":
+            return "\x03"
+        if ch == "\x1b":
+            return "\x1b"
+        return ch
+
+    @staticmethod
+    def read_hotkey_posix() -> str:
+        """
+        Read one hotkey on POSIX terminals.
+
+        This treats a lone Escape keypress as Escape after a short timeout
+        instead of always blocking for the next byte in a possible escape
+        sequence.
+        """
+        import select
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+
+        try:
+            tty.setcbreak(fd)
+
+            first = os.read(fd, 1)
+            if first != b"\x1b":
+                return first.decode("utf-8", errors="replace")
+
+            sequence = first
+            if not select.select([sys.stdin], [], [], 0.05)[0]:
+                return "\x1b"
+
+            for _ in range(8):
+                if not select.select([sys.stdin], [], [], 0)[0]:
+                    break
+                sequence += os.read(fd, 1)
+
+            return sequence.decode("utf-8", errors="replace")
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     @staticmethod
     def ask_hotkey_vanilla(message: str="", lower: bool=True) -> str:

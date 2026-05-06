@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.dictionary_en import DictionaryEn
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_normalizer import TextNormalizer
@@ -101,7 +102,7 @@ class ValidateUtil:
                 start = 0
             else:
                 start = (first_minus_one.end + first.start) / 2
-                start = SoundUtil.get_local_minima(word_error_result.sound, start)
+                start = SoundExtraUtil.get_local_minima(word_error_result.sound, start)
 
             if i + source_word_count == len(transcript_words):
                 end = word_error_result.sound.duration
@@ -111,7 +112,7 @@ class ValidateUtil:
                 else:
                     end = last.end
                 end = min(end, word_error_result.sound.duration)
-                end = SoundUtil.get_local_minima(word_error_result.sound, end)
+                end = SoundExtraUtil.get_local_minima(word_error_result.sound, end)
 
             if start == end: # TODO: revisit
                 return None
@@ -152,7 +153,7 @@ class ValidateUtil:
         if end + 0.1 >= sound.duration:
             return trimmed_result
         
-        end = SoundUtil.get_local_minima(sound, end)
+        end = SoundExtraUtil.get_local_minima(sound, end)
 
         new_sound = SoundUtil.trim(sound, 0, end)
         new_sound = SilenceUtil.trim_silence_ends(new_sound, end_only=True)[0]
@@ -196,6 +197,27 @@ class ValidateUtil:
         return True
 
     @staticmethod
+    def compute_threshold(num_words: int, strictness: Strictness) -> int:
+        """
+        Computes the word-error fail threshold for a given word count and strictness level.
+        
+        Returns the number of word errors allowed before a segment is considered failed.
+        """
+        match strictness:
+            case Strictness.LOW:
+                # 1-10 words = 2, 11-20 words = 3, etc
+                return math.ceil(num_words / 10) + 1
+            case Strictness.MODERATE:
+                # 1-10 words = 1, 11-20 words = 2, etc
+                return math.ceil(num_words / 10)
+            case Strictness.HIGH:
+                # 1-10 words = 0; 11-20 words = 1; etc
+                return max(0, math.ceil(num_words / 10) - 1)
+            case Strictness.INTOLERANT:
+                # 0 word errors allowed regardless of length
+                return 0
+
+    @staticmethod
     def get_word_error_fail(
         source: str,
         transcript: str,
@@ -214,19 +236,7 @@ class ValidateUtil:
         num_word_errors = len(word_errors)
         num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
         
-        match strictness:
-            case Strictness.LOW:
-                # 1-10 words = 2, 11-20 words = 3, etc
-                fail_threshold = math.ceil(num_words / 10) + 1
-            case Strictness.MODERATE:
-                # 1-10 words = 1, 11-20 words = 2, etc
-                fail_threshold = math.ceil(num_words / 10)
-            case Strictness.HIGH:
-                # 1-10 words = 0; 11-20 words = 1; etc
-                fail_threshold = math.ceil(num_words / 10) - 1
-            case Strictness.INTOLERANT:
-                # 0 word errors allowed regardless of length
-                fail_threshold = 0
+        fail_threshold = ValidateUtil.compute_threshold(num_words, strictness)
             
         return (num_word_errors > fail_threshold), word_errors, fail_threshold
 
