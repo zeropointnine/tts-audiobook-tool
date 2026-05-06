@@ -19,6 +19,9 @@ _OVERLAP_OUT      = int(_OVERLAP_DURATION * _OUTPUT_SR)   # 9,600   — overlap 
 class SidonUtil:
     """ 
     Is safe to import w/o sidon package installed
+
+    Rem, in sidon fork, we lowered torch requirement to 2.6 (which does behave).
+    This allows chatterbox venv to work (chatterbox requires torch 2.6)
     """
 
     @staticmethod

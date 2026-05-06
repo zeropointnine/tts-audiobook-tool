@@ -6,7 +6,7 @@
   <title>API Demo</title>
 
   <style>
-    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px;
+    body { font-family: sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px;
            background: #f0f0f0; color: #333333; }
     h2 { margin: 0 0 12px 0; padding: 0; font-size: 24px; font-weight: bold; }
     h3 { margin: 0; padding: 0; font-size: 18px; font-weight: bold; color:#33333394; }
@@ -16,12 +16,15 @@
     button { padding: 12px 24px; font-family: sans-serif; font-size: 18px; font-weight: bold;
              cursor: pointer; background: #ffffff; color: #33333394; border: none;
              border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-    .local-audio-btn { padding: 6px 18px; font-size: 14px; }
-    .local-audio-btn.active { background: #333333; color: #ffffff; }
+    .toggle-btn { padding: 6px 18px; font-size: 14px; }
+    .toggle-btn.active { background: #333333; color: #ffffff; }
     textarea { width: 100%; height: 160px; font-family: monospace; font-size: 13px;
                box-sizing: border-box; resize: vertical; padding: 8px;
                background: #ffffff; color: #333333; border: 1px solid #33333348; }
-    #status-area { font-size: 10px; height: 150px; margin-bottom: 18px; }
+    #status-area { font-size: 10px; min-height: 150px; margin: 0 0 18px 0; padding: 8px;
+                   background: #ffffff; color: #333333; border: 1px solid #33333348;
+                   white-space: pre-wrap; word-break: break-word; overflow-x: auto;
+                   box-sizing: border-box; }
     #response-area { font-size: 10px; height: 250px; }
     label { display: block; margin: 0 0 8px 0; padding: 0; font-size: 13px;
             font-family: sans-serif; color: #33333394; }
@@ -33,15 +36,22 @@
   <h3>tts-server-tool</h3>
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
     <h2 style="margin: 0;">API Demo</h2>
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <span style="font-size: 13px; color: #33333394; white-space: nowrap;">Server local audio:</span>
-      <button id="local-audio-on-btn"  class="local-audio-btn">On</button>
-      <button id="local-audio-off-btn" class="local-audio-btn">Off</button>
+    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; color: #33333394; white-space: nowrap;">Server local audio:</span>
+        <button id="local-audio-on-btn"  class="toggle-btn">On</button>
+        <button id="local-audio-off-btn" class="toggle-btn">Off</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; color: #33333394; white-space: nowrap;">TTS streaming:</span>
+        <button id="tts-streaming-on-btn"  class="toggle-btn">On</button>
+        <button id="tts-streaming-off-btn" class="toggle-btn">Off</button>
+      </div>
     </div>
   </div>
 
   <p style="margin: 0 0 16px 0; font-size: 14px; color: #33333394;">
-    This demo shows the basic server API mechanics: submit text to <code>/prompt</code>, watch <code>/status</code> update as generation and playback progress, stop queued work with <code>/clear</code>, and toggle server-side local audio with <code>/local-audio</code>.
+    This demo shows the basic server API mechanics: submit text to <code>/prompt</code>, watch <code>/status</code> update as generation and playback progress, stop queued work with <code>/clear</code>, toggle server-side local audio with <code>/local-audio</code>, and control model-side TTS streaming with <code>/tts-streaming</code>.
   </p>
 
   <div class="row">
@@ -59,7 +69,7 @@
   </div>
 
   <label>Status:</label>
-  <textarea id="status-area" readonly></textarea>
+  <pre id="status-area"></pre>
 
   <label>Response log:</label>
   <textarea id="response-area" readonly></textarea>
@@ -94,12 +104,19 @@
     const eagerLabel     = document.getElementById('eager-label');
     const localAudioOn   = document.getElementById('local-audio-on-btn');
     const localAudioOff  = document.getElementById('local-audio-off-btn');
+    const ttsStreamingOn = document.getElementById('tts-streaming-on-btn');
+    const ttsStreamingOff = document.getElementById('tts-streaming-off-btn');
 
     function updateEagerVisibility() {
       eagerLabel.style.display = segment.checked ? '' : 'none';
     }
     segment.addEventListener('change', updateEagerVisibility);
     updateEagerVisibility();
+
+    function appendResponseLog(data) {
+      response.value += `${JSON.stringify(data, null, 2)}\n\n`;
+      response.scrollTop = response.scrollHeight;
+    }
 
     submit.addEventListener('click', async () => {
       const text = input.value.trim();
@@ -113,8 +130,7 @@
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      response.value += JSON.stringify(data, null, 2) + '\n\n';
-      response.scrollTop = response.scrollHeight;
+      appendResponseLog(data);
       input.value = '';
     });
 
@@ -129,13 +145,19 @@
     clear.addEventListener('click', async () => {
       const res = await fetch('/clear', { method: 'POST' });
       const data = await res.json();
-      response.value += JSON.stringify(data, null, 2) + '\n\n';
-      response.scrollTop = response.scrollHeight;
+      appendResponseLog(data);
     });
 
     function setLocalAudioActive(enabled) {
       localAudioOn.classList.toggle('active', enabled);
       localAudioOff.classList.toggle('active', !enabled);
+    }
+
+    function setTtsStreamingActive(enabled, supported = true) {
+      ttsStreamingOn.classList.toggle('active', enabled);
+      ttsStreamingOff.classList.toggle('active', !enabled);
+      ttsStreamingOn.disabled = false;
+      ttsStreamingOn.title = supported ? '' : 'Current TTS engine does not support model-side streaming, but you can still send the API request and inspect the warning response';
     }
 
     async function postLocalAudio(enabled) {
@@ -145,22 +167,35 @@
         body: JSON.stringify({ enabled }),
       });
       const data = await res.json();
-      response.value += JSON.stringify(data, null, 2) + '\n\n';
-      response.scrollTop = response.scrollHeight;
+      appendResponseLog(data);
       setLocalAudioActive(data.local_audio);
+    }
+
+    async function postTtsStreaming(enabled) {
+      const res = await fetch('/tts-streaming', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json();
+      appendResponseLog(data);
+      setTtsStreamingActive(data.tts_streaming, data.tts_streaming_supported);
     }
 
     localAudioOn.addEventListener('click',  () => postLocalAudio(true));
     localAudioOff.addEventListener('click', () => postLocalAudio(false));
+    ttsStreamingOn.addEventListener('click',  () => postTtsStreaming(true));
+    ttsStreamingOff.addEventListener('click', () => postTtsStreaming(false));
 
     async function pollStatus() {
       try {
         const res = await fetch('/status');
         const data = await res.json();
-        area.value = JSON.stringify(data, null, 2);
+        area.textContent = JSON.stringify(data, null, 2);
         if (typeof data.local_audio === 'boolean') setLocalAudioActive(data.local_audio);
+        if (typeof data.tts_streaming === 'boolean') setTtsStreamingActive(data.tts_streaming, data.tts_streaming_supported);
       } catch (e) {
-        area.value = `Error: ${e.message}`;
+        area.textContent = `Error: ${e.message}`;
       }
     }
 

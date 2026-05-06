@@ -11,6 +11,7 @@ from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sidon_util import SidonUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
@@ -46,9 +47,11 @@ class ConcatUtil:
         if state.project.use_upsampler:
             import torch
             if not torch.cuda.is_available():
-                AskUtil.ask_error("Sidon generative upsampler requires CUDA")
-                return
-
+                printt(f"{COL_DIM}{Ansi.ITALICS}Warning: Sidon enabled but CUDA not available")
+                printt()
+            if not SidonUtil.has_sidon():
+                printt(f"{COL_DIM}{Ansi.ITALICS}Warning: Sidon enabled but Sidon library not installed")
+                printt()
         if state.project.use_upsampler and ModelsUtil.is_any_model_loaded():
             printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
             printt()

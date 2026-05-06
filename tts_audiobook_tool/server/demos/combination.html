@@ -8,7 +8,7 @@
   <style>
     body {
       font-family: sans-serif;
-      max-width: 640px;
+      max-width: 900px;
       margin: 40px auto;
       padding: 0 16px;
       background: #f0f0f0;
@@ -57,6 +57,16 @@
       font-size: 14px;
       padding-top: 8px;
       padding-bottom: 8px;
+    }
+
+    .toggle-btn {
+      padding: 6px 18px;
+      font-size: 14px;
+    }
+
+    .toggle-btn.active {
+      background: #333333;
+      color: #ffffff;
     }
 
     label {
@@ -150,16 +160,33 @@
     }
 
     .status-entry {
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 1;
-      line-clamp: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: normal;
-      word-break: break-word;
       min-height: 1.3em;
       margin-bottom: 2px;
+    }
+
+    .status-entry-line {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+      min-width: 0;
+    }
+
+    .status-entry-label {
+      flex: 0 0 auto;
+      margin-right: 4px;
+    }
+
+    .status-entry-main {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-entry-suffix {
+      flex: 0 0 auto;
+      white-space: nowrap;
     }
 
     .status-message {
@@ -173,10 +200,24 @@
 <body>
 
   <h3>tts-server-tool</h3>
-  <h2>Combination Demo</h2>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px;">
+    <h2 style="margin: 0;">Combination Demo</h2>
+    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; color: #33333394; white-space: nowrap;">Server local audio:</span>
+        <button id="local-audio-on-btn" class="toggle-btn">On</button>
+        <button id="local-audio-off-btn" class="toggle-btn">Off</button>
+      </div>
+      <div id="tts-streaming-controls" style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; color: #33333394; white-space: nowrap;">TTS streaming:</span>
+        <button id="tts-streaming-on-btn" class="toggle-btn">On</button>
+        <button id="tts-streaming-off-btn" class="toggle-btn">Off</button>
+      </div>
+    </div>
+  </div>
 
   <p style="margin: 0 0 16px 0; font-size: 14px; color: #33333394;">
-    This page combines the two other demos: it calls the server API to submit and clear prompts, while also using the streaming endpoint to receive audio chunks and play them back in the browser as they arrive.
+    This page combines the two other demos: it calls the server API to submit and clear prompts, while also using the streaming endpoint to receive audio chunks and play them back in the browser as they arrive. You can also toggle model-side TTS streaming independently of the HTTP audio stream client.
   </p>
 
   <div class="connect-row">
@@ -185,14 +226,13 @@
   </div>
 
   <div class="input-row">
-    <textarea id="prompt-input" placeholder="Enter prompt…"></textarea>
+    <textarea id="prompt-input"></textarea>
     <div class="buttons">
       <button id="submit-btn">Submit</button>
       <button id="stop-btn" class="small-button">Stop</button>
     </div>
   </div>
 
-  <label id="status-label">Disconnected · 0 queued</label>
   <div id="status-line"></div>
 
   <div class="played-prompts-section">
@@ -208,7 +248,11 @@
     const stopBtn = document.getElementById('stop-btn');
     const connectBtn = document.getElementById('connect-btn');
     const disconnectBtn = document.getElementById('disconnect-btn');
-    const statusLabel = document.getElementById('status-label');
+    const localAudioOnBtn = document.getElementById('local-audio-on-btn');
+    const localAudioOffBtn = document.getElementById('local-audio-off-btn');
+    const ttsStreamingControls = document.getElementById('tts-streaming-controls');
+    const ttsStreamingOnBtn = document.getElementById('tts-streaming-on-btn');
+    const ttsStreamingOffBtn = document.getElementById('tts-streaming-off-btn');
     const statusLine = document.getElementById('status-line');
     const playedPromptsPanel = document.getElementById('played-prompts-panel');
     const playedPromptsList = document.getElementById('played-prompts-list');
@@ -240,31 +284,25 @@
       return div.innerHTML;
     }
 
-    function setStatus({ generating = '', playing = '', message = '' } = {}) {
+    function setStatus({ generating = '', playing = '', message = '', queued = 0 } = {}) {
       const generatingTrimmed = generating.trim();
       const playingTrimmed = playing.trim();
       const messageTrimmed = message.trim();
+      const errorPrefix = 'Error: ';
+      const queuedSuffix = queued > 0 ? ` (${queued} queued)` : '';
 
       const lines = [
-        `<div class="status-entry"><strong>Generating:</strong> ${escapeHtml(generatingTrimmed || 'None')}</div>`,
-        `<div class="status-entry"><strong>Playing:</strong> ${escapeHtml(playingTrimmed || 'None')}</div>`,
+        `<div class="status-entry"><div class="status-entry-line"><strong class="status-entry-label">Generating:</strong><span class="status-entry-main">${escapeHtml(generatingTrimmed || 'None')}</span><span class="status-entry-suffix">${escapeHtml(queuedSuffix)}</span></div></div>`,
+        `<div class="status-entry"><div class="status-entry-line"><strong class="status-entry-label">Playing:</strong><span class="status-entry-main">${escapeHtml(playingTrimmed || 'None')}</span></div></div>`,
       ];
       if (messageTrimmed) {
-        lines.push(`<div class="status-message">${escapeHtml(messageTrimmed)}</div>`);
+        if (messageTrimmed.startsWith(errorPrefix)) {
+          lines.push(`<div class="status-message"><strong>${escapeHtml(errorPrefix)}</strong>${escapeHtml(messageTrimmed.slice(errorPrefix.length))}</div>`);
+        } else {
+          lines.push(`<div class="status-message">${escapeHtml(messageTrimmed)}</div>`);
+        }
       }
       statusLine.innerHTML = lines.join('');
-    }
-
-    function setStatusLabel(message, isConnectedState = false) {
-      const trimmed = message.trim();
-      if (isConnectedState) {
-        const parts = trimmed.split(/(\s+-\s+|\s+·\s+)/, 2);
-        const state = parts[0] || '';
-        const rest = trimmed.slice(state.length);
-        statusLabel.innerHTML = `<strong>${escapeHtml(state)}</strong>${escapeHtml(rest)}`;
-      } else {
-        statusLabel.textContent = trimmed;
-      }
     }
 
     function updateConnectionButtons() {
@@ -272,6 +310,7 @@
       disconnectBtn.disabled = !streamConnected && !streamConnecting;
       disconnectBtn.textContent = streamConnected || streamConnecting ? 'Disconnect' : 'Disconnected';
       input.disabled = !streamConnected;
+      input.placeholder = streamConnecting ? 'Connecting...' : (streamConnected ? 'Enter prompt…' : '');
       submitBtn.disabled = !streamConnected;
       stopBtn.disabled = !streamConnected;
     }
@@ -335,16 +374,47 @@
         });
     }
 
-    async function ensureLocalAudioOff() {
+    function setLocalAudioActive(enabled) {
+      localAudioOnBtn.classList.toggle('active', enabled);
+      localAudioOffBtn.classList.toggle('active', !enabled);
+    }
+
+    function setTtsStreamingActive(enabled, supported = true) {
+      ttsStreamingControls.style.display = supported ? 'flex' : 'none';
+      ttsStreamingOnBtn.classList.toggle('active', enabled);
+      ttsStreamingOffBtn.classList.toggle('active', !enabled);
+      ttsStreamingOnBtn.disabled = !supported;
+      ttsStreamingOnBtn.title = supported ? '' : 'Current TTS engine does not support model-side streaming';
+    }
+
+    async function postLocalAudio(enabled) {
       const res = await fetch('/local-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: false }),
+        body: JSON.stringify({ enabled }),
       });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-      return res.json();
+      const data = await res.json();
+      if (typeof data.local_audio === 'boolean') {
+        setLocalAudioActive(data.local_audio);
+      }
+      return data;
+    }
+
+    async function postTtsStreaming(enabled) {
+      const res = await fetch('/tts-streaming', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setTtsStreamingActive(data.tts_streaming, data.tts_streaming_supported);
+      return data;
     }
 
     async function pollStatus() {
@@ -352,16 +422,18 @@
         const res = await fetch('/status');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        if (typeof data.local_audio === 'boolean') {
+          setLocalAudioActive(data.local_audio);
+        }
+        if (typeof data.tts_streaming === 'boolean') {
+          setTtsStreamingActive(data.tts_streaming, data.tts_streaming_supported);
+        }
 
         const queuedCount = typeof data.num_queued === 'number' ? data.num_queued : 0;
-        const currentCount = data.inferencing ? 1 : 0;
-        const totalCount = queuedCount + currentCount;
-        setStatusLabel(`${streamConnected ? 'Connected' : 'Disconnected'} - ${totalCount} queued`, true);
-
         const inferencing = typeof data.inferencing === 'string' ? data.inferencing : '';
         const playing = typeof data.playing === 'string' ? data.playing : '';
         const hasAudioBuffered = typeof data.audio_buffer === 'number' && data.audio_buffer > 0.05;
-        const hasQueued = typeof data.num_queued === 'number' && data.num_queued > 0;
+        const hasQueued = queuedCount > 0;
 
         if (inferencing) {
           hasPendingGeneration = true;
@@ -382,12 +454,12 @@
         }
 
         if (inferencing) {
-          setStatus({ generating: lastGeneratingText, playing: lastPlayingText });
+          setStatus({ generating: lastGeneratingText, playing: lastPlayingText, queued: queuedCount });
           return;
         }
 
         if (lastPlayingText) {
-          setStatus({ generating: lastGeneratingText, playing: lastPlayingText });
+          setStatus({ generating: lastGeneratingText, playing: lastPlayingText, queued: queuedCount });
           return;
         }
 
@@ -422,19 +494,11 @@
         setStatus({ message: `Server error: HTTP ${response.status}` });
         streamConnecting = false;
         setConnected(false);
-        setStatusLabel('Disconnected - 0 queued', true);
         return;
       }
 
       setConnected(true);
-      setStatusLabel('Connected - 0 queued', true);
       setStatus();
-
-      // try {
-      //   await ensureLocalAudioOff();
-      // } catch (err) {
-      //   setStatus({ message: `Error: ${err.message}` });
-      // }
 
       const reader = response.body.getReader();
 
@@ -466,7 +530,6 @@
       } finally {
         reader.releaseLock();
         setConnected(false);
-        setStatusLabel('Disconnected - 0 queued', true);
         lastGeneratingText = '';
         lastPlayingText = '';
         lastObservedPlayingText = '';
@@ -508,7 +571,6 @@
       lastPlayingText = '';
       lastObservedPlayingText = '';
       setConnected(false);
-      setStatusLabel('Disconnected - 0 queued', true);
       setStatus();
     }
 
@@ -547,7 +609,6 @@
         lastGeneratingText = '';
         lastPlayingText = '';
         lastObservedPlayingText = '';
-        setStatusLabel(`${streamConnected ? 'Connected' : 'Disconnected'} - 0 queued`, true);
         setStatus();
       } catch (err) {
         setStatus({ message: `Error: ${err.message}` });
@@ -560,6 +621,41 @@
 
     disconnectBtn.addEventListener('click', () => {
       disconnectStream();
+    });
+
+    localAudioOnBtn.addEventListener('click', async () => {
+      try {
+        await postLocalAudio(true);
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    localAudioOffBtn.addEventListener('click', async () => {
+      try {
+        await postLocalAudio(false);
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    ttsStreamingOnBtn.addEventListener('click', async () => {
+      try {
+        const data = await postTtsStreaming(true);
+        if (data.warning) {
+          setStatus({ message: data.warning });
+        }
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
+    });
+
+    ttsStreamingOffBtn.addEventListener('click', async () => {
+      try {
+        await postTtsStreaming(false);
+      } catch (err) {
+        setStatus({ message: `Error: ${err.message}` });
+      }
     });
 
     submitBtn.addEventListener('click', () => {

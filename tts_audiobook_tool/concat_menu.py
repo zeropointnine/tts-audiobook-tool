@@ -62,7 +62,7 @@ class ConcatMenu:
                 ),
                 
                 MenuItem(
-                    lambda _: make_menu_label("Subdivide into phrases", state.project.subdivide_phrases), 
+                    lambda _: make_menu_label("Reader phrase subdivision", state.project.subdivide_phrases), 
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 ),
                 
@@ -207,7 +207,7 @@ class ConcatMenu:
         def on_select(value: bool) -> None:
             state.project.subdivide_phrases = value
             state.project.save()
-            print_feedback(f"Subdivide into phrases set to: {state.project.subdivide_phrases}")
+            print_feedback(f"Reader phrase subdivision set to: {state.project.subdivide_phrases}")
 
         MenuUtil.options_menu(
             state=state,

@@ -137,7 +137,7 @@ class Startup:
 
         # cuda-related (ie, win+linux)
         if sys.platform in ("win32", "linux"):
-            ... # xxx new_packages.append("sidon")
+            new_packages.append("sidon")
 
         # mac apple silicon-specific
         if sys.platform == "darwin" and platform.machine() == "arm64":
