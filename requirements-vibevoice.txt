@@ -5,6 +5,7 @@
 # Archived fork of VibeVoice (due to removal of vibevoice project's code from github)
 git+https://github.com/zeropointnine/vibevoice-community-fix
 
+onnxruntime
 triton-windows==3.3.1.post19; sys_platform == 'win32'
 
 # App dependencies
