@@ -605,6 +605,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 |                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 |                         | Macbook Pro M1       | ~40% realtime   |
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
+|                         | Macbook Pro M1       | ~70% realtime   |
 | Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~130% realtime  | 
 |                         | Macbook Pro M1 (MPS) | 20-35% realtime |
@@ -612,8 +613,8 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 |                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | CUDA enabled
-| Pocket TTS              | Macbook Pro M1       | 350% realtime   | CPU
-| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
+|                         | Macbook Pro M1       | 350% realtime   | 
+|                         | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10

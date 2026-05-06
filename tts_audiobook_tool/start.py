@@ -144,7 +144,7 @@ class Startup:
         if is_apple_silicon:
             new_packages.append("mlx_whisper")
         else:
-            new_packages.append("faster-whisper")
+            new_packages.append("faster_whisper")
 
         # win32
         if sys.platform == "win32":
