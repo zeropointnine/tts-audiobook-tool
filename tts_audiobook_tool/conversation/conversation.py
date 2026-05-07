@@ -146,9 +146,15 @@ class Conversation:
             ctrl_c_requested=self.ctrl_c_requested,
             stt_immediate=self.stt_immediate,
         )
+        silence_duration_s = (
+            CHAT_SILENCE_THRESHOLD_IMMEDIATE
+            if self.stt_immediate
+            else CHAT_SILENCE_THRESHOLD_CHUNKED
+        )
         self.util = WhisperRealTimeUtil(
             prefs=self.prefs,
             on_transcription=self.prompt_builder.on_transcription,
+            silence_duration_s=silence_duration_s,
         )
 
         # Note, when streaming, output sound device samplerate is that of the 

@@ -10,8 +10,11 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
+from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.menu_util import MenuUtil
+from tts_audiobook_tool.text_normalizer import TextNormalizer
+from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
@@ -119,6 +122,33 @@ class AppUtil:
             printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{max_words_used}")
         printt(f"- Text segmenter strategy: {COL_ACCENT}{strategy_used.label}")
         printt()                
+
+    @staticmethod
+    def print_regen_lines(project: Project, indices: set[int]) -> None:
+        
+        MenuUtil.print_heading(None, "Lines to be regenerated:", non_menu=True, dont_clear=True)
+
+        if not indices:
+            printt("None")
+            printt()
+            return
+
+        index_width = len(str(len(project.phrase_groups)))
+
+        for index in sorted(indices):
+            phrase_group = project.phrase_groups[index]
+            normalized_source = TextNormalizer.normalize_source(phrase_group.text, project.language_code)
+            num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
+
+            best_item = project.sound_segments.get_best_item_for(index)
+            num_errors_string = "?" if best_item is None or best_item.num_errors < 0 else str(best_item.num_errors)
+
+            index_string = "[" + str(index + 1).rjust(index_width) + "]"
+            info_string = f"[{str(num_words).rjust(2)} words, {num_errors_string} errors]"
+            text = TextUtil.massage_for_display(phrase_group.presentable_text)
+            printt(f"{COL_ACCENT}{index_string} {COL_DIM}{info_string} {COL_DEFAULT}{text}")
+
+        printt()
 
     @staticmethod
     def get_app_temp_dir() -> str:

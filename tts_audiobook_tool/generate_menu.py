@@ -52,10 +52,8 @@ class GenerateMenu:
         def make_regen_label(_: State) -> str:
             num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
             failed_items_label = f"{num_fails} {make_noun('item', 'items', num_fails)}"
-            qualifier = " in specified range" if state.project.generate_range_string else ""
-            strictness_info = f"{state.project.strictness.label}"
-            regenerate_label = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM}{qualifier}, tolerance: {strictness_info})"
-            return f"Regenerate segments with errors {regenerate_label}"
+            currently = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM})"
+            return f"Regenerate segments with errors {currently}"
 
         def make_batch_size_label(state: State) -> str:
             value = state.project.batch_size
@@ -87,7 +85,7 @@ class GenerateMenu:
             items.append(
                 MenuItem(
                     make_regen_label, 
-                    lambda _, __: do_generate(state, is_regen=True)
+                    lambda _, __: regenerate_menu(state)
                 )
             )
             if state.project.sound_segments.num_generated() > 0:
@@ -238,7 +236,7 @@ def make_tolerance_label(state: State) -> str:
 
 def make_retries_label(state: State) -> str:
     return make_menu_label(
-        label="generation max retries",
+        label="Generation max retries",
         value=state.project.max_retries, 
         default=PROJECT_MAX_RETRIES_DEFAULT
     )
@@ -268,7 +266,37 @@ def ask_batch_size(state: State) -> None:
         PROJECT_BATCH_SIZE_DEFAULT, "Set batch size:", is_int=True
     )
 
-def do_generate(state: State, is_regen: bool) -> None:
+def make_regenerate_segments_with_errors_desc(state: State) -> str:
+    return REGENERATE_SEGMENTS_WITH_ERRORS_DESC.replace("%1", state.project.strictness.label)
+
+def regenerate_menu(state: State) -> None:
+
+    def make_print_label(_: State) -> str:
+        num_fails = len(state.project.sound_segments.get_failed_indices_in_generate_range())
+        return f"Review lines to be regenerated {COL_DIM}({COL_ACCENT}{num_fails}{COL_DIM})"
+
+    def on_start(_: State, __: MenuItem) -> None:
+        do_generate(state, is_regen=True, show_stt_status=False)
+
+    def on_print(_: State, __: MenuItem) -> None:
+        indices = state.project.sound_segments.get_failed_indices_in_generate_range()
+        AppUtil.print_regen_lines(state.project, indices)
+        AskUtil.ask_enter_to_continue()
+
+    items = [
+        MenuItem("Start", on_start),
+        MenuItem(make_print_label, on_print),
+    ]
+
+    MenuUtil.menu(
+        state,
+        "Regenerate segments with errors",
+        items,
+        subheading=make_regenerate_segments_with_errors_desc,
+        breadcrumb="Regenerate segments with errors",
+    )
+
+def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> None:
 
     # Check prereqs
     error = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
@@ -298,22 +326,23 @@ def do_generate(state: State, is_regen: bool) -> None:
         AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
     # Print confirmation info, and confirm
-    s = f"Will generate {len(indices)} lines in range {state.project.generate_range_string}"
     if not is_regen:
+        s = f"Will generate {len(indices)} lines in range {state.project.generate_range_string}"
         num = state.project.sound_segments.num_generated_in_current_range()
         if num:
             s += f" {COL_DIM}({num} already complete)"
-    printt(s)
-    if not Stt.should_skip(state):
-        s = "Speech-to-text validation enabled"
-        s += f" {COL_DIM}({Stt.short_description()})"
-    else:
-        s = "Speech-to-text validation disabled"
-    printt(s)
-    printt()
-    b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-    if not b:
-        return
+        printt(s)
+        if show_stt_status:
+            if not Stt.should_skip(state):
+                s = "Speech-to-text validation enabled"
+                s += f" {COL_DIM}({Stt.short_description()})"
+            else:
+                s = "Speech-to-text validation disabled"
+            printt(s)
+            printt()
+        b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+        if not b:
+            return
 
     # Print heading
     word = "Regenerating" if is_regen else "Generating"
@@ -360,4 +389,10 @@ RETRIES_DESC = \
 """This is the max number of retries an audio generation will be attempted 
 when speech-to-text validation fails due to too many word errors.
 Higher values have diminishing returns.
+"""
+
+REGENERATE_SEGMENTS_WITH_ERRORS_DESC = \
+"""Retry only the segments currently flagged as having word errors.
+This uses your current line range and word error tolerance setting
+of %1 to decide which existing segments should be regenerated.
 """
