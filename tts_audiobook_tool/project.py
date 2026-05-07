@@ -17,6 +17,7 @@ from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_model.oute_util import OuteUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -192,8 +193,8 @@ class Project(BaseModel):
     omnivoice_voice_file_name: str = ""
     omnivoice_voice_transcript: str = ""
     omnivoice_target: str = ""
-    omnivoice_dtype: str = "float16"
     omnivoice_instruct: str = ""
+    omnivoice_cfg: float = -1
     omnivoice_speed: float = -1
     omnivoice_num_step: int = -1
     omnivoice_seed: int = -1
@@ -546,9 +547,11 @@ class Project(BaseModel):
         d["omnivoice_seed"] = int(seed)
 
         # omnivoice_num_step
+        if "omnivoice_num_step" not in d and "omnivoice_steps" in d:
+            d["omnivoice_num_step"] = d.get("omnivoice_steps", -1)
         value = d.get("omnivoice_num_step", -1)
         if value != -1:
-            if not isinstance(value, int) or not (1 <= value <= 128):
+            if not isinstance(value, int) or not (OmniVoiceBaseModel.MIN_STEPS <= value <= OmniVoiceBaseModel.MAX_STEPS):
                 value = -1
                 add_warning("omnivoice_num_step", value)
         d["omnivoice_num_step"] = int(value)
@@ -560,6 +563,14 @@ class Project(BaseModel):
                 value = -1
                 add_warning("omnivoice_speed", value)
         d["omnivoice_speed"] = value
+
+        # omnivoice_cfg
+        value = d.get("omnivoice_cfg", -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (OmniVoiceBaseModel.CFG_MIN <= value <= OmniVoiceBaseModel.CFG_MAX):
+                value = -1
+                add_warning("omnivoice_cfg", value)
+        d["omnivoice_cfg"] = value
 
         return d
 
@@ -731,8 +742,8 @@ class Project(BaseModel):
             "omnivoice_voice_file_name": self.omnivoice_voice_file_name,
             "omnivoice_voice_transcript": self.omnivoice_voice_transcript,
             "omnivoice_target": self.omnivoice_target,
-            "omnivoice_dtype": self.omnivoice_dtype,
             "omnivoice_instruct": self.omnivoice_instruct,
+            "omnivoice_cfg": self.omnivoice_cfg,
             "omnivoice_speed": self.omnivoice_speed,
             "omnivoice_num_step": self.omnivoice_num_step,
             "omnivoice_seed": self.omnivoice_seed

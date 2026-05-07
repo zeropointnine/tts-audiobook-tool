@@ -12,6 +12,12 @@ class OmniVoiceBaseModel(TtsBaseModel):
     DEFAULT_REPO_ID = "k2-fsa/OmniVoice"
     SAMPLE_RATE     = 24_000   # OmniVoice's default generation frequency
     DEFAULT_SPEED   = 1.0
+    CFG_DEFAULT     = 2.0
+    CFG_MIN         = 0.0
+    CFG_MAX         = 4.0
+    DEFAULT_STEPS   = 32
+    MIN_STEPS       = 8
+    MAX_STEPS       = 64
 
     def __init__(self) -> None:
         raise NotImplementedError

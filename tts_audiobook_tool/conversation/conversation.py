@@ -157,9 +157,12 @@ class Conversation:
             silence_duration_s=silence_duration_s,
         )
 
-        # Note, when streaming, output sound device samplerate is that of the 
+        # Note, when streaming, output sound device samplerate is that of the
         # native samplerate of the TTS engine because we skip any post-processing.
-        sr = Tts.get_info().sample_rate if self.state.project.streaming_chat else APP_SAMPLE_RATE
+        # Otherwise, use the app default samplerate for the general-purpose
+        # post-processing chain.
+        use_streaming_tts = Tts.get_info().can_stream and self.state.project.streaming_chat
+        sr = Tts.get_info().sample_rate if use_streaming_tts else APP_SAMPLE_RATE
         self.sound_stream = SoundDeviceStream(sr)
 
         self.session: ResponseSession | None = None

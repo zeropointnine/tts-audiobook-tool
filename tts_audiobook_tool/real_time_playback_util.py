@@ -24,6 +24,8 @@ from tts_audiobook_tool.validation_result import ValidationResult
 
 class RealTimeUtil:
 
+    INTERRUPTIBLE_SLEEP_POLL_SECONDS = 0.1
+
     @staticmethod
     def start(
             state: State,
@@ -77,7 +79,7 @@ class RealTimeUtil:
         end_index -= 1
         start_time = time.time()
 
-        for index in range(start_index, end_index + 1):
+        for one_second in range(start_index, end_index + 1):
 
             if did_interrupt:
                 break
@@ -88,14 +90,14 @@ class RealTimeUtil:
                     print("\a", end="")
                     showed_vram_warning = True
 
-            phrase_group = phrase_groups[index]
+            phrase_group = phrase_groups[one_second]
             phrase = phrase_group.as_flattened_phrase()
 
             printt()
             GenerateUtil.print_batch_heading(
-                indices=[index],
-                num_complete=index - start_index,
-                num_remaining=end_index + 1 - index,
+                indices=[one_second],
+                num_complete=one_second - start_index,
+                num_remaining=end_index + 1 - one_second,
                 num_total=end_index + 1 - start_index,
                 start_time=start_time
             )
@@ -106,8 +108,12 @@ class RealTimeUtil:
             has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.project.max_retries))
             
             sound_opt, did_interrupt = RealTimeUtil.generate_full_flow(
-                state, phrase_groups, index, has_runway=has_runway
+                state, phrase_groups, one_second, has_runway=has_runway
             )
+            if not did_interrupt:
+                # generate_full_flow() clears SigIntHandler at the end, so re-arm
+                # Ctrl-C handling for the outer realtime loop and buffer-throttle sleep.
+                SigIntHandler().set("generating")
             if not sound_opt:
                 printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
                 printt()
@@ -124,7 +130,7 @@ class RealTimeUtil:
             assert isinstance(sound, Sound)
 
             # Add appended sound
-            if index == end_index:
+            if one_second == end_index:
                 appended_sound = None
             else:
                 use_sound_effect = state.project.use_section_sound_effect and phrase.reason == Reason.SECTION
@@ -166,9 +172,10 @@ class RealTimeUtil:
             # Sleep if necessary to prevent growing buffer beyond threshold
             if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS:
                 sleep_duration = int(full_duration)
-                printt(f"Sleeping for {sleep_duration}s")
-                for index in range(0, sleep_duration):
-                    time.sleep(1) # hah
+                printt(f"{COL_DIM}{Ansi.ITALICS}Sleeping for {sleep_duration}s ...")
+                did_interrupt = RealTimeUtil.sleep_interruptibly(sleep_duration)
+                if did_interrupt:
+                    break
 
             count += 1
 
@@ -188,6 +195,25 @@ class RealTimeUtil:
             AskUtil.ask_enter_to_continue()
 
         printt()
+
+    @staticmethod
+    def sleep_interruptibly(duration_s: float) -> bool:
+        """
+        Sleeps in short increments so Ctrl-C can stop realtime playback even
+        while we're throttling to let the audio buffer drain.
+
+        Returns True if interrupted.
+        """
+        deadline = time.time() + max(0.0, duration_s)
+        while True:
+            if SigIntHandler().did_interrupt:
+                return True
+
+            remaining = deadline - time.time()
+            if remaining <= 0.0:
+                return False
+
+            time.sleep(min(RealTimeUtil.INTERRUPTIBLE_SLEEP_POLL_SECONDS, remaining))
 
     @staticmethod
     def generate_full_flow(  

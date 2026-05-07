@@ -409,20 +409,21 @@ class TtsModelInfos(Enum):
         torch_devices=["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
-        max_words_reco_range=(40, 80),
+        max_words_reco_range=(40, 80), 
         voice_file_name_attr="omnivoice_voice_file_name",
-        requires_voice=False,              # supports Voice Design and Auto Voice without ref_audio
-        requires_voice_transcript=False,   # OmniVoice already uses Whisper internally for voice cloning
+        requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
+        requires_voice_transcript=True, # Preempts OmniVoice from using internal Whisper instance for transcription
         batch_size_project_field="",
+        can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
-        un_all_caps=True,                  # slightly more error-prone when all-caps
+        un_all_caps=True, # slightly more error-prone when all-caps
         requirements_file_name="requirements-omnivoice.txt",
         ui={
             "proper_name": "OmniVoice",
             "short_name": "OmniVoice",
-            "voice_path_console": "Enter voice clone audio clip file path (3-10s recommended): ",   #tested with 10-20s and can produce better results...
-            "voice_path_requestor": "Select voice clone audio clip (3-10s recommended)",
+            "voice_path_console": "Enter voice clone audio clip file path (3-10s recommended, up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (3-10s recommended, up to 15s)",
             "project_links": ["https://github.com/k2-fsa/OmniVoice", "https://huggingface.co/k2-fsa/OmniVoice"]
         },
         substitutions=[

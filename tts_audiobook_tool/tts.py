@@ -116,10 +116,7 @@ class Tts:
         model_params["fish_s1_compile_enabled"] = project.fish_s1_compile_enabled
         model_params["fish_s2_compile_enabled"] = project.fish_s2_compile_enabled
         model_params["pocket_model_code"] = project.pocket_model_code
-        model_params["omnivoice_target"]   = project.omnivoice_target
-        model_params["omnivoice_dtype"]    = project.omnivoice_dtype
-        model_params["omnivoice_instruct"] = project.omnivoice_instruct
-        model_params["omnivoice_speed"]    = project.omnivoice_speed
+        model_params["omnivoice_target"] = project.omnivoice_target
 
         Tts.set_model_params(model_params)
 
@@ -143,7 +140,6 @@ class Tts:
         dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
         dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
-        dirty |= new_params.get("omnivoice_dtype",  "") != old_params.get("omnivoice_dtype",  "")
         if dirty:
             Tts.clear_tts_model()
 
@@ -466,13 +462,23 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             model_target = Tts._model_params.get("omnivoice_target", "") \
                         or OmniVoiceBaseModel.DEFAULT_REPO_ID
-            dtype_str = Tts._model_params.get("omnivoice_dtype", "float16")
-            print_model_init(f"{device}, dtype={dtype_str}")
+            short_name = Tts.get_type().value.ui["short_name"]
+
+            target_string = model_target
+            target_string = target_string.removeprefix("k2-fsa/")
+            target_string = ellipsize_path_for_menu(target_string)
+
+            if model_target == OmniVoiceBaseModel.DEFAULT_REPO_ID:
+                model_description = short_name
+            else:
+                model_description = f"{short_name} {COL_DIM}({target_string}){COL_DEFAULT}"
+
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(model_description, device))
+
             from tts_audiobook_tool.tts_model.omnivoice_model import OmniVoiceModel
             Tts._omnivoice = OmniVoiceModel(
                 device=device,
                 model_target=model_target,
-                dtype_str=dtype_str,
             )
             printt()
         return Tts._omnivoice

@@ -148,6 +148,8 @@ class VoiceMenuShared:
         printt()
         SoundFileUtil.play_sound_async(sound)
 
+        force_enter_prompt = False
+
         transcript = ""
         if tts_type.value.requires_voice_transcript:
 
@@ -187,6 +189,8 @@ class VoiceMenuShared:
                 printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
                 printt()
 
+                force_enter_prompt = True
+
         file_stem = Path(path).stem
         err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
         if err:
@@ -196,6 +200,9 @@ class VoiceMenuShared:
         print_feedback("Voice file saved")
 
         Hint.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
+
+        if force_enter_prompt:
+            AskUtil.ask_enter_to_continue()
 
     @staticmethod
     def ask_voice_file(default_dir_path: str, tts_type: TtsModelInfos, message_override: str="") -> str:
