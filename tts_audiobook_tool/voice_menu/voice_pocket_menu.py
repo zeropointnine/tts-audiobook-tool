@@ -127,7 +127,7 @@ def ask_language(state: State) -> None:
             return
 
         # Validation step arguably non-essential since we're using a controlled, hard-list, but yea
-        printt(f"{COL_DIM}{Ansi.ITALICS}Validating... ")
+        printt(f"{COL_DIM_ITALICS}Validating... ")
         printt()
         state.project.pocket_model_code = lang
         state.project.save()
@@ -140,7 +140,7 @@ def ask_language(state: State) -> None:
             state.project.save()
             Tts.set_model_params_using_project(state.project)
             AskUtil.ask_error(f"\n{make_error_string(e)}")
-        printt(f"{COL_DIM}{Ansi.ITALICS}OK ")
+        printt(f"{COL_DIM_ITALICS}OK ")
         printt()
 
     MenuUtil.options_menu(
@@ -160,7 +160,7 @@ def on_voice_file(state: State, _) -> None:
 
     if state.project.pocket_voice_file_name:
 
-        printt(f"{COL_DIM}{Ansi.ITALICS}Validating Pocket voice cloning access...")
+        printt(f"{COL_DIM_ITALICS}Validating Pocket voice cloning access...")
         printt()
 
         instance = Tts.get_instance()

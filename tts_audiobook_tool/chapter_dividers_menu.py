@@ -171,10 +171,10 @@ def print_list(state: State) -> None:
         missing = f", {info.num_files_missing} missing" if info.num_files_missing else ""
         s += f"({info.num_files_exist}/{info.num_segments} generated{missing}){COL_DEFAULT}"
         if is_files and index == 0:
-            s += f" {Ansi.ITALICS}{COL_DIM}(implicit)"
+            s += f" {COL_DIM_ITALICS}(implicit)"
         printt(s)
 
-        qual = f"{COL_DIM}{Ansi.ITALICS}Starts with:{Ansi.RESET} " if is_files else ""
+        qual = f"{COL_DIM_ITALICS}Starts with:{Ansi.RESET} " if is_files else ""
         text = ellipsize(state.project.phrase_groups[info.segment_index_start].presentable_text, 50)
         printt(f"{' ' * len_prefix}{qual}{COL_DIM}{text}")
     

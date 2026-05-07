@@ -88,7 +88,7 @@ def make_terminal_divider(width: int | None = None, char: str = "-") -> str:
 
 def print_init(s: str) -> None:
     """ App style for initializing a thing which may take some time """
-    printt(f"{Ansi.ITALICS}{COL_DIM}{s}")
+    printt(f"{COL_DIM_ITALICS}{s}")
     print()
 
 def print_model_init(model_description: str, extra: str = "") -> str:

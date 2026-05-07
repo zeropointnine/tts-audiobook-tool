@@ -100,7 +100,7 @@ class PocketModel(PocketBaseModel):
     ) -> list[Sound] | str:
         
         # Print something to stay consistent w/ other model behavior b/c model lib does not 
-        printt(f"{COL_DIM}{Ansi.ITALICS}Generating...")
+        printt(f"{COL_DIM_ITALICS}Generating...")
 
         try:
             assert self.model

@@ -177,7 +177,7 @@ def main() -> None:
         parts = []
         for i, chunk in enumerate(prompt_chunks):
             parts.append(f"{WHITE}{chunk}{RESET}" if i == selected_idx else f"{COL_DIM}{chunk}{RESET}")
-        content = " ".join(parts) if parts else f"{COL_DIM}{Ansi.ITALICS}Speak into mic...{RESET}"
+        content = " ".join(parts) if parts else f"{COL_DIM_ITALICS}Speak into mic...{RESET}"
         display = f"> {content}"
         new_lines = count_display_lines(display)
         clear_render()

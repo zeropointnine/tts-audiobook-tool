@@ -101,7 +101,7 @@ class RealTimeUtil:
                 num_total=end_index + 1 - start_index,
                 start_time=start_time
             )
-            printt(f"{COL_DIM}{Ansi.ITALICS}{phrase_group.presentable_text}")
+            printt(f"{COL_DIM_ITALICS}{phrase_group.presentable_text}")
             printt()
 
             # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 x max_retries...
@@ -172,7 +172,7 @@ class RealTimeUtil:
             # Sleep if necessary to prevent growing buffer beyond threshold
             if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS:
                 sleep_duration = int(full_duration)
-                printt(f"{COL_DIM}{Ansi.ITALICS}Sleeping for {sleep_duration}s ...")
+                printt(f"{COL_DIM_ITALICS}Sleeping for {sleep_duration}s ...")
                 did_interrupt = RealTimeUtil.sleep_interruptibly(sleep_duration)
                 if did_interrupt:
                     break

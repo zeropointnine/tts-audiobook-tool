@@ -195,7 +195,7 @@ class Qwen3Model(Qwen3BaseModel):
         AppUtil.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt(f"{COL_DIM}{Ansi.ITALICS}Generating...", dont_reset=True) 
+        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
 
         try:
             gen_kwargs = self._build_gen_kwargs(
@@ -244,7 +244,7 @@ class Qwen3Model(Qwen3BaseModel):
         AppUtil.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt(f"{COL_DIM}{Ansi.ITALICS}Generating...", dont_reset=True) 
+        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
 
         try:
             gen_kwargs = self._build_gen_kwargs(
@@ -285,7 +285,7 @@ class Qwen3Model(Qwen3BaseModel):
         AppUtil.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt("{COL_DIM}{Ansi.ITALICS}Generating...", dont_reset=True) 
+        printt("{COL_DIM_ITALICS}Generating...", dont_reset=True) 
 
         try:
             gen_kwargs = self._build_gen_kwargs(

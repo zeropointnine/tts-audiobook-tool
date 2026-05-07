@@ -47,13 +47,13 @@ class ConcatUtil:
         if state.project.use_upsampler:
             import torch
             if not torch.cuda.is_available():
-                printt(f"{COL_DIM}{Ansi.ITALICS}Warning: Sidon enabled but CUDA not available")
+                printt(f"{COL_DIM_ITALICS}Warning: Sidon enabled but CUDA not available")
                 printt()
             if not SidonUtil.has_sidon():
-                printt(f"{COL_DIM}{Ansi.ITALICS}Warning: Sidon enabled but Sidon library not installed")
+                printt(f"{COL_DIM_ITALICS}Warning: Sidon enabled but Sidon library not installed")
                 printt()
         if state.project.use_upsampler and ModelsUtil.is_any_model_loaded():
-            printt(f"{COL_DIM}{Ansi.ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
+            printt(f"{COL_DIM_ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
             printt()
             ModelsUtil.clear_all_models(except_sidon=True)
 

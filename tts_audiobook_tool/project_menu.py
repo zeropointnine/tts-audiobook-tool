@@ -302,7 +302,7 @@ more accurately. {COL_DIM}(Requires some trial and error){COL_DEFAULT}
 
 SUBSTITUTIONS_ASK_DESC = \
 f"""Enter substitutions list. Use this format: 
-{COL_DIM}{Ansi.ITALICS}{{"Ariekei": "AriaKay", "kilohour": "kilo hour"}}
+{COL_DIM_ITALICS}{{"Ariekei": "AriaKay", "kilohour": "kilo hour"}}
  
 """
 

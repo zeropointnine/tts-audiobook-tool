@@ -70,12 +70,12 @@ class Conversation:
         warnings = Tts.get_instance().get_prereq_warnings(self.state.project)
         if warnings:
             s = "\n".join(warnings)
-            printt(f"{COL_DIM}{Ansi.ITALICS}{s}")
+            printt(f"{COL_DIM_ITALICS}{s}")
             printt()
 
         # Mic info
-        printt(f"{COL_DIM}{Ansi.ITALICS}Using sound input device:")
-        printt(f"{COL_DIM}{Ansi.ITALICS}  {SoundInputDeviceInfo.get_input_device_description()}")
+        printt(f"{COL_DIM_ITALICS}Using sound input device:")
+        printt(f"{COL_DIM_ITALICS}  {SoundInputDeviceInfo.get_input_device_description()}")
         printt()
 
         # Instructions

@@ -101,6 +101,7 @@ COL_MEDIUM = Ansi.hex("cccccc")
 COL_INPUT = Ansi.hex("aaaaaa")
 COL_OK = Ansi.hex("00ff00")
 COL_DEFAULT = Ansi.RESET # default text color being that of the terminal; we're assuming this is probably a light color
+COL_DIM_ITALICS = COL_DIM + Ansi.ITALICS
 
 PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/"
 

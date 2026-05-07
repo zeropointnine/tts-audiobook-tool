@@ -19,8 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from faster_whisper.transcribe import Segment
 
-from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.constants import COL_DIM
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.llm_util import LlmUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt
@@ -103,7 +102,7 @@ def main() -> None:
         parts = []
         for i, chunk in enumerate(prompt_chunks):
             parts.append(f"{ORANGE}{chunk}{RESET}" if i == selected_idx else chunk)
-        content = " ".join(parts) if parts else f"{COL_DIM}{Ansi.ITALICS}Speak into mic{RESET}"
+        content = " ".join(parts) if parts else f"{COL_DIM_ITALICS}Speak into mic{RESET}"
         display = f"> {content}"
         visible_len = len(ANSI_RE.sub("", display))
         new_lines = max(1, (visible_len + term_cols() - 1) // term_cols())

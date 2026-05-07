@@ -86,7 +86,7 @@ class ProjectSoundSegments:
     @property
     def sound_segments_map(self) -> dict[int, list[SoundSegment]]:
         if self._dirty:
-            printt(f"{COL_DIM}{Ansi.ITALICS}Project directory contents have changed. Scanning...", end="\r")
+            printt(f"{COL_DIM_ITALICS}Project directory contents have changed. Scanning...", end="\r")
             self._sound_segments_map = SoundSegmentUtil.make_sound_segments_map(self.project)
             printt(f"{Ansi.ERASE_REST_OF_LINE}", end="\r")
             self._dirty = False

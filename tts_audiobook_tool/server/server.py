@@ -190,7 +190,7 @@ class Server:
             Tts.get_instance()
             self._is_initializing = False
             self._tts_ready.set()
-            printt(f"{COL_DIM}{Ansi.ITALICS}Ready")
+            printt(f"{COL_DIM_ITALICS}Ready")
             printt()
 
         with ThreadingHTTPServer((host, port), _Handler) as httpd:

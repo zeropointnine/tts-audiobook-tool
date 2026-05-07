@@ -160,7 +160,7 @@ class VoiceMenuShared:
                 if transcript:
                     printt(f"Loaded transcript text from")
                     printt(f"{transcript_path}:")
-                    printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
+                    printt(f"{COL_DIM_ITALICS}{transcript}")
                     printt()
 
             if not transcript:
@@ -186,7 +186,7 @@ class VoiceMenuShared:
                 words = sound_result
                 transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
                 print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
-                printt(f"{COL_DIM}{Ansi.ITALICS}{transcript}")
+                printt(f"{COL_DIM_ITALICS}{transcript}")
                 printt()
 
                 force_enter_prompt = True
