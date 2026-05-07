@@ -35,7 +35,7 @@ class RealTimeUtil:
         """
         line_range is one-indexed
         """
-        if not line_range:
+        if not line_range or line_range == (0, 0):
             line_range = (1, len(phrase_groups))
 
         # Warm up models

@@ -6,7 +6,6 @@ from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.real_time_playback_util import RealTimeUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 class RealTimePlaybackMenu:
@@ -14,8 +13,13 @@ class RealTimePlaybackMenu:
     @staticmethod
     def get_active_line_range(state: State) -> tuple[int, int] | None:
         if state.real_time.custom_phrase_groups:
-            return state.real_time.custom_text_line_range
-        return state.real_time.project_text_line_range
+            line_range = state.real_time.custom_text_line_range
+        else:
+            line_range = state.real_time.project_text_line_range
+
+        if line_range == (0, 0):
+            return None
+        return line_range
 
     @staticmethod
     def menu(state: State):
@@ -81,6 +85,9 @@ class RealTimePlaybackMenu:
             AskUtil.ask_error(result)
             return
 
+        if result == (0, 0):
+            result = None
+
         if state.real_time.custom_phrase_groups:
             state.real_time.custom_text_line_range = result
         else:
@@ -88,10 +95,11 @@ class RealTimePlaybackMenu:
             state.project.realtime_line_range = result
 
         # Print feedback
-        is_all = (result[0] == 0 and result[1] == 0) or (result[0] == 1 and result[1] == len(text_groups))
+        is_all = result is None or (result[0] == 1 and result[1] == len(text_groups))
         if is_all:
             value = f"1-{len(text_groups)} (all)"
         else:
+            assert result is not None
             value = f"{result[0]}-{result[1]}"
             if result[1] == len(text_groups):
                 value += " (end)"
@@ -173,6 +181,10 @@ def do_start(state: State) -> None:
     else:
         text_groups = state.project.phrase_groups
         line_range = state.real_time.project_text_line_range
+
+    if line_range == (0, 0):
+        line_range = None
+
     if not text_groups:
         print_feedback("No text segments specified")
         return

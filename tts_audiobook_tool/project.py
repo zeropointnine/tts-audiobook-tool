@@ -346,7 +346,10 @@ class Project(BaseModel):
         # realtime_line_range
         value = d.get('realtime_line_range', None)
         if isinstance(value, (list, tuple)) and len(value) == 2 and all(isinstance(item, int) for item in value):
-            d['realtime_line_range'] = (value[0], value[1])
+            if value[0] == 0 and value[1] == 0:
+                d['realtime_line_range'] = None
+            else:
+                d['realtime_line_range'] = (value[0], value[1])
         else:
             d['realtime_line_range'] = None
 
