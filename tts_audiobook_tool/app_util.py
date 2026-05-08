@@ -269,6 +269,8 @@ class AppUtil:
 
         if Tts.get_type() == TtsModelInfos.FISH_S1 and project.fish_s1_compile_enabled:
             Hint.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
+        elif Tts.get_type() == TtsModelInfos.FISH_S2 and project.fish_s2_compile_enabled:
+            Hint.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():
@@ -356,3 +358,82 @@ class AppUtil:
         if not parts:
             return ""
         return f"{base_color}, ".join(parts)
+
+    @staticmethod
+    def log_unload_memory_snapshot(label: str) -> None:
+        parts: list[str] = []
+
+        import torch
+
+        if torch.cuda.is_available():
+            try:
+                allocated = torch.cuda.memory_allocated()
+                reserved = torch.cuda.memory_reserved()
+                max_allocated = torch.cuda.max_memory_allocated()
+                max_reserved = torch.cuda.max_memory_reserved()
+                parts.extend([
+                    f"torch_allocated={make_gb_string(allocated)}",
+                    f"torch_reserved={make_gb_string(reserved)}",
+                    f"torch_max_allocated={make_gb_string(max_allocated)}",
+                    f"torch_max_reserved={make_gb_string(max_reserved)}",
+                ])
+
+                stats = torch.cuda.memory_stats()
+
+                def add_stat_bytes(label_text: str, stat_key: str) -> None:
+                    value = stats.get(stat_key)
+                    if value is not None:
+                        parts.append(f"{label_text}={make_gb_string(int(value))}")
+
+                def add_stat_int(label_text: str, stat_key: str) -> None:
+                    value = stats.get(stat_key)
+                    if value is not None:
+                        parts.append(f"{label_text}={int(value)}")
+
+                add_stat_bytes("active_bytes", "active_bytes.all.current")
+                add_stat_bytes("inactive_split_bytes", "inactive_split_bytes.all.current")
+                add_stat_bytes("requested_bytes", "requested_bytes.all.current")
+                add_stat_bytes("allocated_bytes", "allocated_bytes.all.current")
+                add_stat_bytes("reserved_bytes", "reserved_bytes.all.current")
+                add_stat_int("active_blocks", "active.all.current")
+                add_stat_int("segment_count", "segment.all.current")
+            except Exception as e:
+                parts.append(f"torch_cuda_error={e}")
+        else:
+            parts.append("torch_cuda_unavailable")
+
+        try:
+            import pynvml
+
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            pid = os.getpid()
+            process_bytes = None
+
+            try:
+                for proc in pynvml.nvmlDeviceGetComputeRunningProcesses(handle):
+                    if proc.pid == pid:
+                        process_bytes = int(proc.usedGpuMemory)
+                        break
+            except Exception as e:
+                parts.append(f"nvml_compute_proc_error={e}")
+
+            try:
+                for proc in pynvml.nvmlDeviceGetGraphicsRunningProcesses(handle):
+                    if proc.pid == pid:
+                        used = int(proc.usedGpuMemory)
+                        process_bytes = used if process_bytes is None else process_bytes + used
+                        break
+            except Exception as e:
+                parts.append(f"nvml_graphics_proc_error={e}")
+
+            if process_bytes is None:
+                parts.append(f"pid_gpu_memory=none pid={pid}")
+            else:
+                parts.append(f"pid_gpu_memory={make_gb_string(process_bytes)} pid={pid}")
+
+            pynvml.nvmlShutdown()
+        except Exception as e:
+            parts.append(f"nvml_error={e}")
+
+        L.i(f"Unload memory snapshot [{label}] | " + " | ".join(parts))

@@ -23,10 +23,12 @@ class OptionsMenu:
 
         def on_unload(_: State, __: MenuItem) -> None:
             before_string = AppUtil.make_memory_string()
+            AppUtil.log_unload_memory_snapshot("before")
             if before_string:
                 printt(f"Before: {before_string}")
             ModelsUtil.clear_all_models()
             after_string = AppUtil.make_memory_string()
+            AppUtil.log_unload_memory_snapshot("after")
             if after_string:
                 printt(f"After:  {after_string}")
             if state.prefs.menu_clears_screen:

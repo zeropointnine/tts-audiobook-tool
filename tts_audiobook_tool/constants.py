@@ -192,7 +192,14 @@ HINT_OUTE_LOUD_NORM = Hint(
 HINT_FISH_S1_FIRST_COMPILE = Hint(
     "fish_first",
     "Please note...",
-"""On the first inference, the Fish S1-mini model may go through a compilation step
+"""On the first inference, the Fish model may go through a compilation step
+which may take a minute or two, with no feedback shown."""
+)
+
+HINT_FISH_S2_FIRST_COMPILE = Hint(
+    "fish_s2_first",
+    "Please note...",
+"""On the first inference, the Fish model may go through a compilation step
 which may take a minute or two, with no feedback shown."""
 )
 

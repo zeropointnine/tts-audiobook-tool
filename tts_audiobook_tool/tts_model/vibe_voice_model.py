@@ -122,6 +122,9 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             self.processor.tokenizer = None
             self.processor.audio_processor = None
             self.processor.audio_normalizer = None
+
+        self.stream_chunk_callback = None
+        self.stream_end_callback = None
         self.audio_streamer = None
         self.clear_stream_state()
         self.processor = None
@@ -206,10 +209,8 @@ class VibeVoiceModel(VibeVoiceBaseModel):
 
         try:
             self.model.set_ddpm_inference_steps(num_steps) # type: ignore
-            if on_stream_chunk is not None:
-                self.stream_chunk_callback = on_stream_chunk
-            if on_stream_end is not None:
-                self.stream_end_callback = on_stream_end
+            self.stream_chunk_callback = on_stream_chunk
+            self.stream_end_callback = on_stream_end
 
             # Ensure text is a list
             texts = texts if isinstance(texts, list) else [texts]
@@ -224,16 +225,19 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 return_attention_mask=True,
             )
 
-            self.audio_streamer = CallbackAudioStreamer(
-                batch_size=len(texts),
-                on_chunk=self.on_audio_chunk_received,
-                on_end=self.on_stream_end,
-            )
+            self.audio_streamer = None
+            if on_stream_chunk is not None or on_stream_end is not None:
+                self.audio_streamer = CallbackAudioStreamer(
+                    batch_size=len(texts),
+                    on_chunk=self.on_audio_chunk_received,
+                    on_end=self.on_stream_end,
+                )
 
             # Generate audio
             outputs = self.model.generate(
                 **inputs, # type: ignore
                 max_new_tokens=self.max_new_tokens,
+                max_length_times=VibeVoiceBaseModel.MAX_LENGTH_TIMES,
                 cfg_scale=cfg_scale,
                 tokenizer=self.processor.tokenizer,
                 audio_streamer=self.audio_streamer,

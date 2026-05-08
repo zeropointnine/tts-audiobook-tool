@@ -32,6 +32,8 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
     # Must accommodate worst-case prompt size (app limit 80 words)
     MAX_TOKENS = 250
+    # Slightly above the library default to reduce end truncation on longer prompts
+    MAX_LENGTH_TIMES = 2.5
 
     @property
     @abstractmethod
