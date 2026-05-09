@@ -61,7 +61,18 @@ class ModelsUtil:
 
         # Init STT
         if should_stt:
-            _ = Stt.get_whisper()
+            try:
+                _ = Stt.get_whisper()
+            except RuntimeError as e:
+                if is_oom_error_message(str(e)):
+                    printt(f"{COL_ERROR}{GEN_OOM_ERROR_MESSAGE}")
+                    printt()
+                    printt(f"{COL_ERROR}{e}")
+                else:
+                    printt(f"{COL_ERROR}Failed to initialize Whisper model: {e}")
+                printt()
+                SigIntHandler().clear()
+                return True
 
         if SigIntHandler().did_interrupt:
             SigIntHandler().clear()

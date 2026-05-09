@@ -587,6 +587,54 @@ def get_torch_allocated_vram() -> int:
         return -1
     return torch.cuda.memory_allocated()
 
+def print_gen_oom_message(err: str) -> None:
+    """
+    Print the standard OOM warning followed by the raw error string.
+    Used by generate_util.py and real_time_playback_util.py.
+    """
+    printt(f"{COL_ERROR}{GEN_OOM_ERROR_MESSAGE}")
+    printt()
+    printt(f"{COL_ERROR}{err}")
+    printt()
+
+
+def is_oom_error_message(error_string: str) -> bool:
+    """
+    Checks if an error string likely indicates an out-of-memory error.
+    Uses pattern matching for common OOM error keywords/phrases from various sources
+    (PyTorch, CUDA, system-level, etc.)
+    
+    Returns True if the error string appears to be an OOM error.
+    """
+    if not isinstance(error_string, str):
+        return False
+    
+    lower = error_string.lower()
+    
+    # Common OOM indicators
+    oom_patterns = [
+        r'out\s+of\s+memory',          # Generic OOM
+        r'cuda\s+out\s+of\s+memory',   # CUDA-specific OOM
+        r'outofmemory',                 # PyTorch exception name variant
+        r'torch\.cuda\.outofmemoryexception',
+        r'failed\s+to\s+allocate',     # Memory allocation failure
+        r'failed\s+to\s+allocate.*bytes',
+        r'failed\s+to\s+malloc',       # malloc failure
+        r'failed\s+to\s+malloc.*bytes',
+        r'kernel\s+oom',               # Kernel OOM killer
+        r'kill.*process',              # OOM killer terminated process
+        r'ram\s+full',                 # System RAM full
+        r'no\s+space\s+left',          # No space left (on device)
+        r'memory\s+exhausted',         # Memory exhausted
+        r'memory\s+allocation\s+failed',  # Generic memory alloc failure
+    ]
+    
+    for pattern in oom_patterns:
+        if re.search(pattern, lower):
+            return True
+    return False
+
+
 def load_text_file(path: str, errors: str="strict") -> str:
     """ 
     Load text file of potentially unknown provenance or format 

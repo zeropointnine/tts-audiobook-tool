@@ -27,6 +27,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants import GEN_OOM_ERROR_MESSAGE
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.validate_util import ValidateUtil
@@ -150,6 +151,14 @@ class GenerateUtil:
                 is_realtime=False
             )
             gen_val_sum_time += (time.time() - gen_start_time)
+
+            # Check for OOM in results and break early if detected
+            if any(isinstance(r, str) and is_oom_error_message(r) for r in results):
+                printt()
+                first_oom = next(r for r in results if isinstance(r, str) and is_oom_error_message(r))
+                print_gen_oom_message(first_oom)
+                did_interrupt = True
+                break
 
             # Process and print results # TODO: separate biz n print logic
             re_adds: list[tuple[int, int]] = []
@@ -285,11 +294,11 @@ class GenerateUtil:
         force_random_seed: bool,
         is_realtime: bool,
         is_skip_reason_buffer: bool=False
-    ) -> list[ ValidationResult | str ]:
+    ) -> list[ValidationResult | str]:
         """
         Generates and validates a batch of prompts from the Project text.
         Prints updates.
-        Returns list of sounds etc.
+        Returns a list of results (ValidationResult or error string).
 
         :param indices:
             When length is 1, batch mode is disabled
@@ -322,7 +331,7 @@ class GenerateUtil:
             printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets overwritten
 
         val_start_time = time.time()
-        results: list[ ValidationResult | str ] = []
+        results: list[ValidationResult | str] = []
 
         for i, gen_result in enumerate(gen_results):
 

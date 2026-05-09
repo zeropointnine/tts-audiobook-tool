@@ -110,6 +110,8 @@ class RealTimeUtil:
             sound_opt, did_interrupt = RealTimeUtil.generate_full_flow(
                 state, phrase_groups, one_second, has_runway=has_runway
             )
+            if did_interrupt:
+                break
             if not did_interrupt:
                 # generate_full_flow() clears SigIntHandler at the end, so re-arm
                 # Ctrl-C handling for the outer realtime loop and buffer-throttle sleep.
@@ -225,7 +227,7 @@ class RealTimeUtil:
     ) -> tuple[Sound | None, bool]:
         """
         Similar to `GenerateUtil.generate_full_flow()` but simpler control flow.
-        Returns tuple: Sound or no-sound if problem, and if user interrupted
+        Returns tuple: (Sound or None if problem, did_interrupt)
         """
 
         SigIntHandler().set("generating")
@@ -234,12 +236,12 @@ class RealTimeUtil:
         phrase_group = phrase_groups[index]
         did_interrupt = False
 
-        gen_result: ValidationResult | str  = ""
+        gen_result: ValidationResult | str = ""
         num_attempts = 1 + project.max_retries if has_runway else 1
         
         for attempt in range(num_attempts):
 
-            gen_result = GenerateUtil.generate_and_validate_batch(
+            results = GenerateUtil.generate_and_validate_batch(
                 state=state,
                 indices=[index],
                 phrase_groups=phrase_groups,
@@ -248,7 +250,14 @@ class RealTimeUtil:
                 force_random_seed=(attempt > 0),
                 is_realtime=True,
                 is_skip_reason_buffer=not has_runway
-            )[0]
+            )
+            gen_result = results[0]
+
+            # Check for OOM in results and break early to avoid wasting time
+            if isinstance(gen_result, str) and is_oom_error_message(gen_result):
+                print_gen_oom_message(gen_result)
+                did_interrupt = True
+                break
 
             # Print result info
             if isinstance(gen_result, str):
@@ -257,8 +266,6 @@ class RealTimeUtil:
                 printt()
             else:
                 printt(f"Transcript validation: {gen_result.get_ui_message()}")
-
-
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True
@@ -272,7 +279,7 @@ class RealTimeUtil:
         SigIntHandler().clear()        
 
         if isinstance(gen_result, str): 
-            return None, did_interrupt # is error
+            return None, did_interrupt  # is error
         else:
             validation_result = gen_result
             if project.realtime_save:
