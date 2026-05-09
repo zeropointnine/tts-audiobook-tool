@@ -16,6 +16,7 @@ from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -26,6 +27,8 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
@@ -429,7 +432,28 @@ class GenerateUtil:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
                 # Trim silence ends and peak-normalize
+                original_duration = sound.duration
                 sound = SoundAppUtil.apply_generate_post_processing(sound)
+
+                # Log if trimming activated
+                if sound.data.size > 0 and abs(sound.duration - original_duration) > 0.01:
+                    trimmed_ms = (original_duration - sound.duration) * 1000
+                    L.d(f"Trimmed: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (trimmed {trimmed_ms:.0f}ms)")
+
+                # Limit internal silence gaps (before STT transcription so timestamps match)
+                if sound.data.size > 0 and project.limit_silence_gaps:
+                    original_duration = sound.duration
+                    # Save debug sound before gap limiting
+                    if save_debug_files:
+                        GenerateUtil.save_debug_sound(project, indices[i], "pre_gap_limit", sound, is_realtime=is_realtime)
+                    sound = SilenceUtil.limit_silence_gaps(sound, project.limit_silence_gaps_duration)
+                    # Save debug sound after gap limiting
+                    if save_debug_files:
+                        GenerateUtil.save_debug_sound(project, indices[i], "post_gap_limit", sound, is_realtime=is_realtime)
+                    # Log if gap limiting activated
+                    if abs(sound.duration - original_duration) > 0.01:
+                        trimmed_ms = (original_duration - sound.duration) * 1000
+                        L.d(f"Gap limited: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (removed {trimmed_ms:.0f}ms of excess silence)")
 
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"

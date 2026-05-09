@@ -125,6 +125,7 @@ class RealTimeUtil:
                 sound=sound,
                 high_shelf=state.project.get_high_shelf(),
                 limit_silence_gaps=state.project.limit_silence_gaps,
+                limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
                 use_upsampler=False # no upsampling on realtime for now 
             )
             assert isinstance(sound, Sound)

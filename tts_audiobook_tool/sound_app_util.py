@@ -32,6 +32,7 @@ class SoundAppUtil:
         sound: Sound,
         high_shelf: HighShelfEq,
         limit_silence_gaps: bool = False,
+        limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
         use_upsampler: bool = False,
     ) -> Sound | str:
         """
@@ -51,7 +52,7 @@ class SoundAppUtil:
         Returns the processed Sound, or an error string (if upsampling was requested but failed)
         """
         if limit_silence_gaps:
-            new_sound = SilenceUtil.limit_silence_gaps(sound, LIMIT_SILENCE_GAPS_DURATION)
+            new_sound = SilenceUtil.limit_silence_gaps(sound, limit_silence_gaps_duration)
             if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
                 sound = new_sound
 

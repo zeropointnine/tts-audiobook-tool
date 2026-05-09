@@ -263,7 +263,7 @@ class SilenceUtil:
             Sound: The audio clip with excessive silence trimmed.
         """
         
-        if sound.data.size == 0 or max_silence_seconds <= 0:
+        if sound.data.size == 0 or max_silence_seconds < 0:
             return sound
 
         silences = SilenceUtil.detect_silences(sound)
@@ -281,10 +281,14 @@ class SilenceUtil:
             # Trim or keep the silence
             silence_duration = s_end - s_start
             if silence_duration > max_silence_seconds:
-                mid = (s_start + s_end) / 2.0
-                new_start = mid - max_silence_seconds / 2.0
-                new_end = mid + max_silence_seconds / 2.0
-                pieces.append(SoundUtil.trim(sound, new_start, new_end))
+                if max_silence_seconds == 0:
+                    # Remove all silence - don't add any silence piece
+                    pass
+                else:
+                    mid = (s_start + s_end) / 2.0
+                    new_start = mid - max_silence_seconds / 2.0
+                    new_end = mid + max_silence_seconds / 2.0
+                    pieces.append(SoundUtil.trim(sound, new_start, new_end))
             else:
                 pieces.append(SoundUtil.trim(sound, s_start, s_end))
 

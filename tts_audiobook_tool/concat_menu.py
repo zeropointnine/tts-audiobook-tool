@@ -95,13 +95,6 @@ class ConcatMenu:
                 )
             )
 
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label("Limit silence gaps", state.project.limit_silence_gaps),
-                    lambda _, __: ConcatMenu.limit_silence_gaps_menu(state)
-                )
-            )
-
             can_and_haz = chromium_info and ProjectUtil.get_latest_concat_files(state.project)
             if can_and_haz:
                 items.append(
@@ -237,27 +230,6 @@ class ConcatMenu:
             values=[True, False],
             current_value=state.project.use_section_sound_effect,
             default_value=False,
-            on_select=on_select
-        )
-
-    @staticmethod
-    def limit_silence_gaps_menu(state: State) -> None:
-
-        def on_select(value: bool) -> None:
-            state.project.limit_silence_gaps = value
-            state.project.save()
-            print_feedback(f"Limit silence gaps set to: {value}")
-
-        subheading = LIMIT_SILENCE_GAPS_SUBHEADING.replace("%1", f"{LIMIT_SILENCE_GAPS_DURATION:.1f}")
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Limit silence gaps",
-            subheading=subheading,
-            labels=["True", "False"],
-            values=[True, False],
-            current_value=state.project.limit_silence_gaps,
-            default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
             on_select=on_select
         )
 
@@ -522,12 +494,4 @@ Realtime playback, LLM voice chat, and stand-alone server
 UPSAMPLE_SUBHEADING = \
 """Uses Sidon generative model to upsample audio to 48kHz.
 Enhances audio quality and clarity; affects timbre and tonality.
-"""
-
-LIMIT_SILENCE_GAPS_SUBHEADING = \
-"""Prevents awkwardly long pauses. Limits silences within 
-generated sound segments to a max duration of %1 seconds.
-
-This setting also applies to: 
-Realtime playback, LLM voice chat, and stand-alone server
 """

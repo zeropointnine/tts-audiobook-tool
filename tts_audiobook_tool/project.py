@@ -94,6 +94,7 @@ class Project(BaseModel):
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
     realtime_line_range: tuple[int, int] | None = None
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
+    limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
     strictness: Strictness = list(Strictness)[0]
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
@@ -359,6 +360,13 @@ class Project(BaseModel):
             value = True
             add_warning('streaming_chat', value)
         d['streaming_chat'] = value
+
+        # limit_silence_gaps_duration
+        value = d.get('limit_silence_gaps_duration', None)
+        if not isinstance(value, (int, float)) or value <= 0:
+            value = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
+            add_warning('limit_silence_gaps_duration', value)
+        d['limit_silence_gaps_duration'] = float(value)
 
         # strictness (default depends on language_code)
         s = d.get('strictness', '')
@@ -648,6 +656,7 @@ class Project(BaseModel):
             "realtime_save": self.realtime_save,
             "realtime_line_range": self.realtime_line_range,
             "limit_silence_gaps": self.limit_silence_gaps,
+            "limit_silence_gaps_duration": self.limit_silence_gaps_duration,
             "streaming_chat": self.streaming_chat,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,

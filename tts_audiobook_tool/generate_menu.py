@@ -4,6 +4,7 @@ from tts_audiobook_tool.app_types import Strictness, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.concat_menu import ConcatMenu
+from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -109,9 +110,81 @@ class GenerateMenu:
                     make_retries_label, lambda _, __: ask_retries(state), 
                 )
             )
+
+            # Limit silence gaps
+            items.append(
+                MenuItem(
+                    make_limit_silence_gaps_label, lambda _, __: GenerateMenu.limit_silence_gaps_menu(state),
+                    superlabel="Post-processing"
+                )
+            )
+
             return items
         
         MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
+
+    @staticmethod
+    def limit_silence_gaps_menu(state: State) -> None:
+
+        def make_enabled_label(_: State) -> str:
+            value = state.project.limit_silence_gaps
+            value_str = "True" if value else "False"
+            label = f"Enabled: {COL_ACCENT}{value_str}"
+            if value == PROJECT_DEFAULT_LIMIT_SILENCE_GAPS:
+                label += f" {COL_DIM}(default)"
+            return label
+
+        def items_maker(_: State) -> list[MenuItem]:
+            items = []
+            # Enabled
+            items.append(
+                MenuItem(
+                    make_enabled_label,
+                    lambda _, __: GenerateMenu._limit_silence_gaps_enabled_menu(state),
+                )
+            )
+            # Gap duration threshold
+            items.append(
+                MenuUtil.make_number_item(
+                    state=state,
+                    attr="limit_silence_gaps_duration",
+                    base_label="Gap duration threshold",
+                    default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+                    is_minus_one_default=False,
+                    num_decimals=2,
+                    prompt="Enter gap duration threshold (seconds):",
+                    min_value=SILENCE_GAP_DURATION_MIN,
+                    max_value=SILENCE_GAP_DURATION_MAX,
+                )
+            )
+            return items
+
+        MenuUtil.menu(
+            state=state,
+            heading="Limit silence gaps",
+            items=items_maker,
+            subheading=LIMIT_SILENCE_GAPS_MENU_SUBHEADING,
+            breadcrumb="Limit silence gaps",
+        )
+
+    @staticmethod
+    def _limit_silence_gaps_enabled_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.limit_silence_gaps = value
+            state.project.save()
+            print_feedback(f"Limit silence gaps set to: {value}")
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Enabled",
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.limit_silence_gaps,
+            default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
+            on_select=on_select,
+            breadcrumb="Limit silence gaps > Enabled",
+        )
 
     @staticmethod
     def strictness_menu(state: State) -> None:
@@ -239,6 +312,13 @@ def make_retries_label(state: State) -> str:
         label="Generation max retries",
         value=state.project.max_retries, 
         default=PROJECT_MAX_RETRIES_DEFAULT
+    )
+
+def make_limit_silence_gaps_label(state: State) -> str:
+    return make_menu_label(
+        label="Limit silence gaps",
+        value=state.project.limit_silence_gaps,
+        default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
 
 def ask_retries(state: State) -> None:
@@ -395,4 +475,10 @@ REGENERATE_SEGMENTS_WITH_ERRORS_DESC = \
 """Retry only the segments currently flagged as having word errors.
 This uses your current line range and word error tolerance setting
 of %1 to decide which existing segments should be regenerated.
+"""
+
+LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \
+"""Limits instances of silence within each sound segment to a maximum duration.
+
+Setting also applies to realtime playback, voice chat, stand-alone server.
 """

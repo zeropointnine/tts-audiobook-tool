@@ -382,6 +382,7 @@ class Server:
             sound=sound,
             high_shelf=self._project.get_high_shelf(),
             limit_silence_gaps=self._project.limit_silence_gaps,
+            limit_silence_gaps_duration=self._project.limit_silence_gaps_duration,
             use_upsampler=False,
         )
         assert isinstance(sound, Sound)

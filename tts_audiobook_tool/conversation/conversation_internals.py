@@ -745,6 +745,7 @@ class ResponseSession:
                     sound,
                     high_shelf=self.project.get_high_shelf(),
                     limit_silence_gaps=self.project.limit_silence_gaps,
+                    limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
                 )
                 if isinstance(pp_result, str):
                     if not self.response_aborted.is_set():

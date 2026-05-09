@@ -196,8 +196,9 @@ class ConcatUtil:
             use_section_sound_effect=state.project.use_section_sound_effect,
             high_shelf=high_shelf,
             aac_bitrate=state.prefs.aac_bitrate,
-            use_upsampler=state.project.use_upsampler,
-            limit_silence_gaps=state.project.limit_silence_gaps
+            limit_silence_gaps=state.project.limit_silence_gaps,
+            limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
+            use_upsampler=state.project.use_upsampler
         )
         if isinstance(result, str): # is error
             delete_intermediate_files()
@@ -321,8 +322,9 @@ class ConcatUtil:
         path: str,
         use_section_sound_effect: bool,
         high_shelf: HighShelfEq,
-        use_upsampler: bool = False,
-        limit_silence_gaps: bool = False
+        limit_silence_gaps: bool = False,
+        limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+        use_upsampler: bool = False
     ) -> Sound | str:
         """
         Renders a sound segment by applying necessary transformations to the source audio file at `path`
@@ -338,6 +340,7 @@ class ConcatUtil:
             sound,
             high_shelf=high_shelf,
             limit_silence_gaps=limit_silence_gaps,
+            limit_silence_gaps_duration=limit_silence_gaps_duration,
             use_upsampler=use_upsampler,
         )
         if isinstance(result, str):
@@ -358,8 +361,9 @@ class ConcatUtil:
         high_shelf: HighShelfEq,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
-        use_upsampler: bool = False,
-        limit_silence_gaps: bool = False
+        limit_silence_gaps: bool = False,
+        limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
+        use_upsampler: bool = False
     ) -> list[float] | str:
         """
         Concatenates a list of files to a destination file using ffmpeg streaming process.
@@ -395,7 +399,10 @@ class ConcatUtil:
                 return "Interrupted by user"
 
             result = ConcatUtil.make_rendered_sound_segment(
-                phrase, path, use_section_sound_effect, high_shelf, use_upsampler, limit_silence_gaps
+                phrase, path, use_section_sound_effect, high_shelf,
+                limit_silence_gaps=limit_silence_gaps,
+                limit_silence_gaps_duration=limit_silence_gaps_duration,
+                use_upsampler=use_upsampler
             )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
