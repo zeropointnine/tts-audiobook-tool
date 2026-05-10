@@ -441,13 +441,11 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         is_regen=is_regen
     )
 
-    # Done
-    if not did_interrupt:
-        AppUtil.play_done_sound()
-
     if did_interrupt:
         AskUtil.ask_enter_to_continue()
         return
+
+    AppUtil.play_done_sound()
 
     if is_regen:
         AskUtil.ask_enter_to_continue()
@@ -478,7 +476,13 @@ of %1 to decide which existing segments should be regenerated.
 """
 
 LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \
-"""Limits instances of silence within each sound segment to a maximum duration.
+"""Prevents instances of silence within each sound segment from extending beyond
+the given duration.
 
-Setting also applies to realtime playback, voice chat, stand-alone server.
+Larger values can be used to prevent long pauses (eg, 1-2 seconds). 
+
+Small values can be used to affect pacing and prosody (eg, 0.3 seconds),
+best used with \"Text segmentation strategy: Normal.\" 
+
+This setting also applies to realtime playback, voice chat, stand-alone server.
 """

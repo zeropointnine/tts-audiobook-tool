@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+import os
 import re
 import json
 import pathlib
 import itertools
 import queue
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +17,7 @@ from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.util import make_terminal_hyperlink, printt
+from tts_audiobook_tool.util import *
 
 _HERE = pathlib.Path(__file__).parent
 _DEMOS_DIR = _HERE / "demos"
@@ -187,7 +189,17 @@ class Server:
                 printt(f"[server] {self.address_string()} - {msg}")
 
         def _init_tts():
-            Tts.get_instance()
+            try:
+                Tts.get_instance()
+            except Exception as e:
+                print_feedback(f"\n{COL_ERROR}Model initialization failed:\n\n{make_error_string(e)}")
+                # Fatal init failures can leave native ML runtimes in a bad state; normal Python
+                # shutdown may run C++ destructors and abort. Hard-exit so the process reliably
+                # terminates with the intended status code.
+                sys.stdout.flush()
+                sys.stderr.flush()
+                os._exit(1)
+
             self._is_initializing = False
             self._tts_ready.set()
             printt(f"{COL_DIM_ITALICS}Ready")

@@ -42,7 +42,7 @@ def print_feedback(
         end_value: Any = None,
         is_error=False,
         no_preformat=False,
-        extra_line=True, # TODO: revisit
+        extra_line=True,
         skip_pause=False
 ) -> None:
     """

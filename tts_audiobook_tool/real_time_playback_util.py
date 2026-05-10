@@ -39,12 +39,14 @@ class RealTimeUtil:
             line_range = (1, len(phrase_groups))
 
         # Warm up models
-        did_interrupt = ModelsUtil.warm_up_models(state)
-        
-        # Post-init checks
-        if did_interrupt:
-            print_feedback("\nCancelled")
-            return
+        warm_up_result = ModelsUtil.warm_up_models(state)
+        if warm_up_result.should_stop:
+            AppUtil.print_warm_up_result_stop(warm_up_result)
+            if warm_up_result.error:
+                MemoryUtil.gc_ram_vram()
+            if state.prefs.menu_clears_screen:
+                AskUtil.ask_enter_to_continue()
+            return 
         
         # Do model prereq check now that model instance exists
         err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True, is_realtime_playback=True)

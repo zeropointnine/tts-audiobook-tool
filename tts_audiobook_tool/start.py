@@ -50,7 +50,7 @@ class Startup:
 
         self.exit_on_missing_ffmpeg()
 
-        self.init_tts_or_exit()
+        self.init_tts_or_exit(self.is_server)
 
         self.exit_on_chatterbox_python_version()
 
@@ -72,7 +72,8 @@ class Startup:
             printt("https://ffmpeg.org/download.html")
             exit(1)
 
-    def init_tts_or_exit(self) -> None:
+    def init_tts_or_exit(self, is_server: bool) -> None:
+        """ Inits TTS else prompt to continue anyway """
 
         tts_model_infos, num_matches = Tts.init_model_type()
 
@@ -91,6 +92,9 @@ class Startup:
         warning += f"from the project's README, make sure that it is activated."
         printt(warning)
         printt()
+
+        if is_server:
+            exit(0)
 
         prompt = f"Press {make_hotkey_string('Y')} to run the app without sound generation functionality: "
         from tts_audiobook_tool.ask_util import AskUtil

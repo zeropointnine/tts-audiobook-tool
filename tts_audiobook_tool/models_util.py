@@ -1,5 +1,6 @@
 import torch
 
+from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
@@ -20,16 +21,15 @@ class ModelsUtil:
 
 
     @staticmethod
-    def warm_up_models(state: State, skip_yamnet: bool=False) -> bool:
+    def warm_up_models(state: State, skip_yamnet: bool=False) -> ModelWarmUpResult:
         """
         Instantiates required models for main inference flow, prints updates.
 
         Params:
-            should_not_stt - if True, does not init STT model even if state would dictate otherwise
-            should_yamnet - if True, initializes YamnetDetector
+            skip_yamnet - if True, does not init YAMNet model even if state would dictate otherwise
 
         Returns:
-            True if control-c was pressed
+            ModelWarmUpResult indicating success, interruption, or initialization failure.
         """
 
         should_tts = not Tts.instance_exists()        
@@ -39,7 +39,7 @@ class ModelsUtil:
         shoulds = [should_tts, should_stt, should_yamnet]
         num_shoulds = sum(1 for item in shoulds if item)
         if num_shoulds == 0:
-            return False
+            return ModelWarmUpResult()
 
         if not should_stt:
             # "Lazy unload", relevant for user flows like: 
@@ -53,41 +53,45 @@ class ModelsUtil:
 
         # Init TTS
         if should_tts:
-            _ = Tts.get_instance()
+            try:
+                _ = Tts.get_instance()
+            except Exception as e:
+                err_msg = str(e)
+                SigIntHandler().clear()
+                return ModelWarmUpResult(error=err_msg)
 
         if SigIntHandler().did_interrupt:
             SigIntHandler().clear()
-            return True
+            return ModelWarmUpResult(did_interrupt=True)
 
         # Init STT
         if should_stt:
             try:
                 _ = Stt.get_whisper()
-            except RuntimeError as e:
-                if is_oom_error_message(str(e)):
-                    printt(f"{COL_ERROR}{GEN_OOM_ERROR_MESSAGE}")
-                    printt()
-                    printt(f"{COL_ERROR}{e}")
-                else:
-                    printt(f"{COL_ERROR}Failed to initialize Whisper model: {e}")
-                printt()
+            except Exception as e:
+                err_msg = str(e)
                 SigIntHandler().clear()
-                return True
+                return ModelWarmUpResult(error=err_msg)
 
         if SigIntHandler().did_interrupt:
             SigIntHandler().clear()
-            return True
+            return ModelWarmUpResult(did_interrupt=True)
         
         # Init YAMNet
         if should_yamnet:
-            _ = MusicDetector.get_model()
+            try:
+                _ = MusicDetector.get_model()
+            except Exception as e:
+                err_msg = str(e)
+                SigIntHandler().clear()
+                return ModelWarmUpResult(error=err_msg)
 
         if SigIntHandler().did_interrupt:
             SigIntHandler().clear()
-            return True
+            return ModelWarmUpResult(did_interrupt=True)
 
         SigIntHandler().clear()
-        return False
+        return ModelWarmUpResult()
 
     @staticmethod
     def clear_all_models(except_sidon: bool = False) -> None:

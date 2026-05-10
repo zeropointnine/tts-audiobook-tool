@@ -27,7 +27,6 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.constants import GEN_OOM_ERROR_MESSAGE
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.validate_util import ValidateUtil
@@ -60,11 +59,11 @@ class GenerateUtil:
         stt_config = state.prefs.stt_config
         showed_vram_warning = False
 
-        did_cancel = ModelsUtil.warm_up_models(state)
-        
-        # Post-init checks
-        if did_cancel:
-            print_feedback("\nCancelled")
+        warm_up_result = ModelsUtil.warm_up_models(state)
+        if warm_up_result.should_stop:
+            AppUtil.print_warm_up_result_stop(warm_up_result)
+            if warm_up_result.error:
+                MemoryUtil.gc_ram_vram()
             return True
 
         # Do model prereq check now that model instance exists
@@ -93,7 +92,6 @@ class GenerateUtil:
             items = bucket_items(items, state.project.phrase_groups, batch_size)
 
         # Metrics-related variables
-        
         num_errored = 0
         num_failed = 0
         num_failed_music = 0

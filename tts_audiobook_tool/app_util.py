@@ -5,7 +5,7 @@ import tempfile
 import glob
 import xxhash
 
-from tts_audiobook_tool.app_types import SegmentationStrategy, SttVariant
+from tts_audiobook_tool.app_types import ModelWarmUpResult, SegmentationStrategy, SttVariant
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
@@ -17,6 +17,7 @@ from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
+    
 
 class AppUtil:
     """
@@ -358,6 +359,14 @@ class AppUtil:
         if not parts:
             return ""
         return f"{base_color}, ".join(parts)
+
+    @staticmethod
+    def print_warm_up_result_stop(result: ModelWarmUpResult) -> None:
+        """ Prints user-facing feedback for a failed warm-up result. """
+        if result.did_interrupt:
+            print_feedback("\nCancelled")
+        elif result.error:
+            print_feedback(f"\n{COL_ERROR}Model initialization failed:\n\n{result.error}")
 
     @staticmethod
     def log_unload_memory_snapshot(label: str) -> None:

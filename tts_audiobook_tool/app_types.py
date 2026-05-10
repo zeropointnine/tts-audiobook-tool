@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from enum import Enum
 from functools import cache
 import platform
@@ -326,6 +327,15 @@ class SegmentationStrategy(tuple[str, str, str], Enum):
             if s == item.id:
                 return item
         return None
+
+@dataclass
+class ModelWarmUpResult:
+    did_interrupt: bool = False
+    error: str = ""
+
+    @property
+    def should_stop(self) -> bool:
+        return self.did_interrupt or bool(self.error)
 
 # ---
 
