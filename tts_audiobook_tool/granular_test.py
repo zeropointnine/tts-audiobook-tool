@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from tts_audiobook_tool.dictionary_en import DictionaryEn
+from tts_audiobook_tool.whitelist import Whitelist
 from tts_audiobook_tool.text_normalizer import TextNormalizer
 
 def count_word_errors(
@@ -35,7 +35,7 @@ def count_word_errors(
         if len(word) == 1:
             return False 
         if language_code == "en":
-            return not DictionaryEn.has(word)
+            return not Whitelist().has(word)
         else:
             return False
 

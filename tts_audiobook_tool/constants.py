@@ -286,7 +286,7 @@ If a .txt file with the same base file name exists, it will use that instead."""
 HINT_FORCED_STRICTNESS_LOW = Hint(
     "",
     "Note",
-f"""Because the language code is not en, the setting \"Word error tolerance\"
+f"""Because language code is not en or es, the setting \"Word error tolerance\"
 has been automatically set to \"Low\""""
 )
 

@@ -15,6 +15,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.whitelist import Whitelist
 
 class GenerateMenu:
 
@@ -196,8 +197,8 @@ class GenerateMenu:
 
         warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, Tts.get_instance_if_exists())
 
-        if state.project.language_code != "en":
-            low_desc = f"{Ansi.ITALICS}Highly recommended{Ansi.RESET}{COL_DIM} for {state.project.language_code} (STT accuracy varies by language — lower threshold prevents false positives in retries and regeneration detection)"
+        if not Whitelist.supports_language(state.project.language_code):
+            low_desc = f"{Ansi.ITALICS}Highly recommended when language is not {list(Whitelist.LANGUAGES.keys())}"
             medium_desc = ""
             high_desc = ""
             intolerant_desc = ""
@@ -481,8 +482,8 @@ the given duration.
 
 Larger values can be used to prevent long pauses (eg, 1-2 seconds). 
 
-Small values can be used to affect pacing and prosody (eg, 0.3 seconds),
-best used with \"Text segmentation strategy: Normal.\" 
+Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
+Best used with \"Text segmentation strategy: Normal.\" 
 
 This setting also applies to realtime playback, voice chat, stand-alone server.
 """

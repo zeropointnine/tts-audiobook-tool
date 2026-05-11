@@ -4,6 +4,8 @@ import string
 import unicodedata
 from whisper_normalizer.english import EnglishNumberNormalizer
 
+from tts_audiobook_tool.l import L
+from tts_audiobook_tool.spanish_number_normalizer import SpanishNumberNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 
 
@@ -18,7 +20,7 @@ class TextNormalizer:
     def normalize_common(text: str, language_code: str="") -> str: 
         """
         Normalizes text to be comparable with another piece of text.
-        Function should be run on 'both sides'.
+        Does transformations that are common for "both sides" (source text and transcript).
         Handles international characters via Unicode-aware regex (backslash-w).
         """
         
@@ -30,13 +32,11 @@ class TextNormalizer:
         # Strip apostrophe which is adjacent to word character
         text = re.sub(r"\b'|'\b", "", text)
 
-        # Text-to-numbers
+        # Language-specific treatments
         if language_code == "en":
-            # Some forms of punctuation need to remain intact here
-            # The exception of dash, which needs be replaced by space
-            # (Eg, for some reason, "ninety-nine" does not get transformed to "99", but "ninety nine" does)
-            text = re.sub(r'-', ' ', text)
-            text = TextNormalizer._whisper_number_normalizer_en(text)
+            text = normalize_common_en_specific(text)
+        elif language_code == "es":
+            text = normalize_common_es_specific(text)
 
         # Replace punctuation (including em-dash and en-dash) with space
         punc = string.punctuation + "\u2014" + "\u2013" + "…"
@@ -50,6 +50,7 @@ class TextNormalizer:
 
         return text
 
+
     @staticmethod
     def normalize_source(source: str, language_code="") -> str:
         return TextNormalizer.normalize_common(source, language_code=language_code)
@@ -57,10 +58,16 @@ class TextNormalizer:
     @staticmethod
     def normalize_transcript(transcript: str, normalized_source: str, language_code="") -> str:
         """ Note how already-normalized source text is required in this case """
+        
         normalized_transcript = TextNormalizer.normalize_common(transcript, language_code)
-        normalized_transcript = TextNormalizer.normalize_spacing(normalized_source, normalized_transcript)
+        
+        if language_code == "en":
+            normalized_transcript = normalize_transcript_en_specific(normalized_source, normalized_transcript)
+        elif language_code == "es":
+            normalized_transcript = normalize_transcript_es_specific(normalized_source, normalized_transcript)
+        
         return normalized_transcript
-
+    
     @staticmethod
     def normalize_source_and_transcript(source: str, transcript: str, language_code="") -> tuple[str, str]:
         normalized_source = TextNormalizer.normalize_source(source, language_code=language_code)
@@ -68,48 +75,6 @@ class TextNormalizer:
             transcript=transcript, normalized_source=normalized_source, language_code=language_code
         )
         return normalized_source, normalized_transcript
-
-    @staticmethod
-    def normalize_spacing(source: str, transcript: str) -> str:
-        """
-        Normalizes the spacing of the `transcript` to match the `source` text
-        wherever the characters align, fixing split/merged compound words.
-        """
-        # Create a SequenceMatcher to align the two strings
-        # autojunk=False is important to prevent spaces from being treated as 'noise'
-        matcher = difflib.SequenceMatcher(None, source, transcript, autojunk=False)
-        
-        normalized_parts = []
-        
-        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-            
-            # 1. MATCH: The text is the same. Keep the transcript text.
-            if tag == 'equal':
-                normalized_parts.append(transcript[j1:j2])
-                
-            # 2. DELETE: Text exists in Source but is missing in Transcript.
-            # If the missing part was ONLY whitespace, we restore it.
-            # (Example: Source "high school" -> Trans "highschool". We restore the space.)
-            elif tag == 'delete':
-                missing_source_part = source[i1:i2]
-                if missing_source_part.isspace():
-                    normalized_parts.append(missing_source_part)
-                    
-            # 3. INSERT: Text exists in Transcript but is missing in Source.
-            # If the extra part is ONLY whitespace, we remove it.
-            # (Example: Source "firefly" -> Trans "fire fly". We skip the inserted space.)
-            elif tag == 'insert':
-                inserted_trans_part = transcript[j1:j2]
-                if not inserted_trans_part.isspace():
-                    normalized_parts.append(inserted_trans_part)
-                    
-            # 4. REPLACE: The text differs significantly. 
-            # Usually implies a typo or a completely different word. 
-            # We keep the Transcript version as-is.
-            elif tag == 'replace':
-                normalized_parts.append(transcript[j1:j2])
-
-        return "".join(normalized_parts)
 
     @staticmethod
     def sounds_the_same_en(source_word: str, transcript_word: str) -> bool:
@@ -122,3 +87,100 @@ class TextNormalizer:
 
         # Only checking the primary codes; considering secondary code is too permissive for our use case
         return transcript_codes[0] == source_codes[0]
+
+# ---
+
+def normalize_common_en_specific(text: str) -> str:
+    
+    # Some forms of punctuation need to remain intact here
+    # The exception of dash, which needs be replaced by space
+    # (Eg, for some reason, "ninety-nine" does not get transformed to "99", but "ninety nine" does)
+    text = re.sub(r'-', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Text-to-numbers
+    result = TextNormalizer._whisper_number_normalizer_en(text)
+
+    if result != text:
+        try:
+            L.d(f"before: \"{text}\"")
+            L.d(f"after:  \"{result}\"")
+        except AttributeError:
+            pass
+
+    return result
+
+def normalize_common_es_specific(text: str) -> str:
+    # Convert spelled-out integer cardinals (0-9999) to digits BEFORE stripping
+    # diacritics, because text2num expects accented forms (veintidós, etc.)
+    text = SpanishNumberNormalizer.normalize(text)
+
+    # Then strip diacritics but preserve ñ/Ñ
+    return strip_spanish_diacritics_keep_enye(text)
+
+def strip_spanish_diacritics_keep_enye(text: str) -> str:
+    # Protect ñ/Ñ before Unicode decomposition.
+    text = text.replace("ñ", "\0ENYE_LOWER\0")
+    text = text.replace("Ñ", "\0ENYE_UPPER\0")
+
+    # Decompose accents, remove combining marks, then recompose.
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(
+        ch for ch in text
+        if unicodedata.category(ch) != "Mn"
+    )
+    text = unicodedata.normalize("NFC", text)
+
+    # Restore ñ/Ñ.
+    text = text.replace("\0ENYE_LOWER\0", "ñ")
+    text = text.replace("\0ENYE_UPPER\0", "Ñ")
+    return text
+
+# ---
+
+def normalize_transcript_en_specific(normalized_source: str, normalized_transcript: str) -> str:
+    return normalize_spacing_en(normalized_source, normalized_transcript)
+
+def normalize_spacing_en(source: str, transcript: str) -> str:
+    """
+    Normalizes the spacing of the `transcript` to match the `source` text
+    wherever the characters align, fixing split/merged compound words.
+    """
+    # Create a SequenceMatcher to align the two strings
+    # autojunk=False is important to prevent spaces from being treated as 'noise'
+    matcher = difflib.SequenceMatcher(None, source, transcript, autojunk=False)
+    
+    normalized_parts = []
+    
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        
+        # 1. MATCH: The text is the same. Keep the transcript text.
+        if tag == 'equal':
+            normalized_parts.append(transcript[j1:j2])
+            
+        # 2. DELETE: Text exists in Source but is missing in Transcript.
+        # If the missing part was ONLY whitespace, we restore it.
+        # (Example: Source "high school" -> Trans "highschool". We restore the space.)
+        elif tag == 'delete':
+            missing_source_part = source[i1:i2]
+            if missing_source_part.isspace():
+                normalized_parts.append(missing_source_part)
+                
+        # 3. INSERT: Text exists in Transcript but is missing in Source.
+        # If the extra part is ONLY whitespace, we remove it.
+        # (Example: Source "firefly" -> Trans "fire fly". We skip the inserted space.)
+        elif tag == 'insert':
+            inserted_trans_part = transcript[j1:j2]
+            if not inserted_trans_part.isspace():
+                normalized_parts.append(inserted_trans_part)
+                
+        # 4. REPLACE: The text differs significantly. 
+        # Usually implies a typo or a completely different word. 
+        # We keep the Transcript version as-is.
+        elif tag == 'replace':
+            normalized_parts.append(transcript[j1:j2])
+
+    return "".join(normalized_parts)
+
+def normalize_transcript_es_specific(normalized_source: str, normalized_transcript: str) -> str:
+    return normalized_transcript

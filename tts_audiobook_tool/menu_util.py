@@ -313,6 +313,10 @@ class MenuUtil:
         else:
             path_string = value_color + "none"
 
+        language_code = state.project.language_code.strip()
+        if language_code:
+            path_string += f" {COL_DIM}({language_code})"
+
         if Tts._instance_display_info:
             tts_model_text = value_color + Tts._instance_display_info.model_description
             match (bool(Tts._instance_display_info.device), bool(Tts._instance_display_info.extra)):

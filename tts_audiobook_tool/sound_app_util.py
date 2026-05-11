@@ -52,7 +52,7 @@ class SoundAppUtil:
         Returns the processed Sound, or an error string (if upsampling was requested but failed)
         """
         if limit_silence_gaps:
-            new_sound = SilenceUtil.limit_silence_gaps(sound, limit_silence_gaps_duration)
+            new_sound, _ = SilenceUtil.limit_silence_gaps(sound, limit_silence_gaps_duration)
             if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
                 sound = new_sound
 

@@ -123,6 +123,11 @@ class AskUtil:
         return s
 
     @staticmethod
+    def ask_multiline() -> str:
+        """ App standard way of getting multi-line string input from user """
+        return sys.stdin.read().strip()
+
+    @staticmethod
     def read_hotkey_windows(block: bool=True) -> str | None:
         """
         Read one hotkey on Windows and normalize common special keys.

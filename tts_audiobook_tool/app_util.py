@@ -2,7 +2,6 @@ import logging
 import os
 import glob
 import tempfile
-import glob
 import xxhash
 
 from tts_audiobook_tool.app_types import ModelWarmUpResult, SegmentationStrategy, SttVariant
@@ -326,7 +325,7 @@ class AppUtil:
 
     @staticmethod
     def play_done_sound() -> None:
-        done_wav_path = os.path.join(os.path.dirname(package_dir), ASSETS_DIR_NAME, "done.wav")
+        done_wav_path = make_assets_file_path("done.wav")
         SoundFileUtil.play_sound_file_async(done_wav_path)
 
     @staticmethod

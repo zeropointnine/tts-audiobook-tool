@@ -37,7 +37,7 @@ class LoudnessLufsUtil:
     def calculate_integrated_loudness_file(file_path: str) -> float | None | str:
         """ Returns float or None if sample too short or str if error message """
         try:
-            audio, sample_rate = sf.read(file_path, dtype='float32')
+            audio, sample_rate = sf.read(file_path, dtype='float32') 
         except Exception as e:
             return make_error_string(e)
         return LoudnessLufsUtil.calculate_integrated_loudness(audio, sample_rate)

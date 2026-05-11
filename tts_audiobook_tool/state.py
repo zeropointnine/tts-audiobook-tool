@@ -9,6 +9,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.whitelist import Whitelist
 
 class State:
     """
@@ -54,6 +55,7 @@ class State:
 
         # Sync static values
         Tts.set_model_params_using_project(self.project)
+        Whitelist().set_language_code(self.project.language_code)
         self.real_time.project_text_line_range = self.project.realtime_line_range
 
     @property

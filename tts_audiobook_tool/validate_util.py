@@ -3,7 +3,7 @@ import math
 from typing import Optional
 
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
-from tts_audiobook_tool.dictionary_en import DictionaryEn
+from tts_audiobook_tool.whitelist import Whitelist
 from tts_audiobook_tool.music_detector import MusicDetector
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
@@ -18,6 +18,24 @@ from tts_audiobook_tool.whisper_util import WhisperUtil
 class ValidateUtil:
     """
     """
+
+    @staticmethod
+    def format_source_with_uncommon_words(text: str, language_code: str="") -> str:
+        """
+        Returns `text` with uncommon source words surrounded in brackets.
+
+        Intended for debug printouts so it is easy to see which source words are
+        being treated as wildcard-style uncommon words during validation.
+        """
+        if not Whitelist.supports_language(language_code):
+            return text
+
+        words = text.split()
+        highlighted_words = [
+            (f"{COL_ERROR}[{word}]{COL_DEFAULT}") if not Whitelist().has(word) else word
+            for word in words
+        ]
+        return " ".join(highlighted_words)
 
     @staticmethod
     def validate(
@@ -272,10 +290,14 @@ class ValidateUtil:
             return TextNormalizer.sounds_the_same_en(a, b) if language_code == "en" else False
 
         def is_uncommon_word(word: str) -> bool:
-            return not DictionaryEn.has(word) if language_code == "en" else False
+            return not Whitelist().has(word) if Whitelist.supports_language(language_code) else False
+
+        highlighted_source = ValidateUtil.format_source_with_uncommon_words(
+            normalized_source, language_code
+        )
 
         p("")
-        p(f"source: {normalized_source}")
+        p(f"source: {highlighted_source}")
         p(f"transc: {normalized_transcript}")
         p("")
 

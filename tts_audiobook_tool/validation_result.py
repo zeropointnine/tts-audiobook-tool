@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from tts_audiobook_tool.app_types import Sound, Word
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.silence_util import SilenceGapTrim
 
 
 @dataclass
@@ -13,6 +14,7 @@ class ValidationResult(ABC):
     """
     
     sound: Sound
+    intra_sample_silence_trims: list[SilenceGapTrim] = field(default_factory=list, kw_only=True)
 
     @property
     @abstractmethod
@@ -23,6 +25,25 @@ class ValidationResult(ABC):
     def get_ui_message(self) -> str:
         """ User-facing description, including color code formatting """
         ...
+
+    def get_intra_sample_silence_ui_message(self) -> str:
+        if not self.intra_sample_silence_trims:
+            return ""
+
+        parts = [
+            f"{item.original_duration:.1f}->{item.new_duration:.1f}"
+            for item in self.intra_sample_silence_trims
+        ]
+        total_removed = sum(item.removed_duration for item in self.intra_sample_silence_trims)
+        parts.append(f"{total_removed:.2}s total")
+        return f"{COL_DEFAULT}Trimmed excess silence gaps: {COL_DIM}{', '.join(parts)}"
+
+    def get_ui_message_with_post_processing(self) -> str:
+        message = self.get_ui_message()
+        extra = self.get_intra_sample_silence_ui_message()
+        if extra:
+            message += "\n" + extra
+        return message
 
 @dataclass
 class TranscriptResult(ValidationResult, ABC):
@@ -71,13 +92,13 @@ class TrimmedResult(TranscriptResult):
         return False
 
     def get_ui_message(self) -> str:
-        s = f"{COL_OK}Trimmed excess audio "
+        s = f"{COL_DEFAULT}Trimmed excess audio: "
         if self.start_time and self.end_time:
-            s += f"{COL_DIM}(0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end {self.original_duration:.2f}s)"
+            s += f"{COL_DIM}0s to {self.start_time:.2f}s, {self.end_time:.2f}s to end {self.original_duration:.2f}s"
         elif self.start_time:
-            s += f"{COL_DIM}(0s to {self.start_time:.2f}s)"
+            s += f"{COL_DIM}0s to {self.start_time:.2f}s"
         else:
-            s += f"{COL_DIM}({self.end_time:.2f}s to end {self.original_duration:.2f}s)"
+            s += f"{COL_DIM}{self.end_time:.2f}s to end {self.original_duration:.2f}s"
         return s
 
 @dataclass

@@ -1,8 +1,20 @@
+from dataclasses import dataclass
+
 import librosa
 import numpy as np
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.sound_util import SoundUtil
+
+
+@dataclass
+class SilenceGapTrim:
+    original_duration: float
+    new_duration: float
+
+    @property
+    def removed_duration(self) -> float:
+        return max(self.original_duration - self.new_duration, 0.0)
 
 class SilenceUtil:
 
@@ -251,7 +263,7 @@ class SilenceUtil:
             return []
 
     @staticmethod
-    def limit_silence_gaps(sound: Sound, max_silence_seconds: float) -> Sound:
+    def limit_silence_gaps(sound: Sound, max_silence_seconds: float) -> tuple[Sound, list[SilenceGapTrim]]:
         """
         Trims silence segments in the audio to ensure no silence exceeds max_silence_seconds.
 
@@ -260,17 +272,20 @@ class SilenceUtil:
             max_silence_seconds (float): Maximum allowed duration for any silence segment in seconds.
 
         Returns:
-            Sound: The audio clip with excessive silence trimmed.
+            tuple[Sound, list[SilenceGapTrim]]:
+                The audio clip with excessive silence trimmed, and metadata about
+                each intra-sample silence gap that was shortened.
         """
         
         if sound.data.size == 0 or max_silence_seconds < 0:
-            return sound
+            return sound, []
 
         silences = SilenceUtil.detect_silences(sound)
         if not silences:
-            return sound
+            return sound, []
 
         pieces: list[Sound] = []
+        trims: list[SilenceGapTrim] = []
         last_end = 0.0
 
         for s_start, s_end in silences:
@@ -282,12 +297,20 @@ class SilenceUtil:
             silence_duration = s_end - s_start
             if silence_duration > max_silence_seconds:
                 if max_silence_seconds == 0:
+                    trims.append(SilenceGapTrim(
+                        original_duration=silence_duration,
+                        new_duration=0.0,
+                    ))
                     # Remove all silence - don't add any silence piece
                     pass
                 else:
                     mid = (s_start + s_end) / 2.0
                     new_start = mid - max_silence_seconds / 2.0
                     new_end = mid + max_silence_seconds / 2.0
+                    trims.append(SilenceGapTrim(
+                        original_duration=silence_duration,
+                        new_duration=max_silence_seconds,
+                    ))
                     pieces.append(SoundUtil.trim(sound, new_start, new_end))
             else:
                 pieces.append(SoundUtil.trim(sound, s_start, s_end))
@@ -302,7 +325,7 @@ class SilenceUtil:
         data_arrays = [p.data for p in pieces]
         data_arrays = [arr.astype(pieces[0].data.dtype, copy=False) for arr in data_arrays]
         combined_data = np.concatenate(data_arrays)
-        return Sound(combined_data, sound.sr)
+        return Sound(combined_data, sound.sr), trims
 
 def ms_to_samples(ms, sr):
     """Converts milliseconds to samples"""

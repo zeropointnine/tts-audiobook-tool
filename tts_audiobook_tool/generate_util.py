@@ -31,6 +31,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.silence_util import SilenceGapTrim
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class GenerateUtil:
@@ -188,7 +189,7 @@ class GenerateUtil:
                     # Process validation result
                     validation_result = result
 
-                    val_line = f"{validation_result.get_ui_message()}"
+                    val_line = f"{validation_result.get_ui_message_with_post_processing()}"
 
                     # Modify validation ui message if needed
                     if not validation_result.is_fail:
@@ -341,10 +342,11 @@ class GenerateUtil:
                 results.append(err)
                 continue
 
-            sound = gen_result
+            sound, gap_trims = gen_result
 
             if skip_reason:
                 validation_result = SkippedResult(sound=sound, message=skip_reason)
+                validation_result.intra_sample_silence_trims = gap_trims
                 results.append((validation_result))
                 continue
 
@@ -363,6 +365,7 @@ class GenerateUtil:
             validation_result = ValidateUtil.validate(
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
+            validation_result.intra_sample_silence_trims = gap_trims
             results.append(validation_result)
 
             if save_debug_files and isinstance(validation_result, TrimmedResult):
@@ -390,7 +393,7 @@ class GenerateUtil:
             force_random_seed: bool, 
             is_realtime: bool,
             save_debug_files: bool
-        ) -> list[Sound | str]:
+        ) -> list[tuple[Sound, list[SilenceGapTrim]] | str]:
         """
         Core audio generation function.
         
@@ -425,7 +428,7 @@ class GenerateUtil:
 
         sounds = [result] if isinstance(result, Sound) else result
         
-        results: list[Sound | str] = []
+        results: list[tuple[Sound, list[SilenceGapTrim]] | str] = []
 
         for i, sound in enumerate(sounds):
 
@@ -453,19 +456,17 @@ class GenerateUtil:
                     # Save debug sound before gap limiting
                     if save_debug_files:
                         GenerateUtil.save_debug_sound(project, indices[i], "pre_gap_limit", sound, is_realtime=is_realtime)
-                    sound = SilenceUtil.limit_silence_gaps(sound, project.limit_silence_gaps_duration)
+                    sound, gap_trims = SilenceUtil.limit_silence_gaps(sound, project.limit_silence_gaps_duration)
                     # Save debug sound after gap limiting
                     if save_debug_files:
                         GenerateUtil.save_debug_sound(project, indices[i], "post_gap_limit", sound, is_realtime=is_realtime)
-                    # Log if gap limiting activated
-                    if abs(sound.duration - original_duration) > 0.01:
-                        trimmed_ms = (original_duration - sound.duration) * 1000
-                        L.d(f"Gap limited: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (removed {trimmed_ms:.0f}ms of excess silence)")
+                else:
+                    gap_trims = []
 
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"
                 else:
-                    result = sound
+                    result = (sound, gap_trims)
             
             results.append(result)
 
@@ -542,10 +543,12 @@ class GenerateUtil:
     ) -> None:
         
         line_noun = make_noun("line", "lines", len(indices))
-        index_strings = [str(item + 1) for item in indices[:3]]
-        if len(indices) > 3:
-            index_strings.append("...")
-        indices_string = ", ".join(index_strings)
+        if len(indices) <= 4:
+            indices_string = ", ".join(str(item + 1) for item in indices)
+        else:
+            index_strings = [str(item + 1) for item in indices[:3]]
+            num_more = len(indices) - 3
+            indices_string = f"{', '.join(index_strings)}, + {num_more} more"
         processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
 
         elapsed = duration_string(time.time() - start_time)
@@ -584,7 +587,11 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
     num_sounds = 0
     cum_duration = 0.0
     for item in gen_results:
-        if isinstance(item, Sound):
+        if isinstance(item, tuple) and isinstance(item[0], Sound):
+            sound = item[0]
+            num_sounds += 1
+            cum_duration += sound.duration
+        elif isinstance(item, Sound):
             num_sounds += 1
             cum_duration += item.duration
     if num_sounds == len(gen_results):
@@ -660,7 +667,7 @@ def save_debug_json(
     d["normalized_source"] = normalized_source
     d["normalized_transc"] = normalized_transcript
     d["result_class"] = type(validation_result).__name__
-    d["result_desc"] = strip_ansi_codes( validation_result.get_ui_message() )
+    d["result_desc"] = strip_ansi_codes( validation_result.get_ui_message_with_post_processing() )
     if isinstance(validation_result, WordErrorResult):
         d["result_num_errors"] = validation_result.num_errors
         d["result_threshold"] = validation_result.threshold

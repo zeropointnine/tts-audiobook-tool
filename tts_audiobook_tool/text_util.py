@@ -2,7 +2,7 @@ import re
 import string
 import unicodedata
 
-from tts_audiobook_tool.dictionary_en import DictionaryEn
+from tts_audiobook_tool.whitelist import Whitelist
 
 class TextUtil:
     """
@@ -88,7 +88,6 @@ class TextUtil:
         Replaces consecutive whitespace characters with a single space, and strips whitespace from ends.
         Should be done after any normalize-like text transformation.
         """
-        text = re.sub(r"\s+", " ", text)        
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
@@ -190,7 +189,7 @@ class TextUtil:
         for word in words:
             word = word.strip()
             word_lower = word.lower()
-            if DictionaryEn.has(word_lower):
+            if Whitelist().has(word_lower):
                 # It's a recognized english word, so use lowercase
                 new_words.append(word_lower)
             else:
@@ -218,7 +217,7 @@ class TextUtil:
             if not word:
                 continue
             word_lc = word.lower() # this is the dict key
-            if DictionaryEn.has(word_lc):
+            if Whitelist().has(word_lc):
                 continue
             if word_lc in counts_dict:
                 count, instances = counts_dict[word_lc]
@@ -237,3 +236,7 @@ class TextUtil:
             [(word_lc, count, instances) for word_lc, (count, instances) in counts_dict.items()], key=lambda x: x[1], reverse=True
         )
         return sorted_tuples
+
+    @staticmethod
+    def get_uncommon_words(raw_words: list[str]) -> list[tuple[str, int, list[str]]]:
+        return TextUtil.get_uncommon_words_en(raw_words)

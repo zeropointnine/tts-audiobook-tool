@@ -75,7 +75,7 @@ class PhraseGroupAskUtil:
             s = f"Finish with [ENTER + CTRL-D]"
         printt(s)
         printt()
-        raw_text = sys.stdin.read().strip()
+        raw_text = AskUtil.ask_multiline()
         printt()
         if not raw_text:
             return [], ""

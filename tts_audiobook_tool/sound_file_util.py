@@ -157,7 +157,7 @@ class SoundFileUtil:
     def play_sound_file_async(path: str) -> None:
         """ Plays sound file. Returns error string on failure. """
         try:
-            data, sr = soundfile.read(path, dtype='float32', always_2d=False)
+            data, sr = soundfile.read(path, dtype='float32', always_2d=False) # type: ignore
             sr = int(sr)
             # Ensure mono
             if data.ndim > 1:
@@ -231,16 +231,3 @@ class SoundFileUtil:
         new_thread = threading.Thread(target=_play_stream_from_data, args=(sound_data_2d, sound.sr, channels, SoundFileUtil._stop_playback_event,), daemon=True)
         new_thread.start()
         SoundFileUtil._current_playback_thread = new_thread
-
-
-    @staticmethod
-    def print_samplerates(dir_path: str):
-        """ Dev"""
-
-        for item in os.listdir(dir_path):
-            path = os.path.join(dir_path, item)
-            if path.endswith(".flac"):
-                data, samplerate = soundfile.read(path)
-                print(item)
-                print(samplerate, data.dtype)
-                print()

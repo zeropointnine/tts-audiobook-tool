@@ -430,6 +430,10 @@ def get_package_dir() -> str | None:
         return None
     return os.path.dirname(os.path.abspath(package.__file__))
 
+def make_assets_file_path(file_name: str) -> str:
+    """Returns the full path to an asset file in tts_audiobook_tool/assets/."""
+    return os.path.join(package_dir, ASSETS_DIR_NAME, file_name)
+
 def make_unique_file_path(file_path: str) -> str:
     """
     Creates a unique file path by adding "-1", "-2", "-3", etc to stem if needed.

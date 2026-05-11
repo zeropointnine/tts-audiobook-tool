@@ -473,7 +473,7 @@ class ConcatUtil:
         # Assuming audio_data is float, convert to 16-bit PCM
         # This is a standard conversion for float arrays in range [-1.0, 1.0]
         # if audio_data.dtype is not float, raise ValueError("Expecting float")
-        pcm_data = (audio_data * 32767).astype(np.int16)
+        pcm_data = (audio_data * 32767).astype(np.int16) # type: ignore
 
         try:
             process.stdin.write(pcm_data.tobytes()) # type: ignore

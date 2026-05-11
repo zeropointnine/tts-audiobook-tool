@@ -19,13 +19,13 @@ from tts_audiobook_tool.silence_util import SilenceUtil
 
 
 def enforce_max_silence_for_file(file_path: str, max_silence_seconds: float):
-    data, sr = soundfile.read(file_path, dtype="float32", always_2d=False)
+    data, sr = soundfile.read(file_path, dtype="float32", always_2d=False) # type: ignore
     if data.ndim > 1:
         data = data.mean(axis=1)  # mix down to mono
     sound = Sound(data, int(sr))
 
     original_duration = sound.duration
-    trimmed = SilenceUtil.limit_silence_gaps(sound, max_silence_seconds)
+    trimmed, trims = SilenceUtil.limit_silence_gaps(sound, max_silence_seconds)
     new_duration = trimmed.duration
 
     basename = os.path.basename(file_path)
@@ -36,6 +36,9 @@ def enforce_max_silence_for_file(file_path: str, max_silence_seconds: float):
 
     print(basename)
     print(f"  {original_duration:.3f}s → {new_duration:.3f}s  (Δ {original_duration - new_duration:.3f}s)")
+    if trims:
+        detail = ", ".join(f"{item.original_duration:.1f}s → {item.new_duration:.1f}s" for item in trims)
+        print(f"  Intra-sample silence trims: {detail}")
 
     out_name = f"{root}_TRIMMED{ext}"
     out_path = os.path.join(os.path.dirname(file_path), out_name)

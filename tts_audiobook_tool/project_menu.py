@@ -13,6 +13,7 @@ from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.whitelist import Whitelist
 
 class ProjectMenu:
 
@@ -46,6 +47,7 @@ class ProjectMenu:
 
         def on_clear_language(_: State, __: MenuItem) -> None:
             state.project.language_code = ""
+            Whitelist().set_language_code("")
             state.project.save()
             print_feedback("Language code cleared")            
 
@@ -183,7 +185,7 @@ class ProjectMenu:
                 for phrase in group.phrases:
                     all_words_raw.extend(phrase.words)
 
-            items = TextUtil.get_uncommon_words_en(all_words_raw)
+            items = TextUtil.get_uncommon_words(all_words_raw)
             if not items:
                 printt("None found")
             else:
@@ -210,7 +212,7 @@ class ProjectMenu:
                 label = f"Word substitutions {make_currently_string(value)}"
                 items.append( MenuItem(label, on_print) )
             # Print uncommon words
-            if state.project.language_code == "en" and state.project.phrase_groups:
+            if Whitelist.supports_language(state.project.language_code) and state.project.phrase_groups:
                 items.append(MenuItem("Inspect project text for uncommon words", on_inspect))
             return items
 
@@ -270,15 +272,15 @@ def on_language(state: State, __: MenuItem) -> None:
             Hint.show_hint(hint, and_prompt=True)
 
         # (4) Hint-side-effect re: strictness non-en
-        if state.project.language_code != "en" and state.project.strictness != Strictness.LOW:
-            if not ValidateUtil.is_unsupported_language_code(state.project.language_code):
+        if not Whitelist.supports_language(code) and state.project.strictness != Strictness.LOW:
+            if not ValidateUtil.is_unsupported_language_code(code):
                 state.project.strictness = Strictness.LOW
                 state.project.save()
                 Hint.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)
 
         return ""
 
-    prompt = f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"zh\", \"pt\", etc){COL_DEFAULT}:"
+    prompt = f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"es\", \"zh\", \"pt\", etc){COL_DEFAULT}:"
     AskUtil.ask_string_and_save(
         state.project,
         prompt,
@@ -286,6 +288,7 @@ def on_language(state: State, __: MenuItem) -> None:
         "Project language code set to:",
         validator=validator
     )
+    Whitelist().set_language_code(state.project.language_code)
 
 LANGUAGE_CODE_DESC = "" + \
 """Language code is used by the app at various stages of the pipeline as a \"hint\" for:

@@ -198,10 +198,7 @@ A segment with exactly 99 genuine word errors is indistinguishable from a music-
 
 `is_segment_failed()` treats `num_errors == -1` as **not-failed** (conservative). `get_best_item_for()` treats `-1` as **9999** (worst possible rank). A file with an unknown error count is therefore safe from re-generation but ranks last when multiple candidates exist for the same index. This asymmetry is intentional but could be surprising — worth a comment at the call sites.
 
-### 3. Internal code still uses "strictness" naming
+### 3. "strictness" vs "tolerance" nomenclature
 
-The `Strictness` enum, `project.strictness` attribute, and `GenerateMenu.strictness_menu()` method all use "strictness" internally while the UI now says "Word error tolerance". A full rename of internal identifiers (`project.strictness` → `project.word_error_tolerance`, `Strictness` enum → `WordErrorTolerance`) would affect serialization and many call sites — worth deciding whether to pursue for consistency or leave internal naming as-is.
+Resolve this.
 
-### 4. `HIGH` threshold for zero-word segments
-
-Fixed: `compute_threshold()` for `HIGH` now returns `max(0, ceil(num_words / 10) - 1)`, preventing a negative threshold for zero-word segments.

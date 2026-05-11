@@ -33,4 +33,5 @@ sounddevice==0.5.2
 soundfile==0.13.1
 watchdog==6.0.0
 whisper_normalizer==0.1.12
+text2num==3.0.1
 xxhash==3.5.0
