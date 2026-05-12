@@ -660,6 +660,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
+**2026-05-12**
+
+- Added ability to import project settings from app m4b/flac files
+
 **2026-05-11**
 
 - Added Spanish language support for more accurate dictionary-based audio word error validation (less false positives), along with English. This makes using "Strictness level: High" more useful and more efficient.

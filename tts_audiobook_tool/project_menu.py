@@ -4,7 +4,7 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
@@ -20,15 +20,8 @@ class ProjectMenu:
     @staticmethod
     def menu(state:State) -> None:
 
-        def on_new_project(_: State, __: MenuItem) -> bool:            
-            
-            did = ProjectMenu.ask_and_set_new_project(state)
-            if not did:
-                return False
-
-            print_feedback("Project directory set:", state.project.dir_path)
-            Hint.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
-            return True
+        def on_new_project(_: State, __: MenuItem) -> None:
+            ProjectNewMenu.menu(state)
 
         def on_existing_project(_: State, __: MenuItem) -> bool:
             did = ProjectMenu.ask_and_set_existing_project(state)
@@ -52,21 +45,42 @@ class ProjectMenu:
             print_feedback("Language code cleared")            
 
         def items_maker(_) -> list[MenuItem]:
-            items = [
-                MenuItem("New project", on_new_project, data=True),
-                MenuItem("Open existing project", on_existing_project, data=False),
-                MenuItem(
-                    lambda _: make_menu_label("Language code", state.project.language_code or "none"), 
-                    on_language
-                )
-            ]
-            if state.project.language_code:
-                items.append(MenuItem("Clear language code", on_clear_language))
+
+            items = []
+
+            items.append( 
+                MenuItem("New project", on_new_project, data=True) 
+            )
+
+            items.append( 
+                MenuItem("Open existing project", on_existing_project, data=False) 
+            )
 
             if state.project.dir_path:
-                items.append(MenuItem(make_subst_label, lambda _, __: ProjectMenu.word_substitutions_menu(state)))
 
-                items.append(MenuItem("Show directory in system file explorer", on_view))
+                items.append( 
+                    MenuItem(
+                        lambda _: make_menu_label("Language code", state.project.language_code or "none"), 
+                        on_language,
+                        superlabel="Options"
+                    )
+                )
+
+                if state.project.language_code:
+                    items.append(
+                        MenuItem("Clear language code", on_clear_language)
+                    )
+
+                items.append(
+                    MenuItem(
+                        make_subst_label, lambda _, __: ProjectMenu.word_substitutions_menu(state)
+                    )
+                )
+
+                items.append(
+                    MenuItem("Show directory in system file explorer", on_view)
+                )
+
             return items
 
         value = make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
@@ -77,38 +91,6 @@ class ProjectMenu:
             items_maker,
             breadcrumb="Project",
         )
-
-    @staticmethod
-    def ask_and_set_new_project(state: State) -> bool:
-        """
-        Asks user for directory and creates new project
-        Returns True on success
-        """
-        console_message = "Enter the path to an empty directory:"
-        ui_title = "Select empty directory"
-
-        dir = AskUtil.ask_dir_path(
-            console_message=console_message,
-            dialog_title=ui_title,
-            initialdir=state.project.dir_path,
-            mustexist=False
-        )
-
-        if not dir:
-            return False
-
-        old_project = state.project
-
-        err = state.make_and_set_new_project(dir)
-        if err:
-            AskUtil.ask_error(err)
-            return False
-        
-        if old_project.dir_path:
-            if AskUtil.ask_confirm("Do you want to carry over the current project's settings?"):
-                state.project.migrate_from(old_project)
-
-        return True
 
     @staticmethod
     def ask_and_set_existing_project(state: State) -> bool:

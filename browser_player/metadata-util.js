@@ -79,10 +79,12 @@ class MetadataUtil {
         }
 
         const result = {
+            "version": o["version"] || 1,
             "raw_text": rawText,
             "text_segments": timedTextSegments,
             "bookmarks": bookmarks,
-            "has_section_break_audio": (o["has_section_break_audio"] === true)
+            "has_section_break_audio": (o["has_section_break_audio"] === true),
+            "project_snapshot": o["project_snapshot"] || {}
         }
 
         return result

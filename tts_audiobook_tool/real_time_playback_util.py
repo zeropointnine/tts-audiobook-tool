@@ -271,7 +271,7 @@ class RealTimeUtil:
                 printt(f"{COL_ERROR}Model fail: {err}")
                 printt()
             else:
-                printt(f"Transcript validation: {gen_result.get_ui_message()}")
+                printt(f"Transcript validation: {gen_result.get_ui_message_with_post_processing()}")
 
             if SigIntHandler().did_interrupt:
                 did_interrupt = True

@@ -100,7 +100,9 @@ def make_project_label(state: State) -> str:
         )
     else:
         currently = ""
-    return f"Project {currently}"
+
+    start_here = f" {COL_ERROR}<-- start here" if not state.project.dir_path else ""
+    return f"Project {currently}{start_here}"
 
 # Voice
 def make_voice_label(state: State) -> str:

@@ -16,8 +16,9 @@ PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
 PROJECT_CONCAT_SUBDIR = "combined"
 PROJECT_REALTIME_SUBDIR = "realtime"
 PROJECT_JSON_FILE_NAME = "project.json"
-PROJECT_TEXT_SEGMENTS_FILE_NAME = "text_segments.json"
-PROJECT_TEXT_RAW_FILE_NAME = "text_raw.txt"
+PROJECT_TEXT_FILE_NAME = "project_text.json"
+PROJECT_TEXT_SEGMENTS_FILE_NAME = PROJECT_TEXT_FILE_NAME
+PROJECT_TEXT_RAW_FILE_NAME = "project_text_raw.txt"
 PROJECT_CONCAT_TEMP_TEXT_FILE_NAME = "ffmpeg_temp.txt"
 
 FFMPEG_COMMAND = "ffmpeg"
@@ -91,6 +92,8 @@ FFMPEG_ARGUMENTS_OUTPUT_AAC = make_ffmpeg_arguments_output_aac()
 APP_META_FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
 APP_META_MP4_MEAN = "tts-audiobook-tool"
 APP_META_MP4_TAG = "audiobook-data"
+ABR_VERSION = 2
+PROJECT_SPEC_VERSION = 2
 
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 

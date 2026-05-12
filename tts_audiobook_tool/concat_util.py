@@ -253,9 +253,11 @@ class ConcatUtil:
             )
         app_meta = AppMetadata(
             timed_phrases=timed_phrases,
+            version=ABR_VERSION,
             raw_text=raw_text, 
             bookmark_indices=bookmark_indices,
-            has_section_break_audio=state.project.use_section_sound_effect
+            has_section_break_audio=state.project.use_section_sound_effect,
+            project_snapshot=state.project.to_snapshot_dict()
         )
         if is_aac:
             err = AppMetadata.save_to_mp4(app_meta, last_path, final_path)

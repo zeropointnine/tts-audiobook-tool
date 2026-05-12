@@ -5,6 +5,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -116,8 +117,8 @@ class VoiceMenuShared:
         Prints feedback on success or fail.
         """
 
-        # Rem, we do not save raw voice sound file for Oute
         if not tts_type.value.voice_file_name_attr:
+            # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
         if tts_type.value.requires_voice_transcript:
@@ -142,6 +143,10 @@ class VoiceMenuShared:
             AskUtil.ask_error(err)
             return
         sound = sound_result
+
+        sound = SoundAppUtil.apply_voice_clone_post_processing(
+            sound, tts_type.value.sample_rate,
+        )
 
         duration_s = len(sound.data) / sound.sr
         printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")

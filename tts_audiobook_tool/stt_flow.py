@@ -213,9 +213,11 @@ class SttFlow:
 
         meta = AppMetadata(
             timed_phrases=timed_phrases, 
+            version=ABR_VERSION,
             bookmark_indices=[],
             raw_text=raw_text, 
-            has_section_break_audio=False
+            has_section_break_audio=False,
+            project_snapshot={}
         )
         if dest_path.lower().endswith(".flac"):
             save_error = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))

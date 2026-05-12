@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -6,7 +10,9 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.silence_util import SilenceUtil
 from tts_audiobook_tool.phrase import Phrase, Reason
-from tts_audiobook_tool.project import Project
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.project import Project
 
 
 class SoundAppUtil:
@@ -30,6 +36,21 @@ class SoundAppUtil:
             return sound
         data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
         return Sound(data, sound.sr)
+
+    @staticmethod
+    def apply_generate_post_processing_with_info(sound: Sound) -> tuple[Sound, float | None, float | None, float]:
+        """
+        Same as apply_generate_post_processing, but also returns trim metadata
+        suitable for user-facing reporting.
+        """
+        original_duration = sound.duration
+        sound, start, end = SilenceUtil.trim_silence_ends(sound)
+        start_time = start if start > 0 else None
+        end_time = end if end < original_duration else None
+        if sound.data.size == 0:
+            return sound, start_time, end_time, original_duration
+        data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
+        return Sound(data, sound.sr), start_time, end_time, original_duration
 
     @staticmethod
     def generate_processed_using_project(
@@ -163,3 +184,18 @@ class SoundAppUtil:
             boost_start_hz=high_shelf.boost_start_hz,
             q_like=high_shelf.q_like,
         )
+
+    # ---
+
+    @staticmethod
+    def apply_voice_clone_post_processing(sound: Sound, target_sr: int) -> Sound:
+        """
+        App's standard post-processing treatment on voice clone source audio.
+
+        - Resamples to the model's native sample rate
+        - Applies peak normalization
+        """
+        sound = SoundUtil.resample_if_necessary(sound, target_sr)
+        data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
+        return Sound(data, sound.sr)
+

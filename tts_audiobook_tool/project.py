@@ -21,7 +21,6 @@ from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_model.oute_util import OuteUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -37,6 +36,12 @@ class Project(BaseModel):
     Project settings. Assigning any field automatically saves to disk once `_autosave`
     is enabled (after loading). Use `with project.batch():` to make several assignments
     and save exactly once at the end.
+
+    Project spec versions:
+    - version 1: project text stored inline in `project.json`
+    - version 2: project text stored externally in `project_text.json`
+
+    On save, `version` is always normalized to `CURRENT_PROJECT_VERSION`.
     """
 
     model_config = ConfigDict(
@@ -46,6 +51,8 @@ class Project(BaseModel):
     )
 
     _autosave: bool = PrivateAttr(default=False)
+    _phrase_groups_dirty: bool = PrivateAttr(default=False)
+    _phrase_groups_inline_source: str = PrivateAttr(default="")
     _sound_segments: Any = PrivateAttr(default=None)
     _on_stream_end: StreamEndCallback | None = PrivateAttr(default=None)
 
@@ -67,6 +74,7 @@ class Project(BaseModel):
     # --- Fields ---
 
     dir_path: str = ""
+    version: int = PROJECT_SPEC_VERSION
 
     language_code: str = PROJECT_DEFAULT_LANGUAGE
 
@@ -96,7 +104,10 @@ class Project(BaseModel):
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
+    
+    # Rem, UI nomenclature for this is "tolerance"
     strictness: Strictness = list(Strictness)[0]
+    
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: ChapterMode = list(ChapterMode)[0]
 
@@ -202,6 +213,8 @@ class Project(BaseModel):
 
     def __setattr__(self, name: str, value) -> None:
         super().__setattr__(name, value)
+        if name == 'phrase_groups' and not name.startswith('_'):
+            self._phrase_groups_dirty = True
         if name != '_autosave' and getattr(self, '_autosave', False):
             self.save()
 
@@ -247,6 +260,12 @@ class Project(BaseModel):
                 _tl.warnings.append(s)
 
         _remap_legacy_keys(d)
+
+        # version
+        value = d.get('version', 1)
+        if not isinstance(value, int) or value < 1:
+            value = 1
+        d['version'] = value
 
         # text / text_segments → phrase_groups
         if "text" in d:
@@ -609,11 +628,35 @@ class Project(BaseModel):
 
         d['dir_path'] = dir_path  # inject; not stored in JSON
 
+        inline_text_source = ""
+        if "text" in d:
+            inline_text_source = "text"
+        elif "text_segments" in d:
+            inline_text_source = "text_segments"
+        elif 'phrase_groups' not in d:
+            result = _load_phrase_groups_payload(dir_path)
+            if isinstance(result, str):
+                return result
+            if result is not None:
+                d['phrase_groups'] = result
+
         _tl.warnings = []
         try:
             project = Project.model_validate(d)
         except Exception as e:
             return f"Failed to parse project: {e}"
+
+        project._phrase_groups_dirty = False
+        project._phrase_groups_inline_source = inline_text_source
+
+        if inline_text_source:
+            err = project.save(force_phrase_groups=True)
+            if err:
+                return err
+            L.i(
+                f"Migrated inline project phrase groups from project.json[{inline_text_source!r}] "
+                f"to {PROJECT_TEXT_FILE_NAME}: {dir_path}"
+            )
 
         # Oute voice JSON loading — depends on global Tts state, kept imperative
         if Tts.get_type() == TtsModelInfos.OUTE:
@@ -634,10 +677,10 @@ class Project(BaseModel):
     def to_dict(self) -> dict:
         return {
             "dir_path": self.dir_path,
+            "version": self.version,
 
             "language_code": self.language_code,
 
-            "text": PhraseGroup.phrase_groups_to_json_list(self.phrase_groups),
             "segmentation_strategy": self.segmentation_strategy.id,
             "max_words": self.max_words,
             "word_substitutions_json_string": json.dumps(self.word_substitutions),
@@ -761,16 +804,64 @@ class Project(BaseModel):
             "omnivoice_seed": self.omnivoice_seed
         }
 
-    def save(self) -> str:
-        file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
+    def to_snapshot_dict(self) -> dict:
+        """
+        Returns a project settings snapshot suitable for embedding in ABR metadata.
+
+        This intentionally includes `dir_path` as a best-effort hint for future
+        import flows that may want to locate and optionally copy related project
+        files such as voice clones.
+        """
+        d = self.to_dict()
+        return d
+
+    @property
+    def project_text_path(self) -> str:
+        if not self.dir_path:
+            return ""
+        return os.path.join(self.dir_path, PROJECT_TEXT_FILE_NAME)
+
+    def phrase_groups_to_dict(self) -> dict:
+        return {
+            "format": "phrase_groups.v1",
+            "phrase_groups": PhraseGroup.phrase_groups_to_json_list(self.phrase_groups)
+        }
+
+    def save_phrase_groups(self) -> str:
+        file_path = self.project_text_path
         try:
-            with open(file_path, "w") as file:
-                json.dump(self.to_dict(), file, indent=4)
+            with open(file_path, "w", encoding="utf-8") as file:
+                json.dump(self.phrase_groups_to_dict(), file, indent=4)
+            self._phrase_groups_dirty = False
+            self._phrase_groups_inline_source = ""
+            L.d(f"Saved {PROJECT_TEXT_FILE_NAME}: {file_path}")
             return ""
         except Exception as e:
             err = make_error_string(e)
             printt(f"\n{COL_ERROR}{err}\n")
             return err
+
+    def save(self, force_phrase_groups: bool=False) -> str:
+        
+        file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
+        
+        try:
+            # Ensure project version is up-to-date
+            super().__setattr__('version', PROJECT_SPEC_VERSION)
+            
+            with open(file_path, "w", encoding="utf-8") as file:
+                json.dump(self.to_dict(), file, indent=4)
+            L.d(f"Saved {PROJECT_JSON_FILE_NAME}: {file_path}")
+
+        except Exception as e:
+            err = make_error_string(e)
+            printt(f"\n{COL_ERROR}{err}\n")
+            return err
+
+        if force_phrase_groups or self._phrase_groups_dirty:
+            return self.save_phrase_groups()
+        
+        return ""
 
     def set_phrase_groups_and_save(
             self,
@@ -812,24 +903,17 @@ class Project(BaseModel):
 
     def set_voice_and_save(
             self,
-            source_sound: Sound,
+            sound: Sound,
             voice_file_stem: str,
             transcript: str,
             tts_type: TtsModelInfos,
             is_secondary: bool=False
     ) -> str:
         """
-        Saves resampled/peak-normalized voice sound file, and updates and saves project properties
-        Returns error string on fail
+        Saves voice sound file, and updates and saves project properties.
+        Sound file is expected to already be post-processed (viz, resampled to target model's native sr).
+        Returns error string on fail.
         """
-
-        # Resample to model's native samplerate
-        target_sr = tts_type.value.sample_rate
-        sound = SoundUtil.resample_if_necessary(source_sound, target_sr)
-        # Peak normalization
-        data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
-        sound = Sound(data, sound.sr )
-
         # Add "_modelname" to filename
         dest_file_name = f"{voice_file_stem}_{tts_type.value.file_tag}.flac"
         dest_path = Path(self.dir_path) / dest_file_name
@@ -1033,6 +1117,7 @@ class Project(BaseModel):
 
         # Copy 'internal' files
         src_files = [
+            PROJECT_TEXT_FILE_NAME,
             PROJECT_TEXT_RAW_FILE_NAME,
             source_project.none_voice_file_name,
             source_project.chatterbox_voice_file_name,
@@ -1117,6 +1202,31 @@ def _remap_legacy_keys(d: dict) -> None:
         v = d.get('indextts2_emo_voice_alpha', -1)
         if isinstance(v, (int, float)) and v >= 0:
             d['indextts2_emo_alpha'] = v
+
+def _load_phrase_groups_payload(dir_path: str) -> list[PhraseGroup] | str | None:
+    file_path = os.path.join(dir_path, PROJECT_TEXT_FILE_NAME)
+    if not os.path.exists(file_path):
+        return None
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            payload = json.load(file)
+    except Exception as e:
+        return f"Error loading project text: {e}"
+
+    if isinstance(payload, dict):
+        if 'phrase_groups' not in payload:
+            return "Project text file missing 'phrase_groups'"
+        phrase_group_dicts = payload['phrase_groups']
+    elif isinstance(payload, list):
+        phrase_group_dicts = payload
+    else:
+        return f"Project text file bad type: {type(payload)}"
+
+    result = PhraseGroup.phrase_groups_from_json_list(phrase_group_dicts)
+    if isinstance(result, str):
+        return f"Error parsing project text: {result}"
+    return result
 
 def _load_oute_voice_json(project: Project) -> None:
     """Load Oute voice JSON into project.oute_voice_json (only when Oute is active)."""

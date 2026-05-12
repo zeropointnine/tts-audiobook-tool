@@ -314,7 +314,7 @@ class MenuUtil:
             path_string = value_color + "none"
 
         language_code = state.project.language_code.strip()
-        if language_code:
+        if state.project.dir_path and language_code:
             path_string += f" {COL_DIM}({language_code})"
 
         if Tts._instance_display_info:

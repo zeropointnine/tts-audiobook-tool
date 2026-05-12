@@ -342,11 +342,14 @@ class GenerateUtil:
                 results.append(err)
                 continue
 
-            sound, gap_trims = gen_result
+            sound, gap_trims, start_trim_time, end_trim_time, original_duration = gen_result
 
             if skip_reason:
                 validation_result = SkippedResult(sound=sound, message=skip_reason)
                 validation_result.intra_sample_silence_trims = gap_trims
+                validation_result.generated_start_trim_time = start_trim_time
+                validation_result.generated_end_trim_time = end_trim_time
+                validation_result.generated_trim_original_duration = original_duration
                 results.append((validation_result))
                 continue
 
@@ -366,6 +369,9 @@ class GenerateUtil:
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
             validation_result.intra_sample_silence_trims = gap_trims
+            validation_result.generated_start_trim_time = start_trim_time
+            validation_result.generated_end_trim_time = end_trim_time
+            validation_result.generated_trim_original_duration = original_duration
             results.append(validation_result)
 
             if save_debug_files and isinstance(validation_result, TrimmedResult):
@@ -393,7 +399,7 @@ class GenerateUtil:
             force_random_seed: bool, 
             is_realtime: bool,
             save_debug_files: bool
-        ) -> list[tuple[Sound, list[SilenceGapTrim]] | str]:
+        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float] | str]:
         """
         Core audio generation function.
         
@@ -428,7 +434,7 @@ class GenerateUtil:
 
         sounds = [result] if isinstance(result, Sound) else result
         
-        results: list[tuple[Sound, list[SilenceGapTrim]] | str] = []
+        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float] | str] = []
 
         for i, sound in enumerate(sounds):
 
@@ -442,17 +448,10 @@ class GenerateUtil:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
                 # Trim silence ends and peak-normalize
-                original_duration = sound.duration
-                sound = SoundAppUtil.apply_generate_post_processing(sound)
-
-                # Log if trimming activated
-                if sound.data.size > 0 and abs(sound.duration - original_duration) > 0.01:
-                    trimmed_ms = (original_duration - sound.duration) * 1000
-                    L.d(f"Trimmed: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (trimmed {trimmed_ms:.0f}ms)")
+                sound, start_trim_time, end_trim_time, original_duration = SoundAppUtil.apply_generate_post_processing_with_info(sound)
 
                 # Limit internal silence gaps (done before STT transcription so timestamps match)
                 if sound.data.size > 0 and project.limit_silence_gaps:
-                    original_duration = sound.duration
                     # Save debug sound before gap limiting
                     if save_debug_files:
                         GenerateUtil.save_debug_sound(project, indices[i], "pre_gap_limit", sound, is_realtime=is_realtime)
@@ -466,7 +465,7 @@ class GenerateUtil:
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"
                 else:
-                    result = (sound, gap_trims)
+                    result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration)
             
             results.append(result)
 

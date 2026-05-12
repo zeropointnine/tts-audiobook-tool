@@ -339,7 +339,8 @@ class AskUtil:
             return
 
         setattr(saveable, attr, value)
-        saveable.save()
+        if not isinstance(saveable, Project):
+            saveable.save()
 
         print_feedback(success_prefix, str(value))
 
@@ -353,6 +354,8 @@ class AskUtil:
         success_prefix: str,
         is_int: bool=False
     ) -> None:
+
+        from tts_audiobook_tool.project import Project
 
         if not hasattr(saveable, project_attr_name):
             raise ValueError(f"No such attribute {project_attr_name}")
@@ -377,7 +380,8 @@ class AskUtil:
             return
 
         setattr(saveable, project_attr_name, value)
-        saveable.save()
+        if not isinstance(saveable, Project):
+            saveable.save()
         print_feedback(success_prefix, str(value))
 
     @staticmethod
@@ -393,6 +397,8 @@ class AskUtil:
         Helper to ask for a string value and save it to the project.
         :param validator: Takes in the user input string and returns error string if invalid (optional)
         """
+        from tts_audiobook_tool.project import Project
+
         if not hasattr(saveable, project_attr_name):
             raise ValueError(f"No such attribute {project_attr_name}")
 
@@ -412,7 +418,8 @@ class AskUtil:
                 break                    
 
         setattr(saveable, project_attr_name, value)
-        saveable.save()
+        if not isinstance(saveable, Project):
+            saveable.save()
         print_feedback(success_prefix, value)
 
 # ---

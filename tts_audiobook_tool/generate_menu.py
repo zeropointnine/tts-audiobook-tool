@@ -93,15 +93,16 @@ class GenerateMenu:
             if state.project.sound_segments.num_generated() > 0:
                 items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
             
-            # Strictness/tolerance
             # Batch size
             if Tts.get_type().value.can_batch:
                 items.append(
                     MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state), superlabel="Options")
                 )
+            # Tolerance
             items.append(
                 MenuItem(
-                    make_tolerance_label, lambda _, __: GenerateMenu.strictness_menu(state)
+                    make_tolerance_label, lambda _, __: GenerateMenu.tolerance_menu(state),
+                    superlabel="Options"
                 )
             )
             
@@ -188,7 +189,7 @@ class GenerateMenu:
         )
 
     @staticmethod
-    def strictness_menu(state: State) -> None:
+    def tolerance_menu(state: State) -> None:
 
         def on_select(value: Strictness) -> None:
             state.project.strictness = value
@@ -288,7 +289,7 @@ def ask_delete_segments(state: State) -> None:
     else:
         segment_word = make_noun("segment", "segments", len(indices_to_delete))
         s = f"The following {len(indices_to_delete)} {segment_word} will be deleted: \n"
-        s += ParseUtil.make_ranges_string(selected_indices, total_num_items)
+        s += ParseUtil.make_ranges_string(indices_to_delete, total_num_items)
     printt(s)
     if not AskUtil.ask_confirm():
         return

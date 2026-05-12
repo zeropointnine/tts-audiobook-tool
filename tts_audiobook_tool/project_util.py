@@ -1,5 +1,7 @@
 import os
+import shutil
 from datetime import datetime
+from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
@@ -154,4 +156,103 @@ class ProjectUtil:
                 return f"Out of range: {flt} - must be between 0-1"
             floats.append(flt)
         return floats
+
+    @staticmethod
+    def load_raw_abr_metadata_string(abr_path: str) -> str:
+        suffix = os.path.splitext(abr_path)[1].lower()
+        if suffix == '.flac':
+            return AudioMetaUtil.get_flac_metadata_field(abr_path, APP_META_FLAC_FIELD)
+        if suffix in ['.m4a', '.m4b']:
+            string, _ = AudioMetaUtil.get_mp4_metadata_tag(abr_path, APP_META_MP4_MEAN, APP_META_MP4_TAG)
+            return string
+        return ""
+
+    @staticmethod
+    def make_project_from_snapshot(project_dir: str, project_snapshot: dict) -> Project:
+        parse_dict = dict(project_snapshot)
+        parse_dict['dir_path'] = project_dir
+        return Project.model_validate(parse_dict)
+
+    @staticmethod
+    def apply_project_settings(dest_project: Project, source_project: Project) -> None:
+        skip = {'dir_path', 'sound_segments', 'oute_voice_json'}
+        with dest_project.batch():
+            for field_name in source_project.model_fields:
+                if field_name not in skip:
+                    setattr(dest_project, field_name, getattr(source_project, field_name))
+
+    @staticmethod
+    def get_snapshot_source_dir(project_snapshot: dict) -> str:
+        source_dir = project_snapshot.get('dir_path', '')
+        if not isinstance(source_dir, str) or not source_dir:
+            return ''
+        return source_dir
+
+    @staticmethod
+    def make_supporting_project_file_names(project: Project) -> list[str]:
+        file_names = [
+            PROJECT_TEXT_FILE_NAME,
+            PROJECT_TEXT_RAW_FILE_NAME,
+            project.none_voice_file_name,
+            project.oute_voice_file_name,
+            project.chatterbox_voice_file_name,
+            project.fish_s1_voice_file_name,
+            project.fish_s2_voice_file_name,
+            project.higgs_voice_file_name,
+            project.vibevoice_voice_file_name,
+            project.indextts2_voice_file_name,
+            project.indextts2_emo_voice_file_name,
+            project.glm_voice_file_name,
+            project.mira_voice_file_name,
+            project.qwen3_voice_file_name,
+            project.pocket_voice_file_name,
+            project.omnivoice_voice_file_name,
+        ]
+
+        filtered_file_names: list[str] = []
+        for file_name in file_names:
+            if not isinstance(file_name, str) or not file_name:
+                continue
+            if os.path.isabs(file_name):
+                continue
+            if file_name in filtered_file_names:
+                continue
+            filtered_file_names.append(file_name)
+
+        return filtered_file_names
+
+    @staticmethod
+    def copy_supporting_project_files(project: Project, source_dir: str, file_names: list[str]) -> list[str]:
+        if not isinstance(source_dir, str):
+            source_dir = ''
+
+        missing_paths: list[str] = []
+
+        for file_name in file_names:
+            src_path = ProjectUtil.find_supporting_project_file_source_path(source_dir, file_name)
+            if not src_path:
+                missing_paths.append(os.path.join(source_dir, file_name) if source_dir else file_name)
+                continue
+
+            dest_path = os.path.join(project.dir_path, file_name)
+            try:
+                shutil.copy(src_path, dest_path)
+            except Exception:
+                missing_paths.append(src_path)
+
+        return missing_paths
+
+    @staticmethod
+    def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> str:
+        candidate_names = [file_name]
+
+        if file_name == PROJECT_TEXT_RAW_FILE_NAME:
+            candidate_names.append("text_raw.txt")
+
+        for candidate_name in candidate_names:
+            candidate_path = os.path.join(source_dir, candidate_name) if source_dir else candidate_name
+            if os.path.exists(candidate_path):
+                return candidate_path
+
+        return ""
 
