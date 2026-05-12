@@ -17,6 +17,7 @@ from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import ValidationResult
@@ -125,14 +126,17 @@ class RealTimeUtil:
             else:
                 sound = sound_opt
 
-            sound = SoundAppUtil.apply_segment_post_processing(
+            original_duration = sound.duration
+            sound = SoundAppUtil.prepare_generated_sound_for_playback(
                 sound=sound,
                 high_shelf=state.project.get_high_shelf(),
                 limit_silence_gaps=state.project.limit_silence_gaps,
                 limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
-                use_upsampler=False # no upsampling on realtime for now 
             )
-            assert isinstance(sound, Sound)
+
+            if sound.data.size > 0 and abs(sound.duration - original_duration) > 0.01:
+                trimmed_ms = (original_duration - sound.duration) * 1000
+                L.d(f"Trimmed: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (trimmed {trimmed_ms:.0f}ms)")
 
             # Add appended sound
             if one_second == end_index:
@@ -291,7 +295,7 @@ class RealTimeUtil:
                 if err:
                     printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
                 else:
-                    printt(f"{COL_DIM}Saved: {Path(saved_path).name}")
+                    printt(f"{COL_DEFAULT}Saved: {COL_DIM}{Path(saved_path).name}")
             return validation_result.sound, did_interrupt
 
 # ---

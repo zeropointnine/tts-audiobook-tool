@@ -450,7 +450,7 @@ class GenerateUtil:
                     trimmed_ms = (original_duration - sound.duration) * 1000
                     L.d(f"Trimmed: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (trimmed {trimmed_ms:.0f}ms)")
 
-                # Limit internal silence gaps (before STT transcription so timestamps match)
+                # Limit internal silence gaps (done before STT transcription so timestamps match)
                 if sound.data.size > 0 and project.limit_silence_gaps:
                     original_duration = sound.duration
                     # Save debug sound before gap limiting

@@ -709,7 +709,7 @@ class ResponseSession:
 
                 self.log_tts_inference_start(mode="non-streaming", text=text)
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                    result = Tts.generate_using_project(self.project, [text])
+                    result = SoundAppUtil.generate_processed_using_project(self.project, [text])
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
@@ -730,8 +730,6 @@ class ResponseSession:
                             self.pending_sentences.pop(0)
                     continue
                 
-                # Trim silence ends and peak-normalize
-                sound = SoundAppUtil.apply_generate_post_processing(sound)
                 if sound.data.size == 0:
                     if not self.response_aborted.is_set():
                         self.ui.println(f"[TTS error: empty/silent output]")
@@ -741,22 +739,13 @@ class ResponseSession:
                     self.render_response()
                     continue
                 
-                pp_result = SoundAppUtil.apply_segment_post_processing(
+                sound = SoundAppUtil.prepare_generated_sound_for_playback(
                     sound,
                     high_shelf=self.project.get_high_shelf(),
                     limit_silence_gaps=self.project.limit_silence_gaps,
                     limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
                 )
-                if isinstance(pp_result, str):
-                    if not self.response_aborted.is_set():
-                        self.ui.println(f"[TTS error: {pp_result}]")
-                    with self.state_lock:
-                        if self.pending_sentences and self.pending_sentences[0] == text:
-                            self.pending_sentences.pop(0)
-                    self.render_response()
-                    continue                
-                sound = pp_result
-                sound = SoundUtil.append_pause_or_section_effect(
+                sound = SoundAppUtil.append_pause_or_section_effect(
                     sound, reason=reason, use_section_sound_effect=False,
                 )
 

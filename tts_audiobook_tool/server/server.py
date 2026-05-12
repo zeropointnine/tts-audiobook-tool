@@ -372,7 +372,7 @@ class Server:
     ) -> bool:
         started_at = time.monotonic()
         self.log_tts_inference_start(mode="non-streaming", text=prompt_text)
-        result = Tts.generate_using_project(
+        result = SoundAppUtil.generate_processed_using_project(
             self._project,
             [prompt_text],
             force_random_seed=False,
@@ -385,22 +385,19 @@ class Server:
         if self._generation_id != generation_id:
             return False
 
-        sound = SoundAppUtil.apply_generate_post_processing(sound)
         if sound.data.size == 0:
             printt("* Model output is empty or silence")
             return False
 
-        sound = SoundAppUtil.apply_segment_post_processing(
+        sound = SoundAppUtil.prepare_generated_sound_for_playback(
             sound=sound,
             high_shelf=self._project.get_high_shelf(),
             limit_silence_gaps=self._project.limit_silence_gaps,
-            limit_silence_gaps_duration=self._project.limit_silence_gaps_duration,
-            use_upsampler=False,
+            limit_silence_gaps_duration=self._project.limit_silence_gaps_duration
         )
-        assert isinstance(sound, Sound)
 
         if phrase_group.last_reason != Reason.UNDEFINED:
-            sound = SoundUtil.append_pause_or_section_effect(
+            sound = SoundAppUtil.append_pause_or_section_effect(
                 sound, reason=phrase_group.last_reason, use_section_sound_effect=False
             )
 

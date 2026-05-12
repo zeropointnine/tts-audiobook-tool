@@ -196,8 +196,6 @@ class ConcatUtil:
             use_section_sound_effect=state.project.use_section_sound_effect,
             high_shelf=high_shelf,
             aac_bitrate=state.prefs.aac_bitrate,
-            limit_silence_gaps=state.project.limit_silence_gaps,
-            limit_silence_gaps_duration=state.project.limit_silence_gaps_duration,
             use_upsampler=state.project.use_upsampler
         )
         if isinstance(result, str): # is error
@@ -317,43 +315,6 @@ class ConcatUtil:
         return num_missing
 
     @staticmethod
-    def make_rendered_sound_segment(
-        phrase: Phrase,
-        path: str,
-        use_section_sound_effect: bool,
-        high_shelf: HighShelfEq,
-        limit_silence_gaps: bool = False,
-        limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
-        use_upsampler: bool = False
-    ) -> Sound | str:
-        """
-        Renders a sound segment by applying necessary transformations to the source audio file at `path`
-        :param path: cannot be empty
-        """
-
-        result = SoundFileUtil.load(path)
-        if isinstance(result, str): # error
-            return result
-        sound = result
-
-        result = SoundAppUtil.apply_segment_post_processing(
-            sound,
-            high_shelf=high_shelf,
-            limit_silence_gaps=limit_silence_gaps,
-            limit_silence_gaps_duration=limit_silence_gaps_duration,
-            use_upsampler=use_upsampler,
-        )
-        if isinstance(result, str):
-            return result
-        sound = result
-
-        sound = SoundUtil.append_pause_or_section_effect(
-            sound, reason=phrase.reason, use_section_sound_effect=use_section_sound_effect
-        )
-
-        return sound
-
-    @staticmethod
     def concatenate_sound_segments(
         dest_path: str,
         phrases_and_paths: list[ tuple[Phrase, str] ],
@@ -361,8 +322,6 @@ class ConcatUtil:
         high_shelf: HighShelfEq,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
-        limit_silence_gaps: bool = False,
-        limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION,
         use_upsampler: bool = False
     ) -> list[float] | str:
         """
@@ -398,10 +357,8 @@ class ConcatUtil:
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
 
-            result = ConcatUtil.make_rendered_sound_segment(
+            result = SoundAppUtil.make_concat_rendered_sound_segment(
                 phrase, path, use_section_sound_effect, high_shelf,
-                limit_silence_gaps=limit_silence_gaps,
-                limit_silence_gaps_duration=limit_silence_gaps_duration,
                 use_upsampler=use_upsampler
             )
             if isinstance(result, str): # error

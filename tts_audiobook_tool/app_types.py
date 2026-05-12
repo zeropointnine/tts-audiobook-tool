@@ -225,9 +225,9 @@ class SttConfig(tuple[str, str, str], Enum):
 
 class Strictness(tuple[str, int, str], Enum):
 
-    LOW = ("low", 1, "Low") 
+    LOW = ("low", 1, "Loose") 
     MODERATE = ("moderate", 2, "Moderate")
-    HIGH = ("high", 3, "High")
+    HIGH = ("high", 3, "Strict")
     INTOLERANT = ("intolerant", 4, "Intolerant")
 
     @property

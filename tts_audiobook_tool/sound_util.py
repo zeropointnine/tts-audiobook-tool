@@ -134,15 +134,3 @@ class SoundUtil:
         new_data = numpy.concatenate((base_sound.data, appended_sound.data))
         return Sound(new_data, base_sound.sr)
 
-    @staticmethod
-    def append_pause_or_section_effect(
-        sound: Sound,
-        reason: Reason,
-        use_section_sound_effect: bool,
-    ) -> Sound:
-        if reason == Reason.SECTION and use_section_sound_effect:
-            return SoundUtil.append_sound_using_path(sound, SECTION_SOUND_EFFECT_PATH)
-        if reason.pause_duration:
-            return SoundUtil.add_silence(sound, reason.pause_duration)
-        return sound
-
