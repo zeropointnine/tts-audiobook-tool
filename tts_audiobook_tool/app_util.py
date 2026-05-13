@@ -115,12 +115,14 @@ class AppUtil:
             printt("None")    
         printt()
 
-        if extant_indices is not None:
-            printt(f"- Num audio segments generated: {COL_ACCENT}{len(extant_indices)} {COL_DIM}/ {COL_ACCENT}{len(phrase_groups)}")
+        printt(f"{COL_DIM}The text was segmented using the following settings:")
         printt(f"- Text segmenter language code: {COL_ACCENT}{language_code_used or 'none'}")
         if max_words_used:
             printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{max_words_used}")
         printt(f"- Text segmenter strategy: {COL_ACCENT}{strategy_used.label}")
+        if extant_indices is not None:
+            printt()
+            printt(f"Num audio segments generated: {COL_ACCENT}{len(extant_indices)} {COL_DIM}/ {COL_ACCENT}{len(phrase_groups)}")
         printt()                
 
     @staticmethod

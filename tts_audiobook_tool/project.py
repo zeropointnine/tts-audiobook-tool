@@ -925,44 +925,24 @@ class Project(BaseModel):
         if err:
             return err
 
+        info = tts_type.value
+        voice_file_name_attr = info.voice_file_name_attr
+        voice_transcript_attr = info.voice_transcript_attr
+
         # Update the correct voice file name property of project, and save
         with self.batch():
-            match tts_type:
-                case TtsModelInfos.CHATTERBOX:
-                    self.chatterbox_voice_file_name = dest_file_name
-                    # Rem, chatterbox does not require voice sound file's transcription
-                case TtsModelInfos.FISH_S1:
-                    self.fish_s1_voice_file_name = dest_file_name
-                    self.fish_s1_voice_transcript = transcript
-                case TtsModelInfos.FISH_S2:
-                    self.fish_s2_voice_file_name = dest_file_name
-                    self.fish_s2_voice_transcript = transcript
-                case TtsModelInfos.HIGGS:
-                    self.higgs_voice_file_name = dest_file_name
-                    self.higgs_voice_transcript = transcript
-                case TtsModelInfos.VIBEVOICE:
-                    self.vibevoice_voice_file_name = dest_file_name
-                case TtsModelInfos.INDEXTTS2:
-                    if not is_secondary:
-                        self.indextts2_voice_file_name = dest_file_name
-                    else:
-                        self.indextts2_emo_voice_file_name = dest_file_name
-                case TtsModelInfos.GLM:
-                    self.glm_voice_file_name = dest_file_name
-                    self.glm_voice_transcript = transcript
-                case TtsModelInfos.MIRA:
-                    self.mira_voice_file_name = dest_file_name
-                case TtsModelInfos.QWEN3TTS:
-                    self.qwen3_voice_file_name = dest_file_name
-                    self.qwen3_voice_transcript = transcript
-                case TtsModelInfos.POCKET:
-                    self.pocket_voice_file_name = dest_file_name
-                    self.pocket_predefined_voice = ""
-                case TtsModelInfos.OMNIVOICE:
-                    self.omnivoice_voice_file_name = dest_file_name
-                    self.omnivoice_voice_transcript = transcript
-                case _:
+            if tts_type == TtsModelInfos.INDEXTTS2 and is_secondary: # special case
+                self.indextts2_emo_voice_file_name = dest_file_name
+            else:
+                if not voice_file_name_attr:
                     raise Exception(f"Unsupported tts type {tts_type}")
+                setattr(self, voice_file_name_attr, dest_file_name)
+
+            if voice_transcript_attr:
+                setattr(self, voice_transcript_attr, transcript)
+
+            if tts_type == TtsModelInfos.POCKET:
+                self.pocket_predefined_voice = ""
         return ""
 
     def set_oute_voice_and_save(self, voice_dict: dict, dest_file_stem: str) -> None:
@@ -976,43 +956,24 @@ class Project(BaseModel):
             self.oute_voice_file_name = file_name
             self.oute_voice_json = voice_dict
 
-    # TODO: Refactor next three methods. Generalize using TtsModel or TtsModelInfos.
     def clear_voice_and_save(self, tts_type: TtsModelInfos, is_secondary: bool=False) -> None:
+        info = tts_type.value
+        voice_file_name_attr = info.voice_file_name_attr
+        voice_transcript_attr = info.voice_transcript_attr
+
         with self.batch():
-            match tts_type:
-                case TtsModelInfos.CHATTERBOX:
-                    self.chatterbox_voice_file_name = ""
-                case TtsModelInfos.FISH_S1:
-                    self.fish_s1_voice_file_name = ""
-                    self.fish_s1_voice_transcript = ""
-                case TtsModelInfos.FISH_S2:
-                    self.fish_s2_voice_file_name = ""
-                    self.fish_s2_voice_transcript = ""
-                case TtsModelInfos.HIGGS:
-                    self.higgs_voice_file_name = ""
-                    self.higgs_voice_transcript = ""
-                case TtsModelInfos.VIBEVOICE:
-                    self.vibevoice_voice_file_name = ""
-                case TtsModelInfos.INDEXTTS2:
-                    if not is_secondary:
-                        self.indextts2_voice_file_name = ""
-                    else:
-                        self.indextts2_emo_voice_file_name = ""
-                case TtsModelInfos.GLM:
-                    self.glm_voice_file_name = ""
-                    self.glm_voice_transcript = ""
-                case TtsModelInfos.MIRA:
-                    self.mira_voice_file_name = ""
-                case TtsModelInfos.QWEN3TTS:
-                    self.qwen3_voice_file_name = ""
-                case TtsModelInfos.POCKET:
-                    self.pocket_voice_file_name = ""
-                    self.pocket_predefined_voice = ""
-                case TtsModelInfos.OMNIVOICE:
-                    self.omnivoice_voice_file_name = ""
-                    self.omnivoice_voice_transcript = ""
-                case _:
+            if tts_type == TtsModelInfos.INDEXTTS2 and is_secondary:
+                self.indextts2_emo_voice_file_name = ""
+            else:
+                if not voice_file_name_attr:
                     raise ValueError(f"Unsupported tts_type: {tts_type}")
+                setattr(self, voice_file_name_attr, "")
+
+            if voice_transcript_attr:
+                setattr(self, voice_transcript_attr, "")
+
+            if tts_type == TtsModelInfos.POCKET:
+                self.pocket_predefined_voice = ""
 
     @property
     def voice_label(self) -> str:

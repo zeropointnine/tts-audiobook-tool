@@ -6,6 +6,7 @@ from tts_audiobook_tool.ansi import Ansi
 package_dir = os.path.dirname(os.path.abspath(__file__))
 
 APP_NAME = "tts-audiobook-tool"
+APP_URL = "https://github.com/zeropointnine/tts-audiobook-tool"
 
 APP_USER_SUBDIR = "tts_audiobook_tool"
 APP_TEMP_SUBDIR = "tts_audiobook_tool"

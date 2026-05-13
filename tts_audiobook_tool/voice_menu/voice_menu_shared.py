@@ -121,7 +121,7 @@ class VoiceMenuShared:
             # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
-        if tts_type.value.requires_voice_transcript:
+        if tts_type.value.voice_transcript_attr:
             Hint.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
         if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
@@ -156,7 +156,7 @@ class VoiceMenuShared:
         force_enter_prompt = False
 
         transcript = ""
-        if tts_type.value.requires_voice_transcript:
+        if tts_type.value.voice_transcript_attr:
 
             # [1] Get transcript from 'parallel text file' if possible
             transcript_path = Path(path).with_suffix(".txt")

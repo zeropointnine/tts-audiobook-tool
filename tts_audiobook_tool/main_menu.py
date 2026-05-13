@@ -83,9 +83,10 @@ class MainMenu:
 
         if should_show_menu_status_details(state):
             s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
-            heading = f"{APP_NAME} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
+            heading = f"{make_terminal_hyperlink(APP_URL, APP_NAME)} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
         else:
-            heading = APP_NAME
+            heading = f"{make_terminal_hyperlink(APP_URL, APP_NAME)}"
+        
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
 
 # ---
@@ -162,7 +163,7 @@ def on_concat(state: State, _: MenuItem) -> None:
 
 def on_realtime_audiobook(state: State, _: MenuItem) -> None:
     if Tts.get_type() == TtsModelInfos.NONE:
-        print_feedback("Requires TTS model", is_error=True)
+        print_feedback(REQUIRES_TTS_MODEL, is_error=True)
         return
     if not state.project.dir_path:
         print_feedback(REQUIRES_PROJECT, is_error=True)
@@ -171,7 +172,7 @@ def on_realtime_audiobook(state: State, _: MenuItem) -> None:
 
 def on_chat(state: State, _: MenuItem) -> None:
     if Tts.get_type() == TtsModelInfos.NONE:
-        print_feedback("Requires TTS model", is_error=True)
+        print_feedback(REQUIRES_TTS_MODEL, is_error=True)
         return
     if not state.project.dir_path:
         print_feedback(REQUIRES_PROJECT, is_error=True)
@@ -184,3 +185,4 @@ def on_quit(_: State, __: MenuItem):
     exit(0)
 
 REQUIRES_PROJECT = "Requires a project"
+REQUIRES_TTS_MODEL = "Requires TTS model"

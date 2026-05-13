@@ -25,8 +25,8 @@ class TtsModelInfo(NamedTuple):
     voice_file_name_attr: str
     # Does the model require a voice clone sample to generate audio
     requires_voice: bool
-    # Does the model API require the text transcript of the voice clone sample
-    requires_voice_transcript: bool
+    # Project attribute of voice clone transcript (when applicable; empty = none)
+    voice_transcript_attr: str
     # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
     
     batch_size_project_field: str
@@ -69,7 +69,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(0, 0),
         voice_file_name_attr="",
         requires_voice=False,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -95,7 +95,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 40),
         voice_file_name_attr="oute_voice_json", # rem, special case, is not a sound file
         requires_voice=True,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -124,7 +124,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 40),
         voice_file_name_attr="chatterbox_voice_file_name",
         requires_voice=False,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=True,
@@ -152,7 +152,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80),
         voice_file_name_attr="fish_s1_voice_file_name",
         requires_voice=False,
-        requires_voice_transcript=True,
+        voice_transcript_attr="fish_s1_voice_transcript",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -180,7 +180,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80),
         voice_file_name_attr="fish_s2_voice_file_name",
         requires_voice=False,
-        requires_voice_transcript=True,
+        voice_transcript_attr="fish_s2_voice_transcript",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -208,7 +208,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 40),
         voice_file_name_attr="higgs_voice_file_name",
         requires_voice=False,
-        requires_voice_transcript=True,
+        voice_transcript_attr="higgs_voice_transcript",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -236,7 +236,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80),
         voice_file_name_attr="vibevoice_voice_file_name",
         requires_voice=False,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="vibevoice_batch_size",
         can_stream=True,
         semantic_trim_last=False,
@@ -266,7 +266,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 60),
         voice_file_name_attr="indextts2_voice_file_name",
         requires_voice=True,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -295,7 +295,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 40),
         voice_file_name_attr="glm_voice_file_name",
         requires_voice=True,
-        requires_voice_transcript=True,
+        voice_transcript_attr="glm_voice_transcript",
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -325,7 +325,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80),
         voice_file_name_attr="mira_voice_file_name",
         requires_voice=True,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="mira_batch_size",
         can_stream=False,
         semantic_trim_last=False,
@@ -355,7 +355,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80),
         voice_file_name_attr="pocket_voice_file_name",
         requires_voice=True,
-        requires_voice_transcript=False,
+        voice_transcript_attr="",
         batch_size_project_field="",
         can_stream=True,
         semantic_trim_last=False,
@@ -384,7 +384,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80),
         voice_file_name_attr="qwen3_voice_file_name",
         requires_voice=True, # this applies to 'base' model type only
-        requires_voice_transcript=True,
+        voice_transcript_attr="qwen3_voice_transcript",
         batch_size_project_field="qwen3_batch_size",
         can_stream=False,
         semantic_trim_last=False,
@@ -412,7 +412,7 @@ class TtsModelInfos(Enum):
         max_words_reco_range=(40, 80), 
         voice_file_name_attr="omnivoice_voice_file_name",
         requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
-        requires_voice_transcript=True, # Preempts OmniVoice from using internal Whisper instance for transcription
+        voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
