@@ -238,10 +238,37 @@ class TtsBaseModel(ABC):
     @classmethod
     def get_voice_value(cls, project: Project) -> str:
         """
-        Returns the active voice reference for this model and project.
+        Returns the active voice reference for this model and project (could be filename or other).
         Override for models that store voice across multiple fields.
         """
         return getattr(project, cls.INFO.voice_file_name_attr, "")
+
+    @classmethod
+    def get_missing_voice_file_prereq_error(
+            cls,
+            project: Project,
+            voice_file_name_attr: str | None = None,
+    ) -> PrereqError | None:
+        """
+        Returns prereq error if the given configured voice filename is non-empty
+        but does not exist under the project directory.
+        """
+        voice_file_name_attr = voice_file_name_attr or cls.INFO.voice_file_name_attr
+        if not voice_file_name_attr:
+            raise Exception("Logic error - must override this method")
+
+        voice_file_name = getattr(project, voice_file_name_attr, "")
+        if not voice_file_name:
+            return None
+
+        voice_path = os.path.join(project.dir_path, voice_file_name)
+        if os.path.exists(voice_path):
+            return None
+
+        return PrereqError(
+            "voice sample",
+            f"Voice clone sample file not found: {voice_file_name}"
+        )
 
     @classmethod
     def _get_standard_prereq_error(cls, project: Project) -> PrereqError | None:
@@ -249,10 +276,14 @@ class TtsBaseModel(ABC):
         if not cls.INFO.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
-        if cls.INFO.requires_voice and not cls.get_voice_value(project):
+        if cls.INFO.requires_voice and not getattr(project, cls.INFO.voice_file_name_attr, ""):
             return PrereqError("voice sample", "A voice clone sample is required")
-        else:
-            return None
+
+        err = cls.get_missing_voice_file_prereq_error(project)
+        if err:
+            return err
+
+        return None
 
     def _get_standard_random_voice_reason(self, project: Project) -> str:
 

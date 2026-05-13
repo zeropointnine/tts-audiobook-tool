@@ -1,3 +1,4 @@
+from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 
@@ -17,6 +18,21 @@ class IndexTts2BaseModel(TtsBaseModel):
     DEFAULT_USE_FP16 = False # project api default
     DEFAULT_TOP_P = 0.8
     DEFAULT_TOP_K = 30
+
+    @classmethod
+    def get_prereq_errors(
+            cls, project: Project, instance: TtsBaseModel | None
+    ) -> list[PrereqError]:
+
+        errors = super().get_prereq_errors(project, instance)
+        if errors:
+            return errors
+
+        err = cls.get_missing_voice_file_prereq_error(project, "indextts2_emo_voice_file_name")
+        if err:
+            errors.append(err)
+
+        return errors
 
     @classmethod
     def get_voice_display_info(
