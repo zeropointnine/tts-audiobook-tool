@@ -662,10 +662,12 @@ class Project(BaseModel):
         if Tts.get_type() == TtsModelInfos.OUTE:
             _load_oute_voice_json(project)
 
+        did_clear_invalid_voice_files = project.verify_voice_files_exist()
+
         # Display accumulated warnings
         pending = getattr(_tl, 'warnings', [])
         _tl.warnings = []
-        if pending:
+        if pending or did_clear_invalid_voice_files:
             project.save()
             for w in pending:
                 printt(w)
@@ -1066,42 +1068,52 @@ class Project(BaseModel):
 
     def verify_voice_files_exist(self) -> bool:
         """
-        Checks if the voice file/s for the current TTS model exist, and if they don't,
-        clears the field, prints feedback, re-saves project, and returns True
+        Checks whether current-model voice clone files exist and are valid sound files.
+        Invalid refs are cleared and warnings are printed.
+        Returns True when one or more attributes were cleared.
         """
-        attribs = []
-        match Tts.get_type().value:
-            case TtsModelInfos.CHATTERBOX:
-                attribs = ["chatterbox_voice_file_name"]
-            case TtsModelInfos.FISH_S1:
-                attribs = ["fish_s1_voice_file_name"]
-            case TtsModelInfos.FISH_S2:
-                attribs = ["fish_s2_voice_file_name"]
-            case TtsModelInfos.HIGGS:
-                attribs = ["higgs_voice_file_name"]
-            case TtsModelInfos.VIBEVOICE:
-                attribs = ["vibevoice_voice_file_name"]
-            case TtsModelInfos.INDEXTTS2:
-                attribs = ["indextts2_voice_file_name", "indextts2_emo_voice_file_name"]
-            case TtsModelInfos.GLM:
-                attribs = ["glm_voice_file_name"]
-            case TtsModelInfos.MIRA:
-                attribs = ["mira_voice_file_name"]
-            case TtsModelInfos.POCKET:
-                attribs = ["pocket_voice_file_name"]
-            case TtsModelInfos.OMNIVOICE:
-                attribs = ["omnivoice_voice_file_name"]
+        model_type = Tts.get_type()
+        info = model_type.value
+
+        attribs: list[str] = []
+        if info.voice_file_name_attr:
+            attribs.append(info.voice_file_name_attr)
+
+        if model_type == TtsModelInfos.INDEXTTS2:
+            attribs.append("indextts2_emo_voice_file_name")
+
+        # Oute special case: voice_file_name_attr points to JSON payload, not a sound file name
+        attribs = [attrib for attrib in attribs if attrib.endswith("_voice_file_name")]
+
         if not attribs:
             return False
 
-        did_delete = False
+        warnings = []
         for attrib in attribs:
-            file_name = getattr(self, attrib)
-            if file_name and not os.path.exists(os.path.join(self.dir_path, file_name)):
-                printt(f"{COL_ERROR}Missing voice file: {COL_DEFAULT}{file_name}")
+            file_name = getattr(self, attrib, "")
+            if not file_name:
+                continue
+
+            file_path = os.path.join(self.dir_path, file_name)
+            if not os.path.exists(file_path):
+                warnings.append((attrib, file_name, "file not found"))
                 setattr(self, attrib, "")
-                did_delete = True
-        return did_delete
+                continue
+
+            err = SoundFileUtil.is_valid_sound_file(file_path)
+            if err:
+                warnings.append((attrib, file_name, err))
+                setattr(self, attrib, "")
+
+        if warnings:
+            printt(f"{COL_ERROR}Warning/info: {COL_DEFAULT}Problem with saved voice clone file(s) for current model {COL_ACCENT}{info.ui['proper_name']}{COL_DEFAULT}")
+            for attrib, file_name, reason in warnings:
+                printt(f"- {COL_ACCENT}{attrib}{COL_DEFAULT}: {file_name}")
+                printt(f"  {COL_DIM}{reason}{COL_DEFAULT}")
+            printt("Clearing saved reference(s) and continuing.")
+            printt()
+
+        return bool(warnings)
 
     def migrate_from(self, source_project: Project) -> None:
         """

@@ -53,9 +53,11 @@ class SoundFileUtil:
         """ Returns error string or empty string"""
         from mutagen._file import File
         try:
-            File(path)
+            result = File(path)
         except Exception as e:
-            return "Not a valid audio file: {e}"
+            return f"Not a valid audio file: {e}"
+        if result is None:
+            return "Not a valid audio file"
         return ""
 
     @staticmethod
