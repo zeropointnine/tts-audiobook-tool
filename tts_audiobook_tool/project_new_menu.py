@@ -15,18 +15,15 @@ class ProjectNewMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def on_make_new_project(_: State, __: MenuItem) -> bool:
-            return ProjectNewMenu.make_new_project(state, migrate_current_settings=False)
-
-        def on_make_new_project_using_current_settings(_: State, __: MenuItem) -> bool:
-            return ProjectNewMenu.make_new_project(state, migrate_current_settings=True)
+        def on_make_new_project(_: State, item: MenuItem) -> bool:
+            return ProjectNewMenu.make_new_project(state, migrate_current_settings=bool(item.data))
 
         def on_make_new_project_using_abr(_: State, __: MenuItem) -> None:
             ProjectNewMenu.make_new_project_using_abr(state)
 
         items = [
-            MenuItem("Make new project", on_make_new_project),
-            MenuItem("Make new project using current project's settings", on_make_new_project_using_current_settings),
+            MenuItem("Make new project", on_make_new_project, False),
+            MenuItem("Make new project using current project's settings", on_make_new_project, True),
             MenuItem("Make new project using settings from existing tts-audiobook \"abr\" audiofile", on_make_new_project_using_abr),
         ]
 
@@ -80,8 +77,11 @@ class ProjectNewMenu:
             state.set_existing_project(state.project.dir_path)
             ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
+        Hint.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
+
         print_feedback("Project directory set:", state.project.dir_path)
-        Hint.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS, and_prompt=True)
+        AskUtil.ask_enter_to_continue()
+        
         return True
 
     @staticmethod
@@ -180,7 +180,7 @@ class ProjectNewMenu:
             return
         
         printt(
-            f"{COL_ERROR}Note that following supporting project files do not exist:{COL_DEFAULT}"
+            f"{COL_ERROR}Note that following supporting project files do not exist and were not copied over:{COL_DEFAULT}"
         )
         for path in missing_paths:
             printt(f"- {path}")
@@ -188,7 +188,6 @@ class ProjectNewMenu:
 
 
 ABR_OLD_VERSION_MESSAGE = (
-    "Audio file was generated with an older version of\n"
-    "tts-audiobook-tool (pre-5-2026), so it has ABR metadata but no\n"
-    "project snapshot to restore project settings from."
+    "Audio file was generated with an old version of tts-audiobook-tool (pre-5-2026)\n"
+    "which does not contain project snapshot data."
 )

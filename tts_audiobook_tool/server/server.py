@@ -27,6 +27,7 @@ from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp
@@ -50,7 +51,7 @@ class Server:
             printt(f"{COL_ERROR}Active project required")
             printt("Run tts-audiobook-tool and set up a new project. Then re-start the server.")
             exit(0)
-        result = Project.load_using_dir_path(prefs.project_dir)
+        result = ProjectUtil.load_using_dir_path(prefs.project_dir)
         if isinstance(result, str):
             printt(f"{COL_ERROR}Error: {result}")
             exit(0)

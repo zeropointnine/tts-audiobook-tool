@@ -71,7 +71,7 @@ class TextMenu:
             MenuItem("Import from text file", on_set_text, data="import"),
         )
         items.append(
-            MenuItem("Manually input/paste text", on_set_text, data="manual"),
+            MenuItem("Import manually (input or paste text)", on_set_text, data="manual"),
         )
         if state.project.phrase_groups:
             items.append(MenuItem("Clear text", on_clear))

@@ -1,16 +1,101 @@
+from __future__ import annotations
+
+import json
 import os
 import shutil
 from datetime import datetime
+from typing import TYPE_CHECKING
+
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_model.oute_util import OuteUtil
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.project import Project
 
 class ProjectUtil:
     """
     Helper functions for `Project`
     """
     
+    @staticmethod
+    def load_using_dir_path(dir_path: str) -> Project | str:
+        """
+        Loads project json from directory path and returns parsed project instance.
+        Returns error string if json is unviable.
+        Else, on some parse errors, falls back to defaults and prints info along the way.
+        """
+        from tts_audiobook_tool.ask_util import AskUtil
+        from tts_audiobook_tool.l import L
+        from tts_audiobook_tool import project as project_module
+        from tts_audiobook_tool.project import Project
+
+        if not os.path.exists(dir_path):
+            return f"Project directory doesn't exist:\n{dir_path}"
+
+        project_dict_path = os.path.join(dir_path, PROJECT_JSON_FILE_NAME)
+        try:
+            with open(project_dict_path, 'r', encoding='utf-8') as f:
+                d = json.load(f)
+        except Exception as e:
+            return f"Error loading project settings: {e}"
+
+        if not isinstance(d, dict):
+            return f"Project settings file bad type: {type(d)}"
+
+        d['dir_path'] = dir_path  # inject; not stored in JSON
+
+        inline_text_source = ""
+        if "text" in d:
+            inline_text_source = "text"
+        elif "text_segments" in d:
+            inline_text_source = "text_segments"
+        elif 'phrase_groups' not in d:
+            result = ProjectUtil.load_phrase_groups_payload(dir_path)
+            if isinstance(result, str):
+                return result
+            if result is not None:
+                d['phrase_groups'] = result
+
+        thread_local = project_module._tl
+        thread_local.warnings = []
+        try:
+            project = Project.model_validate(d)
+        except Exception as e:
+            return f"Failed to parse project: {e}"
+
+        project._phrase_groups_dirty = False
+        project._phrase_groups_inline_source = inline_text_source
+
+        if inline_text_source:
+            err = project.save(force_phrase_groups=True)
+            if err:
+                return err
+            L.i(
+                f"Migrated inline project phrase groups from project.json[{inline_text_source!r}] "
+                f"to {PROJECT_TEXT_FILE_NAME}: {dir_path}"
+            )
+
+        if Tts.get_type() == TtsModelInfos.OUTE:
+            ProjectUtil.load_oute_voice_json(project)
+
+        did_clear_invalid_voice_files = project.verify_voice_files_exist()
+
+        pending = getattr(thread_local, 'warnings', [])
+        thread_local.warnings = []
+        if pending or did_clear_invalid_voice_files:
+            project.save()
+            for warning in pending:
+                printt(warning)
+            AskUtil.ask_enter_to_continue()
+
+        project._autosave = True
+        return project
+
     @staticmethod
     def is_valid_project_dir(project_dir: str) -> str:
         """ Returns error feedback text or empty string if is-valid """
@@ -60,6 +145,71 @@ class ProjectUtil:
             value = value.strip() # replacement-word is not
             result[key] = value
         return result
+
+    @staticmethod
+    def remap_legacy_keys(d: dict) -> None:
+        """Mutates d to normalize old JSON key names to current names."""
+        for old, new in [
+            ('fish_voice_file_name', 'fish_s1_voice_file_name'),
+            ('fish_voice_text', 'fish_s1_voice_text'),
+            ('fish_temperature', 'fish_s1_temperature'),
+            ('fish_seed', 'fish_s1_seed'),
+        ]:
+            if new not in d and old in d:
+                d[new] = d.pop(old)
+        if 'vibevoice_target' not in d and 'vibevoice_model_path' in d:
+            d['vibevoice_target'] = d.pop('vibevoice_model_path', '')
+        if 'qwen3_target' not in d and 'qwen3_path_or_id' in d:
+            d['qwen3_target'] = d.pop('qwen3_path_or_id', '')
+        if d.get('indextts2_emo_alpha', -1) == -1:
+            value = d.get('indextts2_emo_voice_alpha', -1)
+            if isinstance(value, (int, float)) and value >= 0:
+                d['indextts2_emo_alpha'] = value
+
+    @staticmethod
+    def load_phrase_groups_payload(dir_path: str) -> list[PhraseGroup] | str | None:
+        file_path = os.path.join(dir_path, PROJECT_TEXT_FILE_NAME)
+        if not os.path.exists(file_path):
+            return None
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                payload = json.load(file)
+        except Exception as e:
+            return f"Error loading project text: {e}"
+
+        if isinstance(payload, dict):
+            if 'phrase_groups' not in payload:
+                return "Project text file missing 'phrase_groups'"
+            phrase_group_dicts = payload['phrase_groups']
+        elif isinstance(payload, list):
+            phrase_group_dicts = payload
+        else:
+            return f"Project text file bad type: {type(payload)}"
+
+        result = PhraseGroup.phrase_groups_from_json_list(phrase_group_dicts)
+        if isinstance(result, str):
+            return f"Error parsing project text: {result}"
+        return result
+
+    @staticmethod
+    def load_oute_voice_json(project: Project) -> None:
+        """Load Oute voice JSON into project.oute_voice_json (only when Oute is active)."""
+        voice_path = os.path.join(project.dir_path, project.oute_voice_file_name)
+        if not project.oute_voice_file_name or not os.path.exists(voice_path):
+            result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
+            if isinstance(result, str):
+                from tts_audiobook_tool.ask_util import AskUtil
+                AskUtil.ask_error(result)
+            else:
+                project.set_oute_voice_and_save(result, "default")
+        else:
+            result = OuteUtil.load_oute_voice_json(voice_path)
+            if isinstance(result, str):
+                printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}: {result}")
+                printt()
+            else:
+                project.oute_voice_json = result
 
     @staticmethod
     def get_indices_to_generate(project: Project) -> set[int]:
@@ -169,6 +319,8 @@ class ProjectUtil:
 
     @staticmethod
     def make_project_from_snapshot(project_dir: str, project_snapshot: dict) -> Project:
+        from tts_audiobook_tool.project import Project
+
         parse_dict = dict(project_snapshot)
         parse_dict['dir_path'] = project_dir
         return Project.model_validate(parse_dict)
@@ -193,21 +345,14 @@ class ProjectUtil:
         file_names = [
             PROJECT_TEXT_FILE_NAME,
             PROJECT_TEXT_RAW_FILE_NAME,
-            project.none_voice_file_name,
-            project.oute_voice_file_name,
-            project.chatterbox_voice_file_name,
-            project.fish_s1_voice_file_name,
-            project.fish_s2_voice_file_name,
-            project.higgs_voice_file_name,
-            project.vibevoice_voice_file_name,
-            project.indextts2_voice_file_name,
-            project.indextts2_emo_voice_file_name,
-            project.glm_voice_file_name,
-            project.mira_voice_file_name,
-            project.qwen3_voice_file_name,
-            project.pocket_voice_file_name,
-            project.omnivoice_voice_file_name,
         ]
+
+        for model_info in TtsModelInfos:
+            attrs = [model_info.value.voice_file_name_attr, *model_info.value.extra_file_attrs]
+            for attr in attrs:
+                if not attr:
+                    continue
+                file_names.append(getattr(project, attr, ""))
 
         filtered_file_names: list[str] = []
         for file_name in file_names:
@@ -223,12 +368,14 @@ class ProjectUtil:
 
     @staticmethod
     def copy_supporting_project_files(project: Project, source_dir: str, file_names: list[str]) -> list[str]:
+        
         if not isinstance(source_dir, str):
             source_dir = ''
 
         missing_paths: list[str] = []
 
         for file_name in file_names:
+            
             src_path = ProjectUtil.find_supporting_project_file_source_path(source_dir, file_name)
             if not src_path:
                 missing_paths.append(os.path.join(source_dir, file_name) if source_dir else file_name)
@@ -244,6 +391,7 @@ class ProjectUtil:
 
     @staticmethod
     def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> str:
+        
         candidate_names = [file_name]
 
         if file_name == PROJECT_TEXT_RAW_FILE_NAME:

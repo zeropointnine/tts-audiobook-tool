@@ -27,6 +27,8 @@ class TtsModelInfo(NamedTuple):
     requires_voice: bool
     # Project attribute of voice clone transcript (when applicable; empty = none)
     voice_transcript_attr: str
+    # Additional project attributes for model-specific saved files
+    extra_file_attrs: list[str]
     # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
     
     batch_size_project_field: str
@@ -70,6 +72,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="",
         requires_voice=False,
         voice_transcript_attr="",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -96,6 +99,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="oute_voice_json", # rem, special case, is not a sound file
         requires_voice=True,
         voice_transcript_attr="",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -125,6 +129,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="chatterbox_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=True,
@@ -153,6 +158,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="fish_s1_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="fish_s1_voice_transcript",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -181,6 +187,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="fish_s2_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="fish_s2_voice_transcript",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -209,6 +216,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="higgs_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="higgs_voice_transcript",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -237,6 +245,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="vibevoice_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="",
+        extra_file_attrs=[],
         batch_size_project_field="vibevoice_batch_size",
         can_stream=True,
         semantic_trim_last=False,
@@ -267,6 +276,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="indextts2_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
+        extra_file_attrs=["indextts2_emo_voice_file_name"],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -296,6 +306,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="glm_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="glm_voice_transcript",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,
@@ -326,6 +337,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="mira_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
+        extra_file_attrs=[],
         batch_size_project_field="mira_batch_size",
         can_stream=False,
         semantic_trim_last=False,
@@ -356,6 +368,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="pocket_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=True,
         semantic_trim_last=False,
@@ -385,6 +398,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="qwen3_voice_file_name",
         requires_voice=True, # this applies to 'base' model type only
         voice_transcript_attr="qwen3_voice_transcript",
+        extra_file_attrs=[],
         batch_size_project_field="qwen3_batch_size",
         can_stream=False,
         semantic_trim_last=False,
@@ -413,6 +427,7 @@ class TtsModelInfos(Enum):
         voice_file_name_attr="omnivoice_voice_file_name",
         requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
         voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
+        extra_file_attrs=[],
         batch_size_project_field="",
         can_stream=False,
         semantic_trim_last=False,

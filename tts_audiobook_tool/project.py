@@ -1,7 +1,6 @@
 from __future__ import annotations
 import json
 import os
-import shutil
 import threading
 from contextlib import contextmanager
 from typing import Any
@@ -18,7 +17,6 @@ from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
-from tts_audiobook_tool.tts_model.oute_util import OuteUtil
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
@@ -259,7 +257,9 @@ class Project(BaseModel):
             if use_tl_warnings:
                 _tl.warnings.append(s)
 
-        _remap_legacy_keys(d)
+        from tts_audiobook_tool.project_util import ProjectUtil
+
+        ProjectUtil.remap_legacy_keys(d)
 
         # version
         value = d.get('version', 1)
@@ -293,7 +293,6 @@ class Project(BaseModel):
 
         # word_substitutions_json_string → word_substitutions dict
         if 'word_substitutions_json_string' in d:
-            from tts_audiobook_tool.project_util import ProjectUtil
             s = d.pop('word_substitutions_json_string')
             result = ProjectUtil.parse_word_substitutions_json_string(s)
             d['word_substitutions'] = {} if isinstance(result, str) else result
@@ -603,78 +602,6 @@ class Project(BaseModel):
         d["omnivoice_cfg"] = value
 
         return d
-
-    @staticmethod
-    def load_using_dir_path(dir_path: str) -> Project | str:
-        """
-        Loads project json from directory path and returns parsed project instance.
-        Returns error string if json is unviable.
-        Else, on some parse errors, falls back to defaults and prints info along the way.
-        """
-        from tts_audiobook_tool.ask_util import AskUtil
-
-        if not os.path.exists(dir_path):
-            return f"Project directory doesn't exist:\n{dir_path}"
-
-        project_dict_path = os.path.join(dir_path, PROJECT_JSON_FILE_NAME)
-        try:
-            with open(project_dict_path, 'r', encoding='utf-8') as f:
-                d = json.load(f)
-        except Exception as e:
-            return f"Error loading project settings: {e}"
-
-        if not isinstance(d, dict):
-            return f"Project settings file bad type: {type(d)}"
-
-        d['dir_path'] = dir_path  # inject; not stored in JSON
-
-        inline_text_source = ""
-        if "text" in d:
-            inline_text_source = "text"
-        elif "text_segments" in d:
-            inline_text_source = "text_segments"
-        elif 'phrase_groups' not in d:
-            result = _load_phrase_groups_payload(dir_path)
-            if isinstance(result, str):
-                return result
-            if result is not None:
-                d['phrase_groups'] = result
-
-        _tl.warnings = []
-        try:
-            project = Project.model_validate(d)
-        except Exception as e:
-            return f"Failed to parse project: {e}"
-
-        project._phrase_groups_dirty = False
-        project._phrase_groups_inline_source = inline_text_source
-
-        if inline_text_source:
-            err = project.save(force_phrase_groups=True)
-            if err:
-                return err
-            L.i(
-                f"Migrated inline project phrase groups from project.json[{inline_text_source!r}] "
-                f"to {PROJECT_TEXT_FILE_NAME}: {dir_path}"
-            )
-
-        # Oute voice JSON loading — depends on global Tts state, kept imperative
-        if Tts.get_type() == TtsModelInfos.OUTE:
-            _load_oute_voice_json(project)
-
-        did_clear_invalid_voice_files = project.verify_voice_files_exist()
-
-        # Display accumulated warnings
-        pending = getattr(_tl, 'warnings', [])
-        _tl.warnings = []
-        if pending or did_clear_invalid_voice_files:
-            project.save()
-            for w in pending:
-                printt(w)
-            AskUtil.ask_enter_to_continue()
-
-        project._autosave = True
-        return project
 
     def to_dict(self) -> dict:
         return {
@@ -1076,49 +1003,6 @@ class Project(BaseModel):
 
         return bool(warnings)
 
-    def migrate_from(self, source_project: Project) -> None:
-        """
-        Copies settings from another project instance  to self (except directory path), 
-        and also copies 'active' internal files.
-        """
-
-        SKIP = {'dir_path', 'sound_segments', 'oute_voice_json'}
-        with self.batch():
-            for field_name in source_project.model_fields:
-                if field_name not in SKIP:
-                    setattr(self, field_name, getattr(source_project, field_name))
-
-        # Copy 'internal' files
-        src_files = [
-            PROJECT_TEXT_FILE_NAME,
-            PROJECT_TEXT_RAW_FILE_NAME,
-            source_project.none_voice_file_name,
-            source_project.chatterbox_voice_file_name,
-            source_project.fish_s1_voice_file_name,
-            source_project.fish_s2_voice_file_name,
-            source_project.higgs_voice_file_name,
-            source_project.vibevoice_voice_file_name,
-            source_project.indextts2_voice_file_name,
-            source_project.indextts2_emo_voice_file_name,
-            source_project.glm_voice_file_name,
-            source_project.mira_voice_file_name,
-            source_project.pocket_voice_file_name,
-            source_project.omnivoice_voice_file_name,
-        ]
-        src_files = [file for file in src_files if file]
-
-        for src_file in src_files:
-            src_path = os.path.join(source_project.dir_path, src_file)
-            if not Path(src_path).exists():
-                continue
-            dest_path = os.path.join(self.dir_path, src_file)
-            try:
-                shutil.copy(src_path, dest_path)
-            except Exception:
-                ...  # eat
-
-        self.save()
-
     def kill(self) -> None:
         self.sound_segments.observer.stop()
 
@@ -1155,67 +1039,4 @@ class Project(BaseModel):
             return True
         return False
 
-# ---
-
-def _remap_legacy_keys(d: dict) -> None:
-    """Mutates d to normalize old JSON key names to current names."""
-    for old, new in [
-        ('fish_voice_file_name', 'fish_s1_voice_file_name'),
-        ('fish_voice_text', 'fish_s1_voice_text'),
-        ('fish_temperature', 'fish_s1_temperature'),
-        ('fish_seed', 'fish_s1_seed'),
-    ]:
-        if new not in d and old in d:
-            d[new] = d.pop(old)
-    if 'vibevoice_target' not in d and 'vibevoice_model_path' in d:
-        d['vibevoice_target'] = d.pop('vibevoice_model_path', '')
-    if 'qwen3_target' not in d and 'qwen3_path_or_id' in d:
-        d['qwen3_target'] = d.pop('qwen3_path_or_id', '')
-    if d.get('indextts2_emo_alpha', -1) == -1:
-        v = d.get('indextts2_emo_voice_alpha', -1)
-        if isinstance(v, (int, float)) and v >= 0:
-            d['indextts2_emo_alpha'] = v
-
-def _load_phrase_groups_payload(dir_path: str) -> list[PhraseGroup] | str | None:
-    file_path = os.path.join(dir_path, PROJECT_TEXT_FILE_NAME)
-    if not os.path.exists(file_path):
-        return None
-
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            payload = json.load(file)
-    except Exception as e:
-        return f"Error loading project text: {e}"
-
-    if isinstance(payload, dict):
-        if 'phrase_groups' not in payload:
-            return "Project text file missing 'phrase_groups'"
-        phrase_group_dicts = payload['phrase_groups']
-    elif isinstance(payload, list):
-        phrase_group_dicts = payload
-    else:
-        return f"Project text file bad type: {type(payload)}"
-
-    result = PhraseGroup.phrase_groups_from_json_list(phrase_group_dicts)
-    if isinstance(result, str):
-        return f"Error parsing project text: {result}"
-    return result
-
-def _load_oute_voice_json(project: Project) -> None:
-    """Load Oute voice JSON into project.oute_voice_json (only when Oute is active)."""
-    voice_path = os.path.join(project.dir_path, project.oute_voice_file_name)
-    if not project.oute_voice_file_name or not os.path.exists(voice_path):
-        result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
-        if isinstance(result, str):
-            from tts_audiobook_tool.ask_util import AskUtil
-            AskUtil.ask_error(result)
-        else:
-            project.set_oute_voice_and_save(result, "default")
-    else:
-        result = OuteUtil.load_oute_voice_json(voice_path)
-        if isinstance(result, str):
-            printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}: {result}")
-            printt()
-        else:
-            project.oute_voice_json = result
 
