@@ -227,6 +227,31 @@ class StorageController {
         localStorage.setItem("pref_player_pinned", isPinned ? "1" : "0");
     }
 
+    /**
+     * Load the player volume preference
+     * @returns {number|null} Volume in range [0, 1], or null if not found/invalid
+     */
+    loadVolume() {
+        const s = localStorage.getItem("pref_volume");
+        if (s === null) {
+            return null;
+        }
+        const value = parseFloat(s);
+        if (isNaN(value)) {
+            return null;
+        }
+        return Math.max(0, Math.min(1, value));
+    }
+
+    /**
+     * Save the player volume preference
+     * @param {number} volume - Volume in range [0, 1]
+     */
+    saveVolume(volume) {
+        const clamped = Math.max(0, Math.min(1, volume));
+        localStorage.setItem("pref_volume", clamped.toString());
+    }
+
     // ========================================
     // Private Methods
     // ========================================

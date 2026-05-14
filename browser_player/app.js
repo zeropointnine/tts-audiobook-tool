@@ -43,6 +43,11 @@ class App {
         this.storageController = new StorageController();
         this.rootAttributer = new RootAttributer(document.documentElement, this.storageController)
 
+        const volume = this.storageController.loadVolume();
+        if (volume !== null) {
+            this.audio.volume = volume;
+        }
+
         this.sleepTimer = new SleepTimer({
             audio: this.audio,
             rootAttributer: this.rootAttributer,
@@ -117,6 +122,7 @@ class App {
         this.player.pinBtn.addEventListener("click", this.onPinButtonClick.bind(this));
         this.audio.addEventListener('play', this.onAudioPlay.bind(this));
         this.audio.addEventListener('pause', this.onAudioPause.bind(this));
+        this.audio.addEventListener('volumechange', this.onAudioVolumeChange.bind(this));
         this.audio.addEventListener('error', this.onAudioError.bind(this));
         document.addEventListener("keydown", this.onKeyDown.bind(this));
         document.addEventListener('visibilitychange', this.onVisibilityChange.bind(this));
@@ -348,6 +354,10 @@ class App {
             return;
         }
         this.rootAttributer.set("data-player-status", "pause");
+    }
+
+    onAudioVolumeChange() {
+        this.storageController.saveVolume(this.audio.volume);
     }
 
     onSeek(seconds) {
