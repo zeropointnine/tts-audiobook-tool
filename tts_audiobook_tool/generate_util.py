@@ -6,7 +6,6 @@ import numpy as np
 
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.music_detector import MusicDetector
@@ -15,13 +14,12 @@ from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.segment_stt_info import SegmentSttInfo, SegmentSttInfoUtil
 from tts_audiobook_tool.silence_util import SilenceUtil
-from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles, SoundSegmentUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -163,11 +161,14 @@ class GenerateUtil:
             for i, result in enumerate(results):
 
                 index = indices[i]
+                phrase_group = project.phrase_groups[index]
+                stt_info: SegmentSttInfo | None = None
+                show_stt_visualization = False
                 message_lines = []
 
                 retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
                 text_string = f"{COL_DEFAULT}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
-                item_line = f"{COL_DEFAULT}Line {index + 1}{retry_string}: {text_string}"
+                item_line = f"{COL_ACCENT}Line {index + 1}{retry_string}: {COL_DEFAULT}{text_string}"
                 message_lines.append(item_line)
                 
                 new_retry_count = retry_counts[i] + 1
@@ -218,16 +219,28 @@ class GenerateUtil:
                     else:
                         num_passed += 1
                     
+                    # Print STT info
+                    if isinstance(validation_result, TranscriptResult):
+                        stt_info = SegmentSttInfoUtil.from_validation_result(
+                            project=project,
+                            phrase_group=phrase_group,
+                            index=index,
+                            validation_result=validation_result
+                        )
+                        show_stt_visualization = (
+                            isinstance(validation_result, MusicFailResult)
+                            or (isinstance(validation_result, WordErrorResult) and validation_result.num_errors > 0)
+                        )
+
                     val_line += Ansi.RESET
                     message_lines.append(val_line)
 
                     # Update word count metrics
-                    word_counts[index] = project.phrase_groups[index].num_words
+                    word_counts[index] = phrase_group.num_words
 
                     # Save
-                    phrase_group = project.phrase_groups[index]
                     err, saved_path = GenerateUtil.save_sound_and_timing_json(
-                        state, phrase_group, index, validation_result, is_real_time=False
+                        state, phrase_group, index, validation_result, is_real_time=False, stt_info=stt_info
                     )
                     if err:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
@@ -237,16 +250,21 @@ class GenerateUtil:
                     message_lines.append(save_line)
 
                 printt("\n".join(message_lines))
+
+                if not isinstance(result, str) and stt_info is not None:
+                    printt()
+                    SegmentSttInfoUtil.print_stt_details(
+                        stt_info,
+                        show_visualization=show_stt_visualization
+                    )
                 
                 if i < len(results) - 1:
                     printt()
 
             # Print current memory usage
-            if len(results) > 1:
-                printt()
-            warnings_string = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
-            printt(warnings_string)
-            
+            printt()
+            s = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
+            printt(s)
             printt()
 
             if re_adds:
@@ -481,7 +499,8 @@ class GenerateUtil:
         phrase_group: PhraseGroup,
         index: int,
         validation_result: ValidationResult,
-        is_real_time: bool
+        is_real_time: bool,
+        stt_info: SegmentSttInfo | None = None
     ) -> tuple[str, str]:
         """
         Saves sound segment and timing info json
@@ -509,28 +528,18 @@ class GenerateUtil:
             return err, sound_path
         
         if not is_real_time and isinstance(validation_result, TranscriptResult): 
-            # Make timing metadata and save to 'parallel' json file        
-            phrase_group = project.phrase_groups[index]
-            timed_phrases = ForceAlignUtil.make_timed_phrases(
-                phrases=phrase_group.phrases,
-                words=validation_result.transcript_words,
-                sound_duration=validation_result.sound.duration
+            # Make STT/timing sidecar and save to 'parallel' json file
+            info = stt_info or SegmentSttInfoUtil.from_validation_result(
+                project=project,
+                phrase_group=phrase_group,
+                index=index,
+                validation_result=validation_result
             )
-            if isinstance(validation_result, TrimmedResult):
-                # TODO verify 
-                timed_phrases = adjust_timed_phrases_trimmed(timed_phrases, validation_result)
-            json_path = Path(sound_path).with_suffix(".json")
-            dicts = TimedPhrase.timed_phrases_to_dicts(timed_phrases)
-            json_string = json.dumps(dicts)
-            try:
-                with open(json_path, 'w', encoding='utf-8') as file:
-                    file.write(json_string)
-            except Exception as e:
+            json_path = SoundSegmentFiles(Path(sound_path)).stt_info_path
+            err = SegmentSttInfoUtil.save(json_path, info)
+            if err:
                 printt(COL_ERROR + str(json_path))
-                printt(COL_ERROR + make_error_string(e))
-
-        if state.prefs.save_debug_files and not is_real_time:
-            save_debug_json(project, phrase_group, index, validation_result, dir_path)
+                printt(COL_ERROR + err)
 
         return "", sound_path
 
@@ -622,69 +631,6 @@ def print_eta(saved_elapsed: list[float], num_left) -> None:
     avg = sum / num_samples
     eta = num_left * avg
     printt(f"Est. time remaining: {duration_string(eta)}")
-
-def adjust_timed_phrases_trimmed(timed_phrases: list[TimedPhrase], trimmed_result: TrimmedResult) -> list[TimedPhrase]:
-    
-    start_offset = trimmed_result.start_time or 0
-    end_time = trimmed_result.end_time or trimmed_result.sound.duration
-    full_duration = end_time - start_offset
-    
-    results = []
-    
-    for item in timed_phrases:
-        time_start = max(item.time_start - start_offset, 0)
-        time_end = min(item.time_end, full_duration)
-        new_item = TimedPhrase(text=item.text, time_start=time_start, time_end=time_end)
-        results.append(new_item)
-
-    return results
-
-def save_debug_json(
-        project: Project,
-        phrase_group: PhraseGroup,
-        index: int,
-        validation_result: ValidationResult,
-        dir_path: str
-) -> None:
-
-    if not isinstance(validation_result, TranscriptResult): 
-        return
-
-    d = {}
-    prompt = GenerateUtil.phrase_group_to_prompt(phrase_group, project)
-    source = phrase_group.as_flattened_phrase().text
-    transcript = WhisperUtil.get_flat_text_from_words(validation_result.transcript_words)
-    normalized_source, normalized_transcript = \
-        TextNormalizer.normalize_source_and_transcript(source, transcript, project.language_code)
-    d["language_code"] = project.language_code
-    d["index_1b"] = index + 1
-    d["prompt"] = prompt
-    d["source"] = source
-    d["transc"] = transcript
-    d["normalized_source"] = normalized_source
-    d["normalized_transc"] = normalized_transcript
-    d["result_class"] = type(validation_result).__name__
-    d["result_desc"] = strip_ansi_codes( validation_result.get_ui_message_with_post_processing() )
-    if isinstance(validation_result, WordErrorResult):
-        d["result_num_errors"] = validation_result.num_errors
-        d["result_threshold"] = validation_result.threshold
-    d["transcript_words"] = WhisperUtil.words_to_json(validation_result.transcript_words)
-    file_name = SoundSegmentUtil.make_file_name(
-        index=index,
-        phrase_group=phrase_group,
-        project=project,
-        validation_result=validation_result,
-        tts_model_info=Tts.get_type().value,
-        is_real_time=False,
-        is_debug_json=True
-    )
-    json_path = os.path.join(dir_path, file_name)
-    json_string = json.dumps(d, indent=4)
-    try:
-        with open(json_path, 'w', encoding='utf-8') as file:
-            file.write(json_string)
-    except Exception as e:
-        ... # eat silently
 
 def bucket_items(
         items: list[tuple[int, int]], 

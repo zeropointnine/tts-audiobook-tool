@@ -203,10 +203,10 @@ class GenerateMenu:
             high_desc = ""
             intolerant_desc = ""
         else:
-            low_desc = "Allows more word errors; segments pass unless severely off"
-            medium_desc = "Balanced; typical choice for most languages"
-            high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration"
-            intolerant_desc = "Zero tolerance; segments with even one word error are flagged for regeneration"
+            low_desc = "Allows more word errors. Segments pass unless notably off."
+            medium_desc = "Balanced. Reasonable choice for most languages."
+            high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration."
+            intolerant_desc = "Zero tolerance. Segments with even one word error are flagged for regeneration.\n      Best net accuracy; for the time and compute unconstrained only."
 
         MenuUtil.options_menu(
             state=state,
@@ -472,8 +472,8 @@ Higher values have diminishing returns.
 
 REGENERATE_SEGMENTS_WITH_ERRORS_DESC = \
 """Retry only the segments currently flagged as having word errors.
-This uses your current line range and word error tolerance setting
-of %1 to decide which existing segments should be regenerated.
+This uses your current line range and word error tolerance setting (%1)
+to decide which segments should be regenerated.
 """
 
 LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \

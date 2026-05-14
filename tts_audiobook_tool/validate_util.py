@@ -1,5 +1,6 @@
 from __future__ import annotations
 import math
+from dataclasses import dataclass
 from typing import Optional
 
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
@@ -13,6 +14,15 @@ from tts_audiobook_tool.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult
+
+
+@dataclass(frozen=True)
+class WordErrorAlignmentStep:
+    action: str
+    source_text: str
+    transcript_text: str
+
+
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 class ValidateUtil:
@@ -50,7 +60,7 @@ class ValidateUtil:
         Returns either WordErrorResult or TrimmedResult
         """
         transcript = WhisperUtil.get_flat_text_from_words(transcript_words)
-        _, word_errors, threshold = ValidateUtil.get_word_error_fail(
+        _, word_errors, num_words, threshold = ValidateUtil.get_word_error_fail(
             source, transcript, language_code=language_code, strictness=strictness
         )
 
@@ -60,7 +70,11 @@ class ValidateUtil:
                 return MusicFailResult(sound, transcript_words)
 
         word_error_result = WordErrorResult(
-            sound=sound, transcript_words=transcript_words, errors=word_errors, threshold=threshold
+            sound=sound,
+            transcript_words=transcript_words,
+            errors=word_errors,
+            num_words=num_words,
+            threshold=threshold
         )
 
         trimmed_result = ValidateUtil.make_trimmed_result(word_error_result, source, transcript_words, language_code)
@@ -241,10 +255,10 @@ class ValidateUtil:
         transcript: str,
         strictness: Strictness,
         language_code: str=""
-    ) -> tuple[bool, list[str], int]:
+    ) -> tuple[bool, list[str], int, int]:
         """
         Returns:
-            True if failed, number of word failures, calculated fail threshold
+            True if failed, word failures, source word count, calculated fail threshold
         """
         normalized_source, normalized_transcript = \
             TextNormalizer.normalize_source_and_transcript(source, transcript, language_code=language_code)
@@ -256,7 +270,7 @@ class ValidateUtil:
         
         fail_threshold = ValidateUtil.compute_threshold(num_words, strictness)
             
-        return (num_word_errors > fail_threshold), word_errors, fail_threshold
+        return (num_word_errors > fail_threshold), word_errors, num_words, fail_threshold
 
     @staticmethod
     def get_word_errors(
@@ -279,9 +293,72 @@ class ValidateUtil:
         Uses dynamic programming table (dp)
         """
 
-        def p(s: str):
-            if verbose:
-                print(s)
+        highlighted_source = ValidateUtil.format_source_with_uncommon_words(
+            normalized_source, language_code
+        )
+
+        if verbose:
+            print("")
+            print(f"source: {highlighted_source}")
+            print(f"transc: {normalized_transcript}")
+            print("")
+
+        path = ValidateUtil.get_word_error_alignment(
+            normalized_source,
+            normalized_transcript,
+            language_code,
+        )
+
+        failure_codes = []
+
+        for step in path:
+            action = step.action
+            s_text = step.source_text
+            t_text = step.transcript_text
+            word_info = f"'{s_text}' vs '{t_text}'"
+            if action == "match_direct":
+                if verbose:
+                    print(f"{word_info} -> direct match")
+            elif action == "match_homophone":
+                if verbose:
+                    print(f"{word_info} -> homophone match")
+            elif action == "uncommon_pass_1":
+                if verbose:
+                    print(f"{word_info} -> no match but giving it a free pass because source word is uncommon")
+            elif action == "uncommon_pass_2":
+                if verbose:
+                    print(f"{word_info} -> no match (2 words) but giving it a free pass because source word is uncommon")
+            elif action == "skip_source":
+                code = f"d:{s_text}"
+                failure_codes.append(code)
+                if verbose:
+                    print(f"{word_info} -> transcript out of words - fail code: {code}")
+            elif action == "skip_transcript":
+                code = f"i:{t_text}"
+                failure_codes.append(code)
+                if verbose:
+                    print(f"{word_info} -> source out of words - fail code: {code}")
+            elif action == "mismatch_sub":
+                code = f"s:{s_text}/{t_text}"
+                failure_codes.append(code)
+                if verbose:
+                    print(f"{word_info} -> mismatch - fail code: {code}")
+
+        return failure_codes
+
+    @staticmethod
+    def get_word_error_alignment(
+            normalized_source: str,
+            normalized_transcript: str,
+            language_code: str=""
+    ) -> list[WordErrorAlignmentStep]:
+        """
+        Returns the word alignment path used for word-error detection.
+
+        Actions match the historical internal DP action names used by
+        get_word_errors(), allowing callers to render richer diagnostics while
+        keeping get_word_errors() backward-compatible.
+        """
 
         def is_match(a: str, b: str) -> bool:
             return (a == b) or sounds_the_same(a, b)
@@ -291,15 +368,6 @@ class ValidateUtil:
 
         def is_uncommon_word(word: str) -> bool:
             return not Whitelist().has(word) if Whitelist.supports_language(language_code) else False
-
-        highlighted_source = ValidateUtil.format_source_with_uncommon_words(
-            normalized_source, language_code
-        )
-
-        p("")
-        p(f"source: {highlighted_source}")
-        p(f"transc: {normalized_transcript}")
-        p("")
 
         source_words = normalized_source.split()
         transcript_words = normalized_transcript.split()
@@ -368,7 +436,7 @@ class ValidateUtil:
                         parent[i][j] = (i, j-1, "skip_transcript")
 
         # Reconstruct Path
-        path = []
+        path: list[WordErrorAlignmentStep] = []
         curr_i, curr_j = n, m
 
         while curr_i > 0 or curr_j > 0:
@@ -383,37 +451,11 @@ class ValidateUtil:
             s_text = " ".join(s_sub) if s_sub else "-"
             t_text = " ".join(t_sub) if t_sub else "-"
 
-            path.append((action, s_text, t_text))
+            path.append(WordErrorAlignmentStep(action, s_text, t_text))
             curr_i, curr_j = prev_i, prev_j
 
         path.reverse()
-
-        failure_codes = []
-        
-        for action, s_text, t_text in path:
-            word_info = f"'{s_text}' vs '{t_text}'"
-            if action == "match_direct":
-                p(f"{word_info} -> direct match")
-            elif action == "match_homophone":
-                p(f"{word_info} -> homophone match")
-            elif action == "uncommon_pass_1":
-                p(f"{word_info} -> no match but giving it a free pass because source word is uncommon")
-            elif action == "uncommon_pass_2":
-                p(f"{word_info} -> no match (2 words) but giving it a free pass because source word is uncommon")
-            elif action == "skip_source":
-                code = f"d:{s_text}"
-                failure_codes.append(code)
-                p(f"{word_info} -> transcript out of words - fail code: {code}")
-            elif action == "skip_transcript":
-                code = f"i:{t_text}"
-                failure_codes.append(code)
-                p(f"{word_info} -> source out of words - fail code: {code}")
-            elif action == "mismatch_sub":
-                code = f"s:{s_text}/{t_text}"
-                failure_codes.append(code)
-                p(f"{word_info} -> mismatch - fail code: {code}")
-                
-        return failure_codes
+        return path
 
     @staticmethod
     def is_unsupported_language_code(code: str) -> bool:

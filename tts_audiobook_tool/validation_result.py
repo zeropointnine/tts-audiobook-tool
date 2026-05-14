@@ -83,6 +83,7 @@ class WordErrorResult(TranscriptResult):
     """ A ValidationResult that has transcript data and has calculated word error list """
 
     errors: list[str]
+    num_words: int
     threshold: int
 
     @property
@@ -95,7 +96,7 @@ class WordErrorResult(TranscriptResult):
 
     def get_ui_message(self) -> str:
         base_message = f"{COL_ERROR}Word error fail" if self.is_fail else "Passed"
-        return f"{base_message} {COL_DIM}(word_errors={COL_DEFAULT}{self.num_errors}{COL_DIM}, threshold={self.threshold})"
+        return f"{base_message} {COL_DIM}(word_errors={COL_DEFAULT}{self.num_errors}{COL_DIM}, words={COL_DEFAULT}{self.num_words}{COL_DIM}, threshold={COL_DEFAULT}{self.threshold}{COL_DIM})"
 
 @dataclass
 class TrimmedResult(TranscriptResult):

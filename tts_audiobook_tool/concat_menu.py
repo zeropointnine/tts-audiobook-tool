@@ -327,7 +327,7 @@ def ask_chapter_indices_and_make(state: State) -> None:
         
         infos = ChapterInfo.make_chapter_infos(state.project)
 
-        result = ask_chapter_indices(infos, len(state.project.phrase_groups))
+        result = ask_chapter_indices(infos)
         if result is None:
             return
         else:
@@ -370,20 +370,20 @@ def ask_chapter_indices_and_make(state: State) -> None:
         bookmark_indices=bookmark_indices
     )
 
-def ask_chapter_indices(infos: list[ChapterInfo], num_phrase_groups: int) -> list[int] | None:
-
-    # Filter out items w/o any generated files
-    infos = [info for info in infos if info.num_files_exist > 0] 
+def ask_chapter_indices(infos: list[ChapterInfo]) -> list[int] | None:
 
     printt("Enter chapter file numbers to create:")
     printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
     inp = AskUtil.ask()
 
     if inp == "all" or inp == "a":
-        indices = [info.chapter_index for info in infos]
+        indices = [info.chapter_index for info in infos if info.num_files_exist > 0]
+        if not indices:
+            print_feedback("No chapter files have generated audio", is_error=True)
+            return None
         return indices
 
-    indices, warnings = ParseUtil.parse_ranges_string(inp, num_phrase_groups)
+    indices, warnings = ParseUtil.parse_ranges_string(inp, len(infos))
     if warnings:
         message = "\n".join(warnings)
         print_feedback(message, is_error=True)
@@ -393,11 +393,11 @@ def ask_chapter_indices(infos: list[ChapterInfo], num_phrase_groups: int) -> lis
     if not indices:
         return None
 
-    valid_indices = {info.chapter_index for info in infos}
-    for index in indices:
-        if index not in valid_indices:
-            print_feedback(f"Item out of range: {index + 1}", is_error=True)
-            return None
+    missing_audio_indices = [index for index in indices if infos[index].num_files_exist == 0]
+    if missing_audio_indices:
+        item_numbers = ", ".join(str(index + 1) for index in missing_audio_indices)
+        print_feedback(f"No generated audio for chapter file: {item_numbers}", is_error=True)
+        return None
     
     return indices
 

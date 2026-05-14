@@ -11,11 +11,13 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sidon_util import SidonUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
-from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles, SoundSegmentUtil
+from tts_audiobook_tool.segment_stt_info import SegmentSttInfoUtil
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
@@ -144,10 +146,15 @@ class ConcatUtil:
         Returns successfull file path, error message if any
         """
 
-        # Load raw text (player no longer requires this but is still part of the 'spec')
+        # Load raw text for app metadata. If unavailable, continue with a
+        # phrase-group fallback rather than aborting concat.
         raw_text = state.project.load_raw_text()
         if not raw_text:
-            return "", "Error loading text"
+            raw_text = "\n".join(
+                group.as_flattened_phrase().text for group in state.project.phrase_groups
+            )
+            if not raw_text:
+                raw_text = ""
 
         # Intermediate file paths etc
         
@@ -540,24 +547,16 @@ def make_subdivided_timed_phrases(
             new_timed_phrases.append(original_timed_phrase)
             continue
 
-        subdivided_items_json_path = Path(sound_path).with_suffix(".json") # TODO rename this to .json
+        subdivided_items_json_path = SoundSegmentFiles(Path(sound_path)).stt_info_path
         if not subdivided_items_json_path.exists():
+            L.w(f"Missing segment timing/STT sidecar JSON: {subdivided_items_json_path}")
             add_to_new_bookmark_indices("no-subdivided-json", original_timed_phrase.presentable_text)
             new_timed_phrases.append(original_timed_phrase)
             continue
 
-        try:
-            with open(subdivided_items_json_path, 'r', encoding='utf-8') as file:
-                json_dicts = json.load(file)
-        except Exception as e:
-            # File error; use original item
-            add_to_new_bookmark_indices("file-error", original_timed_phrase.presentable_text)            
-            new_timed_phrases.append(original_timed_phrase)
-            continue
-
-        parse_result = TimedPhrase.dicts_to_timed_phrases(json_dicts)
+        parse_result = SegmentSttInfoUtil.load_timed_phrases(subdivided_items_json_path)
         if isinstance(parse_result, str): 
-            # Parse error; use original item
+            # File/parse error; use original item
             add_to_new_bookmark_indices("parse-error", original_timed_phrase.presentable_text)
             new_timed_phrases.append(original_timed_phrase)
             continue

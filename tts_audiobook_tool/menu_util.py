@@ -333,7 +333,7 @@ class MenuUtil:
             tts_loaded = "(loaded)"
         else:
             tts_model_text = value_color + Tts.get_class().INFO.ui['proper_name']
-            tts_loaded = "(not loaded)"
+            tts_loaded = ""
 
         voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
             state.project,
@@ -358,7 +358,7 @@ class MenuUtil:
                 fw_config = state.prefs.stt_config.description if not Stt.should_use_mlx_whisper() else ""
                 stt_desc += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"            
             else:
-                stt_desc += f" {COL_DIM}(not loaded)"
+                stt_desc += f""
 
         memory_text = strip_ansi_codes(AppUtil.make_memory_string())
         memory_text = memory_text.replace(":", "") # careful

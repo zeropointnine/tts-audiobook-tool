@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 from tts_audiobook_tool.app_util import AppUtil
@@ -10,6 +11,18 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import MusicFailResult, ValidationResult, WordErrorResult
+
+
+@dataclass(frozen=True)
+class SoundSegmentFiles:
+    """App-coupled files for a saved sound segment."""
+
+    sound_path: Path
+
+    @property
+    def stt_info_path(self) -> Path:
+        """Parallel STT/timing sidecar path derived from the exact sound path."""
+        return self.sound_path.with_suffix(".json")
 
 
 class SoundSegmentUtil:
@@ -64,8 +77,7 @@ class SoundSegmentUtil:
         tts_model_info: TtsModelInfo,
         validation_result: ValidationResult,
         is_real_time: bool,
-        suffix=".flac",
-        is_debug_json: bool=False
+        suffix=".flac"
     ) -> str:
 
         idx = str(index + 1).zfill(5)
@@ -82,9 +94,6 @@ class SoundSegmentUtil:
         else:
             num_fails_tag = ""
         
-        if is_debug_json:
-            suffix = ".debug.json"
-
         if is_real_time:
             timestamp = SoundSegmentUtil.make_timestamp_string()
             path = f"[{timestamp}] [{idx}] [{model}] [{voice}]{num_fails_tag}{text}{suffix}"
@@ -192,7 +201,7 @@ class SoundSegmentUtil:
 
 class SoundSegment(NamedTuple):
     """
-    Extracts the data from the so-called tags from a sound segment filename
+    Contains the extracted data from the tags from a sound segment filename
     """
 
     # The pre-existing file_name from which the SoundSegment fields were extracted

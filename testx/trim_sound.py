@@ -22,7 +22,7 @@ for file in os.listdir(DIR):
     flac_path = os.path.join(DIR, file)
     if not flac_path.endswith(".flac"):
         continue
-    json_path = Path(flac_path).with_suffix(".debug.json")
+    json_path = Path(flac_path).with_suffix(".json")
     if not os.path.exists(json_path):
         continue
     tup = (flac_path, json_path)
@@ -38,8 +38,8 @@ for flac_path, json_path in flacs_and_jsons:
     assert(isinstance(sound, Sound))
     
     with open(json_path, 'r', encoding='utf-8') as f:
-        debug_json = json.load(f)
-    prompt = debug_json["prompt"]
+        segment_stt_info = json.load(f)
+    prompt = segment_stt_info["prompt"]
 
     words = WhisperUtil.transcribe_to_words(sound, "en", SttVariant.LARGE_V3, SttConfig.CUDA_FLOAT16)
     assert(isinstance(words, list))

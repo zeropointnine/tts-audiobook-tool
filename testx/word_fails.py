@@ -3,7 +3,7 @@ import json
 
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.segment_stt_info import SegmentSttInfoUtil
 
 # ---
 
@@ -13,7 +13,9 @@ def load_jsons(dir: str) -> list[dict]:
 
     items: list[dict] = []
     for filename in sorted(os.listdir(dir)):
-        if not ".debug.json" in filename:
+        if not filename.endswith(".json"):
+            continue
+        if filename.endswith(".debug.json"):
             continue
         filepath = os.path.join(DIR, filename)
         try:
@@ -38,12 +40,16 @@ print()
 
 for item in items:
 
-    fails = ValidateUtil.get_word_errors(item["normalized_source"], item["normalized_transc"], "en", False)
+    info = SegmentSttInfoUtil.from_dict(item)
+    if isinstance(info, str):
+        continue
+
+    fails = SegmentSttInfoUtil.get_word_errors(info)
     if not fails: 
         continue
 
     for key in item:
-        # if key in ["index_1b", "normalized_source", "normalized_transc", "result_desc"]:
+        # if key in ["index_1b", "normalized_source", "normalized_transcript"]:
         print(f"{COL_DIM}{key:>24}: {COL_DEFAULT}{str(item[key]).strip()}")
     
     print("Word fails:", fails)

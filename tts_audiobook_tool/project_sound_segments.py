@@ -3,7 +3,7 @@ from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentFiles, SoundSegmentUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_normalizer import TextNormalizer
@@ -189,10 +189,18 @@ class ProjectSoundSegments:
         for sound_segments in self.sound_segments_map.values():
             for item in sound_segments:
                 sound_file_path = Path(self.project.sound_segments_path) / item.file_name
-                delete_silently(str(sound_file_path))
-                timing_file_path = sound_file_path.with_suffix(".json")
-                if timing_file_path.exists():
-                    delete_silently(str(timing_file_path))
+                self.delete_sound_segment_and_sidecars(sound_file_path)
+
+    def delete_sound_segment_and_sidecars(self, sound_file_path: Path) -> None:
+        """
+        Deletes a sound segment and its parallel sidecar files.
+
+        The segment STT/timing JSON is expected to use the exact same stem as
+        the sound file, including any generated-time word-error count tag.
+        """
+        files = SoundSegmentFiles(sound_file_path)
+        delete_silently(str(files.sound_path))
+        delete_silently(str(files.stt_info_path))
 
     def delete_redundants_for(self, index: int) -> int:
         """ Keeps the item with the least word fails and deletes the rest """        
@@ -208,12 +216,7 @@ class ProjectSoundSegments:
         for item in items:
             if item != best_item:    
                 path = Path(os.path.join(self.project.sound_segments_path, item.file_name))
-                delete_silently(str(path))
-                # And also timing json and debug json if exists
-                path = path.with_suffix(".json")
-                delete_silently(str(path))
-                path = path.with_suffix(".debug.json")
-                delete_silently(str(path))
+                self.delete_sound_segment_and_sidecars(path)
                 num_deleted += 1
         return num_deleted
     
@@ -223,9 +226,7 @@ class ProjectSoundSegments:
             items = self._sound_segments_map[index]
             for item in items:
                 sound_file_path = Path(self.project.sound_segments_path) / item.file_name
-                delete_silently(str(sound_file_path))
-                timing_file_path = sound_file_path.with_suffix(".json")
-                delete_silently(str(timing_file_path))
+                self.delete_sound_segment_and_sidecars(sound_file_path)
 
 # ---
 

@@ -2,6 +2,8 @@ import unittest
 
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.whitelist import Whitelist
+from tts_audiobook_tool.segment_stt_info import SegmentSttInfo, SegmentSttInfoUtil
+from tts_audiobook_tool.util import strip_ansi_codes
 
 class TestTranscribeGranular(unittest.TestCase):
 
@@ -72,6 +74,68 @@ class TestTranscribeGranular(unittest.TestCase):
             verbose=False,
         )
         self.assertEqual(len(failure_codes), 1)
+
+    def test_word_error_alignment(self):
+        alignment = ValidateUtil.get_word_error_alignment(
+            "one two three",
+            "one blah bonus",
+            language_code="en",
+        )
+
+        self.assertEqual(
+            [(item.action, item.source_text, item.transcript_text) for item in alignment],
+            [
+                ("match_direct", "one", "one"),
+                ("mismatch_sub", "two", "blah"),
+                ("mismatch_sub", "three", "bonus"),
+            ]
+        )
+
+    def test_word_error_visualization(self):
+        info = SegmentSttInfo(
+            version=SegmentSttInfoUtil.VERSION,
+            type=SegmentSttInfoUtil.TYPE,
+            language_code="en",
+            index_1b=1,
+            source="one two three",
+            prompt="one two three",
+            transcript="one blah three extra",
+            normalized_source="one two three",
+            normalized_transcript="one blah three extra",
+            generation_word_error_count=3,
+            timed_phrases=[],
+            transcript_words=[],
+            exception=None,
+        )
+
+        visualization = strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
+
+        self.assertIn("one", visualization)
+        self.assertIn("[=/=: two/blah]", visualization)
+        self.assertIn("[+: extra]", visualization)
+
+    def test_word_error_visualization_missing(self):
+        info = SegmentSttInfo(
+            version=SegmentSttInfoUtil.VERSION,
+            type=SegmentSttInfoUtil.TYPE,
+            language_code="en",
+            index_1b=1,
+            source="one two three",
+            prompt="one two three",
+            transcript="one three",
+            normalized_source="one two three",
+            normalized_transcript="one three",
+            generation_word_error_count=1,
+            timed_phrases=[],
+            transcript_words=[],
+            exception=None,
+        )
+
+        visualization = strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
+
+        self.assertIn("one", visualization)
+        self.assertIn("[x: two]", visualization)
+        self.assertIn("three", visualization)
 
 
 if __name__ == '__main__':
