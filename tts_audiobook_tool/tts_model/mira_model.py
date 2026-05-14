@@ -1,5 +1,3 @@
-import numpy as np
-
 import random
 from itertools import cycle
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback

@@ -1,8 +1,6 @@
 import os
 import random
 import traceback
-import numpy as np
-from regex import match
 import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore

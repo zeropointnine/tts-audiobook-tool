@@ -36,7 +36,7 @@ class TargetUtil:
         """
 
         from huggingface_hub import model_info, try_to_load_from_cache
-        from huggingface_hub.errors import RepositoryNotFoundError, HFValidationError
+        from huggingface_hub.errors import RepositoryNotFoundError
 
         # If value is an existing local directory, check for existence a 'local file marker'        
         if os.path.exists(target):

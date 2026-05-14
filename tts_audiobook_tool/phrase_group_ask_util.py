@@ -1,5 +1,4 @@
 import platform
-import sys
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *

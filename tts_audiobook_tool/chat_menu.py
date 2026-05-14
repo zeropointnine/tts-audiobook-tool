@@ -1,4 +1,4 @@
-from tts_audiobook_tool.conversation.conversation import Conversation, ConversationStatic
+from tts_audiobook_tool.conversation.conversation import ConversationStatic
 from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.state import State

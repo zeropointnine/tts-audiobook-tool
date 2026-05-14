@@ -1,6 +1,5 @@
 import os
 import random
-import traceback
 
 import numpy as np
 

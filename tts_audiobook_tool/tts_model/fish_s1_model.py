@@ -2,7 +2,6 @@ import importlib
 from pathlib import Path
 import sys
 
-import numpy as np
 import torch
 import torchaudio # type: ignore
 import huggingface_hub

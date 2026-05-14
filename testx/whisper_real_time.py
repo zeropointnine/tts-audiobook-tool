@@ -5,7 +5,6 @@ Manual test: real-time mic transcription via WhisperRealTimeUtil.
 """
 
 import sys
-import os
 import time
 from pathlib import Path
 

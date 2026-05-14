@@ -1,5 +1,4 @@
 from __future__ import annotations
-from ast import If
 import os
 import time
 
@@ -28,7 +27,6 @@ from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.silence_util import SilenceGapTrim

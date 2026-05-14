@@ -1,5 +1,3 @@
-import numpy as np
-
 import logging
 import os
 import random
@@ -17,7 +15,6 @@ from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCa
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import printt
 
 class GlmModel(GlmBaseModel):

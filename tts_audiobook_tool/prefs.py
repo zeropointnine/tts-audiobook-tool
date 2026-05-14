@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from tts_audiobook_tool.app_types import Saveable, SttConfig, SttVariant
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *

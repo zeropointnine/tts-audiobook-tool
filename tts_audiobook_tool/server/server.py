@@ -13,10 +13,8 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 
 _HERE = pathlib.Path(__file__).parent
@@ -26,7 +24,6 @@ _DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream

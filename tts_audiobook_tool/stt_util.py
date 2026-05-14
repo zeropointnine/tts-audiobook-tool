@@ -4,7 +4,6 @@ from typing import Generator, List, NamedTuple
 import ffmpeg
 import numpy as np
 import difflib
-import math
 from tts_audiobook_tool.app_types import ConcreteWord, Word
 from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler

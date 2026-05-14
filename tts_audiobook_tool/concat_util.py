@@ -1,10 +1,11 @@
 import os
+import time
 from pathlib import Path
 
 import numpy as np
 from numpy import ndarray
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, Sound
+from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -17,8 +18,6 @@ from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.phrase import Phrase
 from tts_audiobook_tool.text_util import TextUtil
@@ -42,6 +41,8 @@ class ConcatUtil:
 
         if chapter_indices and bookmark_indices:
             raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
+
+        start_time = time.time()
         
         # Preflight checks
         if state.project.use_upsampler:
@@ -109,7 +110,8 @@ class ConcatUtil:
         # Post-concat feedback, prompt
         
         AppUtil.play_done_sound()
-        printt("Finished.")
+        elapsed = duration_string(time.time() - start_time)
+        printt(f"Finished{COL_DIM} (elapsed: {elapsed})")
         printt()
 
         ModelsUtil.clear_sidon_upsampler()

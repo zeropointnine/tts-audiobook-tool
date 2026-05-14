@@ -4,11 +4,7 @@
 
     "typeCheckingMode": "standard",
 
-    "reportUnusedImport": false,
-
-    "diagnosticSeverityOverrides": {
-        "reportUnusedImport": "information"
-    },
+    "reportUnusedImport": "error",
 
     "exclude": [
         "**/.*",

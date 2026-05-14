@@ -1,4 +1,4 @@
-from text_to_num import text2num
+from text_to_num import text2num  # pyright: ignore[reportMissingImports]
 
 
 class SpanishNumberNormalizer:

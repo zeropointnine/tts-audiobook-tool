@@ -17,10 +17,6 @@ import tty
 import logging
 from pathlib import Path
 
-from tts_audiobook_tool.menu_util import MenuUtil
-
-
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from faster_whisper.transcribe import Segment
@@ -28,7 +24,6 @@ from faster_whisper.transcribe import Segment
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
-from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.llm_util import LlmUtil
 from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.models_util import ModelsUtil

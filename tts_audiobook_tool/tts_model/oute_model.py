@@ -1,5 +1,3 @@
-import numpy as np
-
 import copy
 import outetts # type: ignore
 

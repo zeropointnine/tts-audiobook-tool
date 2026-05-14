@@ -1,5 +1,3 @@
-import numpy as np
-
 import sys
 import langid # type: ignore
 import jieba # type: ignore
@@ -31,7 +29,6 @@ from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCa
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 # --------------------------------------------------------------------------------------------------

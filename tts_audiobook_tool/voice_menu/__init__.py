@@ -11,3 +11,19 @@ from .voice_mira_menu import VoiceMiraMenu
 from .voice_qwen3_menu import VoiceQwen3Menu
 from .voice_pocket_menu import VoicePocketMenu
 from .voice_omnivoice_menu import VoiceOmniVoiceMenu
+
+__all__ = [
+    "VoiceMenuShared",
+    "VoiceOuteMenu",
+    "VoiceChatterboxMenu",
+    "VoiceFishS1Menu",
+    "VoiceFishS2Menu",
+    "VoiceHiggsMenu",
+    "VoiceVibeVoiceMenu",
+    "VoiceIndexTts2Menu",
+    "VoiceGlmMenu",
+    "VoiceMiraMenu",
+    "VoiceQwen3Menu",
+    "VoicePocketMenu",
+    "VoiceOmniVoiceMenu",
+]

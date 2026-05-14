@@ -16,7 +16,6 @@ import os
 import subprocess
 import sys
 import signal
-import time
 
 
 # ---------------------------------------------------------------------------
