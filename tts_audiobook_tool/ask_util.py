@@ -55,10 +55,13 @@ class AskUtil:
         return inp
 
     @staticmethod
-    def ask_enter_to_continue(prefix_line: str="") -> None:
-        message = "Press enter: "
-        if prefix_line:
-            message = f"{prefix_line}\n{message}"
+    def ask_enter_to_continue(value: str="", is_replacement: bool=False) -> None:
+
+        if is_replacement:
+            message = value
+        else:
+            message = f"{value}\nPress enter: "
+
         if AskUtil.can_hotkey:
             while True:
                 key = AskUtil.ask_hotkey(message)

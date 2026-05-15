@@ -136,7 +136,8 @@ class Startup:
         """
         
         new_packages = [
-            "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", "pydantic", "requests", "text_to_num"
+            "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", 
+            "pydantic", "requests", "text_to_num", "ebooklib", "bs4"
         ]
 
         # win32 + linux

@@ -252,7 +252,7 @@ class Project(BaseModel):
 
         def add_warning(attr_name: str, defaulting_to: Any) -> None:
             s = f"{COL_ERROR}Warning/info: {COL_DEFAULT}Missing or invalid value for: {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
-            s += "This can occur if a new project property has been added to the app since the last time you opened the project.\n"
+            s += "This can occur if a new project property has been added to the app since the last time you opened this project.\n"
             s += f"Setting to default: {defaulting_to}"
             if use_tl_warnings:
                 _tl.warnings.append(s)
@@ -378,6 +378,13 @@ class Project(BaseModel):
             value = True
             add_warning('streaming_chat', value)
         d['streaming_chat'] = value
+
+        # limit_silence_gaps
+        value = d.get('limit_silence_gaps', None)
+        if not isinstance(value, bool):
+            value = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
+            add_warning('limit_silence_gaps', value)
+        d['limit_silence_gaps'] = value
 
         # limit_silence_gaps_duration
         value = d.get('limit_silence_gaps_duration', None)
@@ -808,6 +815,27 @@ class Project(BaseModel):
             self.applied_language_code = language_code
             # Setting this invalidates some things
             self.section_dividers = []
+            self.generate_range_string = ""
+            self.realtime_line_range = None
+
+        self.save_raw_text(raw_text)  # saved for reference
+
+    def set_phrase_groups_chapters_and_save(
+            self,
+            phrase_groups: list[PhraseGroup],
+            section_dividers: list[int],
+            strategy: SegmentationStrategy,
+            max_words: int,
+            language_code: str,
+            raw_text: str
+    ) -> None:
+
+        with self.batch():
+            self.phrase_groups = phrase_groups
+            self.applied_strategy = strategy
+            self.applied_max_words = max_words
+            self.applied_language_code = language_code
+            self.section_dividers = section_dividers
             self.generate_range_string = ""
             self.realtime_line_range = None
 

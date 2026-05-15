@@ -320,7 +320,7 @@ class SegmentSttInfoUtil:
 
         if show_visualization:
             printt()
-            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[x: omitted], [+: added], [=/=: expected/heard], <word> = skipped uncommon word")
+            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[x: missing], [+: extra], [=/=: expected/heard], <word> = skipped uncommon word")
             printt(SegmentSttInfoUtil.make_word_error_visualization(info))
 
     @staticmethod

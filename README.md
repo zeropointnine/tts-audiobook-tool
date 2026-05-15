@@ -660,6 +660,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
+**2026-05-15**
+
+- Added support for **EPUB** text import
+
 **2026-05-12**
 
 - Added ability to import project settings from app-created m4b/flac files

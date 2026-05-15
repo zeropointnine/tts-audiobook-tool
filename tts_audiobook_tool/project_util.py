@@ -345,6 +345,7 @@ class ProjectUtil:
         file_names = [
             PROJECT_TEXT_FILE_NAME,
             PROJECT_TEXT_RAW_FILE_NAME,
+            PROJECT_TEXT_EPUB_FILE_NAME,
         ]
 
         for model_info in TtsModelInfos:

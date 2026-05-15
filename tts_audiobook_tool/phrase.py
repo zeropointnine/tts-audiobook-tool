@@ -77,7 +77,7 @@ class Phrase:
 @total_ordering 
 class Reason(tuple[int, str, float], Enum):
     """
-    Describes the "reason" why a piece of text has been segmented.
+    Describes the "reason" why a piece of text has been segmented (at the end of the text).
     
     Value comparisons can be made between members directly or using the level property
     (eg, "reason1 < reason2" or "reason1.level < reason2.level")

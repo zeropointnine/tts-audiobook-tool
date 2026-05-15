@@ -26,12 +26,22 @@ class ChapterDividersMenu:
             print_feedback("Cleared chapter dividers")
 
         items = []
+
         items.append( MenuItem("Enter comma-delimited list", lambda _, __: ask_cut_points(state)) )
+        
         items.append( MenuItem("Enter regular expression", lambda _, __: ask_cut_points_regex(state)) )
+        
         if state.project.section_dividers:
             items.append( MenuItem("Clear", on_clear) )
-        items.append( MenuItem("Print chapter info", lambda _, __: print_list(state)))
+        
         items.append( MenuItem(make_mode_label, lambda _, __: mode_menu(state)) )
+        
+        items.append( 
+            MenuItem(
+                "Print chapter info", lambda _, __: print_list(state), 
+                superlabel=" ", superlabel_no_blank_line=True
+            ),
+        )
 
         MenuUtil.menu(state, make_chapter_dividers_label, items)
 
