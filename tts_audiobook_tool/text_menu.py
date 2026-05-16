@@ -95,13 +95,15 @@ class TextMenu:
 
         items.append(
             MenuItem(
-                "Print text segments", on_print,
+                "Print current text segments", on_print,
                 superlabel=" ", superlabel_no_blank_line=True
             ),
         )
 
-
-        MenuUtil.menu(state, make_heading, items, hint=HINT_LINE_BREAKS, breadcrumb="Text")
+        MenuUtil.menu(
+            state, make_heading, items, 
+            subheading=SUBHEADING, hint=HINT_LINE_BREAKS, breadcrumb="Text"
+        )
 
     @staticmethod
     def strategy_menu(state: State) -> None:
@@ -120,7 +122,6 @@ class TextMenu:
             current_value=state.project.segmentation_strategy,
             default_value=list(SegmentationStrategy)[0],
             on_select=on_select,
-            subheading=SEG_STRATEGY_SUBHEADING,
             breadcrumb="Text segmentation strategy",
         )
 
@@ -292,8 +293,7 @@ def on_ask_max_size(state: State, _) -> None:
 
     MenuUtil.print_screen_heading(state, "Max words per segment")
 
-    printt("This is the maximum number of words that will be used for a single TTS prompt.")
-    printt("This value is applied at the point text is imported into the project.")
+    printt("On text import, this is the maximum number of words to be used for a single text segment.")
     printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelInfos.recommended_range_string(Tts.get_type().value)}")
     printt()
 
@@ -307,7 +307,7 @@ def on_ask_max_size(state: State, _) -> None:
         is_int=True
     )
 
-SEG_STRATEGY_SUBHEADING = \
-"""When text is imported to the project, this dictates how it will be segmented 
-for text-to-speech inference.
+SUBHEADING = \
+"""On import, text will be segmented into sentences and phrases using the settings 
+shown below. Project language code can also affect how the text is segmented.
 """

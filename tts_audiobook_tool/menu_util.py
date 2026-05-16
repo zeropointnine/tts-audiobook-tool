@@ -307,70 +307,83 @@ class MenuUtil:
 
         label_color = COL_DIM
         value_color = COL_MEDIUM
+        qualifier_color = COL_DIM
 
+        # Project line
         if state.project.dir_path:
-            path_string = value_color + make_terminal_hyperlink(state.project.dir_path)
+            project_line = value_color + make_terminal_hyperlink(state.project.dir_path)
         else:
-            path_string = value_color + "none"
+            project_line = value_color + "none"
 
         language_code = state.project.language_code.strip()
         if state.project.dir_path and language_code:
-            path_string += f" {COL_DIM}({language_code})"
+            project_line += f" {qualifier_color}({language_code})"
 
-        if Tts._instance_display_info:
-            tts_model_text = value_color + Tts._instance_display_info.model_description
+        # TTS line
+        if Tts._instance_display_info:            
+            # Instance exists - display extra info
+            tts_line = value_color + Tts._instance_display_info.model_description
             match (bool(Tts._instance_display_info.device), bool(Tts._instance_display_info.extra)):
                 case (True, True):
-                    s = f"{Tts._instance_display_info.device}, {Tts._instance_display_info.extra}"
+                    extra = f"{Tts._instance_display_info.device}, {Tts._instance_display_info.extra}"
                 case (True, False):
-                    s = Tts._instance_display_info.device
+                    extra = Tts._instance_display_info.device
                 case (False, True):
-                    s = Tts._instance_display_info.extra
+                    extra = Tts._instance_display_info.extra
                 case (False, False):
-                    s = ""
-            if s:
-                tts_model_text += f" {COL_DIM}({s})"
-            tts_loaded = "(loaded)"
+                    extra = ""
+            if extra:
+                extra = f"({extra})"
+            extra += " (loaded)"
+            tts_line += f" {qualifier_color}{extra}"
         else:
-            tts_model_text = value_color + Tts.get_class().INFO.ui['proper_name']
-            tts_loaded = ""
+            # No instance exists - display basic info
+            tts_line = value_color + Tts.get_class().INFO.ui['proper_name']
+            if state.prefs.tts_force_cpu:
+                # Note, showing "force cpu" qualifier only if no instance exists
+                # b/c if instance exists, will already show device value cpus
+                tts_line += f" {qualifier_color}(force cpu)"
 
+        # Voice line
         voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
             state.project,
             Tts.get_instance_if_exists()
         )
         voice_prefix = strip_ansi_codes(voice_prefix).strip().rstrip(":")
         voice_value = strip_ansi_codes(voice_value).strip()
-        voice_text = value_color + (voice_value or voice_prefix or "none")
+        voice_line = value_color + (voice_value or voice_prefix or "none")
 
+        # Text line
         total_lines = len(state.project.phrase_groups)
         num_complete = state.project.sound_segments.num_generated()
         text_text = value_color + f"{total_lines} lines"
         text_text += f" {COL_DIM}({num_complete} segments generated)"
 
+        # STT line
         stt_model = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
-        stt_desc = value_color + stt_model
+        stt_line = value_color + stt_model
         if state.prefs.stt_variant == SttVariant.DISABLED:
-            stt_desc += f" disabled" # not dim
+            stt_line += f" disabled" # not dim
         else:
             if Stt.has_instance():
                 stt_variant = Stt.get_variant().id
                 fw_config = state.prefs.stt_config.description if not Stt.should_use_mlx_whisper() else ""
-                stt_desc += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"            
+                stt_line += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"            
             else:
-                stt_desc += f""
+                stt_line += f""
 
-        memory_text = strip_ansi_codes(AppUtil.make_memory_string())
-        memory_text = memory_text.replace(":", "") # careful
-        memory_text = value_color + memory_text if memory_text else ""
+        # Memory line
+        memory_line = strip_ansi_codes(AppUtil.make_memory_string())
+        memory_line = memory_line.replace(":", "") # careful
+        memory_line = value_color + memory_line if memory_line else ""
 
-        printt(f"{label_color}Project:     {path_string}")
-        printt(f"{label_color}TTS model:   {tts_model_text} {COL_DIM}{tts_loaded}")
-        printt(f"{label_color}Voice clone: {voice_text}")
+        printt(f"{label_color}Project:     {project_line}")
+        printt(f"{label_color}TTS model:   {tts_line}")
+        printt(f"{label_color}Voice clone: {voice_line}")
         printt(f"{label_color}Text:        {text_text}")
-        printt(f"{label_color}STT model:   {stt_desc}")
-        if memory_text:
-            printt(f"{label_color}Memory:      {memory_text}")
+        printt(f"{label_color}STT model:   {stt_line}")
+        if memory_line:
+            printt(f"{label_color}Memory:      {memory_line}")
 
 
     @staticmethod

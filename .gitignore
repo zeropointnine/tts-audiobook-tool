@@ -11,11 +11,5 @@ package-lock.json
 
 plans/
 .clinerules
-CLAUDE.md
-.claude/
-
-output/
-checkpoints/
 
 config_oute_dev.py
-requirements-dev.txt

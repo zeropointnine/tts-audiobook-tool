@@ -45,27 +45,34 @@ class OptionsMenu:
 
             items = []
 
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
-                    lambda _, __: OptionsMenu.stt_model_menu(state),
-                    superlabel="Model options", superlabel_no_blank_line=True
+            # Whisper model
+            from tts_audiobook_tool.stt import Stt
+            if not Stt.should_use_mlx_whisper():
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
+                        lambda _, __: OptionsMenu.stt_model_menu(state),
+                        superlabel="Model options", superlabel_no_blank_line=True
+                    )
                 )
-            )
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label("Whisper device", state.prefs.stt_config.description),
-                    lambda _, __: OptionsMenu.stt_config_menu(state)
-                )
-            )
 
+            # Whisper device
+            if not Stt.should_use_mlx_whisper():
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("Whisper device", state.prefs.stt_config.description),
+                        lambda _, __: OptionsMenu.whisper_device_menu(state)
+                    )
+                )
+
+            # TTS force cpu
             import torch
-            _model_devices = Tts.get_type().value.torch_devices
-            _has_gpu = (
-                (torch.cuda.is_available() and "cuda" in _model_devices) or
-                (torch.backends.mps.is_available() and "mps" in _model_devices)
+            model_devices = Tts.get_type().value.torch_devices
+            has_gpu = (
+                (torch.cuda.is_available() and "cuda" in model_devices) or
+                (torch.backends.mps.is_available() and "mps" in model_devices)
             )
-            if _model_devices and _has_gpu:
+            if model_devices and has_gpu:
                 items.append(
                     MenuItem(
                         make_menu_label("TTS model - Force CPU", state.prefs.tts_force_cpu, False),
@@ -73,6 +80,7 @@ class OptionsMenu:
                     )
                 )
                 
+            # About TTS model
             if Tts.get_type() != TtsModelInfos.NONE:
                 items.append(
                     MenuItem(
@@ -81,8 +89,11 @@ class OptionsMenu:
                     )
                 )
 
+            # Unload models
             items.append( MenuItem(make_unload_label, on_unload) )
 
+            # Various:
+            
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
@@ -141,7 +152,7 @@ class OptionsMenu:
         )
 
     @staticmethod
-    def stt_config_menu(state: State) -> None:
+    def whisper_device_menu(state: State) -> None:
 
         def on_select(value: SttConfig) -> None:
             if state.prefs.stt_config != value:

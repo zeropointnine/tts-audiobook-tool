@@ -92,8 +92,8 @@ class AppUtil:
             When exists, prints if sound gen exists for text segment, and prints num-generated info
         """        
 
-        heading = "Text segments" if extant_indices else "Text segments preview"
-        MenuUtil.print_heading(None, heading, non_menu=True)
+        heading = "Text segments:" if extant_indices else "Text segments preview:"
+        MenuUtil.print_heading(None, heading, dont_clear=True)
 
         if len(phrase_groups) > 0:
             index_width = len(str(len(phrase_groups)))
