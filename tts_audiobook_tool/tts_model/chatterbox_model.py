@@ -1,6 +1,7 @@
 import os
 import random
 import traceback
+from typing import Any
 import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
@@ -25,15 +26,21 @@ class ChatterboxModel(ChatterboxBaseModel):
     """
 
     def __init__(self, model_type: ChatterboxType, device: str):
+        
         self._device = device
-        device_obj = torch.device(self._device)
         self._model_type = model_type
+        
+        multilingual_loader: Any = ChatterboxMultilingualTTS
+        turbo_loader: Any = ChatterboxTurboTTS
 
         match self._model_type:
             case ChatterboxType.MULTILINGUAL:
-                self._chatterbox = ChatterboxMultilingualTTS.from_pretrained(device=device_obj)
+                # Pass the normalized device string instead of torch.device(...).
+                # Upstream Chatterbox checks for values like "cpu" and "mps"
+                # before deciding whether to remap CUDA-saved checkpoints to CPU.
+                self._chatterbox = multilingual_loader.from_pretrained(device=self._device)
             case ChatterboxType.TURBO:
-                self._chatterbox = ChatterboxTurboTTS.from_pretrained(device=device_obj)
+                self._chatterbox = turbo_loader.from_pretrained(device=self._device)
 
     def supported_languages_multi(self) -> list[str]:
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)
