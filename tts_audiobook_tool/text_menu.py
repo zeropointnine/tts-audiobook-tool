@@ -193,12 +193,12 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             printt()
 
             # Print dividers info
-            printt(f"{COL_ACCENT}Chapter dividers:")
+            printt(f"{COL_ACCENT}Section markers:")
             num_dividers = len(epub_import_result.section_dividers)
             verb = "was" if num_dividers == 1 else "were"
-            noun = make_noun('chapter divider', 'chapter dividers', num_dividers)
+            noun = make_noun('section marker', 'section markers', num_dividers)
             printt(f"{num_dividers} {noun} {verb} set using the epub's built-in structure.")
-            printt("They can be reviewed and edited at Main > Create > Chapter dividers")
+            printt("They can be reviewed and edited at Main > Create > Section markers")
             printt()
 
             # Print raw text conversion info

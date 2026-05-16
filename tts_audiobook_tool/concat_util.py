@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -79,8 +79,8 @@ class ConcatUtil:
             message += "..."
             MenuUtil.print_heading(None, message, dont_clear=True, non_menu=True)
 
-            if state.project.chapter_mode == ChapterMode.FILES:
-                ranges = make_chapter_ranges(state.project.section_dividers, len(state.project.phrase_groups))
+            if state.project.chapter_mode == SectionMarkerMode.FILES:
+                ranges = make_file_line_ranges(state.project.section_dividers, len(state.project.phrase_groups))
                 index_start, index_end = ranges[chapter_index]
                 num_chapters = len(ranges)
             else:

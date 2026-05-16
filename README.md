@@ -753,13 +753,13 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2025-01-10**
 
-- "Chapter dividers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Chapter dividers` > `Mode`)
+- "Section markers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Section markers` > `Mode`)
 
 - Note, app now saves AAC files using `.m4b` suffix instead of `.m4a`.
 
 **2025-01-05**
 
-- Added option to **add chapter dividers using regular expressions** (thanks @AntitrustEnthusiast).
+- Added option to **add section markers using regular expressions** (thanks @AntitrustEnthusiast).
 
 **2025-01-04**
 

@@ -253,7 +253,7 @@ class MenuUtil:
     ) -> None:
         """
         Prints a heading for a blocking prompt/screen that is not a full menu,
-        but should still participate in the current breadcrumb trail.
+        but should still participate in the current breadcrumb trail. Think "pseudo-menu".
 
         This temporarily pushes a MenuFrame so existing ancestor-only
         breadcrumb rendering works the same way as MenuUtil.menu(...), while

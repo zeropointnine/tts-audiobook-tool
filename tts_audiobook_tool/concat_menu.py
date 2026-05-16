@@ -2,11 +2,11 @@ import os
 
 import torch
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
-from tts_audiobook_tool.chapter_dividers_menu import ChapterDividersMenu
+from tts_audiobook_tool.section_markers_menu import SectionMarkersMenu
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -31,13 +31,13 @@ class ConcatMenu:
                 s += f" {COL_DIM}({COL_ERROR}requires generated audio{COL_DIM})"
             return s
 
-        def make_chapter_dividers_label(_: State) -> str:
+        def make_section_markers_label(_: State) -> str:
             qty = len(state.project.section_dividers)
-            label = "Chapter dividers "
+            label = "Section markers "
             if qty > 0:
                 noun = make_noun('item', 'items', qty)
                 mode = state.project.chapter_mode.label.lower()
-                value = f"{qty} {noun}, {mode}"
+                value = f"{qty} {noun}{COL_DIM}, mode: {COL_ACCENT}{mode}"
                 label += make_currently_string(value)
             else:
                 label += f"{COL_DIM}(optional)"
@@ -53,7 +53,7 @@ class ConcatMenu:
                 
                 MenuItem(make_start_label, lambda _, __: ask_chapter_indices_and_make(state)),
                 
-                MenuItem(make_chapter_dividers_label, lambda _, __: ChapterDividersMenu.menu(state)),
+                MenuItem(make_section_markers_label, lambda _, __: SectionMarkersMenu.menu(state)),
 
                 MenuItem(
                     lambda _: make_menu_label("File type", file_type_value), 
@@ -279,7 +279,7 @@ class ConcatMenu:
 
 def make_chapter_files_subheading(state: State) -> str:
 
-    if state.project.chapter_mode != ChapterMode.FILES:
+    if state.project.chapter_mode != SectionMarkerMode.FILES:
         return ""
 
     infos = ChapterInfo.make_chapter_infos(state.project)
@@ -288,30 +288,26 @@ def make_chapter_files_subheading(state: State) -> str:
     
     if len(infos) > 4:
         subinfos = infos[:3]
-        extra_line = f"Plus {len(infos) - len(subinfos)} more items"
+        extra = f" {COL_DIM_ITALICS}+{len(infos) - len(subinfos)} more files"
     else:
         subinfos = infos
-        extra_line = ""
+        extra = ""
 
     strings = make_chapter_info_strings( subinfos, list(range(len(subinfos))) )
+    if extra:
+        strings[-1] += extra
     string = "\n".join(strings)
     string += "\n"
-    if extra_line:
-        string += extra_line + "\n"
     return string
 
 def make_chapter_info_strings(infos: list[ChapterInfo], indices: list[int]) -> list[str]:
     lst = []
     for index in indices:
-        s = make_chapter_files_string(infos[index], index)
+        info = infos[index]
+        s = f"{COL_DEFAULT}File {index+1}:{COL_DIM} lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
+        s += f"({info.num_files_exist}/{info.num_segments} generated)"
         lst.append(s)
     return lst
-
-def make_chapter_files_string(info: ChapterInfo, index: int) -> str:
-    s = f"{COL_DEFAULT}Chapter file {index+1}:{COL_DIM} lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
-    missing = f", {info.num_files_missing} missing" if info.num_files_missing else ""
-    s += f"({info.num_files_exist}/{info.num_segments} generated{missing}){COL_DEFAULT}"
-    return s
 
 def ask_chapter_indices_and_make(state: State) -> None:
 
@@ -322,7 +318,7 @@ def ask_chapter_indices_and_make(state: State) -> None:
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
 
-    should_ask_file_numbers = (state.project.chapter_mode == ChapterMode.FILES) and len(state.project.section_dividers) > 0
+    should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.section_dividers) > 0
     if should_ask_file_numbers:
         
         infos = ChapterInfo.make_chapter_infos(state.project)

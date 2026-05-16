@@ -344,7 +344,7 @@ def lerp_clamped(
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
-def make_chapter_ranges(section_dividers: list[int], num_items: int) -> list[tuple[int, int]]:
+def make_file_line_ranges(section_dividers: list[int], num_items: int) -> list[tuple[int, int]]:
     """ 
     Returns ranges with length of section_dividers + 1 (always starts with item with start index 0)
     Assumes `section_dividers` is sorted 

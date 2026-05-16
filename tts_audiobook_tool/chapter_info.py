@@ -36,7 +36,7 @@ class ChapterInfo:
         """
         Makes ChapterInfo objects based on the project's section_dividers
         """
-        ranges = make_chapter_ranges(project.section_dividers, len(project.phrase_groups))
+        ranges = make_file_line_ranges(project.section_dividers, len(project.phrase_groups))
         
         result = []
         for chapter_index, rng in enumerate(ranges):

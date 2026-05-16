@@ -258,13 +258,13 @@ class Strictness(tuple[str, int, str], Enum):
     
 # ---
 
-FILES_DESC = "Each chapter divider will result in a new, separate audio file"
-METADATA_DESC = "Always outputs to a single file\n      Chapter dividers are used for M4B chapter metadata and player bookmark metadata"
+FILES_DESC = "Each section marker defines the start of a new, separate audio file."
+METADATA_DESC = "Section markers are used for M4B chapter metadata and player bookmark metadata.\n      Always outputs to a single file."
 
-class ChapterMode(tuple[str, str, str], Enum):
+class SectionMarkerMode(tuple[str, str, str], Enum):
 
-    FILES = ("files", "Split into files", FILES_DESC)
-    BOOKMARKS = ("metadata", "Chapter metadata", METADATA_DESC)
+    FILES = ("files", "Splits into files", FILES_DESC)
+    BOOKMARKS = ("metadata", "Adds metadata", METADATA_DESC)
 
     @property
     def id(self) -> str:
@@ -279,8 +279,8 @@ class ChapterMode(tuple[str, str, str], Enum):
         return self.value[2]
 
     @staticmethod
-    def get_by_id(id: str) -> ChapterMode | None:
-        for item in list(ChapterMode):
+    def get_by_id(id: str) -> SectionMarkerMode | None:
+        for item in list(SectionMarkerMode):
             if id == item.id:
                 return item
         return None

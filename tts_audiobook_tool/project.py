@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from tts_audiobook_tool.app_types import ChapterMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, Sound, StreamEndCallback, Strictness
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, Sound, StreamEndCallback, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
@@ -107,7 +107,7 @@ class Project(BaseModel):
     strictness: Strictness = list(Strictness)[0]
     
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
-    chapter_mode: ChapterMode = list(ChapterMode)[0]
+    chapter_mode: SectionMarkerMode = list(SectionMarkerMode)[0]
 
     # Placeholder attribute used when no TTS model exists
     none_voice_file_name: str = "" 
@@ -410,9 +410,9 @@ class Project(BaseModel):
 
         # chapter_mode
         s = d.get('chapter_mode', '')
-        value = ChapterMode.get_by_id(s)
+        value = SectionMarkerMode.get_by_id(s)
         if value is None:
-            value = list(ChapterMode)[0]
+            value = list(SectionMarkerMode)[0]
             add_warning('chapter_mode', value)
         d['chapter_mode'] = value
 
