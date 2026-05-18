@@ -1,7 +1,6 @@
 from __future__ import annotations
-from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
+from tts_audiobook_tool.app_types import SoundSegment
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
@@ -13,16 +12,9 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ValidationResult, WordErrorResult
 
 
-@dataclass(frozen=True)
-class SoundSegmentFiles:
-    """App-coupled files for a saved sound segment."""
-
-    sound_path: Path
-
-    @property
-    def stt_info_path(self) -> Path:
-        """Parallel STT/timing sidecar path derived from the exact sound path."""
-        return self.sound_path.with_suffix(".json")
+def get_segment_stt_info_path(sound_path: str | Path) -> Path:
+    """Parallel STT/timing sidecar path derived from the exact sound path."""
+    return Path(sound_path).with_suffix(".json")
 
 
 class SoundSegmentUtil:
@@ -30,6 +22,47 @@ class SoundSegmentUtil:
     Logic for managing sound segment files 
     (generated audio for a chunk of project text, saved as a file in the project dir)
     """
+
+    @staticmethod
+    def make_from_file_name(file_name: str) -> SoundSegment | None:
+        """
+        Expecting:
+            [0] index, [1] hash, [2] model, [3] voice, [4] num-fails (optional), ...
+        Eg:
+            [00024] [3ae0f21b9de65a3c] [vibevoice] [sy_even_if_ch1_c] [5] With_Lord_knows_what_s_beyond.flac
+        """
+
+        # In case argument is a full file path
+        file_name = Path(file_name).name 
+
+        tags = SoundSegmentUtil.extract_tags_from_file_name(file_name)
+        if not tags:
+            return None
+
+        if len(tags) < 2:
+            # Index and hash are required
+            return None
+
+        try:
+            idx_1b = int(tags[0])
+        except:
+            return None
+        if idx_1b < 1:
+            return None
+        index_0b = idx_1b - 1
+
+        hash = tags[1]
+        if not AppUtil.is_app_hash(hash):
+            return None
+
+        model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
+        voice = tags[3] if len(tags) >= 4 else ""
+        num_errors = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
+
+        return SoundSegment(
+            file_name=file_name, idx=index_0b, hash=hash,
+            voice=voice, model=model, num_errors=num_errors
+        )
 
     @staticmethod
     def make_sound_segments_map(project: Project) -> dict[int, list[SoundSegment]]:
@@ -51,7 +84,7 @@ class SoundSegmentUtil:
             if path.suffix.lower() != ".flac":
                 continue
 
-            sound_segment = SoundSegment.from_file_name(path.name)
+            sound_segment = SoundSegmentUtil.make_from_file_name(path.name)
             if sound_segment is None:
                 continue
             index = sound_segment.idx
@@ -107,7 +140,7 @@ class SoundSegmentUtil:
     def get_common_model_tag(paths: list[str]) -> str:
         result = ""
         for path in paths:
-            sound_segment = SoundSegment.from_file_name(Path(path).name)
+            sound_segment = SoundSegmentUtil.make_from_file_name(Path(path).name)
             if not sound_segment or not sound_segment.model:
                 return ""
             if not result:
@@ -120,7 +153,7 @@ class SoundSegmentUtil:
     def get_common_voice_tag(paths: list[str]) -> str:
         result = ""
         for path in paths:
-            sound_segment = SoundSegment.from_file_name(Path(path).name)
+            sound_segment = SoundSegmentUtil.make_from_file_name(Path(path).name)
             if not sound_segment or not sound_segment.voice:
                 return ""
             if not result:
@@ -196,63 +229,3 @@ class SoundSegmentUtil:
     def make_timestamp_string() -> str:
         # "0" ensures debug sound files shows up alphabetically before sound non-debug files in segments dir, yes rly
         return "0" + str(int(time.time() * 1000)) 
-
-# ---
-
-class SoundSegment(NamedTuple):
-    """
-    Contains the extracted data from the tags from a sound segment filename
-    """
-
-    # The pre-existing file_name from which the SoundSegment fields were extracted
-    file_name: str
-
-    # Zero-based index
-    idx: int 
-    # Hash of the source text used to generate the sound file
-    hash: str
-    num_errors: int
-    model: str
-    voice: str
-
-    @staticmethod
-    def from_file_name(file_name: str) -> SoundSegment | None:
-        """
-        Expecting:
-            [0] index, [1] hash, [2] model, [3] voice, [4] num-fails (optional), ...
-        Eg:
-            [00024] [3ae0f21b9de65a3c] [vibevoice] [sy_even_if_ch1_c] [5] With_Lord_knows_what_s_beyond.flac
-        """
-
-        # In case argument is a full file path
-        file_name = Path(file_name).name 
-
-        tags = SoundSegmentUtil.extract_tags_from_file_name(file_name)
-        if not tags:
-            return None
-
-        if len(tags) < 2:
-            # Index and hash are required
-            return None
-
-        try:
-            idx_1b = int(tags[0])
-        except:
-            return None
-        if idx_1b < 1:
-            return None
-        index_0b = idx_1b - 1
-
-        hash = tags[1]
-        if not AppUtil.is_app_hash(hash):
-            return None
-
-        model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
-        voice = tags[3] if len(tags) >= 4 else ""
-        num_errors = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
-
-        return SoundSegment(
-            file_name=file_name, idx=index_0b, hash=hash,
-            voice=voice, model=model, num_errors=num_errors
-        )
-

@@ -12,7 +12,6 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -177,7 +176,12 @@ class AppUtil:
 
     @staticmethod
     def set_seed(seed: int):
-        """ Sets random seed across torch, numpy, and random. """
+        """ 
+        Sets random seed across torch, numpy, and random. 
+        
+        This is oftentimes sufficient to make the inference of torch-based TTS models idempotent.
+        (Must be tested carefully to verify, ofc)
+        """
         import torch
         import numpy as np
         torch.manual_seed(seed)
@@ -316,6 +320,7 @@ class AppUtil:
 
     @staticmethod
     def play_done_sound() -> None:
+        from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
         done_wav_path = make_assets_file_path("done.wav")
         SoundFileUtil.play_sound_file_async(done_wav_path)
 

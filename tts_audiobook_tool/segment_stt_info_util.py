@@ -8,7 +8,7 @@ from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
-from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles
+from tts_audiobook_tool.sound_segment_util import get_segment_stt_info_path
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
@@ -229,23 +229,23 @@ class SegmentSttInfoUtil:
             return
 
         sound_path = Path(os.path.join(project.sound_segments_path, best_item.file_name))
-        files = SoundSegmentFiles(sound_path)
-        info = SegmentSttInfoUtil.load(files.stt_info_path)
+        stt_info_path = get_segment_stt_info_path(sound_path)
+        info = SegmentSttInfoUtil.load(stt_info_path)
         if isinstance(info, str):
-            timed_phrases = SegmentSttInfoUtil.load_timed_phrases(files.stt_info_path)
+            timed_phrases = SegmentSttInfoUtil.load_timed_phrases(stt_info_path)
             if not isinstance(timed_phrases, str):
-                SegmentSttInfoUtil.print_legacy_info(sound_segment_index, files, best_item, project)
+                SegmentSttInfoUtil.print_legacy_info(sound_segment_index, sound_path, best_item, project)
                 return
 
             printt(f"{COL_DIM}{'-' * 60}")
             printt(f"{COL_DEFAULT}Line: {index_string}")
             printt(f"{COL_ERROR}Could not load segment STT info: {info}")
-            printt(f"Filename: {make_terminal_hyperlink(str(files.sound_path), best_item.file_name, is_file=True)}")
+            printt(f"Filename: {make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)}")
             printt()
             return
 
         num_words = TextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
-        filename = make_terminal_hyperlink(str(files.sound_path), best_item.file_name, is_file=True)
+        filename = make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
         num_word_errors = SegmentSttInfoUtil.get_word_error_count(info)
         threshold = SegmentSttInfoUtil.get_threshold(info, project.strictness)
 
@@ -279,7 +279,7 @@ class SegmentSttInfoUtil:
     @staticmethod
     def print_legacy_info(
             sound_segment_index: int,
-            files: SoundSegmentFiles,
+            sound_path: str | Path,
             sound_segment,
             project: Project,
     ) -> None:
@@ -295,7 +295,7 @@ class SegmentSttInfoUtil:
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, project.language_code)
         num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
         threshold = ValidateUtil.compute_threshold(num_words, project.strictness)
-        filename = make_terminal_hyperlink(str(files.sound_path), sound_segment.file_name, is_file=True)
+        filename = make_terminal_hyperlink(str(sound_path), sound_segment.file_name, is_file=True)
         num_errors = "?" if sound_segment.num_errors < 0 else str(sound_segment.num_errors)
 
         filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"

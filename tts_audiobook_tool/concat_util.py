@@ -18,7 +18,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
-from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles, SoundSegmentUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
@@ -548,7 +548,7 @@ def make_subdivided_timed_phrases(
             new_timed_phrases.append(original_timed_phrase)
             continue
 
-        subdivided_items_json_path = SoundSegmentFiles(Path(sound_path)).stt_info_path
+        subdivided_items_json_path = get_segment_stt_info_path(sound_path)
         if not subdivided_items_json_path.exists():
             L.w(f"Missing segment timing/STT sidecar JSON: {subdivided_items_json_path}")
             add_to_new_bookmark_indices("no-subdivided-json", original_timed_phrase.presentable_text)

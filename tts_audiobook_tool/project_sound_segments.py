@@ -3,7 +3,7 @@ from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentFiles, SoundSegmentUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
@@ -78,7 +78,7 @@ class ProjectSoundSegments:
         path = Path(event.src_path)
         if path.suffix != ".flac":
             return
-        if not bool(SoundSegment.from_file_name(event.src_path)):
+        if not bool(SoundSegmentUtil.make_from_file_name(event.src_path)):
             return
 
         self._dirty = True
@@ -198,9 +198,8 @@ class ProjectSoundSegments:
         The segment STT/timing JSON is expected to use the exact same stem as
         the sound file, including any generated-time word-error count tag.
         """
-        files = SoundSegmentFiles(sound_file_path)
-        delete_silently(str(files.sound_path))
-        delete_silently(str(files.stt_info_path))
+        delete_silently(str(sound_file_path))
+        delete_silently(str(get_segment_stt_info_path(sound_file_path)))
 
     def delete_redundants_for(self, index: int) -> int:
         """ Keeps the item with the least word fails and deletes the rest """        

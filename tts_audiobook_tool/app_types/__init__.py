@@ -398,3 +398,21 @@ class RealTimeMenuState:
     custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
     custom_text_line_range: tuple[int, int] | None = None
     project_text_line_range: tuple[int, int] | None = None
+
+# ---
+
+class SoundSegment(NamedTuple):
+    """
+    Contains the extracted data from the tags from a sound segment filename
+    """
+
+    # The pre-existing file_name from which the SoundSegment fields were extracted
+    file_name: str
+
+    # Zero-based index
+    idx: int 
+    # Hash of the source text used to generate the sound file
+    hash: str
+    num_errors: int
+    model: str
+    voice: str

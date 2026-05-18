@@ -17,7 +17,7 @@ from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
-from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles, SoundSegmentUtil
+from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
@@ -536,7 +536,7 @@ class GenerateUtil:
                 index=index,
                 validation_result=validation_result
             )
-            json_path = SoundSegmentFiles(Path(sound_path)).stt_info_path
+            json_path = get_segment_stt_info_path(sound_path)
             err = SegmentSttInfoUtil.save(json_path, info)
             if err:
                 printt(COL_ERROR + str(json_path))
