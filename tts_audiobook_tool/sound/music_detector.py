@@ -1,5 +1,5 @@
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.yamnet_detector import YamnetDetector
+from tts_audiobook_tool.sound.yamnet_detector import YamnetDetector
 
 
 class MusicDetector:

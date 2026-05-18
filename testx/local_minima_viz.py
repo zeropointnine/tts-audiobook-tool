@@ -1,8 +1,8 @@
 from pathlib import Path
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.sound_debug_util import SoundDebugUtil
-from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sound_debug_util import SoundDebugUtil
+from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 
 # Tests "SoundUtil.find_local_minima()"
 

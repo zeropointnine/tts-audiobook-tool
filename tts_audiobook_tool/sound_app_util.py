@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.sound_util import SoundUtil
-from tts_audiobook_tool.silence_util import SilenceUtil
+from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sound_util import SoundUtil
+from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.phrase import Phrase, Reason
 
 if TYPE_CHECKING:

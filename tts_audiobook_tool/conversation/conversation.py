@@ -23,7 +23,7 @@ from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
 from tts_audiobook_tool.conversation.console_session import ConsoleSession
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
-from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 
 
 class Conversation:

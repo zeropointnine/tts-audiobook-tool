@@ -6,7 +6,7 @@ from pathlib import Path
 import zlib
 
 from tts_audiobook_tool.app_types import *
-from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *

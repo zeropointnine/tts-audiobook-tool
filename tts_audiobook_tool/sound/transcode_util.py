@@ -1,6 +1,6 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
+from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 

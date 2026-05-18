@@ -1,8 +1,8 @@
 from pathlib import Path
 import soundfile
 
-from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 
 
 """

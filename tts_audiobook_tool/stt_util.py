@@ -5,7 +5,7 @@ import ffmpeg
 import numpy as np
 import difflib
 from tts_audiobook_tool.app_types import ConcreteWord, Word
-from tts_audiobook_tool.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.phrase import Phrase

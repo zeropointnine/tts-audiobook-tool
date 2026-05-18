@@ -65,7 +65,7 @@ class Startup:
     # ---
 
     def exit_on_missing_ffmpeg(self) -> None:
-        from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
+        from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
         if not self.is_server and not FfmpegUtil.is_ffmpeg_available():
             printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
             printt(f"{COL_ERROR}Please install it first:")

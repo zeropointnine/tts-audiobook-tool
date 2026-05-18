@@ -33,9 +33,9 @@ from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.phrase import Reason
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
-from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.whisper_util import WhisperUtil

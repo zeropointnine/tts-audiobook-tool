@@ -2,9 +2,9 @@ import torch
 
 from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.memory_util import MemoryUtil
-from tts_audiobook_tool.music_detector import MusicDetector
+from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
@@ -67,7 +67,7 @@ class ModelsUtil:
         # Init STT
         if should_stt:
             try:
-                _ = Stt.get_whisper()
+                Stt.eager_warm_up_for_inference()
             except Exception as e:
                 err_msg = str(e)
                 SigIntHandler().clear()

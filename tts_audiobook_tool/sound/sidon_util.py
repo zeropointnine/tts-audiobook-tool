@@ -3,7 +3,7 @@ import torch
 from huggingface_hub import hf_hub_download # type: ignore
 
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.sound.sound_util import SoundUtil
 
 _HF_REPO_ID       = "sarulab-speech/sidon-v0.1"
 _INPUT_SR         = 16_000

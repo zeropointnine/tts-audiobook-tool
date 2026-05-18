@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from tts_audiobook_tool.app_types import Sound, Strictness, SttConfig, SttVariant
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import printt
 from tts_audiobook_tool.validate_util import ValidateUtil

@@ -9,11 +9,11 @@ from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShel
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.models_util import ModelsUtil
-from tts_audiobook_tool.loudness_normalization_util import LoudnessNormalizationUtil
+from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles, SoundSegmentUtil

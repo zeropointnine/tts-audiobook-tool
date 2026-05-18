@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 from tts_audiobook_tool.app_types import Sound, Word
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.silence_util import SilenceGapTrim
+from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 
 
 @dataclass

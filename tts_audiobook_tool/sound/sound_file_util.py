@@ -6,7 +6,7 @@ import threading
 import soundfile
 
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.ffmpeg_util import FfmpegUtil
+from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 

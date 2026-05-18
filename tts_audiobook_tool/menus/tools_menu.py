@@ -1,10 +1,10 @@
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.mp3_concat import SoundConcatTranscodeUtil
-from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.mp3_concat import SoundConcatTranscodeUtil
+from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.transcode_util import TranscodeUtil
+from tts_audiobook_tool.sound.transcode_util import TranscodeUtil
 from tts_audiobook_tool.util import *
 
 class ToolsMenu:

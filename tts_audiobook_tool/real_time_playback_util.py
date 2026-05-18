@@ -12,8 +12,8 @@ from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *

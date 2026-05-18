@@ -135,6 +135,7 @@ class Stt:
     # the returned generator.
     inference_lock = threading.Lock()
     _did_eager_warm_up_mlx = False
+    _did_eager_warm_up_inference = False
 
     @staticmethod
     def should_use_mlx_whisper() -> bool:
@@ -177,7 +178,6 @@ class Stt:
             if Stt.should_use_mlx_whisper():
                 print_init(f"Initializing mlx-whisper model ({model})...")
                 Stt._whisper = MlxWhisperAdapter(model)
-                Stt.eager_warm_up_mlx_whisper()
                 return cast(WhisperBackend, Stt._whisper)
 
             dq = Stt._config
@@ -208,19 +208,20 @@ class Stt:
         return cast(WhisperBackend, Stt._whisper)
 
     @staticmethod
-    def eager_warm_up_mlx_whisper() -> None:
-        if not Stt.should_use_mlx_whisper() or Stt._did_eager_warm_up_mlx:
+    def eager_warm_up_for_inference() -> None:
+        """
+        Forces backend-specific lazy initialization needed for the first real
+        inference to complete during warm-up rather than during the first user-
+        visible transcription.
+        """
+        if Stt._did_eager_warm_up_inference:
             return
 
-        whisper = Stt._whisper
-        if whisper is None:
-            return
+        whisper = Stt.get_whisper()
 
-        # mlx-whisper defers the real model download/load until the first
-        # transcribe() call. Force a tiny silent transcription here so the
-        # startup behavior matches the eager faster-whisper path and any
-        # progress output appears during model warmup rather than after the
-        # conversation UI prompt is already on screen.
+        # Both whisper backends can defer backend-side work until the first
+        # transcribe() call. Force a tiny silent transcription here so that
+        # the remaining load/compile/graph setup happens during warm-up.
         silent_audio = np.zeros(1600, dtype=np.float32)
         with Stt.inference_lock:
             segments, _ = whisper.transcribe(
@@ -229,7 +230,10 @@ class Stt:
                 language=None,
             )
             _ = list(segments)
-        Stt._did_eager_warm_up_mlx = True
+
+        Stt._did_eager_warm_up_inference = True
+        if Stt.should_use_mlx_whisper():
+            Stt._did_eager_warm_up_mlx = True
 
     @staticmethod
     def short_description() -> str:
@@ -250,6 +254,7 @@ class Stt:
         if Stt._whisper:
             Stt._whisper = None
             Stt._did_eager_warm_up_mlx = False
+            Stt._did_eager_warm_up_inference = False
             from tts_audiobook_tool.memory_util import MemoryUtil
             MemoryUtil.gc_ram_vram()
 

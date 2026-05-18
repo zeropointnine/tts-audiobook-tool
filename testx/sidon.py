@@ -2,8 +2,8 @@ import os
 import soundfile as sf
 import torch
 
-from tts_audiobook_tool.sidon_util import SidonUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 
 
 INPUT_PATH = "/d/w/w/rebuild6a/combined/long test.m4b"

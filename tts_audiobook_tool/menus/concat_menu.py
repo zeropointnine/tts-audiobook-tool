@@ -13,7 +13,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_util import ProjectUtil
-from tts_audiobook_tool.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos

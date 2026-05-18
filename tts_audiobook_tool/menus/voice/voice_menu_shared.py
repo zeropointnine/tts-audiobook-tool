@@ -6,7 +6,7 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
-from tts_audiobook_tool.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.target_util import TargetUtil

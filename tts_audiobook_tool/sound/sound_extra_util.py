@@ -2,7 +2,7 @@ import librosa
 import numpy as np
 
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.sound_util import SoundUtil
+from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.util import *
 
 

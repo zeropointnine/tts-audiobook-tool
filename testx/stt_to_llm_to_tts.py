@@ -28,7 +28,7 @@ from tts_audiobook_tool.llm_util import LlmUtil
 from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
