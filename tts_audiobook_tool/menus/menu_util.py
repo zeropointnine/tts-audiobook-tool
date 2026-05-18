@@ -2,7 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from typing import Callable
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import Hint, SttVariant
+from tts_audiobook_tool.hint_util import HintUtil
 import tts_audiobook_tool.util as util_module
 
 from tts_audiobook_tool.ask_util import AskUtil
@@ -140,7 +141,7 @@ class MenuUtil:
 
                 # Print optional hint
                 if hint:
-                    Hint.show_hint_if_necessary(state.prefs, hint)
+                    HintUtil.show_hint_if_necessary(state.prefs, hint)
 
                 left_padding = "  "
 

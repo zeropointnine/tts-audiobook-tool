@@ -6,11 +6,12 @@ import xxhash
 
 from tts_audiobook_tool.app_types import ModelWarmUpResult, SegmentationStrategy, SttVariant
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -126,6 +127,7 @@ class AppUtil:
 
     @staticmethod
     def print_regen_lines(project: Project, indices: set[int]) -> None:
+        from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
         
         MenuUtil.print_heading(None, "Lines to be regenerated:", non_menu=True, dont_clear=True)
 
@@ -257,16 +259,16 @@ class AppUtil:
         project: Project = p_project
 
         if Tts.get_type() == TtsModelInfos.FISH_S1 and project.fish_s1_compile_enabled:
-            Hint.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
+            HintUtil.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
         elif Tts.get_type() == TtsModelInfos.FISH_S2 and project.fish_s2_compile_enabled:
-            Hint.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
+            HintUtil.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
 
         import torch
         if platform.system() == "Linux" and torch.cuda.is_available():
                 if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
                     version = torch.backends.cudnn.version()
                     if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
-                        Hint.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
+                        HintUtil.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
 
     @staticmethod
     def get_chromium_info() -> tuple[str, str] | None:

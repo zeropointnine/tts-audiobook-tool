@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from tts_audiobook_tool.app_types import Saveable, SttConfig, SttVariant
+from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -99,9 +100,9 @@ class Prefs(Saveable):
             migrated_properties = ["segmentation_strategy", "max_words", "normalization_type", "use_section_sound_effect"]
             has = [item for item in migrated_properties if prefs_dict.get(item) is not None]
             if has:
-                from tts_audiobook_tool.hint import Hint                
+                from tts_audiobook_tool.hint_util import Hint                
                 hint = Hint("", "Properties have changed", MIGRATED_MESSAGE.replace("%1", ", ".join(has)))
-                Hint.show_hint(hint, and_prompt=True)
+                HintUtil.show_hint(hint, and_prompt=True)
                 dirty = True
 
         # Project dir

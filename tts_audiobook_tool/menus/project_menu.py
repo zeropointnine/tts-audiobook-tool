@@ -2,7 +2,9 @@ from dataclasses import replace
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
+from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_util import ProjectUtil
@@ -120,7 +122,7 @@ class ProjectMenu:
             reco_str = TtsModelInfos.recommended_range_string(Tts.get_type().value)
             message = message.replace("%2", reco_str)
             hint = Hint("", "FYI", message)
-            Hint.show_hint(hint, and_prompt=True)
+            HintUtil.show_hint(hint, and_prompt=True)
 
         return True
 
@@ -251,14 +253,14 @@ def on_language(state: State, __: MenuItem) -> None:
         if ValidateUtil.is_unsupported_language_code(code): # (not to be confused with chatterbox multilingual requirement)
             text = HINT_VALIDATION_UNSUPPORTED_LANGUAGE.text.replace("%1", str(VALIDATION_UNSUPPORTED_LANGUAGES))
             hint = replace(HINT_VALIDATION_UNSUPPORTED_LANGUAGE, text=text)
-            Hint.show_hint(hint, and_prompt=True)
+            HintUtil.show_hint(hint, and_prompt=True)
 
         # (4) Hint-side-effect re: strictness non-en
         if not Whitelist.supports_language(code) and state.project.strictness != Strictness.LOW:
             if not ValidateUtil.is_unsupported_language_code(code):
                 state.project.strictness = Strictness.LOW
                 state.project.save()
-                Hint.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)
+                HintUtil.show_hint(HINT_FORCED_STRICTNESS_LOW, and_prompt=True)
 
         return ""
 

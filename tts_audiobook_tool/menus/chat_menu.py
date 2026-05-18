@@ -1,4 +1,5 @@
 from tts_audiobook_tool.conversation.conversation import ConversationStatic
+from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.state import State

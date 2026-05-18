@@ -1,4 +1,6 @@
 from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.sound.mp3_concat import SoundConcatTranscodeUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
@@ -13,7 +15,7 @@ class ToolsMenu:
     def menu(state: State) -> None:
 
         def speed_handler(_: State, __: MenuItem):
-            Hint.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
+            HintUtil.show_hint_if_necessary(state.prefs, HINT_SPEED_UP)
             ToolsMenu.ask_save_speed_up_audio()
 
         def item_maker(_: State) -> list[MenuItem]:

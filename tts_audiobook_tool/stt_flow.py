@@ -7,6 +7,8 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
@@ -29,7 +31,7 @@ class SttFlow:
 
         MenuUtil.print_heading(None, "Enhance existing audiobook")
 
-        Hint.show_hint_if_necessary(prefs, HINT_STT_ENHANCE)
+        HintUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE)
 
         # [1] Ask text file
         if DEV and False:
@@ -71,7 +73,7 @@ class SttFlow:
 
         # Optional transcode step
         if Path(source_audio_path).suffix == ".mp3":
-            Hint.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
+            HintUtil.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
             b = AskUtil.ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
             if not b:
                 return
@@ -230,7 +232,7 @@ class SttFlow:
             printt(f"{COL_ACCENT}Saved {dest_path}")
             printt()
 
-        Hint.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
+        HintUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
 
         # [4b] Review "discontinuity info"
         b = AskUtil.ask_confirm("View discontinuity info summary? ")
@@ -239,7 +241,7 @@ class SttFlow:
             AskUtil.ask_enter_to_continue()
 
         if not save_error:
-            Hint.show_player_hint_if_necessary(prefs)
+            HintUtil.show_player_hint_if_necessary(prefs)
 
         return bool(save_error)
 

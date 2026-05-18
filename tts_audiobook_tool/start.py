@@ -17,9 +17,10 @@ from huggingface_hub import constants # type: ignore
 
 import sys
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.hint import Hint
+from tts_audiobook_tool.hint_util import Hint, HintUtil
 
 
 class Startup:
@@ -106,7 +107,7 @@ class Startup:
         # Chatterbox special case, Python v3.11, legacy guard
         if Tts.get_type() == TtsModelInfos.CHATTERBOX:
             if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
-                Hint.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
+                HintUtil.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
                 exit(1)
 
     def exit_on_missing_packages(self) -> None:
@@ -127,7 +128,7 @@ class Startup:
             "Update your virtual environment by re-running:\n"
             f"`{Ansi.BOLD}pip install -r {Tts.get_type().value.requirements_file_name}{Ansi.RESET}`."
         )
-        Hint.print_hint(hint)
+        HintUtil.print_hint(hint)
         exit(1)
 
     def get_new_packages(self) -> list[str]:
@@ -176,15 +177,15 @@ class Startup:
 
         # Tkinter (must do concrete import to test for tkinter functionality)
         if not self.is_server and not does_import_test_pass("tkinter"): 
-            Hint.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
+            HintUtil.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
 
         # Long paths on Windows
         if not self.is_server and not is_long_path_enabled():
-            Hint.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
+            HintUtil.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
 
         # Oute
         if Tts.get_type() == TtsModelInfos.OUTE:
-            Hint.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
+            HintUtil.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
 
         # Updated UI
         # 
@@ -194,7 +195,7 @@ class Startup:
         if b:
             temp_prefs.menu_clears_screen = True
             temp_prefs.save()
-            Hint.show_hint(HINT_UPDATED_UI, and_prompt=True)
+            HintUtil.show_hint(HINT_UPDATED_UI, and_prompt=True)
 
     def init_logging(self) -> None:
         from tts_audiobook_tool.app_util import AppUtil

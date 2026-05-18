@@ -1,13 +1,12 @@
 from __future__ import annotations
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 import time
+from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants import *
 
 @dataclass
-class Hint:
-
-    # TODO: move Hint to app_types.py and rename rest as "hint_util.py" non-class module
+class HintUtil:
 
     key: str
     heading: str
@@ -23,7 +22,7 @@ class Hint:
         if prefs.get_hint(hint.key):
             return True
         prefs.set_hint_true(hint.key)
-        return Hint.show_hint(hint, and_confirm=and_confirm, and_prompt=and_prompt)
+        return HintUtil.show_hint(hint, and_confirm=and_confirm, and_prompt=and_prompt)
 
     @staticmethod
     def show_hint(hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
@@ -34,7 +33,7 @@ class Hint:
         """
         from tts_audiobook_tool.ask_util import AskUtil
 
-        Hint.print_hint(hint)
+        HintUtil.print_hint(hint)
 
         if and_confirm:
             return AskUtil.ask_confirm()
@@ -75,13 +74,4 @@ class Hint:
         s += PLAYER_URL
 
         hint = Hint(key="player", heading="Reminder", text = s)
-        Hint.show_hint_if_necessary(prefs, hint)
-
-    @staticmethod
-    def make_using(source: Hint, value1: str, value2: str="") -> Hint:
-        """ Does a string replace on the source Hint text using '%1' and optionally '%2' """
-        text = source.text
-        text = text.replace("%1", value1)
-        text = text.replace("%2", value2)
-        new_hint = replace(source, text=text)
-        return new_hint
+        HintUtil.show_hint_if_necessary(prefs, hint)

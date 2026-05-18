@@ -10,7 +10,7 @@ and application behavior rather than acting as lightweight shared structures.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from functools import cache
 import platform
@@ -369,6 +369,26 @@ class ExportType(tuple[str, str, str], Enum):
             if id == item.id:
                 return item
         return None
+
+# ---
+
+@dataclass
+class Hint:
+
+    # TODO: move Hint to app_types.py and rename rest as "hint_util.py" non-class module
+
+    key: str
+    heading: str
+    text: str
+
+    @staticmethod
+    def make_using(source: Hint, value1: str, value2: str="") -> Hint:
+        """ Does a string replace on the source Hint text using '%1' and optionally '%2' """
+        text = source.text
+        text = text.replace("%1", value1)
+        text = text.replace("%2", value2)
+        new_hint = replace(source, text=text)
+        return new_hint
 
 # ---
 

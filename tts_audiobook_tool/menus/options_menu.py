@@ -1,5 +1,6 @@
 import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
+from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu

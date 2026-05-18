@@ -3,8 +3,10 @@ from __future__ import annotations
 from tts_audiobook_tool.app_types import Strictness, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -258,7 +260,7 @@ def ask_delete_segments(state: State) -> None:
 
     path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
     hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path, is_file=True))
-    Hint.show_hint_if_necessary(state.prefs, hint)
+    HintUtil.show_hint_if_necessary(state.prefs, hint)
 
     printt(f"Enter line numbers to delete:") 
     printt(f"{COL_DIM}For example, \"3, 5, 21\" or \"201-350, 215\", or just \"all\"") 
@@ -338,7 +340,7 @@ def ask_batch_size(state: State) -> None:
     if not field_name:
         return # silently ignore (shouldn't happen)
 
-    Hint.show_hint_if_necessary(state.prefs, HINT_BATCH)
+    HintUtil.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
     prompt = "Enter batch size:"
     AskUtil.ask_number(
@@ -402,7 +404,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
 
     # Show pre-inference hint/warning if necessary
     if is_regen:
-        Hint.show_hint_if_necessary(state.prefs, HINT_REGEN)
+        HintUtil.show_hint_if_necessary(state.prefs, HINT_REGEN)
     else:
         AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
