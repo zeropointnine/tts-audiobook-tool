@@ -1,10 +1,10 @@
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import COL_DEFAULT, COL_ERROR
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
-from tts_audiobook_tool.text_normalizer import TextNormalizer
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.whitelist import Whitelist
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 
 def highlight_failed_words_normalized(text: str) -> str:

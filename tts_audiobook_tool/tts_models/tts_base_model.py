@@ -120,7 +120,7 @@ class TtsBaseModel(ABC):
              optional un-all-caps per model)
           3. Model-specific massage_for_inference (overridable per model)
         """
-        from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
+        from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
         text = PromptNormalizer.apply_prompt_word_substitutions(
             text, project.word_substitutions, project.language_code
         )

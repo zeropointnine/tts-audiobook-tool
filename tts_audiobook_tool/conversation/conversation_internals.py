@@ -29,8 +29,8 @@ from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, Q
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.llm_util import LlmUtil
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.phrase_segmenter import PhraseSegmenter
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.phrase import Reason
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil

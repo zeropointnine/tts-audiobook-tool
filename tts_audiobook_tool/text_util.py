@@ -2,7 +2,7 @@ import re
 import string
 import unicodedata
 
-from tts_audiobook_tool.whitelist import Whitelist
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 class TextUtil:
     """

@@ -1,6 +1,6 @@
 import unittest
 
-from tts_audiobook_tool.epub_section_skip_detector import EpubSectionSkipDetector
+from tts_audiobook_tool.text_ops.epub_section_skip_detector import EpubSectionSkipDetector
 
 
 class StubEpubItem:

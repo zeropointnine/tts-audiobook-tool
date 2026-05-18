@@ -22,7 +22,7 @@ _DEMOS_DIR = _HERE / "demos"
 _DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.l import L

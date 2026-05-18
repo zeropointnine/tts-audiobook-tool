@@ -14,7 +14,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.whitelist import Whitelist
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 class GenerateMenu:
 

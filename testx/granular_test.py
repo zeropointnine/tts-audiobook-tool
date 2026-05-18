@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional
-from tts_audiobook_tool.whitelist import Whitelist
-from tts_audiobook_tool.text_normalizer import TextNormalizer
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
+from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 
 def count_word_errors(
         normalized_source: str,

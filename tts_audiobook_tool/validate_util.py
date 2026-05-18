@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
-from tts_audiobook_tool.whitelist import Whitelist
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.text_normalizer import TextNormalizer
+from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult

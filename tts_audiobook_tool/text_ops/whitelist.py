@@ -1,7 +1,7 @@
-import os
+from pathlib import Path
 
-from tts_audiobook_tool.whitelist_util_en import WhitelistUtilEn
-from tts_audiobook_tool.whitelist_util_es import WhitelistUtilEs
+from tts_audiobook_tool.text_ops.whitelist_util_en import WhitelistUtilEn
+from tts_audiobook_tool.text_ops.whitelist_util_es import WhitelistUtilEs
 
 
 class Whitelist:
@@ -48,8 +48,8 @@ class Whitelist:
         if not file_name:
             return set()
 
-        this_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(this_dir, "assets", file_name)
+        package_dir = Path(__file__).resolve().parent.parent
+        path = package_dir / "assets" / file_name
 
         with open(path, 'r', encoding='utf-8') as file:
             # Note, extant file is a requirement. No catching of exception.

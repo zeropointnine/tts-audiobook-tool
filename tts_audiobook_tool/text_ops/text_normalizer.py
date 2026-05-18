@@ -5,7 +5,7 @@ import unicodedata
 from whisper_normalizer.english import EnglishNumberNormalizer
 
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.spanish_number_normalizer import SpanishNumberNormalizer
+from tts_audiobook_tool.text_ops.spanish_number_normalizer import SpanishNumberNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 
 

@@ -7,7 +7,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.stt import Stt

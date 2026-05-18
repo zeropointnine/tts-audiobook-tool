@@ -6,7 +6,7 @@ from watchdog.events import FileSystemEventHandler
 from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentFiles, SoundSegmentUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
-from tts_audiobook_tool.text_normalizer import TextNormalizer
+from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *

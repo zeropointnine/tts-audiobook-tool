@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubSourceChapter, EpubTextChapter, EpubTextExtractionResult
+from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubSourceChapter, EpubTextChapter, EpubTextExtractionResult
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 
 

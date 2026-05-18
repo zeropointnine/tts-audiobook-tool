@@ -1,6 +1,6 @@
 import unittest
 
-from tts_audiobook_tool.prompt_normalizer import PromptNormalizer
+from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
 
 class TestPromptNormalizer(unittest.TestCase):
 

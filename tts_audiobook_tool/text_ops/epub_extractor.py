@@ -10,10 +10,10 @@ from typing import Any, Protocol
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.constants import PROJECT_TEXT_EPUB_FILE_NAME
-from tts_audiobook_tool.epub_section_skip_detector import EpubSectionSkipDetector
+from tts_audiobook_tool.text_ops.epub_section_skip_detector import EpubSectionSkipDetector
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup, Reason
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 
 
 @dataclass

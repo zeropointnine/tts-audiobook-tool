@@ -1,6 +1,6 @@
 import unittest
 
-from tts_audiobook_tool.text_normalizer import TextNormalizer, normalize_spacing_en
+from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer, normalize_spacing_en
 
 class TestTextNormalizer(unittest.TestCase):
 

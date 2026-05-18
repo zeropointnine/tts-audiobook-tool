@@ -3,7 +3,7 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.phrase import PhraseGroup
-from tts_audiobook_tool.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.util import *
 

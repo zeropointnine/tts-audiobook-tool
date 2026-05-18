@@ -1,7 +1,7 @@
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.epub_extractor import EpubExtractor, EpubImportResult
+from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.state import State
