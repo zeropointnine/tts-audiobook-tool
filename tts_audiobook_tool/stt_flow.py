@@ -15,7 +15,7 @@ from tts_audiobook_tool.stt_util import SttUtil
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.timed_phrase import TimedPhrase
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.menu_util import MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuUtil
 
 from tts_audiobook_tool.util import *
 

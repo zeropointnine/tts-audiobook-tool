@@ -1,17 +1,17 @@
-from tts_audiobook_tool.concat_menu import ConcatMenu
-from tts_audiobook_tool.chat_menu import ChatMenu
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
-from tts_audiobook_tool.real_time_playback_menu import RealTimePlaybackMenu
-from tts_audiobook_tool.options_menu import OptionsMenu
-from tts_audiobook_tool.generate_menu import GenerateMenu
-from tts_audiobook_tool.project_menu import ProjectMenu
-from tts_audiobook_tool.tools_menu import ToolsMenu
+from tts_audiobook_tool.menus.concat_menu import ConcatMenu
+from tts_audiobook_tool.menus.chat_menu import ChatMenu
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.menus.real_time_playback_menu import RealTimePlaybackMenu
+from tts_audiobook_tool.menus.options_menu import OptionsMenu
+from tts_audiobook_tool.menus.generate_menu import GenerateMenu
+from tts_audiobook_tool.menus.project_menu import ProjectMenu
+from tts_audiobook_tool.menus.tools_menu import ToolsMenu
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.text_menu import TextMenu
+from tts_audiobook_tool.menus.text_menu import TextMenu
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.voice_menu.voice_menu_shared import VoiceMenuShared
+from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 
 
 class MainMenu:

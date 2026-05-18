@@ -3,7 +3,7 @@ from typing import Callable
 
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
@@ -24,31 +24,31 @@ class VoiceMenuShared:
         """
         match Tts.get_type():
             case TtsModelInfos.OUTE:
-                from tts_audiobook_tool.voice_menu import VoiceOuteMenu
+                from tts_audiobook_tool.menus.voice import VoiceOuteMenu
                 VoiceOuteMenu.menu(state)
             case TtsModelInfos.CHATTERBOX:
-                from tts_audiobook_tool.voice_menu import VoiceChatterboxMenu
+                from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)
             case TtsModelInfos.FISH_S1:
-                from tts_audiobook_tool.voice_menu import VoiceFishS1Menu
+                from tts_audiobook_tool.menus.voice import VoiceFishS1Menu
                 VoiceFishS1Menu.menu(state)
             case TtsModelInfos.FISH_S2:
-                from tts_audiobook_tool.voice_menu import VoiceFishS2Menu
+                from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
                 VoiceFishS2Menu.menu(state)
             case TtsModelInfos.HIGGS:
-                from tts_audiobook_tool.voice_menu import VoiceHiggsMenu
+                from tts_audiobook_tool.menus.voice import VoiceHiggsMenu
                 VoiceHiggsMenu.menu(state)
             case TtsModelInfos.VIBEVOICE:
-                from tts_audiobook_tool.voice_menu import VoiceVibeVoiceMenu
+                from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
             case TtsModelInfos.INDEXTTS2:
-                from tts_audiobook_tool.voice_menu import VoiceIndexTts2Menu
+                from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)
             case TtsModelInfos.GLM:
-                from tts_audiobook_tool.voice_menu import VoiceGlmMenu
+                from tts_audiobook_tool.menus.voice import VoiceGlmMenu
                 VoiceGlmMenu.menu(state)
             case TtsModelInfos.MIRA:
-                from tts_audiobook_tool.voice_menu import VoiceMiraMenu
+                from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
 
             case TtsModelInfos.QWEN3TTS:
@@ -59,14 +59,14 @@ class VoiceMenuShared:
                     _ = Tts.get_instance() 
                     print_feedback("Model loaded")
 
-                from tts_audiobook_tool.voice_menu.voice_qwen3_menu import VoiceQwen3Menu
+                from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
 
             case TtsModelInfos.POCKET:
-                from tts_audiobook_tool.voice_menu import VoicePocketMenu
+                from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
             case TtsModelInfos.OMNIVOICE:
-                from tts_audiobook_tool.voice_menu import VoiceOmniVoiceMenu
+                from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
             case _:
                 ...

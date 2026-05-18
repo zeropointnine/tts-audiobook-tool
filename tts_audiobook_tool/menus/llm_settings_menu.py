@@ -2,7 +2,7 @@ import json
 
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 

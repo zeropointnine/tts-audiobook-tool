@@ -3,10 +3,10 @@ from __future__ import annotations
 from tts_audiobook_tool.app_types import Strictness, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.concat_menu import ConcatMenu
+from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.generate_util import GenerateUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project_util import ProjectUtil

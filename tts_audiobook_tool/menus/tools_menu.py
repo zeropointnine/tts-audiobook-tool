@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.mp3_concat import SoundConcatTranscodeUtil
 from tts_audiobook_tool.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound_file_util import SoundFileUtil

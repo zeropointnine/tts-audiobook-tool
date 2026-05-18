@@ -3,8 +3,8 @@ from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
-from tts_audiobook_tool.project_new_menu import ProjectNewMenu
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts

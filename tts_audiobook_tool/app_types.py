@@ -11,7 +11,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 
 """
-Some common app types
+Simple app types
 """
 
 class SingletonBase:

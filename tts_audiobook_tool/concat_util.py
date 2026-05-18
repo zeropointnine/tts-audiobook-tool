@@ -24,7 +24,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.phrase import Phrase
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.timed_phrase import TimedPhrase
-from tts_audiobook_tool.menu_util import MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:

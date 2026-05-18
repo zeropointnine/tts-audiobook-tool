@@ -1,10 +1,10 @@
-from tts_audiobook_tool.menu_util import MenuItem
+from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu import VoiceMenuShared
+from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
 class VoiceHiggsMenu:
 

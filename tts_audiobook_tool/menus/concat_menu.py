@@ -6,11 +6,11 @@ from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShel
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.chapter_info import ChapterInfo
-from tts_audiobook_tool.section_markers_menu import SectionMarkersMenu
+from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.sidon_util import SidonUtil

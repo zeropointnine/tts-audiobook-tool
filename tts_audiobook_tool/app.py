@@ -1,6 +1,6 @@
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.main_menu import MainMenu
+from tts_audiobook_tool.menus.main_menu import MainMenu
 from tts_audiobook_tool.state import State
 
 class App:

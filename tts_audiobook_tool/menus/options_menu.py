@@ -2,8 +2,8 @@ import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.llm_settings_menu import LlmSettingsMenu
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -266,7 +266,7 @@ def print_about_model(state: State) -> None:
 
     from tts_audiobook_tool.tts import Tts
     from tts_audiobook_tool.ask_util import AskUtil
-    from tts_audiobook_tool.menu_util import MenuUtil
+    from tts_audiobook_tool.menus.menu_util import MenuUtil
 
     ui = Tts.get_type().value.ui
     model_name = ui["proper_name"]

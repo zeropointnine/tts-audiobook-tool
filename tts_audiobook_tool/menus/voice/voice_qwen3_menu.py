@@ -1,5 +1,5 @@
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.target_util import TargetUtil
@@ -8,8 +8,8 @@ from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.voice_menu import VoiceMenuShared
-from tts_audiobook_tool.voice_menu import VoiceMenuShared
+from tts_audiobook_tool.menus.voice import VoiceMenuShared
+from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
 class VoiceQwen3Menu:
     """
