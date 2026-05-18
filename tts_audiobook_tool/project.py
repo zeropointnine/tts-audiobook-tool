@@ -904,8 +904,8 @@ class Project(BaseModel):
         file_name = dest_file_stem + ".json"
         err = save_json(voice_dict, os.path.join(self.dir_path, file_name))
         if err:
-            from tts_audiobook_tool.ask_util import AskUtil
-            AskUtil.ask_error(err)
+            from tts_audiobook_tool import ask
+            ask.ask_error(err)
             return
         with self.batch():
             self.oute_voice_file_name = file_name

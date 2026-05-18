@@ -1,7 +1,7 @@
 import os
 
 import natsort
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -13,13 +13,13 @@ class SoundConcatTranscodeUtil:
 
         # TODO: need pseudo-menu
 
-        src_dir = AskUtil.ask_dir_path("Enter directory of audio files:", "Select directory with audio files")
+        src_dir = ask.ask_dir_path("Enter directory of audio files:", "Select directory with audio files")
 
         if not src_dir:
             return
 
         if not os.path.exists(src_dir):
-            AskUtil.ask_enter_to_continue("No such directory")
+            ask.ask_enter_to_continue("No such directory")
             return
 
         src_dir = os.path.abspath(src_dir)
@@ -43,7 +43,7 @@ class SoundConcatTranscodeUtil:
 
         while True:
             s = f"Press {make_hotkey_string('F')} to export as FLAC or {make_hotkey_string('M')} for M4A/AAC: "
-            hotkey = AskUtil.ask_hotkey(s)
+            hotkey = ask.ask_hotkey(s)
             if hotkey == "f":
                 is_flac = True
                 break
@@ -69,17 +69,17 @@ class SoundConcatTranscodeUtil:
             audio_files, src_dir, file_name, is_flac
         )
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return
 
         printt("Finished")
         printt()
         s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open directory: "
-        hotkey = AskUtil.ask_hotkey(s)
+        hotkey = ask.ask_hotkey(s)
         if hotkey == "o":
             err = open_directory_in_gui(src_dir)
             if err:
-                AskUtil.ask_error(err)
+                ask.ask_error(err)
 
     @staticmethod
     def concatenate_audio_files(

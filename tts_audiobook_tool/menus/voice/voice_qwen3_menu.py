@@ -1,4 +1,4 @@
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -245,7 +245,7 @@ def apply_model_and_validate(project: Project, target: str) -> None:
         if not instance.is_model_type_supported:
             print_feedback(f"Unsupported type: {instance.model_type}", is_error=True)
             revert()
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
             return        
         
         # Success
@@ -266,7 +266,7 @@ def apply_model_and_validate(project: Project, target: str) -> None:
         printt(f"{COL_ERROR}{make_error_string(e)}")
         printt()
         revert()
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
 
 def on_clear_model_target(state: State, __: MenuItem) -> None:
     state.project.qwen3_target = ""
@@ -285,7 +285,7 @@ def ask_speaker_id(project: Project) -> None:
         print_feedback(message)
         return
     prompt = f"Choose a speaker:\n{speakers}\n"
-    inp = AskUtil.ask(prompt, lower=False)
+    inp = ask.ask(prompt, lower=False)
     if not inp:
         return
     if not inp in speakers:
@@ -297,7 +297,7 @@ def ask_speaker_id(project: Project) -> None:
 
 def ask_instructions(project: Project) -> None:
     printt("Enter instructions prompt:")
-    inp = AskUtil.ask(lower=False)
+    inp = ask.ask(lower=False)
     if not inp:
         return
     project.qwen3_instructions = inp

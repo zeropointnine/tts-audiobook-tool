@@ -7,7 +7,7 @@ from tts_audiobook_tool.app_types import Hint, SttVariant
 from tts_audiobook_tool.hint_util import HintUtil
 import tts_audiobook_tool.util as util_module
 
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -175,9 +175,9 @@ class MenuUtil:
 
                 while True:
                     # Prompt
-                    hotkey = AskUtil.ask_hotkey()
+                    hotkey = ask.ask_hotkey()
 
-                    if AskUtil.can_hotkey:
+                    if ask.can_hotkey:
                         # enter (windows), enter (mac/linux), backspace, escape
                         # Some terminals/readchar combos can return double-escape for Esc.
                         should_return = hotkey in ["\r", "\n", "\x08", "\x1b", "\x1b\x1b"] and is_submenu
@@ -198,7 +198,7 @@ class MenuUtil:
                     if selected_item:
                         break
                     else:
-                        if AskUtil.can_hotkey:
+                        if ask.can_hotkey:
                             continue # wait for next hotkey
                         else:
                             return
@@ -487,7 +487,7 @@ class MenuUtil:
             num_decimals = 0
 
         def on_item(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
+            ask.ask_number(
                 state.project,
                 attr,
                 prompt,

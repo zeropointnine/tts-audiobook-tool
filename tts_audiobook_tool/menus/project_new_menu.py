@@ -2,7 +2,7 @@ import os
 
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.hint_util import HintUtil
@@ -51,7 +51,7 @@ class ProjectNewMenu:
             )
         ui_title = "Select empty directory"
 
-        dir = AskUtil.ask_dir_path(
+        dir = ask.ask_dir_path(
             console_message=console_message,
             dialog_title=ui_title,
             initialdir=state.project.dir_path,
@@ -65,7 +65,7 @@ class ProjectNewMenu:
 
         err = state.make_and_set_new_project(dir)
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return False
 
         if migrate_current_settings and old_project.dir_path:
@@ -82,7 +82,7 @@ class ProjectNewMenu:
         HintUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
 
         print_feedback("Project directory set:", state.project.dir_path)
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
         
         return True
 
@@ -91,10 +91,10 @@ class ProjectNewMenu:
         """
         Creates a new project using settings embedded in an existing ABR audio file.
         Returns True on success.
-        Always ends with AskUtil.ask_enter_to_continue().
+        Always ends with ask_util.ask_enter_to_continue().
         """
         try:
-            dest_dir = AskUtil.ask_dir_path(
+            dest_dir = ask.ask_dir_path(
                 console_message=(
                     "This will create a new project directory using settings from an\n"
                     "existing tts-audiobook-tool ABR audio file.\n\n"
@@ -107,7 +107,7 @@ class ProjectNewMenu:
             if not dest_dir:
                 return False
 
-            abr_path = AskUtil.ask_file_path(
+            abr_path = ask.ask_file_path(
                 console_message="Enter the path to the tts-audiobook-tool ABR audio file:",
                 dialog_title="Select ABR audio file",
                 filetypes=[('ABR audio files', '*.flac *.m4a *.m4b')],
@@ -169,7 +169,7 @@ class ProjectNewMenu:
             print_feedback(make_error_string(e), is_error=True)
             return False
         finally:
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
 
     @staticmethod
     def print_missing_supporting_files_warning(missing_paths: list[str]) -> None:

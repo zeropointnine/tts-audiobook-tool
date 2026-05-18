@@ -29,7 +29,7 @@ class ProjectUtil:
         Returns error string if json is unviable.
         Else, on some parse errors, falls back to defaults and prints info along the way.
         """
-        from tts_audiobook_tool.ask_util import AskUtil
+        from tts_audiobook_tool import ask
         from tts_audiobook_tool.l import L
         from tts_audiobook_tool import project as project_module
         from tts_audiobook_tool.project import Project
@@ -91,7 +91,7 @@ class ProjectUtil:
             project.save()
             for warning in pending:
                 printt(warning)
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
 
         project._autosave = True
         return project
@@ -199,8 +199,8 @@ class ProjectUtil:
         if not project.oute_voice_file_name or not os.path.exists(voice_path):
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
-                from tts_audiobook_tool.ask_util import AskUtil
-                AskUtil.ask_error(result)
+                from tts_audiobook_tool import ask
+                ask.ask_error(result)
             else:
                 project.set_oute_voice_and_save(result, "default")
         else:

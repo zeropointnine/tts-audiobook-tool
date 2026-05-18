@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tts_audiobook_tool.app_types import Strictness, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.constants_config import *
@@ -233,7 +233,7 @@ def ask_item_range(state: State) -> None:
     printt(f"Enter line numbers to generate {COL_DIM}(currently: {s}):") 
     printt(f"{COL_DIM}For example, \"1-100\" or \"201-210, 215\", or just \"all\"") 
 
-    inp = AskUtil.ask()
+    inp = ask.ask()
     if inp == "all" or inp == "a":
         indices = set( [item for item in range(0, num_items)] )
     else:
@@ -264,7 +264,7 @@ def ask_delete_segments(state: State) -> None:
 
     printt(f"Enter line numbers to delete:") 
     printt(f"{COL_DIM}For example, \"3, 5, 21\" or \"201-350, 215\", or just \"all\"") 
-    inp = AskUtil.ask()
+    inp = ask.ask()
     if not inp:
         return
 
@@ -292,7 +292,7 @@ def ask_delete_segments(state: State) -> None:
         s = f"The following {len(indices_to_delete)} {segment_word} will be deleted: \n"
         s += ParseUtil.make_ranges_string(indices_to_delete, total_num_items)
     printt(s)
-    if not AskUtil.ask_confirm():
+    if not ask.ask_confirm():
         return
     
     state.project.sound_segments.delete_by_indices(indices_to_delete)
@@ -327,7 +327,7 @@ def make_limit_silence_gaps_label(state: State) -> str:
 def ask_retries(state: State) -> None:
     MenuUtil.print_heading(state, make_retries_label(state))
     printt(RETRIES_DESC)
-    AskUtil.ask_number(
+    ask.ask_number(
         state.project,
         "max_retries",
         "Enter value:",
@@ -343,7 +343,7 @@ def ask_batch_size(state: State) -> None:
     HintUtil.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
     prompt = "Enter batch size:"
-    AskUtil.ask_number(
+    ask.ask_number(
         state.project, field_name, prompt,
         1, PROJECT_BATCH_SIZE_MAX,
         PROJECT_BATCH_SIZE_DEFAULT, "Set batch size:", is_int=True
@@ -364,7 +364,7 @@ def regenerate_menu(state: State) -> None:
     def on_print(_: State, __: MenuItem) -> None:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
         AppUtil.print_regen_lines(state.project, indices)
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
 
     items = [
         MenuItem("Start", on_start),
@@ -423,7 +423,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
                 s = "Speech-to-text validation disabled"
             printt(s)
             printt()
-        b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+        b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
         if not b:
             return
 
@@ -445,17 +445,17 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
     )
 
     if did_interrupt:
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
         return
 
     AppUtil.play_done_sound()
 
     if is_regen:
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
         return
     
     s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to create audiobook file now: \a"
-    hotkey = AskUtil.ask_hotkey(s)
+    hotkey = ask.ask_hotkey(s)
     printt() # TODO revisit
     if hotkey == "c":
         ConcatMenu.menu(state)

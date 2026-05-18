@@ -1,3 +1,4 @@
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.chat_menu import ChatMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.state import State
@@ -27,7 +27,7 @@ class VoiceOuteMenu:
             return f"Temperature {make_currently_string(value)}"
 
         def on_temperature(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
+            ask.ask_number(
                 project,
                 "oute_temperature",
                 "Enter temperature:",
@@ -39,7 +39,7 @@ class VoiceOuteMenu:
         def on_default(_: State, __: MenuItem) -> None:
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):
-                AskUtil.ask_error(result)
+                ask.ask_error(result)
                 return
             project.set_oute_voice_and_save(result, "default")
             print_feedback("Voice clone set")
@@ -85,7 +85,7 @@ def ask_create_oute_voice(project: Project) -> None:
 
     if isinstance(result, str):
         error = result
-        AskUtil.ask_error(f"Error creating voice: {error}")
+        ask.ask_error(f"Error creating voice: {error}")
         return
 
     voice_dict = result
@@ -97,7 +97,7 @@ def ask_create_oute_voice(project: Project) -> None:
 
 def ask_load_oute_json(project: Project):
 
-    path = AskUtil.ask_file_path(
+    path = ask.ask_file_path(
         "Enter file path of voice json file: ",
         "Select Oute voice json file",
         [("JSON files", "*.json"), ("All files", "*.*")],
@@ -108,7 +108,7 @@ def ask_load_oute_json(project: Project):
 
     result = OuteUtil.load_oute_voice_json(path)
     if isinstance(result, str):
-        AskUtil.ask_error(result)
+        ask.ask_error(result)
         return
 
     project.set_oute_voice_and_save(result, Path(path).stem)

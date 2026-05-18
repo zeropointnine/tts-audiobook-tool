@@ -3,7 +3,7 @@ from typing import Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
@@ -134,7 +134,7 @@ class VoiceMenuShared:
             return
         
         if not os.path.exists(path) or not os.path.isfile(path):
-            AskUtil.ask_error(f"File doesn't exist: {path}")
+            ask.ask_error(f"File doesn't exist: {path}")
             return
         
         state.prefs.last_voice_dir = str(Path(path).parent)
@@ -143,7 +143,7 @@ class VoiceMenuShared:
         sound_result = SoundFileUtil.load(path)
         if isinstance(sound_result, str):
             err = sound_result
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return
         sound = sound_result
 
@@ -188,7 +188,7 @@ class VoiceMenuShared:
 
                 if isinstance(sound_result, str):
                     err = sound_result
-                    AskUtil.ask_error(err)
+                    ask.ask_error(err)
                     return
 
                 words = sound_result
@@ -202,7 +202,7 @@ class VoiceMenuShared:
         file_stem = Path(path).stem
         err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return
 
         print_feedback("Voice file saved")
@@ -210,7 +210,7 @@ class VoiceMenuShared:
         HintUtil.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
 
         if force_enter_prompt:
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
 
     @staticmethod
     def ask_voice_file(default_dir_path: str, tts_type: TtsModelInfos, message_override: str="") -> str:
@@ -228,7 +228,7 @@ class VoiceMenuShared:
             console_message = ui.get("voice_path_console", "")
             requestor_title = ui.get("voice_path_requestor", "")
 
-        path = AskUtil.ask_file_path(
+        path = ask.ask_file_path(
              console_message=console_message,
              dialog_title=requestor_title,
              filetypes=FILE_REQUESTOR_SOUND_TYPES,
@@ -238,12 +238,12 @@ class VoiceMenuShared:
             return ""
 
         if not os.path.exists(path):
-            AskUtil.ask_error(f"File not found: {path}")
+            ask.ask_error(f"File not found: {path}")
             return ""
 
         err = SoundFileUtil.is_valid_sound_file(path)
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return ""
 
         return path
@@ -356,7 +356,7 @@ class VoiceMenuShared:
             prompt = "Enter a static seed value (-1 = random): "
 
         def on_item(_: State, __: MenuItem) -> None:
-            AskUtil.ask_number(
+            ask.ask_number(
                 saveable=state.project,
                 attr=attr,
                 prompt=prompt,
@@ -383,7 +383,7 @@ class VoiceMenuShared:
     ) -> None: 
 
         printt(prompt)
-        new_target = AskUtil.ask(lower=False)
+        new_target = ask.ask(lower=False)
         if not new_target:
             return
 

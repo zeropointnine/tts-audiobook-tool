@@ -1,4 +1,4 @@
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -159,7 +159,7 @@ def apply_model_and_validate(project: Project, target: str) -> None:
         project.vibevoice_target = ""
         project.save()
         Tts.set_model_params_using_project(project)
-        AskUtil.ask_error(f"\n{make_error_string(e)}")
+        ask.ask_error(f"\n{make_error_string(e)}")
         return
 
     print_feedback("\nCustom model set:", target)
@@ -200,14 +200,14 @@ def apply_lora_and_validate(project: Project, target: str) -> None:
         instance = Tts.get_vibevoice()
     except Exception as e:
         revert()
-        AskUtil.ask_error(f"\n{make_error_string(e)}")
+        ask.ask_error(f"\n{make_error_string(e)}")
         return
 
     if instance.has_lora:
         print_feedback("\nLoRA set:", target)
     else:
         revert()
-        AskUtil.ask_error("\n{COL_ERROR}Couldn't load LoRA")
+        ask.ask_error("\n{COL_ERROR}Couldn't load LoRA")
 
 def on_clear_lora(state: State, __: MenuItem) -> None:
     state.project.vibevoice_lora_target = ""

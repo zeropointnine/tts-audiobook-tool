@@ -1,6 +1,6 @@
 import json
 
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_config import DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
@@ -104,7 +104,7 @@ class LlmSettingsMenu:
                 return "Must start with http:// or https://"
             return ""
 
-        AskUtil.ask_string_and_save(
+        ask.ask_string_and_save(
             state.prefs,
             f"Enter LLM endpoint URL\n{COL_DIM}Eg, \"https://www.example.com/v1/chat/completions\" or \"https://www.example.com/v1/messages\"{COL_DEFAULT}",
             "llm_url",
@@ -120,7 +120,7 @@ class LlmSettingsMenu:
                 return "Value cannot be empty"
             return ""
 
-        AskUtil.ask_string_and_save(
+        ask.ask_string_and_save(
             state.prefs,
             "Enter LLM token:",
             "llm_api_key",
@@ -146,7 +146,7 @@ class LlmSettingsMenu:
                 return "Value cannot be empty"
             return ""
 
-        AskUtil.ask_string_and_save(
+        ask.ask_string_and_save(
             state.prefs,
             f"Enter LLM model name\n{COL_DIM}Eg, \"example-model-v1\"{COL_DEFAULT}:",
             "llm_model",
@@ -168,7 +168,7 @@ class LlmSettingsMenu:
             return ""
 
         printt("Enter LLM system prompt:")
-        value = AskUtil.ask(lower=False)
+        value = ask.ask(lower=False)
         if not value:
             return
         err = validator(value)
@@ -249,7 +249,7 @@ class LlmSettingsMenu:
         s += f"{COL_DEFAULT}{system_prompt}"
         printt(s)
         printt()
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
 
     @staticmethod
     def llm_extra_params_menu(state: State) -> None:
@@ -258,7 +258,7 @@ class LlmSettingsMenu:
         printt(f"{COL_DIM}Use this for provider-specific fields not covered by the app.")
         printt(f'{COL_DIM}For example, using DeepSeek: {COL_MEDIUM}{{"thinking": {{"type": "disabled"}}}}')
         printt()
-        value = AskUtil.ask(lower=False)
+        value = ask.ask(lower=False)
         if not value:
             return
 

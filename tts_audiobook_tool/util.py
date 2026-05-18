@@ -10,7 +10,6 @@ import subprocess
 import time
 from typing import Any, Callable
 
-from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
@@ -58,8 +57,8 @@ def print_feedback(
     printt(message)
     
     if is_error:
-        from tts_audiobook_tool.ask_util import AskUtil
-        AskUtil.ask_enter_to_continue()
+        from tts_audiobook_tool import ask
+        ask.ask_enter_to_continue()
     else:
         if skip_pause:
             sleep_duration = 0.0

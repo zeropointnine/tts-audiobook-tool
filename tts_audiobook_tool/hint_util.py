@@ -31,14 +31,14 @@ class HintUtil:
         Then either asks for confirmation, prompts to press enter, or or shows a 3-second 'animation'
         Returns True if "should continue"
         """
-        from tts_audiobook_tool.ask_util import AskUtil
+        from tts_audiobook_tool import ask
 
         HintUtil.print_hint(hint)
 
         if and_confirm:
-            return AskUtil.ask_confirm()
+            return ask.ask_confirm()
         elif and_prompt:
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
             return True
         else:
             # Anim

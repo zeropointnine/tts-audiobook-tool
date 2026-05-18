@@ -5,7 +5,7 @@ import select
 import sys
 from abc import ABC, abstractmethod
 
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 
 
 KEY_LEFT = "\x1b[D"
@@ -98,7 +98,7 @@ class WindowsConsoleSession(ConsoleSession):
             self.kernel32.SetConsoleMode(handle, mode)
 
     def read_key(self) -> str | None:
-        key = AskUtil.read_hotkey_windows(block=False)
+        key = ask._read_hotkey_windows(block=False)
         if key == "\r":
             return KEY_ENTER
         if key == "\x08":

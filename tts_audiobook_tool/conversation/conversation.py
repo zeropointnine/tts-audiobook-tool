@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.conversation.conversation_internals import PromptBuilder, ResponseSession, Ui
@@ -55,7 +55,7 @@ class Conversation:
 
         if not Conversation._run_preflight_checks(self.state):
             if self.state.prefs.menu_clears_screen:
-                AskUtil.ask_enter_to_continue()
+                ask.ask_enter_to_continue()
             return
 
         self.print_various()

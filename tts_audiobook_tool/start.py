@@ -98,8 +98,8 @@ class Startup:
             exit(0)
 
         prompt = f"Press {make_hotkey_string('Y')} to run the app without sound generation functionality: "
-        from tts_audiobook_tool.ask_util import AskUtil
-        hotkey = AskUtil.ask_hotkey(prompt)
+        from tts_audiobook_tool import ask
+        hotkey = ask.ask_hotkey(prompt)
         if hotkey != "y":
             exit(0)
 

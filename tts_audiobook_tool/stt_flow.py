@@ -5,7 +5,7 @@ import time
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.hint_util import HintUtil
@@ -37,11 +37,11 @@ class SttFlow:
         if DEV and False:
             inp = r"exc.txt"
         else:
-            inp = AskUtil.ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
+            inp = ask.ask_file_path("Step 1/2 - Enter text file path: ", "Step 1/2: Select text file")
         if not inp:
             return
         if not os.path.exists(inp):
-            AskUtil.ask_enter_to_continue(f"File doesn't exist.")
+            ask.ask_enter_to_continue(f"File doesn't exist.")
             return
         source_text_path = Path(inp)
 
@@ -49,11 +49,11 @@ class SttFlow:
             with open(source_text_path, "r", encoding="utf-8") as file:
                 raw_text = file.read()
         except Exception as e:
-            AskUtil.ask_error(f"Error: {e}")
+            ask.ask_error(f"Error: {e}")
             return
 
         if not raw_text:
-            AskUtil.ask_enter_to_continue("File has no content.")
+            ask.ask_enter_to_continue("File has no content.")
             return
 
         time.sleep(1)
@@ -62,7 +62,7 @@ class SttFlow:
         if DEV and False:
             inp = r"exc.flac"
         else:
-            inp = AskUtil.ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
+            inp = ask.ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
 
         if not inp:
             return
@@ -74,12 +74,12 @@ class SttFlow:
         # Optional transcode step
         if Path(source_audio_path).suffix == ".mp3":
             HintUtil.show_hint_if_necessary(prefs, HINT_MULTIPLE_MP3S)
-            b = AskUtil.ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
+            b = ask.ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
             if not b:
                 return
             path, err = SoundFileUtil.transcode_to_aac(source_audio_path)
             if err:
-                AskUtil.ask_error(err)
+                ask.ask_error(err)
                 return
             source_audio_path = path
 
@@ -97,7 +97,7 @@ class SttFlow:
             if DEV and False:
                 b = True
             else:
-                b = AskUtil.ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
+                b = ask.ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
             if not b:
                 return
 
@@ -107,7 +107,7 @@ class SttFlow:
             print_progress_text="Calculating audio file hash:"
         )
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return
 
         # [4] Check if already has transcription pickle file
@@ -118,7 +118,7 @@ class SttFlow:
             if DEV and False:
                 b = True
             else:
-                b = AskUtil.ask_confirm("You've previously transcribed this audio file. Use saved transcription data? ")
+                b = ask.ask_confirm("You've previously transcribed this audio file. Use saved transcription data? ")
             if not b:
                 transcription_pickle_path = ""
 
@@ -162,7 +162,7 @@ class SttFlow:
                 with open(source_pickle_path, "rb") as file:
                     words = pickle.load(file)
             except Exception as e:
-                AskUtil.ask_error(make_error_string(e))
+                ask.ask_error(make_error_string(e))
                 return False
 
         else:
@@ -235,10 +235,10 @@ class SttFlow:
         HintUtil.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
 
         # [4b] Review "discontinuity info"
-        b = AskUtil.ask_confirm("View discontinuity info summary? ")
+        b = ask.ask_confirm("View discontinuity info summary? ")
         if b:
             print_discontinuity_info(timed_phrases)
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
 
         if not save_error:
             HintUtil.show_player_hint_if_necessary(prefs)

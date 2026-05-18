@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_types import SectionMarkerMode
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -59,7 +59,7 @@ def ask_section_markers(state: State) -> None:
 
     printt("Enter line numbers:")
     printt(f"{COL_DIM}(Eg: 48, 101, 545)")
-    inp = AskUtil.ask()
+    inp = ask.ask()
     if not inp:
         return
 
@@ -70,7 +70,7 @@ def ask_section_markers(state: State) -> None:
             index = int(string_item)
             one_indexed_items.append(index)
         except:
-            AskUtil.ask_error(f"Parse error: {string_item}")
+            ask.ask_error(f"Parse error: {string_item}")
             return
     one_indexed_items = list(set(one_indexed_items))
     one_indexed_items.sort()
@@ -102,7 +102,7 @@ def ask_section_markers_regex(state: State) -> None:
     printt(f"{COL_DIM}For example, if the source text has chapters that start with, eg, \"Chapter 241: Chapter Name\", you could enter \"Chapter \\d+\",")
     printt(f"{COL_DIM}which will insert a section marker for each line matching that pattern.")
     printt()
-    inp = AskUtil.ask(lower=False)
+    inp = ask.ask(lower=False)
     if not inp:
         return
 
@@ -135,7 +135,7 @@ def ask_section_markers_regex(state: State) -> None:
         print_line(index)
     printt()
 
-    if not AskUtil.ask_confirm():
+    if not ask.ask_confirm():
         print_feedback("Cancelled")
         return
 
@@ -170,7 +170,7 @@ def print_list(state: State) -> None:
 
     if state.prefs.menu_clears_screen:
         print()
-        AskUtil.ask_enter_to_continue()
+        ask.ask_enter_to_continue()
     
 def mode_menu(state: State) -> None:
 

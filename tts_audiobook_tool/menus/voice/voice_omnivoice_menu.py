@@ -1,4 +1,4 @@
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
@@ -124,7 +124,7 @@ def ask_instruct(project: Project) -> None:
     printt(f"{COL_DIM}Eg: \"male, british accent, low pitch\" / \"female, young adult, high pitch\"")
     if project.omnivoice_voice_file_name:
         printt(f"{COL_DIM}Note: When used alongside voice cloning, instructions may have minimal effect")
-    inp = AskUtil.ask(lower=False)
+    inp = ask.ask(lower=False)
     if not inp:
         return
 
@@ -205,7 +205,7 @@ def apply_target(project: Project, target: str) -> None:
 
 def ask_speed(project: Project) -> None:
     prompt = f"Enter speech speed {COL_DIM}(0.5–2.0; default 1.0; or -1 to reset){COL_DEFAULT}: "
-    inp = AskUtil.ask(prompt, lower=False)
+    inp = ask.ask(prompt, lower=False)
     if not inp:
         return
     try:
@@ -228,7 +228,7 @@ def ask_steps(project: Project) -> None:
         f"\nSmaller values = faster, reduced quality"
     )
     printt(s)
-    inp = AskUtil.ask()
+    inp = ask.ask()
     if not inp:
         return
     try:

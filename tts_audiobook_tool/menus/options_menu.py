@@ -2,7 +2,7 @@ import torch
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -34,7 +34,7 @@ class OptionsMenu:
                 printt(f"After:  {after_string}")
             if state.prefs.menu_clears_screen:
                 printt()
-                AskUtil.ask_enter_to_continue()
+                ask.ask_enter_to_continue()
 
         def on_hints(_: State, __: MenuItem) -> None:
             state.prefs.reset_hints()
@@ -266,7 +266,7 @@ class OptionsMenu:
 def print_about_model(state: State) -> None:
 
     from tts_audiobook_tool.tts import Tts
-    from tts_audiobook_tool.ask_util import AskUtil
+    from tts_audiobook_tool import ask
     from tts_audiobook_tool.menus.menu_util import MenuUtil
 
     ui = Tts.get_type().value.ui
@@ -277,7 +277,7 @@ def print_about_model(state: State) -> None:
         printt(text_util.make_terminal_hyperlink(link))
     printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
     printt()
-    AskUtil.ask_enter_to_continue()
+    ask.ask_enter_to_continue()
 
 
 

@@ -1,6 +1,6 @@
 from dataclasses import replace
 from tts_audiobook_tool.app_types import Strictness
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.dir_open_util import DirOpenUtil
@@ -36,7 +36,7 @@ class ProjectMenu:
         def on_view(_: State, __: MenuItem) -> None:
             err = DirOpenUtil.open(state.project.dir_path)
             if err:
-                AskUtil.ask_error(err)
+                ask.ask_error(err)
             else:
                 print_feedback("Launched window")
 
@@ -102,12 +102,12 @@ class ProjectMenu:
         """
         s = "Enter existing project directory path:"
         s2 = "Select existing project directory"
-        dir = AskUtil.ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
+        dir = ask.ask_dir_path(s, s2, initialdir=state.project.dir_path, mustexist=True)
         if not dir:
             return False
         err = ProjectUtil.is_valid_project_dir(dir)
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return False
 
         state.set_existing_project(dir)
@@ -130,7 +130,7 @@ class ProjectMenu:
     def word_substitutions_menu(state: State) -> None:
 
         def on_enter(_, __) -> None:
-            inp = AskUtil.ask(SUBSTITUTIONS_ASK_DESC, lower=False)
+            inp = ask.ask(SUBSTITUTIONS_ASK_DESC, lower=False)
             if not inp:
                 return 
             # Add curlies
@@ -265,7 +265,7 @@ def on_language(state: State, __: MenuItem) -> None:
         return ""
 
     prompt = f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"es\", \"zh\", \"pt\", etc){COL_DEFAULT}:"
-    AskUtil.ask_string_and_save(
+    ask.ask_string_and_save(
         state.project,
         prompt,
         "language_code",

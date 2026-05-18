@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import numpy as np
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.util import *

@@ -1,5 +1,5 @@
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import COL_DEFAULT, COL_ERROR
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
@@ -43,7 +43,7 @@ def main() -> None:
     Whitelist().set_language_code("es")
 
     print("Enter Spanish text:")
-    text = AskUtil.ask_multiline()
+    text = ask.ask_multiline()
     if not text:
         return
     

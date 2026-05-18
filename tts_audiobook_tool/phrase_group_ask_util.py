@@ -1,6 +1,6 @@
 import platform
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
@@ -28,20 +28,20 @@ class PhraseGroupAskUtil:
             initial_dir = prefs.last_text_dir 
         else:
             initial_dir = ""
-        path = AskUtil.ask_file_path(
+        path = ask.ask_file_path(
             "Enter text file path: ", "Select text file", initialdir=initial_dir
         )
         if not path:
             return [], ""
         if not os.path.exists(path):
-            AskUtil.ask_error("No such file")
+            ask.ask_error("No such file")
             return [], ""
 
         try:
             with open(path, 'r', encoding='utf-8') as file:
                 raw_text = file.read()
         except Exception as e:
-            AskUtil.ask_error(f"Error: {e}")
+            ask.ask_error(f"Error: {e}")
             return [], ""
 
         prefs.last_text_dir = str( Path(path).parent )
@@ -53,7 +53,7 @@ class PhraseGroupAskUtil:
         print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
 
         if not phrase_groups:
-            AskUtil.ask_enter_to_continue("No text segments.")
+            ask.ask_enter_to_continue("No text segments.")
             return [], raw_text
 
         return phrase_groups, raw_text
@@ -74,7 +74,7 @@ class PhraseGroupAskUtil:
             s = f"Finish with [ENTER + CTRL-D]"
         printt(s)
         printt()
-        raw_text = AskUtil.ask_multiline()
+        raw_text = ask.ask_multiline()
         printt()
         if not raw_text:
             return [], ""
@@ -84,7 +84,7 @@ class PhraseGroupAskUtil:
         )
 
         if not phrase_groups:
-            AskUtil.ask_enter_to_continue("No text segments.")
+            ask.ask_enter_to_continue("No text segments.")
             return [], raw_text
 
         return phrase_groups, raw_text

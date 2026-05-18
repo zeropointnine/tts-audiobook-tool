@@ -1,6 +1,6 @@
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -42,7 +42,7 @@ class TextMenu:
                 max_words_used=state.project.applied_max_words,
                 strategy_used=state.project.applied_strategy or list(SegmentationStrategy)[0]
             )
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
 
         def on_clear(_: State, __: MenuItem) -> None:
             num_files = state.project.sound_segments.num_generated()
@@ -51,7 +51,7 @@ class TextMenu:
                 s += "Are you sure? "
             else:
                 s = "Clear project text? "
-            if not AskUtil.ask_confirm(s):
+            if not ask.ask_confirm(s):
                 return
 
             state.project.sound_segments.delete_all()
@@ -133,7 +133,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         # First confirm
         s = f"Replacing project text will cause all {num_files} previously generated sound segment files to be deleted.\n"
         s += "Are you sure? "
-        if not AskUtil.ask_confirm(s):
+        if not ask.ask_confirm(s):
             return False
 
     epub_path = ""
@@ -173,18 +173,18 @@ def on_set_text(state: State, item: MenuItem) -> bool:
                 )
             except ImportError as e:
                 printt()
-                AskUtil.ask_error(str(e))
+                ask.ask_error(str(e))
                 return False
             except Exception as e:
                 printt()
-                AskUtil.ask_error(f"Error importing EPUB: {e}")
+                ask.ask_error(f"Error importing EPUB: {e}")
                 return False
 
             phrase_groups = epub_import_result.phrase_groups
             raw_text = epub_import_result.raw_text
             if not phrase_groups:
                 printt()
-                AskUtil.ask_enter_to_continue("No text segments.")
+                ask.ask_enter_to_continue("No text segments.")
                 return False
 
             # Print info/warnings
@@ -211,7 +211,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             printt(f"{raw_text_link}")
             printt()
 
-            AskUtil.ask_enter_to_continue("Press enter to review text segmentation info: ", is_replacement=True)
+            ask.ask_enter_to_continue("Press enter to review text segmentation info: ", is_replacement=True)
 
         case _:
             raise ValueError(f"Bad value: {item.data!r}")
@@ -226,7 +226,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     )
 
     # Confirm
-    if not AskUtil.ask_confirm():
+    if not ask.ask_confirm():
         print_feedback("Cancelled")
         return False
 
@@ -237,7 +237,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     if epub_import_result:
         err = EpubExtractor.copy_epub_to_project(epub_path, state.project.dir_path)
         if err:
-            AskUtil.ask_error(err)
+            ask.ask_error(err)
             return False
         state.project.set_phrase_groups_chapters_and_save(
             phrase_groups=phrase_groups,
@@ -273,7 +273,7 @@ def ask_epub_path(state: State) -> str:
         initial_dir = state.prefs.last_text_dir
     else:
         initial_dir = ""
-    path = AskUtil.ask_file_path(
+    path = ask.ask_file_path(
         "Enter EPUB file path: ",
         "Select EPUB file",
         filetypes=[("EPUB files", "*.epub"), ("All files", "*.*")],
@@ -282,10 +282,10 @@ def ask_epub_path(state: State) -> str:
     if not path:
         return ""
     if not os.path.exists(path):
-        AskUtil.ask_error("No such file")
+        ask.ask_error("No such file")
         return ""
     if os.path.splitext(path)[1].lower() != ".epub":
-        AskUtil.ask_error("Must select an .epub file")
+        ask.ask_error("Must select an .epub file")
         return ""
     state.prefs.last_text_dir = str(Path(path).parent)
     return path
@@ -298,7 +298,7 @@ def on_ask_max_size(state: State, _) -> None:
     printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelInfos.recommended_range_string(Tts.get_type().value)}")
     printt()
 
-    AskUtil.ask_number(
+    ask.ask_number(
         state.project,
         attr="max_words",
         prompt="Enter max words per segment:",

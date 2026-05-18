@@ -1,4 +1,4 @@
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -168,7 +168,7 @@ def ask_vector(project: Project) -> None:
     s += f'{COL_DIM}Enter \"none\" to clear{COL_DEFAULT}'
     printt(s)
     printt()
-    inp = AskUtil.ask("")
+    inp = ask.ask("")
     if not inp:
         return
     if inp == "none":
@@ -176,7 +176,7 @@ def ask_vector(project: Project) -> None:
     else:
         value = ProjectUtil.parse_emo_vector_string(inp)
         if isinstance(value, str):
-            AskUtil.ask_error(value)
+            ask.ask_error(value)
             return
     project.indextts2_emo_vector = value
     project.save()

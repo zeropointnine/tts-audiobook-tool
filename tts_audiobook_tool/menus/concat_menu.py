@@ -4,7 +4,7 @@ import torch
 
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.chapter_info import ChapterInfo
 from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
@@ -340,7 +340,7 @@ def ask_chapter_indices_and_make(state: State) -> None:
         printt(s)
         printt()
 
-        b = AskUtil.ask_confirm()
+        b = ask.ask_confirm()
         if not b:
             return
 
@@ -357,7 +357,7 @@ def ask_chapter_indices_and_make(state: State) -> None:
         printt(s)
         printt()
 
-        b = AskUtil.ask_confirm()
+        b = ask.ask_confirm()
         if not b:
             return
 
@@ -371,7 +371,7 @@ def ask_chapter_indices(infos: list[ChapterInfo]) -> list[int] | None:
 
     printt("Enter chapter file numbers to create:")
     printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
-    inp = AskUtil.ask()
+    inp = ask.ask()
 
     if inp == "all" or inp == "a":
         indices = [info.chapter_index for info in infos if info.num_files_exist > 0]

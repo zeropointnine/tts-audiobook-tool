@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
@@ -77,12 +77,12 @@ class RealTimePlaybackMenu:
 
         s = f"Enter line range {COL_DIM}(eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
         printt(s)
-        inp = AskUtil.ask()
+        inp = ask.ask()
         if not inp:
             return
         result = ParseUtil.parse_range_string_normal(inp, length)
         if isinstance(result, str):
-            AskUtil.ask_error(result)
+            ask.ask_error(result)
             return
 
         if result == (0, 0):
@@ -199,8 +199,8 @@ def do_start(state: State) -> None:
     AppUtil.show_pre_inference_hints(state.prefs, state.project)
 
     # Confirm and start proper
-    if AskUtil.can_hotkey:
-        b = AskUtil.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+    if ask.can_hotkey:
+        b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
         if not b:
             return
 

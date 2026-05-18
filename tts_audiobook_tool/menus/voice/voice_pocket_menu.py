@@ -1,4 +1,4 @@
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -139,7 +139,7 @@ def ask_language(state: State) -> None:
             state.project.pocket_model_code = previous
             state.project.save()
             Tts.set_model_params_using_project(state.project)
-            AskUtil.ask_error(f"\n{make_error_string(e)}")
+            ask.ask_error(f"\n{make_error_string(e)}")
         printt(f"{COL_DIM_ITALICS}OK ")
         printt()
 

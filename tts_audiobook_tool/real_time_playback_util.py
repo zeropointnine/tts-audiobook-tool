@@ -3,7 +3,7 @@ import time
 import numpy as np
 from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -54,7 +54,7 @@ class RealTimeUtil:
             if warm_up_result.error:
                 MemoryUtil.gc_ram_vram()
             if state.prefs.menu_clears_screen:
-                AskUtil.ask_enter_to_continue()
+                ask.ask_enter_to_continue()
             return 
         
         # Do model prereq check now that model instance exists
@@ -203,13 +203,13 @@ class RealTimeUtil:
         if should_prompt_before_shutdown:
             # Prompt allows buffer to play until enter pressed
             printt()
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
         if stream:
             stream.shut_down()
 
         if not should_prompt_before_shutdown:
             printt()
-            AskUtil.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
 
         printt()
 

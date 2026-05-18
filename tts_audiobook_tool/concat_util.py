@@ -8,7 +8,7 @@ from numpy import ndarray
 
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_util import AppUtil
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
@@ -68,7 +68,7 @@ class ConcatUtil:
         try:
             os.makedirs(dest_dir, exist_ok=True)
         except:
-            AskUtil.ask_error(f"Couldn't make directory {dest_dir}")
+            ask.ask_error(f"Couldn't make directory {dest_dir}")
             return
 
         if not chapter_indices:
@@ -106,7 +106,7 @@ class ConcatUtil:
             )
             if err:
                 printt()
-                AskUtil.ask_error(err)
+                ask.ask_error(err)
                 return
             
             printt(f"Saved {COL_ACCENT}{dest_path}") 
@@ -123,12 +123,12 @@ class ConcatUtil:
 
         HintUtil.show_player_hint_if_necessary(state.prefs)
 
-        hotkey = AskUtil.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file explorer: ")
+        hotkey = ask.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file explorer: ")
         printt()
         if hotkey == "o":
             err = open_directory_in_gui(dest_dir)
             if err:
-                AskUtil.ask_error(err)
+                ask.ask_error(err)
 
     @staticmethod
     def make_file(

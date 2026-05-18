@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.ask_util import AskUtil
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
@@ -69,7 +69,7 @@ class PrereqUtil:
         errors = [] 
         
         # Hotkeys
-        if not AskUtil.can_hotkey:
+        if not ask.can_hotkey:
             errors.append(PrereqError("terminal hotkey support", "Terminal does not have hotkey capabilities"))
 
         # Microphone 
