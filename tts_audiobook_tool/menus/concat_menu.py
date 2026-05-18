@@ -430,7 +430,7 @@ def launch_player_with_chromium(
     this_file_path = Path(os.path.abspath(__file__))
     index_html_path = this_file_path.parent.parent / "browser_player" / "index.html"
     index_html_url = index_html_path.as_uri() # important
-    browser_url = make_url_with_params(index_html_url, { "url": audio_file_path })
+    browser_url = text_util.make_url_with_params(index_html_url, { "url": audio_file_path })
 
     command = []
     command.append(chromium_path)

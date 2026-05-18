@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import Enum
 
 from tts_audiobook_tool.prereqs_util import PrereqError
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -213,7 +213,7 @@ class Qwen3BaseModel(TtsBaseModel):
         match project.qwen3_model_type:            
             case "custom_voice":
                 if project.qwen3_speaker_id:
-                    return TextUtil.sanitize_for_filename(project.qwen3_speaker_id)[:30]
+                    return AppTextUtil.sanitize_for_filename(project.qwen3_speaker_id)[:30]
                 else:
                     return "speaker" # good enough
             case "voice_design":

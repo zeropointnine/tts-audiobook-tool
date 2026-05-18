@@ -11,7 +11,7 @@ from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult
 
@@ -104,7 +104,7 @@ class ValidateUtil:
             return None 
 
         normalized_source = TextNormalizer.normalize_source(source, language_code)
-        source_word_count = TextUtil.get_word_count(normalized_source, vocalizable_only=True)        
+        source_word_count = AppTextUtil.get_word_count(normalized_source, vocalizable_only=True)        
         overage = len(transcript_words) - source_word_count
         if overage < 0:
             return None
@@ -266,7 +266,7 @@ class ValidateUtil:
         word_errors = \
             ValidateUtil.get_word_errors(normalized_source, normalized_transcript, language_code)
         num_word_errors = len(word_errors)
-        num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
+        num_words = AppTextUtil.get_word_count(normalized_source, vocalizable_only=True)
         
         fail_threshold = ValidateUtil.compute_threshold(num_words, strictness)
             

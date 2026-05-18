@@ -1,3 +1,4 @@
+import random
 import sys
 import langid # type: ignore
 import jieba # type: ignore

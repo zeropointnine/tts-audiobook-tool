@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -10,7 +11,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound_segment_util import get_segment_stt_info_path
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
@@ -207,7 +208,7 @@ class SegmentSttInfoUtil:
 
     @staticmethod
     def get_threshold(info: SegmentSttInfo, strictness: Strictness) -> int:
-        num_words = TextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
+        num_words = AppTextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
         return ValidateUtil.compute_threshold(num_words, strictness)
 
     @staticmethod
@@ -240,17 +241,17 @@ class SegmentSttInfoUtil:
             printt(f"{COL_DIM}{'-' * 60}")
             printt(f"{COL_DEFAULT}Line: {index_string}")
             printt(f"{COL_ERROR}Could not load segment STT info: {info}")
-            printt(f"Filename: {make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)}")
+            printt(f"Filename: {text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)}")
             printt()
             return
 
-        num_words = TextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
-        filename = make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
+        num_words = AppTextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
+        filename = text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
         num_word_errors = SegmentSttInfoUtil.get_word_error_count(info)
         threshold = SegmentSttInfoUtil.get_threshold(info, project.strictness)
 
         filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"
-        stroke = f"{COL_DIM}{len(strip_ansi_codes(filename_line)) * '-'}"
+        stroke = f"{COL_DIM}{len(text_util.strip_ansi_codes(filename_line)) * '-'}"
         printt(stroke)
         printt(f"{COL_DEFAULT}Line: {COL_ACCENT}{info.index_1b}, {COL_DEFAULT}word errors detected: {COL_ACCENT}{num_word_errors}, {COL_DEFAULT}word error threshold: {COL_ACCENT}{threshold}")
         printt(filename_line)
@@ -293,13 +294,13 @@ class SegmentSttInfoUtil:
         """
         phrase_group = project.phrase_groups[sound_segment_index]
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, project.language_code)
-        num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
+        num_words = AppTextUtil.get_word_count(normalized_source, vocalizable_only=True)
         threshold = ValidateUtil.compute_threshold(num_words, project.strictness)
-        filename = make_terminal_hyperlink(str(sound_path), sound_segment.file_name, is_file=True)
+        filename = text_util.make_terminal_hyperlink(str(sound_path), sound_segment.file_name, is_file=True)
         num_errors = "?" if sound_segment.num_errors < 0 else str(sound_segment.num_errors)
 
         filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"
-        stroke = f"{COL_DIM}{len(strip_ansi_codes(filename_line)) * '-'}"
+        stroke = f"{COL_DIM}{len(text_util.strip_ansi_codes(filename_line)) * '-'}"
         printt(stroke)
         printt(f"{COL_DEFAULT}Line: {COL_DEFAULT}{sound_segment_index + 1}, {COL_ACCENT}word errors detected: {COL_DEFAULT}{num_errors}, {COL_ACCENT}word error threshold: {COL_DEFAULT}{threshold}")
         printt(filename_line)

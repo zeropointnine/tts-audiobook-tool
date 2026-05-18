@@ -1,6 +1,7 @@
 import os
 from typing import Callable
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.hint_util import HintUtil
@@ -163,7 +164,7 @@ class VoiceMenuShared:
             # [1] Get transcript from 'parallel text file' if possible
             transcript_path = Path(path).with_suffix(".txt")
             if transcript_path.exists():
-                transcript = load_text_file(str(transcript_path), errors="replace").strip()
+                transcript = text_util.load_text_file(str(transcript_path), errors="replace").strip()
                 if transcript:
                     printt(f"Loaded transcript text from")
                     printt(f"{transcript_path}:")

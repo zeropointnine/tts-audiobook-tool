@@ -3,7 +3,7 @@ from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import COL_DEFAULT, COL_ERROR
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 
@@ -22,8 +22,8 @@ def highlight_failed_words_normalized(text: str) -> str:
         normalized = TextNormalizer.normalize_source(source, language_code="es")
 
         parts: list[str] = []
-        for token in TextUtil.get_words(normalized):
-            leading, middle, trailing = TextUtil.split_raw_word(token)
+        for token in AppTextUtil.get_words(normalized):
+            leading, middle, trailing = AppTextUtil.split_raw_word(token)
             if not middle:
                 parts.append(token)
                 continue

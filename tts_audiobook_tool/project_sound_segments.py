@@ -7,7 +7,7 @@ from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validate_util import ValidateUtil
@@ -147,7 +147,7 @@ class ProjectSoundSegments:
             return True
         phrase_group = self.project.phrase_groups[index]
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, self.project.language_code)
-        num_words = TextUtil.get_word_count(normalized_source, vocalizable_only=True)
+        num_words = AppTextUtil.get_word_count(normalized_source, vocalizable_only=True)
         threshold = ValidateUtil.compute_threshold(num_words, self.project.strictness)
         return item.num_errors > threshold
 

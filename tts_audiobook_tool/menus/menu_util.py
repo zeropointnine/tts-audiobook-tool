@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from typing import Callable
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Hint, SttVariant
 from tts_audiobook_tool.hint_util import HintUtil
 import tts_audiobook_tool.util as util_module
@@ -239,7 +240,7 @@ class MenuUtil:
     def make_breadcrumb_segment(state: State, frame: MenuFrame) -> str:
         string_or_maker = frame.breadcrumb if frame.breadcrumb is not None else frame.heading
         segment = get_string_from(state, string_or_maker)
-        segment = strip_ansi_codes(segment).strip().rstrip(":")
+        segment = text_util.strip_ansi_codes(segment).strip().rstrip(":")
 
         if frame.breadcrumb is None:
             segment = re.sub(r"\s*\([^)]*\)\s*$", "", segment).strip()
@@ -290,7 +291,7 @@ class MenuUtil:
             os.system('cls' if os.name == 'nt' else 'clear')
 
         if state and not state.prefs.menu_clears_screen:
-            length = len(strip_ansi_codes(text))
+            length = len(text_util.strip_ansi_codes(text))
             print("-" * length)
 
         color = COL_DEFAULT if non_menu else COL_ACCENT
@@ -312,7 +313,7 @@ class MenuUtil:
 
         # Project line
         if state.project.dir_path:
-            project_line = value_color + make_terminal_hyperlink(state.project.dir_path)
+            project_line = value_color + text_util.make_terminal_hyperlink(state.project.dir_path)
         else:
             project_line = value_color + "none"
 
@@ -350,8 +351,8 @@ class MenuUtil:
             state.project,
             Tts.get_instance_if_exists()
         )
-        voice_prefix = strip_ansi_codes(voice_prefix).strip().rstrip(":")
-        voice_value = strip_ansi_codes(voice_value).strip()
+        voice_prefix = text_util.strip_ansi_codes(voice_prefix).strip().rstrip(":")
+        voice_value = text_util.strip_ansi_codes(voice_value).strip()
         voice_line = value_color + (voice_value or voice_prefix or "none")
 
         # Text line
@@ -374,7 +375,7 @@ class MenuUtil:
                 stt_line += f""
 
         # Memory line
-        memory_line = strip_ansi_codes(AppUtil.make_memory_string())
+        memory_line = text_util.strip_ansi_codes(AppUtil.make_memory_string())
         memory_line = memory_line.replace(":", "") # careful
         memory_line = value_color + memory_line if memory_line else ""
 

@@ -5,7 +5,7 @@ import re
 import pysbd
 
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 
 
 class PhraseSegmenter:
@@ -32,7 +32,7 @@ class PhraseSegmenter:
             for i, phrase in enumerate(phrase_strings):
                 is_last_phrase_in_sentence = (i == len(phrase_strings) - 1)
                 if is_last_phrase_in_sentence:
-                    num_lf = TextUtil.num_trailing_line_breaks(phrase)
+                    num_lf = AppTextUtil.num_trailing_line_breaks(phrase)
                     match num_lf:
                         case 0:
                             reason = Reason.SENTENCE
@@ -81,7 +81,7 @@ class PhraseSegmenter:
                         
             result: list[str] = []
             for sentence in sentences:
-                if result and TextUtil.is_ws_punc(sentence):                    
+                if result and AppTextUtil.is_ws_punc(sentence):                    
                     # TODO even more, fml
                     #   pysbd can replace linefeed with space. 
                     #   eg: "And you can . . .\nYes?" 
@@ -153,7 +153,7 @@ class PhraseSegmenter:
         # Combine any all-ws/punc items to predecessor (edge case)
         new_items = [ items[0] ]
         for i in range(1, len(items)):
-            if TextUtil.is_ws_punc(items[i]):
+            if AppTextUtil.is_ws_punc(items[i]):
                 new_items[len(new_items) - 1] += items[i]
             else:
                 new_items.append(items[i])
@@ -189,7 +189,7 @@ class PhraseSegmenter:
         """
         
         def is_ornamental_break(phrase: Phrase) -> bool:
-            return phrase.reason in [Reason.PARAGRAPH, Reason.SECTION] and not TextUtil.is_vocalizable(phrase.text)
+            return phrase.reason in [Reason.PARAGRAPH, Reason.SECTION] and not AppTextUtil.is_vocalizable(phrase.text)
         
         results: list[Phrase] = []
 

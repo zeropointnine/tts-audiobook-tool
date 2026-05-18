@@ -1,6 +1,7 @@
 import os
 import sys
 from typing import Callable
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Saveable
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -284,7 +285,7 @@ class AskUtil:
         """
         printt(message)
         inp = AskUtil.ask("")
-        return strip_quotes_from_ends(inp)
+        return text_util.strip_quotes_around_path_string(inp)
 
     @staticmethod
     def is_shell_gui_gtk_based() -> bool:

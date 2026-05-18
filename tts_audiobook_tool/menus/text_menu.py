@@ -206,7 +206,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             # Print raw text conversion info
             printt(f"{COL_ACCENT}Text file conversion:")
             raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
-            raw_text_link = make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
+            raw_text_link = text_util.make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
             printt(f"The plain text conversion of the epub can be reviewed here:")
             printt(f"{raw_text_link}")
             printt()

@@ -259,7 +259,7 @@ def ask_delete_segments(state: State) -> None:
     MenuUtil.print_screen_heading(state, "Delete segments", breadcrumb="Delete segments")
 
     path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
-    hint = Hint.make_using(HINT_DELETE_SEGMENTS, make_terminal_hyperlink(path, is_file=True))
+    hint = Hint.make_using(HINT_DELETE_SEGMENTS, text_util.make_terminal_hyperlink(path, is_file=True))
     HintUtil.show_hint_if_necessary(state.prefs, hint)
 
     printt(f"Enter line numbers to delete:") 

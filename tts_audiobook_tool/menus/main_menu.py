@@ -83,9 +83,9 @@ class MainMenu:
 
         if should_show_menu_status_details(state):
             s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
-            heading = f"{make_terminal_hyperlink(APP_URL, APP_NAME)} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
+            heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
         else:
-            heading = f"{make_terminal_hyperlink(APP_URL, APP_NAME)}"
+            heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)}"
         
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
 

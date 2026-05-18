@@ -1,10 +1,10 @@
 import unittest
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
-from tts_audiobook_tool.util import strip_ansi_codes
 
 class TestTranscribeGranular(unittest.TestCase):
 
@@ -109,7 +109,7 @@ class TestTranscribeGranular(unittest.TestCase):
             exception=None,
         )
 
-        visualization = strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
+        visualization = text_util.strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
 
         self.assertIn("one", visualization)
         self.assertIn("[=/=: two/blah]", visualization)
@@ -132,7 +132,7 @@ class TestTranscribeGranular(unittest.TestCase):
             exception=None,
         )
 
-        visualization = strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
+        visualization = text_util.strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
 
         self.assertIn("one", visualization)
         self.assertIn("[x: two]", visualization)

@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
@@ -38,7 +39,7 @@ class FfmpegUtil:
 
         if use_temp_file:
             dest_file_suffix = Path(dest_file_path).suffix
-            temp_file_name = make_random_hex_string() + dest_file_suffix
+            temp_file_name = text_util.make_random_hex_string() + dest_file_suffix
             working_dest_file_path = str( Path(dest_file_path).parent / temp_file_name )
         else:
             working_dest_file_path = dest_file_path

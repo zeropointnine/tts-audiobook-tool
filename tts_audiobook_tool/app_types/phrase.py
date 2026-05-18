@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import Enum
 from functools import total_ordering
 
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -11,7 +11,7 @@ class Phrase:
     def __init__(self, text: str, reason: Reason):
         self._text = text
         self.reason = reason
-        self._words = TextUtil.get_words(self._text, vocalizable_only=False)
+        self._words = AppTextUtil.get_words(self._text, vocalizable_only=False)
 
     def __eq__(self, other: Any):
         if not isinstance(other, Phrase):
@@ -29,13 +29,13 @@ class Phrase:
     @text.setter
     def text(self, value: str) -> None:
         self._text = value
-        self._words = TextUtil.get_words(self._text, vocalizable_only=False)
+        self._words = AppTextUtil.get_words(self._text, vocalizable_only=False)
 
     @property
     def presentable_text(self) -> str:
         """ Text in 'presentable' format for UI-related purposes """
         text = self.text.replace("\n", " ").replace("\r", " ")
-        text = TextUtil.massage_post_normalize(text)
+        text = AppTextUtil.massage_post_normalize(text)
         return text
 
     @property
@@ -162,7 +162,7 @@ class PhraseGroup:
         for phrase in self.phrases:
             text += phrase.text + " "
         text = text.replace("\n", " ").replace("\r", " ")
-        text = TextUtil.massage_post_normalize(text)
+        text = AppTextUtil.massage_post_normalize(text)
         return text
     
     @property

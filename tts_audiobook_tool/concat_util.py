@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import time
 from pathlib import Path
@@ -23,7 +24,7 @@ from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.app_types.phrase import Phrase
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
@@ -62,7 +63,8 @@ class ConcatUtil:
             ModelsUtil.clear_all_models(except_sidon=True)
 
         # Make subdir
-        dest_dir = os.path.join(state.project.concat_path, timestamp_string())
+        subdir = datetime.now().strftime("%y%m%d_%H%M%S") # eg, 260518_120811
+        dest_dir = os.path.join(state.project.concat_path, subdir)
         try:
             os.makedirs(dest_dir, exist_ok=True)
         except:
@@ -488,7 +490,7 @@ def make_stem(
     # Make Filename
     extant_file_names = [file_name for _, file_name in phrases_and_paths if file_name]
     # [1] project name
-    stem = TextUtil.sanitize_for_filename( Path(project.dir_path).name[:20] ) + " "
+    stem = AppTextUtil.sanitize_for_filename( Path(project.dir_path).name[:20] ) + " "
     # [2] file number
     if num_chapters > 1:
         stem += f"[{ chapter_index+1 } of {num_chapters}]" + " "

@@ -1,6 +1,6 @@
 import unittest
 
-from tts_audiobook_tool.text_util import TextUtil
+from tts_audiobook_tool.app_text_util import AppTextUtil
 
 class TestTextUtil(unittest.TestCase):
 
@@ -26,7 +26,7 @@ class TestTextUtil(unittest.TestCase):
         ]
         
         for raw_word, answer in items:
-            result = TextUtil.split_raw_word(raw_word)
+            result = AppTextUtil.split_raw_word(raw_word)
             print("raw word:", repr(raw_word))
             print("result  :", repr(result))
             print("answer  :", repr(answer))

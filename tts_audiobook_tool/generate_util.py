@@ -4,6 +4,7 @@ import time
 
 import numpy as np
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
@@ -247,7 +248,7 @@ class GenerateUtil:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         project.sound_segments.delete_redundants_for(index)
-                        save_line = f"Saved: {COL_DIM}{make_terminal_hyperlink(saved_path, is_file=True)}{Ansi.RESET}"
+                        save_line = f"Saved: {COL_DIM}{text_util.make_terminal_hyperlink(saved_path, is_file=True)}{Ansi.RESET}"
                     message_lines.append(save_line)
 
                 printt("\n".join(message_lines))
@@ -264,7 +265,7 @@ class GenerateUtil:
 
             # Print current memory usage
             printt()
-            s = f"Memory: {COL_DIM}{strip_ansi_codes(AppUtil.make_memory_string())}"
+            s = f"Memory: {COL_DIM}{text_util.strip_ansi_codes(AppUtil.make_memory_string())}"
             printt(s)
             printt()
 
@@ -563,7 +564,7 @@ class GenerateUtil:
 
         message = f"{processing_string} {counts}"
         
-        printt(f"{COL_ACCENT}{'-' * (len(strip_ansi_codes(message)))}")
+        printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(message)))}")
         printt(f"{message}")
         printt()
 

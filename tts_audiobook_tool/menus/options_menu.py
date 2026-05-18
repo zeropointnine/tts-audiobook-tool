@@ -99,7 +99,7 @@ class OptionsMenu:
                 MenuItem(
                     lambda _: make_menu_label(
                         "LLM settings",
-                        make_terminal_hyperlink(
+                        text_util.make_terminal_hyperlink(
                             state.prefs.llm_url,
                             ellipsize(state.prefs.llm_url, 50)
                         ) if state.prefs.llm_url else "none"
@@ -274,7 +274,7 @@ def print_about_model(state: State) -> None:
     MenuUtil.print_screen_heading(state, f"About {model_name}")
 
     for link in ui.get("project_links", []):
-        printt(make_terminal_hyperlink(link))
+        printt(text_util.make_terminal_hyperlink(link))
     printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
     printt()
     AskUtil.ask_enter_to_continue()

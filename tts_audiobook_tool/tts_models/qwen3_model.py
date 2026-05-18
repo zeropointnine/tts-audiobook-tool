@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 from qwen_tts import Qwen3TTSModel # type: ignore

@@ -3,22 +3,21 @@ import math
 import re
 import os
 import shutil
-import random
 import importlib
-from datetime import datetime
 from pathlib import Path
 import platform
 import subprocess
 import time
 from typing import Any, Callable
-from urllib.parse import urlencode
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.ansi import Ansi
 
 """
-Various small util functions, both app-specific and general
+Various frequently used small util functions, both app-specific and general
+Meant to be imported using "*"
 """
 
 # 'Global; variable
@@ -73,6 +72,9 @@ def print_feedback(
     if extra_line:
         printt()
 
+def make_noun(singular: str, plural: str, quantity: int) -> str:
+    return singular if quantity == 1 else plural
+
 def get_terminal_width(fallback: int=80) -> int:
     """Returns terminal width with a safe cross-platform fallback."""
     try:
@@ -80,7 +82,6 @@ def get_terminal_width(fallback: int=80) -> int:
     except Exception:
         width = fallback
     return max(20, width)
-
 
 def make_terminal_divider(width: int | None = None, char: str = "-") -> str:
     width = width or get_terminal_width()
@@ -103,51 +104,11 @@ def print_model_init(model_description: str, extra: str = "") -> str:
     print_init(s)
     return f"{model_description} {extra}"
 
-def strip_quotes_from_ends(s: str) -> str:
-    if len(s) >= 2:
-        first = s[0]
-        last = s[-1]
-        if (first == "'" and last == "'") or (first == "\"" and last == "\""):
-            s = s[1:-1]
-    return s
-
-def strip_ansi_codes(s: str) -> str:
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    osc_hyperlink_escape = re.compile(r'\x1b]8;;.*?\x1b\\')
-    s = osc_hyperlink_escape.sub('', s)
-    return ansi_escape.sub('', s)
-
-def make_random_hex_string(num_hex_chars: int=32) -> str:
-    return f"{random.getrandbits(num_hex_chars * 4):0{num_hex_chars}x}"
-
-def make_sibling_random_file_path(source_file_path: str, new_suffix: str="") -> str:
-    """
-    When no new_suffix, uses source_file_path's suffix
-    """
-    source_path = Path(source_file_path)
-    parent_dir = source_path.parent
-    new_suffix = new_suffix or source_path.suffix
-    new_file_name = make_random_hex_string() + new_suffix
-    new_path = os.path.join(parent_dir, new_file_name)
-    return new_path
-
 def make_error_string(e: Exception) -> str:
     """
     Standard way for the app to display exceptions
     """
     return f"{type(e).__name__}: {e}"
-
-def make_url_with_params(base_url: str, params: dict) -> str:
-    """ Builds a properly encoded URL """
-    if params:
-        query_string = urlencode(params, doseq=True)
-        return f"{base_url}?{query_string}"
-    return base_url
-
-def make_terminal_hyperlink(url: str, text: str = "", is_file: bool=False) -> str:
-    display = text or url
-    link = f"file://{url}" if is_file else url
-    return f"\x1b]8;;{link}\x1b\\{display}\x1b]8;;\x1b\\"
 
 def swap_and_delete_file(temp_file_path: str, target_file_path: str) -> str:
     """
@@ -172,10 +133,6 @@ def delete_silently(path: str):
         os.remove(path)
     except Exception as e:
         pass # eat
-
-def timestamp_string() -> str:
-    current_time = datetime.now()
-    return current_time.strftime("%y%m%d_%H%M%S")
 
 def is_number(o: Any) -> bool:
     return isinstance(o, int) or isinstance(o, float)
@@ -394,7 +351,7 @@ def duration_string(seconds: float, include_tenth: bool=False) -> str:
     return f"{hours}h{minutes}m{seconds}s"
 
 def time_stamp(seconds: float, with_tenth: bool=True) -> str:
-    """ 05:00:00 """
+    """ Eg: 05:00:00 """
 
     tenths = int((seconds - int(seconds)) * 10)
     seconds = int(seconds)
@@ -530,30 +487,6 @@ def clear_input_buffer() -> None:
         import termios
         termios.tcflush(sys.stdin, termios.TCIFLUSH) # type: ignore
 
-def get_string_printable_len(string: str) -> int:
-    """
-    Returns the length of the string, filtering out non-printable characters like ANSI codes.
-    """
-    # ANSI escape code pattern: \x1b\[[0-?]*[ -/]*[@-~]
-    # This pattern covers most common ANSI SGR (Select Graphic Rendition) codes.
-    # It matches:
-    # \x1b or \033 (ESC)
-    # \[ (opening bracket)
-    # [0-?]* (zero or more characters in the range 0x30-0x3F, typically numbers and semicolons)
-    # [ -/]* (zero or more intermediate characters in the range 0x20-0x2F)
-    # [@-~] (final character in the range 0x40-0x7E, which indicates the end of the sequence)
-    ansi_escape_pattern = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
-    osc_hyperlink_escape_pattern = re.compile(r'\x1b]8;;.*?\x1b\\')
-
-    # Remove ANSI escape codes
-    clean_string = osc_hyperlink_escape_pattern.sub('', string)
-    clean_string = ansi_escape_pattern.sub('', clean_string)
-
-    return len(clean_string)
-
-def make_noun(singular: str, plural: str, quantity: int) -> str:
-    return singular if quantity == 1 else plural
-
 def save_json(json_object: Any, path: str) -> str:
     """
     Returns error message on fail, else empty string
@@ -601,7 +534,6 @@ def print_gen_oom_message(err: str) -> None:
     printt(f"{COL_ERROR}{err}")
     printt()
 
-
 def is_oom_error_message(error_string: str) -> bool:
     """
     Checks if an error string likely indicates an out-of-memory error.
@@ -637,39 +569,3 @@ def is_oom_error_message(error_string: str) -> bool:
         if re.search(pattern, lower):
             return True
     return False
-
-
-def load_text_file(path: str, errors: str="strict") -> str:
-    """ 
-    Load text file of potentially unknown provenance or format 
-    
-    param errors:
-        is passed to the decode(errors=) function.
-        rem:
-            "strict" is the default, which will raise an exception
-            "ignore" will filter out unknown characters
-            "replace" will replace unknown characters with the standard mystery character U+FFFD
-    """
-    import chardet
-    try:
-        # 1. Open as binary (rb) to get raw bytes, not text
-        with open(path, 'rb') as f:
-            raw_data = f.read()
-
-        # 2. Detect the encoding
-        result = chardet.detect(raw_data)
-        encoding = result['encoding']
-        confidence = result['confidence'] # (Optional) strictly for debugging
-
-        # 3. Handle edge case: if chardet is confused, default to utf-8
-        if encoding is None:
-            encoding = 'utf-8'
-
-        # 4. Decode using the detected encoding
-        transcript = raw_data.decode(encoding, errors=errors)
-        
-        # print(f"Loaded with encoding: {encoding} (Confidence: {confidence})")
-        return transcript
-
-    except Exception as e:
-        return ""

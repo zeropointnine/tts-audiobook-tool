@@ -57,7 +57,7 @@ class Server:
         Tts.set_model_params_using_project(self._project) 
 
         s = f"{COL_ACCENT}Loaded tts-audiobook-tool's current active project's settings from:\n"
-        s += f"{COL_ACCENT}{make_terminal_hyperlink(self._project.dir_path, is_file=True)}"
+        s += f"{COL_ACCENT}{text_util.make_terminal_hyperlink(self._project.dir_path, is_file=True)}"
         printt(s)
         printt()
 
@@ -211,12 +211,12 @@ class Server:
             demo_url_2 = f"{base_url}/demos/{STREAMING_CLIENT_DEMO_HTML_FILE_NAME}"
             demo_url_3 = f"{base_url}/demos/{COMBINATION_DEMO_HTML_FILE_NAME}"
 
-            printt(f"{COL_ACCENT}Server listening on {make_terminal_hyperlink(base_url)}")
+            printt(f"{COL_ACCENT}Server listening on {text_util.make_terminal_hyperlink(base_url)}")
             printt()
             printt("Demo pages:")
-            printt(f"- API demo: {make_terminal_hyperlink(demo_url_1)}")
-            printt(f"- Streaming client demo: {make_terminal_hyperlink(demo_url_2)}")
-            printt(f"- Combination demo: {make_terminal_hyperlink(demo_url_3)}")
+            printt(f"- API demo: {text_util.make_terminal_hyperlink(demo_url_1)}")
+            printt(f"- Streaming client demo: {text_util.make_terminal_hyperlink(demo_url_2)}")
+            printt(f"- Combination demo: {text_util.make_terminal_hyperlink(demo_url_3)}")
             printt()
 
             # Initialize the TTS model
