@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from tts_audiobook_tool.app_types import RealTimeMenuState
 from tts_audiobook_tool.ask_util import AskUtil
-from tts_audiobook_tool.tts_model.oute_util import OuteUtil
+from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.whitelist import Whitelist

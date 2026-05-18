@@ -28,7 +28,7 @@ from huggingface_hub import snapshot_download as _hf_snapshot_download # type: i
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_models.higgs_base_model import HiggsBaseModel
 from tts_audiobook_tool.util import *
 
 # --------------------------------------------------------------------------------------------------

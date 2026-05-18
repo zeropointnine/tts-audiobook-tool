@@ -9,7 +9,7 @@ from huggingface_hub.errors import GatedRepoError
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.util import *
 
 

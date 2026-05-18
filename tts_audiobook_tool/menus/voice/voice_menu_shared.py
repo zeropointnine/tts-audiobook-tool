@@ -11,7 +11,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.target_util import TargetUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 

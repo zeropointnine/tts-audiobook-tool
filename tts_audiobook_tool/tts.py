@@ -7,21 +7,21 @@ from typing import Callable
 
 from tts_audiobook_tool.app_types import StreamChunkCallback, StreamEndCallback
 
-from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
-from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
-from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
-from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.tts_model.higgs_base_model import HiggsBaseModel
-from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
-from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
-from tts_audiobook_tool.tts_model.none_base_model import NoneBaseModel
-from tts_audiobook_tool.tts_model.pocket_base_model import PocketBaseModel
-from tts_audiobook_tool.tts_model.oute_base_model import OuteBaseModel
-from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfo, TtsModelInfos
-from tts_audiobook_tool.tts_model.vibevoice_base_model import VibeVoiceBaseModel
-from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
+from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_models.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
+from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
+from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
+from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
+from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -275,7 +275,7 @@ class Tts:
     def get_oute() -> OuteBaseModel:
         if not Tts._oute:
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
-            from tts_audiobook_tool.tts_model.oute_model import OuteModel
+            from tts_audiobook_tool.tts_models.oute_model import OuteModel
             Tts._oute = OuteModel()
             printt()
         return Tts._oute
@@ -288,7 +288,7 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             Tts._set_and_print_instance_info(InstanceDisplayInfo(model_type.label, device))
             
-            from tts_audiobook_tool.tts_model.chatterbox_model import ChatterboxModel
+            from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(model_type, device)
             printt()
         return Tts._chatterbox
@@ -310,7 +310,7 @@ class Tts:
             
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
             
-            from tts_audiobook_tool.tts_model.fish_s1_model import FishS1Model
+            from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
             Tts._fish = FishS1Model(device, compile_enabled)
             printt()
 
@@ -333,7 +333,7 @@ class Tts:
             
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
             
-            from tts_audiobook_tool.tts_model.fish_s2_model import FishS2Model
+            from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
             Tts._fish_s2 = FishS2Model(device, compile_enabled)
             printt()
 
@@ -345,7 +345,7 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
             
-            from tts_audiobook_tool.tts_model.higgs_model import HiggsModel
+            from tts_audiobook_tool.tts_models.higgs_model import HiggsModel
             Tts._higgs = HiggsModel(device)
             printt()
 
@@ -370,7 +370,7 @@ class Tts:
 
             Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device, extra))
 
-            from tts_audiobook_tool.tts_model.vibe_voice_model import VibeVoiceModel
+            from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
                 device_map=device,
                 model_target=target,
@@ -388,7 +388,7 @@ class Tts:
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
 
-            from tts_audiobook_tool.tts_model.indextts2_model import IndexTts2Model
+            from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
             printt()
         return Tts._indextts2
@@ -400,7 +400,7 @@ class Tts:
             sr = Tts._model_params["glm_sr"]
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
 
-            from tts_audiobook_tool.tts_model.glm_model import GlmModel
+            from tts_audiobook_tool.tts_models.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
             printt()
         return Tts._glm
@@ -410,7 +410,7 @@ class Tts:
         if not Tts._mira:
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
             
-            from tts_audiobook_tool.tts_model.mira_model import MiraModel
+            from tts_audiobook_tool.tts_models.mira_model import MiraModel
             Tts._mira = MiraModel()
             printt()
         return Tts._mira
@@ -434,7 +434,7 @@ class Tts:
 
             Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device))
 
-            from tts_audiobook_tool.tts_model.qwen3_model import Qwen3Model
+            from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             try:
                 Tts._qwen3 = Qwen3Model(target, device)
             except Exception as e:
@@ -451,7 +451,7 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
             
-            from tts_audiobook_tool.tts_model.pocket_model import PocketModel
+            from tts_audiobook_tool.tts_models.pocket_model import PocketModel
             Tts._pocket = PocketModel(device=device, language=language)
             printt()
         return Tts._pocket
@@ -475,7 +475,7 @@ class Tts:
 
             Tts._set_and_print_instance_info(InstanceDisplayInfo(model_description, device))
 
-            from tts_audiobook_tool.tts_model.omnivoice_model import OmniVoiceModel
+            from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
             Tts._omnivoice = OmniVoiceModel(
                 device=device,
                 model_target=model_target,

@@ -4,8 +4,8 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared

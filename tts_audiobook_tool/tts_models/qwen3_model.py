@@ -6,7 +6,7 @@ from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: igno
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.util import *
 
 

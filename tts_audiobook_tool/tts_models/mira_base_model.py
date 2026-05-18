@@ -1,5 +1,5 @@
-from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
 
 class MiraBaseModel(TtsBaseModel):

@@ -1,8 +1,8 @@
 from tts_audiobook_tool.menus.menu_util import MenuUtil, MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared

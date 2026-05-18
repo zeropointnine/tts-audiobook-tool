@@ -4,8 +4,8 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.target_util import TargetUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared

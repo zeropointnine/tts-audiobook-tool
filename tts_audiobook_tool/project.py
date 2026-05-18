@@ -10,17 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, Sound, StreamEndCallback, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.tts_model.chatterbox_base_model import ChatterboxType
-from tts_audiobook_tool.tts_model.fish_s1_base_model import FishS1BaseModel
-from tts_audiobook_tool.tts_model.fish_s2_base_model import FishS2BaseModel
-from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.tts_model.indextts2_base_model import IndexTts2BaseModel
-from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
-from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.tts_model.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.tts import Tts
@@ -558,7 +558,7 @@ class Project(BaseModel):
         d['qwen3_seed'] = int(seed)
 
         # pocket_temperature
-        from tts_audiobook_tool.tts_model.pocket_base_model import PocketBaseModel
+        from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
         value = d.get('pocket_temperature', -1)
         if value != -1:
             if not isinstance(value, (float, int)) or not (PocketBaseModel.TEMPERATURE_MIN <= value <= PocketBaseModel.TEMPERATURE_MAX):

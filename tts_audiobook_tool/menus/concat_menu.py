@@ -16,7 +16,7 @@ from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 class ConcatMenu:

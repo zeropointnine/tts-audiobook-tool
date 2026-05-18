@@ -78,7 +78,7 @@ COL_INPUT = Ansi.hex("aaaaaa")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
 # Build the list of (module_test, proper_name) from the enum, skipping NONE
 QUALIFIED_MODELS: list[tuple[str, str]] = []

@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.prereqs_util import PrereqError
 from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 
 from typing import TYPE_CHECKING

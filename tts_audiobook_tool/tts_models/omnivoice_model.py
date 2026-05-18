@@ -9,7 +9,7 @@ from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCa
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.omnivoice_base_model import OmniVoiceBaseModel
+from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.util import *
 
 

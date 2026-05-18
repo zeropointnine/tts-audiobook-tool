@@ -14,7 +14,7 @@ from functools import partial
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.util import printt
 
 class GlmModel(GlmBaseModel):

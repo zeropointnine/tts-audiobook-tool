@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State

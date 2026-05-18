@@ -3,7 +3,7 @@ from itertools import cycle
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.util import *
 
 import torch

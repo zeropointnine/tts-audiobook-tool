@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from tts_audiobook_tool.app_types import Strictness
-from tts_audiobook_tool.tts_model.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import ellipsize_path_for_menu
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_ERROR

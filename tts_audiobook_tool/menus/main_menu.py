@@ -8,7 +8,7 @@ from tts_audiobook_tool.menus.project_menu import ProjectMenu
 from tts_audiobook_tool.menus.tools_menu import ToolsMenu
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.text_menu import TextMenu
-from tts_audiobook_tool.tts_model.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared

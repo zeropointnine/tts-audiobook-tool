@@ -3,7 +3,7 @@ import outetts # type: ignore
 
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.oute_base_model import OuteBaseModel
+from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.util import make_error_string
 
 

@@ -2,12 +2,12 @@ from pathlib import Path
 
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem
-from tts_audiobook_tool.tts_model.oute_util import OuteUtil
+from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_model.oute_base_model import OuteBaseModel
+from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
