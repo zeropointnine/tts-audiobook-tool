@@ -13,7 +13,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult
 
 
 @dataclass(frozen=True)

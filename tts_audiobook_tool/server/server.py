@@ -21,7 +21,7 @@ _HERE = pathlib.Path(__file__).parent
 _DEMOS_DIR = _HERE / "demos"
 _DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 
-from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project_util import ProjectUtil

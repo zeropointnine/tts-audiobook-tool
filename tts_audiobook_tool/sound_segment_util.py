@@ -5,12 +5,12 @@ from typing import NamedTuple
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.text_util import TextUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validation_result import MusicFailResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ValidationResult, WordErrorResult
 
 
 @dataclass(frozen=True)

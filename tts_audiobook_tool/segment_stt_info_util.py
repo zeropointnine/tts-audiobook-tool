@@ -4,16 +4,16 @@ from pathlib import Path
 from typing import Any
 
 from tts_audiobook_tool.app_types import Strictness
-from tts_audiobook_tool.force_align_util import ForceAlignUtil
-from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.segment_stt_info import SegmentSttInfo
+from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.text_util import TextUtil
-from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.validate_util import ValidateUtil
-from tts_audiobook_tool.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 from tts_audiobook_tool.util import *
 

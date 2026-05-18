@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import pickle
 import time
-from tts_audiobook_tool.app_metadata import AppMetadata
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.ask_util import AskUtil
@@ -12,8 +12,8 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.stt_util import SttUtil
-from tts_audiobook_tool.phrase import PhraseGroup
-from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 

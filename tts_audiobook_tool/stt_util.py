@@ -8,9 +8,9 @@ from tts_audiobook_tool.app_types import ConcreteWord, Word
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.phrase import Phrase
+from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.whisper_util import WhisperUtil
 

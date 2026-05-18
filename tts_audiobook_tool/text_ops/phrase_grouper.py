@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
 from tts_audiobook_tool.util import printt
 

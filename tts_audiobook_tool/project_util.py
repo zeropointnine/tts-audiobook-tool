@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.parse_util import ParseUtil
-from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.tts import Tts

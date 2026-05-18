@@ -1,6 +1,6 @@
 import os
 
-from tts_audiobook_tool.app_metadata import AppMetadata
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.ask_util import AskUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *

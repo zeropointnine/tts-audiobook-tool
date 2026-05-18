@@ -2,7 +2,7 @@ import json
 import os
 import subprocess
 
-from tts_audiobook_tool.app_metadata import AppMetadata
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import NormalizationSpecs
 from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
 from tts_audiobook_tool.constants import *

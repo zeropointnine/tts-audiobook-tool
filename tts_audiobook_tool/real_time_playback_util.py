@@ -14,13 +14,13 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.phrase import PhraseGroup, Reason
+from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.validation_result import ValidationResult
+from tts_audiobook_tool.app_types.validation_result import ValidationResult
 
 
 class RealTimeUtil:

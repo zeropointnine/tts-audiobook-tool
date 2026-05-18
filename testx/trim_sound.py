@@ -7,7 +7,7 @@ from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import printt
 from tts_audiobook_tool.validate_util import ValidateUtil
-from tts_audiobook_tool.validation_result import TrimmedResult
+from tts_audiobook_tool.app_types.validation_result import TrimmedResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 DIR = "/home/lee/Documents/w/w/_tests/trim_trailing"

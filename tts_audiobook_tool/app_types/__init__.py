@@ -1,3 +1,14 @@
+"""
+Shared structural data types for the application
+
+Foundational value-like types, lightweight domain structures 
+used across subsystems.
+
+Intentionally excludes heavier stateful/persistent orchestrators such as
+Project, Prefs, and State; those own lifecycle, IO, runtime coordination,
+and application behavior rather than acting as lightweight shared structures.
+"""
+
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
@@ -9,10 +20,6 @@ from numpy import ndarray
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-
-"""
-Simple app types
-"""
 
 class SingletonBase:
     """
@@ -367,7 +374,7 @@ class ExportType(tuple[str, str, str], Enum):
 
 class RealTimeMenuState:
     """ Values related to the real-time playback feature """
-    from tts_audiobook_tool.phrase import PhraseGroup
+    from tts_audiobook_tool.app_types.phrase import PhraseGroup
     custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
     custom_text_line_range: tuple[int, int] | None = None
     project_text_line_range: tuple[int, int] | None = None

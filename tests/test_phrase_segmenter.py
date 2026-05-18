@@ -1,6 +1,6 @@
 import unittest
 
-from tts_audiobook_tool.phrase import Phrase, Reason
+from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 
 class TestPhraseSegmenter(unittest.TestCase):

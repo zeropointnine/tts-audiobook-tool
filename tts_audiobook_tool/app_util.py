@@ -7,7 +7,7 @@ import xxhash
 from tts_audiobook_tool.app_types import ModelWarmUpResult, SegmentationStrategy, SttVariant
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.phrase import PhraseGroup
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil

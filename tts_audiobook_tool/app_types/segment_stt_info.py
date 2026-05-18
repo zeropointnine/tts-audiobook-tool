@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
 
 

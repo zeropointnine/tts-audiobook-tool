@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 
-from tts_audiobook_tool.phrase import Phrase
+from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.util import *
 
 class TimedPhrase:

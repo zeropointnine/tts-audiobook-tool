@@ -26,18 +26,18 @@ from tts_audiobook_tool.conversation.console_session import (
     KEY_RIGHT,
 )
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream, UiOp
-from tts_audiobook_tool.force_align_util import ForceAlignUtil
+from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.llm_session import LlmSession
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
-from tts_audiobook_tool.phrase import Reason
+from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.whisper_util import WhisperUtil
 from tts_audiobook_tool.util import make_error_string
 

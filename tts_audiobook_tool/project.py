@@ -17,7 +17,7 @@ from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
-from tts_audiobook_tool.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos

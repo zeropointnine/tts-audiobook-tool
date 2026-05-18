@@ -4,7 +4,7 @@ import string
 import re
 import pysbd
 
-from tts_audiobook_tool.phrase import Phrase, Reason
+from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.text_util import TextUtil
 
 
