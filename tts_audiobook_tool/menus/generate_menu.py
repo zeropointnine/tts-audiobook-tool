@@ -479,8 +479,8 @@ to decide which segments should be regenerated.
 """
 
 LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \
-"""Prevents instances of silence within each sound segment from extending beyond
-the given duration.
+"""Limits instances of silence within sound segment from extending beyond
+a certain duration.
 
 Larger values can be used to prevent long pauses (eg, 1-2 seconds). 
 

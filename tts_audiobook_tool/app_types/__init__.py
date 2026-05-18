@@ -266,7 +266,10 @@ class Strictness(tuple[str, int, str], Enum):
 # ---
 
 FILES_DESC = "Each section marker defines the start of a new, separate audio file."
-METADATA_DESC = "Section markers are used for M4B chapter metadata and player bookmark metadata.\n      Always outputs to a single file."
+METADATA_DESC = (
+    "Section markers are used for M4B chapter metadata and player bookmark metadata.\n"
+    "      Always outputs to a single file."
+)
 
 class SectionMarkerMode(tuple[str, str, str], Enum):
 
@@ -292,23 +295,22 @@ class SectionMarkerMode(tuple[str, str, str], Enum):
                 return item
         return None
     
-
 # ---
 
 SS_NORMAL_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, by sentence.
-    This produces predictable caesuras between sentences. Relatively shorter 
-    word length may help some models maintain a more natural speaking pace."""
+      This produces predictable caesuras between sentences. Relatively shorter 
+      word length may help some models maintain a more natural speaking pace."""
 
 SS_MULTI_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, 
-    by one or multiple sentences up to \"max words per segment.\"
-    May produce a better sense of continuity between those sentences."""
+      by one or multiple sentences up to \"max words per segment.\"
+      May preserve a better sense of continuity between those sentences."""
 
 SS_MAX_LEN_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, segmented by 
-    \"max words per segment\" to the nearest sentence or phrase boundary.
-    This maximizes text length per TTS generation."""
+      \"max words per segment\" to the nearest sentence or phrase boundary.
+      This maximizes text length per TTS generation."""
 
 class SegmentationStrategy(tuple[str, str, str], Enum):
 

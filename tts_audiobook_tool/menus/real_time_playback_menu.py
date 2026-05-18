@@ -157,7 +157,7 @@ class RealTimePlaybackMenu:
         if os.path.exists(state.project.realtime_path):
             subheading = f"Saves FLAC files to {make_terminal_hyperlink(state.project.realtime_path, is_file=True)}\n"
         else:
-            subheading = f"FLAC files will be saved to {state.project.realtime_path}\n"
+            subheading = f"FLAC files will be saved to {make_terminal_hyperlink(state.project.realtime_path)}\n"
 
         MenuUtil.options_menu(
             state=state,
