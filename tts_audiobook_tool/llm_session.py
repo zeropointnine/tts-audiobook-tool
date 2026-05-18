@@ -7,7 +7,7 @@ from typing import Callable
 import requests
 
 
-class LlmUtil:
+class LlmSession:
     """
     Manages a multi-turn LLM conversation and makes the HTTP API calls.
 

@@ -25,6 +25,14 @@ from tts_audiobook_tool.validation_result import ValidationResult
 
 class RealTimeUtil:
 
+    """
+    Coordinates and drives TTS playback in "real time".
+    Manages buffer growth, validate-and-retry handling
+    intra-segment pauses, and clean interruption/shutdown behavior.
+
+    Is blocking.
+    """
+
     INTERRUPTIBLE_SLEEP_POLL_SECONDS = 0.1
 
     @staticmethod

@@ -6,6 +6,9 @@ from tts_audiobook_tool.constants import *
 
 @dataclass
 class Hint:
+
+    # TODO: move Hint to app_types.py and rename rest as "hint_util.py" non-class module
+
     key: str
     heading: str
     text: str

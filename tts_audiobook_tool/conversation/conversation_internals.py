@@ -27,7 +27,7 @@ from tts_audiobook_tool.conversation.console_session import (
 )
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream, UiOp
 from tts_audiobook_tool.force_align_util import ForceAlignUtil
-from tts_audiobook_tool.llm_util import LlmUtil
+from tts_audiobook_tool.llm_session import LlmSession
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
@@ -527,7 +527,7 @@ class ResponseSession:
     def __init__(
         self,
         ui: Ui,
-        llm: LlmUtil,
+        llm: LlmSession,
         project: Project,
         chunking_config: ChunkingConfig,
         stt_variant: SttVariant,

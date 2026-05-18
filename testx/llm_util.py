@@ -1,7 +1,7 @@
 import sys
 sys.path.insert(0, "/d/p/tts-audiobook-tool")
 
-from tts_audiobook_tool.llm_util import LlmUtil
+from tts_audiobook_tool.llm_session import LlmSession
 
 """
 LlmUtil class - minimal functionality test 
@@ -15,7 +15,7 @@ SYSTEM_PROMPT = ""
 PARAMS = {"thinking": {"type": "disabled"} }
 
 
-llm = LlmUtil(
+llm = LlmSession(
     api_endpoint_url=API_ENDPOINT_URL,
     token=TOKEN,
     model=MODEL,

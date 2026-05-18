@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from faster_whisper.transcribe import Segment
 
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.llm_util import LlmUtil
+from tts_audiobook_tool.llm_session import LlmSession
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
@@ -61,7 +61,7 @@ def main() -> None:
     Stt.get_whisper()
     print("STT model ready.\n")
 
-    llm = LlmUtil(
+    llm = LlmSession(
         api_endpoint_url=API_ENDPOINT_URL,
         token=TOKEN,
         model=MODEL,

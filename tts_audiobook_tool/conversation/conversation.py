@@ -16,7 +16,7 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.models_util import ModelsUtil
-from tts_audiobook_tool.llm_util import LlmUtil
+from tts_audiobook_tool.llm_session import LlmSession
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
@@ -129,7 +129,7 @@ class Conversation:
     def init_session_state(self) -> None:
         state = self.state
         system_prompt = DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT if state.prefs.llm_system_prompt_default else state.prefs.llm_system_prompt.strip()
-        self.llm = LlmUtil(
+        self.llm = LlmSession(
             api_endpoint_url=state.prefs.llm_url,
             token=state.prefs.llm_api_key,
             model=state.prefs.llm_model,

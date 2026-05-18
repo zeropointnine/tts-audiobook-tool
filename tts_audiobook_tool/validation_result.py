@@ -10,7 +10,7 @@ from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 class ValidationResult(ABC):
     """ 
     Base class for a validation result.
-    A validation result contains a Sound, which may or may not be transformed.
+    A validation result contains a Sound, which may or may not be already-transformed.
     """
     
     sound: Sound
@@ -69,6 +69,9 @@ class ValidationResult(ABC):
         if extras:
             message += "\n" + "\n".join(extras)
         return message
+
+# ----------
+# Subclasses
 
 @dataclass
 class TranscriptResult(ValidationResult, ABC):
