@@ -8,13 +8,14 @@ from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
-from tts_audiobook_tool.segment_stt_info import SegmentSttInfo, SegmentSttInfoUtil
+from tts_audiobook_tool.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentFiles, SoundSegmentUtil
 from tts_audiobook_tool.state import State

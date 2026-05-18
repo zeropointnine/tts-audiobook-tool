@@ -1,8 +1,9 @@
 import unittest
 
+from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
-from tts_audiobook_tool.segment_stt_info import SegmentSttInfo, SegmentSttInfoUtil
+from tts_audiobook_tool.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.util import strip_ansi_codes
 
 class TestTranscribeGranular(unittest.TestCase):

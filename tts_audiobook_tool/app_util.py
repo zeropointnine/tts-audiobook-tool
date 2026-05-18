@@ -10,6 +10,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.phrase import PhraseGroup
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -132,8 +133,6 @@ class AppUtil:
             printt("None")
             printt()
             return
-
-        from tts_audiobook_tool.segment_stt_info import SegmentSttInfoUtil
 
         for index in sorted(indices):
             SegmentSttInfoUtil.print_info(index, project)
