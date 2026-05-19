@@ -556,15 +556,15 @@ This helps keep generation-time validation and later regen-time evaluation consi
 
 ## Related but Separate Flow: STT Alignment for Existing Audiobooks
 
-There is a second, distinct STT flow in `tts_audiobook_tool/stt_flow.py` used for enhancing existing audiobooks.
+There is a second, distinct STT flow in `tts_audiobook_tool/enhance/enhance_flow.py` used for enhancing existing audiobooks.
 
 That flow also starts from source text, runs Whisper, and compares/aligns source text with transcription, but its primary goal is **timing alignment and metadata generation**, not TTS output validation.
 
 In that path:
 
 - `PhraseGrouper.text_to_groups()` segments source text,
-- `SttUtil.transcribe_to_words()` transcribes the source audiobook,
-- `SttUtil.make_timed_phrases()` merges source phrases with transcribed words.
+- `extended_alignment_util.transcribe_to_words()` transcribes the source audiobook,
+- `extended_alignment_util.make_timed_phrases()` merges source phrases with transcribed words.
 
 It is adjacent to this architecture, but separate from the generation-time normalization/WER validation flow described above.
 

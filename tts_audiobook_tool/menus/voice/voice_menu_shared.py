@@ -11,7 +11,7 @@ from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.target_util import TargetUtil
+from tts_audiobook_tool import target_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -387,11 +387,11 @@ class VoiceMenuShared:
         if not new_target:
             return
 
-        if TargetUtil.is_same_target(current_target, new_target):
+        if target_util.is_same_target(current_target, new_target):
             print_feedback("Already set")
             return
 
-        _, err = TargetUtil.exist_test(new_target)
+        _, err = target_util.exist_test(new_target)
         if err:
             print_feedback(err, is_error=True)
             return

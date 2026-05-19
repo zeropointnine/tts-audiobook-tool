@@ -5,9 +5,10 @@ import time
 
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.prefs import Prefs
 
 
-def show_hint_if_necessary(prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
+def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
     """
     Shows hint only if not yet shown.
     """

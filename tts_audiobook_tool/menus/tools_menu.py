@@ -1,6 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.enhance import enhance_flow
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.sound.mp3_concat import SoundConcatTranscodeUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
@@ -20,6 +21,10 @@ class ToolsMenu:
 
         def item_maker(_: State) -> list[MenuItem]:
 
+            enhance_item = MenuItem(
+                "Enhance a pre-existing audiobook", 
+                lambda _, __: enhance_flow.ask_and_make(state)
+            )
             mp3s_item = MenuItem(
                 "Concatenate a directory of audio files",
                 lambda _, __: SoundConcatTranscodeUtil.ask_and_concat_audio_files()
@@ -30,7 +35,7 @@ class ToolsMenu:
             )
             speed_item = MenuItem("Speed up voice sample", speed_handler)
             
-            return [mp3s_item, transcode_item, speed_item]
+            return [enhance_item, mp3s_item, transcode_item, speed_item]
         
         MenuUtil.menu(state, "Tools:", item_maker, breadcrumb="Tools")
 

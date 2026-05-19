@@ -1,8 +1,8 @@
 from tts_audiobook_tool import ask
+from tts_audiobook_tool import target_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.target_util import TargetUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -33,7 +33,7 @@ class VoiceQwen3Menu:
 
         def make_target_label(_) -> str:
             value = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
-            if TargetUtil.is_hf_repo_id_syntax(value):
+            if target_util.is_hf_repo_id_syntax(value):
                 value = value.removeprefix("Qwen/") # simplify display text
             else:
                 value = ellipsize_path_for_menu(value)

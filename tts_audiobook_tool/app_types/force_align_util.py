@@ -2,7 +2,7 @@ import difflib
 
 from tts_audiobook_tool.app_types import Word
 from tts_audiobook_tool.app_types.phrase import Phrase
-from tts_audiobook_tool.stt_util import normalize_text
+from tts_audiobook_tool.enhance.enhance_alignment import normalize_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 
 class ForceAlignUtil:

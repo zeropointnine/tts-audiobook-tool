@@ -68,7 +68,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 
 This feature extends the browser player to work with professionally produced audiobooks — not just ones generated with this tool. It uses speech-to-text to align the existing audio with the corresponding book text, then embeds the same timing metadata the app normally produces during generation.
 
-Select `Options` > `Enhance existing audiobook`, and choose your source audiobook file (M4A or M4B) and the corresponding book text. This feature is experimental.
+Select `Tools` > `Enhance existing audiobook`, and choose your source audiobook file (M4A or M4B) and the corresponding book text. This feature is experimental.
 
 ### tts-server-tool
 
