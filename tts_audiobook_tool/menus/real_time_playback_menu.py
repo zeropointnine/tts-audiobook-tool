@@ -1,10 +1,10 @@
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool import ask, text_util
+from tts_audiobook_tool import phrase_group_ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
-from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
-from tts_audiobook_tool.real_time_playback_util import RealTimeUtil
+from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -124,14 +124,14 @@ class RealTimePlaybackMenu:
         def on_custom(_: State, item: MenuItem) -> bool:
             printt("Note, custom text source does not persist.")
             if item.data == "file":
-                phrase_groups, __ = PhraseGroupAskUtil.get_from_text_file(
+                phrase_groups, __ = phrase_group_ask.get_from_text_file(
                     state.project.max_words, 
                     state.project.segmentation_strategy, 
                     pysbd_language=state.project.language_code,
                     prefs=state.prefs
                 )
             else:
-                phrase_groups, __ = PhraseGroupAskUtil.get_from_std_in(
+                phrase_groups, __ = phrase_group_ask.get_from_std_in(
                     state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
             if phrase_groups:
                 state.real_time.custom_phrase_groups = phrase_groups
@@ -204,7 +204,7 @@ def do_start(state: State) -> None:
         if not b:
             return
 
-    RealTimeUtil.start(
+    real_time_playback.start(
         state=state,
         phrase_groups=text_groups,
         line_range=line_range
