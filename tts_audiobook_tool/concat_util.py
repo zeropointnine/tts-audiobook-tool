@@ -14,7 +14,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
-from tts_audiobook_tool.chapter_metadata import ChapterMetadata
+from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
@@ -240,10 +240,10 @@ class ConcatUtil:
         #     Both due to ffmpeg limitations
 
         if chapter_meta_path:
-            chapter_metadata = ChapterMetadata.make_metadata(
+            chapter_metadata = m4b_chapter_util.make_metadata(
                 state.project, durations, file_title=Path(stem_path).name
             )
-            err = ChapterMetadata.make_copy_with_metadata(
+            err = m4b_chapter_util.make_copy_with_metadata(
                 source_path=last_path, dest_path=chapter_meta_path, metadata=chapter_metadata
             )
             if err:
