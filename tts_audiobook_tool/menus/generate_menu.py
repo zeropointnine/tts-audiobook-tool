@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from tts_audiobook_tool.app_types import Strictness, SttVariant
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool import app_support
+from tts_audiobook_tool.app_support import app_display
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
@@ -363,7 +364,7 @@ def regenerate_menu(state: State) -> None:
 
     def on_print(_: State, __: MenuItem) -> None:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
-        AppUtil.print_regen_lines(state.project, indices)
+        app_display.print_regen_lines(state.project, indices)
         ask.ask_enter_to_continue()
 
     items = [
@@ -406,7 +407,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
     if is_regen:
         HintUtil.show_hint_if_necessary(state.prefs, HINT_REGEN)
     else:
-        AppUtil.show_pre_inference_hints(state.prefs, state.project)
+        app_support.show_pre_inference_hints(state.prefs, state.project)
 
     # Print confirmation info, and confirm
     if not is_regen:
@@ -448,7 +449,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         ask.ask_enter_to_continue()
         return
 
-    AppUtil.play_done_sound()
+    app_support.play_done_sound()
 
     if is_regen:
         ask.ask_enter_to_continue()

@@ -493,8 +493,8 @@ class Prefs(Saveable):
 
     @staticmethod
     def get_file_path() -> str:
-        from tts_audiobook_tool.app_util import AppUtil # ugh
-        dir = AppUtil.get_app_user_dir()
+        from tts_audiobook_tool.app_support import app_paths
+        dir = app_paths.get_app_user_dir()
         return os.path.join(dir, PREFS_FILE_NAME)
 
 # ---

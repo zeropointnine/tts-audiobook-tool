@@ -3,8 +3,8 @@ import random
 
 import numpy as np
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
@@ -110,7 +110,7 @@ class PocketModel(PocketBaseModel):
             voice_state = self.get_voice_state(voice_path)
             if seed <= -1:
                 seed = random.randrange(0, SEED_MAX)
-            AppUtil.set_seed(seed)
+            app_support.set_seed(seed)
             sounds = []
             for text in texts:
                 audio_chunks = []

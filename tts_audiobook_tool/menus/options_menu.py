@@ -1,7 +1,7 @@
 import torch
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -17,19 +17,19 @@ class OptionsMenu:
     def menu(state: State) -> None:
 
         def make_unload_label(_) -> str:
-            memory_string = AppUtil.make_memory_string()
+            memory_string = app_support.make_memory_string()
             if memory_string:
                 memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
             return f"Attempt to unload models {memory_string}"
 
         def on_unload(_: State, __: MenuItem) -> None:
-            before_string = AppUtil.make_memory_string()
-            AppUtil.log_unload_memory_snapshot("before")
+            before_string = app_support.make_memory_string()
+            app_support.log_unload_memory_snapshot("before")
             if before_string:
                 printt(f"Before: {before_string}")
             ModelsUtil.clear_all_models()
-            after_string = AppUtil.make_memory_string()
-            AppUtil.log_unload_memory_snapshot("after")
+            after_string = app_support.make_memory_string()
+            app_support.log_unload_memory_snapshot("after")
             if after_string:
                 printt(f"After:  {after_string}")
             if state.prefs.menu_clears_screen:

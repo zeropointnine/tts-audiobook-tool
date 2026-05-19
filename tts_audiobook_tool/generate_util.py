@@ -5,8 +5,8 @@ import time
 import numpy as np
 
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
@@ -60,7 +60,7 @@ class GenerateUtil:
 
         warm_up_result = ModelsUtil.warm_up_models(state)
         if warm_up_result.should_stop:
-            AppUtil.print_warm_up_result_stop(warm_up_result)
+            app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:
                 MemoryUtil.gc_ram_vram()
             return True
@@ -265,7 +265,7 @@ class GenerateUtil:
 
             # Print current memory usage
             printt()
-            s = f"Memory: {COL_DIM}{text_util.strip_ansi_codes(AppUtil.make_memory_string())}"
+            s = f"Memory: {COL_DIM}{text_util.strip_ansi_codes(app_support.make_memory_string())}"
             printt(s)
             printt()
 

@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.parse_util import ParseUtil
@@ -196,7 +196,7 @@ def do_start(state: State) -> None:
         return
 
     # Show pre-inference hint/warning if necessary
-    AppUtil.show_pre_inference_hints(state.prefs, state.project)
+    app_support.show_pre_inference_hints(state.prefs, state.project)
 
     # Confirm and start proper
     if ask.can_hotkey:

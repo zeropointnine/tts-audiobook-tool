@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from typing import Callable
 
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool import app_support
 from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference # type: ignore
 from vibevoice.modular.streamer import AudioStreamer # type: ignore
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
@@ -207,7 +207,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
 
         if seed <= -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         try:
             self.model.set_ddpm_inference_steps(num_steps) # type: ignore

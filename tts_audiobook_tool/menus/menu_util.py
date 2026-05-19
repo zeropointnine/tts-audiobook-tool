@@ -303,7 +303,7 @@ class MenuUtil:
     @staticmethod
     def _print_status_block(state: State) -> None:
         
-        from tts_audiobook_tool.app_util import AppUtil
+        from tts_audiobook_tool import app_support
         from tts_audiobook_tool.stt import Stt
         from tts_audiobook_tool.tts import Tts
 
@@ -375,7 +375,7 @@ class MenuUtil:
                 stt_line += f""
 
         # Memory line
-        memory_line = text_util.strip_ansi_codes(AppUtil.make_memory_string())
+        memory_line = text_util.strip_ansi_codes(app_support.make_memory_string())
         memory_line = memory_line.replace(":", "") # careful
         memory_line = value_color + memory_line if memory_line else ""
 

@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 import pickle
 import time
+from tts_audiobook_tool.app_support import app_hashing, app_paths
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_hints import *
@@ -102,7 +102,7 @@ class SttFlow:
                 return
 
         # [3] Calc hash
-        source_audio_hash, err = AppUtil.calc_hash_file(
+        source_audio_hash, err = app_hashing.calc_hash_file(
             source_audio_path,
             print_progress_text="Calculating audio file hash:"
         )
@@ -249,7 +249,7 @@ class SttFlow:
 
 def make_transcription_pickle_file_path(hash: str) -> str:
     file_name = f"transcription {hash}.pkl"
-    return os.path.join(AppUtil.get_app_user_dir(), file_name)
+    return os.path.join(app_paths.get_app_user_dir(), file_name)
 
 def print_discontinuity_info(timed_text_segments: list[TimedPhrase]):
 

@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.menus.main_menu import MainMenu
 from tts_audiobook_tool.state import State
@@ -10,7 +10,7 @@ class App:
 
     def __init__(self):
 
-        AppUtil.init_logging()
+        app_support.init_logging()
 
         SigIntHandler().init()
 

@@ -1,8 +1,8 @@
 import time
 
 import numpy as np
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttVariant
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.memory_util import MemoryUtil
@@ -50,7 +50,7 @@ class RealTimeUtil:
         # Warm up models
         warm_up_result = ModelsUtil.warm_up_models(state)
         if warm_up_result.should_stop:
-            AppUtil.print_warm_up_result_stop(warm_up_result)
+            app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:
                 MemoryUtil.gc_ram_vram()
             if state.prefs.menu_clears_screen:

@@ -7,8 +7,8 @@ from omnivoice import OmniVoice  # type: ignore
 from omnivoice.models.omnivoice import OmniVoiceGenerationConfig  # type: ignore
 from omnivoice.models.omnivoice import VoiceClonePrompt  # type: ignore
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
@@ -169,7 +169,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         printt("Generating...", dont_reset=True)
 
@@ -208,7 +208,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         generation_config = OmniVoiceGenerationConfig(
             num_step=steps,
@@ -248,7 +248,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         generation_config = OmniVoiceGenerationConfig(
             num_step=steps,

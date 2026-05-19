@@ -5,8 +5,8 @@ import torch
 from qwen_tts import Qwen3TTSModel # type: ignore
 from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: ignore
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.util import *
@@ -193,7 +193,7 @@ class Qwen3Model(Qwen3BaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
         printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
@@ -242,7 +242,7 @@ class Qwen3Model(Qwen3BaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
         printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
@@ -283,7 +283,7 @@ class Qwen3Model(Qwen3BaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
         printt("{COL_DIM_ITALICS}Generating...", dont_reset=True) 

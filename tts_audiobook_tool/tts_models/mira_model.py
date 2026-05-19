@@ -1,7 +1,7 @@
 import random
 from itertools import cycle
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.util import *
@@ -84,7 +84,7 @@ class MiraModel(MiraBaseModel):
         seed = -1 if force_random_seed else project.mira_seed
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
         self.mira_tts.gen_config.random_seed = seed
 
         if len(prompts) == 1:

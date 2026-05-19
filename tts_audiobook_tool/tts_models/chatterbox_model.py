@@ -8,7 +8,7 @@ from chatterbox.tts_turbo import ChatterboxTurboTTS # type: ignore
 
 import logging
 
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
@@ -121,7 +121,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         
         if seed <= -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         if repetition_penalty == -1:
             match self._model_type:

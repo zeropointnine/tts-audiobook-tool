@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
+from tts_audiobook_tool.app_support import app_hashing
 from tts_audiobook_tool.app_types import SoundSegment
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -52,7 +52,7 @@ class SoundSegmentUtil:
         index_0b = idx_1b - 1
 
         hash = tags[1]
-        if not AppUtil.is_app_hash(hash):
+        if not app_hashing.is_app_hash(hash):
             return None
 
         model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
@@ -169,7 +169,7 @@ class SoundSegmentUtil:
         Simply hashes the combination of: index value and text
         """
         s = str(index) + " " + text
-        return AppUtil.calc_hash_string(s)
+        return app_hashing.calc_hash_string(s)
 
     @staticmethod
     def extract_tags_from_file_name(file_name: str) -> list[str] | None:

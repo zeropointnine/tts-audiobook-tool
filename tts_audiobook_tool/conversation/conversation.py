@@ -6,6 +6,7 @@ import threading
 import time
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.conversation.conversation_internals import PromptBuilder, ResponseSession, Ui
@@ -14,7 +15,6 @@ from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.ansi import Ansi
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.llm_session import LlmSession
 from tts_audiobook_tool.state import State
@@ -112,7 +112,7 @@ class Conversation:
         # Warm up models
         warm_up_result = ModelsUtil.warm_up_models(state, skip_yamnet=True)
         if warm_up_result.should_stop:
-            AppUtil.print_warm_up_result_stop(warm_up_result)
+            app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:
                 MemoryUtil.gc_ram_vram()
             return False

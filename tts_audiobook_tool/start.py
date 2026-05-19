@@ -17,6 +17,7 @@ from huggingface_hub import constants # type: ignore
 
 import sys
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts import Tts
@@ -198,8 +199,7 @@ class Startup:
             HintUtil.show_hint(HINT_UPDATED_UI, and_prompt=True)
 
     def init_logging(self) -> None:
-        from tts_audiobook_tool.app_util import AppUtil
-        AppUtil.init_logging()
+        app_support.init_logging()
         printt()
         if DEV:
             printt(f"### DEV ###")

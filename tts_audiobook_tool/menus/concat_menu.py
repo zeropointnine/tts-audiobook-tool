@@ -2,8 +2,9 @@ import os
 
 import torch
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.chapter_info import ChapterInfo
@@ -246,7 +247,7 @@ class ConcatMenu:
             print_feedback("No files found")
             return
         
-        user_data_dir=AppUtil.get_chromium_user_data_dir()
+        user_data_dir=app_paths.get_chromium_user_data_dir()
 
         def on_item(_: State, item: MenuItem) -> None:
             assert(isinstance(chromium_info, tuple))
@@ -450,7 +451,7 @@ def launch_player_with_chromium(
         print_feedback(make_error_string(e), is_error=True)
 
 
-chromium_info = AppUtil.get_chromium_info()
+chromium_info = app_support.get_chromium_info()
 
 LOUDNORM_SUBHEADING = \
 """Performs an extra pass after concatenation to minimize volume disparities between

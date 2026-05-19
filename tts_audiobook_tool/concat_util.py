@@ -6,8 +6,8 @@ from pathlib import Path
 import numpy as np
 from numpy import ndarray
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.models_util import ModelsUtil
@@ -114,7 +114,7 @@ class ConcatUtil:
 
         # Post-concat feedback, prompt
         
-        AppUtil.play_done_sound()
+        app_support.play_done_sound()
         elapsed = duration_string(time.time() - start_time)
         printt(f"Finished{COL_DIM} (elapsed: {elapsed})")
         printt()

@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.app_util import AppUtil
+from tts_audiobook_tool.app_support import app_display
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
@@ -35,7 +35,7 @@ class TextMenu:
             return make_menu_label("Text segmentation max words per segment", value)
 
         def on_print(_: State, __: MenuItem) -> None:
-            AppUtil.print_project_text(
+            app_display.print_project_text(
                 phrase_groups=state.project.phrase_groups,
                 extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
                 language_code_used=state.project.applied_language_code,
@@ -217,7 +217,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             raise ValueError(f"Bad value: {item.data!r}")
     
     # Preview text segments
-    AppUtil.print_project_text(
+    app_display.print_project_text(
         phrase_groups=phrase_groups,
         extant_indices=None,
         language_code_used=state.project.language_code,

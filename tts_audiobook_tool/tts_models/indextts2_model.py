@@ -5,8 +5,8 @@ from indextts.infer_v2 import IndexTTS2 # type: ignore
 from numpy import ndarray
 import numpy
 
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.app_util import AppUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
@@ -120,7 +120,7 @@ class IndexTts2Model(IndexTts2BaseModel):
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        AppUtil.set_seed(seed)
+        app_support.set_seed(seed)
 
         try:
             # FYI, infer() caches loaded voice sample/s internally
