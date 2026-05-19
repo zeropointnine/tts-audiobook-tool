@@ -8,7 +8,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_support import app_memory
-from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -30,7 +30,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
-from tts_audiobook_tool.whisper_util import WhisperUtil
+from tts_audiobook_tool.transcriber import Transcriber
 
 class GenerateUtil:
 
@@ -58,7 +58,7 @@ class GenerateUtil:
         stt_config = state.prefs.stt_config
         showed_vram_warning = False
 
-        warm_up_result = ModelsUtil.warm_up_models(state)
+        warm_up_result = ModelManager.warm_up_models(state)
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:
@@ -372,7 +372,7 @@ class GenerateUtil:
                 continue
 
             # Transcribe
-            gen_result = WhisperUtil.transcribe_to_words(
+            gen_result = Transcriber.transcribe_to_words(
                 sound, project.language_code, stt_variant, stt_config
             )
             if isinstance(gen_result, str):

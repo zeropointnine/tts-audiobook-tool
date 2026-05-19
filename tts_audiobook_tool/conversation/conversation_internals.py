@@ -39,7 +39,7 @@ from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.system_support.terminal import get_terminal_width
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
-from tts_audiobook_tool.whisper_util import WhisperUtil
+from tts_audiobook_tool.transcriber import Transcriber
 from tts_audiobook_tool.util import make_error_string
 
 
@@ -934,7 +934,7 @@ class ResponseSession:
             if len(phrases) <= 1:
                 return []
 
-            words = WhisperUtil.transcribe_to_words(
+            words = Transcriber.transcribe_to_words(
                 sound,
                 self.project.language_code,
                 self.stt_variant,

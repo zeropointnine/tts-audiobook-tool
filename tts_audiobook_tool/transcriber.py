@@ -10,8 +10,17 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.util import make_error_string
 
 
-class WhisperUtil:
+class Transcriber:
+    """
+    Central entry point for converting audio into word-level transcript data.
 
+    Transcriber wraps the configured STT backend, handles backend-specific input
+    requirements such as sample-rate conversion, and normalizes transcription
+    results into the app's shared Word/Segment structures. It also provides small
+    helpers for flattening transcript words into display text or JSON-friendly
+    data.
+    """
+    
     @staticmethod
     def transcribe_to_words(
             sound: Sound,
@@ -28,7 +37,7 @@ class WhisperUtil:
         Makes temporary resampled audio if necessary.
         """
         if sound.sr != WHISPER_SAMPLERATE:
-            sound = WhisperUtil.resample_sound_for_whisper(sound)
+            sound = Transcriber.resample_sound_for_whisper(sound)
 
         Stt.set_variant(stt_variant)
         Stt.set_config(stt_config)
@@ -48,7 +57,7 @@ class WhisperUtil:
             return make_error_string(e)
 
         # Flatten Segments into Words
-        words = WhisperUtil.get_words_from_segments(segments)
+        words = Transcriber.get_words_from_segments(segments)
         return words
 
     # ---
@@ -66,8 +75,8 @@ class WhisperUtil:
 
     @staticmethod
     def get_flat_text_from_segments(segments: Iterable[Segment]) -> str:
-        words = WhisperUtil.get_words_from_segments(segments)
-        return WhisperUtil.get_flat_text_from_words(words)
+        words = Transcriber.get_words_from_segments(segments)
+        return Transcriber.get_flat_text_from_words(words)
 
     @staticmethod
     def get_flat_text_from_words(words: list[Word]) -> str:
@@ -86,10 +95,10 @@ class WhisperUtil:
         when they are not of high-ish confidence, apparently.
         """
         if min_probability <= 0.0:
-            text = WhisperUtil.get_flat_text_from_words(words)
+            text = Transcriber.get_flat_text_from_words(words)
         else:
             words = [word for word in words if word.probability >= min_probability]
-            text = WhisperUtil.get_flat_text_from_words(words)
+            text = Transcriber.get_flat_text_from_words(words)
         return text
     
     @staticmethod

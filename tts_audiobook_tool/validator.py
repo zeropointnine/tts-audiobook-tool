@@ -23,7 +23,7 @@ class WordErrorAlignmentStep:
     transcript_text: str
 
 
-from tts_audiobook_tool.whisper_util import WhisperUtil
+from tts_audiobook_tool.transcriber import Transcriber
 
 class Validator:
     """
@@ -59,7 +59,7 @@ class Validator:
         Calculates word errors.
         Returns either WordErrorResult or TrimmedResult
         """
-        transcript = WhisperUtil.get_flat_text_from_words(transcript_words)
+        transcript = Transcriber.get_flat_text_from_words(transcript_words)
         _, word_errors, num_words, threshold = Validator.get_word_error_fail(
             source, transcript, language_code=language_code, strictness=strictness
         )
@@ -109,7 +109,7 @@ class Validator:
         if overage < 0:
             return None
                 
-        transcript = WhisperUtil.get_flat_text_from_words(transcript_words)
+        transcript = Transcriber.get_flat_text_from_words(transcript_words)
         normalized_transcript = TextNormalizer.normalize_transcript(
             transcript, normalized_source, language_code
         )
@@ -117,7 +117,7 @@ class Validator:
         for i in range(overage + 1):
             
             sub_transcript_words = transcript_words[i:i+source_word_count]
-            sub_transcript = WhisperUtil.get_flat_text_from_words(sub_transcript_words)
+            sub_transcript = Transcriber.get_flat_text_from_words(sub_transcript_words)
             normalized_sub_transcript = TextNormalizer.normalize_transcript(sub_transcript, normalized_source, language_code)
 
             errors = Validator.get_word_errors(normalized_source, normalized_sub_transcript, language_code)
@@ -213,7 +213,7 @@ class Validator:
         and has a high enough probability.
         TODO: Unverified
         """
-        transcribed_words = WhisperUtil.transcribe_to_words(sound, "", Stt.get_variant(), Stt.get_config()) # yek 
+        transcribed_words = Transcriber.transcribe_to_words(sound, "", Stt.get_variant(), Stt.get_config()) # yek 
         if isinstance(transcribed_words, str):
             return False
         if not transcribed_words:

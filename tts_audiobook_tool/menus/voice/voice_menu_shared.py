@@ -16,7 +16,7 @@ from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.whisper_util import WhisperUtil
+from tts_audiobook_tool.transcriber import Transcriber
 
 class VoiceMenuShared:
 
@@ -180,7 +180,7 @@ class VoiceMenuShared:
                     stt_variant = SttVariant.LARGE_V3
                 else:
                     stt_variant = state.prefs.stt_variant
-                sound_result = WhisperUtil.transcribe_to_words(
+                sound_result = Transcriber.transcribe_to_words(
                     sound, state.project.language_code, stt_variant, state.prefs.stt_config
                 )
                 if state.prefs.stt_variant == SttVariant.DISABLED:
@@ -192,7 +192,7 @@ class VoiceMenuShared:
                     return
 
                 words = sound_result
-                transcript = WhisperUtil.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
+                transcript = Transcriber.get_flat_text_filtered_by_probability(words, VOICE_CLONE_TRANSCRIBE_MIN_PROBABILITY)
                 print(f"Transcribed text {COL_DIM}(low probability words filtered out){COL_DEFAULT}:")
                 printt(f"{COL_DIM_ITALICS}{transcript}")
                 printt()

@@ -15,7 +15,7 @@ from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.system_support.ansi import Ansi
-from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -110,7 +110,7 @@ class Conversation:
             return False
 
         # Warm up models
-        warm_up_result = ModelsUtil.warm_up_models(state, skip_yamnet=True)
+        warm_up_result = ModelManager.warm_up_models(state, skip_yamnet=True)
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:

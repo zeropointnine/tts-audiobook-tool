@@ -15,7 +15,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
-from tts_audiobook_tool.whisper_util import WhisperUtil
+from tts_audiobook_tool.transcriber import Transcriber
 from tts_audiobook_tool.util import *
 
 class SegmentTranscriptUtil:
@@ -35,7 +35,7 @@ class SegmentTranscriptUtil:
 
         prompt = phrase_group.as_flattened_phrase().text
         source = phrase_group.as_flattened_phrase().text
-        transcript = WhisperUtil.get_flat_text_from_words(validation_result.transcript_words)
+        transcript = Transcriber.get_flat_text_from_words(validation_result.transcript_words)
         normalized_source, normalized_transcript = TextNormalizer.normalize_source_and_transcript(
             source, transcript, project.language_code
         )
@@ -56,7 +56,7 @@ class SegmentTranscriptUtil:
             normalized_transcript=normalized_transcript,
             generation_word_error_count=generation_word_error_count,
             timed_phrases=SegmentTranscriptUtil.make_timed_phrases(phrase_group, validation_result),
-            transcript_words=WhisperUtil.words_to_json(validation_result.transcript_words),
+            transcript_words=Transcriber.words_to_json(validation_result.transcript_words),
             exception=exception
         )
 

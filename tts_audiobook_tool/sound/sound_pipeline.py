@@ -158,9 +158,9 @@ class SoundPipeline:
 
     @staticmethod
     def apply_sidon_upsampling(sound: Sound) -> Sound | str:
-        from tts_audiobook_tool.models_util import ModelsUtil
+        from tts_audiobook_tool.model_manager import ModelManager
 
-        upsampler = ModelsUtil.get_sidon_upsampler()
+        upsampler = ModelManager.get_sidon_upsampler()
         assert upsampler
         result = upsampler.process(sound)
         if isinstance(result, str):

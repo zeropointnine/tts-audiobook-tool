@@ -11,7 +11,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
@@ -58,10 +58,10 @@ class ConcatUtil:
             if not SidonUtil.has_sidon():
                 printt(f"{COL_DIM_ITALICS}Warning: Sidon enabled but Sidon library not installed")
                 printt()
-        if state.project.use_upsampler and ModelsUtil.is_any_model_loaded():
+        if state.project.use_upsampler and ModelManager.is_any_model_loaded():
             printt(f"{COL_DIM_ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
             printt()
-            ModelsUtil.clear_all_models(except_sidon=True)
+            ModelManager.clear_all_models(except_sidon=True)
 
         # Make subdir
         subdir = datetime.now().strftime("%y%m%d_%H%M%S") # eg, 260518_120811
@@ -120,7 +120,7 @@ class ConcatUtil:
         printt(f"Finished{COL_DIM} (elapsed: {elapsed})")
         printt()
 
-        ModelsUtil.clear_sidon_upsampler()
+        ModelManager.clear_sidon_upsampler()
 
         hints.show_player_hint_if_necessary(state.prefs)
 

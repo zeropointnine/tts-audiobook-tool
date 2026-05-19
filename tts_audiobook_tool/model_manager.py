@@ -11,10 +11,11 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 
 
-class ModelsUtil:
+class ModelManager:
     """
-    Multiple-model management util functions
-    Including YamnetDetector, and Sidonmodel (holds statics instance)
+    Multiple-model management utils.
+
+    Including YamnetDetector and Sidonmodel (which it holds a static instance)
     """
 
     sidon_upsampler: SidonUtil | None = None
@@ -100,7 +101,7 @@ class ModelsUtil:
         Tts.clear_tts_model()
         MusicDetector.clear_model()
         if not except_sidon:
-            ModelsUtil.clear_sidon_upsampler()
+            ModelManager.clear_sidon_upsampler()
 
         # For good measure
         app_memory.gc_ram_vram()
@@ -110,7 +111,7 @@ class ModelsUtil:
         return Stt.has_instance() or \
             Tts.instance_exists() or \
             MusicDetector.has_instance() or \
-            ModelsUtil.sidon_upsampler is not None
+            ModelManager.sidon_upsampler is not None
 
     @staticmethod
     def get_sidon_upsampler() -> SidonUtil | None:
@@ -118,14 +119,14 @@ class ModelsUtil:
             return None
         if not SidonUtil.has_sidon():
             return None
-        if ModelsUtil.sidon_upsampler is None:
+        if ModelManager.sidon_upsampler is None:
             print_init("Initializing Sidon upsampler (CUDA)...")
-            ModelsUtil.sidon_upsampler = SidonUtil()
-        return ModelsUtil.sidon_upsampler
+            ModelManager.sidon_upsampler = SidonUtil()
+        return ModelManager.sidon_upsampler
 
     @staticmethod
     def clear_sidon_upsampler() -> None:
-        if ModelsUtil.sidon_upsampler is not None:
-            ModelsUtil.sidon_upsampler.kill()
-            ModelsUtil.sidon_upsampler = None
+        if ModelManager.sidon_upsampler is not None:
+            ModelManager.sidon_upsampler.kill()
+            ModelManager.sidon_upsampler = None
             app_memory.gc_ram_vram()

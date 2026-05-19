@@ -21,7 +21,7 @@ from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.whisper_util import WhisperUtil
+from tts_audiobook_tool.transcriber import Transcriber
 
 
 def make_timed_phrases(
@@ -254,7 +254,7 @@ def _transcribe_stream_with_overlap(path: str) -> list[list[Word]] | None:
         print(s, end="", flush=True)
 
         segments, _ = Stt.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
-        transcribed_words = WhisperUtil.get_words_from_segments(segments)
+        transcribed_words = Transcriber.get_words_from_segments(segments)
         updated_words = []
         for word in transcribed_words:
             updated_word = ConcreteWord(

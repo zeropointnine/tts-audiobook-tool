@@ -5,7 +5,7 @@ from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.models_util import ModelsUtil
+from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -27,7 +27,7 @@ class OptionsMenu:
             app_support.log_unload_memory_snapshot("before")
             if before_string:
                 printt(f"Before: {before_string}")
-            ModelsUtil.clear_all_models()
+            ModelManager.clear_all_models()
             after_string = app_support.make_memory_string()
             app_support.log_unload_memory_snapshot("after")
             if after_string:
