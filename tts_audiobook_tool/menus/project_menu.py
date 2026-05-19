@@ -8,7 +8,7 @@ from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_util import ProjectUtil
-from tts_audiobook_tool.app_text_util import AppTextUtil
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -169,7 +169,7 @@ class ProjectMenu:
                 for phrase in group.phrases:
                     all_words_raw.extend(phrase.words)
 
-            items = AppTextUtil.get_uncommon_words(all_words_raw)
+            items = app_text.get_uncommon_words(all_words_raw)
             if not items:
                 printt("None found")
             else:

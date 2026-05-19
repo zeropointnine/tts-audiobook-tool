@@ -1,7 +1,7 @@
 import re
 from num2words import num2words
 
-from tts_audiobook_tool.app_text_util import AppTextUtil
+from tts_audiobook_tool.app_support import app_text
 
 class PromptNormalizer:
     """
@@ -23,7 +23,7 @@ class PromptNormalizer:
         TODO: Strip out stray punctuation-only "words" which do not seem "caesura-related". Or smth.
         """
 
-        text = AppTextUtil.normalize_text_general(text)
+        text = app_text.normalize_text_general(text)
 
         # Collapse multiple triple-dots or multiple ellipses character
         pattern = r'\.{3,}'
@@ -38,7 +38,7 @@ class PromptNormalizer:
         words = text.split(" ")
         new_words = []
         for word in words:
-            if not AppTextUtil.is_ws_punc(word):
+            if not app_text.is_ws_punc(word):
                 new_words.append(word)
             else:
                 whitelist = ["...", "…", "\u2014", "\u2013", "-"]
@@ -63,7 +63,7 @@ class PromptNormalizer:
             except NotImplementedError:
                 pass # Fail silently
 
-        text = AppTextUtil.massage_post_normalize(text)
+        text = app_text.massage_post_normalize(text)
 
         return text
     
@@ -72,12 +72,12 @@ class PromptNormalizer:
         prompt: str, substitutions: dict[str, str], language_code: str
     ) -> str:
 
-        prompt_raw_words_original = AppTextUtil.get_words(prompt)
+        prompt_raw_words_original = app_text.get_words(prompt)
         prompt_raw_words = []
         
         for prompt_raw_word in prompt_raw_words_original:
 
-            before, prompt_word, after = AppTextUtil.split_raw_word(prompt_raw_word)
+            before, prompt_word, after = app_text.split_raw_word(prompt_raw_word)
             prompt_word_lc = prompt_word.lower()
 
             for reference_word, substitute_word in substitutions.items():
@@ -124,7 +124,7 @@ class PromptNormalizer:
         """
         THRESHOLD = 3
 
-        words = AppTextUtil.get_words(prompt)
+        words = app_text.get_words(prompt)
         should = False
         count = 0
 

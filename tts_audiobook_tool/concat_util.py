@@ -24,7 +24,7 @@ from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.app_types.phrase import Phrase
-from tts_audiobook_tool.app_text_util import AppTextUtil
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
@@ -490,7 +490,7 @@ def make_stem(
     # Make Filename
     extant_file_names = [file_name for _, file_name in phrases_and_paths if file_name]
     # [1] project name
-    stem = AppTextUtil.sanitize_for_filename( Path(project.dir_path).name[:20] ) + " "
+    stem = app_text.sanitize_for_filename(Path(project.dir_path).name[:20]) + " "
     # [2] file number
     if num_chapters > 1:
         stem += f"[{ chapter_index+1 } of {num_chapters}]" + " "

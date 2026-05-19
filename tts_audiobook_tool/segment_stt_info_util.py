@@ -11,7 +11,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound_segment_util import get_segment_stt_info_path
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
-from tts_audiobook_tool.app_text_util import AppTextUtil
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
@@ -208,7 +208,7 @@ class SegmentSttInfoUtil:
 
     @staticmethod
     def get_threshold(info: SegmentSttInfo, strictness: Strictness) -> int:
-        num_words = AppTextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
+        num_words = app_text.get_word_count(info.normalized_source, vocalizable_only=True)
         return ValidateUtil.compute_threshold(num_words, strictness)
 
     @staticmethod
@@ -245,7 +245,7 @@ class SegmentSttInfoUtil:
             printt()
             return
 
-        num_words = AppTextUtil.get_word_count(info.normalized_source, vocalizable_only=True)
+        num_words = app_text.get_word_count(info.normalized_source, vocalizable_only=True)
         filename = text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
         num_word_errors = SegmentSttInfoUtil.get_word_error_count(info)
         threshold = SegmentSttInfoUtil.get_threshold(info, project.strictness)
@@ -294,7 +294,7 @@ class SegmentSttInfoUtil:
         """
         phrase_group = project.phrase_groups[sound_segment_index]
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, project.language_code)
-        num_words = AppTextUtil.get_word_count(normalized_source, vocalizable_only=True)
+        num_words = app_text.get_word_count(normalized_source, vocalizable_only=True)
         threshold = ValidateUtil.compute_threshold(num_words, project.strictness)
         filename = text_util.make_terminal_hyperlink(str(sound_path), sound_segment.file_name, is_file=True)
         num_errors = "?" if sound_segment.num_errors < 0 else str(sound_segment.num_errors)

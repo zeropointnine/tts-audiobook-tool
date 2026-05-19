@@ -6,7 +6,7 @@ from whisper_normalizer.english import EnglishNumberNormalizer
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.text_ops.spanish_number_normalizer import SpanishNumberNormalizer
-from tts_audiobook_tool.app_text_util import AppTextUtil
+from tts_audiobook_tool.app_support import app_text
 
 
 class TextNormalizer:
@@ -24,7 +24,7 @@ class TextNormalizer:
         Handles international characters via Unicode-aware regex (backslash-w).
         """
         
-        text = AppTextUtil.normalize_text_general(text)
+        text = app_text.normalize_text_general(text)
         
         # Use casefold for aggressive lowercase (better for Intl text)
         text = text.casefold().strip()
@@ -46,7 +46,7 @@ class TextNormalizer:
         # TODO: Revisit?
         text = re.sub(r'[^\w\s]', '', text) # TODO: '' or ' ' ?
 
-        text = AppTextUtil.massage_post_normalize(text)
+        text = app_text.massage_post_normalize(text)
 
         return text
 

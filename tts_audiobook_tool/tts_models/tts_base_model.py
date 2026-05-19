@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, Strictness
 from tts_audiobook_tool.prereqs_util import PrereqError
-from tts_audiobook_tool.app_text_util import AppTextUtil
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -179,7 +179,7 @@ class TtsBaseModel(ABC):
         # Remove filename 'postfix decorator'; not great
         voice_file_name = voice_file_name.strip("_" + cls.INFO.file_tag)
         
-        tag = AppTextUtil.sanitize_for_filename(voice_file_name[:30])
+        tag = app_text.sanitize_for_filename(voice_file_name[:30])
         return tag
     
     @classmethod
