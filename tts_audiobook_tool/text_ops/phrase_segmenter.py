@@ -8,6 +8,9 @@ from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.app_support import app_text
 
 
+DOWNGRADE_CONSECUTIVE_SECTIONS = True
+
+
 class PhraseSegmenter:
     """ 
     Creates Phrases from strings
@@ -54,6 +57,8 @@ class PhraseSegmenter:
         phrases = new_result
 
         phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
+        if DOWNGRADE_CONSECUTIVE_SECTIONS:
+            phrases = PhraseSegmenter.downgrade_consecutive_sections(phrases)
 
         return phrases
 
@@ -201,6 +206,30 @@ class PhraseSegmenter:
                 results[-1].text += phrase.text
 
         return results
+
+    @staticmethod
+    def downgrade_consecutive_sections(phrases: list[Phrase]) -> list[Phrase]:
+        """
+        Downgrades immediate repeated SECTION reasons to PARAGRAPH.
+
+        Some EPUB-to-text converters emit multiple blank lines around adjacent headings,
+        e.g. chapter number followed by chapter title. The first such break can be useful
+        as a section/prosody marker, but repeated immediate SECTION reasons overstate the
+        structure and can trigger repeated section effects in downstream audio/browser flows.
+        """
+
+        last_reason_was_section = False
+
+        for phrase in phrases:
+            if phrase.reason == Reason.SECTION:
+                if last_reason_was_section:
+                    phrase.reason = Reason.PARAGRAPH
+                    phrase.text = phrase.text.rstrip() + "\n\n"
+                last_reason_was_section = True
+            else:
+                last_reason_was_section = False
+
+        return phrases
 
 # ---
 

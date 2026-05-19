@@ -187,6 +187,13 @@ The first chapter starts at phrase group `0`, so it does not need a divider entr
 
 `mark_last_phrase_as_section(...)` also marks the last phrase of each chapter as `Reason.SECTION` and normalizes its trailing line breaks, matching the app's existing section-ending expectations.
 
+This EPUB boundary marker is structural: it represents the end of a retained EPUB spine
+document, not merely whitespace found in the source text. To avoid duplicated section
+behavior, the importer also downgrades section-like groups at the start of a subsequent
+spine document when a previous retained document already ended with a forced
+`Reason.SECTION`. This handles common heading patterns where the next XHTML file begins
+with chapter-title text separated by multiple blank lines.
+
 ---
 
 ## Text Menu Integration

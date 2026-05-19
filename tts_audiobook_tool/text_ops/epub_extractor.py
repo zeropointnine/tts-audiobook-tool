@@ -16,6 +16,9 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 
 
+DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY = True
+
+
 @dataclass
 class EpubSourceChapter:
     title: str
@@ -414,6 +417,8 @@ class EpubExtractor:
                 strategy=segmentation_strategy,
                 pysbd_lang=language_code,
             )
+            if phrase_groups and DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY:
+                EpubExtractor.downgrade_leading_section_groups(chapter_phrase_groups)
             EpubExtractor.mark_last_phrase_as_section(chapter_phrase_groups)
             phrase_groups.extend(chapter_phrase_groups)
             raw_text_parts.append(chapter_text)
@@ -509,6 +514,24 @@ class EpubExtractor:
         last_phrase.reason = Reason.SECTION
         # Also add two blank lines at end, matching expectations and behavior for flat text flow
         last_phrase.text = last_phrase.text.rstrip() + "\n\n\n"
+
+    @staticmethod
+    def downgrade_leading_section_groups(phrase_groups: list[PhraseGroup]) -> None:
+        """
+        Downgrades section-like groups at the start of an EPUB spine document.
+
+        EPUB import force-marks the previous retained spine document's final phrase as
+        SECTION. If the next spine document begins with heading text that also ends in
+        section-like spacing, that leading source-derived SECTION is redundant and should
+        behave as a paragraph. The spine boundary marker remains on the previous item.
+        """
+
+        for group in phrase_groups:
+            if group.last_reason != Reason.SECTION:
+                break
+            last_phrase = group.phrases[-1]
+            last_phrase.reason = Reason.PARAGRAPH
+            last_phrase.text = last_phrase.text.rstrip() + "\n\n"
 
     @staticmethod
     def load_source_chapters(epub_path: str) -> tuple[list[EpubSourceChapter], str, list[str], list[str]]:

@@ -58,6 +58,52 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertTrue(result.phrase_groups[0].phrases[-1].text.endswith("\n\n\n"))
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("\n\n\n"))
 
+    def test_import_epub_downgrades_leading_section_after_previous_spine_boundary(self):
+        source_chapters = [
+            EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose."),
+            EpubSourceChapter(
+                "Chapter 2",
+                "chapter2.xhtml",
+                "application/xhtml+xml",
+                "Chapter 2\n\n\nThe Beginning\n\n\nChapter two prose.",
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.NORMAL,
+                language_code="en",
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(result.section_dividers, [1])
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION)
+        self.assertEqual(result.phrase_groups[1].text, "Chapter 2\n\n")
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
+        self.assertEqual(result.phrase_groups[2].last_reason, Reason.PARAGRAPH)
+        self.assertEqual(result.phrase_groups[3].last_reason, Reason.SECTION)
+
+    def test_import_epub_single_group_chapter_still_ends_as_section(self):
+        source_chapters = [
+            EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose."),
+            EpubSourceChapter("Chapter 2", "chapter2.xhtml", "application/xhtml+xml", "Chapter two prose."),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.NORMAL,
+                language_code="en",
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(len(result.phrase_groups), 2)
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SECTION)
+        self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("\n\n\n"))
+
     def test_import_epub_prepends_metadata_book_title_before_first_retained_chapter(self):
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter 1\n\nThe story begins."),

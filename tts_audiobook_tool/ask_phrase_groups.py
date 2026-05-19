@@ -45,7 +45,7 @@ def get_from_text_file(
 
     prefs.last_text_dir = str(Path(path).parent)
 
-    print("Segmenting text... ", end="", flush=True)
+    print(f"{COL_DIM_ITALICS}Segmenting text... ", end="", flush=True)
     phrase_groups = PhraseGrouper.text_to_groups(
         raw_text,
         pysbd_lang=pysbd_language,

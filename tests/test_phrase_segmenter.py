@@ -5,6 +5,35 @@ from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 
 class TestPhraseSegmenter(unittest.TestCase):
 
+    def test_text_to_phrases_downgrades_immediate_consecutive_sections(self):
+        text = "Chapter 1\n\n\nThe Beginning\n\n\nProse starts here."
+
+        result = PhraseSegmenter.text_to_phrases(text, 40, "en")
+
+        self.assertEqual(
+            result,
+            [
+                Phrase("Chapter 1\n\n\n", Reason.SECTION),
+                Phrase("The Beginning\n\n", Reason.PARAGRAPH),
+                Phrase("Prose starts here.", Reason.SENTENCE),
+            ]
+        )
+
+    def test_text_to_phrases_keeps_non_consecutive_sections(self):
+        text = "Chapter 1\n\n\nProse starts here.\n\nNext section\n\n\nMore prose."
+
+        result = PhraseSegmenter.text_to_phrases(text, 40, "en")
+
+        self.assertEqual(
+            result,
+            [
+                Phrase("Chapter 1\n\n\n", Reason.SECTION),
+                Phrase("Prose starts here.\n\n", Reason.PARAGRAPH),
+                Phrase("Next section\n\n\n", Reason.SECTION),
+                Phrase("More prose.", Reason.SENTENCE),
+            ]
+        )
+
     def test_text_to_phrases(self):
 
         items = [

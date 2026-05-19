@@ -129,11 +129,11 @@ class Reason(tuple[int, str, float], Enum):
 class PhraseGroup:
     """
     Wraps a list of `Phrase` instances.
-    Gets passed to TTS inferencing routine.
+    This is the app's atomic unit of TTS text inference.
     
-    Reason for doing this rather than simply using a Phrase or simple string is that after TTS+STT, 
-    we eventually want to forced-align the transcript with the individual phrases,
-    ie, add 'phrase-level granularity' to the timing metadata.
+    Reason for this higher-level wrapper is that after TTS+STT, 
+    we can force-align the transcript with the PhraseGroup's constituent phrases.
+    Ie, add 'phrase-level granularity' to the timing metadata.
     """
     
     def __init__(self, phrases: list[Phrase] | None = None):
