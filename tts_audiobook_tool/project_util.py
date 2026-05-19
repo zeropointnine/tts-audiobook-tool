@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
@@ -222,7 +222,7 @@ class ProjectUtil:
         if is_all:
             result = set(range(len(project.phrase_groups)))
         else:
-            result, _ = ParseUtil.parse_ranges_string(range_string, len(project.phrase_groups))
+            result, _ = RangeStringUtil.parse_ranges_string(range_string, len(project.phrase_groups))
         return result
 
     @staticmethod

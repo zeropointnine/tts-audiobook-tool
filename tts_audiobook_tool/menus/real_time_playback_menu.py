@@ -1,7 +1,7 @@
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.phrase_group_ask_util import PhraseGroupAskUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.real_time_playback_util import RealTimeUtil
@@ -80,7 +80,7 @@ class RealTimePlaybackMenu:
         inp = ask.ask()
         if not inp:
             return
-        result = ParseUtil.parse_range_string_normal(inp, length)
+        result = RangeStringUtil.parse_range_string_normal(inp, length)
         if isinstance(result, str):
             ask.ask_error(result)
             return

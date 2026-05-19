@@ -9,7 +9,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
@@ -237,14 +237,14 @@ def ask_item_range(state: State) -> None:
     if inp == "all" or inp == "a":
         indices = set( [item for item in range(0, num_items)] )
     else:
-        indices, warnings = ParseUtil.parse_ranges_string(inp, num_items)
+        indices, warnings = RangeStringUtil.parse_ranges_string(inp, num_items)
         if not indices:
             return
         if warnings:
             print_feedback("\n".join(warnings))
             return
 
-    s = ParseUtil.make_ranges_string(indices, len(state.project.phrase_groups))
+    s = RangeStringUtil.make_ranges_string(indices, len(state.project.phrase_groups))
     state.project.generate_range_string = "" if s == "all" else s
     state.project.save()
 
@@ -273,7 +273,7 @@ def ask_delete_segments(state: State) -> None:
     if inp == "all" or inp == "a":
         selected_indices = set( [item for item in range(0, total_num_items)] )
     else:
-        selected_indices, _ = ParseUtil.parse_ranges_string(inp, total_num_items)
+        selected_indices, _ = RangeStringUtil.parse_ranges_string(inp, total_num_items)
         if not selected_indices:
             print_feedback("No valid line numbers entered")
             return
@@ -290,7 +290,7 @@ def ask_delete_segments(state: State) -> None:
     else:
         segment_word = make_noun("segment", "segments", len(indices_to_delete))
         s = f"The following {len(indices_to_delete)} {segment_word} will be deleted: \n"
-        s += ParseUtil.make_ranges_string(indices_to_delete, total_num_items)
+        s += RangeStringUtil.make_ranges_string(indices_to_delete, total_num_items)
     printt(s)
     if not ask.ask_confirm():
         return

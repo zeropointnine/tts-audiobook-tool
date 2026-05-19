@@ -10,7 +10,7 @@ from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.parse_util import ParseUtil
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
@@ -382,7 +382,7 @@ def ask_chapter_indices(infos: list[ChapterInfo]) -> list[int] | None:
             return None
         return indices
 
-    indices, warnings = ParseUtil.parse_ranges_string(inp, len(infos))
+    indices, warnings = RangeStringUtil.parse_ranges_string(inp, len(infos))
     if warnings:
         message = "\n".join(warnings)
         print_feedback(message, is_error=True)

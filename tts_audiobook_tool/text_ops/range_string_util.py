@@ -1,7 +1,7 @@
-class ParseUtil:
+class RangeStringUtil:
 
     @staticmethod
-    def parse_ranges_string(string: str, num_items: int) -> tuple[ set[int], list[str] ]:
+    def parse_ranges_string(string: str, num_items: int) -> tuple[set[int], list[str]]:
         """
         Expects a comma-delimited list of one-indexed ints and/or int ranges. Eg, "1, 3, 6-8"
         Returns tuple of zero-indexed index values and warning strings (eg, 1,3,6,7,8)
@@ -10,7 +10,7 @@ class ParseUtil:
         ints = []
         warnings: list[str] = []
 
-        tokens = split_and_strip(string, ",")
+        tokens = _split_and_strip(string, ",")
         if not tokens:
             return (set(), [])
 
@@ -22,7 +22,7 @@ class ParseUtil:
                 else:
                     ints.append(value - 1)
             else:
-                items = ParseUtil._parse_range_string(token, num_items)
+                items = RangeStringUtil.parse_range_token(token, num_items)
                 if not items:
                     warnings.append(f"Bad value: {token}")
                 else:
@@ -41,14 +41,14 @@ class ParseUtil:
             return "none"
 
         ints_list = sorted(list(set(zero_indexed_ints)))
-        one_indexed_parts: list[ int | tuple[int, int] ] = []
+        one_indexed_parts: list[int | tuple[int, int]] = []
 
         i = 0
         while i < len(ints_list):
             start = ints_list[i]
             end = start
-            while i + 1 < len(ints_list) and ints_list[i+1] == end + 1:
-                end = ints_list[i+1]
+            while i + 1 < len(ints_list) and ints_list[i + 1] == end + 1:
+                end = ints_list[i + 1]
                 i += 1
 
             if start == end:
@@ -72,7 +72,7 @@ class ParseUtil:
         return ", ".join(strings)
 
     @staticmethod
-    def _parse_range_string(string: str, max_one_indexed: int) -> list[int]:
+    def parse_range_token(string: str, max_one_indexed: int) -> list[int]:
         """
         Expects a string like "5-10" of one-indexed values. Or, "-5" or "5-".
         Returns zero-indexed list of expanded ints.
@@ -103,7 +103,7 @@ class ParseUtil:
                 return []
             if value > max_one_indexed:
                 return []
-            return [i for i in range(value -1 , max_one_indexed)]
+            return [i for i in range(value - 1, max_one_indexed)]
 
         # Eg, "5-10"
         tokens = string.split("-")
@@ -136,7 +136,7 @@ class ParseUtil:
         string = string.strip()
 
         if string.lower() in ["all", "a"]:
-            return (0,0)
+            return (0, 0)
 
         strings = string.split("-")
         strings = [string.strip() for string in strings]
@@ -151,11 +151,11 @@ class ParseUtil:
             # Single item means "start at a"
             str_a = strings[0]
             str_b = str(max_one_indexed)
-        else: # len == 2
+        else:  # len == 2
             str_a, str_b = strings
-            if not str_a: # eg, "-10", meaning 1-10
+            if not str_a:  # eg, "-10", meaning 1-10
                 str_a = str(1)
-            if not str_b: # eg, "5-", meaning 5 to the end
+            if not str_b:  # eg, "5-", meaning 5 to the end
                 str_b = str(max_one_indexed)
 
         if not str_a.isdigit():
@@ -170,13 +170,12 @@ class ParseUtil:
         if int_b < 1:
             return f"Out of range: {int_b}"
         if int_b > max_one_indexed:
-            int_b = max_one_indexed # silently clamp
+            int_b = max_one_indexed  # silently clamp
         if int_a > int_b:
             return "Bad values"
 
         return (int_a, int_b)
 
-# ---
 
-def split_and_strip(s: str, delimiter: str) -> list[str]:
+def _split_and_strip(s: str, delimiter: str) -> list[str]:
     return [item.strip() for item in s.split(delimiter) if item and item.strip()]
