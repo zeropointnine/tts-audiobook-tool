@@ -4,7 +4,7 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool import phrase_group_ask
+from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -142,7 +142,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     match item.data:
 
         case "import":
-            phrase_groups, raw_text = phrase_group_ask.get_from_text_file(
+            phrase_groups, raw_text = ask_phrase_groups.get_from_text_file(
                 state.project.max_words,
                 state.project.segmentation_strategy,
                 pysbd_language=state.project.language_code,
@@ -152,7 +152,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
                 return False
 
         case "manual":
-            phrase_groups, raw_text = phrase_group_ask.get_from_std_in(
+            phrase_groups, raw_text = ask_phrase_groups.get_from_std_in(
                 state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
             )
             if not phrase_groups:
