@@ -1,7 +1,7 @@
 import sys
 sys.path.insert(0, "/d/p/tts-audiobook-tool")
 
-from tts_audiobook_tool.llm_session import LlmSession
+from tts_audiobook_tool.conversation.llm_session import LlmSession
 
 """
 LlmUtil class - minimal functionality test 

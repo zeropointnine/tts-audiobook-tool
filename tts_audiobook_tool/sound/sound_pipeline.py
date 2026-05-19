@@ -15,15 +15,12 @@ if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 
 
-class SoundAppUtil:
-    """
-    """
-
+class SoundPipeline:
     @staticmethod
     def apply_generate_post_processing(sound: Sound) -> Sound:
         """
-        App's standard post-processing treatment on generated sounds. 
-    
+        App's standard post-processing treatment on generated sounds.
+
         - Trims silence from both ends
         - Applies peak normalization.
         - Does *not* touch samplerate.
@@ -72,7 +69,7 @@ class SoundAppUtil:
             return result
 
         sounds = [result] if isinstance(result, Sound) else result
-        return [SoundAppUtil.apply_generate_post_processing(sound) for sound in sounds]
+        return [SoundPipeline.apply_generate_post_processing(sound) for sound in sounds]
 
     @staticmethod
     def make_concat_rendered_sound_segment(
@@ -96,14 +93,14 @@ class SoundAppUtil:
         sound = result
 
         if use_upsampler:
-            result = SoundAppUtil.apply_sidon_upsampling(sound)
+            result = SoundPipeline.apply_sidon_upsampling(sound)
             if isinstance(result, str):
                 return result
             sound = result
 
-        sound = SoundAppUtil.resample_for_app(sound)
-        sound = SoundAppUtil.apply_high_shelf(sound, high_shelf)
-        sound = SoundAppUtil.append_pause_or_section_effect(
+        sound = SoundPipeline.resample_for_app(sound)
+        sound = SoundPipeline.apply_high_shelf(sound, high_shelf)
+        sound = SoundPipeline.append_pause_or_section_effect(
             sound,
             reason=phrase.reason,
             use_section_sound_effect=use_section_sound_effect,
@@ -125,15 +122,13 @@ class SoundAppUtil:
         - Resample to 48k if not already
         - Apply high shelf (optional)
         """
-        sound = SoundAppUtil.limit_silence_gaps_if_enabled(
+        sound = SoundPipeline.limit_silence_gaps_if_enabled(
             sound,
             enabled=limit_silence_gaps,
             max_gap_duration=limit_silence_gaps_duration,
         )
-        sound = SoundAppUtil.resample_for_app(sound)
-        return SoundAppUtil.apply_high_shelf(sound, high_shelf)
-
-# ---
+        sound = SoundPipeline.resample_for_app(sound)
+        return SoundPipeline.apply_high_shelf(sound, high_shelf)
 
     @staticmethod
     def append_pause_or_section_effect(
@@ -157,7 +152,7 @@ class SoundAppUtil:
             return sound
 
         new_sound, _ = SilenceUtil.limit_silence_gaps(sound, max_gap_duration)
-        if abs(new_sound.duration - sound.duration) > 0.01: # 'epsilon'
+        if abs(new_sound.duration - sound.duration) > 0.01:
             return new_sound
         return sound
 
@@ -170,7 +165,7 @@ class SoundAppUtil:
         result = upsampler.process(sound)
         if isinstance(result, str):
             return result
-        return result # rem, this is 48khz
+        return result
 
     @staticmethod
     def resample_for_app(sound: Sound) -> Sound:
@@ -185,8 +180,6 @@ class SoundAppUtil:
             q_like=high_shelf.q_like,
         )
 
-    # ---
-
     @staticmethod
     def apply_voice_clone_post_processing(sound: Sound, target_sr: int) -> Sound:
         """
@@ -198,4 +191,3 @@ class SoundAppUtil:
         sound = SoundUtil.resample_if_necessary(sound, target_sr)
         data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
         return Sound(data, sound.sr)
-

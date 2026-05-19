@@ -15,7 +15,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
@@ -466,7 +466,7 @@ class GenerateUtil:
                     GenerateUtil.save_debug_sound(project, indices[i], "raw", sound, is_realtime=is_realtime)
 
                 # Trim silence ends and peak-normalize
-                sound, start_trim_time, end_trim_time, original_duration = SoundAppUtil.apply_generate_post_processing_with_info(sound)
+                sound, start_trim_time, end_trim_time, original_duration = SoundPipeline.apply_generate_post_processing_with_info(sound)
 
                 # Limit internal silence gaps (done before STT transcription so timestamps match)
                 if sound.data.size > 0 and project.limit_silence_gaps:

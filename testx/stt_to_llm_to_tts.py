@@ -24,7 +24,7 @@ from faster_whisper.transcribe import Segment
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
-from tts_audiobook_tool.llm_session import LlmSession
+from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State

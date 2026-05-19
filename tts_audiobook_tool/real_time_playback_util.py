@@ -9,7 +9,7 @@ from tts_audiobook_tool.memory_util import MemoryUtil
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
@@ -135,7 +135,7 @@ class RealTimeUtil:
                 sound = sound_opt
 
             original_duration = sound.duration
-            sound = SoundAppUtil.prepare_generated_sound_for_playback(
+            sound = SoundPipeline.prepare_generated_sound_for_playback(
                 sound=sound,
                 high_shelf=state.project.get_high_shelf(),
                 limit_silence_gaps=state.project.limit_silence_gaps,

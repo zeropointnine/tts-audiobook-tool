@@ -15,7 +15,7 @@ import numpy as np
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.util import *
 
 _HERE = pathlib.Path(__file__).parent
@@ -371,7 +371,7 @@ class Server:
     ) -> bool:
         started_at = time.monotonic()
         self.log_tts_inference_start(mode="non-streaming", text=prompt_text)
-        result = SoundAppUtil.generate_processed_using_project(
+        result = SoundPipeline.generate_processed_using_project(
             self._project,
             [prompt_text],
             force_random_seed=False,
@@ -388,7 +388,7 @@ class Server:
             printt("* Model output is empty or silence")
             return False
 
-        sound = SoundAppUtil.prepare_generated_sound_for_playback(
+        sound = SoundPipeline.prepare_generated_sound_for_playback(
             sound=sound,
             high_shelf=self._project.get_high_shelf(),
             limit_silence_gaps=self._project.limit_silence_gaps,
@@ -396,7 +396,7 @@ class Server:
         )
 
         if phrase_group.last_reason != Reason.UNDEFINED:
-            sound = SoundAppUtil.append_pause_or_section_effect(
+            sound = SoundPipeline.append_pause_or_section_effect(
                 sound, reason=phrase_group.last_reason, use_section_sound_effect=False
             )
 

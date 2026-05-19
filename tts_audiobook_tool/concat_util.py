@@ -19,7 +19,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
-from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
@@ -372,7 +372,7 @@ class ConcatUtil:
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
 
-            result = SoundAppUtil.make_concat_rendered_sound_segment(
+            result = SoundPipeline.make_concat_rendered_sound_segment(
                 phrase, path, use_section_sound_effect, high_shelf,
                 use_upsampler=use_upsampler
             )

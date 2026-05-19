@@ -27,12 +27,12 @@ from tts_audiobook_tool.conversation.console_session import (
 )
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream, UiOp
 from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
-from tts_audiobook_tool.llm_session import LlmSession
+from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.app_types.phrase import Reason
-from tts_audiobook_tool.sound_app_util import SoundAppUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
@@ -707,7 +707,7 @@ class ResponseSession:
 
                 self.log_tts_inference_start(mode="non-streaming", text=text)
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                    result = SoundAppUtil.generate_processed_using_project(self.project, [text])
+                    result = SoundPipeline.generate_processed_using_project(self.project, [text])
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
@@ -737,13 +737,13 @@ class ResponseSession:
                     self.render_response()
                     continue
                 
-                sound = SoundAppUtil.prepare_generated_sound_for_playback(
+                sound = SoundPipeline.prepare_generated_sound_for_playback(
                     sound,
                     high_shelf=self.project.get_high_shelf(),
                     limit_silence_gaps=self.project.limit_silence_gaps,
                     limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
                 )
-                sound = SoundAppUtil.append_pause_or_section_effect(
+                sound = SoundPipeline.append_pause_or_section_effect(
                     sound, reason=reason, use_section_sound_effect=False,
                 )
 

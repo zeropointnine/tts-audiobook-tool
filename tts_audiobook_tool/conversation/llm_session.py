@@ -60,7 +60,7 @@ class LlmSession:
         if self.resolved_api_type == "anthropic" and max_tokens is None:
             raise ValueError("max_tokens is required for Anthropic API")
 
-    def vlog(self, label: str, data: object, extra_line: str="") -> None:
+    def vlog(self, label: str, data: object, extra_line: str = "") -> None:
         if not self.verbose:
             return
         sep = "─" * 60
@@ -161,7 +161,7 @@ class LlmSession:
         payload: dict = {
             "model": self.model,
             "messages": history_snapshot,
-            "max_tokens": self.max_tokens,  # validated non-None at __init__ for anthropic
+            "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             **self.extra_params,
         }
@@ -187,6 +187,7 @@ class LlmSession:
         self.vlog("REQUEST (openai)", payload)
         if on_chunk is not None:
             import time
+
             payload = {**payload, "stream": True}
             t0 = time.monotonic()
             response = requests.post(
@@ -226,10 +227,14 @@ class LlmSession:
                 t_total = time.monotonic() - t0
                 timing_info = f"first chunk: {t_first:.2f}s  " if t_first is not None else ""
                 timing_info += f"total: {t_total:.2f}s"
-                self.vlog("RESPONSE (openai streaming)", {
-                    "reasoning_content": reasoning_text or None,
-                    "content": full_text,
-                }, extra_line=timing_info)
+                self.vlog(
+                    "RESPONSE (openai streaming)",
+                    {
+                        "reasoning_content": reasoning_text or None,
+                        "content": full_text,
+                    },
+                    extra_line=timing_info,
+                )
             return full_text
         else:
             response = requests.post(
@@ -257,6 +262,7 @@ class LlmSession:
         self.vlog("REQUEST (anthropic)", payload)
         if on_chunk is not None:
             import time
+
             payload = {**payload, "stream": True}
             t0 = time.monotonic()
             response = requests.post(
@@ -294,10 +300,13 @@ class LlmSession:
                     break
             if self.verbose:
                 t_total = time.monotonic() - t0
-                self.vlog("RESPONSE (anthropic streaming)", {
-                    "thinking": thinking_text or None,
-                    "content": full_text,
-                })
+                self.vlog(
+                    "RESPONSE (anthropic streaming)",
+                    {
+                        "thinking": thinking_text or None,
+                        "content": full_text,
+                    },
+                )
                 first_str = f"first chunk: {t_first:.2f}s  " if t_first is not None else ""
                 print(f"{first_str}total: {t_total:.2f}s")
             return full_text
