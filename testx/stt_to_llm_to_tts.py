@@ -31,7 +31,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
+from tts_audiobook_tool.conversation.realtime_transcriber import RealtimeTranscriber
 
 API_ENDPOINT_URL = "https://api.deepseek.com/v1/chat/completions"
 TOKEN  = ""
@@ -179,7 +179,7 @@ def main() -> None:
         print(display, end="", flush=True)
         render_prev_lines = new_lines
 
-    util = WhisperRealTimeUtil(
+    util = RealtimeTranscriber(
         prefs=prefs,
         on_transcription=on_transcription, # type: ignore  # TODO: revisit if needed
         debug_vad=DEBUG_VAD,

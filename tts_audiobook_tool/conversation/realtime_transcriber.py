@@ -15,28 +15,7 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt
 
 
-@contextmanager
-def block_sigint_during_stream_start() -> Iterator[None]:
-    """
-    On POSIX, block SIGINT while creating the PortAudio stream so the spawned
-    audio thread inherits the mask and Ctrl-C stays on the main thread.
-
-    Windows does not expose signal.pthread_sigmask, so stream creation there is
-    already the best available behavior and should proceed without masking.
-    """
-    pthread_sigmask = getattr(signal, "pthread_sigmask", None)
-    if pthread_sigmask is None:
-        yield
-        return
-
-    old_mask = pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
-    try:
-        yield
-    finally:
-        pthread_sigmask(signal.SIG_SETMASK, old_mask)
-
-
-class WhisperRealTimeUtil:
+class RealtimeTranscriber:
     """
     Captures the default microphone and fires a callback with transcribed Segment
     objects as each utterance completes.
@@ -318,4 +297,28 @@ class WhisperRealTimeUtil:
             if segments_list:
                 self.on_transcription(segments_list)
         except Exception as e:
-            print(f"WhisperRealTimeUtil transcription error: {e}")
+            print(f"RealtimeTranscriber transcription error: {e}")
+
+# ---
+
+@contextmanager
+def block_sigint_during_stream_start() -> Iterator[None]:
+    """
+    On POSIX, block SIGINT while creating the PortAudio stream so the spawned
+    audio thread inherits the mask and Ctrl-C stays on the main thread.
+
+    Windows does not expose signal.pthread_sigmask, so stream creation there is
+    already the best available behavior and should proceed without masking.
+    """
+    pthread_sigmask = getattr(signal, "pthread_sigmask", None)
+    if pthread_sigmask is None:
+        yield
+        return
+
+    old_mask = pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
+    try:
+        yield
+    finally:
+        pthread_sigmask(signal.SIG_SETMASK, old_mask)
+
+

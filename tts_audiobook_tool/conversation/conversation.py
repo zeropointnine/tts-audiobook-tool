@@ -19,7 +19,7 @@ from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
+from tts_audiobook_tool.conversation.realtime_transcriber import RealtimeTranscriber
 from tts_audiobook_tool.conversation.console_session import ConsoleSession
 from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
@@ -31,7 +31,7 @@ class Conversation:
     "Realtime LLM Chat"
 
     Orchestrates the full lifecycle: preflight checks, mic capture via
-    WhisperRealTimeUtil, prompt assembly (PromptBuilder), LLM streaming and
+    RealtimeTranscriber, prompt assembly (PromptBuilder), LLM streaming and
     TTS playback (ResponseSession), and clean teardown of the terminal/audio
     state on exit or Ctrl-C.
     """
@@ -157,7 +157,7 @@ class Conversation:
             if self.stt_immediate
             else CHAT_SILENCE_THRESHOLD_CHUNKED
         )
-        self.util = WhisperRealTimeUtil(
+        self.util = RealtimeTranscriber(
             prefs=self.prefs,
             on_transcription=self.prompt_builder.on_transcription,
             silence_duration_s=silence_duration_s,

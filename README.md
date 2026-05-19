@@ -570,6 +570,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
 - LoRA support!
 - Batch processing support
+- Streaming support
 - Music detection/rejection
 - CFG, steps, seed
 
@@ -612,6 +613,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 - Selectable language models (english, french_241, german_241, italian, portuguese, spanish_241)
 - Predefined voices (alba, anna, azelma, etc)
+- Streaming support
 - Supports CUDA acceleration (this is not mentioned in the project page)
 - Temperature, seed
 

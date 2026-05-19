@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Manual test: real-time mic transcription via WhisperRealTimeUtil.
+Manual test: real-time mic transcription via RealtimeTranscriber.
 """
 
 import sys
@@ -16,7 +16,7 @@ from faster_whisper.transcribe import Segment
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.whisper_realtime_util import WhisperRealTimeUtil
+from tts_audiobook_tool.conversation.realtime_transcriber import RealtimeTranscriber
 
 DEBUG_VAD = True
 
@@ -83,7 +83,7 @@ def main() -> None:
                 f" … [{last.word.strip()} @{last.end:.2f}s]"
             )
 
-    util = WhisperRealTimeUtil(
+    util = RealtimeTranscriber(
         prefs=prefs,
         on_transcription=on_transcription,  # type: ignore  # TODO: revisit if needed
         on_chunk_dispatched=on_chunk_dispatched,
