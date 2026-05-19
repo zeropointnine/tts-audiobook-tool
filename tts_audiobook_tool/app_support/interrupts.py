@@ -1,10 +1,11 @@
 import signal
+
 from tts_audiobook_tool.app_types import SingletonBase
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
 
-class SigIntHandler(SingletonBase):
+class Interrupts(SingletonBase):
     """
     Raises a flag which can be checked for when control-c is pressed.
 
@@ -45,7 +46,7 @@ class SigIntHandler(SingletonBase):
             # Eats control-c
             return
 
-        self._flag = True # TODO: rly shd just send an event or even just callback
+        self._flag = True
 
         feedback = ""
         match self._mode:
@@ -58,7 +59,7 @@ class SigIntHandler(SingletonBase):
             case _:
                 feedback = "Control-C pressed, will stop"
         if feedback:
-            printt() # Clear any 3p lib's use of "\r" in their print() statements
+            printt()
             printt(COL_ERROR + "*" * len(feedback))
             printt(feedback)
             printt(COL_ERROR + "*" * len(feedback))

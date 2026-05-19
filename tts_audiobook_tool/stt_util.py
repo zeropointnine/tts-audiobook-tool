@@ -5,8 +5,8 @@ import ffmpeg
 import numpy as np
 import difflib
 from tts_audiobook_tool.app_types import ConcreteWord, Word
+from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.constants import *
@@ -52,7 +52,7 @@ class SttUtil:
             s = normalize_text(s)
             print(f"\ntranscribed text:\n{s}\n")
 
-        SigIntHandler().set("thinking")
+        Interrupts().set("thinking")
 
         debug_start_time = time.time()
 
@@ -64,8 +64,8 @@ class SttUtil:
 
         for segment_index, segment in enumerate(phrases):
 
-            if SigIntHandler().did_interrupt:
-                SigIntHandler().clear()
+            if Interrupts().did_interrupt:
+                Interrupts().clear()
                 return [], True
 
             text_normed = normalize_text(segment.text)
@@ -233,7 +233,7 @@ class SttUtil:
                 printt(f"{i}  {item}")
             printt()
 
-        SigIntHandler().clear()
+        Interrupts().clear()
         return result, False
 
     @staticmethod
@@ -270,7 +270,7 @@ class SttUtil:
             duration_str = duration_string(value)
 
         did_interrupt = False
-        SigIntHandler().set("transcribing")
+        Interrupts().set("transcribing")
 
         for i, chunk in enumerate(
             SttUtil._stream_audio_with_overlap(
@@ -279,7 +279,7 @@ class SttUtil:
                 overlap_duration=OVERLAP_DURATION
             )
         ):
-            if SigIntHandler().did_interrupt:
+            if Interrupts().did_interrupt:
                 did_interrupt = True
                 break
 
@@ -304,7 +304,7 @@ class SttUtil:
 
             time_offset += CHUNK_DURATION - OVERLAP_DURATION
 
-        SigIntHandler().clear()
+        Interrupts().clear()
 
         print() # clear status printout
         print()

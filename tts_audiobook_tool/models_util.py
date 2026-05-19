@@ -2,8 +2,8 @@ import torch
 
 from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.app_support import app_memory
+from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.music_detector import MusicDetector
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -49,7 +49,7 @@ class ModelsUtil:
         if num_shoulds >= 2:
             print_init("Warming up models...")
 
-        SigIntHandler().set("model init")
+        Interrupts().set("model init")
 
         # Init TTS
         if should_tts:
@@ -57,11 +57,11 @@ class ModelsUtil:
                 _ = Tts.get_instance()
             except Exception as e:
                 err_msg = str(e)
-                SigIntHandler().clear()
+                Interrupts().clear()
                 return ModelWarmUpResult(error=err_msg)
 
-        if SigIntHandler().did_interrupt:
-            SigIntHandler().clear()
+        if Interrupts().did_interrupt:
+            Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
 
         # Init STT
@@ -70,11 +70,11 @@ class ModelsUtil:
                 Stt.eager_warm_up_for_inference()
             except Exception as e:
                 err_msg = str(e)
-                SigIntHandler().clear()
+                Interrupts().clear()
                 return ModelWarmUpResult(error=err_msg)
 
-        if SigIntHandler().did_interrupt:
-            SigIntHandler().clear()
+        if Interrupts().did_interrupt:
+            Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
         
         # Init YAMNet
@@ -83,14 +83,14 @@ class ModelsUtil:
                 _ = MusicDetector.get_model()
             except Exception as e:
                 err_msg = str(e)
-                SigIntHandler().clear()
+                Interrupts().clear()
                 return ModelWarmUpResult(error=err_msg)
 
-        if SigIntHandler().did_interrupt:
-            SigIntHandler().clear()
+        if Interrupts().did_interrupt:
+            Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
 
-        SigIntHandler().clear()
+        Interrupts().clear()
         return ModelWarmUpResult()
 
     @staticmethod

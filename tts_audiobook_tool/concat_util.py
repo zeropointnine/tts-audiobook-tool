@@ -18,9 +18,9 @@ from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
+from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
@@ -358,16 +358,15 @@ class ConcatUtil:
         to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
         process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate)
 
-        SigIntHandler().set("concat")
+        Interrupts().set("concat")
 
         for (phrase, path) in phrases_and_paths:
 
             if not path:
                 durations.append(0)
                 continue
-
-            if SigIntHandler().did_interrupt:
-                SigIntHandler().clear()
+            if Interrupts().did_interrupt:
+                Interrupts().clear()
                 ConcatUtil.close_ffmpeg_stream(process)
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
@@ -383,9 +382,8 @@ class ConcatUtil:
             sound = result
             durations.append(sound.duration)
             duration_sum += sound.duration
-
-            if SigIntHandler().did_interrupt:
-                SigIntHandler().clear()
+            if Interrupts().did_interrupt:
+                Interrupts().clear()
                 ConcatUtil.close_ffmpeg_stream(process)
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
@@ -400,7 +398,7 @@ class ConcatUtil:
             printt()
         printt()
 
-        SigIntHandler().clear()
+        Interrupts().clear()
         ConcatUtil.close_ffmpeg_stream(process)
         return durations
 

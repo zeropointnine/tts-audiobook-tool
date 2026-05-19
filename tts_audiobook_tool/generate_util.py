@@ -14,7 +14,7 @@ from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
+from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
@@ -101,13 +101,13 @@ class GenerateUtil:
         gen_val_sum_time = 0
         start_time = time.time()
 
-        SigIntHandler().set("generating")
+        Interrupts().set("generating")
         did_interrupt = False
 
         # Loop through items in the batch
         while items:
 
-            if SigIntHandler().did_interrupt:
+            if Interrupts().did_interrupt:
                 did_interrupt = True
                 break
 
@@ -298,7 +298,7 @@ class GenerateUtil:
             warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
         printt(warnings_string)
 
-        SigIntHandler().clear()
+        Interrupts().clear()
         return did_interrupt
 
     @staticmethod

@@ -6,9 +6,9 @@ from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.app_support import app_memory
+from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
-from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -80,7 +80,7 @@ class RealTimeUtil:
 
         # Outer loop
 
-        SigIntHandler().set("generating")
+        Interrupts().set("generating")
         did_interrupt = False
         stream = None
         count = 0
@@ -124,9 +124,9 @@ class RealTimeUtil:
             if did_interrupt:
                 break
             if not did_interrupt:
-                # generate_full_flow() clears SigIntHandler at the end, so re-arm
+                # generate_full_flow() clears Interrupts at the end, so re-arm
                 # Ctrl-C handling for the outer realtime loop and buffer-throttle sleep.
-                SigIntHandler().set("generating")
+                Interrupts().set("generating")
             if not sound_opt:
                 printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
                 printt()
@@ -197,7 +197,7 @@ class RealTimeUtil:
             count += 1
 
         # Finished
-        SigIntHandler().clear()
+        Interrupts().clear()
 
         should_prompt_before_shutdown = stream and stream.buffer_duration > 0
         if should_prompt_before_shutdown:
@@ -223,7 +223,7 @@ class RealTimeUtil:
         """
         deadline = time.time() + max(0.0, duration_s)
         while True:
-            if SigIntHandler().did_interrupt:
+            if Interrupts().did_interrupt:
                 return True
 
             remaining = deadline - time.time()
@@ -244,7 +244,7 @@ class RealTimeUtil:
         Returns tuple: (Sound or None if problem, did_interrupt)
         """
 
-        SigIntHandler().set("generating")
+        Interrupts().set("generating")
 
         project = state.project
         phrase_group = phrase_groups[index]
@@ -281,7 +281,7 @@ class RealTimeUtil:
             else:
                 printt(f"Transcript validation: {gen_result.get_ui_message_with_post_processing()}")
 
-            if SigIntHandler().did_interrupt:
+            if Interrupts().did_interrupt:
                 did_interrupt = True
 
             if did_interrupt:
@@ -290,7 +290,7 @@ class RealTimeUtil:
             if is_pass:
                 break
 
-        SigIntHandler().clear()        
+        Interrupts().clear()        
 
         if isinstance(gen_result, str): 
             return None, did_interrupt  # is error
