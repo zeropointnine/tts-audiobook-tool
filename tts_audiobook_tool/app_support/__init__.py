@@ -15,6 +15,7 @@ import os
 import random
 from typing import TYPE_CHECKING
 
+from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import ModelWarmUpResult, SttVariant
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
@@ -96,23 +97,21 @@ def play_done_sound() -> None:
 
 
 def make_memory_string(base_color=COL_DIM) -> str:
-    from tts_audiobook_tool.memory_util import MemoryUtil
-
-    result = MemoryUtil.get_nv_vram()
+    result = app_memory.get_nv_vram()
     if result is None:
         vram_string = ""
     else:
         used, total = result
         vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
 
-    shared_result = MemoryUtil.get_shared_gpu_memory()
+    shared_result = app_memory.get_shared_gpu_memory()
     if shared_result is None:
         shared_string = ""
     else:
         _, shared = shared_result
         shared_string = f"{base_color}shared VRAM: {COL_ACCENT}{make_gb_string(shared)}"
 
-    result = MemoryUtil.get_system_ram()
+    result = app_memory.get_system_ram()
     if result is None:
         ram_string = ""
     else:

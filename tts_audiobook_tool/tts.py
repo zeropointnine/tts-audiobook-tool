@@ -22,6 +22,7 @@ from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo, TtsModelInfos
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
+from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -501,9 +502,7 @@ class Tts:
             Tts._pocket = None
             Tts._omnivoice = None
             Tts._instance_display_info = None
-
-        from tts_audiobook_tool.memory_util import MemoryUtil
-        MemoryUtil.gc_ram_vram()
+        app_memory.gc_ram_vram()
 
     @staticmethod
     def get_resolved_torch_device() -> str:

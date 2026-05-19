@@ -26,6 +26,6 @@ class MusicDetector:
         if MusicDetector._yamnet:
             MusicDetector._yamnet.kill()
             MusicDetector._yamnet = None
-            from tts_audiobook_tool.memory_util import MemoryUtil
-            MemoryUtil.gc_ram_vram()
+            from tts_audiobook_tool.app_support import app_memory
+            app_memory.gc_ram_vram()
 

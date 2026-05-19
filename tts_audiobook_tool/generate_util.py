@@ -7,7 +7,7 @@ import numpy as np
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
-from tts_audiobook_tool.memory_util import MemoryUtil
+from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 from tts_audiobook_tool.sound.music_detector import MusicDetector
@@ -62,7 +62,7 @@ class GenerateUtil:
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:
-                MemoryUtil.gc_ram_vram()
+                app_memory.gc_ram_vram()
             return True
 
         # Do model prereq check now that model instance exists
@@ -77,7 +77,7 @@ class GenerateUtil:
             warnings_string = "\n".join(warnings)
             print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
 
-        showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
+        showed_vram_warning = app_memory.show_vram_memory_warning_if_necessary()
 
         # Make 'items' (tuple = phase group index, retry_count)
         sorted_indices = sorted(list(indices_set))
@@ -115,7 +115,7 @@ class GenerateUtil:
                 break
 
             if not showed_vram_warning:
-                b = MemoryUtil.show_vram_memory_warning_if_necessary()
+                b = app_memory.show_vram_memory_warning_if_necessary()
                 if b:
                     print("\a", end="")
                     showed_vram_warning = True

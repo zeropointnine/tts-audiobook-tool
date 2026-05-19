@@ -1,7 +1,7 @@
 import torch
 
 from tts_audiobook_tool.app_types import ModelWarmUpResult
-from tts_audiobook_tool.memory_util import MemoryUtil
+from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
@@ -103,7 +103,7 @@ class ModelsUtil:
             ModelsUtil.clear_sidon_upsampler()
 
         # For good measure
-        MemoryUtil.gc_ram_vram()
+        app_memory.gc_ram_vram()
 
     @staticmethod
     def is_any_model_loaded() -> bool:
@@ -128,4 +128,4 @@ class ModelsUtil:
         if ModelsUtil.sidon_upsampler is not None:
             ModelsUtil.sidon_upsampler.kill()
             ModelsUtil.sidon_upsampler = None
-            MemoryUtil.gc_ram_vram()
+            app_memory.gc_ram_vram()

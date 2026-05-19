@@ -255,8 +255,8 @@ class Stt:
             Stt._whisper = None
             Stt._did_eager_warm_up_mlx = False
             Stt._did_eager_warm_up_inference = False
-            from tts_audiobook_tool.memory_util import MemoryUtil
-            MemoryUtil.gc_ram_vram()
+            from tts_audiobook_tool.app_support import app_memory
+            app_memory.gc_ram_vram()
 
     @staticmethod
     def should_skip(state, is_real_time_buffer_too_short: bool=False) -> str:

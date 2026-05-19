@@ -68,7 +68,7 @@ class VoiceOuteMenu:
 
 def ask_create_oute_voice(project: Project) -> None:
 
-    from tts_audiobook_tool.memory_util import MemoryUtil
+    from tts_audiobook_tool.app_support import app_memory
 
     path = VoiceMenuShared.ask_voice_file(project.dir_path, Tts.get_type())
     if not path:
@@ -76,12 +76,12 @@ def ask_create_oute_voice(project: Project) -> None:
 
     # Outte is about to create its own instance of whisper, so better clear ours first
     Stt.clear_stt_model()
-    MemoryUtil.gc_ram_vram()
+    app_memory.gc_ram_vram()
 
     result = Tts.get_oute().create_speaker(path)
 
     # Clear lingering oute-created whisper instance
-    MemoryUtil.gc_ram_vram()
+    app_memory.gc_ram_vram()
 
     if isinstance(result, str):
         error = result

@@ -5,7 +5,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil
-from tts_audiobook_tool.memory_util import MemoryUtil
+from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.sig_int_handler import SigIntHandler
@@ -52,7 +52,7 @@ class RealTimeUtil:
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
             if warm_up_result.error:
-                MemoryUtil.gc_ram_vram()
+                app_memory.gc_ram_vram()
             if state.prefs.menu_clears_screen:
                 ask.ask_enter_to_continue()
             return 
@@ -69,7 +69,7 @@ class RealTimeUtil:
             warnings_string = "\n".join(warnings)
             print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
 
-        showed_vram_warning = MemoryUtil.show_vram_memory_warning_if_necessary()
+        showed_vram_warning = app_memory.show_vram_memory_warning_if_necessary()
 
         s = "Starting real-time playback..."
         if state.prefs.stt_variant == SttVariant.DISABLED:
@@ -96,7 +96,7 @@ class RealTimeUtil:
                 break
 
             if not showed_vram_warning:
-                b = MemoryUtil.show_vram_memory_warning_if_necessary()
+                b = app_memory.show_vram_memory_warning_if_necessary()
                 if b:
                     print("\a", end="")
                     showed_vram_warning = True
