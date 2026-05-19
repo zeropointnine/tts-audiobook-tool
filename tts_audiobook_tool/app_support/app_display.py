@@ -64,7 +64,7 @@ def print_project_text(
 
 
 def print_regen_lines(project: Project, indices: set[int]) -> None:
-    from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
+    from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 
     MenuUtil.print_heading(None, "Lines to be regenerated:", non_menu=True, dont_clear=True)
 
@@ -74,7 +74,7 @@ def print_regen_lines(project: Project, indices: set[int]) -> None:
         return
 
     for index in sorted(indices):
-        SegmentSttInfoUtil.print_info(index, project)
+        SegmentTranscriptUtil.print_info(index, project)
 
     printt()
 

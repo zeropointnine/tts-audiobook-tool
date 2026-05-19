@@ -12,14 +12,14 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.models_util import ModelsUtil
-from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
+from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.chapter_metadata import ChapterMetadata
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
-from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
+from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.constants import *
@@ -556,7 +556,7 @@ def make_subdivided_timed_phrases(
             new_timed_phrases.append(original_timed_phrase)
             continue
 
-        parse_result = SegmentSttInfoUtil.load_timed_phrases(subdivided_items_json_path)
+        parse_result = SegmentTranscriptUtil.load_timed_phrases(subdivided_items_json_path)
         if isinstance(parse_result, str): 
             # File/parse error; use original item
             add_to_new_bookmark_indices("parse-error", original_timed_phrase.presentable_text)

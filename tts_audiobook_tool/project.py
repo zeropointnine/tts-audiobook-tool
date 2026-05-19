@@ -236,7 +236,7 @@ class Project(BaseModel):
                 except Exception:
                     pass
 
-        from tts_audiobook_tool.project_sound_segments import ProjectSoundSegments
+        from tts_audiobook_tool.project_support.project_sound_segments import ProjectSoundSegments
         self._sound_segments = ProjectSoundSegments(self)
 
         if self.pocket_voice_file_name and self.pocket_predefined_voice:
@@ -257,7 +257,7 @@ class Project(BaseModel):
             if use_tl_warnings:
                 _tl.warnings.append(s)
 
-        from tts_audiobook_tool.project_util import ProjectUtil
+        from tts_audiobook_tool.project_support.project_util import ProjectUtil
 
         ProjectUtil.remap_legacy_keys(d)
 

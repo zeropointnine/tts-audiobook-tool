@@ -2,7 +2,7 @@ import os
 import json
 
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
+from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 
 # ---
 
@@ -39,11 +39,11 @@ print()
 
 for item in items:
 
-    info = SegmentSttInfoUtil.from_dict(item)
+    info = SegmentTranscriptUtil.from_dict(item)
     if isinstance(info, str):
         continue
 
-    fails = SegmentSttInfoUtil.get_word_errors(info)
+    fails = SegmentTranscriptUtil.get_word_errors(info)
     if not fails: 
         continue
 

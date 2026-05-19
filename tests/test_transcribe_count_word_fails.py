@@ -1,10 +1,10 @@
 import unittest
 
 from tts_audiobook_tool import text_util
-from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
+from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
-from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
+from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
 
 class TestTranscribeGranular(unittest.TestCase):
 
@@ -93,9 +93,9 @@ class TestTranscribeGranular(unittest.TestCase):
         )
 
     def test_word_error_visualization(self):
-        info = SegmentSttInfo(
-            version=SegmentSttInfoUtil.VERSION,
-            type=SegmentSttInfoUtil.TYPE,
+        info = SegmentTranscriptData(
+            version=SegmentTranscriptUtil.VERSION,
+            type=SegmentTranscriptUtil.TYPE,
             language_code="en",
             index_1b=1,
             source="one two three",
@@ -109,16 +109,16 @@ class TestTranscribeGranular(unittest.TestCase):
             exception=None,
         )
 
-        visualization = text_util.strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
+        visualization = text_util.strip_ansi_codes(SegmentTranscriptUtil.make_word_error_visualization(info))
 
         self.assertIn("one", visualization)
         self.assertIn("[=/=: two/blah]", visualization)
         self.assertIn("[+: extra]", visualization)
 
     def test_word_error_visualization_missing(self):
-        info = SegmentSttInfo(
-            version=SegmentSttInfoUtil.VERSION,
-            type=SegmentSttInfoUtil.TYPE,
+        info = SegmentTranscriptData(
+            version=SegmentTranscriptUtil.VERSION,
+            type=SegmentTranscriptUtil.TYPE,
             language_code="en",
             index_1b=1,
             source="one two three",
@@ -132,7 +132,7 @@ class TestTranscribeGranular(unittest.TestCase):
             exception=None,
         )
 
-        visualization = text_util.strip_ansi_codes(SegmentSttInfoUtil.make_word_error_visualization(info))
+        visualization = text_util.strip_ansi_codes(SegmentTranscriptUtil.make_word_error_visualization(info))
 
         self.assertIn("one", visualization)
         self.assertIn("[x: two]", visualization)

@@ -11,7 +11,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
-from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.browser import (

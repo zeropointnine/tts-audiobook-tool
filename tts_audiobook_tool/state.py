@@ -5,7 +5,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *

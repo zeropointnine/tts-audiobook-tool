@@ -7,7 +7,7 @@ from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
-from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.tts import Tts

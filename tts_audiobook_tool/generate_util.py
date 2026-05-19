@@ -9,16 +9,16 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.models_util import ModelsUtil
-from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
+from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
-from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
+from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
-from tts_audiobook_tool.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
+from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
@@ -164,7 +164,7 @@ class GenerateUtil:
 
                 index = indices[i]
                 phrase_group = project.phrase_groups[index]
-                stt_info: SegmentSttInfo | None = None
+                stt_info: SegmentTranscriptData | None = None
                 show_stt_visualization = False
                 message_lines = []
 
@@ -223,7 +223,7 @@ class GenerateUtil:
                     
                     # Print STT info
                     if isinstance(validation_result, TranscriptResult):
-                        stt_info = SegmentSttInfoUtil.from_validation_result(
+                        stt_info = SegmentTranscriptUtil.from_validation_result(
                             project=project,
                             phrase_group=phrase_group,
                             index=index,
@@ -255,7 +255,7 @@ class GenerateUtil:
 
                 if not isinstance(result, str) and stt_info is not None:
                     printt()
-                    SegmentSttInfoUtil.print_stt_details(
+                    SegmentTranscriptUtil.print_stt_details(
                         stt_info,
                         show_visualization=show_stt_visualization
                     )
@@ -502,7 +502,7 @@ class GenerateUtil:
         index: int,
         validation_result: ValidationResult,
         is_real_time: bool,
-        stt_info: SegmentSttInfo | None = None
+        stt_info: SegmentTranscriptData | None = None
     ) -> tuple[str, str]:
         """
         Saves sound segment and timing info json
@@ -531,14 +531,14 @@ class GenerateUtil:
         
         if not is_real_time and isinstance(validation_result, TranscriptResult): 
             # Make STT/timing sidecar and save to 'parallel' json file
-            info = stt_info or SegmentSttInfoUtil.from_validation_result(
+            info = stt_info or SegmentTranscriptUtil.from_validation_result(
                 project=project,
                 phrase_group=phrase_group,
                 index=index,
                 validation_result=validation_result
             )
             json_path = get_segment_stt_info_path(sound_path)
-            err = SegmentSttInfoUtil.save(json_path, info)
+            err = SegmentTranscriptUtil.save(json_path, info)
             if err:
                 printt(COL_ERROR + str(json_path))
                 printt(COL_ERROR + err)

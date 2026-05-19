@@ -7,7 +7,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 

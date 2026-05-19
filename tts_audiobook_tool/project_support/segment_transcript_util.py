@@ -8,8 +8,8 @@ from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.app_types.segment_stt_info import SegmentSttInfo
-from tts_audiobook_tool.sound_segment_util import get_segment_stt_info_path
+from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
+from tts_audiobook_tool.project_support.sound_segment_util import get_segment_stt_info_path
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
@@ -18,7 +18,7 @@ from tts_audiobook_tool.app_types.validation_result import MusicFailResult, Tran
 from tts_audiobook_tool.whisper_util import WhisperUtil
 from tts_audiobook_tool.util import *
 
-class SegmentSttInfoUtil:
+class SegmentTranscriptUtil:
 
     VERSION = 1
     TYPE = "segment_stt_info"
@@ -31,7 +31,7 @@ class SegmentSttInfoUtil:
             phrase_group: PhraseGroup,
             index: int,
             validation_result: TranscriptResult
-    ) -> SegmentSttInfo:
+    ) -> SegmentTranscriptData:
 
         prompt = phrase_group.as_flattened_phrase().text
         source = phrase_group.as_flattened_phrase().text
@@ -41,12 +41,12 @@ class SegmentSttInfoUtil:
         )
         exception = None
         if isinstance(validation_result, MusicFailResult):
-            exception = SegmentSttInfoUtil.EXCEPTION_MUSIC_DETECTED
-        generation_word_error_count = SegmentSttInfoUtil.make_generation_word_error_count(validation_result)
+            exception = SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED
+        generation_word_error_count = SegmentTranscriptUtil.make_generation_word_error_count(validation_result)
 
-        return SegmentSttInfo(
-            version=SegmentSttInfoUtil.VERSION,
-            type=SegmentSttInfoUtil.TYPE,
+        return SegmentTranscriptData(
+            version=SegmentTranscriptUtil.VERSION,
+            type=SegmentTranscriptUtil.TYPE,
             language_code=project.language_code,
             index_1b=index + 1,
             source=source,
@@ -55,7 +55,7 @@ class SegmentSttInfoUtil:
             normalized_source=normalized_source,
             normalized_transcript=normalized_transcript,
             generation_word_error_count=generation_word_error_count,
-            timed_phrases=SegmentSttInfoUtil.make_timed_phrases(phrase_group, validation_result),
+            timed_phrases=SegmentTranscriptUtil.make_timed_phrases(phrase_group, validation_result),
             transcript_words=WhisperUtil.words_to_json(validation_result.transcript_words),
             exception=exception
         )
@@ -63,7 +63,7 @@ class SegmentSttInfoUtil:
     @staticmethod
     def make_generation_word_error_count(validation_result: TranscriptResult) -> int:
         if isinstance(validation_result, MusicFailResult):
-            return SegmentSttInfoUtil.MUSIC_DETECTED_WORD_ERROR_SENTINEL
+            return SegmentTranscriptUtil.MUSIC_DETECTED_WORD_ERROR_SENTINEL
         if isinstance(validation_result, WordErrorResult):
             return validation_result.num_errors
         return 0
@@ -80,7 +80,7 @@ class SegmentSttInfoUtil:
             sound_duration=validation_result.sound.duration
         )
         if isinstance(validation_result, TrimmedResult):
-            timed_phrases = SegmentSttInfoUtil.adjust_timed_phrases_trimmed(timed_phrases, validation_result)
+            timed_phrases = SegmentTranscriptUtil.adjust_timed_phrases_trimmed(timed_phrases, validation_result)
         return timed_phrases
 
     @staticmethod
@@ -103,7 +103,7 @@ class SegmentSttInfoUtil:
         return results
 
     @staticmethod
-    def to_dict(info: SegmentSttInfo) -> dict[str, Any]:
+    def to_dict(info: SegmentTranscriptData) -> dict[str, Any]:
         return {
             "version": info.version,
             "type": info.type,
@@ -121,8 +121,8 @@ class SegmentSttInfoUtil:
         }
 
     @staticmethod
-    def from_dict(payload: dict[str, Any]) -> SegmentSttInfo | str:
-        if payload.get("type") != SegmentSttInfoUtil.TYPE:
+    def from_dict(payload: dict[str, Any]) -> SegmentTranscriptData | str:
+        if payload.get("type") != SegmentTranscriptUtil.TYPE:
             return f"Unsupported segment STT info type: {payload.get('type')}"
 
         timed_phrase_dicts = payload.get("timed_phrases")
@@ -137,7 +137,7 @@ class SegmentSttInfoUtil:
             return "Missing or invalid transcript_words"
 
         try:
-            return SegmentSttInfo(
+            return SegmentTranscriptData(
                 version=int(payload["version"]),
                 type=str(payload["type"]),
                 language_code=str(payload["language_code"]),
@@ -156,23 +156,23 @@ class SegmentSttInfoUtil:
             return make_error_string(e)
 
     @staticmethod
-    def save(path: str | Path, info: SegmentSttInfo) -> str:
+    def save(path: str | Path, info: SegmentTranscriptData) -> str:
         try:
-            json_string = json.dumps(SegmentSttInfoUtil.to_dict(info), indent=4)
+            json_string = json.dumps(SegmentTranscriptUtil.to_dict(info), indent=4)
             Path(path).write_text(json_string, encoding="utf-8")
         except Exception as e:
             return make_error_string(e)
         return ""
 
     @staticmethod
-    def load(path: str | Path) -> SegmentSttInfo | str:
+    def load(path: str | Path) -> SegmentTranscriptData | str:
         try:
             payload = json.loads(Path(path).read_text(encoding="utf-8"))
         except Exception as e:
             return make_error_string(e)
         if not isinstance(payload, dict):
             return f"Unsupported segment STT info root type: {type(payload)}"
-        return SegmentSttInfoUtil.from_dict(payload)
+        return SegmentTranscriptUtil.from_dict(payload)
 
     @staticmethod
     def load_timed_phrases(path: str | Path) -> list[TimedPhrase] | str:
@@ -193,7 +193,7 @@ class SegmentSttInfoUtil:
         return TimedPhrase.dicts_to_timed_phrases(timed_phrase_dicts)
 
     @staticmethod
-    def get_word_errors(info: SegmentSttInfo) -> list[str]:
+    def get_word_errors(info: SegmentTranscriptData) -> list[str]:
         return ValidateUtil.get_word_errors(
             info.normalized_source,
             info.normalized_transcript,
@@ -201,21 +201,21 @@ class SegmentSttInfoUtil:
         )
 
     @staticmethod
-    def get_word_error_count(info: SegmentSttInfo) -> int:
-        if info.exception == SegmentSttInfoUtil.EXCEPTION_MUSIC_DETECTED:
-            return SegmentSttInfoUtil.MUSIC_DETECTED_WORD_ERROR_SENTINEL
-        return len(SegmentSttInfoUtil.get_word_errors(info))
+    def get_word_error_count(info: SegmentTranscriptData) -> int:
+        if info.exception == SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED:
+            return SegmentTranscriptUtil.MUSIC_DETECTED_WORD_ERROR_SENTINEL
+        return len(SegmentTranscriptUtil.get_word_errors(info))
 
     @staticmethod
-    def get_threshold(info: SegmentSttInfo, strictness: Strictness) -> int:
+    def get_threshold(info: SegmentTranscriptData, strictness: Strictness) -> int:
         num_words = app_text.get_word_count(info.normalized_source, vocalizable_only=True)
         return ValidateUtil.compute_threshold(num_words, strictness)
 
     @staticmethod
-    def is_failed(info: SegmentSttInfo, strictness: Strictness) -> bool:
+    def is_failed(info: SegmentTranscriptData, strictness: Strictness) -> bool:
         if info.exception is not None:
             return True
-        return SegmentSttInfoUtil.get_word_error_count(info) > SegmentSttInfoUtil.get_threshold(info, strictness)
+        return SegmentTranscriptUtil.get_word_error_count(info) > SegmentTranscriptUtil.get_threshold(info, strictness)
 
     @staticmethod
     def print_info(sound_segment_index: int, project: Project) -> None:
@@ -231,11 +231,11 @@ class SegmentSttInfoUtil:
 
         sound_path = Path(os.path.join(project.sound_segments_path, best_item.file_name))
         stt_info_path = get_segment_stt_info_path(sound_path)
-        info = SegmentSttInfoUtil.load(stt_info_path)
+        info = SegmentTranscriptUtil.load(stt_info_path)
         if isinstance(info, str):
-            timed_phrases = SegmentSttInfoUtil.load_timed_phrases(stt_info_path)
+            timed_phrases = SegmentTranscriptUtil.load_timed_phrases(stt_info_path)
             if not isinstance(timed_phrases, str):
-                SegmentSttInfoUtil.print_legacy_info(sound_segment_index, sound_path, best_item, project)
+                SegmentTranscriptUtil.print_legacy_info(sound_segment_index, sound_path, best_item, project)
                 return
 
             printt(f"{COL_DIM}{'-' * 60}")
@@ -247,8 +247,8 @@ class SegmentSttInfoUtil:
 
         num_words = app_text.get_word_count(info.normalized_source, vocalizable_only=True)
         filename = text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
-        num_word_errors = SegmentSttInfoUtil.get_word_error_count(info)
-        threshold = SegmentSttInfoUtil.get_threshold(info, project.strictness)
+        num_word_errors = SegmentTranscriptUtil.get_word_error_count(info)
+        threshold = SegmentTranscriptUtil.get_threshold(info, project.strictness)
 
         filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"
         stroke = f"{COL_DIM}{len(text_util.strip_ansi_codes(filename_line)) * '-'}"
@@ -259,12 +259,12 @@ class SegmentSttInfoUtil:
             printt(f"{COL_DEFAULT}Exception: {COL_DIM}{info.exception}")
         printt()
 
-        SegmentSttInfoUtil.print_stt_details(info, show_visualization=num_word_errors > 0)
+        SegmentTranscriptUtil.print_stt_details(info, show_visualization=num_word_errors > 0)
 
         printt()
 
     @staticmethod
-    def print_stt_details(info: SegmentSttInfo, show_visualization: bool) -> None:
+    def print_stt_details(info: SegmentTranscriptData, show_visualization: bool) -> None:
         printt(f"{COL_DEFAULT}Source text               : {COL_DIM_ITALICS}{info.source.strip()}")
         printt(f"{COL_DEFAULT}TTS prompt                : {COL_DIM_ITALICS}{info.prompt.strip()}")
         printt(f"{COL_DEFAULT}STT transcript            : {COL_DIM_ITALICS}{info.transcript}")
@@ -275,7 +275,7 @@ class SegmentSttInfoUtil:
         if show_visualization:
             printt()
             printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[x: missing], [+: extra], [=/=: expected/heard], <word> = skipped uncommon word")
-            printt(SegmentSttInfoUtil.make_word_error_visualization(info))
+            printt(SegmentTranscriptUtil.make_word_error_visualization(info))
 
     @staticmethod
     def print_legacy_info(
@@ -307,7 +307,7 @@ class SegmentSttInfoUtil:
         printt(f"{COL_DIM_ITALICS}Legacy timing data; detailed STT info unavailable")
 
     @staticmethod
-    def make_word_error_visualization(info: SegmentSttInfo) -> str:
+    def make_word_error_visualization(info: SegmentTranscriptData) -> str:
         path = ValidateUtil.get_word_error_alignment(
             info.normalized_source,
             info.normalized_transcript,

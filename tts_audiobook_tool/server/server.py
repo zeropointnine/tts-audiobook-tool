@@ -25,7 +25,7 @@ _DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp

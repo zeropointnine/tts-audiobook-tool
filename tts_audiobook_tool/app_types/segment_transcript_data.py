@@ -6,7 +6,7 @@ from tts_audiobook_tool.util import *
 
 
 @dataclass
-class SegmentSttInfo:
+class SegmentTranscriptData:
     """Persisted STT-derived sidecar info for a generated sound segment."""
 
     # Schema version for this sidecar file format.

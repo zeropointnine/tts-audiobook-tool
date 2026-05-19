@@ -3,9 +3,9 @@ from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from tts_audiobook_tool.sound_segment_util import SoundSegment, SoundSegmentUtil, get_segment_stt_info_path
+from tts_audiobook_tool.project_support.sound_segment_util import SoundSegment, SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
