@@ -10,7 +10,7 @@ from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.validator import Validator
 
 class ProjectSoundSegments:
     """
@@ -148,7 +148,7 @@ class ProjectSoundSegments:
         phrase_group = self.project.phrase_groups[index]
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, self.project.language_code)
         num_words = app_text.get_word_count(normalized_source, vocalizable_only=True)
-        threshold = ValidateUtil.compute_threshold(num_words, self.project.strictness)
+        threshold = Validator.compute_threshold(num_words, self.project.strictness)
         return item.num_errors > threshold
 
     def get_failed_indices_in_generate_range(self) -> set[int]:

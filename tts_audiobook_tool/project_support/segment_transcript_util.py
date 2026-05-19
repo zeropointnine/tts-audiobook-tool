@@ -13,7 +13,7 @@ from tts_audiobook_tool.project_support.sound_segment_util import get_segment_st
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
-from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
 from tts_audiobook_tool.whisper_util import WhisperUtil
 from tts_audiobook_tool.util import *
@@ -194,7 +194,7 @@ class SegmentTranscriptUtil:
 
     @staticmethod
     def get_word_errors(info: SegmentTranscriptData) -> list[str]:
-        return ValidateUtil.get_word_errors(
+        return Validator.get_word_errors(
             info.normalized_source,
             info.normalized_transcript,
             info.language_code
@@ -209,7 +209,7 @@ class SegmentTranscriptUtil:
     @staticmethod
     def get_threshold(info: SegmentTranscriptData, strictness: Strictness) -> int:
         num_words = app_text.get_word_count(info.normalized_source, vocalizable_only=True)
-        return ValidateUtil.compute_threshold(num_words, strictness)
+        return Validator.compute_threshold(num_words, strictness)
 
     @staticmethod
     def is_failed(info: SegmentTranscriptData, strictness: Strictness) -> bool:
@@ -295,7 +295,7 @@ class SegmentTranscriptUtil:
         phrase_group = project.phrase_groups[sound_segment_index]
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, project.language_code)
         num_words = app_text.get_word_count(normalized_source, vocalizable_only=True)
-        threshold = ValidateUtil.compute_threshold(num_words, project.strictness)
+        threshold = Validator.compute_threshold(num_words, project.strictness)
         filename = text_util.make_terminal_hyperlink(str(sound_path), sound_segment.file_name, is_file=True)
         num_errors = "?" if sound_segment.num_errors < 0 else str(sound_segment.num_errors)
 
@@ -308,7 +308,7 @@ class SegmentTranscriptUtil:
 
     @staticmethod
     def make_word_error_visualization(info: SegmentTranscriptData) -> str:
-        path = ValidateUtil.get_word_error_alignment(
+        path = Validator.get_word_error_alignment(
             info.normalized_source,
             info.normalized_transcript,
             info.language_code,

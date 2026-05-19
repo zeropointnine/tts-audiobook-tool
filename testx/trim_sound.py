@@ -6,8 +6,8 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import printt
-from tts_audiobook_tool.validate_util import ValidateUtil
 from tts_audiobook_tool.app_types.validation_result import TrimmedResult
+from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
 DIR = "/home/lee/Documents/w/w/_tests/trim_trailing"
@@ -44,7 +44,7 @@ for flac_path, json_path in flacs_and_jsons:
     words = WhisperUtil.transcribe_to_words(sound, "en", SttVariant.LARGE_V3, SttConfig.CUDA_FLOAT16)
     assert(isinstance(words, list))
 
-    result = ValidateUtil.validate(sound, prompt, words, "en", Strictness.MODERATE)
+    result = Validator.validate(sound, prompt, words, "en", Strictness.MODERATE)
     
     if isinstance(result, TrimmedResult):
 

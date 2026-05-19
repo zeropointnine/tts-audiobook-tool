@@ -264,11 +264,11 @@ class Stt:
         Given app `state`, returns UI-message reason why STT/validation should be skipped, or empty string        
         """
         from tts_audiobook_tool.state import State
-        from tts_audiobook_tool.validate_util import ValidateUtil
+        from tts_audiobook_tool.validator import Validator
         assert(isinstance(state, State))
         if state.prefs.stt_variant == SttVariant.DISABLED:
             return "Whisper disabled"
-        if ValidateUtil.is_unsupported_language_code(state.project.language_code):
+        if Validator.is_unsupported_language_code(state.project.language_code):
             return "Unsupported language"
         if is_real_time_buffer_too_short:
             return "Sound buffer duration too short"

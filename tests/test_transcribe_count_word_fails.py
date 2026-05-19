@@ -2,7 +2,7 @@ import unittest
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
-from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
 
@@ -47,7 +47,7 @@ class TestTranscribeGranular(unittest.TestCase):
         ]
 
         for a, b, answer in items:
-            failure_codes = ValidateUtil.get_word_errors(a, b, language_code="en", verbose=True)
+            failure_codes = Validator.get_word_errors(a, b, language_code="en", verbose=True)
             num_fail_words = len(failure_codes)
             self.assertTrue(num_fail_words == answer)
 
@@ -57,7 +57,7 @@ class TestTranscribeGranular(unittest.TestCase):
         self.assertTrue(Whitelist().has("hola"))
         self.assertFalse(Whitelist().has("qwertyasdfz"))
 
-        failure_codes = ValidateUtil.get_word_errors(
+        failure_codes = Validator.get_word_errors(
             "hola qwertyasdfz",
             "hola algo distinto",
             language_code="es",
@@ -68,7 +68,7 @@ class TestTranscribeGranular(unittest.TestCase):
     def test_unsupported_language_disables_whitelist_wildcards(self):
         Whitelist().set_language_code("fr")
 
-        failure_codes = ValidateUtil.get_word_errors(
+        failure_codes = Validator.get_word_errors(
             "motinvente bonjour",
             "autrechose bonjour",
             language_code="fr",
@@ -77,7 +77,7 @@ class TestTranscribeGranular(unittest.TestCase):
         self.assertEqual(len(failure_codes), 1)
 
     def test_word_error_alignment(self):
-        alignment = ValidateUtil.get_word_error_alignment(
+        alignment = Validator.get_word_error_alignment(
             "one two three",
             "one blah bonus",
             language_code="en",

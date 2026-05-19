@@ -25,7 +25,7 @@ class WordErrorAlignmentStep:
 
 from tts_audiobook_tool.whisper_util import WhisperUtil
 
-class ValidateUtil:
+class Validator:
     """
     """
 
@@ -60,7 +60,7 @@ class ValidateUtil:
         Returns either WordErrorResult or TrimmedResult
         """
         transcript = WhisperUtil.get_flat_text_from_words(transcript_words)
-        _, word_errors, num_words, threshold = ValidateUtil.get_word_error_fail(
+        _, word_errors, num_words, threshold = Validator.get_word_error_fail(
             source, transcript, language_code=language_code, strictness=strictness
         )
 
@@ -77,11 +77,11 @@ class ValidateUtil:
             threshold=threshold
         )
 
-        trimmed_result = ValidateUtil.make_trimmed_result(word_error_result, source, transcript_words, language_code)
+        trimmed_result = Validator.make_trimmed_result(word_error_result, source, transcript_words, language_code)
         
         # TODO: Disabled. Too unreliable. No good workarounds.
         # if trimmed_result and Tts.get_type().value.semantic_trim_last:            
-        #    trimmed_result = ValidateUtil.make_trimmed_result_end_only(trimmed_result)
+        #    trimmed_result = Validator.make_trimmed_result_end_only(trimmed_result)
 
         if trimmed_result:
             delta = word_error_result.sound.duration - trimmed_result.sound.duration
@@ -120,7 +120,7 @@ class ValidateUtil:
             sub_transcript = WhisperUtil.get_flat_text_from_words(sub_transcript_words)
             normalized_sub_transcript = TextNormalizer.normalize_transcript(sub_transcript, normalized_source, language_code)
 
-            errors = ValidateUtil.get_word_errors(normalized_source, normalized_sub_transcript, language_code)
+            errors = Validator.get_word_errors(normalized_source, normalized_sub_transcript, language_code)
             if errors:
                 continue
 
@@ -191,7 +191,7 @@ class ValidateUtil:
         new_sound = SilenceUtil.trim_silence_ends(new_sound, end_only=True)[0]
 
         # Even after adding 'offset' above, we may have landed in-between phonemes/syllables/words, so
-        if not ValidateUtil._is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):
+        if not Validator._is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):
             return None
 
         # Clamp word end times
@@ -264,11 +264,11 @@ class ValidateUtil:
             TextNormalizer.normalize_source_and_transcript(source, transcript, language_code=language_code)
         
         word_errors = \
-            ValidateUtil.get_word_errors(normalized_source, normalized_transcript, language_code)
+            Validator.get_word_errors(normalized_source, normalized_transcript, language_code)
         num_word_errors = len(word_errors)
         num_words = app_text.get_word_count(normalized_source, vocalizable_only=True)
         
-        fail_threshold = ValidateUtil.compute_threshold(num_words, strictness)
+        fail_threshold = Validator.compute_threshold(num_words, strictness)
             
         return (num_word_errors > fail_threshold), word_errors, num_words, fail_threshold
 
@@ -293,7 +293,7 @@ class ValidateUtil:
         Uses dynamic programming table (dp)
         """
 
-        highlighted_source = ValidateUtil.format_source_with_uncommon_words(
+        highlighted_source = Validator.format_source_with_uncommon_words(
             normalized_source, language_code
         )
 
@@ -303,7 +303,7 @@ class ValidateUtil:
             print(f"transc: {normalized_transcript}")
             print("")
 
-        path = ValidateUtil.get_word_error_alignment(
+        path = Validator.get_word_error_alignment(
             normalized_source,
             normalized_transcript,
             language_code,

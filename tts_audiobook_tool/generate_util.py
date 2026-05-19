@@ -27,7 +27,7 @@ from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.validate_util import ValidateUtil
+from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.whisper_util import WhisperUtil
@@ -383,7 +383,7 @@ class GenerateUtil:
 
             # Validate
             text = phrase_groups[ indices[i] ].as_flattened_phrase().text
-            validation_result = ValidateUtil.validate(
+            validation_result = Validator.validate(
                 sound, text, transcribed_words, project.language_code, strictness=project.strictness
             )
             validation_result.intra_sample_silence_trims = gap_trims
