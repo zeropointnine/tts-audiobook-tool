@@ -4,6 +4,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.system_support.terminal import get_terminal_width
 
 
 def print_text_groups(groups: list[PhraseGroup]) -> None:
@@ -76,3 +77,7 @@ def print_regen_lines(project: Project, indices: set[int]) -> None:
         SegmentSttInfoUtil.print_info(index, project)
 
     printt()
+
+def make_terminal_divider(width: int | None = None, char: str = "-") -> str:
+    width = width or get_terminal_width()
+    return char * max(1, width)

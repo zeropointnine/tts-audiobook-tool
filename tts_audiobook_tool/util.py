@@ -2,11 +2,9 @@ import json
 import math
 import re
 import os
-import shutil
 import importlib
 from pathlib import Path
 import platform
-import subprocess
 import time
 from typing import Any, Callable
 
@@ -73,18 +71,6 @@ def print_feedback(
 
 def make_noun(singular: str, plural: str, quantity: int) -> str:
     return singular if quantity == 1 else plural
-
-def get_terminal_width(fallback: int=80) -> int:
-    """Returns terminal width with a safe cross-platform fallback."""
-    try:
-        width = shutil.get_terminal_size(fallback=(fallback, 20)).columns
-    except Exception:
-        width = fallback
-    return max(20, width)
-
-def make_terminal_divider(width: int | None = None, char: str = "-") -> str:
-    width = width or get_terminal_width()
-    return char * max(1, width)
 
 def print_init(s: str) -> None:
     """ App style for initializing a thing which may take some time """
@@ -426,65 +412,24 @@ def is_long_path_enabled():
         return False
 
 def has_gui():
-    """Check if a GUI shell exists or whatever"""
-    s = platform.system()
-    if s == "Linux":
-        return "DISPLAY" in os.environ  # X11 GUI environment check # This also returns true when using WSL
-    elif s == "Darwin":  # macOS (assumes GUI is available)
-        return True
-    elif s == "Windows":
-        return True  # Assume GUI is available on Windows
-    else:
-        return False  # Unknown system
+    from tts_audiobook_tool.system_support.platforms import has_gui as system_has_gui
+
+    return system_has_gui()
 
 def open_directory_in_gui(path) -> str:
-    """
-    Open the directory in the OS's default file explorer.
-    Returns error string on fail
-    """
-    if not os.path.isdir(path):
-        return "Directory doesn't exist"
-    if not has_gui():
-        return "No recognized GUI environment detected"
+    from tts_audiobook_tool.system_support.platforms import open_directory
 
-    if is_wsl():
-        return "Unsupported for WSL"
-
-    system = platform.system()
-    try:
-        if system == "Windows":
-            os.startfile(path) # type: ignore
-        elif system == "Darwin":  # macOS
-            subprocess.run(["open", path])
-        else:  # Linux and others
-            subprocess.run(["xdg-open", path])
-    except Exception as e:
-        return f"Failed to open directory: {e}"
-    return ""
+    return open_directory(path)
 
 def is_wsl():
-    if not platform.system() == "Linux":
-        return False
-    # Combine checks for robustness
-    checks = [
-        "microsoft" in platform.uname().release.lower(),
-        "WSL_DISTRO_NAME" in os.environ,
-        os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop")
-    ]
-    return any(checks)
+    from tts_audiobook_tool.system_support.platforms import is_wsl as system_is_wsl
+
+    return system_is_wsl()
 
 def clear_input_buffer() -> None:
-    """ Use before "input()" to prevent buffered keystrokes from being registered """
-    import sys
-    try:
-        # Windows
-        import msvcrt
-        while msvcrt.kbhit(): # type: ignore
-            msvcrt.getch() # type: ignore
-    except ImportError:
-        # Linux/macos
-        import termios
-        termios.tcflush(sys.stdin, termios.TCIFLUSH) # type: ignore
+    from tts_audiobook_tool.system_support.terminal import clear_input_buffer as system_clear_input_buffer
+
+    system_clear_input_buffer()
 
 def save_json(json_object: Any, path: str) -> str:
     """

@@ -205,45 +205,9 @@ def log_unload_memory_snapshot(label: str) -> None:
 
 
 def get_chromium_info() -> tuple[str, str] | None:
-    """
-    Looks for Chromium-based browser on local machine,
-    and returns app name and path.
-    """
-    system = platform.system()
+    from tts_audiobook_tool.system_support.browser import get_chromium_info as browser_get_chromium_info
 
-    if system == "Windows":
-        names_and_paths = [
-            ("Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-            ("Chrome", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-            ("Chrome", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "Application", "chrome.exe")),
-            ("Chromium", r"C:\Program Files\Chromium\Application\chrome.exe"),
-            ("Chromium", r"C:\Program Files (x86)\Chromium\Application\chrome.exe"),
-            ("Chromium", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Chromium", "Application", "chrome.exe")),
-            ("Edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
-        ]
-    elif system == "Darwin":
-        names_and_paths = [
-            ("Chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-            ("Chromium", "/Applications/Chromium.app/Contents/MacOS/Chromium"),
-        ]
-    elif system == "Linux":
-        names_and_paths = [
-            ("Chrome", "/usr/bin/google-chrome"),
-            ("Chrome", "/usr/bin/google-chrome-stable"),
-            ("Chrome", "/opt/google/chrome/google-chrome"),
-            ("Chromium", "/usr/bin/chromium"),
-            ("Chromium", "/usr/bin/chromium-browser"),
-            ("Chromium", "/usr/bin/chromium-browser-stable"),
-            ("Chromium", "/snap/bin/chromium"),
-        ]
-    else:
-        return None
-
-    for item in names_and_paths:
-        if os.path.exists(item[1]):
-            return item
-
-    return None
+    return browser_get_chromium_info()
 
 
 def print_warm_up_result_stop(result: ModelWarmUpResult) -> None:

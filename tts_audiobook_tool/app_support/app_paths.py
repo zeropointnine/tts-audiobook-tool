@@ -18,9 +18,7 @@ def get_app_user_dir() -> str:
 
 
 def get_chromium_user_data_dir() -> str:
-    dir = get_app_user_dir()
-    dir = os.path.join(dir, CHROME_USER_DATA_DIR_NAME)
-    return dir
+    return os.path.join(get_app_user_dir(), CHROME_USER_DATA_DIR_NAME)
 
 
 def get_temp_file_path_by_hash(hash: str) -> str:

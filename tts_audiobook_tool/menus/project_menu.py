@@ -4,12 +4,12 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.dir_open_util import DirOpenUtil
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -35,7 +35,7 @@ class ProjectMenu:
                 return False
 
         def on_view(_: State, __: MenuItem) -> None:
-            err = DirOpenUtil.open(state.project.dir_path)
+            err = open_directory(state.project.dir_path)
             if err:
                 ask.ask_error(err)
             else:

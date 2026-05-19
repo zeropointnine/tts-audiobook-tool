@@ -36,6 +36,7 @@ from tts_audiobook_tool.sound_app_util import SoundAppUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
+from tts_audiobook_tool.system_support.terminal import get_terminal_width
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.whisper_util import WhisperUtil
@@ -190,10 +191,7 @@ class Ui:
 
     @staticmethod
     def term_cols() -> int:
-        try:
-            return os.get_terminal_size().columns
-        except OSError:
-            return 80
+        return get_terminal_width()
 
     @staticmethod
     def display_width(s: str) -> int:

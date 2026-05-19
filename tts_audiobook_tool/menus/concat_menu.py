@@ -1,11 +1,8 @@
-import os
-
 import torch
 
-from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool.app_support import app_paths
-from tts_audiobook_tool import ask, text_util
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.chapter_info import ChapterInfo
 from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
@@ -17,6 +14,10 @@ from tts_audiobook_tool.parse_util import ParseUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.system_support.browser import (
+    get_chromium_info,
+    launch_player_with_chromium,
+)
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -247,7 +248,7 @@ class ConcatMenu:
             print_feedback("No files found")
             return
         
-        user_data_dir=app_paths.get_chromium_user_data_dir()
+        user_data_dir = app_paths.get_chromium_user_data_dir()
 
         def on_item(_: State, item: MenuItem) -> None:
             assert(isinstance(chromium_info, tuple))
@@ -399,59 +400,7 @@ def ask_chapter_indices(infos: list[ChapterInfo]) -> list[int] | None:
     
     return indices
 
-def launch_player_with_chromium(
-        chromium_path: str, 
-        audio_file_path: str,
-        user_data_dir: str
-    ) -> None:
-    """
-    Launches local player/reader in Chrome/Chromium with the latest concat'ed file
-
-    Eg:
-      chromium
-          --allow-file-access-from-files
-          --autoplay-policy=no-user-gesture-required
-          --user-data-dir=/path/to/tts-audiobook-tool-chromium-profile
-          file:///path/to/index.html?url=/path/to/audiobook.m4b
-    """
-
-    if user_data_dir:
-        os.makedirs(user_data_dir, exist_ok=True)
-        if not os.path.exists(user_data_dir):
-            print_feedback(f"Couldn't create browser user directory {user_data_dir}")
-            return
-
-    browser_flags = [
-        "--allow-file-access-from-files", 
-        "--autoplay-policy=no-user-gesture-required",
-    ]
-    if user_data_dir:
-        browser_flags.append(f"--user-data-dir={user_data_dir}")
-
-    this_file_path = Path(os.path.abspath(__file__))
-    index_html_path = this_file_path.parent.parent / "browser_player" / "index.html"
-    index_html_url = index_html_path.as_uri() # important
-    browser_url = text_util.make_url_with_params(index_html_url, { "url": audio_file_path })
-
-    command = []
-    command.append(chromium_path)
-    command.extend(browser_flags)
-    command.append(browser_url)
-
-    try:
-        subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True  # Detach from Python process so it doesn't block
-        )
-        print_feedback(f"Launched process:\n{command}")
-    
-    except (FileNotFoundError, Exception) as e:
-        print_feedback(make_error_string(e), is_error=True)
-
-
-chromium_info = app_support.get_chromium_info()
+chromium_info = get_chromium_info()
 
 LOUDNORM_SUBHEADING = \
 """Performs an extra pass after concatenation to minimize volume disparities between
