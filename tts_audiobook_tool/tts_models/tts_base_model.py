@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, Strictness
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo
 from tts_audiobook_tool.util import *
@@ -136,19 +136,19 @@ class TtsBaseModel(ABC):
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 
     @classmethod
-    def get_prereq_errors(
+    def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
-    ) -> list[PrereqError]:
+    ) -> list[ReadinessIssue]:
         """
-        Returns list of unfulfilled prereq items describing why generate is not possible.
-        Some prereqs can only be known with a concrete instance (param `instance`).
+        Returns list of blocking issues describing why generate is not possible.
+        Some issues can only be known with a concrete instance (param `instance`).
         """
 
         # Default implementation is for model whose only potential requirement is voice clone-related
-        item = cls._get_standard_prereq_error(project)
+        item = cls._get_standard_voice_blocker(project)
         return [item] if item else []
    
-    def get_prereq_warnings(self, project: Project) -> list[str]:
+    def get_warning_issues(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
 
         # Default implementation returns random voice warning if any
@@ -244,13 +244,13 @@ class TtsBaseModel(ABC):
         return getattr(project, cls.INFO.voice_file_name_attr, "")
 
     @classmethod
-    def get_missing_voice_file_prereq_error(
+    def get_missing_voice_file_issue(
             cls,
             project: Project,
             voice_file_name_attr: str | None = None,
-    ) -> PrereqError | None:
+    ) -> ReadinessIssue | None:
         """
-        Returns prereq error if the given configured voice filename is non-empty
+        Returns a blocking issue if the given configured voice filename is non-empty
         but does not exist under the project directory.
         """
         voice_file_name_attr = voice_file_name_attr or cls.INFO.voice_file_name_attr
@@ -265,21 +265,21 @@ class TtsBaseModel(ABC):
         if os.path.exists(voice_path):
             return None
 
-        return PrereqError(
+        return ReadinessIssue(
             "voice sample",
             f"Voice clone sample file not found: {voice_file_name}"
         )
 
     @classmethod
-    def _get_standard_prereq_error(cls, project: Project) -> PrereqError | None:
+    def _get_standard_voice_blocker(cls, project: Project) -> ReadinessIssue | None:
 
         if not cls.INFO.voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
         if cls.INFO.requires_voice and not getattr(project, cls.INFO.voice_file_name_attr, ""):
-            return PrereqError("voice sample", "A voice clone sample is required")
+            return ReadinessIssue("voice sample", "A voice clone sample is required")
 
-        err = cls.get_missing_voice_file_prereq_error(project)
+        err = cls.get_missing_voice_file_issue(project)
         if err:
             return err
 

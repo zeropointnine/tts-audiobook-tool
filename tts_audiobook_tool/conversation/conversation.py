@@ -11,7 +11,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.conversation.conversation_internals import PromptBuilder, ResponseSession, Ui
 from tts_audiobook_tool.app_support import app_memory
-from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool import readiness
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.system_support.ansi import Ansi
@@ -72,7 +72,7 @@ class Conversation:
     def print_various(self) -> None:
 
         # Warnings
-        warnings = Tts.get_instance().get_prereq_warnings(self.state.project)
+        warnings = Tts.get_instance().get_warning_issues(self.state.project)
         if warnings:
             s = "\n".join(warnings)
             printt(f"{COL_DIM_ITALICS}{s}")
@@ -101,8 +101,8 @@ class Conversation:
         Returns True for success
         """
 
-        # Get prereq errors
-        errors = PrereqUtil.get_chat_prereq_errors(state)
+        # Get blocking issues
+        errors = readiness.get_chat_blockers(state)
         if errors:
             lines = [item.verbose for item in errors]
             s = "\n".join(lines)
@@ -117,10 +117,10 @@ class Conversation:
                 app_memory.gc_ram_vram()
             return False
 
-        # Must check for TTS Model prereq errors again b/c instance is guaranteed to exist now
-        model_errors = Tts.get_class().get_prereq_errors(state.project, Tts.get_instance_if_exists()) 
+        # Must check for TTS model blockers again because instance is guaranteed to exist now
+        model_errors = Tts.get_class().get_blocking_issues(state.project, Tts.get_instance_if_exists()) 
         if model_errors:
-            model_error_string = PrereqUtil.prereq_errors_to_string(model_errors, verbose=True)
+            model_error_string = readiness.format_issues(model_errors, verbose=True)
             print_feedback(model_error_string, is_error=True)
             return False
 

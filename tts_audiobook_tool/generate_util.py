@@ -12,7 +12,7 @@ from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
-from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -65,14 +65,14 @@ class GenerateUtil:
                 app_memory.gc_ram_vram()
             return True
 
-        # Do model prereq check now that model instance exists
-        err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+        # Do model readiness check now that model instance exists
+        err = readiness.get_generate_blocker_text(state, verbose=True)
         if err:
             print_feedback(err, is_error=True)
             return True
 
         # Print warnings if any
-        warnings = Tts.get_instance().get_prereq_warnings(state.project)
+        warnings = Tts.get_instance().get_warning_issues(state.project)
         if warnings:
             warnings_string = "\n".join(warnings)
             print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)

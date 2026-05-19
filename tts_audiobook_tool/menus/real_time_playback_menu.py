@@ -3,7 +3,7 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
-from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool import readiness
 from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -26,7 +26,7 @@ class RealTimePlaybackMenu:
 
         def make_start_label(_: State) -> str:
             label = "Start"
-            err = PrereqUtil.get_generate_prereq_error_string(state, verbose=False)
+            err = readiness.get_generate_blocker_text(state, verbose=False)
             if err:
                 return make_menu_label(label, err, value_prefix="", color_code=COL_ERROR)
             else:
@@ -189,8 +189,8 @@ def do_start(state: State) -> None:
         print_feedback("No text segments specified")
         return
 
-    # Check model and other app prereqs
-    err = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+    # Check model and other app blockers
+    err = readiness.get_generate_blocker_text(state, verbose=True)
     if err:
         print_feedback(err, is_error=True)
         return

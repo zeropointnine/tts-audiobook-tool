@@ -44,7 +44,7 @@ class Startup:
 
         """
         App entrypoint:
-        - Does prerequisite checks and exits on fail
+        - Checks readiness blockers and exits on fail
         - Prints one-time info messages as needed
         - Starts the app proper
         """

@@ -3,7 +3,7 @@ from abc import abstractmethod
 from enum import Enum
 
 from tts_audiobook_tool.app_types import Strictness
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
@@ -31,14 +31,14 @@ class ChatterboxBaseModel(TtsBaseModel):
         ...
 
     @classmethod
-    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None) -> list[PrereqError]:
+    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
 
         if not instance:
             return [] # Can't know if language is invalid w/o loading model code
         else:
             assert(isinstance(instance, ChatterboxBaseModel))
             if not project.language_code in instance.supported_languages_multi():
-                return [PrereqError("supported language code", f"Language code {project.language_code} not supported by current model")]
+                return [ReadinessIssue("supported language code", f"Language code {project.language_code} not supported by current model")]
             else:
                 return []
 

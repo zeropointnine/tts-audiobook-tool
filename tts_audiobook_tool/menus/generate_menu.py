@@ -10,7 +10,7 @@ from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
-from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -24,10 +24,10 @@ class GenerateMenu:
     def menu(state: State) -> None:
 
         def make_start_label(_: State) -> str:
-            prereq = PrereqUtil.get_generate_prereq_error_string(state, verbose=False)
+            blocker = readiness.get_generate_blocker_text(state, verbose=False)
             label = "Start"
-            if prereq:
-                label += f" {COL_DIM}({COL_ERROR}{prereq}{COL_DIM})"
+            if blocker:
+                label += f" {COL_DIM}({COL_ERROR}{blocker}{COL_DIM})"
             return label
 
         def make_range_label(_: State) -> str:
@@ -381,8 +381,8 @@ def regenerate_menu(state: State) -> None:
 
 def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> None:
 
-    # Check prereqs
-    error = PrereqUtil.get_generate_prereq_error_string(state, verbose=True)
+    # Check blockers
+    error = readiness.get_generate_blocker_text(state, verbose=True)
     if error:
         print_feedback(error, is_error=True)
         return

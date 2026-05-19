@@ -1,5 +1,5 @@
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
@@ -31,10 +31,10 @@ class NoneBaseModel(TtsBaseModel):
         return "N/A", ""
 
     @classmethod
-    def get_prereq_errors(
+    def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
-    ) -> list[PrereqError]:
-        return [ PrereqError("TTS model", "A TTS model is required") ]
+    ) -> list[ReadinessIssue]:
+        return [ ReadinessIssue("TTS model", "A TTS model is required") ]
 
 class NoneModel(NoneBaseModel):
 

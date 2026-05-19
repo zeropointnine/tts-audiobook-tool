@@ -1,7 +1,7 @@
 from tts_audiobook_tool.conversation.conversation import ConversationStatic
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.prereqs_util import PrereqUtil
+from tts_audiobook_tool import readiness
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
@@ -13,10 +13,10 @@ class ChatMenu:
     def menu(state: State) -> None:
 
         def make_start_label(state: State) -> str:
-            prereq = PrereqUtil.get_chat_prereq_error_string(state, verbose=False)
+            blocker = readiness.get_chat_blocker_text(state, verbose=False)
             label = "Start"
-            if prereq:
-                label += f" {COL_DIM}({COL_ERROR}{prereq}{COL_DIM})"
+            if blocker:
+                label += f" {COL_DIM}({COL_ERROR}{blocker}{COL_DIM})"
             return label
 
         subheading = (

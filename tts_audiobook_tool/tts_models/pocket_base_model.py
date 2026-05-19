@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
@@ -52,7 +52,7 @@ class PocketBaseModel(TtsBaseModel):
     ]
     DEFAULT_LANGUAGE = "english_2026-04"
     # Cache the gated/opt-in validation result per resolved voice prompt path so
-    # repeated prereq checks (eg, menu label rendering) do not keep re-encoding
+    # repeated readiness checks (eg, menu label rendering) do not keep re-encoding
     # the same audio prompt through pocket_tts. This is intentionally process-
     # lifetime cache; changing voice path naturally uses a different key.
     gated_error_message_cache: dict[str, str] = {}
@@ -69,18 +69,18 @@ class PocketBaseModel(TtsBaseModel):
         return s
 
     @classmethod
-    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None) -> list[PrereqError]:
+    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
         errors = []
         
         if instance:
             assert isinstance(instance, PocketBaseModel)
             if PocketBaseModel.get_gated_error_message(project, instance):
                 verbose_ui_message = cls.make_gated_error_message_ui()
-                errors.append(PrereqError("ungated model", verbose_ui_message))
+                errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
         
         if not project.pocket_voice_file_name and not project.pocket_predefined_voice:
-            errors.append(PrereqError("voice clone", "Setting a voice clone file or predefined voice is required"))
+            errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
 
         return errors
 

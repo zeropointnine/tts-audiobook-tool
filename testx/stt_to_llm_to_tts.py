@@ -17,6 +17,8 @@ import tty
 import logging
 from pathlib import Path
 
+from tts_audiobook_tool.model_manager import ModelManager
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from faster_whisper.transcribe import Segment
@@ -26,7 +28,6 @@ from tts_audiobook_tool.constants import *
 
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
-from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.stt import Stt
@@ -111,13 +112,13 @@ def main() -> None:
     Stt.set_config(prefs.stt_config)
     
     # Instantiate STT and TTS models
-    ModelsUtil.warm_up_models(state)
+    ModelManager.warm_up_models(state)
 
-    # TTS prereq check
-    prereq_errors = Tts.get_class().get_prereq_errors(project, Tts.get_instance()) 
-    if prereq_errors:
+    # TTS readiness check
+    blocking_issues = Tts.get_class().get_blocking_issues(project, Tts.get_instance()) 
+    if blocking_issues:
         print("Errors:")
-        for err in prereq_errors:
+        for err in blocking_issues:
             print(f"  - {err}")
         print("Please fix these issues and try again.")
         return  

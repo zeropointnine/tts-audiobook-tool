@@ -1,4 +1,4 @@
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
@@ -20,15 +20,15 @@ class IndexTts2BaseModel(TtsBaseModel):
     DEFAULT_TOP_K = 30
 
     @classmethod
-    def get_prereq_errors(
+    def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
-    ) -> list[PrereqError]:
+    ) -> list[ReadinessIssue]:
 
-        errors = super().get_prereq_errors(project, instance)
+        errors = super().get_blocking_issues(project, instance)
         if errors:
             return errors
 
-        err = cls.get_missing_voice_file_prereq_error(project, "indextts2_emo_voice_file_name")
+        err = cls.get_missing_voice_file_issue(project, "indextts2_emo_voice_file_name")
         if err:
             errors.append(err)
 

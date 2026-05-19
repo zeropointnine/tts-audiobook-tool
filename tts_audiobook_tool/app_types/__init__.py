@@ -265,6 +265,30 @@ class Strictness(tuple[str, int, str], Enum):
     
 # ---
 
+@dataclass
+class ReadinessIssue:
+    """
+    User-facing issue found while checking whether an action is ready to run.
+
+    Convention:
+    - Blockers are readiness issues that prevent a desired action from starting.
+    - Warnings are non-blocking readiness issues or messages that may be shown
+      before/around an action but do not prevent it.
+
+    The same structure can represent either category. API names communicate the
+    category, eg `get_generate_blockers()` versus `get_warning_issues()`.
+    """
+
+    # Very short noun phrase naming what is missing or invalid.
+    # Eg, "voice clone", "microphone", "valid speaker id".
+    short: str
+
+    # Complete user-facing sentence explaining the issue.
+    # Eg, "A voice clone sample is required".
+    verbose: str
+
+# ---
+
 FILES_DESC = "Each section marker defines the start of a new, separate audio file."
 METADATA_DESC = (
     "Section markers are used for M4B chapter metadata and player bookmark metadata.\n"

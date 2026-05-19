@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from tts_audiobook_tool.app_types import Strictness
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -41,15 +41,15 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         ...
 
     @classmethod
-    def get_prereq_errors(cls, project: Project, instance: TtsBaseModel | None) -> list[PrereqError]:
+    def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
         errors = []
         if instance:
             assert isinstance(instance, VibeVoiceBaseModel)
             if project.vibevoice_lora_target and not instance.has_lora:
-                errors.append( PrereqError("valid LoRA", "Couldn't load LoRA") )
+                errors.append( ReadinessIssue("valid LoRA", "Couldn't load LoRA") )
         return errors
 
-    def get_prereq_warnings(self, project: Project) -> list[str]:
+    def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
         if not project.vibevoice_voice_file_name and not project.vibevoice_lora_target:
             warning = "Model may generate random voices because no voice sample or lora has been defined"

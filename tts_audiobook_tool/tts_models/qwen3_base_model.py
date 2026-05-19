@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import Enum
 
-from tts_audiobook_tool.prereqs_util import PrereqError
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -112,9 +112,9 @@ class Qwen3BaseModel(TtsBaseModel):
     # ---
 
     @classmethod
-    def get_prereq_errors(
+    def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
-    ) -> list[PrereqError]:
+    ) -> list[ReadinessIssue]:
 
         if instance:
             assert(isinstance(instance, Qwen3BaseModel))
@@ -122,7 +122,7 @@ class Qwen3BaseModel(TtsBaseModel):
         items = []
 
         if instance and not instance.is_model_type_supported:
-            return [ PrereqError("supported model type", f"Model type {instance.model_type} is unsupported") ]
+            return [ ReadinessIssue("supported model type", f"Model type {instance.model_type} is unsupported") ]
 
         match project.qwen3_model_type:            
             case "custom_voice":
@@ -131,17 +131,17 @@ class Qwen3BaseModel(TtsBaseModel):
                 else:
                     is_valid = instance.get_resolved_speaker_info(project)[1]
                     if not is_valid:
-                        items.append( PrereqError("valid speaker id", "A valid speaker id is required") )
+                        items.append( ReadinessIssue("valid speaker id", "A valid speaker id is required") )
             case "voice_design":
                 ... # # has no requirements bc "instruction" is optional
             case "base" | _:
-                err = cls._get_standard_prereq_error(project)
+                err = cls._get_standard_voice_blocker(project)
                 if err:
                     items.append(err)
         
         return items
 
-    def get_prereq_warnings(self, project: Project) -> list[str]:
+    def get_warning_issues(self, project: Project) -> list[str]:
         
         warnings = []
 
