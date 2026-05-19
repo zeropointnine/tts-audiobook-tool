@@ -2,8 +2,13 @@
 # Use Python v3.11
 # ################
 
-# Most recent commit of IndexTTS2
-git+https://github.com/index-tts/index-tts@db5b39bb6ad903c219b2dd33d60b0f0bdaede664
+# Most recent commit of IndexTTS2.
+# Use GitHub's commit source archive instead of a git+https requirement because
+# upstream tracks example WAVs in Git LFS and their LFS quota is often exceeded.
+# A normal pip git clone then fails during checkout/smudge before installation,
+# even though the app does not need those example files. The archive URL keeps
+# the same pinned commit while avoiding Git LFS downloads.
+indextts @ https://github.com/index-tts/index-tts/archive/db5b39bb6ad903c219b2dd33d60b0f0bdaede664.zip
 ninja
 
 # App dependencies
