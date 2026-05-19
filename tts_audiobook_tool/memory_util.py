@@ -1,7 +1,8 @@
 import gc
 import sys
 
-from tts_audiobook_tool.hint_util import Hint, HintUtil
+from tts_audiobook_tool.app_support import hints
+from tts_audiobook_tool.app_types import Hint
 
 if sys.platform == "win32":
     import win32pdh
@@ -145,5 +146,5 @@ class MemoryUtil:
         message = f"VRAM is full and shared GPU memory is {shared_gb:.1f} GB"
         message += "\nDegraded inference speed is possible/likely"
         hint = Hint("", "Windows VRAM warning", message)
-        HintUtil.show_hint(hint)
+        hints.show_hint(hint)
         return True

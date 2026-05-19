@@ -1,11 +1,11 @@
 import os
 
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
@@ -79,7 +79,7 @@ class ProjectNewMenu:
             state.set_existing_project(state.project.dir_path)
             ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
-        HintUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
+        hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
 
         print_feedback("Project directory set:", state.project.dir_path)
         ask.ask_enter_to_continue()
@@ -163,7 +163,7 @@ class ProjectNewMenu:
             if missing_paths:
                 ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
-            HintUtil.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
+            hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
             return True
         except Exception as e:
             print_feedback(make_error_string(e), is_error=True)

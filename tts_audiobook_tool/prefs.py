@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_types import Saveable, SttConfig, SttVariant
-from tts_audiobook_tool.hint_util import HintUtil
+from tts_audiobook_tool.app_support import hints
+from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -100,9 +100,8 @@ class Prefs(Saveable):
             migrated_properties = ["segmentation_strategy", "max_words", "normalization_type", "use_section_sound_effect"]
             has = [item for item in migrated_properties if prefs_dict.get(item) is not None]
             if has:
-                from tts_audiobook_tool.hint_util import Hint                
                 hint = Hint("", "Properties have changed", MIGRATED_MESSAGE.replace("%1", ", ".join(has)))
-                HintUtil.show_hint(hint, and_prompt=True)
+                hints.show_hint(hint, and_prompt=True)
                 dirty = True
 
         # Project dir
@@ -112,7 +111,7 @@ class Prefs(Saveable):
             dirty = True
 
         # Hints
-        hints = prefs_dict.get("hints", None) or {}
+        hint_prefs = prefs_dict.get("hints", None) or {}
 
         # Speech-to-text variant
         s = prefs_dict.get("stt_variant", "")
@@ -256,7 +255,7 @@ class Prefs(Saveable):
             save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
             menu_clears_screen=menu_clears_screen,
-            hints=hints,
+            hints=hint_prefs,
             source_dict_keys=set(prefs_dict.keys())
         )
 

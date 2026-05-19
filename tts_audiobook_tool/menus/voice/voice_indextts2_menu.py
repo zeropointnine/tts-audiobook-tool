@@ -1,6 +1,6 @@
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_util import ProjectUtil
@@ -28,7 +28,7 @@ class VoiceIndexTts2Menu:
             return f"Select voice clone sample {currently}"
 
         def on_voice(_: State, __: MenuItem) -> None:
-            HintUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
+            hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
 
         def make_emo_voice_label(_) -> str:
@@ -41,7 +41,7 @@ class VoiceIndexTts2Menu:
 
         def on_emo_voice(_: State, __: MenuItem) -> None:
             # TODO: disallow emo voice file == voice file (bc is default behavior anyway)
-            HintUtil.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
+            hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceMenuShared.ask_and_set_voice_file(
                 state=state,
                 tts_type=TtsModelInfos.INDEXTTS2,

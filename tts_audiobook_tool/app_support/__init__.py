@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import ModelWarmUpResult, SttVariant
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.hint_util import HintUtil
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -76,16 +76,16 @@ def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
     project: Project = p_project
 
     if Tts.get_type() == TtsModelInfos.FISH_S1 and project.fish_s1_compile_enabled:
-        HintUtil.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
+        hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
     elif Tts.get_type() == TtsModelInfos.FISH_S2 and project.fish_s2_compile_enabled:
-        HintUtil.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
+        hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
 
     import torch
     if platform.system() == "Linux" and torch.cuda.is_available():
         if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
             version = torch.backends.cudnn.version()
             if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
-                HintUtil.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
+                hints.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
 
 
 def play_done_sound() -> None:

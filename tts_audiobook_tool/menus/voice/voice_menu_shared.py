@@ -2,9 +2,9 @@ import os
 from typing import Callable
 
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.hint_util import HintUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound_app_util import SoundAppUtil
@@ -125,7 +125,7 @@ class VoiceMenuShared:
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
         if tts_type.value.voice_transcript_attr:
-            HintUtil.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
+            hints.show_hint_if_necessary(state.prefs, HINT_VOICE_TRANSCRIPT)
 
         if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
             state.prefs.last_voice_dir = ""
@@ -207,7 +207,7 @@ class VoiceMenuShared:
 
         print_feedback("Voice file saved")
 
-        HintUtil.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
+        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
 
         if force_enter_prompt:
             ask.ask_enter_to_continue()

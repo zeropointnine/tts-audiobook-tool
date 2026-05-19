@@ -3,8 +3,8 @@ from dataclasses import dataclass
 import re
 from typing import Callable
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint, SttVariant
-from tts_audiobook_tool.hint_util import HintUtil
 import tts_audiobook_tool.util as util_module
 
 from tts_audiobook_tool import ask
@@ -142,7 +142,7 @@ class MenuUtil:
 
                 # Print optional hint
                 if hint:
-                    HintUtil.show_hint_if_necessary(state.prefs, hint)
+                    hints.show_hint_if_necessary(state.prefs, hint)
 
                 left_padding = "  "
 
