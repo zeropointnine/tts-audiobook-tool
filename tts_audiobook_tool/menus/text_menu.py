@@ -73,7 +73,7 @@ class TextMenu:
             MenuItem("Import from text file", on_set_text, data="import"),
         )
         items.append(
-            MenuItem("Import from epub file", on_set_text, data="epub"),
+            MenuItem("Import from EPUB file", on_set_text, data="epub"),
         )
         items.append(
             MenuItem("Import manually (input or paste text)", on_set_text, data="manual"),
@@ -197,17 +197,17 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             # Print dividers info
             printt(f"{COL_ACCENT}Section markers:")
             num_dividers = len(epub_import_result.section_dividers)
-            verb = "was" if num_dividers == 1 else "were"
             noun = make_noun('section marker', 'section markers', num_dividers)
-            printt(f"{num_dividers} {noun} {verb} set using the epub's built-in structure.")
-            printt("They can be reviewed and edited at Main > Create > Section markers")
+            verb = make_noun("was added", "were added", num_dividers) # heh
+            printt(f"{num_dividers} {noun} {verb} using the epub's built-in structure.")
+            printt("They can be reviewed and edited at: Main > Create > Section markers")
             printt()
 
             # Print raw text conversion info
             printt(f"{COL_ACCENT}Text file conversion:")
             raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
             raw_text_link = text_util.make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
-            printt(f"The plain text conversion of the epub can be reviewed here:")
+            printt(f"The plain text conversion of the epub file can be reviewed here:")
             printt(f"{raw_text_link}")
             printt()
 

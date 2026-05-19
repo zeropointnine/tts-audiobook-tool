@@ -49,6 +49,12 @@ def init_logging() -> None:
     logging.getLogger("pocket_tts.models.tts_model").setLevel(logging.WARNING)
     import warnings
     warnings.filterwarnings("ignore", module="pyloud")
+    warnings.filterwarnings(
+        "ignore",
+        message="This search incorrectly ignores the root element.*",
+        category=FutureWarning,
+        module="ebooklib\\.epub",
+    )
 
 
 def set_seed(seed: int) -> None:

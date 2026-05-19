@@ -194,7 +194,7 @@ The first chapter starts at phrase group `0`, so it does not need a divider entr
 The user-facing import entry point is the existing text menu:
 
 ```python
-MenuItem("Import from epub file", on_set_text, data="epub")
+MenuItem("Import from EPUB file", on_set_text, data="epub")
 ```
 
 The EPUB branch in `on_set_text(...)` mirrors the existing text-file and manual import flow:

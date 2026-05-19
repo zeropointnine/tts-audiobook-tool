@@ -57,7 +57,7 @@ class Bookmarks {
         this.indices = [];
         if (indices) {
             for (const index of indices) {
-                this.addIndex(index, false);
+                this.addIndex(parseInt(index), false);
             }
         }
         this._updateList();
@@ -90,7 +90,7 @@ class Bookmarks {
             return;
         }
         this.indices.push(index);
-        this.indices.sort();
+        this.indices.sort((a, b) => a - b);
         if (andUpdate) {
             this._updateList();
         }

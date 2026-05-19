@@ -291,7 +291,7 @@ def make_chapter_files_subheading(state: State) -> str:
     
     if len(infos) > 4:
         subinfos = infos[:3]
-        extra = f" {COL_DIM_ITALICS}+{len(infos) - len(subinfos)} more files"
+        extra = f" {COL_DIM_ITALICS}... {COL_ACCENT}+{len(infos) - len(subinfos)} {COL_DIM}more files"
     else:
         subinfos = infos
         extra = ""

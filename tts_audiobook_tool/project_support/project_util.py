@@ -243,6 +243,8 @@ class ProjectUtil:
         returning tuples of (path, modified_date) where modified_date is
         YYYY-MM-DD HH:MM.
         """
+        ONE_FILE_PER_SUBDIR = True
+
         concat_dir = project.concat_path
         if not concat_dir or not os.path.exists(concat_dir):
             return []
@@ -273,7 +275,8 @@ class ProjectUtil:
                     except (OSError, PermissionError, ValueError):
                         modified_date = "unknown"
                     results.append((path, modified_date))
-                    break
+                    if ONE_FILE_PER_SUBDIR:
+                        break
             if len(results) >= limit:
                 break
         

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import app_paths
-from tts_audiobook_tool.util import make_error_string, print_feedback
+from tts_audiobook_tool.util import get_package_dir, make_error_string, print_feedback
 
 
 def get_chromium_info() -> tuple[str, str] | None:
@@ -69,9 +69,12 @@ def launch_player_with_chromium(
     if user_data_dir:
         browser_flags.append(f"--user-data-dir={user_data_dir}")
 
-    this_file_path = Path(os.path.abspath(__file__))
-    index_html_path = this_file_path.parent.parent / "browser_player" / "index.html"
-    index_html_url = index_html_path.as_uri()
+    package_dir = get_package_dir()
+    if package_dir:
+        index_html_path = Path(package_dir).parent / "browser_player" / "index.html"
+    else:
+        index_html_path = Path("browser_player") / "index.html"
+    index_html_url = index_html_path.resolve().as_uri()
     browser_url = text_util.make_url_with_params(index_html_url, {"url": audio_file_path})
 
     command: list[str] = [chromium_path]

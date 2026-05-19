@@ -523,7 +523,7 @@ class EpubExtractor:
             raise ImportError("Missing dependency EbookLib. Reinstall requirements for EPUB import support.") from e
 
         try:
-            book = epub.read_epub(epub_path)
+            book = epub.read_epub(epub_path, options={"ignore_ncx": True})
         except Exception as e:
             message = f"Error reading EPUB: {e}"
             L.e(message)

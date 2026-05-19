@@ -45,7 +45,7 @@ class AppMetadata(NamedTuple):
         dic = {
             "version": self.version,
             "raw_text": raw_text_base64,
-            "bookmarks": self.bookmark_indices,
+            "bookmarks": sorted(set(self.bookmark_indices)),
             "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
             "has_section_break_audio": bool(self.has_section_break_audio),
             "project_snapshot": self.project_snapshot
