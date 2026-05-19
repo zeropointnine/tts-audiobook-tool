@@ -1,7 +1,7 @@
 import os
 import re
 
-from tts_audiobook_tool.ansi import Ansi
+from tts_audiobook_tool.system_support.ansi import Ansi
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
 

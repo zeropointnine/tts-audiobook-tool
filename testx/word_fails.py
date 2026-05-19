@@ -1,7 +1,6 @@
 import os
 import json
 
-from tts_audiobook_tool.ansi import Ansi
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.segment_stt_info_util import SegmentSttInfoUtil
 

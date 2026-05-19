@@ -14,7 +14,7 @@ from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.prereqs_util import PrereqUtil
 from tts_audiobook_tool.util import *
 
-from tts_audiobook_tool.ansi import Ansi
+from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.models_util import ModelsUtil
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.state import State

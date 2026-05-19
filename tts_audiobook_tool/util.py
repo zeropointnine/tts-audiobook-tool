@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.ansi import Ansi
+from tts_audiobook_tool.system_support.ansi import Ansi
 
 """
 Various frequently used small util functions, both app-specific and general

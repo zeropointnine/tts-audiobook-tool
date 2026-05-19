@@ -12,7 +12,7 @@ from typing import Callable
 
 import numpy as np
 
-from tts_audiobook_tool.ansi import Ansi
+from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.conversation.console_session import (
