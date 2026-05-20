@@ -14,12 +14,15 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from functools import cache
 import platform
-from typing import Callable, NamedTuple, Protocol, Sequence
+from typing import Callable, NamedTuple, Protocol, Sequence, TYPE_CHECKING
 
 from numpy import ndarray
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.app_types.phrase import PhraseGroup
 
 class SingletonBase:
     """
@@ -360,6 +363,63 @@ class SegmentationStrategy(tuple[str, str, str], Enum):
             if s == item.id:
                 return item
         return None
+
+# ---
+
+@dataclass
+class BookSection:
+    """
+    Structural subdivision of a Book, such as an imported EPUB chapter or a plain-text
+    section. Owns the phrase groups for that section plus an optional display title.
+    """
+    phrase_groups: list[PhraseGroup]
+    title: str = ""
+
+
+class BookSegmentationSettings(NamedTuple):
+    """
+    Records the segmentation-time inputs used to produce a Book's current phrase groups.
+    Replaces the applied segmentation fields that previously lived directly on Project.
+    """
+    language_code: str = ""
+    max_words_per_segment: int = 0
+    strategy: SegmentationStrategy = SegmentationStrategy.NORMAL
+
+
+@dataclass
+class Book:
+    """
+    Canonical segmented text model for an audiobook. Used as TTS generation input,
+    forced-alignment reference text, and ABR/player reader text source.
+    """
+    sections: list[BookSection]
+    title: str = ""
+    text_source_kind: str = ""
+    audio_source_kind: str = ""
+    segmentation_settings: BookSegmentationSettings = BookSegmentationSettings()
+
+    def phrase_groups(self) -> list[PhraseGroup]:
+        result: list[PhraseGroup] = []
+        for section in self.sections:
+            result.extend(section.phrase_groups)
+        return result
+
+    def section_start_indices(self) -> list[int]:
+        result: list[int] = []
+        index = 0
+        for section in self.sections:
+            result.append(index)
+            index += len(section.phrase_groups)
+        return result
+
+    def section_ranges(self) -> list[tuple[int, int]]:
+        result: list[tuple[int, int]] = []
+        index = 0
+        for section in self.sections:
+            end = index + len(section.phrase_groups)
+            result.append((index, end))
+            index = end
+        return result
 
 @dataclass
 class ModelWarmUpResult:

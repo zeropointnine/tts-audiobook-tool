@@ -94,7 +94,11 @@ FFMPEG_ARGUMENTS_OUTPUT_AAC = make_ffmpeg_arguments_output_aac()
 APP_META_FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
 APP_META_MP4_MEAN = "tts-audiobook-tool"
 APP_META_MP4_TAG = "audiobook-data"
-ABR_VERSION = 2
+# ABR metadata version history:
+# - 1: original timed text/bookmark payload; missing version implies 1
+# - 2: adds project_snapshot
+# - 3: adds structural sections metadata for reader/player navigation
+ABR_VERSION = 3
 PROJECT_SPEC_VERSION = 2
 
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]

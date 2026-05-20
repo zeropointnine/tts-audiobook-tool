@@ -27,7 +27,7 @@ The app uses a plain-text interface in the console. It also includes optional re
 
 1. Assign a working project directory.
 2. Select a short reference audio clip for the voice clone, and adjust related model parameters if desired.
-3. Select the source text, and optionally define file split points.
+3. Select the source EPUB or text file, and optionally define file split points.
 4. Generate
 5. Concatenate the generated audio segments to create the finished audiobook file/s.
 6. Use the optional web player to play and read your audiobook.
@@ -528,21 +528,23 @@ On Windows, download a pre-compiled wheel from a trustworthy source (for example
 
 # Usage notes
 
+The app uses sane, conservative defaults -- regardless of chosen TTS model -- which should allow you to start generating your first audiobook in just a couple minutes. From there, you can explore and adjust the app's various knobs and settings to your preference.
+
 The app saves its state between sessions, so you can interrupt the program at any time and resume later (important due to how long generating a full-length novel can take).
 
-Additionally, setting chapter cut points can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
+Additionally, setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
 
-Note too that it's possible to utilize different voices and even different models over the course of generating the audio segments for a given project.
+Note too that it's possible to utilize different voices and even different models over the course of generating the audio segments for a given project for whatever reason.
 
 ### Voice cloning
 
-When prepping reference audio for voice cloning, it's worthwhile to prepare three or so different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit.
+When prepping reference audio for voice cloning, it's worthwhile to prepare a few different sound samples from a given source (not just one), and then test each one out in turn on a short passage of the intended text, as the quality, characteristics, and word error rate resulting from each sample from the same source can vary quite a bit. Some TTS models are especially sensitive to this.
 
 ### VRAM considerations
 
 The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which needs to runs concurrently with the currently active TTS model to validate its output. If you are getting out of memory errors, try one of the following:
 
-- Use large-v3-turbo instead of large-v3 (saves about 1 GB of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
+- Use large-v3-turbo instead of large-v3 (saves a gig or two of VRAM) (`Options` > `Whisper model` > `large-v3-turbo`)
 - Force Whisper to use system memory instead of running on the GPU (runs much slower, ofc) (`Options` > `Whisper device` > `CPU`)
 - Disable Whisper altogether (last resort) (`Options` > `Whisper model` > `Disabled`)
 

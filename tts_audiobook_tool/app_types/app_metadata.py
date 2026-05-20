@@ -1,15 +1,48 @@
 from __future__ import annotations
 
-import base64
 import json
 from pathlib import Path
-import zlib
 
 from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.util import *
+
+
+class AppMetadataSection(NamedTuple):
+    title: str
+    start_index: int
+    end_index: int
+
+    @staticmethod
+    def to_dict(section: AppMetadataSection) -> dict:
+        return {
+            "title": section.title,
+            "start_index": section.start_index,
+            "end_index": section.end_index,
+        }
+
+    @staticmethod
+    def list_to_dicts(sections: list[AppMetadataSection]) -> list[dict]:
+        return [AppMetadataSection.to_dict(section) for section in sections]
+
+    @staticmethod
+    def dicts_to_list(dicts: list[dict]) -> list[AppMetadataSection] | str:
+        result: list[AppMetadataSection] = []
+        for d in dicts:
+            try:
+                section = AppMetadataSection(**d)
+            except Exception as e:
+                return f"Error with section dict {json.dumps(d)} - {e}"
+            if not isinstance(section.title, str):
+                return f"Bad type for section title: {type(section.title)}"
+            if not isinstance(section.start_index, int) or section.start_index < 0:
+                return f"Bad type/value for section start_index: {section.start_index}"
+            if not isinstance(section.end_index, int) or section.end_index < section.start_index:
+                return f"Bad type/value for section end_index: {section.end_index}"
+            result.append(section)
+        return result
 
 class AppMetadata(NamedTuple):
     """
@@ -35,20 +68,17 @@ class AppMetadata(NamedTuple):
     # Export-time snapshot of project settings for possible future import flows
     project_snapshot: dict
 
+    # Structural overlay over text_segments for reader/player section navigation
+    sections: list[AppMetadataSection]
+
     def to_json_string(self) -> str:
-
-        # Convert raw text to base64'ed compressed data blob
-        bytes = self.raw_text.encode('utf-8')
-        data = zlib.compress(bytes, level=6)
-        raw_text_base64 = base64.urlsafe_b64encode(data).decode('ascii')
-
         dic = {
             "version": self.version,
-            "raw_text": raw_text_base64,
             "bookmarks": sorted(set(self.bookmark_indices)),
             "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
             "has_section_break_audio": bool(self.has_section_break_audio),
-            "project_snapshot": self.project_snapshot
+            "project_snapshot": self.project_snapshot,
+            "sections": AppMetadataSection.list_to_dicts(self.sections),
         }
         string = json.dumps(dic)
         return string
@@ -66,18 +96,14 @@ class AppMetadata(NamedTuple):
             return f"{e}"
         if not isinstance(o, dict):
             return f"Bad type: {type(o)}"
-        if not "raw_text" in o or not "text_segments" in o:
+        if "text_segments" not in o:
             return f"Missing required field in {o}"
 
         version = o.get("version", 1)
         if not isinstance(version, int) or version < 1:
             return f"Bad type/value for 'version': {version}"
 
-        # raw_text - Decode base64 string to bytes, decompress, and convert back to utf8
-        s = o["raw_text"]
-        data = base64.urlsafe_b64decode(s.encode('ascii'))
-        bytes_data = zlib.decompress(data)
-        raw_text = bytes_data.decode('utf-8')
+        raw_text = ""
 
         phrase_dicts = o["text_segments"]
         if not isinstance(phrase_dicts, list):
@@ -103,13 +129,21 @@ class AppMetadata(NamedTuple):
         if not isinstance(project_snapshot, dict):
             return f"Bad type for 'project_snapshot': {type(project_snapshot)}"
 
+        sections = o.get("sections", [])
+        if not isinstance(sections, list):
+            return f"Bad type for 'sections': {type(sections)}"
+        sections_result = AppMetadataSection.dicts_to_list(sections)
+        if isinstance(sections_result, str):
+            return sections_result
+
         return AppMetadata(
             timed_phrases=timed_phrases, 
             version=version,
             bookmark_indices=bookmarks,
             raw_text=raw_text, 
             has_section_break_audio=has_section_break_audio,
-            project_snapshot=project_snapshot
+            project_snapshot=project_snapshot,
+            sections=sections_result,
         )
 
     @staticmethod

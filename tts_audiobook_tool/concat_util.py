@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import os
 import subprocess
 import time
@@ -21,7 +22,7 @@ from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.app_types.app_metadata import AppMetadata
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.app_types.phrase import Phrase
@@ -256,22 +257,36 @@ class ConcatUtil:
 
         phrases = [item[0] for item in phrases_and_paths]
         timed_phrases = TimedPhrase.make_list_using(phrases, durations)        
+        phrase_to_text_segment_start_indices = list(range(len(timed_phrases)))
         if state.project.subdivide_phrases:
             file_paths = [item[1] for item in phrases_and_paths]
-            timed_phrases, bookmark_indices = make_subdivided_timed_phrases(
+            timed_phrases, bookmark_indices, phrase_to_text_segment_start_indices = make_subdivided_timed_phrases(
                 timed_phrases=timed_phrases, 
                 sound_paths=file_paths, 
                 sound_durations=durations, 
                 bookmark_indices=bookmark_indices
             )
+        sections = make_app_metadata_sections(
+            project=state.project,
+            index_start=index_start,
+            index_end=index_end,
+            phrase_to_text_segment_start_indices=phrase_to_text_segment_start_indices,
+            text_segment_count=len(timed_phrases),
+        )
         app_meta = AppMetadata(
             timed_phrases=timed_phrases,
             version=ABR_VERSION,
             raw_text=raw_text, 
             bookmark_indices=bookmark_indices,
             has_section_break_audio=state.project.use_section_sound_effect,
-            project_snapshot=state.project.to_snapshot_dict()
+            project_snapshot=state.project.to_snapshot_dict(),
+            sections=sections,
         )
+        if DEV or state.prefs.save_debug_files:
+            debug_json_path = stem_path + ".abr.metadata.json"
+            err = save_abr_metadata_debug_json(app_meta, debug_json_path)
+            if err:
+                L.w(f"Couldn't save ABR metadata debug JSON: {err}")
         if is_aac:
             err = AppMetadata.save_to_mp4(app_meta, last_path, final_path)
         else:
@@ -516,7 +531,7 @@ def make_subdivided_timed_phrases(
         sound_paths: list[str],
         sound_durations: list[float],
         bookmark_indices: list[int]
-    ) -> tuple[ list[TimedPhrase], list[int] ]:
+    ) -> tuple[ list[TimedPhrase], list[int], list[int] ]:
     """
     Uses the "forced alignment" metadata in the json files which is saved alongside the sound_paths 
     to break up the timed_phrases into smaller parts.
@@ -531,8 +546,10 @@ def make_subdivided_timed_phrases(
 
     new_timed_phrases: list[TimedPhrase] = []
     new_bookmark_indices: list[int] = []
+    phrase_to_text_segment_start_indices: list[int] = []
 
     for i in range(0, len(timed_phrases)):
+        phrase_to_text_segment_start_indices.append(len(new_timed_phrases))
         
         def add_to_new_bookmark_indices(debug_reason: str, debug_text: str) -> None:
             if i in bookmark_indices:
@@ -586,4 +603,49 @@ def make_subdivided_timed_phrases(
         # (prevents discontinuities in segment selectedness across boundaries, which looks distracting)
         new_timed_phrases[-1].time_end = sound_durations[i] + offset
 
-    return new_timed_phrases, new_bookmark_indices
+    return new_timed_phrases, new_bookmark_indices, phrase_to_text_segment_start_indices
+
+
+def make_app_metadata_sections(
+    project: Project,
+    index_start: int,
+    index_end: int,
+    phrase_to_text_segment_start_indices: list[int],
+    text_segment_count: int,
+) -> list[AppMetadataSection]:
+    sections: list[AppMetadataSection] = []
+    book_sections = project.book.sections
+    section_ranges = project.get_section_ranges()
+
+    if len(book_sections) != len(section_ranges):
+        return sections
+
+    for section, (section_start, section_end) in zip(book_sections, section_ranges):
+        overlap_start = max(section_start, index_start)
+        overlap_end = min(section_end, index_end + 1)
+        if overlap_start >= overlap_end:
+            continue
+
+        start_index = phrase_to_text_segment_start_indices[overlap_start]
+        if overlap_end < len(phrase_to_text_segment_start_indices):
+            end_index = phrase_to_text_segment_start_indices[overlap_end]
+        else:
+            end_index = text_segment_count
+
+        sections.append(AppMetadataSection(
+            title=section.title,
+            start_index=start_index,
+            end_index=end_index,
+        ))
+
+    return sections
+
+
+def save_abr_metadata_debug_json(app_meta: AppMetadata, path: str) -> str:
+    try:
+        payload = json.loads(app_meta.to_json_string())
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(payload, file, indent=4, ensure_ascii=False)
+        return ""
+    except Exception as e:
+        return make_error_string(e)

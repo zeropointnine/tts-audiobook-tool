@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.app_types import BookSegmentationSettings
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.menu_util import MenuUtil
@@ -20,9 +20,7 @@ def print_text_groups(groups: list[PhraseGroup]) -> None:
 def print_project_text(
     phrase_groups: list[PhraseGroup],
     extant_indices: set[int] | None,
-    language_code_used: str,
-    max_words_used: int | None,
-    strategy_used: SegmentationStrategy,
+    segmentation_settings: BookSegmentationSettings,
 ) -> None:
     """
     Prints the list of text segments of a Project.
@@ -53,10 +51,10 @@ def print_project_text(
     printt()
 
     printt(f"{COL_DIM}The text was segmented using the following settings:")
-    printt(f"- Text segmenter language code: {COL_ACCENT}{language_code_used or 'none'}")
-    if max_words_used:
-        printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{max_words_used}")
-    printt(f"- Text segmenter strategy: {COL_ACCENT}{strategy_used.label}")
+    printt(f"- Text segmenter language code: {COL_ACCENT}{segmentation_settings.language_code or 'none'}")
+    if segmentation_settings.max_words_per_segment:
+        printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{segmentation_settings.max_words_per_segment}")
+    printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
     if extant_indices is not None:
         printt()
         printt(f"Num audio segments generated: {COL_ACCENT}{len(extant_indices)} {COL_DIM}/ {COL_ACCENT}{len(phrase_groups)}")

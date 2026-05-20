@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.app_types import BookSegmentationSettings, SegmentationStrategy
 from tts_audiobook_tool.app_support import app_display
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
@@ -38,9 +38,7 @@ class TextMenu:
             app_display.print_project_text(
                 phrase_groups=state.project.phrase_groups,
                 extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
-                language_code_used=state.project.applied_language_code,
-                max_words_used=state.project.applied_max_words,
-                strategy_used=state.project.applied_strategy or list(SegmentationStrategy)[0]
+                segmentation_settings=state.project.get_book_segmentation_settings(),
             )
             ask.ask_enter_to_continue()
 
@@ -60,7 +58,8 @@ class TextMenu:
                 strategy=state.project.segmentation_strategy,
                 max_words=state.project.max_words,
                 language_code=state.project.language_code,
-                raw_text=""
+                raw_text="",
+                text_source_kind="manual",
             )
 
             if not state.real_time.custom_phrase_groups:
@@ -192,22 +191,15 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             printt(f"{COL_ACCENT}Import info:{COL_DEFAULT}")
             for warning in epub_import_result.significant_warnings:
                 printt(f"- {warning}")
+            num_sections = len(epub_import_result.chapters)
+            noun = make_noun("EPUB section", "EPUB sections", num_sections)
+            printt(f"- Imported {num_sections} {noun} using the EPUB's built-in structure.")
             printt()
 
-            # Print dividers info
-            printt(f"{COL_ACCENT}Section markers:")
-            num_dividers = len(epub_import_result.section_dividers)
-            noun = make_noun('section marker', 'section markers', num_dividers)
-            verb = make_noun("was added", "were added", num_dividers) # heh
-            printt(f"{num_dividers} {noun} {verb} using the epub's built-in structure.")
-            printt("They can be reviewed and edited at: Main > Create > Section markers")
-            printt()
-
-            # Print raw text conversion info
-            printt(f"{COL_ACCENT}Text file conversion:")
+            # Print EPUB-to-text artifact info
             raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
             raw_text_link = text_util.make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
-            printt(f"The plain text conversion of the epub file can be reviewed here:")
+            printt(f"{COL_ACCENT}A plain-text conversion{COL_DEFAULT} of the EPUB file was also saved here:")
             printt(f"{raw_text_link}")
             printt()
 
@@ -220,9 +212,11 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     app_display.print_project_text(
         phrase_groups=phrase_groups,
         extant_indices=None,
-        language_code_used=state.project.language_code,
-        max_words_used=state.project.max_words,
-        strategy_used=state.project.segmentation_strategy
+        segmentation_settings=BookSegmentationSettings(
+            language_code=state.project.language_code,
+            max_words_per_segment=state.project.max_words,
+            strategy=state.project.segmentation_strategy,
+        ),
     )
 
     # Confirm
@@ -245,15 +239,21 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             strategy=state.project.segmentation_strategy,
             max_words=state.project.max_words,
             language_code=state.project.language_code,
-            raw_text=raw_text
+            raw_text=raw_text,
+            title=epub_import_result.book_title,
+            section_titles=[chapter.title for chapter in epub_import_result.chapters],
         )
+        state.project.section_dividers = []
+        state.project.save()
     else:
+        text_source_kind = "manual" if item.data == "manual" else "plain_text"
         state.project.set_phrase_groups_and_save(
             phrase_groups=phrase_groups,
             strategy=state.project.segmentation_strategy,
             max_words=state.project.max_words,
             language_code=state.project.language_code,
-            raw_text=raw_text
+            raw_text=raw_text,
+            text_source_kind=text_source_kind,
         )
 
     if not state.real_time.custom_phrase_groups:
@@ -262,7 +262,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     if epub_import_result:
         print_feedback(
             "Project text has been set from EPUB:",
-            f"{len(epub_import_result.chapters)} chapters, {len(epub_import_result.section_dividers)} dividers"
+            f"{len(epub_import_result.chapters)} {make_noun('EPUB section', 'EPUB sections', len(epub_import_result.chapters))}"
         )
     else:
         print_feedback("Project text has been set")

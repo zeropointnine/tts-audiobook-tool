@@ -9,7 +9,6 @@ Its purpose is to let the browser player reconstruct:
 - the timed text shown during playback
 - embedded bookmark locations
 - whether section-break audio was inserted
-- optionally, the source raw text
 
 It also carries export-time metadata for app compatibility, including:
 
@@ -29,7 +28,6 @@ In practice, an `*.abr.flac`, `*.abr.m4a`, or `*.abr.m4b` file is just a normal 
 At the end of concat/export, it builds an `AppMetadata` object using:
 
 - `timed_phrases`: generated from the exported audio segment durations
-- `raw_text`: loaded from the project text source
 - `bookmark_indices`: user-provided bookmark indices, possibly adjusted after subdivision
 - `has_section_break_audio`: whether section-break sound effects were included
 
@@ -37,6 +35,14 @@ That payload is then embedded into the final file:
 
 - FLAC via `AppMetadata.save_to_flac()`
 - AAC/MP4/M4B via `AppMetadata.save_to_mp4()`
+
+During concat, the app can also write a standalone debug/dev JSON sidecar containing the same
+payload shape that is embedded into the audio file.
+
+- path pattern: `*.abr.metadata.json`
+- location: the active timestamped subdirectory under `combined/`
+- one sidecar is written per emitted ABR output file
+- this happens only when `DEV` is enabled or `Prefs.save_debug_files` is `True`
 
 The browser player reads the same payload through `browser_player/metadata-util.js`.
 
@@ -71,8 +77,7 @@ The embedded value is a JSON object.
 
 ```json
 {
-  "version": 2,
-  "raw_text": "<encoded representation of the original raw text>",
+  "version": 3,
   "bookmarks": [0, 12, 31],
   "text_segments": [
     {
@@ -87,6 +92,13 @@ The embedded value is a JSON object.
     }
   ],
   "has_section_break_audio": true,
+  "sections": [
+    {
+      "title": "Chapter 1",
+      "start_index": 0,
+      "end_index": 2
+    }
+  ],
   "project_snapshot": {
     "dir_path": "/abs/path/to/original/project",
     "version": 2,
@@ -106,11 +118,15 @@ Integer ABR metadata version.
 Current value:
 
 - `2`: includes `project_snapshot`
+- `3`: includes structural `sections` metadata
 
 Backward compatibility rule:
 
 - if `version` is missing, the file should be treated as ABR version `1`
 - ABR version `1` means there is no `project_snapshot`
+
+Version `3` adds `sections`, which provide structural overlay ranges over the flat
+`text_segments` array. They do not convert ABR into a nested per-section document model.
 
 ### `project_snapshot` (optional)
 
@@ -174,27 +190,17 @@ The browser player uses these as initial embedded bookmarks. They can seed the p
 
 If missing, consumers should treat it as an empty list.
 
-### `raw_text` (legacy / optional in practice)
+### `raw_text` (legacy only)
 
-Semantically, this field is the original source text for the book.
-
-Within the metadata payload, that text is stored in encoded form:
-
-1. UTF-8 text
-2. zlib-compressed bytes
-3. base64url-encoded ASCII string
+Older ABR files may contain a `raw_text` field holding an encoded representation of the
+original source text.
 
 Important notes:
 
-- This field is still written by the exporter.
-- The browser player no longer requires it for normal operation.
-- The browser player tolerates it being missing or empty.
-- After decoding and decompressing, the consumer gets back the real raw source text.
-
-Base64 details:
-
-- URL-safe base64 alphabet is used
-- `-` and `_` may appear in place of `+` and `/`
+- Newer exporters no longer write this field.
+- The browser player does not require it.
+- Consumers should tolerate it being absent.
+- Parsers may ignore it entirely when present.
 
 ### `has_section_break_audio` (optional)
 
@@ -208,6 +214,34 @@ Semantics:
 The browser player uses this to decide whether to add section-divider treatment in the displayed text flow.
 
 If missing, consumers should treat it as `false`.
+
+### `sections` (optional)
+
+Array of structural section descriptors.
+
+Each item has the form:
+
+```json
+{
+  "title": "Chapter 1",
+  "start_index": 0,
+  "end_index": 42
+}
+```
+
+Semantics:
+
+- `title`: human-readable section title, possibly empty
+- `start_index`: inclusive index into `text_segments`
+- `end_index`: exclusive index into `text_segments`
+
+Important notes:
+
+- `sections` is an overlay on the flat `text_segments` array
+- it is intended for reader/player structure and navigation
+- it does not imply a nested per-section text payload format
+
+If missing, consumers should treat it as an empty list.
 
 ---
 
@@ -255,19 +289,20 @@ The browser player currently expects:
 It also supports:
 
 - `bookmarks` defaulting to `[]`
-- `raw_text` being absent or empty
+- legacy `raw_text` being absent, empty, or ignored
 - `has_section_break_audio` defaulting to `false`
+- `sections` defaulting to `[]`
 - `project_snapshot` defaulting to `{}`
 
 ### Recommended writer behavior
 
 Writers producing ABR-compatible files should:
 
-- write `version` explicitly as `2` for the current format
+- write `version` explicitly as `3` for the current format
 - always include `text_segments`
 - ensure `bookmarks`, if present, contain valid indices into `text_segments`
-- write `raw_text` using the existing compressed/base64url form for compatibility
 - write `has_section_break_audio` explicitly as a boolean
+- write `sections` when structural section information is known
 - write `project_snapshot` as the project settings snapshot when such data exists
 
 ---
@@ -285,7 +320,9 @@ An ABR payload should satisfy the following:
   - `time_end` as a number
 - `bookmarks`, if present, is an array of integers
 - `has_section_break_audio`, if present, is a boolean
-- `raw_text`, if present, is a string in the encoded form described above
+- `sections`, if present, is an array of objects with string `title` and integer
+  `start_index`/`end_index` values where `0 <= start_index <= end_index`
+- `raw_text`, if present in legacy files, may be ignored by consumers
 - `project_snapshot`, if present, is an object
 
 The current browser-side parser is intentionally permissive in some areas, but new writers should follow the stricter interpretation above.
@@ -296,17 +333,18 @@ The current browser-side parser is intentionally permissive in some areas, but n
 
 - FLAC and MP4-family ABR files carry the same JSON payload, only the container-level tag location differs.
 - The transcode flow preserves ABR metadata when converting an ABR FLAC file to AAC/M4A by copying the JSON payload into the MP4 custom tag.
+- The optional `*.abr.metadata.json` debug sidecar is not part of the container format; it is only a developer/debug artifact mirroring the embedded payload.
 - File naming such as `.abr.flac` or `.abr.m4b` is a project convention, not part of the metadata spec itself.
 - Version 1 ABR files do not contain `project_snapshot`; missing `version` should be interpreted as version 1.
+- Version 2 ABR files do not contain `sections`.
 
 ---
 
-## Minimal encoded example
+## Minimal example
 
 ```json
 {
-  "version": 2,
-  "raw_text": "eJzzSM3JyVcozy_KSVEEAB0JBF4=",
+  "version": 3,
   "bookmarks": [0],
   "text_segments": [
     {
@@ -316,13 +354,10 @@ The current browser-side parser is intentionally permissive in some areas, but n
     }
   ],
   "has_section_break_audio": false,
+  "sections": [],
   "project_snapshot": {}
 }
 ```
-
-In that example, the `raw_text` value shown is not a hash and not arbitrary binary junk semantically; it is the encoded storage form of the original raw text.
-
-If you decode base64url and then zlib-decompress it, you recover the actual source text.
 
 ---
 
@@ -335,6 +370,8 @@ ABR metadata is:
 - centered around `text_segments`
 - used primarily by the browser player for synchronized text and bookmarks
 - extended in version 2 to also carry `project_snapshot` for possible future project import/recovery flows
+- extended in version 3 to also carry structural `sections` overlay metadata
+- optionally mirrored during concat into a standalone debug JSON sidecar for inspection
 
 The most important compatibility contract is the combination of:
 

@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
+from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, SegmentationStrategy
+from tts_audiobook_tool.app_types.book_serialization import BOOK_FORMAT, book_from_project_text_json_dict, get_project_text_format
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
@@ -16,6 +19,12 @@ from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+
+
+@dataclass
+class ProjectTextLoadResult:
+    book: Book
+    format: str
 
 class ProjectUtil:
     """
@@ -47,19 +56,29 @@ class ProjectUtil:
         if not isinstance(d, dict):
             return f"Project settings file bad type: {type(d)}"
 
+        had_legacy_applied_fields = any(
+            key in d for key in (
+                "applied_language_code",
+                "applied_strategy",
+                "applied_max_words",
+            )
+        )
+
         d['dir_path'] = dir_path  # inject; not stored in JSON
 
         inline_text_source = ""
+        external_text_source = ""
         if "text" in d:
             inline_text_source = "text"
         elif "text_segments" in d:
             inline_text_source = "text_segments"
-        elif 'phrase_groups' not in d:
-            result = ProjectUtil.load_phrase_groups_payload(dir_path)
+        elif 'phrase_groups' not in d and 'book' not in d:
+            result = ProjectUtil.load_book_payload(dir_path, d)
             if isinstance(result, str):
                 return result
             if result is not None:
-                d['phrase_groups'] = result
+                d['book'] = result.book
+                external_text_source = result.format
 
         thread_local = project_module._tl
         thread_local.warnings = []
@@ -79,6 +98,21 @@ class ProjectUtil:
                 f"Migrated inline project phrase groups from project.json[{inline_text_source!r}] "
                 f"to {PROJECT_TEXT_FILE_NAME}: {dir_path}"
             )
+
+        if external_text_source and external_text_source != BOOK_FORMAT:
+            err = project.save(force_phrase_groups=True)
+            if err:
+                return err
+            L.i(
+                f"Migrated {PROJECT_TEXT_FILE_NAME} from {external_text_source!r} "
+                f"to {BOOK_FORMAT}: {dir_path}"
+            )
+
+        if had_legacy_applied_fields and not inline_text_source and external_text_source == BOOK_FORMAT:
+            err = project.save()
+            if err:
+                return err
+            L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
 
         if Tts.get_type() == TtsModelInfos.OUTE:
             ProjectUtil.load_oute_voice_json(project)
@@ -165,6 +199,33 @@ class ProjectUtil:
             value = d.get('indextts2_emo_voice_alpha', -1)
             if isinstance(value, (int, float)) and value >= 0:
                 d['indextts2_emo_alpha'] = value
+
+    @staticmethod
+    def load_book_payload(project_dir: str, project_settings: dict) -> ProjectTextLoadResult | str | None:
+        file_path = os.path.join(project_dir, PROJECT_TEXT_FILE_NAME)
+        if not os.path.exists(file_path):
+            return None
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                payload = json.load(file)
+        except Exception as e:
+            return f"Error loading project text: {e}"
+
+        format_value = get_project_text_format(payload)
+        if not format_value:
+            return f"Unsupported project text format"
+
+        strategy = SegmentationStrategy.from_id(project_settings.get('applied_strategy', ''))
+        legacy_settings = BookSegmentationSettings(
+            language_code=project_settings.get('applied_language_code', ''),
+            max_words_per_segment=project_settings.get('applied_max_words', 0),
+            strategy=strategy or BookSegmentationSettings().strategy,
+        )
+        result = book_from_project_text_json_dict(payload, legacy_settings)
+        if isinstance(result, str):
+            return f"Error parsing project text: {result}"
+        return ProjectTextLoadResult(book=result, format=format_value)
 
     @staticmethod
     def load_phrase_groups_payload(dir_path: str) -> list[PhraseGroup] | str | None:

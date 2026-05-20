@@ -114,7 +114,7 @@ class ProjectMenu:
         state.set_existing_project(dir)
 
         # Show over-default-max-words hint
-        max_count = state.project.applied_max_words 
+        max_count = state.project.get_book_segmentation_settings().max_words_per_segment
         # TODO: Not doing this for now: ... or PhraseGroup.get_max_num_words(state.project.phrase_groups)
         reco_range: tuple[int, int] = Tts.get_type().value.max_words_reco_range
         if max_count > reco_range[1]:
