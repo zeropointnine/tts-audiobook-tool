@@ -8,30 +8,46 @@ class StorageController {
 
     /**
      * @param {Object} config - Configuration object
-     * @param {string} config.fileId - The current file identifier (can be updated later)
+     * @param {string} config.positionId - Timeline identifier for currentTime resume
+     * @param {string} config.bookmarkId - Text-structure identifier for bookmark indices
      */
     constructor(config = {}) {
-        this.fileId = config.fileId || null;
+        this.positionId = config.positionId || null;
+        this.bookmarkId = config.bookmarkId || null;
     }
 
     // ========================================
-    // File ID Management
+    // Identity Management
     // ========================================
 
     /**
-     * Set the current file ID for storage operations
-     * @param {string} fileId - The file identifier
+     * Set the current IDs for storage operations.
+     * @param {Object} identity - Identity object
+     * @param {string} identity.positionId - Timeline identifier for position storage
+     * @param {string} identity.bookmarkId - Text identifier for bookmark storage
+     */
+    setIdentity(identity) {
+        this.positionId = identity.positionId || null;
+        this.bookmarkId = identity.bookmarkId || null;
+    }
+
+    /**
+     * Set both storage identities from one value.
+     * @param {string} fileId - The shared storage identifier
      */
     setFileId(fileId) {
-        this.fileId = fileId;
+        this.setIdentity({
+            positionId: fileId,
+            bookmarkId: fileId,
+        });
     }
 
     /**
-     * Get the current file ID
-     * @returns {string|null} The current file ID
+     * Get the current shared ID, if position/bookmark IDs are the same.
+     * @returns {string|null} The current shared ID
      */
     getFileId() {
-        return this.fileId;
+        return (this.positionId === this.bookmarkId) ? this.positionId : null;
     }
 
     // ========================================
@@ -43,7 +59,7 @@ class StorageController {
      * @param {number} value - The position in seconds
      */
     storePosition(value) {
-        if (!this.fileId) {
+        if (!this.positionId) {
             return;
         }
         const key = this._getPositionKey();
@@ -55,11 +71,10 @@ class StorageController {
      * @returns {number|null} The stored position in seconds, or null if not found
      */
     loadPosition() {
-        if (!this.fileId) {
+        if (!this.positionId) {
             return null;
         }
-        const key = this._getPositionKey();
-        const value = localStorage.getItem(key);
+        const value = localStorage.getItem(this._getPositionKey());
         if (!value) {
             return null;
         }
@@ -71,7 +86,7 @@ class StorageController {
      * Clear the stored position for the current file
      */
     clearPosition() {
-        if (!this.fileId) {
+        if (!this.positionId) {
             return;
         }
         const key = this._getPositionKey();
@@ -87,11 +102,10 @@ class StorageController {
      * @returns {Array} Array of bookmark indices
      */
     loadBookmarks() {
-        if (!this.fileId) {
+        if (!this.bookmarkId) {
             return [];
         }
-        const key = this._getBookmarksKey();
-        const value = localStorage.getItem(key);
+        const value = localStorage.getItem(this._getBookmarksKey());
         if (!value) {
             return [];
         }
@@ -114,7 +128,7 @@ class StorageController {
      * @param {Array} indices - Array of bookmark indices
      */
     saveBookmarks(indices) {
-        if (!this.fileId) {
+        if (!this.bookmarkId) {
             return;
         }
         const key = this._getBookmarksKey();
@@ -127,11 +141,10 @@ class StorageController {
      * @returns {boolean} True if bookmarks exist
      */
     hasBookmarks() {
-        if (!this.fileId) {
+        if (!this.bookmarkId) {
             return false;
         }
-        const key = this._getBookmarksKey();
-        return localStorage.getItem(key) !== null;
+        return localStorage.getItem(this._getBookmarksKey()) !== null;
     }
 
     // ========================================
@@ -257,20 +270,20 @@ class StorageController {
     // ========================================
 
     /**
-     * Get the localStorage key for position storage
+     * Get the localStorage key for position storage.
      * @private
      * @returns {string} The position key
      */
     _getPositionKey() {
-        return `fileId_${this.fileId}`;
+        return `abrPlayer:v3:position:${this.positionId}`;
     }
 
     /**
-     * Get the localStorage key for bookmark storage
+     * Get the localStorage key for bookmark storage.
      * @private
      * @returns {string} The bookmarks key
      */
     _getBookmarksKey() {
-        return `bookmarks_fileId_${this.fileId}`;
+        return `abrPlayer:v3:bookmarks:${this.bookmarkId}`;
     }
 }

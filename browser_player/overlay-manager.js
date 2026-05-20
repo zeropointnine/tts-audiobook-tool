@@ -3,8 +3,8 @@
 /**
  * Coordinates visibility and states for:
  * - scrim overlay
- * - menu and bookmark panels
- * - menu and bookmark toggle buttons
+ * - menu and navigation panels
+ * - menu and navigation toggle buttons
  */
 class OverlayManager {
 
@@ -12,9 +12,9 @@ class OverlayManager {
      * @param {Object} config - Configuration object
      * @param {HTMLElement} config.scrim - The scrim overlay element
      * @param {Menu} config.menu - Menu panel
-     * @param {Bookmarks} config.bookmarks - Bookmark panel
+     * @param {NavigationPanel} config.navigationPanel - Navigation panel
      * @param {HTMLElement} config.menuButton - The menu button element
-     * @param {HTMLElement} config.bookmarkButton - The bookmark button element
+     * @param {HTMLElement} config.navigationPanelButton - The navigation panel button element
      * @param {BookText} config.bookText - book text component
      * @param {RootAttributer} config.rootAttributer
      * @param {Function} config.onOverlayStart - Callback when overlay is shown () => void
@@ -22,7 +22,7 @@ class OverlayManager {
      */
     constructor(config) {
 
-        const requiredKeys = ["scrim", "menu", "menuButton", "bookmarkButton", "bookmarks", "bookText", "onOverlayStart", "onOverlayEnd", "rootAttributer"]
+        const requiredKeys = ["scrim", "menu", "menuButton", "navigationPanelButton", "navigationPanel", "bookText", "onOverlayStart", "onOverlayEnd", "rootAttributer"]
         const err = Util.validateObject(config, requiredKeys);
         if (err) {
             throw new Error(err)
@@ -30,9 +30,9 @@ class OverlayManager {
 
         this.scrim = config.scrim;
         this.menu = config.menu;
-        this.bookmarks = config.bookmarks;
+        this.navigationPanel = config.navigationPanel;
         this.menuButton = config.menuButton;
-        this.bookmarkButton = config.bookmarkButton;
+        this.navigationPanelButton = config.navigationPanelButton;
         this.bookText = config.bookText;
         this.onOverlayStart = config.onOverlayStart;
         this.onOverlayEnd = config.onOverlayEnd;
@@ -59,7 +59,7 @@ class OverlayManager {
     }
 
     /**
-     * Toggle the bookmark panel visibility
+     * Toggle the navigation panel visibility
      */
     toggleMenu() {
         if (!this.menu.isShowing) {
@@ -74,32 +74,32 @@ class OverlayManager {
      */
     showMenu() {
         this.showScrim();
-        this.bookmarks.hide();
+        this.navigationPanel.hide();
         this.collapseMenuButton();
         this.menu.update();        
         this.menu.show();
     }
 
     /**
-     * Toggle the bookmark panel visibility
+     * Toggle the navigation panel visibility
      */
-    toggleBookmarks() {
-        if (!this.bookmarks.isShowing) {
-            this.showBookmarks();
+    toggleNavigationPanel() {
+        if (!this.navigationPanel.isShowing) {
+            this.showNavigationPanel();
         } else {
             this.hideAll();
         }
     }
 
     /**
-     * Show the bookmark panel
+     * Show the navigation panel
      */
-    showBookmarks() {
+    showNavigationPanel() {
         this.showScrim();
         this.menu.hide()
-        this.bookText.removeBookmarkClasses(this.bookmarks.indices); // efficient way of keeping bookText bookmarks up-to-date
-        this.bookmarks.updateAddButton(this.bookText.getCurrentIndex());
-        this.bookmarks.show()
+        this.bookText.removeBookmarkClasses(this.navigationPanel.indices); // efficient way of keeping bookText bookmarks up-to-date
+        this.navigationPanel.updateAddButton(this.bookText.getCurrentIndex());
+        this.navigationPanel.show()
     }
 
     /**
@@ -109,8 +109,8 @@ class OverlayManager {
         this.onOverlayEnd();
         ShowUtil.hide(this.scrim);
         this.menu.hide();
-        this.bookmarks.hide();
-        this.bookText.addBookmarkClasses(this.bookmarks.indices);
+        this.navigationPanel.hide();
+        this.bookText.addBookmarkClasses(this.navigationPanel.indices);
     }
 
     // ========================================
@@ -125,17 +125,17 @@ class OverlayManager {
     }
 
     /**
-     * Show the bookmark button
+     * Show the navigation panel button
      */
-    showBookmarkButton() {
-        ShowUtil.show(this.bookmarkButton);
+    showNavigationPanelButton() {
+        ShowUtil.show(this.navigationPanelButton);
     }
 
     /**
-     * Hide the bookmark button
+     * Hide the navigation panel button
      */
-    hideBookmarkButton() {
-        ShowUtil.hide(this.bookmarkButton);
+    hideNavigationPanelButton() {
+        ShowUtil.hide(this.navigationPanelButton);
     }
 
     // ========================================
@@ -149,7 +149,7 @@ class OverlayManager {
     _initListeners() {
         this.scrim.addEventListener("click", this._onScrimClick.bind(this));
         this.menuButton.addEventListener('click', () => { this.toggleMenu() });
-        this.bookmarkButton.addEventListener('click', () => { this.toggleBookmarks(); });
+        this.navigationPanelButton.addEventListener('click', () => { this.toggleNavigationPanel(); });
     }
 
     /**

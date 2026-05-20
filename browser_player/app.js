@@ -9,7 +9,7 @@ class App {
 
     // Widgets and controllers
     player;
-    bookmarks;
+    navigationPanel;
     bookText;
     sleepTimer;
     zombieChecker;
@@ -26,11 +26,12 @@ class App {
     file = null;
     url = null;
     fileId = null;
-    metaBookmarkIndices = [];
+    metaBookmarkIndices = []; 
     isStarted = false;
     isLoading = false;
     pollIntervalId = -1;
     lastStorePositionTime = 0;
+    appMetadata = null;
 
     constructor() {
 
@@ -64,13 +65,13 @@ class App {
 
         // Widgets (view controllers for pre-existing DOM elements or groups of elements)
         this.player = new AudioPlayer({ audioElement: this.audio, container: this.playerHolder });
-        this.bookmarks = new Bookmarks({
-            mainEl: document.getElementById("bookmarkPanel"),
-            onSelected: (index) => this.onBookmarkSelected(index),
+        this.navigationPanel = new NavigationPanel({
+            mainEl: document.getElementById("navigationPanel"),
+            onSelected: (index) => this.onNavigationItemSelected(index),
             onChanged: () => this.onBookmarksChanged()
         });
         this.bookText = new BookText({
-            textHolder: document.getElementById("textHolder"),
+            textHolder: document.getElementById("outerTextHolder"),
             fileNameLabel: document.getElementById("currentFileName"),
             onSeek: (seconds) => this.onSeek(seconds),
             onPlay: () => this.playerPlay(),
@@ -103,9 +104,9 @@ class App {
         this.overlayManager = new OverlayManager({
             scrim: document.getElementById("scrim"),
             menu: this.menu,
-            bookmarks: this.bookmarks,
+            navigationPanel: this.navigationPanel,
             menuButton: document.getElementById("menuButton"),
-            bookmarkButton: document.getElementById("bookmarkButton"),
+            navigationPanelButton: document.getElementById("navigationPanelButton"),
             bookText: this.bookText,
             rootAttributer: this.rootAttributer,
             onOverlayStart: () => this.onOverlayStart(),
@@ -165,6 +166,7 @@ class App {
         this.file = null;
         this.url = "";
         this.fileId = "";
+        this.appMetadata = null;
         this.lastStorePositionTime = 0;
 
         this.rootAttributer.set("data-player-status", "none");
@@ -184,7 +186,7 @@ class App {
         this.bookText.hideFileName();
         this.bookText.clear();
 
-        this.overlayManager.hideBookmarkButton();        
+        this.overlayManager.hideNavigationPanelButton();        
     }
 
     async loadAudioFileOrUrl(pFile, pUrl) {
@@ -227,10 +229,14 @@ class App {
 
         this.file = file;
         this.url = url;
+        this.appMetadata = appMetadata;
 
-        this.fileId = Util.getObjectHash(appMetadata);
-        this.storageController.setFileId(this.fileId);
-        cl("fileId", this.fileId);
+        this.storageController.setIdentity({
+            positionId: appMetadata.identity.positionId,
+            bookmarkId: appMetadata.identity.textId,
+        });
+        cl("positionId", appMetadata.identity.positionId);
+        cl("bookmarkId", appMetadata.identity.textId);
         
         const fileName = file ? file.name : url;
         this.storageController.saveLastOpened(fileName);
@@ -241,13 +247,13 @@ class App {
         this.header.githubButton.style.display = "none"; 
 
         // Init book text (heavy operation)
-        const addSectionDividers = (appMetadata["has_section_break_audio"] === true);
-        const textSegments = appMetadata["text_segments"];
-        this.bookText.init(textSegments, addSectionDividers);
+        const addSectionDividers = (appMetadata.hasSectionBreakAudio === true);
+        const textSegments = appMetadata.textSegments;
+        this.bookText.init(textSegments, addSectionDividers, appMetadata.sections || []);
         this.bookText.showFileName(fileName)
 
         // Init bookmark-related
-        this.metaBookmarkIndices = appMetadata["bookmarks"] || [];
+        this.metaBookmarkIndices = appMetadata.bookmarks || [];
         const shouldMeta = (!this.storageController.hasBookmarks() && this.metaBookmarkIndices.length > 0);
         let indices = null;
         if (shouldMeta) {
@@ -257,9 +263,9 @@ class App {
         } else {
             indices = this.storageController.loadBookmarks();
         }
-        this.bookmarks.init(textSegments, indices);
-        this.overlayManager.showBookmarkButton();
-        this.bookText.addBookmarkClasses(this.bookmarks.indices);
+        this.navigationPanel.init(textSegments, indices, appMetadata.sections || []);
+        this.overlayManager.showNavigationPanelButton();
+        this.bookText.addBookmarkClasses(this.navigationPanel.indices);
 
         if (Util.isTouchDevice() || this.player.isPinned()) {
             this.playerVisibility.show();
@@ -335,7 +341,7 @@ class App {
                 this.audio.currentTime += 60;
                 break;
             case "b":
-                this.overlayManager.toggleBookmarks();
+                this.overlayManager.toggleNavigationPanel();
         }
     }
 
@@ -394,19 +400,19 @@ class App {
         }
     }
 
-    onBookmarkSelected(index) {
+    onNavigationItemSelected(index) {
         this.bookText.seekBySegmentIndex(index);
         this.audio.play();
         this.overlayManager.hideAll();
     }
 
     onBookmarksChanged(e) {
-        if (this.bookmarks.indices.length == 0 && this.metaBookmarkIndices.length > 0) {
+        if (this.navigationPanel.indices.length == 0 && this.metaBookmarkIndices.length > 0) {
             if (confirm("Re-add file's embedded bookmarks?")) {
-                this.bookmarks.initIndices(this.metaBookmarkIndices);
+                this.navigationPanel.initIndices(this.metaBookmarkIndices);
             }
         }
-        this.storageController.saveBookmarks(this.bookmarks.indices);
+        this.storageController.saveBookmarks(this.navigationPanel.indices);
     }
 
     onZombieDetected = (originalTime) => {

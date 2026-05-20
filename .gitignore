@@ -6,7 +6,6 @@ __pycache__/
 venv*/
 *.egg-info/
 .python-version
-package.json
 package-lock.json
 
 plans/

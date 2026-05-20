@@ -170,7 +170,7 @@ class GenerateUtil:
 
                 retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
                 text_string = f"{COL_DEFAULT}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
-                item_line = f"{COL_ACCENT}Line {index + 1}{retry_string}: {COL_DEFAULT}{text_string}"
+                item_line = f"{COL_ACCENT}Line {index + 1}{retry_string}:" # {COL_DEFAULT}{text_string}"
                 message_lines.append(item_line)
                 
                 new_retry_count = retry_counts[i] + 1
@@ -404,8 +404,8 @@ class GenerateUtil:
         if not skip_reason:
             message = f"{COL_DEFAULT}Transcribed audio in {(time.time() - val_start_time):.1f}s"
             printt(f"{Ansi.LINE_HOME}{message}")
-        if len(indices) > 1:
-            printt()
+
+        printt()
 
         return results
 

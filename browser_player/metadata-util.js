@@ -47,47 +47,174 @@ class MetadataUtil {
             return "Couldn't parse metadata"
         }
 
-        // Text segments
-        const timedTextSegments = o["text_segments"];
-        if (!timedTextSegments || timedTextSegments.length == 0) {
+        return MetadataUtil.normalizeAppMetadata(o)
+    }
+
+    static normalizeAppMetadata(rawMetadata) {
+
+        if (!rawMetadata || typeof rawMetadata !== "object" || Array.isArray(rawMetadata)) {
+            return "Couldn't parse metadata"
+        }
+
+        const textSegments = rawMetadata["text_segments"];
+        if (!Array.isArray(textSegments) || textSegments.length === 0) {
             return "ABR metadata missing required field 'text_segments'";
         }
 
-        // Static bookmarks
-        const bookmarks = o["bookmarks"] || []
+        const version = Number.isInteger(rawMetadata["version"]) && rawMetadata["version"] >= 1
+            ? rawMetadata["version"]
+            : 1;
 
-        // Raw text (no longer required but)
-        let rawText = ""
-        const rawTextBase64 = o["raw_text"]
-        if (!rawTextBase64) {
-            console.warning("empty or missing raw_text field")
-        } else {
+        const bookmarks = Array.isArray(rawMetadata["bookmarks"])
+            ? rawMetadata["bookmarks"].map((index) => parseInt(index)).filter((index) => Number.isInteger(index))
+            : [];
+
+        const rawText = MetadataUtil.decodeLegacyRawText(rawMetadata["raw_text"]);
+        const hasSectionBreakAudio = (rawMetadata["has_section_break_audio"] === true);
+        const projectSnapshot = MetadataUtil.normalizeProjectSnapshot(rawMetadata["project_snapshot"]);
+        const sections = MetadataUtil.normalizeSections(rawMetadata["sections"], textSegments.length);
+        const identity = MetadataUtil.makePlaybackIdentity(textSegments);
+
+        return {
+            version,
+            rawText,
+            textSegments,
+            bookmarks,
+            hasSectionBreakAudio,
+            projectSnapshot,
+            sections,
+            identity,
+
+            // Backward-compatible aliases for existing callers during transition.
+            "raw_text": rawText,
+            "text_segments": textSegments,
+            "has_section_break_audio": hasSectionBreakAudio,
+            "project_snapshot": projectSnapshot,
+        }
+    }
+
+    static decodeLegacyRawText(rawTextBase64) {
+        let rawText = "";
+        if (!rawTextBase64 || typeof rawTextBase64 !== "string") {
+            return rawText;
+        }
+
+        try {
             const binaryStr = atob(rawTextBase64.replace(/_/g, '/').replace(/-/g, '+'));
             const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) {
                 bytes[i] = binaryStr.charCodeAt(i);
             }
             // eslint-disable-next-line
-            const decompressed = pako.inflate(bytes); // zlib decompression
-            rawText = new TextDecoder('utf-8').decode(decompressed);
-            if (!rawText) {
-                console.warning("decoded rawText is empty?");
+            const decompressed = pako.inflate(bytes);
+            rawText = new TextDecoder('utf-8').decode(decompressed) || "";
+        } catch (error) {
+            console.warn("Couldn't decode legacy raw_text field", error);
+        }
+
+        return rawText;
+    }
+
+    static normalizeProjectSnapshot(projectSnapshot) {
+        if (!projectSnapshot || typeof projectSnapshot !== "object" || Array.isArray(projectSnapshot)) {
+            return {};
+        }
+        return projectSnapshot;
+    }
+
+    static normalizeSections(rawSections, textSegmentCount) {
+        if (!Array.isArray(rawSections)) {
+            return [];
+        }
+
+        const sections = [];
+        for (const rawSection of rawSections) {
+            if (!rawSection || typeof rawSection !== "object" || Array.isArray(rawSection)) {
+                continue;
+            }
+
+            const title = (typeof rawSection.title === "string") ? rawSection.title : "";
+            const startIndex = parseInt(rawSection.start_index);
+            const endIndex = parseInt(rawSection.end_index);
+
+            if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) {
+                continue;
+            }
+            if (startIndex < 0 || endIndex < startIndex || endIndex > textSegmentCount) {
+                continue;
+            }
+
+            sections.push({
+                title,
+                start_index: startIndex,
+                end_index: endIndex,
+            });
+        }
+
+        return sections;
+    }
+
+    static makePlaybackIdentity(textSegments) {
+        const textIdentity = MetadataUtil.makeTextIdentity(textSegments);
+        const timelineIdentity = MetadataUtil.makeTimelineIdentity(textSegments, textIdentity);
+        return {
+            textId: Util.getObjectHash(textIdentity),
+            positionId: Util.getObjectHash(timelineIdentity),
+            textIdentity,
+            timelineIdentity,
+        };
+    }
+
+    static makeTextIdentity(textSegments) {
+        return {
+            kind: "browser-player-bookmark-text-v1",
+            texts: textSegments.map((segment) => MetadataUtil.normalizeIdentityText(segment.text)),
+        };
+    }
+
+    static makeTimelineIdentity(textSegments, textIdentity) {
+        const playableRange = MetadataUtil.getPlayableRange(textSegments);
+        return {
+            kind: "browser-player-position-timeline-v1",
+            textIdentity,
+            playableStartIndex: playableRange.startIndex,
+            playableEndIndex: playableRange.endIndex,
+            duration: MetadataUtil.roundIdentityTime(playableRange.duration),
+        };
+    }
+
+    static getPlayableRange(textSegments) {
+        let startIndex = -1;
+        let endIndex = -1;
+        let duration = 0;
+
+        for (let i = 0; i < textSegments.length; i++) {
+            const segment = textSegments[i] || {};
+            const timeStart = MetadataUtil.parseFiniteNumber(segment.time_start);
+            const timeEnd = MetadataUtil.parseFiniteNumber(segment.time_end);
+            if (timeEnd > timeStart) {
+                if (startIndex < 0) {
+                    startIndex = i;
+                }
+                endIndex = i + 1;
+                duration = Math.max(duration, timeEnd);
             }
         }
-        if (!rawText) {
-            rawText = "";
-        }
 
-        const result = {
-            "version": o["version"] || 1,
-            "raw_text": rawText,
-            "text_segments": timedTextSegments,
-            "bookmarks": bookmarks,
-            "has_section_break_audio": (o["has_section_break_audio"] === true),
-            "project_snapshot": o["project_snapshot"] || {}
-        }
+        return { startIndex, endIndex, duration };
+    }
 
-        return result
+    static normalizeIdentityText(text) {
+        return (typeof text === "string") ? text : "";
+    }
+
+    static parseFiniteNumber(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : 0;
+    }
+
+    static roundIdentityTime(seconds) {
+        return Math.round(MetadataUtil.parseFiniteNumber(seconds) * 100) / 100;
     }
 
     /**

@@ -27,7 +27,7 @@ In practice, an `*.abr.flac`, `*.abr.m4a`, or `*.abr.m4b` file is just a normal 
 
 At the end of concat/export, it builds an `AppMetadata` object using:
 
-- `timed_phrases`: generated from the exported audio segment durations
+- `timed_phrases`: the full audiobook text segment sequence, with generated/exported audio segment durations where playable audio exists and zero timings where playable audio does not exist
 - `bookmark_indices`: user-provided bookmark indices, possibly adjusted after subdivision
 - `has_section_break_audio`: whether section-break sound effects were included
 
@@ -165,15 +165,17 @@ Each item has the form:
 Semantics:
 
 - `text`: text displayed by the player for that segment
-- `time_start`: segment start time in seconds
-- `time_end`: segment end time in seconds
+- `time_start`: segment start time in seconds, or `0` when the segment has no playable audio in this ABR file
+- `time_end`: segment end time in seconds, or `0` when the segment has no playable audio in this ABR file
 
 Notes:
 
 - This is the only field the browser player currently treats as required.
 - `text` is presentation text, not a normalized token stream.
+- `text_segments` represents the full audiobook text segment sequence, not only the rendered/exported audio span.
 - Segment timing is derived from concatenated export timing, not from container chapter metadata.
-- Some segments may have `time_start = 0` and `time_end = 0` when no real audio timing exists for that item.
+- Some segments may have `time_start = 0` and `time_end = 0` when no playable audio exists for that item in this ABR file.
+- Zero-timed segments can be outside the rendered/exported range, missing generated audio, or non-verbal/formatting-related text.
 
 ### `bookmarks` (optional, recommended)
 
@@ -254,9 +256,9 @@ At export time:
 3. those durations are converted into timed phrases
 4. if phrase subdivision is enabled, the timed phrases may be replaced with finer-grained segments based on adjacent JSON alignment metadata
 
-So the ABR payload represents the final exported playback timeline, not just the original project phrase list.
+So the ABR payload carries the full text sequence plus the exported playback timeline where playable audio exists.
 
-This distinction matters because bookmark indices refer to the final `text_segments` array actually written into the file.
+This distinction matters because bookmark indices refer to the full `text_segments` array actually written into the file, while playback position restoration depends on the subset of segments with positive-duration timing.
 
 ---
 
@@ -337,6 +339,7 @@ The current browser-side parser is intentionally permissive in some areas, but n
 - File naming such as `.abr.flac` or `.abr.m4b` is a project convention, not part of the metadata spec itself.
 - Version 1 ABR files do not contain `project_snapshot`; missing `version` should be interpreted as version 1.
 - Version 2 ABR files do not contain `sections`.
+- The browser player's localStorage identity rules are documented separately in `docs/browser-player-identity.md`.
 
 ---
 

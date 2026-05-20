@@ -13,7 +13,7 @@ class BookText {
 
     /**
      * @param {Object} config - Configuration object
-     * @param {HTMLElement} config.textHolder - The container element for text
+     * @param {HTMLElement} config.textHolder - The container element for generated text blocks
      * @param {HTMLElement} config.fileNameLabel - The filename text, above the main text
      * @param {Function} config.onSeek - Callback when seeking audio(time) void
      * @param {Function} config.onPlay - Callback when play is requested () => Promise<void>
@@ -66,7 +66,7 @@ class BookText {
      * time_start and time_end are monotonically increasing, 
      * with the exception that that they can both be 0.0.
      */
-    init(textSegments, addSectionDividers = false) {
+    init(textSegments, addSectionDividers = false, sections = []) {
         
         this.textSegments = textSegments;
         this.currentIndex = -1;
@@ -93,7 +93,7 @@ class BookText {
             }
         }
 
-        this._populateText(addSectionDividers);
+        this._populateText(addSectionDividers, sections);
     }
 
     /**
@@ -189,7 +189,6 @@ class BookText {
      * 
      */
     seekAdjacentFromIndex(segmentIndex, isForward) {
-        cl("seekadjacentfromindex", segmentIndex, isForward)
         const audioIndex = this.segmentMap[segmentIndex];
         const newAudioIndex = audioIndex + (isForward ? 1 : -1);
         if (newAudioIndex < 0 || newAudioIndex > this.audioIndices.length -1 ) {
@@ -208,11 +207,9 @@ class BookText {
             newAudioIndex = isForward ? audioIndices[1] : audioIndices[0]
         }
         if (Number.isNaN(newAudioIndex) || newAudioIndex < 0 || newAudioIndex > this.audioIndices.length - 1) {
-            cl("no.")
             return
         }
         const newSegmentIndex = this.audioIndices[newAudioIndex];
-        cl("seekadjacentfromtime", time, isForward, "audioindices", audioIndices, "newaudioindex", newAudioIndex, "newsegmentindex", newSegmentIndex)
         this.seekBySegmentIndex(newSegmentIndex)
     }
 
@@ -427,46 +424,89 @@ class BookText {
     /**
      * Build DOM from text segments
      * @param {boolean} addSectionDividers - Whether to add section break markers
+     * @param {Array} sections - Section ranges over the flat text segment array
      * @private
      */
-    _populateText(addSectionDividers) {
-    
+    _populateText(addSectionDividers, sections = []) {
+
+        const sectionRanges = this._getDisplaySectionRanges(sections);
         let contentHtml = '';
-    
-        this.textSegments.forEach((segment, i) => {
 
-            const o = BookText._splitTextSegment(segment.text);
+        for (const [sectionIndex, section] of sectionRanges.entries()) {
+            contentHtml += `<pre class="textHolder" data-section-index="${sectionIndex}">`;
 
-            if (o["before"]) {
-                contentHtml += Util.escapeHtml(o["before"]);
-            }
+            for (let i = section.startIndex; i < section.endIndex; i++) {
+                const segment = this.textSegments[i];
 
-            const hasAudio = segment["time_start"] > 0.0 || segment["time_end"] > 0.0;
-            const className = hasAudio ? "hasAudio" : "noAudio";
-            const spanString = `<span id="segment-${i}" class="${className}">${Util.escapeHtml(o["content"])}</span>`;
-            contentHtml += spanString;
+                const o = BookText._splitTextSegment(segment.text);
 
-            if (o["after"]) {
-                if (addSectionDividers) {
-                    const numLfs = o["after"].split('\n').length - 1;
-                    if (numLfs >= 3) {
-                        contentHtml += "<br>&nbsp;<hr><br>";
+                if (o["before"]) {
+                    contentHtml += Util.escapeHtml(o["before"]);
+                }
+
+                const hasAudio = segment["time_start"] > 0.0 || segment["time_end"] > 0.0;
+                const className = hasAudio ? "hasAudio" : "noAudio";
+                const spanString = `<span id="segment-${i}" class="${className}">${Util.escapeHtml(o["content"])}</span>`;
+                contentHtml += spanString;
+
+                if (o["after"]) {
+                    if (addSectionDividers) {
+                        const numLfs = o["after"].split('\n').length - 1;
+                        if (numLfs >= 3) {
+                            contentHtml += "<br>&nbsp;<hr><br>";
+                        } else {
+                            contentHtml += Util.escapeHtml(o["after"]);
+                        }
                     } else {
                         contentHtml += Util.escapeHtml(o["after"]);
                     }
-                } else {
-                    contentHtml += Util.escapeHtml(o["after"]);
                 }
             }
-        });
+
+            contentHtml += "</pre>";
+        }
 
         this.textHolder.innerHTML = contentHtml;
+        this.textHolder.classList.toggle("multipleTextHolders", sectionRanges.length > 1);
         this.textHolder.style.display = "block";
+        for (const textBlock of this.textHolder.querySelectorAll(".textHolder")) {
+            textBlock.style.display = "block";
+        }
 
         this.spans = [];
         for (let i = 0; i < this.textSegments.length; i++) {
             this.spans[i] = document.getElementById("segment-" + i);
         }
+    }
+
+    _getDisplaySectionRanges(sections) {
+        if (!Array.isArray(sections) || sections.length === 0) {
+            return [{ startIndex: 0, endIndex: this.textSegments.length }];
+        }
+
+        const ranges = [];
+        let expectedStartIndex = 0;
+        for (const section of sections) {
+            const startIndex = section.start_index;
+            const endIndex = section.end_index;
+            if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) {
+                return [{ startIndex: 0, endIndex: this.textSegments.length }];
+            }
+            if (startIndex < 0 || endIndex <= startIndex || endIndex > this.textSegments.length) {
+                return [{ startIndex: 0, endIndex: this.textSegments.length }];
+            }
+            if (startIndex !== expectedStartIndex) {
+                return [{ startIndex: 0, endIndex: this.textSegments.length }];
+            }
+            ranges.push({ startIndex, endIndex });
+            expectedStartIndex = endIndex;
+        }
+
+        if (ranges.length === 0 || expectedStartIndex !== this.textSegments.length) {
+            return [{ startIndex: 0, endIndex: this.textSegments.length }];
+        }
+
+        return ranges;
     }
 
     /**

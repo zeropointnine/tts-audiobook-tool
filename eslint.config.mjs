@@ -28,6 +28,7 @@ export default defineConfig([
         AudioPlayer: true,
         Bookmarks: true,
         BookText: true,
+        NavigationPanel: true,
         Header: true,
         Toast: true,
         Menu: true,
@@ -52,10 +53,23 @@ export default defineConfig([
     }
   },
 
+  // Browser global utility classes
+  {
+    files: [
+      "browser_player/app-util.js",
+      "browser_player/root-attributer.js",
+      "browser_player/show-util.js",
+      "browser_player/util.js",
+    ],
+    rules: { "no-redeclare": "off", "no-unused-vars": "off" },
+    plugins: { js },
+    extends: ["js/recommended"],
+  },
+
   // Catch-all - applies to all js files
   {
     files: ["**/*.{js,mjs,cjs}"],
-    rules: { "no-unused-vars": "off" },
+    rules: { "no-redeclare": "off", "no-unused-vars": "off" },
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { 

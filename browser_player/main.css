@@ -393,16 +393,16 @@ html, body {
     align-items: flex-end;
 }
 
-#bookmarkButton {
+#navigationPanelButton {
     display: none; /* inline block */
     margin-right:12px;
     opacity: 0;
     transition: opacity 0.3s ease;
 }
-#bookmarkButton.showing {
+#navigationPanelButton.showing {
     opacity: 1;
 }
-#bookmarkButton svg path {
+#navigationPanelButton svg path {
     fill: var(--color-text-dim);
 }
 
@@ -437,7 +437,7 @@ html, body {
 
 /* ------------------- */
 
-#bookmarkPanel {
+#navigationPanel {
     pointer-events: auto;
 
     display: none; /* flex */
@@ -454,29 +454,72 @@ html, body {
     transition: transform 0.3s ease-out;
 }
 @media (max-width: 600px) {
-    #bookmarkPanel {
+    #navigationPanel {
         width: 75%;
     }
 }
-#bookmarkPanel.showing {
+#navigationPanel.showing {
     transform: translateX(0);
 }
 
-.bookmarkTitle {
+.navigationPanelTabs {
     flex: 0 0 auto;
-    margin-bottom:18px;
+    display: flex;
+    align-items: stretch;
+    width: calc(100% + 36px);
+    margin: -18px -18px 18px -18px;
 }
 
-#bookmarkAddButton {
+.navigationPanelTab {
+    flex: 1 1 50%;
+    min-width: 0;
+    padding: 18px 12px;
+    border: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-text-dim);
+    opacity: 0.5;
+    cursor: pointer;
+    text-align: center;
+    font: inherit;
+}
+
+.navigationPanelTab.selected {
+    opacity: 1;
+}
+
+.navigationPanelTab + .navigationPanelTab {
+    border-left: 1px solid currentColor;
+}
+
+.navigationPanelTab:focus {
+    outline: 3px solid var(--color-segment-highlight);
+    outline-offset: -3px;
+}
+
+.navigationPanelView {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.navigationPanelViewHidden {
+    display: none;
+}
+
+#bookmarksAddButton {
     flex: 0 0 auto;
     margin-bottom:16px;
     padding-right:12px;
 }
-#bookmarkAddDescLine {
+#bookmarksAddDescLine {
     display: flex;
     align-items: baseline;
 }
-#bookmarkAddDesc {
+#bookmarksAddDesc {
     flex: 1;
     font-style: italic;
     font-size: 14px; /* TODO: make text size variables small medium large */
@@ -490,18 +533,19 @@ html, body {
     text-overflow: ellipsis;
 }
 
-#bookmarkList {
+#bookmarksList,
+#sectionList {
     flex: 1;
     width: 100%;
 }
 
-.bookmarkItem {
+.navigationItem {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: 10px;
 }
-.bookmarkItemText {
+.navigationItemText {
     flex: 1;
 
     font-family: serif;
@@ -514,13 +558,13 @@ html, body {
     overflow-x: hidden;
     text-overflow: ellipsis;
 }
-.bookmarkItemText {
+.navigationItemText {
     @media (max-width: 600px) {
         --book-text-size: 14px;
     }
 }
 
-.bookmarkLocation {
+.navigationItemLocation {
     flex: 0 0 auto;
 
     font-family: sans-serif;
@@ -529,11 +573,11 @@ html, body {
     opacity: 0.5;
 }
 @media (max-width: 600px) {
-    .bookmarkLocation {
+    .navigationItemLocation {
         font-size: 12px;
     }
 }
-.bookmarkItemDelete {
+.bookmarksItemDelete {
     flex: 0 0 auto;
 
     width:42px;
@@ -541,12 +585,12 @@ html, body {
     padding: 6px;
     cursor:pointer;
 }
-.bookmarkItemDelete svg {
+.bookmarksItemDelete svg {
     width: 100%;
     height: 100%;
     fill: var(--color-text-dim);
 }
-.bookmarkItemNone {
+.navigationItemNone {
     padding-top:12px;
 }
 
@@ -639,7 +683,7 @@ html, body {
 
 /* ------------------- */
 
-#textHolder {
+.textHolder {
     display: none;
     font-family: serif;
     font-size: var(--book-text-size);
@@ -657,15 +701,24 @@ html, body {
 
     max-width: 100%;
 }
+.textHolder + .textHolder {
+    margin-top: 12px;
+}
+@media (min-width: 601px) {
+    #outerTextHolder.multipleTextHolders .textHolder {
+        padding-top: 72px;
+        padding-bottom: 72px;
+    }
+}
 @media (max-width: 600px) {
-    #textHolder {
+    .textHolder {
         padding: 18px;
         border-radius: 0;
         box-shadow: none;
         }
 }
 
-#textHolder {
+.textHolder {
     /*
     Prevent i-bar cursor over non-hot text
     (ie, white space between adjacent TextSegments, and non-matched STT text)
@@ -723,19 +776,19 @@ span.bookmark.highlight::before {
 
 @media (pointer: fine) {
     /* hover effect only when is pointer device */
-    #textHolder span.hasAudio:hover {
+    .textHolder span.hasAudio:hover {
         background-color: var(--color-segment-hover);
         padding: 0.1em 0;
         border-radius: 3px;
         cursor: pointer;
     }
     /* hovering over currently highlighted segment shouldn't change its bg color */
-    #textHolder span:hasAudio.highlight:hover {
+    .textHolder span.hasAudio.highlight:hover {
         border-radius: 3px;
         background-color: var(--color-segment-highlight);
     }
 
-    #textHolder span.noAudio:hover {
+    .textHolder span.noAudio:hover {
         background-color: var(--color-bg);
         padding: 0.1em 0;
         border-radius: 3px;

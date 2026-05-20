@@ -15,13 +15,17 @@ class Util {
     }
 
     /**
-     * Generates a 32-bit hash of an object using FNV-1a algorithm
+     * Generates a 32-bit hash of an object using FNV-1a algorithm.
+     *
+     * Objects are converted to a stable deep representation before hashing so
+     * nested object keys affect identity regardless of insertion order.
      */
     static getObjectHash(obj) {
-    
-        // Stable string representation of object
-        const str = JSON.stringify(obj, Object.keys(obj).sort());
+        const str = Util.stableStringify(obj);
+        return Util.getStringHash(str);
+    }
 
+    static getStringHash(str) {
         // FNV-1a Hashing Algorithm
         let hash = 2166136261; // FNV offset basis
         for (let i = 0; i < str.length; i++) {
@@ -31,6 +35,27 @@ class Util {
         }
         // Convert to unsigned hex string
         return (hash >>> 0).toString(16);
+    }
+
+    /**
+     * Stable deep JSON serialization with sorted object keys.
+     */
+    static stableStringify(value) {
+        return JSON.stringify(Util.toStableObject(value));
+    }
+
+    static toStableObject(value) {
+        if (Array.isArray(value)) {
+            return value.map((item) => Util.toStableObject(item));
+        }
+        if (value && typeof value === "object") {
+            const result = {};
+            for (const key of Object.keys(value).sort()) {
+                result[key] = Util.toStableObject(value[key]);
+            }
+            return result;
+        }
+        return value;
     }
 
     /**

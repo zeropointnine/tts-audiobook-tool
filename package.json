@@ -1,0 +1,24 @@
+{
+  "name": "tts-audiobook-tool-dev-tooling",
+  "private": true,
+  "description": "Repository-local developer tooling for the tts-audiobook-tool browser player and lint configuration.",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:js": "eslint browser_player eslint.config.mjs",
+    "lint:css": "eslint browser_player/*.css",
+    "lint:json": "eslint . --ext .json"
+  },
+  "devDependencies": {
+    "@eslint/css": "^0.6.0",
+    "@eslint/js": "^9.27.0",
+    "@eslint/json": "^0.13.0",
+    "eslint": "^9.27.0",
+    "globals": "^16.0.0"
+  },
+  "keywords": [
+    "development-tooling",
+    "eslint",
+    "browser-player"
+  ]
+}

@@ -8,30 +8,30 @@
 
     <title>tts-audiobook-tool player</title>
 
-    <link rel="stylesheet" href="base.css?version=0126">
-    <link rel="stylesheet" href="main.css?version=0126">
-    <link rel="stylesheet" href="audio-player.css?version=0126">
+    <link rel="stylesheet" href="base.css?version=0520">
+    <link rel="stylesheet" href="main.css?version=0520">
+    <link rel="stylesheet" href="audio-player.css?version=0520">
 
     <script src="pako.min.js"></script>
 
-    <script src="util.js?version=0126"></script>
-    <script src="root-attributer.js?version=0126"></script>
-    <script src="show-util.js?version=0126"></script>
-    <script src="metadata-util.js?version=0126"></script>
-    <script src="drag-drop-controller.js?version=0126"></script>
-    <script src="zombie-checker.js?version=0126"></script>
-    <script src="storage-controller.js?version=0126"></script>
-    <script src="audio-player.js?version=0126"></script>
-    <script src="bookmarks.js?version=0126"></script>
-    <script src="book-text.js?version=0126"></script>
-    <script src="menu.js?version=0126"></script>
-    <script src="sleep-timer.js?version=0126"></script>
-    <script src="header.js?version=0126"></script>
-    <script src="toast.js?version=0126"></script>
-    <script src="overlay-manager.js?version=0126"></script>
-    <script src="player-visibility-controller.js?version=0126"></script>
-    <script src="app-util.js?version=0126"></script>
-    <script src="app.js?version=0126"></script>
+    <script src="util.js?version=0520"></script>
+    <script src="root-attributer.js?version=0520"></script>
+    <script src="show-util.js?version=0520"></script>
+    <script src="metadata-util.js?version=0520"></script>
+    <script src="drag-drop-controller.js?version=0520"></script>
+    <script src="zombie-checker.js?version=0520"></script>
+    <script src="storage-controller.js?version=0520"></script>
+    <script src="audio-player.js?version=0520"></script>
+    <script src="navigation-panel.js?version=0520"></script>
+    <script src="book-text.js?version=0520"></script>
+    <script src="menu.js?version=0520"></script>
+    <script src="sleep-timer.js?version=0520"></script>
+    <script src="header.js?version=0520"></script>
+    <script src="toast.js?version=0520"></script>
+    <script src="overlay-manager.js?version=0520"></script>
+    <script src="player-visibility-controller.js?version=0520"></script>
+    <script src="app-util.js?version=0520"></script>
+    <script src="app.js?version=0520"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -84,7 +84,6 @@
         <div id="currentFileName"></div>
 
         <div id="outerTextHolder">
-            <pre id="textHolder"></pre>
         </div>
     </div>
 
@@ -131,22 +130,30 @@
                 <svg class="graphic" xmlns="http://www.w3.org/2000/svg" height="100%" viewBox="0 -960 960 960" width="100%" fill="#e3e3e3"><path d="M480-160q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm0-240q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm0-240q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Z"/></svg>
             </div>
 
-            <div id="bookmarkButton" class="iconButton">
+            <div id="navigationPanelButton" class="iconButton">
                 <svg xmlns="http://www.w3.org/2000/svg" width="32px" height="32px" viewBox="0 -960 960 960" fill="#e3e3e3"><path d="M200-120v-640q0-33 23.5-56.5T280-840h400q33 0 56.5 23.5T760-760v640L480-240 200-120Zm80-122 200-86 200 86v-518H280v518Zm0-518h400-400Z"/></svg>
             </div>
 
         </div>
 
-        <div id="bookmarkPanel">
-            <div class="bookmarkTitle titleText">Bookmarks</div>
-            <div id="bookmarkAddButton" class="buttonText loadButton">
-                <div>Add:</div>
-                <div id="bookmarkAddDescLine">
-                    <div id="bookmarkAddDesc" tabindex="-1"></div>
-                    <div id="bookmarkAddLocation" class="bookmarkLocation">666/999</div>
-                </div>
+        <div id="navigationPanel">
+            <div id="navigationPanelTabs" class="navigationPanelTabs titleText" role="tablist" aria-label="Sidebar navigation">
+                <button id="sectionsTab" class="navigationPanelTab selected" type="button" data-tab="sections" aria-selected="true">Sections</button>
+                <button id="bookmarksTab" class="navigationPanelTab" type="button" data-tab="bookmarks" aria-selected="false">Bookmarks</button>
             </div>
-            <div id="bookmarkList"></div>
+            <div id="sectionsView" class="navigationPanelView">
+                <div id="sectionList"></div>
+            </div>
+            <div id="bookmarksView" class="navigationPanelView navigationPanelViewHidden">
+                <div id="bookmarksAddButton" class="buttonText loadButton">
+                    <div>Add:</div>
+                    <div id="bookmarksAddDescLine">
+                        <div id="bookmarksAddDesc" tabindex="-1"></div>
+                        <div id="bookmarksAddLocation" class="navigationItemLocation">666/999</div>
+                    </div>
+                </div>
+                <div id="bookmarksList"></div>
+            </div>
         </div>
         <div id="toast" class="buttonText">
     </div>
