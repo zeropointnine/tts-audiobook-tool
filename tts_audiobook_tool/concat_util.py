@@ -174,7 +174,7 @@ class ConcatUtil:
             norm_path = stem_path + " [norm]" + suffix
         else:
             norm_path = ""
-        if is_aac and bookmark_indices:
+        if is_aac and m4b_chapter_util.has_multiple_chapters(state.project, index_start, index_end):
             chapter_meta_path = stem_path + " [chaptermeta]" + suffix
         else:
             chapter_meta_path = ""
@@ -242,7 +242,11 @@ class ConcatUtil:
 
         if chapter_meta_path:
             chapter_metadata = m4b_chapter_util.make_metadata(
-                state.project, durations, file_title=Path(stem_path).name
+                state.project,
+                durations,
+                file_title=Path(stem_path).name,
+                index_start=index_start,
+                index_end=index_end,
             )
             err = m4b_chapter_util.make_copy_with_metadata(
                 source_path=last_path, dest_path=chapter_meta_path, metadata=chapter_metadata

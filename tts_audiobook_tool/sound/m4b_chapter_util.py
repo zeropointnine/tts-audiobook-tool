@@ -13,7 +13,9 @@ def make_metadata(
         project: Project, 
         durations: list[float],
         file_title: str,
-        artist: str=APP_NAME
+        artist: str=APP_NAME,
+        index_start: int=0,
+        index_end: int | None=None,
 ) -> str:
     """
     Creates M4B chapter metadata string.
@@ -27,20 +29,10 @@ def make_metadata(
         if i == len(durations) - 1:
             duration_sums.append(sum) # Add end item
 
-    indices = list(project.section_dividers)
-    indices.insert(0, 0) # insert index 0 at the beginning
+    if index_end is None:
+        index_end = index_start + len(durations) - 1
 
-    chapter_info = []
-    for i, index in enumerate(indices):
-        start_time = duration_sums[index]
-        if i == len(indices) - 1:
-            end_time = duration_sums[-1]
-        else:
-            end_time = duration_sums[index + 1]
-        chapter_title = project.phrase_groups[index].presentable_text
-        chapter_title = ellipsize(chapter_title, 60) # TODO: Consider prefixing with [9999] etc
-        info = (start_time, end_time, chapter_title)
-        chapter_info.append(info)
+    chapter_info = make_chapter_info(project, duration_sums, index_start, index_end)
 
     meta = ";FFMETADATA1\n"
     meta += f"title={file_title}\n"
@@ -55,6 +47,63 @@ def make_metadata(
         meta += section
             
     return meta
+
+def has_multiple_chapters(project: Project, index_start: int, index_end: int) -> bool:
+    """
+    Returns whether this output range contains more than one Book section, which is
+    the condition for writing M4B chapter metadata.
+    """
+    return len(make_output_sections(project, index_start, index_end)) > 1
+
+def make_output_sections(project: Project, index_start: int, index_end: int) -> list[tuple[int, int, str]]:
+    """
+    Returns Book sections overlapping the inclusive phrase-group output range as
+    tuples of absolute start index, absolute end index (exclusive), and title.
+    """
+    sections = project.book.sections
+    if len(sections) <= 1:
+        return []
+
+    starts = project.book.section_start_indices()
+    result: list[tuple[int, int, str]] = []
+    for section_index, section in enumerate(sections):
+        section_start = starts[section_index]
+        section_end = starts[section_index + 1] if section_index + 1 < len(starts) else section_start + len(section.phrase_groups)
+        overlaps = section_start <= index_end and section_end > index_start
+        if overlaps:
+            result.append((section_start, section_end, section.title))
+    return result
+
+def make_chapter_info(
+        project: Project,
+        duration_sums: list[float],
+        index_start: int,
+        index_end: int,
+) -> list[tuple[float, float, str]]:
+    output_sections = make_output_sections(project, index_start, index_end)
+    if len(output_sections) <= 1:
+        return []
+
+    chapter_info: list[tuple[float, float, str]] = []
+    for i, (section_start, _, chapter_title) in enumerate(output_sections):
+        relative_start_index = max(section_start, index_start) - index_start
+        if not (0 <= relative_start_index < len(duration_sums)):
+            continue
+        start_time = duration_sums[relative_start_index]
+
+        if i == len(output_sections) - 1:
+            end_time = duration_sums[-1]
+        else:
+            next_section_start = output_sections[i + 1][0]
+            relative_end_index = max(next_section_start, index_start) - index_start
+            if not (0 <= relative_end_index < len(duration_sums)):
+                continue
+            end_time = duration_sums[relative_end_index]
+
+        chapter_title = ellipsize(chapter_title, 60)
+        info = (start_time, end_time, chapter_title)
+        chapter_info.append(info)
+    return chapter_info
 
 def make_copy_with_metadata(source_path: str, dest_path: str, metadata: str) -> str:
     """

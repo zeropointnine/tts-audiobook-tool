@@ -6,6 +6,7 @@ import shutil
 import importlib
 from dataclasses import dataclass, field
 from html import unescape
+from urllib.parse import unquote, urlsplit
 from typing import Any, Protocol
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
@@ -551,6 +552,7 @@ class EpubExtractor:
             return [], "", [], [message]
 
         book_title = EpubExtractor.extract_book_title(book)
+        toc_title_by_href = EpubExtractor.extract_toc_title_by_href(book)
         warnings: list[str] = []
         significant_warnings: list[str] = []
         source_chapter_candidates: list[EpubSourceChapter] = []
@@ -573,7 +575,7 @@ class EpubExtractor:
                 warnings.append(warning)
                 continue
 
-            title = EpubExtractor.extract_title(html, href)
+            title = toc_title_by_href.get(EpubExtractor.normalize_toc_href(href)) or EpubExtractor.extract_title(html, href)
             if EpubSectionSkipDetector.is_navigation_document(str(item_id), href, item):
                 toc_skip_decision = EpubSectionSkipDetector.detect_table_of_contents_skip(
                     readable_spine_index=len(source_chapter_candidates),
@@ -647,6 +649,51 @@ class EpubExtractor:
             significant_warnings.append(warning)
 
         return source_chapters, book_title, warnings, significant_warnings
+
+    @staticmethod
+    def extract_toc_title_by_href(book: Any) -> dict[str, str]:
+        title_by_href: dict[str, str] = {}
+        try:
+            toc = getattr(book, "toc", [])
+        except Exception:
+            return title_by_href
+
+        EpubExtractor.collect_toc_titles(toc, title_by_href)
+        return title_by_href
+
+    @staticmethod
+    def collect_toc_titles(toc_items: Any, title_by_href: dict[str, str]) -> None:
+        if toc_items is None:
+            return
+
+        if isinstance(toc_items, tuple):
+            for toc_item in toc_items:
+                EpubExtractor.collect_toc_titles(toc_item, title_by_href)
+            return
+
+        if isinstance(toc_items, list):
+            for toc_item in toc_items:
+                EpubExtractor.collect_toc_titles(toc_item, title_by_href)
+            return
+
+        href = getattr(toc_items, "href", "")
+        title = BeautifulSoupEpubChapterTextExtractor.normalize_inline_text(getattr(toc_items, "title", ""))
+        normalized_href = EpubExtractor.normalize_toc_href(href)
+        if normalized_href and title:
+            title_by_href.setdefault(normalized_href, title)
+
+        subitems = getattr(toc_items, "subitems", None)
+        if subitems:
+            EpubExtractor.collect_toc_titles(subitems, title_by_href)
+
+    @staticmethod
+    def normalize_toc_href(href: str) -> str:
+        if not isinstance(href, str):
+            return ""
+        href = unquote(urlsplit(href).path).replace("\\", "/").strip()
+        while href.startswith("./"):
+            href = href[2:]
+        return href
 
     @staticmethod
     def extract_book_title(book: Any) -> str:
