@@ -77,24 +77,31 @@ class Phrase:
 @total_ordering 
 class Reason(tuple[int, str, float], Enum):
     """
-    Describes the "reason" why a piece of text has been segmented (at the end of the text).
+    Describes the "semantic reason" why a piece of text has been segmented (at the end of the text).
     
     Value comparisons can be made between members directly or using the level property
     (eg, "reason1 < reason2" or "reason1.level < reason2.level")
+
+    We map a pause duration to each reason. 
+    We may effect other configurable side-effects related to Reason as well (namely, display-related).
     """
     
-    # for back-compat and as fallback
+    # For back-compat and as fallback
     UNDEFINED = 0, "undefined", PAUSE_DURATION_SENTENCE
-    # string has been split after an arbitrary word
+    # The string has been split after an arbitrary word
     WORD = 1, "w", PAUSE_DURATION_WORD
-    # string has been split at a phrase (not to be confused with the class named "Phrase")
-    PHRASE = 2, "is", PAUSE_DURATION_PHRASE
-    # string has been split at a sentence (which does not end in a paragraph break)
+    # The string has been split at a phrase (not to be confused with the class named "Phrase")
+    PHRASE = 2, "is", PAUSE_DURATION_PHRASE # "is" - think "intra-sentence"
+    # The string has been split at a sentence (which does not end in a paragraph break)
     SENTENCE = 3, "s", PAUSE_DURATION_SENTENCE
-    # string has been split at a paragraph break (line feed)
+    # The string has been split at a paragraph break (line feed)
     PARAGRAPH = 4, "p", PAUSE_DURATION_PARAGRAPH
-    # string has been split at a paragraph break plus extra line feed/s
-    SECTION = 5, "x", PAUSE_DURATION_SECTION
+    # The string has been split at a paragraph break *plus* one or more blank lines.
+    # Related publishing/typography terms for what this represents: "space break"; "scene break"; "dinkus"
+    SPACE_BREAK = 5, "x", PAUSE_DURATION_SPACE_BREAK
+    # The segment was the last text at the end of a section (eg, the end of an html section of an epub). 
+    # Think "page break" almost.
+    SECTION_BREAK = 6, "xx", PAUSE_DURATION_SECTION
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:

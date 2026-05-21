@@ -44,7 +44,7 @@ class PhraseSegmenter:
                         case 2:
                             reason = Reason.PARAGRAPH
                         case _: # >= 3
-                            reason = Reason.SECTION
+                            reason = Reason.SPACE_BREAK
                 else:
                     reason = Reason.PHRASE
                 phrases.append( Phrase(phrase, reason) )
@@ -58,7 +58,7 @@ class PhraseSegmenter:
 
         phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
         if DOWNGRADE_CONSECUTIVE_SECTIONS:
-            phrases = PhraseSegmenter.downgrade_consecutive_sections(phrases)
+            phrases = PhraseSegmenter.downgrade_consecutive_space_breaks(phrases)
 
         return phrases
 
@@ -194,7 +194,7 @@ class PhraseSegmenter:
         """
         
         def is_ornamental_break(phrase: Phrase) -> bool:
-            return phrase.reason in [Reason.PARAGRAPH, Reason.SECTION] and not app_text.is_vocalizable(phrase.text)
+            return phrase.reason in [Reason.PARAGRAPH, Reason.SPACE_BREAK] and not app_text.is_vocalizable(phrase.text)
         
         results: list[Phrase] = []
 
@@ -208,20 +208,20 @@ class PhraseSegmenter:
         return results
 
     @staticmethod
-    def downgrade_consecutive_sections(phrases: list[Phrase]) -> list[Phrase]:
+    def downgrade_consecutive_space_breaks(phrases: list[Phrase]) -> list[Phrase]:
         """
-        Downgrades immediate repeated SECTION reasons to PARAGRAPH.
+        Downgrades immediate repeated SPACE_BREAK reasons to PARAGRAPH.
 
         Some EPUB-to-text converters emit multiple blank lines around adjacent headings,
         e.g. chapter number followed by chapter title. The first such break can be useful
-        as a section/prosody marker, but repeated immediate SECTION reasons overstate the
+        as a section/prosody marker, but repeated immediate SPACE_BREAK reasons overstate the
         structure and can trigger repeated section effects in downstream audio/browser flows.
         """
 
         last_reason_was_section = False
 
         for phrase in phrases:
-            if phrase.reason == Reason.SECTION:
+            if phrase.reason == Reason.SPACE_BREAK:
                 if last_reason_was_section:
                     phrase.reason = Reason.PARAGRAPH
                     phrase.text = phrase.text.rstrip() + "\n\n"

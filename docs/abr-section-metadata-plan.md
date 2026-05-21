@@ -26,7 +26,7 @@ Explicitly out of scope for this plan:
 - browser backward-compatibility handling details,
 - changing the player into multiple section-owned document blocks,
 - flat/manual text import section inference,
-- broader cleanup of `Reason.SECTION` or `section_dividers` compatibility logic.
+- broader cleanup of `Reason.SPACE_BREAK` or `section_dividers` compatibility logic.
 
 ## Design Decision: Flat Timeline with Sections Overlay
 

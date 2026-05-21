@@ -70,7 +70,7 @@ class ConcatMenu:
                 ),
                 
                 MenuItem(
-                    lambda _: make_menu_label("Section break sound effect", state.project.use_section_sound_effect),
+                    lambda _: make_menu_label("Section break sound effect", state.project.use_break_sound_effect),
                     lambda _, __: ConcatMenu.section_break_menu(state)
                 )
             ]
@@ -221,7 +221,7 @@ class ConcatMenu:
     def section_break_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
-            state.project.use_section_sound_effect = value
+            state.project.use_break_sound_effect = value
             state.project.save()
             print_feedback(f"Set to:", value)
 
@@ -231,7 +231,7 @@ class ConcatMenu:
             subheading=SECTION_BREAK_SUBHEADING,
             labels=["True", "False"],
             values=[True, False],
-            current_value=state.project.use_section_sound_effect,
+            current_value=state.project.use_break_sound_effect,
             default_value=False,
             on_select=on_select
         )

@@ -398,8 +398,8 @@ class EpubExtractor:
         has_seen_spine_chapter = False
 
         for chapter in text_chapters:
-            chapter_text = chapter.text.strip()
-            if not chapter_text:
+            chapter_text = chapter.text
+            if not chapter_text.strip():
                 continue
             is_injected_book_title = EpubExtractor.is_injected_book_title_chapter(chapter)
             if not is_injected_book_title:
@@ -480,7 +480,7 @@ class EpubExtractor:
         text_chapters.insert(0, EpubTextChapter(
             title=book_title,
             href="__epub_book_title__",
-            text=book_title,
+            text=book_title + "\n\n",
         ))
         return True
 
@@ -511,9 +511,7 @@ class EpubExtractor:
         if not last_group.phrases:
             return
         last_phrase = last_group.phrases[-1]
-        last_phrase.reason = Reason.SECTION
-        # Also add two blank lines at end, matching expectations and behavior for flat text flow
-        last_phrase.text = last_phrase.text.rstrip() + "\n\n\n"
+        last_phrase.reason = Reason.SECTION_BREAK
 
     @staticmethod
     def downgrade_leading_section_groups(phrase_groups: list[PhraseGroup]) -> None:
@@ -527,7 +525,7 @@ class EpubExtractor:
         """
 
         for group in phrase_groups:
-            if group.last_reason != Reason.SECTION:
+            if group.last_reason != Reason.SPACE_BREAK:
                 break
             last_phrase = group.phrases[-1]
             last_phrase.reason = Reason.PARAGRAPH

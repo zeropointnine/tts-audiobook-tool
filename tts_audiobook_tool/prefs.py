@@ -97,7 +97,7 @@ class Prefs(Saveable):
 
         # Migration-related (properties which used to but no longer exist in Preferences)
         if save_if_dirty:            
-            migrated_properties = ["segmentation_strategy", "max_words", "normalization_type", "use_section_sound_effect"]
+            migrated_properties = ["segmentation_strategy", "max_words", "normalization_type", "use_break_sound_effect"]
             has = [item for item in migrated_properties if prefs_dict.get(item) is not None]
             if has:
                 hint = Hint("", "Properties have changed", MIGRATED_MESSAGE.replace("%1", ", ".join(has)))

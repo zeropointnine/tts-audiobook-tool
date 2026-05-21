@@ -207,7 +207,7 @@ class ConcatUtil:
             concat_path,
             phrases_and_paths,
             print_progress=True,
-            use_section_sound_effect=state.project.use_section_sound_effect,
+            use_break_sound_effect=state.project.use_break_sound_effect,
             high_shelf=high_shelf,
             aac_bitrate=state.prefs.aac_bitrate,
             use_upsampler=state.project.use_upsampler
@@ -278,7 +278,7 @@ class ConcatUtil:
             version=ABR_VERSION,
             raw_text=raw_text, 
             bookmark_indices=bookmark_indices,
-            has_section_break_audio=state.project.use_section_sound_effect,
+            has_break_audio=state.project.use_break_sound_effect,
             project_snapshot=state.project.to_snapshot_dict(),
             sections=sections,
         )
@@ -303,17 +303,19 @@ class ConcatUtil:
         project: Project, 
         index_start: int = -1, 
         index_end: int = -1
-    ) -> list[tuple[Phrase, str]]:
+    ) -> list[tuple[Phrase, str, bool]]:
         
         if index_start == -1:
             index_start = 0
         if index_end == -1:
             index_end = len(project.phrase_groups) - 1
 
-        phrases_and_paths: list[tuple[Phrase, str]] = []
+        phrases_and_paths: list[tuple[Phrase, str, bool]] = []
+        section_start_indices = {0, *project.section_dividers}
 
         for group_index, group in enumerate(project.phrase_groups):            
             phrase = group.as_flattened_phrase()
+            is_first_in_section = group_index in section_start_indices
             out_of_range = (group_index < index_start or group_index > index_end)
             if out_of_range:
                 file_path = ""
@@ -323,7 +325,7 @@ class ConcatUtil:
                     file_path = os.path.join(project.sound_segments_path, file_name)
                 else:
                     file_path = ""
-            phrases_and_paths.append((phrase, file_path))
+            phrases_and_paths.append((phrase, file_path, is_first_in_section))
 
         return phrases_and_paths
 
@@ -347,8 +349,8 @@ class ConcatUtil:
     @staticmethod
     def concatenate_sound_segments(
         dest_path: str,
-        phrases_and_paths: list[ tuple[Phrase, str] ],
-        use_section_sound_effect: bool,
+        phrases_and_paths: list[ tuple[Phrase, str, bool] ],
+        use_break_sound_effect: bool,
         high_shelf: HighShelfEq,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
@@ -375,7 +377,7 @@ class ConcatUtil:
 
         Interrupts().set("concat")
 
-        for (phrase, path) in phrases_and_paths:
+        for (phrase, path, is_first_in_section) in phrases_and_paths:
 
             if not path:
                 durations.append(0)
@@ -387,7 +389,8 @@ class ConcatUtil:
                 return "Interrupted by user"
 
             result = SoundPipeline.make_concat_rendered_sound_segment(
-                phrase, path, use_section_sound_effect, high_shelf,
+                phrase, path, use_break_sound_effect, high_shelf,
+                is_first_in_section=is_first_in_section,
                 use_upsampler=use_upsampler
             )
             if isinstance(result, str): # error
@@ -483,11 +486,12 @@ def make_stem(
     num_chapters: int
 ) -> str:
 
-    phrases_and_paths: list[tuple[Phrase, str]] = []
+    phrases_and_paths: list[tuple[Phrase, str, bool]] = []
     num_missing = 0
 
     for group_index, group in enumerate(project.phrase_groups):            
         phrase = group.as_flattened_phrase()
+        is_first_in_section = group_index == 0 or group_index in project.section_dividers
         out_of_range = (group_index < index_start or group_index > index_end)
         if out_of_range:
             file_path = ""
@@ -497,12 +501,12 @@ def make_stem(
                 file_path = os.path.join(project.sound_segments_path, stem)
             else:
                 file_path = ""
-        phrases_and_paths.append((phrase, file_path))
+        phrases_and_paths.append((phrase, file_path, is_first_in_section))
         if file_path == "":
             num_missing += 1
 
     # Make Filename
-    extant_file_names = [file_name for _, file_name in phrases_and_paths if file_name]
+    extant_file_names = [file_name for _, file_name, _ in phrases_and_paths if file_name]
     # [1] project name
     stem = app_text.sanitize_for_filename(Path(project.dir_path).name[:20]) + " "
     # [2] file number

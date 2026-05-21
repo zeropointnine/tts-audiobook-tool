@@ -144,9 +144,17 @@ def start(
         if one_second == end_index:
             appended_sound = None
         else:
-            use_sound_effect = state.project.use_section_sound_effect and phrase.reason == Reason.SECTION
+            is_first_in_section = one_second == 0 or one_second in state.project.section_dividers
+            use_sound_effect = SoundPipeline.should_append_break_sound_effect(
+                phrase.reason,
+                use_break_sound_effect=state.project.use_break_sound_effect,
+                is_first_in_section=is_first_in_section,
+            )
             if use_sound_effect:
-                path = SECTION_SOUND_EFFECT_PATH
+                if phrase.reason == Reason.SECTION_BREAK:
+                    path = SECTION_BREAK_SOUND_EFFECT_PATH
+                else:
+                    path = SPACE_BREAK_SOUND_EFFECT_PATH
                 result = SoundFileUtil.load(path, sound.sr)
                 if isinstance(result, str):
                     printt(f"{COL_ERROR}Error loading sound effect: {path}")

@@ -22,7 +22,7 @@ class TestAppMetadata(unittest.TestCase):
             version=3,
             bookmark_indices=[0],
             raw_text="One.",
-            has_section_break_audio=False,
+            has_break_audio=False,
             project_snapshot={},
             sections=[AppMetadataSection(title="Chapter 1", start_index=0, end_index=1)],
         )
@@ -78,7 +78,7 @@ class TestAppMetadata(unittest.TestCase):
             version=3,
             bookmark_indices=[0],
             raw_text="One.",
-            has_section_break_audio=False,
+            has_break_audio=False,
             project_snapshot={"voice": "test"},
             sections=[AppMetadataSection(title="Chapter 1", start_index=0, end_index=1)],
         )

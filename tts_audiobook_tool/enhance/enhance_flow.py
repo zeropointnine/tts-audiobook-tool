@@ -213,7 +213,7 @@ def make(
         version=ABR_VERSION,
         bookmark_indices=[],
         raw_text=raw_text,
-        has_section_break_audio=False,
+        has_break_audio=False,
         project_snapshot={},
         sections=[]
     )

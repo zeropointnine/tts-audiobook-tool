@@ -744,7 +744,7 @@ class ResponseSession:
                     limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
                 )
                 sound = SoundPipeline.append_pause_or_section_effect(
-                    sound, reason=reason, use_section_sound_effect=False,
+                    sound, reason=reason, use_break_sound_effect=False,
                 )
 
                 if not self.interrupt_requested.is_set() and not self.response_aborted.is_set():

@@ -62,8 +62,8 @@ class AppMetadata(NamedTuple):
     # The unmassaged input text 
     raw_text: str
 
-    # Is True when the audio includes page turn sound effect at so-called section breaks
-    has_section_break_audio: bool | None
+    # Is True when the audio includes page turn sound effect at space breaks + section breaks
+    has_break_audio: bool | None
 
     # Export-time snapshot of project settings for possible future import flows
     project_snapshot: dict
@@ -76,7 +76,7 @@ class AppMetadata(NamedTuple):
             "version": self.version,
             "bookmarks": sorted(set(self.bookmark_indices)),
             "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
-            "has_section_break_audio": bool(self.has_section_break_audio),
+            "has_section_break_audio": bool(self.has_break_audio),
             "project_snapshot": self.project_snapshot,
             "sections": AppMetadataSection.list_to_dicts(self.sections),
         }
@@ -123,7 +123,7 @@ class AppMetadata(NamedTuple):
         except Exception as e:
             return "Bad item in bookmarks: " + make_error_string(e)
 
-        has_section_break_audio = o.get("has_section_break_audio", False)
+        has_break_audio = o.get("has_section_break_audio", False)
 
         project_snapshot = o.get("project_snapshot", {})
         if not isinstance(project_snapshot, dict):
@@ -141,7 +141,7 @@ class AppMetadata(NamedTuple):
             version=version,
             bookmark_indices=bookmarks,
             raw_text=raw_text, 
-            has_section_break_audio=has_section_break_audio,
+            has_break_audio=has_break_audio,
             project_snapshot=project_snapshot,
             sections=sections_result,
         )

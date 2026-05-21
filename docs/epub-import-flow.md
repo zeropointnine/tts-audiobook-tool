@@ -31,7 +31,7 @@ EPUB-specific parsing, spine traversal, HTML flattening, warning collection, and
 This boundary keeps ebook handling from leaking into the rest of the application. Downstream audiobook features continue to consume the same structures they already understand:
 
 - `PhraseGroup` instances for generation and playback,
-- `Reason.SECTION` markers for phrase-level section endings,
+- `Reason.SPACE_BREAK` markers for phrase-level section endings,
 - `section_dividers` / `chapter_indices` for chapter-aware concat and metadata flows,
 - `project_text_raw.txt` as the readable raw text reference.
 
@@ -54,7 +54,7 @@ EpubTextChapter objects retain per-spine-document text chunks
   ↓
 Each chapter is segmented independently with PhraseGrouper
   ↓
-The last phrase in each chapter is marked Reason.SECTION
+The last phrase in each chapter is marked Reason.SPACE_BREAK
   ↓
 Chapter-start phrase indices become Project.section_dividers
   ↓
@@ -185,13 +185,13 @@ raw_text = "\n\n".join(raw_text_parts)
 
 The first chapter starts at phrase group `0`, so it does not need a divider entry. Each subsequent chapter adds a divider at the current phrase-group count before its groups are appended.
 
-`mark_last_phrase_as_section(...)` also marks the last phrase of each chapter as `Reason.SECTION` and normalizes its trailing line breaks, matching the app's existing section-ending expectations.
+`mark_last_phrase_as_section(...)` also marks the last phrase of each chapter as `Reason.SPACE_BREAK` and normalizes its trailing line breaks, matching the app's existing section-ending expectations.
 
 This EPUB boundary marker is structural: it represents the end of a retained EPUB spine
 document, not merely whitespace found in the source text. To avoid duplicated section
 behavior, the importer also downgrades section-like groups at the start of a subsequent
 spine document when a previous retained document already ended with a forced
-`Reason.SECTION`. This handles common heading patterns where the next XHTML file begins
+`Reason.SPACE_BREAK`. This handles common heading patterns where the next XHTML file begins
 with chapter-title text separated by multiple blank lines.
 
 ---

@@ -397,7 +397,7 @@ class Server:
 
         if phrase_group.last_reason != Reason.UNDEFINED:
             sound = SoundPipeline.append_pause_or_section_effect(
-                sound, reason=phrase_group.last_reason, use_section_sound_effect=False
+                sound, reason=phrase_group.last_reason, use_break_sound_effect=False
             )
 
         if self._generation_id != generation_id:

@@ -247,7 +247,7 @@ class App {
         this.header.githubButton.style.display = "none"; 
 
         // Init book text (heavy operation)
-        const addSectionDividers = (appMetadata.hasSectionBreakAudio === true);
+        const addSectionDividers = (appMetadata.hasBreakAudio === true);
         const textSegments = appMetadata.textSegments;
         this.bookText.init(textSegments, addSectionDividers, appMetadata.sections || []);
         this.bookText.showFileName(fileName)

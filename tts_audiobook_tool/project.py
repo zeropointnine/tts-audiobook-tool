@@ -99,7 +99,7 @@ class Project(BaseModel):
     section_dividers: list[int] = Field(default_factory=list, alias="chapter_indices")
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]
-    use_section_sound_effect: bool = PROJECT_DEFAULT_SECTION_SOUND_EFFECT
+    use_break_sound_effect: bool = Field(default=PROJECT_DEFAULT_BREAK_EFFECT, alias="use_section_sound_effect")
     normalization_type: NormalizationType = list(NormalizationType)[0]
     high_shelf: str = HighShelfEq.DISABLED.id
     use_upsampler: bool = False
@@ -748,7 +748,7 @@ class Project(BaseModel):
             "chapter_indices": self.section_dividers,
             "subdivide_phrases": self.subdivide_phrases,
             "export_type": self.export_type.id,
-            "use_section_sound_effect": self.use_section_sound_effect,
+            "use_break_sound_effect": self.use_break_sound_effect,
             "normalization_type": self.normalization_type.value.id,
             "high_shelf": self.high_shelf,
             "use_upsampler": self.use_upsampler,
@@ -1208,5 +1208,3 @@ class Project(BaseModel):
         if self.language_code.startswith(("zh-", "ja-", "ko-")):
             return True
         return False
-
-

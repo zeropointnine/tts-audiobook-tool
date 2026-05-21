@@ -18,13 +18,13 @@ maps naturally to:
 
 Over time, however, several structural concerns were layered onto that same flat view:
 
-- `Phrase.reason`, especially `Reason.SECTION`, influences segmentation/prosody,
-- section-break audio can be triggered from `Reason.SECTION`,
+- `Phrase.reason`, especially `Reason.SPACE_BREAK`, influences segmentation/prosody,
+- section-break audio can be triggered from `Reason.SPACE_BREAK`,
 - the browser player can insert visible separators from text formatting heuristics,
 - `Project.section_dividers` / `chapter_indices` mark flat indices where sections/files begin,
 - EPUB import introduces spine-document boundaries that are structural rather than purely local text breaks.
 
-That made `Reason.SECTION` do too much. In practice it has been used to suggest some mix of:
+That made `Reason.SPACE_BREAK` do too much. In practice it has been used to suggest some mix of:
 
 1. a strong local text break,
 2. a section-break sound effect trigger,
@@ -76,7 +76,7 @@ the newer section helpers:
 EPUB import also still carries some pre-`Book` behavior:
 
 - it still builds flat `phrase_groups` plus flat `section_dividers`,
-- it still marks EPUB boundaries with `Reason.SECTION`,
+- it still marks EPUB boundaries with `Reason.SPACE_BREAK`,
 - it still downgrades some leading consecutive section groups after EPUB boundaries,
 - the browser player still infers visible separators rather than consuming explicit section metadata.
 
@@ -256,12 +256,12 @@ It also still contains old boundary-encoding behavior. In
 
 - `section_dividers.append(len(phrase_groups))` is still used,
 - `DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY = True` still exists,
-- the final phrase of a chapter can still be forced to `Reason.SECTION`.
+- the final phrase of a chapter can still be forced to `Reason.SPACE_BREAK`.
 
 That means EPUB structural boundaries are currently represented **both** as:
 
 - `BookSection` boundaries after project construction, and
-- legacy `Reason.SECTION` / divider-based compatibility signals during import.
+- legacy `Reason.SPACE_BREAK` / divider-based compatibility signals during import.
 
 ### Enhance-existing-audiobook flow
 
@@ -273,18 +273,18 @@ verified separately.
 
 ## Relationship to `Phrase.reason`
 
-The original architectural goal still stands: `Reason.SECTION` should eventually narrow to
+The original architectural goal still stands: `Reason.SPACE_BREAK` should eventually narrow to
 mean a local text-derived section break inside a `BookSection`, not an EPUB document boundary.
 
 That is **not** fully true yet.
 
 Current status:
 
-- plain-text/local segmentation still uses `Reason.SECTION` for strong local breaks,
-- EPUB import still uses `Reason.SECTION` as part of boundary handling,
+- plain-text/local segmentation still uses `Reason.SPACE_BREAK` for strong local breaks,
+- EPUB import still uses `Reason.SPACE_BREAK` as part of boundary handling,
 - compensating EPUB logic still exists to downgrade repeated section markers after a boundary.
 
-So `Reason.SECTION` remains somewhat overloaded in the current codebase, even though the app
+So `Reason.SPACE_BREAK` remains somewhat overloaded in the current codebase, even though the app
 now has the structural types needed to fix that cleanly.
 
 ## Relationship to `section_dividers`
@@ -374,7 +374,7 @@ Examples verified in the codebase today:
 The extractor still:
 
 - emits flat section-divider indices,
-- forces/sustains `Reason.SECTION` semantics around chapter boundaries,
+- forces/sustains `Reason.SPACE_BREAK` semantics around chapter boundaries,
 - retains downgrade logic for consecutive section markers after EPUB boundaries.
 
 ### 3. Browser-player export still lacks explicit structural section metadata
@@ -422,11 +422,11 @@ Priority candidates remain:
 - section-marker displays and edit flows
 - any ABR export path that should reflect structural sections explicitly.
 
-### Phase 3 — De-overload `Reason.SECTION`: not complete
+### Phase 3 — De-overload `Reason.SPACE_BREAK`: not complete
 
 This is blocked less by data modeling now and more by remaining importer/consumer behavior.
 
-The structural model is in place, but EPUB import still uses `Reason.SECTION` to carry some
+The structural model is in place, but EPUB import still uses `Reason.SPACE_BREAK` to carry some
 boundary meaning. That old behavior should be removed only after the consumers above stop
 depending on the flat/boundary-encoded signals.
 
@@ -503,7 +503,7 @@ Recommended next steps from the codebase’s current midpoint:
    section export: ebook-imported sections should become visible reading boundaries and a
    dedicated navigation surface, not just hidden metadata.
 5. Once those consumers no longer require EPUB boundary encoding, remove EPUB-specific
-   `Reason.SECTION` boundary forcing and downgrade logic.
+   `Reason.SPACE_BREAK` boundary forcing and downgrade logic.
 6. Export explicit section metadata to ABR/browser-player consumers so structural boundaries
    do not need to be inferred from whitespace or audio-only cues.
 
@@ -535,7 +535,7 @@ The project now has the missing structural text layer.
 What remains unfinished is the second half of the migration:
 
 - consumers still need to stop depending directly on flat divider fields,
-- EPUB import still needs to stop encoding structural boundaries with `Reason.SECTION`,
+- EPUB import still needs to stop encoding structural boundaries with `Reason.SPACE_BREAK`,
 - browser/player metadata still needs explicit section export.
 
 What is newly clarified is the UX destination for that remaining work: structural book sections

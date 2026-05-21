@@ -13,7 +13,7 @@ class TestPhraseSegmenter(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                Phrase("Chapter 1\n\n\n", Reason.SECTION),
+                Phrase("Chapter 1\n\n\n", Reason.SPACE_BREAK),
                 Phrase("The Beginning\n\n", Reason.PARAGRAPH),
                 Phrase("Prose starts here.", Reason.SENTENCE),
             ]
@@ -27,9 +27,9 @@ class TestPhraseSegmenter(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                Phrase("Chapter 1\n\n\n", Reason.SECTION),
+                Phrase("Chapter 1\n\n\n", Reason.SPACE_BREAK),
                 Phrase("Prose starts here.\n\n", Reason.PARAGRAPH),
-                Phrase("Next section\n\n\n", Reason.SECTION),
+                Phrase("Next section\n\n\n", Reason.SPACE_BREAK),
                 Phrase("More prose.", Reason.SENTENCE),
             ]
         )

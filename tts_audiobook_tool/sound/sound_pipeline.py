@@ -75,8 +75,9 @@ class SoundPipeline:
     def make_concat_rendered_sound_segment(
         phrase: Phrase,
         path: str,
-        use_section_sound_effect: bool,
+        use_break_sound_effect: bool,
         high_shelf: HighShelfEq,
+        is_first_in_section: bool = False,
         use_upsampler: bool = False,
     ) -> Sound | str:
         """
@@ -103,7 +104,8 @@ class SoundPipeline:
         sound = SoundPipeline.append_pause_or_section_effect(
             sound,
             reason=phrase.reason,
-            use_section_sound_effect=use_section_sound_effect,
+            use_break_sound_effect=use_break_sound_effect,
+            is_first_in_section=is_first_in_section,
         )
         return sound
 
@@ -134,13 +136,33 @@ class SoundPipeline:
     def append_pause_or_section_effect(
         sound: Sound,
         reason: Reason,
-        use_section_sound_effect: bool,
+        use_break_sound_effect: bool,
+        is_first_in_section: bool = False,
     ) -> Sound:
-        if reason == Reason.SECTION and use_section_sound_effect:
-            return SoundUtil.append_sound_using_path(sound, SECTION_SOUND_EFFECT_PATH)
+        if SoundPipeline.should_append_break_sound_effect(
+            reason,
+            use_break_sound_effect=use_break_sound_effect,
+            is_first_in_section=is_first_in_section,
+        ):
+            if reason == Reason.SPACE_BREAK:
+                return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
+            if reason == Reason.SECTION_BREAK:
+                return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
         if reason.pause_duration:
             return SoundUtil.add_silence(sound, reason.pause_duration)
         return sound
+
+    @staticmethod
+    def should_append_break_sound_effect(
+        reason: Reason,
+        use_break_sound_effect: bool,
+        is_first_in_section: bool = False,
+    ) -> bool:
+        if not use_break_sound_effect:
+            return False
+        if reason == Reason.SPACE_BREAK and is_first_in_section:
+            return False
+        return reason in [Reason.SPACE_BREAK, Reason.SECTION_BREAK]
 
     @staticmethod
     def limit_silence_gaps_if_enabled(

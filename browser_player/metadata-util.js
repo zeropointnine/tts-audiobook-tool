@@ -70,7 +70,7 @@ class MetadataUtil {
             : [];
 
         const rawText = MetadataUtil.decodeLegacyRawText(rawMetadata["raw_text"]);
-        const hasSectionBreakAudio = (rawMetadata["has_section_break_audio"] === true);
+        const hasBreakAudio = (rawMetadata["has_section_break_audio"] === true);
         const projectSnapshot = MetadataUtil.normalizeProjectSnapshot(rawMetadata["project_snapshot"]);
         const sections = MetadataUtil.normalizeSections(rawMetadata["sections"], textSegments.length);
         const identity = MetadataUtil.makePlaybackIdentity(textSegments);
@@ -80,7 +80,7 @@ class MetadataUtil {
             rawText,
             textSegments,
             bookmarks,
-            hasSectionBreakAudio,
+            hasBreakAudio,
             projectSnapshot,
             sections,
             identity,
@@ -88,7 +88,7 @@ class MetadataUtil {
             // Backward-compatible aliases for existing callers during transition.
             "raw_text": rawText,
             "text_segments": textSegments,
-            "has_section_break_audio": hasSectionBreakAudio,
+            "has_section_break_audio": hasBreakAudio,
             "project_snapshot": projectSnapshot,
         }
     }

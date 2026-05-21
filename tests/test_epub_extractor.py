@@ -53,8 +53,8 @@ class TestEpubExtractor(unittest.TestCase):
 
         self.assertEqual(result.section_dividers, [1])
         self.assertEqual(len(result.phrase_groups), 2)
-        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION)
-        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SECTION)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SPACE_BREAK)
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SPACE_BREAK)
         self.assertTrue(result.phrase_groups[0].phrases[-1].text.endswith("\n\n\n"))
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("\n\n\n"))
 
@@ -79,11 +79,11 @@ class TestEpubExtractor(unittest.TestCase):
             )
 
         self.assertEqual(result.section_dividers, [1])
-        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SPACE_BREAK)
         self.assertEqual(result.phrase_groups[1].text, "Chapter 2\n\n")
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.phrase_groups[2].last_reason, Reason.PARAGRAPH)
-        self.assertEqual(result.phrase_groups[3].last_reason, Reason.SECTION)
+        self.assertEqual(result.phrase_groups[3].last_reason, Reason.SPACE_BREAK)
 
     def test_import_epub_single_group_chapter_still_ends_as_section(self):
         source_chapters = [
@@ -101,7 +101,7 @@ class TestEpubExtractor(unittest.TestCase):
             )
 
         self.assertEqual(len(result.phrase_groups), 2)
-        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SECTION)
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SPACE_BREAK)
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("\n\n\n"))
 
     def test_import_epub_prepends_metadata_book_title_before_first_retained_chapter(self):
@@ -145,7 +145,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.chapters[0].href, "__epub_book_title__")
         self.assertEqual(result.section_dividers, [3])
         self.assertEqual(result.phrase_groups[0].phrases[0].text, "Example Book\n\n\n")
-        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SPACE_BREAK)
 
     def test_import_epub_does_not_duplicate_metadata_title_already_at_start(self):
         source_chapters = [
@@ -223,7 +223,7 @@ class TestEpubExtractor(unittest.TestCase):
 
         phrase = phrase_groups[0].phrases[0]
         self.assertEqual(phrase.text, "Section end.\n\n\n")
-        self.assertEqual(phrase.reason, Reason.SECTION)
+        self.assertEqual(phrase.reason, Reason.SPACE_BREAK)
 
     def test_extract_text_does_not_make_image_only_chapter_warning_significant(self):
         chapter = EpubSourceChapter(

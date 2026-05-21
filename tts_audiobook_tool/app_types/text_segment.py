@@ -90,7 +90,7 @@ class TextSegmentReason(Enum):
 
     # Segment is start of a section (more than 2 line breaks)
     # (and by definition is the start of a paragraph and a sentence too)
-    SECTION = ("x", PAUSE_DURATION_SECTION)
+    SECTION = ("x", PAUSE_DURATION_SPACE_BREAK)
 
     UNDEFINED = ("undefined", PAUSE_DURATION_SENTENCE) # for back-compat and as fallback
 
