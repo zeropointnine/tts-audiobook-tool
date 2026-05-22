@@ -286,20 +286,20 @@ def lerp_clamped(
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
-def make_file_line_ranges(section_dividers: list[int], num_items: int) -> list[tuple[int, int]]:
+def make_file_line_ranges(markers: list[int], num_items: int) -> list[tuple[int, int]]:
     """ 
-    Returns ranges with length of section_dividers + 1 (always starts with item with start index 0)
-    Assumes `section_dividers` is sorted 
+    Returns ranges with length of markers + 1 (always starts with item with start index 0)
+    Assumes `markers` is sorted 
     """
 
     # TODO: this should be a property in Project
 
-    if not section_dividers:
+    if not markers:
         return [ (0, num_items - 1) ]
 
-    section_dividers = sorted(section_dividers) # for good measure
+    markers = sorted(markers) # for good measure
 
-    indices = list(section_dividers)
+    indices = list(markers)
     if indices[0] == 0:
         del indices[0]
 
@@ -358,9 +358,9 @@ def time_stamp(seconds: float, with_tenth: bool=True) -> str:
 def ellipsize(s: str, length: int, from_start:bool = False) -> str:
     if len(s) > length:
         if from_start:
-            s = s[:length - 3] + "..."
-        else:
             s = "..." + s[-(length - 3):]
+        else:
+            s = s[:length - 3] + "..."
     return s
 
 def get_package_dir() -> str | None:

@@ -88,9 +88,11 @@ class SoundPipeline:
         - Applies high shelf filter (optional)
         - Adds ending silence
         """
+
         result = SoundFileUtil.load(path)
         if isinstance(result, str):
             return result
+
         sound = result
 
         if use_upsampler:
@@ -100,7 +102,9 @@ class SoundPipeline:
             sound = result
 
         sound = SoundPipeline.resample_for_app(sound)
+
         sound = SoundPipeline.apply_high_shelf(sound, high_shelf)
+        
         sound = SoundPipeline.append_pause_or_section_effect(
             sound,
             reason=phrase.reason,
@@ -139,17 +143,21 @@ class SoundPipeline:
         use_break_sound_effect: bool,
         is_first_in_section: bool = False,
     ) -> Sound:
-        if SoundPipeline.should_append_break_sound_effect(
+        
+        b = SoundPipeline.should_append_break_sound_effect(
             reason,
             use_break_sound_effect=use_break_sound_effect,
             is_first_in_section=is_first_in_section,
-        ):
+        )
+        if b:
             if reason == Reason.SPACE_BREAK:
                 return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
             if reason == Reason.SECTION_BREAK:
                 return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
-        if reason.pause_duration:
+        
+        if reason.pause_duration > 0:
             return SoundUtil.add_silence(sound, reason.pause_duration)
+        
         return sound
 
     @staticmethod

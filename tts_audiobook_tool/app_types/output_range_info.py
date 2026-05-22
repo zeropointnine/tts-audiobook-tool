@@ -6,18 +6,18 @@ from tts_audiobook_tool.util import *
 
 
 @dataclass
-class ChapterInfo:
+class OutputRangeInfo:
     """
     Stores mappings of project phrase group index to sound segment path within a certain start/end range
     """
     
-    chapter_index: int
+    output_index: int
     segment_index_start: int
     segment_index_end: int
     segment_index_to_path: dict[int, str]
 
     def __str__(self) -> str:
-        return f"<ChapterInfo - index {self.chapter_index} start {self.segment_index_start} end {self.segment_index_end} num exist {self.num_files_exist} num missing {self.num_files_missing}>"
+        return f"<OutputRangeInfo - index {self.output_index} start {self.segment_index_start} end {self.segment_index_end} num exist {self.num_files_exist} num missing {self.num_files_missing}>"
 
     @property
     def num_segments(self) -> int:
@@ -32,36 +32,36 @@ class ChapterInfo:
         return self.num_segments - self.num_files_exist
 
     @staticmethod
-    def make_chapter_infos(project: Project) -> list[ChapterInfo]:
+    def make_output_range_infos(project: Project) -> list[OutputRangeInfo]:
         """
-        Makes ChapterInfo objects based on the project's section_dividers
+        Makes OutputRangeInfo objects based on the project's section markers
         """
-        ranges = make_file_line_ranges(project.section_dividers, len(project.phrase_groups))
+        ranges = make_file_line_ranges(project.markers, len(project.phrase_groups))
         
         result = []
-        for chapter_index, rng in enumerate(ranges):
-            chapter_info = ChapterInfo(
-                chapter_index = chapter_index,
+        for output_index, rng in enumerate(ranges):
+            output_range_info = OutputRangeInfo(
+                output_index = output_index,
                 segment_index_start=rng[0],
                 segment_index_end=rng[1],
                 segment_index_to_path=make_index_to_path(project, rng[0], rng[1])
             )
-            result.append(chapter_info)
+            result.append(output_range_info)
         return result
 
     @staticmethod
-    def make_single_info(project: Project) -> ChapterInfo:
+    def make_single_info(project: Project) -> OutputRangeInfo:
         """
-        Makes single ChapterInfo, disregarding section_dividers
+        Makes single OutputRangeInfo, disregarding section markers
         """
         index_end = len(project.phrase_groups) - 1
-        chapter_info = ChapterInfo(
-            chapter_index = 0,
+        output_range_info = OutputRangeInfo(
+            output_index = 0,
             segment_index_start=0,
             segment_index_end=index_end,
             segment_index_to_path=make_index_to_path(project, 0, index_end)
         )
-        return chapter_info
+        return output_range_info
 
 # ---
 

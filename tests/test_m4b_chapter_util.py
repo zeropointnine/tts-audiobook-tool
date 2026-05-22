@@ -38,7 +38,7 @@ class TestM4bChapterUtil(unittest.TestCase):
         self.assertIn("START=3000\nEND=6000\ntitle=Part Two", metadata)
         self.assertIn("START=6000\nEND=15000\ntitle=Part Three", metadata)
 
-    def test_make_metadata_ignores_section_dividers_and_chapter_mode(self):
+    def test_make_metadata_ignores_markers_and_chapter_mode(self):
         project = Project.model_validate({
             "book": Book(sections=[
                 BookSection(title="Book A", phrase_groups=[
@@ -50,7 +50,7 @@ class TestM4bChapterUtil(unittest.TestCase):
                     self.make_phrase_group("B2."),
                 ]),
             ]),
-            "chapter_indices": [1, 3],
+            "markers": [1, 3],
             "chapter_mode": SectionMarkerMode.FILES.id,
         })
 

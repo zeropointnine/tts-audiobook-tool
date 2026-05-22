@@ -330,10 +330,10 @@ html, body {
 }
 
 
-#currentFileName {
+#currentFileName,
+#currentTitle {
     margin-left: 36px;
     width: calc(100% - 72px);
-    margin-bottom: 16px;
     font-family: sans-serif;
     font-size: 14px;
     color: var(--color-text-dim);
@@ -341,8 +341,19 @@ html, body {
     overflow-wrap: break-word;
     word-break: break-word; /* Safari fallback */
 }
+
+#currentFileName {
+    margin-bottom: 18px;
+}
+
+#currentTitle {
+    display: none;
+    margin-bottom: 18px;
+}
+
 @media (max-width: 600px) {
-    #currentFileName {
+    #currentFileName,
+    #currentTitle {
         font-size: 12px;
         margin-left: 18px;
         width: calc(100% - 36px);
@@ -448,7 +459,7 @@ html, body {
     padding:18px;
     background: var(--color-content-bg);
     color: var(--color-text-dim);
-    overflow: auto;
+    overflow: hidden;
 
     transform: translateX(calc(-100%));
     transition: transform 0.3s ease-out;
@@ -504,6 +515,7 @@ html, body {
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
 }
 
 .navigationPanelViewHidden {
@@ -537,6 +549,15 @@ html, body {
 #sectionList {
     flex: 1;
     width: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#bookmarksList::-webkit-scrollbar,
+#sectionList::-webkit-scrollbar {
+    display: none;
 }
 
 .navigationItem {
@@ -544,6 +565,14 @@ html, body {
     flex-direction: row;
     align-items: center;
     gap: 10px;
+}
+.navigationItemDisabled .navigationItemText {
+    color: var(--color-text-dim);
+    opacity: 0.5;
+    cursor: default;
+}
+.navigationItemDisabled .navigationItemLocation {
+    opacity: 0.35;
 }
 .navigationItemText {
     flex: 1;

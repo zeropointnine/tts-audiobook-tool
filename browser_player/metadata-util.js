@@ -65,6 +65,10 @@ class MetadataUtil {
             ? rawMetadata["version"]
             : 1;
 
+        const title = (typeof rawMetadata["title"] === "string")
+            ? rawMetadata["title"]
+            : "";
+
         const bookmarks = Array.isArray(rawMetadata["bookmarks"])
             ? rawMetadata["bookmarks"].map((index) => parseInt(index)).filter((index) => Number.isInteger(index))
             : [];
@@ -76,6 +80,7 @@ class MetadataUtil {
         const identity = MetadataUtil.makePlaybackIdentity(textSegments);
 
         return {
+            title,
             version,
             rawText,
             textSegments,

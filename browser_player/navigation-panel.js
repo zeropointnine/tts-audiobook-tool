@@ -145,7 +145,7 @@ class NavigationPanel {
 
     show() {
        this.selectTab(this.activeTab || "sections");
-       ShowUtil.show(this.mainEl);
+       ShowUtil.show(this.mainEl, "flex");
     }
 
     hide() {
@@ -178,18 +178,9 @@ class NavigationPanel {
             return;
         }
 
-        let numRendered = 0;
         for (const [i, section] of this.sections.entries()) {
             const itemEl = this._makeSectionItemEl(section, i);
-            if (itemEl) {
-                this.sectionList.appendChild(itemEl);
-                numRendered += 1;
-            }
-        }
-
-        if (numRendered === 0) {
-            const noneItem = this._makeElement(`<div class="navigationItemNone">No sections available.</div>`);
-            this.sectionList.appendChild(noneItem);
+            this.sectionList.appendChild(itemEl);
         }
     }
 
@@ -237,7 +228,8 @@ class NavigationPanel {
 
         // Description text
         const text = this.textSegments[index].text;
-        const s = `<div class="navigationItemText" data-index="${index}" tabindex="-1">${text}</div>`;
+        const escapedText = Util.escapeHtml(text);
+        const s = `<div class="navigationItemText" data-index="${index}" tabindex="-1" title="${escapedText}">${escapedText}</div>`;
         const textEl = this._makeElement(s);
         textEl.addEventListener("click", this._onItemClick);
 
@@ -257,16 +249,21 @@ class NavigationPanel {
 
     _makeSectionItemEl(section, sectionIndex) {
         const targetIndex = this._getSectionPlayableIndex(section);
-        if (targetIndex < 0) {
-            return null;
+        const isPlayable = targetIndex >= 0;
+        const title = section.title || `Section ${sectionIndex + 1}`;
+        const escapedTitle = Util.escapeHtml(title);
+        const itemClasses = isPlayable ? "navigationItem" : "navigationItem navigationItemDisabled";
+        const location = isPlayable ? `${targetIndex + 1}` : "—";
+        const textAttrs = isPlayable
+            ? `data-index="${targetIndex}" tabindex="-1" title="${escapedTitle}"`
+            : `tabindex="-1" aria-disabled="true" title="${escapedTitle}"`;
+
+        const itemEl = this._makeElement(`<div class="${itemClasses}">`);
+        const textEl = this._makeElement(`<div class="navigationItemText" ${textAttrs}>${escapedTitle}</div>`);
+        if (isPlayable) {
+            textEl.addEventListener("click", this._onItemClick);
         }
 
-        const title = section.title || `Section ${sectionIndex + 1}`;
-        const itemEl = this._makeElement(`<div class="navigationItem">`);
-        const textEl = this._makeElement(`<div class="navigationItemText" data-index="${targetIndex}" tabindex="-1">${Util.escapeHtml(title)}</div>`);
-        textEl.addEventListener("click", this._onItemClick);
-
-        const location = `${targetIndex + 1}`;
         const locationEl = this._makeElement(`<div class="navigationItemLocation">${location}</div>`);
 
         itemEl.appendChild(textEl);

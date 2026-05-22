@@ -34,14 +34,6 @@ class TextMenu:
             )
             return make_menu_label("Text segmentation max words per segment", value)
 
-        def on_print(_: State, __: MenuItem) -> None:
-            app_display.print_project_text(
-                phrase_groups=state.project.phrase_groups,
-                extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
-                segmentation_settings=state.project.get_book_segmentation_settings(),
-            )
-            ask.ask_enter_to_continue()
-
         def on_clear(_: State, __: MenuItem) -> None:
             num_files = state.project.sound_segments.num_generated()
             if num_files > 0:
@@ -67,41 +59,66 @@ class TextMenu:
 
             print_feedback("Project text cleared")
 
-        items = []
-        items.append(
-            MenuItem("Import from text file", on_set_text, data="import"),
-        )
-        items.append(
-            MenuItem("Import from EPUB file", on_set_text, data="epub"),
-        )
-        items.append(
-            MenuItem("Import manually (input or paste text)", on_set_text, data="manual"),
-        )
-        if state.project.phrase_groups:
-            items.append(MenuItem("Clear text", on_clear))
+        def make_items(_: State) -> list[MenuItem]:
 
-        items.append(
-            MenuItem(
-                make_max_size_label, on_ask_max_size, 
-                superlabel="Text import settings"
+            items = []
+            items.append(
+                MenuItem("Import from EPUB file", on_set_text, data="epub"),
             )
-        )
-        items.append(
-            MenuItem(
-                lambda _: make_menu_label("Text segmentation strategy", state.project.segmentation_strategy.label.lower()),
-                lambda _, __: TextMenu.strategy_menu(state)   
+            items.append(
+                MenuItem("Import from plain text file", on_set_text, data="import"),
             )
-        )
+            items.append(
+                MenuItem("Import plain text manually (input or paste text)", on_set_text, data="manual"),
+            )
+            if state.project.phrase_groups:
+                items.append(MenuItem("Clear text", on_clear))
 
-        items.append(
-            MenuItem(
-                "Print current text segments", on_print,
-                superlabel=" ", superlabel_no_blank_line=True
-            ),
-        )
+            items.append(
+                MenuItem(
+                    make_max_size_label, on_ask_max_size, 
+                    superlabel="Text import settings"
+                )
+            )
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Text segmentation strategy", state.project.segmentation_strategy.label.lower()),
+                    lambda _, __: TextMenu.strategy_menu(state)   
+                )
+            )
+
+            if state.project.phrase_groups:
+                
+                num_sections = len(state.project.book.sections)
+                if num_sections > 2:
+                    items.append(
+                        MenuItem(
+                            f"Print sections {COL_DIM}({num_sections})", on_print_sections, 
+                            superlabel=" ", superlabel_no_blank_line=True
+                        )
+                    )
+                
+                superlabel = "" if num_sections > 2 else " "
+                superlabel_nbl = False if num_sections > 2 else True
+
+                items.append(                    
+                    MenuItem(
+                        f"Print text segments {COL_DIM}({len(state.project.phrase_groups)})", on_print_segments,
+                        superlabel=superlabel, superlabel_no_blank_line=superlabel_nbl
+                    )
+                )
+
+                # items.append(
+                #     MenuItem(
+                #         "Print text", lambda _, __: TextMenu.print_menu(state),
+                #         superlabel=" ", superlabel_no_blank_line=True
+                #     ),
+                # )       
+
+            return items
 
         MenuUtil.menu(
-            state, make_heading, items, 
+            state, make_heading, make_items, 
             subheading=SUBHEADING, hint=HINT_LINE_BREAKS, breadcrumb="Text"
         )
 
@@ -125,6 +142,8 @@ class TextMenu:
             breadcrumb="Text segmentation strategy",
         )
 
+# ---
+
 def on_set_text(state: State, item: MenuItem) -> bool:
 
     num_files = state.project.sound_segments.num_generated()
@@ -141,7 +160,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     match item.data:
 
         case "import":
-            phrase_groups, raw_text = ask_phrase_groups.get_from_text_file(
+            phrase_groups, raw_text, title = ask_phrase_groups.get_from_text_file(
                 state.project.max_words,
                 state.project.segmentation_strategy,
                 pysbd_language=state.project.language_code,
@@ -154,6 +173,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             phrase_groups, raw_text = ask_phrase_groups.get_from_std_in(
                 state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code
             )
+            title = ""
             if not phrase_groups:
                 print_feedback("Cancelled")
                 return False
@@ -181,6 +201,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
             phrase_groups = epub_import_result.phrase_groups
             raw_text = epub_import_result.raw_text
+            title = epub_import_result.book_title
             if not phrase_groups:
                 printt()
                 ask.ask_enter_to_continue("No text segments.")
@@ -193,14 +214,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
                 printt(f"- {warning}")
             num_sections = len(epub_import_result.chapters)
             noun = make_noun("EPUB section", "EPUB sections", num_sections)
-            printt(f"- Imported {num_sections} {noun} using the EPUB's built-in structure.")
-            printt()
-
-            # Print EPUB-to-text artifact info
-            raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
-            raw_text_link = text_util.make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
-            printt(f"{COL_ACCENT}A plain-text conversion{COL_DEFAULT} of the EPUB file was also saved here:")
-            printt(f"{raw_text_link}")
+            printt(f"- Imported {COL_ACCENT}{num_sections}{COL_DEFAULT} {noun} using the EPUB's built-in structure.")
             printt()
 
             ask.ask_enter_to_continue("Press enter to review text segmentation info: ", is_replacement=True)
@@ -209,7 +223,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             raise ValueError(f"Bad value: {item.data!r}")
     
     # Preview text segments
-    app_display.print_project_text(
+    app_display.print_book_text_lines(
         phrase_groups=phrase_groups,
         extant_indices=None,
         segmentation_settings=BookSegmentationSettings(
@@ -235,16 +249,15 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             return False
         state.project.set_phrase_groups_chapters_and_save(
             phrase_groups=phrase_groups,
-            section_dividers=epub_import_result.section_dividers,
+            section_start_indices=epub_import_result.section_start_indices,
             strategy=state.project.segmentation_strategy,
             max_words=state.project.max_words,
             language_code=state.project.language_code,
             raw_text=raw_text,
-            title=epub_import_result.book_title,
+            title=title,
             section_titles=[chapter.title for chapter in epub_import_result.chapters],
         )
-        state.project.section_dividers = []
-        state.project.save()
+
     else:
         text_source_kind = "manual" if item.data == "manual" else "plain_text"
         state.project.set_phrase_groups_and_save(
@@ -253,6 +266,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             max_words=state.project.max_words,
             language_code=state.project.language_code,
             raw_text=raw_text,
+            title=title,
             text_source_kind=text_source_kind,
         )
 
@@ -260,12 +274,18 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         state.real_time.project_text_line_range = None
 
     if epub_import_result:
-        print_feedback(
-            "Project text has been set from EPUB:",
-            f"{len(epub_import_result.chapters)} {make_noun('EPUB section', 'EPUB sections', len(epub_import_result.chapters))}"
-        )
+        printt("Project text has been set")
+        printt()
+        
+        raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
+        raw_text_link = text_util.make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
+        printt(f"{COL_ACCENT}A plain-text conversion{COL_DEFAULT} of the EPUB file was also saved here:")
+        printt(f"{raw_text_link}")
+        printt()
+        ask.ask_enter_to_continue()
     else:
         print_feedback("Project text has been set")
+
     return True
 
 def ask_epub_path(state: State) -> str:
@@ -307,6 +327,18 @@ def on_ask_max_size(state: State, _) -> None:
         success_prefix="Max words per segment set to:",
         is_int=True
     )
+
+def on_print_sections(state: State, __: MenuItem) -> None:
+    app_display.print_book_sections(state.project)
+    ask.ask_enter_to_continue()
+
+def on_print_segments(state: State, __: MenuItem) -> None:
+    app_display.print_book_text_lines(
+        phrase_groups=state.project.phrase_groups,
+        extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
+        segmentation_settings=state.project.get_book_segmentation_settings(),
+    )
+    ask.ask_enter_to_continue()
 
 SUBHEADING = \
 """On import, text will be segmented into sentences and phrases using the settings 

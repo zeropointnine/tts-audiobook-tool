@@ -144,7 +144,7 @@ def start(
         if one_second == end_index:
             appended_sound = None
         else:
-            is_first_in_section = one_second == 0 or one_second in state.project.section_dividers
+            is_first_in_section = one_second == 0 or one_second in state.project.markers
             use_sound_effect = SoundPipeline.should_append_break_sound_effect(
                 phrase.reason,
                 use_break_sound_effect=state.project.use_break_sound_effect,

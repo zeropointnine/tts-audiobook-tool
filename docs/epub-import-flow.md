@@ -11,7 +11,7 @@ This keeps EPUB import aligned with the app's pre-existing design constraints:
 - the project text model remains `PhraseGroup`-based,
 - raw source text remains available as `project_text_raw.txt`,
 - segmented text remains serialized as `project_text.json`,
-- chapter boundaries continue to use `Project.section_dividers`, serialized as `chapter_indices` in `project.json`,
+- chapter boundaries continue to use `Project.markers`, serialized as `markers` in `project.json` (with legacy `chapter_indices` still accepted on load),
 - generated sound segments are invalidated when source text is replaced,
 - preview/confirmation behavior matches the existing text import flow,
 - richer ebook/reader formatting is not forced into the current audiobook-generation model.
@@ -32,7 +32,7 @@ This boundary keeps ebook handling from leaking into the rest of the application
 
 - `PhraseGroup` instances for generation and playback,
 - `Reason.SPACE_BREAK` markers for phrase-level section endings,
-- `section_dividers` / `chapter_indices` for chapter-aware concat and metadata flows,
+- `markers` / `markers` for chapter-aware concat and metadata flows,
 - `project_text_raw.txt` as the readable raw text reference.
 
 ### Implemented Pipeline
@@ -56,7 +56,7 @@ Each chapter is segmented independently with PhraseGrouper
   ↓
 The last phrase in each chapter is marked Reason.SPACE_BREAK
   ↓
-Chapter-start phrase indices become Project.section_dividers
+Chapter-start phrase indices become Project.markers
   ↓
 Existing AppUtil.print_project_text(...) preview is shown
   ↓
@@ -98,7 +98,7 @@ class EpubTextExtractionResult:
 class EpubImportResult:
     phrase_groups: list[PhraseGroup]
     raw_text: str
-    section_dividers: list[int]
+    markers: list[int]
     chapters: list[EpubTextChapter]
     warnings: list[str]
     significant_warnings: list[str]
@@ -150,7 +150,7 @@ For each readable spine document:
 
 The importer does not split within a spine document based on `h1` or `h2`. If multiple major headings are detected, that condition is surfaced as a warning instead of changing the chapter model automatically.
 
-### Mapping to `section_dividers`
+### Mapping to `markers`
 
 Chapters are segmented independently and concatenated afterward. This avoids fragile text-offset mapping after segmentation and ensures segments do not cross EPUB spine boundaries.
 
@@ -158,7 +158,7 @@ Conceptually:
 
 ```python
 phrase_groups = []
-section_dividers = []
+markers = []
 raw_text_parts = []
 
 for chapter in text_chapters:
@@ -167,7 +167,7 @@ for chapter in text_chapters:
         continue
 
     if phrase_groups:
-        section_dividers.append(len(phrase_groups))
+        markers.append(len(phrase_groups))
 
     chapter_phrase_groups = PhraseGrouper.text_to_groups(
         chapter_text,
@@ -230,14 +230,14 @@ On confirmed import:
 
 - `[project root]/project_text_raw.txt` stores the flattened raw text,
 - `[project root]/project_text.json` stores segmented phrase groups,
-- `[project root]/project.json` stores project metadata, including `chapter_indices`,
+- `[project root]/project.json` stores project metadata, including `markers`,
 - `[project root]/project_text.epub` stores the original EPUB copy.
 
 `PROJECT_TEXT_EPUB_FILE_NAME = "project_text.epub"` is defined in `tts_audiobook_tool/constants.py`.
 
 ### Atomic commit method
 
-Regular text replacement uses `Project.set_phrase_groups_and_save(...)`, which clears `section_dividers` because a generic flat text import has no reliable chapter structure.
+Regular text replacement uses `Project.set_phrase_groups_and_save(...)`, which clears `markers` because a generic flat text import has no reliable chapter structure.
 
 EPUB import uses a separate method:
 
@@ -245,7 +245,7 @@ EPUB import uses a separate method:
 def set_phrase_groups_chapters_and_save(
         self,
         phrase_groups: list[PhraseGroup],
-        section_dividers: list[int],
+        markers: list[int],
         strategy: SegmentationStrategy,
         max_words: int,
         language_code: str,
@@ -258,7 +258,7 @@ This method mirrors the standard text commit behavior while preserving the chapt
 
 - sets `phrase_groups`,
 - records `applied_strategy`, `applied_max_words`, and `applied_language_code`,
-- sets `section_dividers`,
+- sets `markers`,
 - clears `generate_range_string`,
 - clears `realtime_line_range`,
 - saves project metadata and phrase groups through the existing save flow,
@@ -307,7 +307,7 @@ This makes EPUB import behave like every other text source from the perspective 
 
 ### Chapter structure is projected into existing fields
 
-EPUB chapter boundaries become `section_dividers` / `chapter_indices`; they are not stored as a parallel chapter system.
+EPUB chapter boundaries become `markers` / `markers`; they are not stored as a parallel chapter system.
 
 ### Existing generated-audio invalidation rules apply
 
@@ -346,7 +346,7 @@ Phase 2a would define a more structured format for imported book text, including
 
 This would not replace the current plain-text audiobook path. Instead, EPUB import could produce two related outputs:
 
-1. the existing plain-text `PhraseGroup`/`chapter_indices` data needed for TTS generation,
+1. the existing plain-text `PhraseGroup`/`markers` data needed for TTS generation,
 2. a structured reader document used for display, navigation, and formatting-aware reading.
 
 Possible structured-reader content could include:

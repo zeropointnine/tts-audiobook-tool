@@ -36,17 +36,18 @@ class ConcatUtil:
     @staticmethod
     def make_files(
         state: State, 
-        chapter_indices: list[int], 
+        file_cut_indices: list[int], 
         bookmark_indices: list[int]
     ) -> None:
         """
-        Creates a final, concatenated audio file for each chapter index given.
+        Creates a final, concatenated audio file for each cut point index given.
         Else, creates a single concatenated audio file for the entire book.
-        `chapter_indices` and `bookmark_indices` are mutually exclusive.
+
+        `file_cut_indices` and `bookmark_indices` are mutually exclusive.
         """
 
-        if chapter_indices and bookmark_indices:
-            raise ValueError(f"chapter_indices and bookmark_indices are mutually exclusive: {chapter_indices} vs {bookmark_indices}")
+        if file_cut_indices and bookmark_indices:
+            raise ValueError(f"file_cut_indices and bookmark_indices are mutually exclusive: {file_cut_indices} vs {bookmark_indices}")
 
         start_time = time.time()
         
@@ -73,20 +74,20 @@ class ConcatUtil:
             ask.ask_error(f"Couldn't make directory {dest_dir}")
             return
 
-        if not chapter_indices:
-            chapter_indices = [0]
+        if not file_cut_indices:
+            file_cut_indices = [0]
 
-        for i, chapter_index in enumerate(chapter_indices):
+        for i, file_cut_index in enumerate(file_cut_indices):
 
             message = "Creating concatenated audiobook file"
-            if len(chapter_indices) > 1:
-                message += f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(chapter_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{chapter_index+1}{COL_DEFAULT}"
+            if len(file_cut_indices) > 1:
+                message += f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(file_cut_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{file_cut_index+1}{COL_DEFAULT}"
             message += "..."
             MenuUtil.print_heading(None, message, dont_clear=True, non_menu=True)
 
             if state.project.chapter_mode == SectionMarkerMode.FILES:
-                ranges = make_file_line_ranges(state.project.section_dividers, len(state.project.phrase_groups))
-                index_start, index_end = ranges[chapter_index]
+                ranges = make_file_line_ranges(state.project.markers, len(state.project.phrase_groups))
+                index_start, index_end = ranges[file_cut_index]
                 num_chapters = len(ranges)
             else:
                 index_start, index_end = 0, len(state.project.phrase_groups) - 1
@@ -95,7 +96,7 @@ class ConcatUtil:
             stem = make_stem(
                 project=state.project, 
                 index_start=index_start, index_end=index_end, 
-                chapter_index=chapter_index, num_chapters=num_chapters
+                file_cut_index=file_cut_index, num_chapters=num_chapters
             )
             dest_stem_path = os.path.join(dest_dir, stem)
 
@@ -196,7 +197,7 @@ class ConcatUtil:
 
         high_shelf = HighShelfEq.get_by_id(state.project.high_shelf) or HighShelfEq.DISABLED
 
-        # Make phrase/path list # TODO: Duplicated logic; refactor ChapterInfo and add phrase info etc
+        # Make phrase/path list # TODO: Duplicated logic; refactor OutputRangeInfo and add phrase info etc
         phrases_and_paths = ConcatUtil.make_phrases_and_paths(
             state.project, index_start, index_end
         )
@@ -279,6 +280,7 @@ class ConcatUtil:
         )
         app_meta = AppMetadata(
             timed_phrases=timed_phrases,
+            title=state.project.book.title,
             version=ABR_VERSION,
             raw_text=raw_text, 
             bookmark_indices=bookmark_indices,
@@ -315,7 +317,7 @@ class ConcatUtil:
             index_end = len(project.phrase_groups) - 1
 
         phrases_and_paths: list[tuple[Phrase, str, bool]] = []
-        section_start_indices = {0, *project.section_dividers}
+        section_start_indices = {0, *project.markers}
 
         for group_index, group in enumerate(project.phrase_groups):            
             phrase = group.as_flattened_phrase()
@@ -336,12 +338,12 @@ class ConcatUtil:
     @staticmethod
     def num_missing_in(
         project: Project, 
-        chapter_index_start: int, 
-        chapter_index_end: int
+        index_start: int, 
+        index_end: int
     ) -> int:
         num_missing = 0
         for group_index in range(len(project.phrase_groups)):
-            out_of_range = (group_index < chapter_index_start or group_index > chapter_index_end)
+            out_of_range = (group_index < index_start or group_index > index_end)
             if out_of_range:
                 num_missing += 1
             else:
@@ -486,7 +488,7 @@ def make_stem(
     project: Project,
     index_start: int, 
     index_end: int,
-    chapter_index: int,
+    file_cut_index: int,
     num_chapters: int
 ) -> str:
 
@@ -495,7 +497,7 @@ def make_stem(
 
     for group_index, group in enumerate(project.phrase_groups):            
         phrase = group.as_flattened_phrase()
-        is_first_in_section = group_index == 0 or group_index in project.section_dividers
+        is_first_in_section = group_index == 0 or group_index in project.markers
         out_of_range = (group_index < index_start or group_index > index_end)
         if out_of_range:
             file_path = ""
@@ -515,7 +517,7 @@ def make_stem(
     stem = app_text.sanitize_for_filename(Path(project.dir_path).name[:20]) + " "
     # [2] file number
     if num_chapters > 1:
-        stem += f"[{ chapter_index+1 } of {num_chapters}]" + " "
+        stem += f"[{ file_cut_index+1 } of {num_chapters}]" + " "
     # [3] line range
     if num_chapters > 1:
         stem += f"[{index_start+1}-{index_end+1}]" + " "
@@ -629,14 +631,9 @@ def make_app_metadata_sections(
         return sections
 
     for section, (section_start, section_end) in zip(book_sections, section_ranges):
-        overlap_start = max(section_start, index_start)
-        overlap_end = min(section_end, index_end + 1)
-        if overlap_start >= overlap_end:
-            continue
-
-        start_index = phrase_to_text_segment_start_indices[overlap_start]
-        if overlap_end < len(phrase_to_text_segment_start_indices):
-            end_index = phrase_to_text_segment_start_indices[overlap_end]
+        start_index = phrase_to_text_segment_start_indices[section_start]
+        if section_end < len(phrase_to_text_segment_start_indices):
+            end_index = phrase_to_text_segment_start_indices[section_end]
         else:
             end_index = text_segment_count
 

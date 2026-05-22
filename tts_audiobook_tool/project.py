@@ -74,6 +74,25 @@ class Project(BaseModel):
     def get_high_shelf(self) -> HighShelfEq:
         return HighShelfEq.get_by_id(self.high_shelf) or HighShelfEq.DISABLED
 
+    def has_multiple_book_sections(self) -> bool:
+        return len(self.book.sections) > 1
+
+    def can_use_bookmark_section_markers(self) -> bool:
+        return not self.has_multiple_book_sections()
+
+    def get_validated_chapter_mode(self, value: SectionMarkerMode | None = None) -> SectionMarkerMode:
+        chapter_mode = value or self.chapter_mode
+        if self.has_multiple_book_sections() and chapter_mode == SectionMarkerMode.BOOKMARKS:
+            return SectionMarkerMode.FILES
+        return chapter_mode
+
+    def normalize_chapter_mode(self) -> bool:
+        valid_mode = self.get_validated_chapter_mode()
+        if valid_mode == self.chapter_mode:
+            return False
+        super().__setattr__('chapter_mode', valid_mode)
+        return True
+
     # --- Fields ---
 
     dir_path: str = ""
@@ -96,7 +115,7 @@ class Project(BaseModel):
     applied_language_code: str = ""
 
     generate_range_string: str = Field(default="", alias="generate_range")
-    section_dividers: list[int] = Field(default_factory=list, alias="chapter_indices")
+    markers: list[int] = Field(default_factory=list, alias="markers")
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]
     use_break_sound_effect: bool = Field(default=PROJECT_DEFAULT_BREAK_EFFECT, alias="use_section_sound_effect")
@@ -331,12 +350,16 @@ class Project(BaseModel):
         if s in ('all', 'a'):
             d['generate_range'] = ''
 
-        # chapter_indices → validate against phrase_groups length
-        if 'chapter_indices' in d:
+        # Backcompat: chapter_indices -> markers
+        if 'markers' not in d and 'chapter_indices' in d:
+            d['markers'] = d['chapter_indices']
+
+        # markers → validate against phrase_groups length
+        if 'markers' in d:
             phrase_groups = d.get('phrase_groups', [])
             if not phrase_groups and isinstance(d.get('book'), Book):
                 phrase_groups = d['book'].phrase_groups()
-            lst = d['chapter_indices']
+            lst = d['markers']
             if isinstance(lst, list):
                 is_valid = all(
                     isinstance(idx, int) and 0 <= idx <= len(phrase_groups)
@@ -344,9 +367,9 @@ class Project(BaseModel):
                 )
                 if not is_valid:
                     printt(f"File cut points invalid: {lst}")
-                    d['chapter_indices'] = []
+                    d['markers'] = []
             else:
-                d['chapter_indices'] = []
+                d['markers'] = []
 
         legacy_settings = BookSegmentationSettings(
             language_code=d.get('applied_language_code', ''),
@@ -355,19 +378,10 @@ class Project(BaseModel):
         )
         book = d.get('book')
         if isinstance(book, Book):
-            if book.text_source_kind == "legacy_flat" and len(book.sections) == 1 and d.get('chapter_indices'):
-                d['book'] = cls.make_book_from_flat_compatibility_fields(
-                    phrase_groups=book.phrase_groups(),
-                    section_dividers=d.get('chapter_indices', []),
-                    segmentation_settings=book.segmentation_settings,
-                    text_source_kind=book.text_source_kind,
-                    audio_source_kind=book.audio_source_kind,
-                )
             cls.sync_parse_dict_flat_text_from_book(d)
         elif d.get('phrase_groups'):
-            d['book'] = cls.make_book_from_flat_compatibility_fields(
-                phrase_groups=d.get('phrase_groups', []),
-                section_dividers=d.get('chapter_indices', []),
+            d['book'] = Book(
+                sections=[BookSection(phrase_groups=d.get('phrase_groups', []))],
                 segmentation_settings=legacy_settings,
                 text_source_kind="legacy_flat",
                 audio_source_kind="unknown",
@@ -447,6 +461,11 @@ class Project(BaseModel):
         if value is None:
             value = list(SectionMarkerMode)[0]
             add_warning('chapter_mode', value)
+
+        book = d.get('book')
+        if isinstance(book, Book) and len(book.sections) > 1 and value == SectionMarkerMode.BOOKMARKS:
+            value = SectionMarkerMode.FILES
+
         d['chapter_mode'] = value
 
         # chatterbox_type
@@ -646,17 +665,17 @@ class Project(BaseModel):
     @staticmethod
     def make_book_from_flat_compatibility_fields(
             phrase_groups: list[PhraseGroup],
-            section_dividers: list[int] | None,
+            section_start_indices: list[int] | None,
             segmentation_settings: BookSegmentationSettings,
             text_source_kind: str,
             audio_source_kind: str,
             title: str="",
             section_titles: list[str] | None=None,
     ) -> Book:
-        section_dividers = sorted(section_dividers or [])
+        section_start_indices = sorted(section_start_indices or [])
         section_titles = section_titles or []
-        valid_dividers = [index for index in section_dividers if 0 < index <= len(phrase_groups)]
-        starts = [0, *valid_dividers]
+        valid_section_starts = [index for index in section_start_indices if 0 < index <= len(phrase_groups)]
+        starts = [0, *valid_section_starts]
         sections: list[BookSection] = []
         for section_index, start in enumerate(starts):
             end = starts[section_index + 1] if section_index + 1 < len(starts) else len(phrase_groups)
@@ -682,7 +701,6 @@ class Project(BaseModel):
             return
         settings = book.segmentation_settings
         d['phrase_groups'] = book.phrase_groups()
-        d['chapter_indices'] = book.section_start_indices()[1:]
         d['applied_language_code'] = settings.language_code
         d['applied_max_words'] = settings.max_words_per_segment
         d['applied_strategy'] = settings.strategy
@@ -690,7 +708,6 @@ class Project(BaseModel):
     def sync_flat_text_from_book(self) -> None:
         settings = self.book.segmentation_settings
         super().__setattr__('phrase_groups', self.book.phrase_groups())
-        super().__setattr__('section_dividers', self.book.section_start_indices()[1:])
         super().__setattr__('applied_language_code', settings.language_code)
         super().__setattr__('applied_max_words', settings.max_words_per_segment)
         super().__setattr__('applied_strategy', settings.strategy)
@@ -703,9 +720,8 @@ class Project(BaseModel):
             max_words_per_segment=self.applied_max_words,
             strategy=self.applied_strategy or BookSegmentationSettings().strategy,
         )
-        super().__setattr__('book', self.make_book_from_flat_compatibility_fields(
-            phrase_groups=self.phrase_groups,
-            section_dividers=self.section_dividers,
+        super().__setattr__('book', Book(
+            sections=[BookSection(phrase_groups=self.phrase_groups)],
             segmentation_settings=settings,
             text_source_kind="legacy_flat",
             audio_source_kind="unknown",
@@ -726,12 +742,12 @@ class Project(BaseModel):
     def get_section_start_indices(self) -> list[int]:
         if self.book.sections:
             return self.book.section_start_indices()
-        return [0, *self.section_dividers]
+        return [0, *self.markers]
 
     def get_section_ranges(self) -> list[tuple[int, int]]:
         if self.book.sections:
             return self.book.section_ranges()
-        return make_file_line_ranges(self.section_dividers, len(self.phrase_groups))
+        return make_file_line_ranges(self.markers, len(self.phrase_groups))
 
     def to_dict(self) -> dict:
         return {
@@ -745,7 +761,7 @@ class Project(BaseModel):
             "word_substitutions_json_string": json.dumps(self.word_substitutions),
 
             "generate_range": self.generate_range_string,
-            "chapter_indices": self.section_dividers,
+            "markers": self.markers,
             "subdivide_phrases": self.subdivide_phrases,
             "export_type": self.export_type.id,
             "use_break_sound_effect": self.use_break_sound_effect,
@@ -902,6 +918,7 @@ class Project(BaseModel):
         try:
             # Ensure project version is up-to-date
             super().__setattr__('version', PROJECT_SPEC_VERSION)
+            self.normalize_chapter_mode()
             
             with open(file_path, "w", encoding="utf-8") as file:
                 json.dump(self.to_dict(), file, indent=4)
@@ -924,6 +941,7 @@ class Project(BaseModel):
             max_words: int,
             language_code: str,
             raw_text: str,
+            title: str="",
             text_source_kind: str="plain_text",
     ) -> None:
 
@@ -933,6 +951,7 @@ class Project(BaseModel):
             strategy=strategy,
         )
         book = Book(
+            title=title,
             text_source_kind=text_source_kind,
             audio_source_kind="generated",
             segmentation_settings=settings,
@@ -942,6 +961,7 @@ class Project(BaseModel):
         with self.batch():
             self.book = book
             self.sync_flat_text_from_book()
+            self.markers = []
             # Setting this invalidates some things
             self.generate_range_string = ""
             self.realtime_line_range = None
@@ -951,7 +971,7 @@ class Project(BaseModel):
     def set_phrase_groups_chapters_and_save(
             self,
             phrase_groups: list[PhraseGroup],
-            section_dividers: list[int],
+            section_start_indices: list[int],
             strategy: SegmentationStrategy,
             max_words: int,
             language_code: str,
@@ -967,7 +987,7 @@ class Project(BaseModel):
         )
         book = self.make_book_from_flat_compatibility_fields(
             phrase_groups=phrase_groups,
-            section_dividers=section_dividers,
+            section_start_indices=section_start_indices,
             segmentation_settings=settings,
             text_source_kind="epub",
             audio_source_kind="generated",
@@ -978,6 +998,7 @@ class Project(BaseModel):
         with self.batch():
             self.book = book
             self.sync_flat_text_from_book()
+            self.markers = []
             self.generate_range_string = ""
             self.realtime_line_range = None
 

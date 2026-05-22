@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SegmentationStrategy
+from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, SegmentationStrategy
 from tts_audiobook_tool.app_types.book_serialization import book_to_project_text_json_dict
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
@@ -34,7 +34,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "w", encoding="utf-8") as file:
             json.dump(payload, file)
 
-    def test_project_model_validate_creates_book_from_flat_phrase_groups_and_section_dividers(self):
+    def test_project_model_validate_keeps_flat_phrase_groups_as_single_book_section(self):
         phrase_groups = [
             self.make_phrase_group("One."),
             self.make_phrase_group("Two."),
@@ -43,7 +43,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         project = Project.model_validate({
             "phrase_groups": phrase_groups,
-            "chapter_indices": [2],
+            "markers": [2],
             "applied_language_code": "en",
             "applied_strategy": "multi",
             "applied_max_words": 80,
@@ -55,8 +55,8 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.segmentation_settings.strategy, SegmentationStrategy.MULTI_SENTENCE)
         self.assertEqual(project.book.segmentation_settings.max_words_per_segment, 80)
         self.assertEqual(project.phrase_groups, phrase_groups)
-        self.assertEqual(project.section_dividers, [2])
-        self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [2, 1])
+        self.assertEqual(project.markers, [2])
+        self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [3])
 
     def test_project_to_dict_excludes_legacy_applied_fields(self):
         project = Project.model_validate({
@@ -104,8 +104,8 @@ class TestProjectBookIntegration(unittest.TestCase):
         assert isinstance(result, Project)
         self.assertEqual(result.book.text_source_kind, "legacy_flat")
         self.assertEqual([group.text for group in result.phrase_groups], ["One.", "Two."])
-        self.assertEqual(result.section_dividers, [1])
-        self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [1, 1])
+        self.assertEqual(result.markers, [1])
+        self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [2])
 
     def test_project_load_migrates_phrase_groups_v1_project_text_to_book_v1(self):
         phrase_groups = [self.make_phrase_group("One."), self.make_phrase_group("Two.")]
@@ -132,7 +132,9 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertIsInstance(result, Project)
         self.assertEqual(migrated_payload["format"], "book.v1")
         self.assertEqual(migrated_payload["book"]["text_source_kind"], "legacy_flat")
-        self.assertEqual(len(migrated_payload["book"]["sections"]), 2)
+        self.assertEqual(len(migrated_payload["book"]["sections"]), 1)
+        self.assertEqual(migrated_project_payload["markers"], [1])
+        self.assertNotIn("chapter_indices", migrated_project_payload)
         self.assertNotIn("applied_language_code", migrated_project_payload)
         self.assertNotIn("applied_strategy", migrated_project_payload)
         self.assertNotIn("applied_max_words", migrated_project_payload)
@@ -167,6 +169,8 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertIsInstance(result, Project)
         self.assertEqual(text_project_payload["format"], "book.v1")
+        self.assertIn("markers", migrated_project_payload)
+        self.assertNotIn("chapter_indices", migrated_project_payload)
         self.assertNotIn("applied_language_code", migrated_project_payload)
         self.assertNotIn("applied_strategy", migrated_project_payload)
         self.assertNotIn("applied_max_words", migrated_project_payload)
@@ -250,19 +254,80 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(payload["book"]["segmentation_settings"]["language_code"], "en")
         self.assertEqual(payload["book"]["segmentation_settings"]["max_words_per_segment"], 120)
         self.assertEqual(payload["book"]["segmentation_settings"]["strategy"], "max_len")
+        self.assertEqual(project_payload["markers"], [])
+        self.assertNotIn("chapter_indices", project_payload)
         self.assertNotIn("applied_language_code", project_payload)
         self.assertNotIn("applied_strategy", project_payload)
-        self.assertNotIn("applied_max_words", project_payload)
+
+    def test_project_model_validate_coerces_bookmark_mode_for_multi_section_books(self):
+        project = Project.model_validate({
+            "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
+            "book": Book(sections=[
+                BookSection(title="Chapter 1", phrase_groups=[self.make_phrase_group("One.")]),
+                BookSection(title="Chapter 2", phrase_groups=[self.make_phrase_group("Two.")]),
+            ]),
+        })
+
+        self.assertEqual(project.chapter_mode, SectionMarkerMode.FILES)
+
+    def test_project_model_validate_keeps_bookmark_mode_for_single_section_books(self):
+        project = Project.model_validate({
+            "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
+            "book": Book(sections=[
+                BookSection(title="Chapter 1", phrase_groups=[self.make_phrase_group("One.")]),
+            ]),
+        })
+
+        self.assertEqual(project.chapter_mode, SectionMarkerMode.BOOKMARKS)
+
+    def test_project_save_coerces_bookmark_mode_for_multi_section_books(self):
+        book = Book(sections=[
+            BookSection(title="Chapter 1", phrase_groups=[self.make_phrase_group("One.")]),
+            BookSection(title="Chapter 2", phrase_groups=[self.make_phrase_group("Two.")]),
+        ])
+
+        with tempfile.TemporaryDirectory() as project_dir:
+            project = Project(dir_path=project_dir, book=book, chapter_mode=SectionMarkerMode.BOOKMARKS)
+            project.sync_flat_text_from_book()
+
+            err = project.save(force_phrase_groups=True)
+            self.assertEqual(err, "")
+
+            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
+                payload = json.load(file)
+
+        self.assertEqual(project.chapter_mode, SectionMarkerMode.FILES)
+        self.assertEqual(payload["chapter_mode"], SectionMarkerMode.FILES.id)
+        self.assertNotIn("applied_max_words", payload)
+
+    def test_project_model_validate_accepts_legacy_chapter_indices_alias(self):
+        phrase_groups = [
+            self.make_phrase_group("One."),
+            self.make_phrase_group("Two."),
+            self.make_phrase_group("Three."),
+        ]
+
+        project = Project.model_validate({
+            "phrase_groups": phrase_groups,
+            "chapter_indices": [2],
+            "applied_language_code": "en",
+            "applied_strategy": "multi",
+            "applied_max_words": 80,
+        })
+
+        self.assertEqual(project.markers, [2])
 
     def test_set_phrase_groups_and_save_creates_plain_text_book(self):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
+            project.markers = [99]
             project.set_phrase_groups_and_save(
                 phrase_groups=[self.make_phrase_group("One.")],
                 strategy=SegmentationStrategy.NORMAL,
                 max_words=50,
                 language_code="en",
                 raw_text="One.",
+                title="Manual Title",
                 text_source_kind="manual",
             )
 
@@ -270,11 +335,31 @@ class TestProjectBookIntegration(unittest.TestCase):
                 payload = json.load(file)
 
         self.assertEqual(project.book.text_source_kind, "manual")
+        self.assertEqual(project.book.title, "Manual Title")
         self.assertEqual(project.book.audio_source_kind, "generated")
         self.assertEqual(project.applied_max_words, 50)
-        self.assertEqual(project.section_dividers, [])
+        self.assertEqual(project.markers, [])
         self.assertEqual(payload["format"], "book.v1")
+        self.assertEqual(payload["book"]["title"], "Manual Title")
         self.assertEqual(payload["book"]["text_source_kind"], "manual")
+
+    def test_set_phrase_groups_and_save_clears_markers_for_plain_text_import(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            project = Project(dir_path=project_dir)
+            project.markers = [2]
+            project.set_phrase_groups_and_save(
+                phrase_groups=[self.make_phrase_group("One."), self.make_phrase_group("Two.")],
+                strategy=SegmentationStrategy.NORMAL,
+                max_words=50,
+                language_code="en",
+                raw_text="One.\nTwo.",
+                title="source-file",
+                text_source_kind="plain_text",
+            )
+
+        self.assertEqual(project.book.text_source_kind, "plain_text")
+        self.assertEqual(project.book.title, "source-file")
+        self.assertEqual(project.markers, [])
 
     def test_set_phrase_groups_chapters_and_save_creates_epub_book_sections(self):
         phrase_groups = [
@@ -287,7 +372,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             project = Project(dir_path=project_dir)
             project.set_phrase_groups_chapters_and_save(
                 phrase_groups=phrase_groups,
-                section_dividers=[2],
+                section_start_indices=[2],
                 strategy=SegmentationStrategy.MULTI_SENTENCE,
                 max_words=80,
                 language_code="en",
@@ -298,9 +383,71 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertEqual(project.book.title, "Example Book")
         self.assertEqual(project.book.text_source_kind, "epub")
-        self.assertEqual(project.section_dividers, [2])
+        self.assertEqual(project.markers, [])
         self.assertEqual([section.title for section in project.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [2, 1])
+
+    def test_project_load_keeps_epub_book_sections_and_does_not_repopulate_markers(self):
+        book = Book(
+            title="Example Book",
+            text_source_kind="epub",
+            audio_source_kind="generated",
+            segmentation_settings=BookSegmentationSettings(
+                language_code="en",
+                max_words_per_segment=80,
+                strategy=SegmentationStrategy.MULTI_SENTENCE,
+            ),
+            sections=[
+                BookSection(title="Chapter 1", phrase_groups=[self.make_phrase_group("One."), self.make_phrase_group("Two.")]),
+                BookSection(title="Chapter 2", phrase_groups=[self.make_phrase_group("Three.")]),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as project_dir:
+            self.write_minimal_project_json(project_dir, {"markers": []})
+            text_path = os.path.join(project_dir, PROJECT_TEXT_FILE_NAME)
+            with open(text_path, "w", encoding="utf-8") as file:
+                json.dump(book_to_project_text_json_dict(book), file)
+
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+                result = ProjectUtil.load_using_dir_path(project_dir)
+
+        self.assertIsInstance(result, Project)
+        assert isinstance(result, Project)
+        self.assertEqual(result.markers, [])
+        self.assertEqual([section.title for section in result.book.sections], ["Chapter 1", "Chapter 2"])
+        self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [2, 1])
+
+    def test_project_markers_persist_independently_of_epub_book_sections(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            project = Project(dir_path=project_dir)
+            project.set_phrase_groups_chapters_and_save(
+                phrase_groups=[
+                    self.make_phrase_group("One."),
+                    self.make_phrase_group("Two."),
+                    self.make_phrase_group("Three."),
+                ],
+                section_start_indices=[2],
+                strategy=SegmentationStrategy.MULTI_SENTENCE,
+                max_words=80,
+                language_code="en",
+                raw_text="One. Two. Three.",
+                title="Example Book",
+                section_titles=["Chapter 1", "Chapter 2"],
+            )
+            project.markers = [1]
+            project.save(force_phrase_groups=True)
+
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+                    patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
+                reloaded = ProjectUtil.load_using_dir_path(project_dir)
+
+        self.assertIsInstance(reloaded, Project)
+        assert isinstance(reloaded, Project)
+        self.assertEqual(reloaded.markers, [1])
+        self.assertEqual([section.title for section in reloaded.book.sections], ["Chapter 1", "Chapter 2"])
+        self.assertEqual([len(section.phrase_groups) for section in reloaded.book.sections], [2, 1])
 
 
 if __name__ == "__main__":

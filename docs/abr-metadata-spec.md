@@ -77,6 +77,7 @@ The embedded value is a JSON object.
 
 ```json
 {
+  "title": "Example Book",
   "version": 3,
   "bookmarks": [0, 12, 31],
   "text_segments": [
@@ -110,6 +111,21 @@ The embedded value is a JSON object.
 ---
 
 ## Field definitions
+
+### `title` (optional)
+
+String book title.
+
+Semantics:
+
+- this is the top-level title of the imported/populated book
+- it may come from EPUB metadata, a plain-text source filename, or be empty
+- empty string is legal
+
+Notes:
+
+- this is separate from per-section `sections[].title`
+- if missing, consumers should treat it as `""`
 
 ### `version` (optional in stored data, required conceptually)
 
@@ -284,6 +300,7 @@ They serve different purposes and should not be conflated.
 
 The browser player currently expects:
 
+- `title` defaulting to `""`
 - ABR `version` if present, otherwise it assumes version `1`
 - a valid JSON payload
 - a non-empty `text_segments` array
@@ -300,6 +317,7 @@ It also supports:
 
 Writers producing ABR-compatible files should:
 
+- write `title` when known, using `""` when no title is available
 - write `version` explicitly as `3` for the current format
 - always include `text_segments`
 - ensure `bookmarks`, if present, contain valid indices into `text_segments`
@@ -314,6 +332,7 @@ Writers producing ABR-compatible files should:
 An ABR payload should satisfy the following:
 
 - top-level value is a JSON object
+- `title`, if present, is a string and may be empty
 - `version`, if present, is an integer >= 1
 - `text_segments` exists and is a non-empty array
 - every `text_segments` item has:
@@ -347,6 +366,7 @@ The current browser-side parser is intentionally permissive in some areas, but n
 
 ```json
 {
+  "title": "Hello World",
   "version": 3,
   "bookmarks": [0],
   "text_segments": [
@@ -370,6 +390,7 @@ ABR metadata is:
 
 - a JSON payload
 - embedded into FLAC or MP4-family files using custom metadata storage
+- optionally carrying a top-level book `title`
 - centered around `text_segments`
 - used primarily by the browser player for synchronized text and bookmarks
 - extended in version 2 to also carry `project_snapshot` for possible future project import/recovery flows

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubSourceChapter, EpubTextChapter, EpubTextExtractionResult
+from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubSourceChapter, EpubTextExtractionResult
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
 
@@ -85,7 +85,7 @@ class TestEpubExtractor(unittest.TestCase):
                 extractor=StubEpubChapterTextExtractor(),
             )
 
-        self.assertEqual(result.section_dividers, [1])
+        self.assertEqual(result.section_start_indices, [1])
         self.assertEqual(len(result.phrase_groups), 2)
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION_BREAK)
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.SECTION_BREAK)
@@ -112,7 +112,7 @@ class TestEpubExtractor(unittest.TestCase):
                 extractor=StubEpubChapterTextExtractor(),
             )
 
-        self.assertEqual(result.section_dividers, [1])
+        self.assertEqual(result.section_start_indices, [1])
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION_BREAK)
         self.assertEqual(result.phrase_groups[1].text, "Chapter 2\n\n")
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
@@ -138,7 +138,7 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.SECTION_BREAK)
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("prose."))
 
-    def test_import_epub_prepends_metadata_book_title_before_first_retained_chapter(self):
+    def test_import_epub_keeps_metadata_book_title_without_inserting_title_chapter(self):
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter 1\n\nThe story begins."),
         ]
@@ -153,15 +153,14 @@ class TestEpubExtractor(unittest.TestCase):
             )
 
         self.assertEqual(result.book_title, "Example Book")
-        self.assertEqual(result.chapters[0].href, "__epub_book_title__")
-        self.assertEqual(result.chapters[0].text, "Example Book\n\n")
-        self.assertTrue(result.raw_text.startswith("Example Book\n\n\n\nChapter 1"))
-        self.assertEqual(result.section_dividers, [])
-        self.assertEqual(result.phrase_groups[0].phrases[0].text, "Example Book\n\n")
-        self.assertIn("Inserted EPUB metadata title at start of imported text: Example Book", result.warnings)
-        self.assertNotIn("Inserted EPUB metadata title at start of imported text: Example Book", result.significant_warnings)
+        self.assertEqual(len(result.chapters), 1)
+        self.assertEqual(result.chapters[0].href, "chapter1.xhtml")
+        self.assertEqual(result.raw_text, "Chapter 1\n\nThe story begins.")
+        self.assertEqual(result.section_start_indices, [])
+        self.assertEqual(result.phrase_groups[0].phrases[0].text, "Chapter 1\n\n")
+        self.assertEqual(result.warnings, [])
 
-    def test_import_epub_does_not_create_divider_between_metadata_title_and_first_spine_chapter(self):
+    def test_import_epub_uses_real_spine_chapter_boundaries_without_inserted_title_chapter(self):
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter 1\n\nThe story begins."),
             EpubSourceChapter("Chapter 2", "chapter2.xhtml", "application/xhtml+xml", "Chapter 2\n\nThe story continues."),
@@ -176,29 +175,10 @@ class TestEpubExtractor(unittest.TestCase):
                 extractor=StubEpubChapterTextExtractor(),
             )
 
-        self.assertEqual(result.chapters[0].href, "__epub_book_title__")
-        self.assertEqual(result.section_dividers, [3])
-        self.assertEqual(result.phrase_groups[0].phrases[0].text, "Example Book\n\n")
-        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION_BREAK)
-
-    def test_import_epub_does_not_duplicate_metadata_title_already_at_start(self):
-        source_chapters = [
-            EpubSourceChapter("Example Book", "title.xhtml", "application/xhtml+xml", "Example Book\n\nChapter 1\n\nThe story begins."),
-        ]
-
-        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "Example Book", [], [])):
-            result = EpubExtractor.import_epub(
-                epub_path="book.epub",
-                max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
-                language_code="en",
-                extractor=StubEpubChapterTextExtractor(),
-            )
-
-        self.assertEqual(len(result.chapters), 1)
-        self.assertEqual(result.chapters[0].href, "title.xhtml")
-        self.assertTrue(result.raw_text.startswith("Example Book\n\nChapter 1"))
-        self.assertEqual(result.section_dividers, [])
+        self.assertEqual([chapter.href for chapter in result.chapters], ["chapter1.xhtml", "chapter2.xhtml"])
+        self.assertEqual(result.section_start_indices, [2])
+        self.assertEqual(result.phrase_groups[0].phrases[0].text, "Chapter 1\n\n")
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.PARAGRAPH)
 
     def test_import_epub_reports_inline_whitespace_repair_warning_once(self):
         source_chapters = [
@@ -222,24 +202,16 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(len(repair_warnings), 1)
         self.assertIn("chapter1.xhtml", repair_warnings[0])
 
-    def test_prepend_book_title_chapter_matches_title_with_punctuation_insensitively(self):
-        text_chapters = [
-            EpubTextChapter(
-                title="Title",
-                href="title.xhtml",
-                text="Example Book: A Novel\n\nChapter 1",
-            )
-        ]
-
-        EpubExtractor.prepend_book_title_chapter_if_needed(text_chapters, "Example Book")
-
-        self.assertEqual(len(text_chapters), 1)
-        self.assertEqual(text_chapters[0].href, "title.xhtml")
-
     def test_extract_book_title_uses_first_non_empty_dc_title(self):
         book = StubEpubBook([("  \n  ", {}), (" Example Book&nbsp; ", {})])
 
         title = EpubExtractor.extract_book_title(book)
+
+        self.assertEqual(title, "Example Book")
+
+    def test_get_ebook_title_uses_existing_book_title_extraction(self):
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=([], "Example Book", [], [])):
+            title = EpubExtractor.get_ebook_title("book.epub")
 
         self.assertEqual(title, "Example Book")
 

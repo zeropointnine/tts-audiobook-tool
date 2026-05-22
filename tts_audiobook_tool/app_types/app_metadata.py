@@ -53,6 +53,9 @@ class AppMetadata(NamedTuple):
     # The list of Phrases that make up the audiobook text, including timing info
     timed_phrases: list[TimedPhrase]
 
+    # Human-readable book title, possibly empty
+    title: str
+
     # ABR metadata spec version; missing in old files implies version 1
     version: int
 
@@ -73,6 +76,7 @@ class AppMetadata(NamedTuple):
 
     def to_json_string(self) -> str:
         dic = {
+            "title": self.title,
             "version": self.version,
             "bookmarks": sorted(set(self.bookmark_indices)),
             "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
@@ -98,6 +102,10 @@ class AppMetadata(NamedTuple):
             return f"Bad type: {type(o)}"
         if "text_segments" not in o:
             return f"Missing required field in {o}"
+
+        title = o.get("title", "")
+        if not isinstance(title, str):
+            return f"Bad type for 'title': {type(title)}"
 
         version = o.get("version", 1)
         if not isinstance(version, int) or version < 1:
@@ -138,6 +146,7 @@ class AppMetadata(NamedTuple):
 
         return AppMetadata(
             timed_phrases=timed_phrases, 
+            title=title,
             version=version,
             bookmark_indices=bookmarks,
             raw_text=raw_text, 

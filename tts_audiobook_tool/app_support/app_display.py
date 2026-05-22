@@ -17,7 +17,32 @@ def print_text_groups(groups: list[PhraseGroup]) -> None:
     printt()
 
 
-def print_project_text(
+def print_book_sections(project: Project) -> None:
+    
+    MenuUtil.print_heading(None, "Sections", dont_clear=True)
+
+    sections = project.book.sections
+    section_start_indices = project.get_section_start_indices()
+
+    if len(sections) == 0:
+        printt("None")
+    else:   
+        index_width = len(str(len(sections)))
+        for i, section in enumerate(sections):
+            
+            index_string = "[" + str(i + 1).rjust(index_width) + "]"
+            
+            printt(f"{COL_ACCENT}{index_string} {COL_DEFAULT}{ellipsize(section.title, length=60)}")
+
+            if not section.phrase_groups:
+                continue
+
+            phrase_group_index = section_start_indices[i]
+            phrase_group = project.phrase_groups[phrase_group_index]
+            printt(f"{COL_DIM}{' ' * (index_width + 3)}Line {phrase_group_index + 1}: {ellipsize(phrase_group.presentable_text, length=60)}")
+    printt()
+
+def print_book_text_lines(
     phrase_groups: list[PhraseGroup],
     extant_indices: set[int] | None,
     segmentation_settings: BookSegmentationSettings,
@@ -32,9 +57,11 @@ def print_project_text(
     heading = "Text segments:" if extant_indices else "Text segments preview:"
     MenuUtil.print_heading(None, heading, dont_clear=True)
 
-    if len(phrase_groups) > 0:
+    if len(phrase_groups) == 0:
+        printt("None")
+    
+    else:   
         index_width = len(str(len(phrase_groups)))
-
         for i, phrase_group in enumerate(phrase_groups):
             index_string = "[" + str(i + 1).rjust(index_width) + "]"
             if extant_indices is not None:
@@ -46,8 +73,7 @@ def print_project_text(
             else:
                 reason_string = ""
             printt(f"{COL_ACCENT}{index_string} {COL_DIM}{exists_string}{COL_DEFAULT}{phrase_group.presentable_text}{reason_string}")
-    else:
-        printt("None")
+
     printt()
 
     printt(f"{COL_DIM}The text was segmented using the following settings:")

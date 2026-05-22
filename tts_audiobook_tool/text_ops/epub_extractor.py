@@ -51,7 +51,7 @@ class EpubTextExtractionStats:
 class EpubImportResult:
     phrase_groups: list[PhraseGroup]
     raw_text: str
-    section_dividers: list[int]
+    section_start_indices: list[int]
     chapters: list[EpubTextChapter]
     book_title: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -354,6 +354,11 @@ class EpubExtractor:
     DEFAULT_EXTRACTOR = BeautifulSoupEpubChapterTextExtractor()
 
     @staticmethod
+    def get_ebook_title(epub_path: str) -> str:
+        _, book_title, _, _ = EpubExtractor.load_source_chapters(epub_path)
+        return book_title
+
+    @staticmethod
     def import_epub(
             epub_path: str,
             max_words: int,
@@ -388,30 +393,16 @@ class EpubExtractor:
                 text=result.text,
             ))
 
-        if EpubExtractor.prepend_book_title_chapter_if_needed(text_chapters, book_title):
-            warning = f"Inserted EPUB metadata title at start of imported text: {book_title}"
-            EpubExtractor.log_warnings([warning])
-            warnings.append(warning)
-
         phrase_groups: list[PhraseGroup] = []
-        section_dividers: list[int] = []
+        markers: list[int] = []
         raw_text_parts: list[str] = []
-        has_seen_spine_chapter = False
 
         for chapter in text_chapters:
             chapter_text = chapter.text
             if not chapter_text.strip():
                 continue
-            is_injected_book_title = EpubExtractor.is_injected_book_title_chapter(chapter)
-            if not is_injected_book_title:
-                if has_seen_spine_chapter:
-                    section_dividers.append(len(phrase_groups))
-                has_seen_spine_chapter = True
-            else:
-                # The metadata title can be injected as a pseudo-chapter for text readability,
-                # but it is not an EPUB spine entry and should not create a bookmark/file divider
-                # before any later real spine entry.
-                pass
+            if phrase_groups:
+                markers.append(len(phrase_groups))
             chapter_phrase_groups = PhraseGrouper.text_to_groups(
                 chapter_text,
                 max_words=max_words,
@@ -435,7 +426,7 @@ class EpubExtractor:
         return EpubImportResult(
             phrase_groups=phrase_groups,
             raw_text=raw_text,
-            section_dividers=section_dividers,
+            section_start_indices=markers,
             chapters=text_chapters,
             book_title=book_title,
             warnings=warnings,
@@ -470,39 +461,6 @@ class EpubExtractor:
     @staticmethod
     def is_inline_whitespace_repair_warning(warning: str) -> bool:
         return warning.startswith(BeautifulSoupEpubChapterTextExtractor.INLINE_WHITESPACE_REPAIR_WARNING_PREFIX)
-
-    @staticmethod
-    def prepend_book_title_chapter_if_needed(text_chapters: list[EpubTextChapter], book_title: str) -> bool:
-        book_title = BeautifulSoupEpubChapterTextExtractor.normalize_inline_text(book_title)
-        if not book_title:
-            return False
-        if text_chapters and EpubExtractor.text_starts_with_title(text_chapters[0].text, book_title):
-            return False
-        text_chapters.insert(0, EpubTextChapter(
-            title=book_title,
-            href="__epub_book_title__",
-            text=book_title + "\n\n",
-        ))
-        return True
-
-    @staticmethod
-    def is_injected_book_title_chapter(chapter: EpubTextChapter) -> bool:
-        return chapter.href == "__epub_book_title__"
-
-    @staticmethod
-    def text_starts_with_title(text: str, book_title: str) -> bool:
-        normalized_title = EpubExtractor.normalize_title_match_text(book_title)
-        if not normalized_title:
-            return False
-
-        prefix = " ".join(text.splitlines()[:4])
-        normalized_prefix = EpubExtractor.normalize_title_match_text(prefix)
-        return normalized_prefix.startswith(normalized_title)
-
-    @staticmethod
-    def normalize_title_match_text(text: str) -> str:
-        text = BeautifulSoupEpubChapterTextExtractor.normalize_inline_text(text).lower()
-        return re.sub(r"[^a-z0-9]+", "", text)
 
     @staticmethod
     def mark_last_phrase_as_section(phrase_groups: list[PhraseGroup]) -> None:

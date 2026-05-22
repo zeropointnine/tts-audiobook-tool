@@ -4,8 +4,10 @@ from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.app_types.chapter_info import ChapterInfo
+from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
+from tts_audiobook_tool.menus.section_markers_limited_menu import SectionMarkersLimitedMenu
 from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
+from tts_audiobook_tool.menus.menu_shared import make_output_files_subheading, make_output_range_info_strings
 from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -35,7 +37,7 @@ class ConcatMenu:
             return s
 
         def make_section_markers_label(_: State) -> str:
-            qty = len(state.project.section_dividers)
+            qty = len(state.project.markers)
             label = "Section markers "
             if qty > 0:
                 noun = make_noun('item', 'items', qty)
@@ -46,34 +48,61 @@ class ConcatMenu:
                 label += f"{COL_DIM}(optional)"
             return label
 
+        def make_split_points_label(_: State) -> str:
+            num_markers = len(state.project.markers)
+            if num_markers > 0:
+                items_noun = make_noun('item', 'items', num_markers)
+                num_files = num_markers + 1
+                files_noun = make_noun('file', 'files', num_files)
+                value = make_currently_string(f"{num_markers} {items_noun} = {num_files} {files_noun}")
+            else:
+                value = f"{COL_DIM}(optional)"
+            label = f"File split points {value}"
+            return label
+
         def make_items(_: State) -> list[MenuItem]:
             
             file_type_value = state.project.export_type.label
             if state.project.export_type == ExportType.AAC:
                 file_type_value += f" {COL_DIM}{state.prefs.aac_bitrate}"
 
-            items = [
+            items = []
                 
-                MenuItem(make_start_label, lambda _, __: ask_chapter_indices_and_make(state)),
-                
-                MenuItem(make_section_markers_label, lambda _, __: SectionMarkersMenu.menu(state)),
+            items.append( 
+                MenuItem(make_start_label, lambda _, __: ask_output_indices_and_make(state)) 
+            )
 
+            is_limited = state.project.has_multiple_book_sections()
+            if is_limited:    
+                items.append( 
+                    MenuItem(make_split_points_label, lambda _, __: SectionMarkersLimitedMenu.menu(state)) 
+                )
+            else:
+                items.append( 
+                    MenuItem(make_section_markers_label, lambda _, __: SectionMarkersMenu.menu(state)) 
+                )
+
+            items.append(
                 MenuItem(
                     lambda _: make_menu_label("File type", file_type_value), 
                     lambda _, __: ConcatMenu.file_type_menu(state),
                     superlabel="Options"
-                ),
-                
+                )
+            )
+
+            items.append(
                 MenuItem(
                     lambda _: make_menu_label("Reader phrase subdivision", state.project.subdivide_phrases), 
                     lambda _, __: ConcatMenu.subdivide_menu(state)
-                ),
+                )
+            )
                 
+            items.append(
                 MenuItem(
                     lambda _: make_menu_label("Section break sound effect", state.project.use_break_sound_effect),
                     lambda _, __: ConcatMenu.section_break_menu(state)
                 )
-            ]
+            )
 
             items.append(
                 MenuItem(
@@ -110,7 +139,7 @@ class ConcatMenu:
 
             return items
 
-        MenuUtil.menu(state, "Create audiobook file/s:", make_items, subheading=make_chapter_files_subheading, breadcrumb="Create audiobook")
+        MenuUtil.menu(state, "Create audiobook file/s:", make_items, subheading=make_output_files_subheading, breadcrumb="Create audiobook")
 
     @staticmethod
     def file_type_menu(state: State) -> None:
@@ -278,41 +307,7 @@ class ConcatMenu:
             one_shot=True
         )
 
-# ---
-
-def make_chapter_files_subheading(state: State) -> str:
-
-    if state.project.chapter_mode != SectionMarkerMode.FILES:
-        return ""
-
-    infos = ChapterInfo.make_chapter_infos(state.project)
-    if len(infos) == 1:
-        return "" # bc always has one item
-    
-    if len(infos) > 4:
-        subinfos = infos[:3]
-        extra = f" {COL_DIM_ITALICS}... {COL_ACCENT}+{len(infos) - len(subinfos)} {COL_DIM}more files"
-    else:
-        subinfos = infos
-        extra = ""
-
-    strings = make_chapter_info_strings( subinfos, list(range(len(subinfos))) )
-    if extra:
-        strings[-1] += extra
-    string = "\n".join(strings)
-    string += "\n"
-    return string
-
-def make_chapter_info_strings(infos: list[ChapterInfo], indices: list[int]) -> list[str]:
-    lst = []
-    for index in indices:
-        info = infos[index]
-        s = f"{COL_DEFAULT}File {index+1}:{COL_DIM} lines {info.segment_index_start + 1} to {info.segment_index_end + 1} "
-        s += f"({info.num_files_exist}/{info.num_segments} generated)"
-        lst.append(s)
-    return lst
-
-def ask_chapter_indices_and_make(state: State) -> None:
+def ask_output_indices_and_make(state: State) -> None:
 
     num_generated = state.project.sound_segments.num_generated()
     if not state.prefs.project_dir or num_generated == 0:
@@ -321,23 +316,23 @@ def ask_chapter_indices_and_make(state: State) -> None:
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
 
-    should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.section_dividers) > 0
+    should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.markers) > 0
     if should_ask_file_numbers:
         
-        infos = ChapterInfo.make_chapter_infos(state.project)
+        infos = OutputRangeInfo.make_output_range_infos(state.project)
 
-        result = ask_chapter_indices(infos)
+        result = ask_output_indices(infos)
         if result is None:
             return
         else:
-            chapter_indices = result
+            output_indices = result
             bookmark_indices = []
 
-        noun = make_noun('file', 'files', len(chapter_indices))
+        noun = make_noun('file', 'files', len(output_indices))
         s = f"Will create the following {type_string} {noun}:"
         printt(s)
 
-        strings = make_chapter_info_strings(infos, chapter_indices)
+        strings = make_output_range_info_strings(infos, output_indices)
         s = "\n".join( ("    " + item) for item in strings)
         printt(s)
         printt()
@@ -348,10 +343,13 @@ def ask_chapter_indices_and_make(state: State) -> None:
 
     else:
 
-        chapter_indices = []
-        bookmark_indices = state.project.section_dividers
+        output_indices = []
+        if state.project.can_use_bookmark_section_markers():
+            bookmark_indices = state.project.markers
+        else:
+            bookmark_indices = []
 
-        info = ChapterInfo.make_single_info(state.project)
+        info = OutputRangeInfo.make_single_info(state.project)
         s = f"Will create a single {type_string} file"
         printt(s)
         s = f"{COL_DIM}All lines "
@@ -365,18 +363,18 @@ def ask_chapter_indices_and_make(state: State) -> None:
 
     ConcatUtil.make_files(
         state=state, 
-        chapter_indices=chapter_indices, 
+        file_cut_indices=output_indices, 
         bookmark_indices=bookmark_indices
     )
 
-def ask_chapter_indices(infos: list[ChapterInfo]) -> list[int] | None:
+def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
 
-    printt("Enter chapter file numbers to create:")
+    printt("Enter file numbers to create:")
     printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
     inp = ask.ask()
 
     if inp == "all" or inp == "a":
-        indices = [info.chapter_index for info in infos if info.num_files_exist > 0]
+        indices = [info.output_index for info in infos if info.num_files_exist > 0]
         if not indices:
             print_feedback("No chapter files have generated audio", is_error=True)
             return None

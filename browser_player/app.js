@@ -6,6 +6,8 @@ class App {
     playerHolder;
     audio;
     loadingOverlay;
+    currentTitle;
+    currentFileName;
 
     // Widgets and controllers
     player;
@@ -39,6 +41,8 @@ class App {
         this.playerHolder = document.getElementById("playerHolder");
         this.audio = document.getElementById("audio");
         this.loadingOverlay = document.getElementById("loadingOverlay");
+        this.currentFileName = document.getElementById("currentFileName");
+        this.currentTitle = document.getElementById("currentTitle");
 
         // Controllers
         this.storageController = new StorageController();
@@ -184,6 +188,7 @@ class App {
         }
 
         this.bookText.hideFileName();
+        this.updateCurrentTitle(null);
         this.bookText.clear();
 
         this.overlayManager.hideNavigationPanelButton();        
@@ -251,6 +256,7 @@ class App {
         const textSegments = appMetadata.textSegments;
         this.bookText.init(textSegments, addSectionDividers, appMetadata.sections || []);
         this.bookText.showFileName(fileName)
+        this.updateCurrentTitle(appMetadata.title);
 
         // Init bookmark-related
         this.metaBookmarkIndices = appMetadata.bookmarks || [];
@@ -460,6 +466,20 @@ class App {
 
     doScrollTop() {
         window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    }
+
+    updateCurrentTitle(title) {
+        const normalizedTitle = typeof title === "string" ? title.trim() : "";
+        if (!normalizedTitle) {
+            this.currentTitle.textContent = "";
+            this.currentTitle.style.display = "none";
+            this.currentFileName.style.marginBottom = "18px";
+            return;
+        }
+
+        this.currentTitle.textContent = normalizedTitle;
+        this.currentTitle.style.display = "block";
+        this.currentFileName.style.marginBottom = "4px";
     }
 
     storePosition(value) {

@@ -1,3 +1,4 @@
+import os
 import platform
 
 from tts_audiobook_tool import ask
@@ -14,7 +15,7 @@ def get_from_text_file(
         segmentation_strategy: SegmentationStrategy,
         pysbd_language: str,
         prefs: Prefs,
-) -> tuple[list[PhraseGroup], str]:
+) -> tuple[list[PhraseGroup], str, str]:
     """
     Ask the user for a text file path and return phrase groups plus raw text.
 
@@ -31,17 +32,17 @@ def get_from_text_file(
         "Enter text file path: ", "Select text file", initialdir=initial_dir
     )
     if not path:
-        return [], ""
+        return [], "", ""
     if not os.path.exists(path):
         ask.ask_error("No such file")
-        return [], ""
+        return [], "", ""
 
     try:
         with open(path, "r", encoding="utf-8") as file:
             raw_text = file.read()
     except Exception as e:
         ask.ask_error(f"Error: {e}")
-        return [], ""
+        return [], "", ""
 
     prefs.last_text_dir = str(Path(path).parent)
 
@@ -56,9 +57,10 @@ def get_from_text_file(
 
     if not phrase_groups:
         ask.ask_enter_to_continue("No text segments.")
-        return [], raw_text
+        return [], raw_text, ""
 
-    return phrase_groups, raw_text
+    title = os.path.splitext(os.path.basename(path))[0]
+    return phrase_groups, raw_text, title
 
 
 def get_from_std_in(
