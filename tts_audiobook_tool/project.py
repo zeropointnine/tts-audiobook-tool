@@ -127,6 +127,7 @@ class Project(BaseModel):
     realtime_line_range: tuple[int, int] | None = None
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
+    gen_auto_concat: bool = PROJECT_DEFAULT_GEN_AUTO_CONCAT
     streaming_chat: bool = PROJECT_DEFAULT_STREAMING_CHAT
     
     # Rem, UI nomenclature for this is "tolerance"
@@ -278,7 +279,8 @@ class Project(BaseModel):
 
         def add_warning(attr_name: str, defaulting_to: Any) -> None:
             s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Missing or invalid value for {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
-            s += "This can occur if a new project property or feature has been added to the app since the last time you opened this project.\n"
+            s += "This can occur if a new project property or feature has been added to the app\n"
+            s += "since the last time you opened this project.\n"
             s += f"Setting to default: {defaulting_to}"
             s += "\n"
             if use_tl_warnings:
@@ -448,6 +450,13 @@ class Project(BaseModel):
             value = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
             add_warning('limit_silence_gaps_duration', value)
         d['limit_silence_gaps_duration'] = float(value)
+
+        # gen_auto_concat
+        value = d.get('gen_auto_concat', None)
+        if not isinstance(value, bool):
+            value = PROJECT_DEFAULT_GEN_AUTO_CONCAT
+            add_warning('gen_auto_concat', value)
+        d['gen_auto_concat'] = value
 
         # strictness (default depends on language_code)
         s = d.get('strictness', '')
@@ -782,6 +791,7 @@ class Project(BaseModel):
             "realtime_line_range": self.realtime_line_range,
             "limit_silence_gaps": self.limit_silence_gaps,
             "limit_silence_gaps_duration": self.limit_silence_gaps_duration,
+            "gen_auto_concat": self.gen_auto_concat,
             "streaming_chat": self.streaming_chat,
             "strictness": self.strictness.id,
             "max_retries": self.max_retries,

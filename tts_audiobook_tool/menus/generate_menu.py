@@ -7,6 +7,7 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
@@ -122,6 +123,13 @@ class GenerateMenu:
                 )
             )
 
+            items.append(
+                MenuItem(
+                    make_gen_auto_concat_label, lambda _, __: GenerateMenu.gen_auto_concat_menu(state),
+                    superlabel=" ", superlabel_no_blank_line=True
+                )
+            )
+
             return items
         
         MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
@@ -187,6 +195,28 @@ class GenerateMenu:
             default_value=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS,
             on_select=on_select,
             breadcrumb="Limit silence gaps > Enabled",
+        )
+
+    @staticmethod
+    def gen_auto_concat_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.gen_auto_concat = value
+            state.project.save()
+            print_feedback(f"Concatenate when finished set to: {value}")
+
+        SUBHEADING = 'Automatically runs concatenation step ("Create audiobook file")\nwhen generation job is finished.\n'
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text='Concatenate when finished',
+            subheading=SUBHEADING,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.gen_auto_concat,
+            default_value=PROJECT_DEFAULT_GEN_AUTO_CONCAT,
+            on_select=on_select,
+            breadcrumb="Concatenate when finished",
         )
 
     @staticmethod
@@ -324,6 +354,13 @@ def make_limit_silence_gaps_label(state: State) -> str:
         default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
 
+def make_gen_auto_concat_label(state: State) -> str:
+    return make_menu_label(
+        label="Concatenate when finished",
+        value=state.project.gen_auto_concat,
+        default=PROJECT_DEFAULT_GEN_AUTO_CONCAT
+    )
+
 def ask_retries(state: State) -> None:
     MenuUtil.print_heading(state, make_retries_label(state))
     printt(RETRIES_DESC)
@@ -415,6 +452,8 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         if num:
             s += f" {COL_DIM}({num} already complete)"
         printt(s)
+        if state.project.gen_auto_concat:
+            printt("Will concatenate audio file/s when finished")
         if show_stt_status:
             if not Stt.should_skip(state):
                 s = "Speech-to-text validation enabled"
@@ -452,6 +491,11 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
 
     if is_regen:
         ask.ask_enter_to_continue()
+        return
+
+    if state.project.gen_auto_concat:
+        printt()
+        ConcatUtil.auto_concat_after_generation(state)
         return
     
     s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to create audiobook file now: \a"

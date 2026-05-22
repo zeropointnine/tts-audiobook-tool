@@ -28,7 +28,9 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
 from tts_audiobook_tool.menus.menu_util import MenuUtil
+from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:
@@ -81,9 +83,12 @@ class ConcatUtil:
 
             message = "Creating concatenated audiobook file"
             if len(file_cut_indices) > 1:
-                message += f" {COL_ACCENT}{i+1}{COL_DEFAULT}/{COL_ACCENT}{len(file_cut_indices)}{COL_DEFAULT} - chapter file {COL_ACCENT}{file_cut_index+1}{COL_DEFAULT}"
+                message += f" {i+1} of {len(file_cut_indices)} - output file {file_cut_index+1}"
             message += "..."
-            MenuUtil.print_heading(None, message, dont_clear=True, non_menu=True)
+            dash_line = "-" * len(message)
+            printt(f"{COL_ACCENT}{dash_line}")
+            printt(f"{COL_ACCENT}{message}")
+            printt()
 
             if state.project.chapter_mode == SectionMarkerMode.FILES:
                 ranges = make_file_line_ranges(state.project.markers, len(state.project.phrase_groups))
@@ -112,7 +117,7 @@ class ConcatUtil:
                 ask.ask_error(err)
                 return
             
-            printt(f"Saved {COL_ACCENT}{dest_path}") 
+            printt(f"{COL_ACCENT}Saved {COL_DEFAULT}{make_terminal_hyperlink(dest_path)}") 
             printt()
 
         # Post-concat feedback, prompt
@@ -481,6 +486,34 @@ class ConcatUtil:
         """
         process.stdin.close()  # type: ignore
         process.wait()
+
+    @staticmethod
+    def auto_concat_after_generation(state: State) -> None:
+        if state.project.chapter_mode == SectionMarkerMode.FILES and len(state.project.markers) > 0:
+            infos = OutputRangeInfo.make_output_range_infos(state.project)
+            output_indices = [info.output_index for info in infos if info.num_files_exist > 0]
+            if not output_indices:
+                print_feedback("No chapter files have generated audio", is_error=True)
+                return
+
+            ConcatUtil.make_files(
+                state=state,
+                file_cut_indices=output_indices,
+                bookmark_indices=[]
+            )
+            return
+
+        if state.project.can_use_bookmark_section_markers():
+            bookmark_indices = state.project.markers
+        else:
+            bookmark_indices = []
+
+        MenuUtil.print_heading(state, "Concatenating file", dont_clear=True, non_menu=True)
+        ConcatUtil.make_files(
+            state=state,
+            file_cut_indices=[],
+            bookmark_indices=bookmark_indices
+        )
 
 # ---
 
