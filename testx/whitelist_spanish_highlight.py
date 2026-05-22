@@ -13,7 +13,7 @@ def highlight_failed_words_normalized(text: str) -> str:
     groups = PhraseGrouper.text_to_groups(
         text=text,
         max_words=40,
-        strategy=SegmentationStrategy.NORMAL,
+        strategy=SegmentationStrategy.SENTENCE_PLUS,
         pysbd_lang="es",
     )
 

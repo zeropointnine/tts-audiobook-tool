@@ -103,7 +103,7 @@ class Project(BaseModel):
     book: Book = Field(default_factory=lambda: Book(sections=[]))
     phrase_groups: list[PhraseGroup] = Field(default_factory=list)
 
-    segmentation_strategy: SegmentationStrategy = list(SegmentationStrategy)[0]
+    segmentation_strategy: SegmentationStrategy = PROJECT_DEFAULT_SEGMENTATION_STRATEGY
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
     word_substitutions: dict[str, str] = Field(default_factory=dict)
 
@@ -328,7 +328,7 @@ class Project(BaseModel):
 
         # segmentation_strategy
         s = d.get('segmentation_strategy', '')
-        d['segmentation_strategy'] = SegmentationStrategy.from_id(s) or list(SegmentationStrategy)[0]
+        d['segmentation_strategy'] = SegmentationStrategy.from_id(s) or PROJECT_DEFAULT_SEGMENTATION_STRATEGY
 
         # max_words
         i = d.get('max_words', MAX_WORDS_PER_SEGMENT_DEFAULT)

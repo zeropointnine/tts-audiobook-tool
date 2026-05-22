@@ -80,7 +80,7 @@ class TestEpubExtractor(unittest.TestCase):
             result = EpubExtractor.import_epub(
                 epub_path="book.epub",
                 max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
                 language_code="en",
                 extractor=StubEpubChapterTextExtractor(),
             )
@@ -107,7 +107,7 @@ class TestEpubExtractor(unittest.TestCase):
             result = EpubExtractor.import_epub(
                 epub_path="book.epub",
                 max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
                 language_code="en",
                 extractor=StubEpubChapterTextExtractor(),
             )
@@ -129,7 +129,7 @@ class TestEpubExtractor(unittest.TestCase):
             result = EpubExtractor.import_epub(
                 epub_path="book.epub",
                 max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
                 language_code="en",
                 extractor=StubEpubChapterTextExtractor(),
             )
@@ -147,7 +147,7 @@ class TestEpubExtractor(unittest.TestCase):
             result = EpubExtractor.import_epub(
                 epub_path="book.epub",
                 max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
                 language_code="en",
                 extractor=StubEpubChapterTextExtractor(),
             )
@@ -170,7 +170,7 @@ class TestEpubExtractor(unittest.TestCase):
             result = EpubExtractor.import_epub(
                 epub_path="book.epub",
                 max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
                 language_code="en",
                 extractor=StubEpubChapterTextExtractor(),
             )
@@ -190,7 +190,7 @@ class TestEpubExtractor(unittest.TestCase):
             result = EpubExtractor.import_epub(
                 epub_path="book.epub",
                 max_words=40,
-                segmentation_strategy=SegmentationStrategy.NORMAL,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
                 language_code="en",
                 extractor=StubWarningEpubChapterTextExtractor(),
             )

@@ -12,7 +12,7 @@ class PhraseGrouper:
     def text_to_groups(
             text: str,
             max_words: int,
-            strategy: SegmentationStrategy=SegmentationStrategy.NORMAL,
+            strategy: SegmentationStrategy=SegmentationStrategy.SENTENCE_PLUS,
             pysbd_lang: str="en"
     ) -> list[PhraseGroup]:
         """
@@ -25,7 +25,9 @@ class PhraseGrouper:
 
         # First group by either complete sentence or paragraph
         match strategy:
-            case SegmentationStrategy.NORMAL:
+            case SegmentationStrategy.SENTENCE:
+                reason_threshold = Reason.SENTENCE
+            case SegmentationStrategy.SENTENCE_PLUS:
                 reason_threshold = Reason.SENTENCE
             case SegmentationStrategy.MULTI_SENTENCE:
                 reason_threshold = Reason.SENTENCE # (will re-combine sentences later)
@@ -33,9 +35,8 @@ class PhraseGrouper:
                 reason_threshold = Reason.PARAGRAPH
         groups = PhraseGrouper.phrases_to_groups_by_reason(phrases, reason_threshold)
 
-        if strategy == SegmentationStrategy.NORMAL:
-            # Special case for NORMAL:
-            # Mitigate tts glitches due to too-short prompts
+        if strategy == SegmentationStrategy.SENTENCE_PLUS:
+            # Mitigates tts glitches due to too-short prompts
             SHORT_SENTENCE_NUM_WORDS = 2
             groups = PhraseGrouper.merge_short_sentences(groups, SHORT_SENTENCE_NUM_WORDS, max_words)
         elif strategy == SegmentationStrategy.MULTI_SENTENCE:

@@ -19,7 +19,6 @@ from typing import Callable, NamedTuple, Protocol, Sequence, TYPE_CHECKING
 from numpy import ndarray
 
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.constants_config import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -324,15 +323,20 @@ class SectionMarkerMode(tuple[str, str, str], Enum):
     
 # ---
 
-SS_NORMAL_DESC = \
-"""    Text is segmented by paragraph, and within each paragraph, by sentence.
-      This produces predictable caesuras between sentences. Relatively shorter 
-      word length may help some models maintain a more natural speaking pace."""
+SS_SENTENCE_DESC = \
+"""    Text is segmented by sentence. Produces predictable caesuras between sentences. 
+      Relatively short resulting word length may help some models maintain 
+      a more natural speaking pace."""
+
+SS_SENTENCE_PLUS_DESC = \
+"""    Text is segmented by sentence, but short sentences are joined to
+      neighboring sentences within a paragraph. This is done to avoid very
+      short prompts, which many TTS models tend to struggle with."""
 
 SS_MULTI_DESC = \
-"""    Text is segmented by paragraph, and within each paragraph, 
-      by one or multiple sentences up to \"max words per segment.\"
-      May preserve a better sense of continuity between those sentences."""
+"""    Within a paragraph, text is grouped by sentences up to \"max words per segment.\"
+      May preserve better continuity of timbre between those sentences compared to
+      single-sentence segmentation."""
 
 SS_MAX_LEN_DESC = \
 """    Text is segmented by paragraph, and within each paragraph, segmented by 
@@ -341,7 +345,8 @@ SS_MAX_LEN_DESC = \
 
 class SegmentationStrategy(tuple[str, str, str], Enum):
 
-    NORMAL = "normal", "Normal", SS_NORMAL_DESC
+    SENTENCE = "sentence", "Sentence", SS_SENTENCE_DESC
+    SENTENCE_PLUS = "normal", "Sentence+", SS_SENTENCE_PLUS_DESC 
     MULTI_SENTENCE = "multi", "Multiple sentences", SS_MULTI_DESC
     MAX_LEN = "max_len", "Maximized word count", SS_MAX_LEN_DESC
 
@@ -383,7 +388,7 @@ class BookSegmentationSettings(NamedTuple):
     """
     language_code: str = ""
     max_words_per_segment: int = 0
-    strategy: SegmentationStrategy = SegmentationStrategy.NORMAL
+    strategy: SegmentationStrategy = SegmentationStrategy.SENTENCE_PLUS
 
 
 @dataclass
@@ -480,7 +485,6 @@ class Hint:
 
 class RealTimeMenuState:
     """ Values related to the real-time playback feature """
-    from tts_audiobook_tool.app_types.phrase import PhraseGroup
     custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
     custom_text_line_range: tuple[int, int] | None = None
     project_text_line_range: tuple[int, int] | None = None

@@ -323,7 +323,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             project.markers = [99]
             project.set_phrase_groups_and_save(
                 phrase_groups=[self.make_phrase_group("One.")],
-                strategy=SegmentationStrategy.NORMAL,
+                strategy=SegmentationStrategy.SENTENCE_PLUS,
                 max_words=50,
                 language_code="en",
                 raw_text="One.",
@@ -349,7 +349,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             project.markers = [2]
             project.set_phrase_groups_and_save(
                 phrase_groups=[self.make_phrase_group("One."), self.make_phrase_group("Two.")],
-                strategy=SegmentationStrategy.NORMAL,
+                strategy=SegmentationStrategy.SENTENCE_PLUS,
                 max_words=50,
                 language_code="en",
                 raw_text="One.\nTwo.",

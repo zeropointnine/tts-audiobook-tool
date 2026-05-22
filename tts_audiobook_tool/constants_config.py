@@ -5,6 +5,8 @@ TODO: consider making this a config file proper
 
 import os
 
+from tts_audiobook_tool.app_types import SegmentationStrategy
+
 DEV = os.getenv("TTS_AUDIOBOOK_TOOL_DEV", "").lower() in ("true", "1", "yes") and True
 
 PROJECT_DEFAULT_LANGUAGE = "en"
@@ -14,7 +16,7 @@ PROJECT_DEFAULT_CHAT_SAVE = False
 PROJECT_DEFAULT_LIMIT_SILENCE_GAPS = False
 PROJECT_DEFAULT_GEN_AUTO_CONCAT = False
 PROJECT_DEFAULT_STREAMING_CHAT = True
-
+PROJECT_DEFAULT_SEGMENTATION_STRATEGY = SegmentationStrategy.SENTENCE_PLUS
 PROJECT_MAX_RETRIES_DEFAULT = 1
 PROJECT_MAX_RETRIES_MIN = 1
 PROJECT_MAX_RETRIES_MAX = 5

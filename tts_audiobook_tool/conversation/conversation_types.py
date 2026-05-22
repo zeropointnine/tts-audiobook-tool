@@ -12,7 +12,7 @@ from tts_audiobook_tool.app_types import SegmentationStrategy
 class ChunkingConfig:
     language_code: str
     max_words: int = 40
-    strategy: SegmentationStrategy = SegmentationStrategy.NORMAL
+    strategy: SegmentationStrategy = SegmentationStrategy.SENTENCE_PLUS
 
 
 @dataclass(frozen=True)
