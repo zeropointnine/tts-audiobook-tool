@@ -1,4 +1,5 @@
 from tts_audiobook_tool.conversation.conversation import ConversationStatic
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool import readiness
@@ -24,8 +25,6 @@ class ChatMenu:
             "response is generated as speech using the current TTS model settings.\n"
         )
 
-        has_more_than_one_option = Tts.get_info().can_stream
-
         items = [
             MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
             
@@ -36,7 +35,7 @@ class ChatMenu:
                     False
                 ),
                 lambda _, __: ChatMenu.conversation_stt_immediate_menu(state),
-                superlabel="Options" if has_more_than_one_option else ""
+                superlabel="Options"
             )
         ]
 
@@ -47,6 +46,15 @@ class ChatMenu:
                     lambda _, __: ChatMenu.streaming_menu(state),
                 )
             )
+
+        items.append(
+            MenuItem(
+                lambda _: make_menu_label("Save output", state.project.chat_save),
+                lambda _, __: ChatMenu.save_menu(state)
+            )
+        )
+
+        # ...
 
         MenuUtil.menu(
             state,
@@ -101,4 +109,30 @@ class ChatMenu:
             on_select=on_select,
             subheading=subheading,
             breadcrumb="Streaming",
+        )
+
+    @staticmethod
+    def save_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.project.chat_save = value
+            state.project.save()
+            print_feedback("Set to:", state.project.chat_save)
+
+        dir_path = os.path.join(state.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
+        if os.path.exists(dir_path):
+            subheading = f"Saves FLAC files to {text_util.make_terminal_hyperlink(dir_path, is_file=True)}\n"
+        else:
+            subheading = f"FLAC files will be saved to {text_util.make_terminal_hyperlink(dir_path)}\n"
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Save output to files",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.project.chat_save,
+            default_value=PROJECT_DEFAULT_CHAT_SAVE,
+            on_select=on_select,
+            breadcrumb="Save output",
         )

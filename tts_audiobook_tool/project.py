@@ -123,6 +123,7 @@ class Project(BaseModel):
     high_shelf: str = HighShelfEq.DISABLED.id
     use_upsampler: bool = False
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
+    chat_save: bool = PROJECT_DEFAULT_CHAT_SAVE
     realtime_line_range: tuple[int, int] | None = None
     limit_silence_gaps: bool = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     limit_silence_gaps_duration: float = PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION
@@ -276,9 +277,10 @@ class Project(BaseModel):
         use_tl_warnings = getattr(_tl, 'warnings', None) is not None
 
         def add_warning(attr_name: str, defaulting_to: Any) -> None:
-            s = f"{COL_ERROR}Warning/info: {COL_DEFAULT}Missing or invalid value for: {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
-            s += "This can occur if a new project property has been added to the app since the last time you opened this project.\n"
+            s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Missing or invalid value for {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
+            s += "This can occur if a new project property or feature has been added to the app since the last time you opened this project.\n"
             s += f"Setting to default: {defaulting_to}"
+            s += "\n"
             if use_tl_warnings:
                 _tl.warnings.append(s)
 
@@ -425,6 +427,13 @@ class Project(BaseModel):
             value = True
             add_warning('streaming_chat', value)
         d['streaming_chat'] = value
+
+        # chat_save
+        value = d.get('chat_save', None)
+        if not isinstance(value, bool):
+            value = PROJECT_DEFAULT_CHAT_SAVE
+            add_warning('chat_save', value)
+        d['chat_save'] = value
 
         # limit_silence_gaps
         value = d.get('limit_silence_gaps', None)
@@ -769,6 +778,7 @@ class Project(BaseModel):
             "high_shelf": self.high_shelf,
             "use_upsampler": self.use_upsampler,
             "realtime_save": self.realtime_save,
+            "chat_save": self.chat_save,
             "realtime_line_range": self.realtime_line_range,
             "limit_silence_gaps": self.limit_silence_gaps,
             "limit_silence_gaps_duration": self.limit_silence_gaps_duration,
@@ -1134,7 +1144,7 @@ class Project(BaseModel):
     def realtime_path(self) -> str:
         if not self.dir_path:
             return ""
-        return os.path.join(self.dir_path, PROJECT_REALTIME_SUBDIR)
+        return os.path.join(self.dir_path, PROJECT_REALTIME_OUTPUT_SUBDIR)
 
     def emo_vector_to_string(self) -> str:
         if not self.indextts2_emo_vector or sum(self.indextts2_emo_vector) == 0:

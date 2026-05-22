@@ -210,6 +210,7 @@ def make(
 
     meta = AppMetadata(
         timed_phrases=timed_phrases,
+        title=Path(source_audio_path).stem,
         version=ABR_VERSION,
         bookmark_indices=[],
         raw_text=raw_text,

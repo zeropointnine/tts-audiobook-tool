@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 import queue
 import re
 import sys
@@ -32,9 +33,12 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.app_types.phrase import Reason
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.system_support.terminal import get_terminal_width
 from tts_audiobook_tool.tts import Tts
@@ -441,18 +445,18 @@ class ConversationStreamingTts:
         interrupt_requested: threading.Event,
         response_aborted: threading.Event,
         on_segment_range: Callable[[int, int], None] | None = None,
-    ) -> tuple[tuple[int, int] | None, str | None]:
+    ) -> tuple[tuple[int, int] | None, Sound | None, str | None]:
         """
         Stream one TTS chunk directly into the conversation output stream.
 
         Returns:
-            ((start_sample, end_sample), None) on success, where the range covers
+            ((start_sample, end_sample), saved_sound, None) on success, where the range covers
             the full streamed audio plus any appended trailing silence.
-            (None, error_string) on failure.
+            (None, None, error_string) on failure.
         """
         info = Tts.get_info()
         if sound_stream.sample_rate != info.sample_rate:
-            return None, (
+            return None, None, (
                 f"Streaming sample rate mismatch: output stream={sound_stream.sample_rate}, "
                 f"tts={info.sample_rate}"
             )
@@ -460,11 +464,13 @@ class ConversationStreamingTts:
         stream_start: int | None = None
         stream_end: int | None = None
         speech_end: int | None = None
+        saved_chunks: list[np.ndarray] = []
 
         def append_chunk(data: np.ndarray) -> None:
             nonlocal stream_start, stream_end, speech_end
             if interrupt_requested.is_set() or response_aborted.is_set():
                 return
+            saved_chunks.append(np.copy(data))
             start, end = sound_stream.add_data(data)
             if stream_start is None:
                 stream_start = start
@@ -489,6 +495,7 @@ class ConversationStreamingTts:
                 sr=sound_stream.sample_rate,
                 dtype=np.dtype(np.float32),
             )
+            saved_chunks.append(np.copy(silence_sound.data))
             start, end = sound_stream.add_data(silence_sound.data)
             if stream_start is None:
                 stream_start = start
@@ -507,10 +514,15 @@ class ConversationStreamingTts:
                 model.clear_stream_state()
 
         if isinstance(result, str):
-            return None, result
+            return None, None, result
         if stream_start is None or speech_end is None or speech_end <= stream_start:
-            return None, "No streamed audio output"
-        return (stream_start, speech_end), None
+            return None, None, "No streamed audio output"
+
+        saved_sound = None
+        if saved_chunks:
+            saved_sound = Sound(np.concatenate(saved_chunks), sound_stream.sample_rate)
+
+        return (stream_start, speech_end), saved_sound, None
 
 
 class ResponseSession:
@@ -553,6 +565,7 @@ class ResponseSession:
         self.tts_buffer = ""
         self.render_buffer = ResponseSession.RESPONSE_PLACEHOLDER
         self.spoken_segments: list[tuple[str, int, int]] = []
+        self.saved_turn_sounds: list[Sound] = []
         self.pending_sentences: list[str] = []
         self.state_lock = threading.Lock()
         self.render_lock = threading.Lock()
@@ -622,6 +635,8 @@ class ResponseSession:
         self.render_response(force=True)
         self.ui.commit_render(1)
         self.ui.wait_idle()
+        if not llm_failed and not was_interrupted:
+            self.save_chat_output_if_needed()
 
     def tts_worker(self) -> None:
         while True:
@@ -668,7 +683,7 @@ class ResponseSession:
                         self.render_response()
 
                     with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                        stream_range, err = ConversationStreamingTts.generate_to_sound_stream(
+                        stream_range, saved_sound, err = ConversationStreamingTts.generate_to_sound_stream(
                             project=self.project,
                             text=text,
                             reason=reason,
@@ -694,6 +709,8 @@ class ResponseSession:
                         continue
 
                     assert stream_range is not None
+                    if saved_sound is not None:
+                        self.saved_turn_sounds.append(saved_sound)
                     start, end = stream_range
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
@@ -746,6 +763,7 @@ class ResponseSession:
                 sound = SoundPipeline.append_pause_or_section_effect(
                     sound, reason=reason, use_break_sound_effect=False,
                 )
+                self.saved_turn_sounds.append(sound)
 
                 if not self.interrupt_requested.is_set() and not self.response_aborted.is_set():
                     start, end = self.sound_stream.add_data(sound.data)
@@ -900,6 +918,42 @@ class ResponseSession:
         with self.llm.history_lock:
             if self.llm.history and self.llm.history[-1] == {"role": "user", "content": message}:
                 self.llm.history.pop()
+
+    def save_chat_output_if_needed(self) -> None:
+        if not self.project.chat_save or not self.project.dir_path or not self.saved_turn_sounds:
+            return
+
+        dir_path = os.path.join(self.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
+        os.makedirs(dir_path, exist_ok=True)
+
+        sound = self.saved_turn_sounds[0]
+        if len(self.saved_turn_sounds) > 1:
+            sound_data = np.concatenate([item.data for item in self.saved_turn_sounds])
+            sound = Sound(sound_data, sound.sr)
+
+        file_path = os.path.join(dir_path, self.make_chat_file_name())
+        err = SoundFileUtil.save_flac(sound, file_path)
+        if err:
+            self.ui.println(f"[Save error: {err}]")
+            return
+
+    def make_chat_file_name(self) -> str:
+        timestamp = SoundSegmentUtil.make_timestamp_string()
+        model = Tts.get_info().file_tag
+        voice = Tts.get_class().get_voice_tag(self.project)
+        text = " "+ app_text.sanitize_for_filename(self.render_response_text()[:50])
+        return f"[{timestamp}] [chat] [{model}] [{voice}]{text}.flac"
+
+    def render_response_text(self) -> str:
+        parts: list[str] = []
+        with self.state_lock:
+            parts.extend(text for text, _, _ in self.spoken_segments)
+            parts.extend(self.pending_sentences)
+            if self.tts_buffer.strip():
+                parts.append(self.tts_buffer)
+            elif self.render_buffer.strip() and self.render_buffer != ResponseSession.RESPONSE_PLACEHOLDER:
+                parts.append(self.render_buffer)
+        return " ".join(part.strip() for part in parts if part.strip())
 
     def make_spoken_segments(
         self,

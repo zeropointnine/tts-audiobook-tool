@@ -3,6 +3,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.system_support.terminal import get_terminal_width
 
@@ -17,10 +18,11 @@ def print_text_groups(groups: list[PhraseGroup]) -> None:
     printt()
 
 
-def print_book_sections(project: Project) -> None:
+def print_book_sections(state: State) -> None:
     
-    MenuUtil.print_heading(None, "Sections", dont_clear=True)
+    MenuUtil.print_screen_heading(state, "Sections")
 
+    project = state.project
     sections = project.book.sections
     section_start_indices = project.get_section_start_indices()
 
@@ -43,6 +45,7 @@ def print_book_sections(project: Project) -> None:
     printt()
 
 def print_book_text_lines(
+    state: State,
     phrase_groups: list[PhraseGroup],
     extant_indices: set[int] | None,
     segmentation_settings: BookSegmentationSettings,
@@ -50,12 +53,16 @@ def print_book_text_lines(
     """
     Prints the list of text segments of a Project.
 
+    state:
+        Is used for print_screen_heading only; text data is passed in independently
+        (because it may or may not be part of project yet)
+
     extant_indices:
         When exists, prints if sound gen exists for text segment, and prints num-generated info
     """
 
-    heading = "Text segments:" if extant_indices else "Text segments preview:"
-    MenuUtil.print_heading(None, heading, dont_clear=True)
+    heading = "Text segments" if extant_indices else "Text segments preview"
+    MenuUtil.print_screen_heading(state, heading)
 
     if len(phrase_groups) == 0:
         printt("None")

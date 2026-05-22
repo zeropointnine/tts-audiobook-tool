@@ -11,17 +11,6 @@ from tts_audiobook_tool.util import *
 class RealTimePlaybackMenu:
 
     @staticmethod
-    def get_active_line_range(state: State) -> tuple[int, int] | None:
-        if state.real_time.custom_phrase_groups:
-            line_range = state.real_time.custom_text_line_range
-        else:
-            line_range = state.real_time.project_text_line_range
-
-        if line_range == (0, 0):
-            return None
-        return line_range
-
-    @staticmethod
     def menu(state: State):
 
         def make_start_label(_: State) -> str:
@@ -41,18 +30,21 @@ class RealTimePlaybackMenu:
             return make_menu_label("Text source", value)
 
         def make_range_label(_) -> str:
-            line_range = RealTimePlaybackMenu.get_active_line_range(state)
+            line_range = get_active_line_range(state)
             if line_range:
                 value = f"{line_range[0]}-{line_range[1]}"
             else:
                 value = "all"
-            return make_menu_label("Select line range", value)
+            return make_menu_label("Line range", value)
 
         # Menu        
         items = [
             MenuItem(make_start_label, lambda _, __: do_start(state)),
             MenuItem(make_text_label, lambda _, __: RealTimePlaybackMenu.text_menu(state)),
-            MenuItem(make_range_label, lambda _, __: RealTimePlaybackMenu.ask_line_range(state)),
+            MenuItem(
+                make_range_label, lambda _, __: RealTimePlaybackMenu.ask_line_range(state),
+                superlabel="Options"
+            ),
             MenuItem(
                 lambda _: make_menu_label("Save output", state.project.realtime_save),
                 lambda _, __: RealTimePlaybackMenu.save_menu(state)
@@ -124,7 +116,7 @@ class RealTimePlaybackMenu:
         def on_custom(_: State, item: MenuItem) -> bool:
             printt("Note, custom text source does not persist.")
             if item.data == "file":
-                phrase_groups, __ = ask_phrase_groups.get_from_text_file(
+                phrase_groups, __, ___ = ask_phrase_groups.get_from_text_file(
                     state.project.max_words, 
                     state.project.segmentation_strategy, 
                     pysbd_language=state.project.language_code,
@@ -172,6 +164,16 @@ class RealTimePlaybackMenu:
         )
 
 # ---
+
+def get_active_line_range(state: State) -> tuple[int, int] | None:
+    if state.real_time.custom_phrase_groups:
+        line_range = state.real_time.custom_text_line_range
+    else:
+        line_range = state.real_time.project_text_line_range
+
+    if line_range == (0, 0):
+        return None
+    return line_range
 
 def do_start(state: State) -> None:
     

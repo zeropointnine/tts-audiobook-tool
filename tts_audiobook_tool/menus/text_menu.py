@@ -224,6 +224,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     
     # Preview text segments
     app_display.print_book_text_lines(
+        state,
         phrase_groups=phrase_groups,
         extant_indices=None,
         segmentation_settings=BookSegmentationSettings(
@@ -329,11 +330,12 @@ def on_ask_max_size(state: State, _) -> None:
     )
 
 def on_print_sections(state: State, __: MenuItem) -> None:
-    app_display.print_book_sections(state.project)
+    app_display.print_book_sections(state)
     ask.ask_enter_to_continue()
 
 def on_print_segments(state: State, __: MenuItem) -> None:
     app_display.print_book_text_lines(
+        state,
         phrase_groups=state.project.phrase_groups,
         extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
         segmentation_settings=state.project.get_book_segmentation_settings(),
