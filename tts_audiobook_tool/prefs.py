@@ -31,6 +31,8 @@ class Prefs(Saveable):
             last_project_dir: str = "",
             last_text_dir: str = "",
             conversation_stt_immediate: bool = False,
+            chat_save: bool = PROJECT_DEFAULT_CHAT_SAVE,
+            chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
             menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT,
@@ -52,6 +54,8 @@ class Prefs(Saveable):
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
         self._conversation_stt_immediate = conversation_stt_immediate
+        self._chat_save = chat_save
+        self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
         self._play_on_generate = play_on_generate
 
@@ -217,6 +221,18 @@ class Prefs(Saveable):
             conversation_stt_immediate = False
             dirty = True
 
+        # Chat save
+        chat_save = prefs_dict.get("chat_save", PROJECT_DEFAULT_CHAT_SAVE)
+        if not isinstance(chat_save, bool):
+            chat_save = PROJECT_DEFAULT_CHAT_SAVE
+            dirty = True
+
+        # Chat save mic
+        chat_save_mic = prefs_dict.get("chat_save_mic", PROJECT_DEFAULT_CHAT_SAVE_MIC)
+        if not isinstance(chat_save_mic, bool):
+            chat_save_mic = PROJECT_DEFAULT_CHAT_SAVE_MIC
+            dirty = True
+
         # Play on generate
         save_debug_files = prefs_dict.get("save_debug_files", False)
         if not isinstance(save_debug_files, bool):
@@ -252,6 +268,8 @@ class Prefs(Saveable):
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
             conversation_stt_immediate=conversation_stt_immediate,
+            chat_save=chat_save,
+            chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
             play_on_generate=play_on_generate,
             menu_clears_screen=menu_clears_screen,
@@ -455,6 +473,24 @@ class Prefs(Saveable):
         self.save()
 
     @property
+    def chat_save(self) -> bool:
+        return self._chat_save
+
+    @chat_save.setter
+    def chat_save(self, value: bool) -> None:
+        self._chat_save = value
+        self.save()
+
+    @property
+    def chat_save_mic(self) -> bool:
+        return self._chat_save_mic
+
+    @chat_save_mic.setter
+    def chat_save_mic(self, value: bool) -> None:
+        self._chat_save_mic = value
+        self.save()
+
+    @property
     def is_validation_disabled(self) -> bool:
         # When so-called stt variant is 'disabled', it is implied that validation-after-generation is disabled
         return (self._stt_variant == SttVariant.DISABLED)
@@ -477,6 +513,8 @@ class Prefs(Saveable):
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
             "conversation_stt_immediate": self._conversation_stt_immediate,
+            "chat_save": self._chat_save,
+            "chat_save_mic": self._chat_save_mic,
             "save_debug_files": self._save_debug_files,
             "play_on_generate": self._play_on_generate,
             "menu_clears_screen": self._menu_clears_screen

@@ -139,7 +139,7 @@ class ConcatMenu:
 
             return items
 
-        MenuUtil.menu(state, "Create audiobook file/s:", make_items, subheading=make_output_files_subheading, breadcrumb="Create audiobook")
+        MenuUtil.menu(state, "Create audiobook file/s", make_items, subheading=make_output_files_subheading, breadcrumb="Create audiobook")
 
     @staticmethod
     def file_type_menu(state: State) -> None:

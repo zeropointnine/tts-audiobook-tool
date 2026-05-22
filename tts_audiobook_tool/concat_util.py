@@ -13,6 +13,9 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
+from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormalizationUtil
 from tts_audiobook_tool.sound import m4b_chapter_util
@@ -159,7 +162,7 @@ class ConcatUtil:
 
         # Load raw text for app metadata. If unavailable, continue with a
         # phrase-group fallback rather than aborting concat.
-        raw_text = state.project.load_raw_text()
+        raw_text = ProjectTextIOUtil.load_raw_text(state.project)
         if not raw_text:
             raw_text = "\n".join(
                 group.as_flattened_phrase().text for group in state.project.phrase_groups
@@ -290,7 +293,7 @@ class ConcatUtil:
             raw_text=raw_text, 
             bookmark_indices=bookmark_indices,
             has_break_audio=state.project.use_break_sound_effect,
-            project_snapshot=state.project.to_snapshot_dict(),
+            project_snapshot=ProjectSerializationUtil.to_snapshot_dict(state.project),
             sections=sections,
         )
         if DEV or state.prefs.save_debug_files:
@@ -658,7 +661,7 @@ def make_app_metadata_sections(
 ) -> list[AppMetadataSection]:
     sections: list[AppMetadataSection] = []
     book_sections = project.book.sections
-    section_ranges = project.get_section_ranges()
+    section_ranges = ProjectBookUtil.get_section_ranges(project)
 
     if len(book_sections) != len(section_ranges):
         return sections

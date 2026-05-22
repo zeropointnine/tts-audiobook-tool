@@ -7,6 +7,7 @@ from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -94,16 +95,16 @@ class VoiceMenuShared:
 
     @staticmethod
     def make_resolved_voice_label(state: State) -> str:
-        if Tts.get_type().value.requires_voice and not state.project.has_voice:
+        if Tts.get_type().value.requires_voice and not ProjectVoiceUtil.has_voice(state.project):
             currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
-        elif not state.project.has_voice:
+        elif not ProjectVoiceUtil.has_voice(state.project):
             if not should_show_menu_status_details(state):
                 return "Select voice clone sample"
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
             if not should_show_menu_status_details(state):
                 return "Select voice clone sample"
-            currently = make_currently_string(state.project.voice_label)
+            currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
         return f"Select voice clone sample {currently}"
 
     @staticmethod
@@ -200,7 +201,14 @@ class VoiceMenuShared:
                 force_enter_prompt = True
 
         file_stem = Path(path).stem
-        err = state.project.set_voice_and_save(sound, file_stem, transcript, tts_type, is_secondary=is_secondary)
+        err = ProjectVoiceUtil.set_voice_and_save(
+            state.project,
+            sound,
+            file_stem,
+            transcript,
+            tts_type,
+            is_secondary=is_secondary,
+        )
         if err:
             ask.ask_error(err)
             return
@@ -253,7 +261,7 @@ class VoiceMenuShared:
 
         def on_clear_voice(_: State, item: MenuItem) -> None:
             info_item: TtsModelInfos = item.data
-            state.project.clear_voice_and_save(info_item, is_secondary=False)
+            ProjectVoiceUtil.clear_voice_and_save(state.project, info_item, is_secondary=False)
             if callback:
                 callback()
             print_feedback("Cleared")

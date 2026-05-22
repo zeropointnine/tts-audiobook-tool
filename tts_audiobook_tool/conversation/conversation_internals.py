@@ -38,6 +38,7 @@ from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
 from tts_audiobook_tool.system_support.terminal import get_terminal_width
 from tts_audiobook_tool.tts import Tts
@@ -245,17 +246,24 @@ class PromptBuilder:
         self.console = console
         self.ctrl_c_requested = ctrl_c_requested
         self.stt_immediate = stt_immediate
-        self.chunk_queue: queue.Queue[str] = queue.Queue()
+        self.chunk_queue: queue.Queue[tuple[str, np.ndarray | None]] = queue.Queue()
         self.prompt_chunks: list[str] = []
+        self.prompt_chunk_audios: list[np.ndarray | None] = []
         self.selected_idx: int | None = None
         self.mic_paused = False
+        self.finalized_mic_audio: np.ndarray | None = None
 
-    def on_transcription(self, segments: list[Segment]) -> None:
+    def on_transcription(self, segments: list[Segment], audio: np.ndarray | None = None) -> None:
         if self.mic_paused:
             return
         text = " ".join(s.text.strip() for s in segments).strip()
         if text:
-            self.chunk_queue.put(text)
+            self.chunk_queue.put((text, np.copy(audio) if audio is not None else None))
+
+    def take_finalized_mic_audio(self) -> np.ndarray | None:
+        audio = self.finalized_mic_audio
+        self.finalized_mic_audio = None
+        return audio
 
     def resume(self) -> None:
         self.mic_paused = False
@@ -274,8 +282,9 @@ class PromptBuilder:
 
             updated = False
             while not self.chunk_queue.empty():
-                chunk = self.chunk_queue.get_nowait()
+                chunk, audio = self.chunk_queue.get_nowait()
                 self.prompt_chunks.append(chunk)
+                self.prompt_chunk_audios.append(audio)
                 self.selected_idx = len(self.prompt_chunks) - 1
                 updated = True
 
@@ -307,12 +316,14 @@ class PromptBuilder:
             elif key in (KEY_DEL, KEY_DEL2, KEY_FWDDEL):
                 if self.selected_idx is not None and self.prompt_chunks:
                     self.prompt_chunks.pop(self.selected_idx)
+                    self.prompt_chunk_audios.pop(self.selected_idx)
                     if not self.prompt_chunks:
                         self.selected_idx = None
                     else:
                         self.selected_idx = min(self.selected_idx, len(self.prompt_chunks) - 1)
                 elif self.prompt_chunks:
                     self.prompt_chunks.pop()
+                    self.prompt_chunk_audios.pop()
             elif key == KEY_ENTER and self.prompt_chunks:
                 assembled = " ".join(self.prompt_chunks)
                 self.commit_finalized_prompt(assembled)
@@ -321,9 +332,16 @@ class PromptBuilder:
             self.render()
 
     def commit_finalized_prompt(self, assembled: str) -> None:
+        audio_chunks = [audio for audio in self.prompt_chunk_audios if audio is not None and audio.size > 0]
+        if audio_chunks:
+            finalized_audio = np.concatenate(audio_chunks)
+            self.finalized_mic_audio = SoundUtil.normalize(finalized_audio)
+        else:
+            self.finalized_mic_audio = None
         self.ui.println(f"> {COL_DIM}{assembled}{Ansi.RESET}")
         self.ui.println()
         self.prompt_chunks.clear()
+        self.prompt_chunk_audios.clear()
         self.selected_idx = None
         self.mic_paused = True
         while not self.chunk_queue.empty():
@@ -537,7 +555,7 @@ class ResponseSession:
         self,
         ui: Ui,
         llm: LlmSession,
-        project: Project,
+        state: State,
         chunking_config: ChunkingConfig,
         stt_variant: SttVariant,
         stt_config: SttConfig,
@@ -549,7 +567,8 @@ class ResponseSession:
     ) -> None:
         self.ui = ui
         self.llm = llm
-        self.project = project
+        self.prefs = state.prefs
+        self.project = state.project
         self.chunking_config = chunking_config
         self.stt_variant = stt_variant
         self.stt_config = stt_config
@@ -558,8 +577,10 @@ class ResponseSession:
         self.ctrl_c_requested = ctrl_c_requested
         self.phrase_stt_enabled = phrase_stt_enabled
         self.sound_stream: SoundDeviceStream = sound_stream
+        self.user_input_sound: Sound | None = None
 
-    def run(self, assembled: str) -> None:
+    def run(self, assembled: str, user_input_sound: Sound | None = None) -> None:
+        self.user_input_sound = user_input_sound
         self.tts_q: queue.Queue[tuple[str, Reason] | None] = queue.Queue()
         self.tts_buffer = ""
         self.render_buffer = ResponseSession.RESPONSE_PLACEHOLDER
@@ -919,7 +940,7 @@ class ResponseSession:
                 self.llm.history.pop()
 
     def save_chat_output_if_needed(self) -> None:
-        if not self.project.chat_save or not self.project.dir_path or not self.saved_turn_sounds:
+        if not self.prefs.chat_save or not self.project.dir_path or not self.saved_turn_sounds:
             return
 
         dir_path = os.path.join(self.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
@@ -942,6 +963,24 @@ class ResponseSession:
         voice = Tts.get_class().get_voice_tag(self.project)
         text = " "+ app_text.sanitize_for_filename(self.render_response_text()[:50])
         return f"[{timestamp}] [chat] [{model}] [{voice}]{text}.flac"
+
+    def save_chat_mic_input_if_needed(self, assembled: str) -> None:
+        if not self.prefs.chat_save_mic or not self.project.dir_path or self.user_input_sound is None:
+            return
+
+        dir_path = os.path.join(self.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
+        os.makedirs(dir_path, exist_ok=True)
+
+        file_path = os.path.join(dir_path, self.make_chat_mic_file_name(assembled))
+        err = SoundFileUtil.save_flac(self.user_input_sound, file_path)
+        if err:
+            self.ui.println(f"[Save error: {err}]")
+            return
+
+    def make_chat_mic_file_name(self, assembled: str) -> str:
+        timestamp = SoundSegmentUtil.make_timestamp_string()
+        text = " " + app_text.sanitize_for_filename(assembled[:50])
+        return f"[{timestamp}] [chat] [mic]{text}.flac"
 
     def render_response_text(self) -> str:
         parts: list[str] = []

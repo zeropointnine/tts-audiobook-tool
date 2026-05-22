@@ -38,7 +38,7 @@ class RangeStringUtil:
         Returns a string of one-indexed values in this format: "1, 3-5, 7-10". Or just "all".
         """
         if not zero_indexed_ints:
-            return "none"
+            return "None"
 
         ints_list = sorted(list(set(zero_indexed_ints)))
         one_indexed_parts: list[int | tuple[int, int]] = []

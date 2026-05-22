@@ -4,6 +4,7 @@ from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
@@ -22,7 +23,7 @@ class VoiceIndexTts2Menu:
 
         def voice_label(_) -> str:
             if project.indextts2_voice_file_name:
-                currently = make_currently_string(project.voice_label)
+                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(project))
             else:
                 currently = f"{COL_DIM}({COL_ERROR}required{COL_DIM})" # nb
             return f"Select voice clone sample {currently}"
@@ -50,12 +51,12 @@ class VoiceIndexTts2Menu:
             )
 
         def on_clear_emo(_: State, __: MenuItem) -> None:
-            project.clear_voice_and_save(TtsModelInfos.INDEXTTS2, is_secondary=True)
+            ProjectVoiceUtil.clear_voice_and_save(project, TtsModelInfos.INDEXTTS2, is_secondary=True)
             print_feedback("Cleared")
 
         def make_vector_label(_) -> str:
             if project.indextts2_emo_vector:
-                current = make_currently_string(project.emo_vector_to_string())
+                current = make_currently_string(ProjectVoiceUtil.emo_vector_to_string(project))
             else:
                 current = f"{COL_DIM}(optional){COL_DEFAULT}"
             return f"Emotion vector {current}"
@@ -180,4 +181,4 @@ def ask_vector(project: Project) -> None:
             return
     project.indextts2_emo_vector = value
     project.save()
-    print_feedback("Emotion vector set:", project.emo_vector_to_string())
+    print_feedback("Emotion vector set:", ProjectVoiceUtil.emo_vector_to_string(project))

@@ -9,6 +9,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -86,7 +87,7 @@ class GenerateUtil:
             index = sorted_indices[i]
             items.append((index, 0))
 
-        should_bucket = (batch_size > 1 and not state.project.is_language_cjk)
+        should_bucket = (batch_size > 1 and not ProjectVoiceUtil.is_language_cjk(state.project))
         if should_bucket:
             items = bucket_items(items, state.project.phrase_groups, batch_size)
 

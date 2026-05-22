@@ -7,7 +7,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
 
@@ -69,11 +69,11 @@ class ProjectNewMenu:
             return False
 
         if migrate_current_settings and old_project.dir_path:
-            ProjectUtil.apply_project_settings(state.project, old_project)
-            missing_paths = ProjectUtil.copy_supporting_project_files(
+            ProjectTransferUtil.apply_project_settings(state.project, old_project)
+            missing_paths = ProjectTransferUtil.copy_supporting_project_files(
                 state.project,
                 old_project.dir_path,
-                ProjectUtil.make_supporting_project_file_names(old_project)
+                ProjectTransferUtil.make_supporting_project_file_names(old_project)
             )
             state.project.save()
             state.set_existing_project(state.project.dir_path)
@@ -122,7 +122,7 @@ class ProjectNewMenu:
 
             app_meta = AppMetadata.load_from_file(abr_path)
             if app_meta is None:
-                raw_meta = ProjectUtil.load_raw_abr_metadata_string(abr_path)
+                raw_meta = ProjectTransferUtil.load_raw_abr_metadata_string(abr_path)
                 if not raw_meta:
                     printt(f"{COL_ERROR}This audio file has no ABR metadata")
                     printt()
@@ -143,16 +143,16 @@ class ProjectNewMenu:
                 print_feedback(err, is_error=True)
                 return False
 
-            snapshot_project = ProjectUtil.make_project_from_snapshot(
+            snapshot_project = ProjectTransferUtil.make_project_from_snapshot(
                 state.project.dir_path,
                 project_snapshot
             )
-            ProjectUtil.apply_project_settings(state.project, snapshot_project)
+            ProjectTransferUtil.apply_project_settings(state.project, snapshot_project)
 
-            missing_paths = ProjectUtil.copy_supporting_project_files(
+            missing_paths = ProjectTransferUtil.copy_supporting_project_files(
                 state.project,
-                ProjectUtil.get_snapshot_source_dir(project_snapshot),
-                ProjectUtil.make_supporting_project_file_names(snapshot_project)
+                ProjectTransferUtil.get_snapshot_source_dir(project_snapshot),
+                ProjectTransferUtil.make_supporting_project_file_names(snapshot_project)
             )
 
             state.project.save()

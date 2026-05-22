@@ -5,7 +5,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -33,7 +33,7 @@ class State:
         if not self.prefs.project_dir:
             self.project = Project(dir_path="")
         else:
-            result = ProjectUtil.load_using_dir_path(self.prefs.project_dir)
+            result = ProjectLoadUtil.load_using_dir_path(self.prefs.project_dir)
             if isinstance(result, str):
                 ask.ask_error(result)
                 self.prefs.project_dir = ""
@@ -124,7 +124,7 @@ class State:
 
     def set_existing_project(self, path: str) -> None:
         self.prefs.project_dir = path
-        result = ProjectUtil.load_using_dir_path(path)
+        result = ProjectLoadUtil.load_using_dir_path(path)
         if isinstance(result, str):
             ask.ask_error(result)
             self.project = Project(dir_path="")

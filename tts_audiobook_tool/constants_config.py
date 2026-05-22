@@ -13,6 +13,7 @@ PROJECT_DEFAULT_LANGUAGE = "en"
 PROJECT_DEFAULT_BREAK_EFFECT = False
 PROJECT_DEFAULT_REALTIME_SAVE = False
 PROJECT_DEFAULT_CHAT_SAVE = False
+PROJECT_DEFAULT_CHAT_SAVE_MIC = False
 PROJECT_DEFAULT_LIMIT_SILENCE_GAPS = False
 PROJECT_DEFAULT_GEN_AUTO_CONCAT = False
 PROJECT_DEFAULT_STREAMING_CHAT = True
@@ -59,4 +60,3 @@ DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT = (
     "Be conversational and brief. "
     "Respond in plain, natural language that sounds good when spoken aloud. Avoid emojis, decorative or nonverbal punctuation. Use only simple ASCII-friendly characters, prefer the regular dash `-`, and avoid em dashes, en dashes, or unusual symbols.`"
 )
-

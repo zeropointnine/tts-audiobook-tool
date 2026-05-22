@@ -1,6 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
@@ -17,14 +18,14 @@ class VoiceVibeVoiceMenu:
         project = state.project
 
         def make_select_voice_label(_: State) -> str: # custom
-            if not state.project.has_voice:
+            if not ProjectVoiceUtil.has_voice(state.project):
                 if state.project.vibevoice_lora_target:
                     col = COL_ACCENT
                 else:
                     col = COL_ERROR
                 currently = make_currently_string("none", color_code=col)
             else:
-                currently = make_currently_string(state.project.voice_label)
+                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
             return f"Select voice clone sample {currently}"
 
         def make_model_target_label(_) -> str:

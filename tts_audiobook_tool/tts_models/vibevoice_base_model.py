@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
@@ -89,7 +90,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
                 value = COL_ACCENT + "lora + voice clone"
             case (True, False):
                 prefix = "current voice clone"
-                value = COL_ACCENT + project.voice_label
+                value = COL_ACCENT + ProjectVoiceUtil.get_voice_label(project)
             case (False, True):
                 prefix = "current lora"
                 value = COL_ACCENT + ellipsize_path_for_menu(project.vibevoice_lora_target)

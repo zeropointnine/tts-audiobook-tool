@@ -4,6 +4,8 @@ from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
+from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -45,7 +47,8 @@ class TextMenu:
                 return
 
             state.project.sound_segments.delete_all()
-            state.project.set_phrase_groups_and_save(
+            ProjectTextIOUtil.set_phrase_groups_and_save(
+                state.project,
                 phrase_groups=[],
                 strategy=state.project.segmentation_strategy,
                 max_words=state.project.max_words,
@@ -248,7 +251,8 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         if err:
             ask.ask_error(err)
             return False
-        state.project.set_phrase_groups_chapters_and_save(
+        ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
+            state.project,
             phrase_groups=phrase_groups,
             section_start_indices=epub_import_result.section_start_indices,
             strategy=state.project.segmentation_strategy,
@@ -261,7 +265,8 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
     else:
         text_source_kind = "manual" if item.data == "manual" else "plain_text"
-        state.project.set_phrase_groups_and_save(
+        ProjectTextIOUtil.set_phrase_groups_and_save(
+            state.project,
             phrase_groups=phrase_groups,
             strategy=state.project.segmentation_strategy,
             max_words=state.project.max_words,
@@ -338,7 +343,7 @@ def on_print_segments(state: State, __: MenuItem) -> None:
         state,
         phrase_groups=state.project.phrase_groups,
         extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
-        segmentation_settings=state.project.get_book_segmentation_settings(),
+        segmentation_settings=ProjectBookUtil.get_book_segmentation_settings(state.project),
     )
     ask.ask_enter_to_continue()
 

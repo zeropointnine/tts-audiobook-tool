@@ -10,6 +10,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
 from tts_audiobook_tool.project_support.sound_segment_util import get_segment_stt_info_path
+from tts_audiobook_tool.system_support import terminal
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
@@ -245,13 +246,13 @@ class SegmentTranscriptUtil:
             printt()
             return
 
-        num_words = app_text.get_word_count(info.normalized_source, vocalizable_only=True)
         filename = text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
         num_word_errors = SegmentTranscriptUtil.get_word_error_count(info)
         threshold = SegmentTranscriptUtil.get_threshold(info, project.strictness)
 
         filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"
-        stroke = f"{COL_DIM}{len(text_util.strip_ansi_codes(filename_line)) * '-'}"
+        stroke_width = min( len(text_util.strip_ansi_codes(filename_line)), terminal.get_terminal_width())
+        stroke = f"{COL_DIM}{stroke_width * '-'}"
         printt(stroke)
         printt(f"{COL_DEFAULT}Line: {COL_ACCENT}{info.index_1b}, {COL_DEFAULT}word errors detected: {COL_ACCENT}{num_word_errors}, {COL_DEFAULT}word error threshold: {COL_ACCENT}{threshold}")
         printt(filename_line)

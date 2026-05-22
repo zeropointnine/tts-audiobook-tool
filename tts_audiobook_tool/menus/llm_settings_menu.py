@@ -91,7 +91,7 @@ class LlmSettingsMenu:
         )
         MenuUtil.menu(
             state,
-            "LLM configuration:",
+            "LLM settings",
             item_maker,
             subheading=subheading
         )
@@ -227,7 +227,7 @@ class LlmSettingsMenu:
 
         MenuUtil.menu(
             state,
-            "System prompt:",
+            "System prompt",
             item_maker
         )
 

@@ -10,6 +10,9 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
+from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
@@ -65,7 +68,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             "applied_max_words": 80,
         })
 
-        payload = project.to_dict()
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
 
         self.assertNotIn("applied_language_code", payload)
         self.assertNotIn("applied_strategy", payload)
@@ -78,7 +81,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             "applied_max_words": 42,
         })
 
-        settings = project.get_book_segmentation_settings()
+        settings = ProjectBookUtil.get_book_segmentation_settings(project)
 
         self.assertEqual(settings.language_code, "es")
         self.assertEqual(settings.strategy, SegmentationStrategy.MAX_LEN)
@@ -239,7 +242,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir, book=book)
-            project.sync_flat_text_from_book()
+            ProjectBookUtil.sync_flat_text_from_book(project)
             err = project.save(force_phrase_groups=True)
             self.assertEqual(err, "")
 
@@ -288,7 +291,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir, book=book, chapter_mode=SectionMarkerMode.BOOKMARKS)
-            project.sync_flat_text_from_book()
+            ProjectBookUtil.sync_flat_text_from_book(project)
 
             err = project.save(force_phrase_groups=True)
             self.assertEqual(err, "")
@@ -320,8 +323,8 @@ class TestProjectBookIntegration(unittest.TestCase):
     def test_set_phrase_groups_and_save_creates_plain_text_book(self):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
-            project.markers = [99]
-            project.set_phrase_groups_and_save(
+            ProjectTextIOUtil.set_phrase_groups_and_save(
+                project,
                 phrase_groups=[self.make_phrase_group("One.")],
                 strategy=SegmentationStrategy.SENTENCE_PLUS,
                 max_words=50,
@@ -346,8 +349,8 @@ class TestProjectBookIntegration(unittest.TestCase):
     def test_set_phrase_groups_and_save_clears_markers_for_plain_text_import(self):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
-            project.markers = [2]
-            project.set_phrase_groups_and_save(
+            ProjectTextIOUtil.set_phrase_groups_and_save(
+                project,
                 phrase_groups=[self.make_phrase_group("One."), self.make_phrase_group("Two.")],
                 strategy=SegmentationStrategy.SENTENCE_PLUS,
                 max_words=50,
@@ -370,7 +373,8 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
-            project.set_phrase_groups_chapters_and_save(
+            ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
+                project,
                 phrase_groups=phrase_groups,
                 section_start_indices=[2],
                 strategy=SegmentationStrategy.MULTI_SENTENCE,
@@ -422,7 +426,8 @@ class TestProjectBookIntegration(unittest.TestCase):
     def test_project_markers_persist_independently_of_epub_book_sections(self):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
-            project.set_phrase_groups_chapters_and_save(
+            ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
+                project,
                 phrase_groups=[
                     self.make_phrase_group("One."),
                     self.make_phrase_group("Two."),

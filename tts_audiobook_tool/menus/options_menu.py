@@ -130,7 +130,7 @@ class OptionsMenu:
             )
             return items
         
-        MenuUtil.menu(state, "Options:", item_maker, breadcrumb="Options")
+        MenuUtil.menu(state, "Options", item_maker, breadcrumb="Options")
 
     @staticmethod
     def stt_model_menu(state: State) -> None:

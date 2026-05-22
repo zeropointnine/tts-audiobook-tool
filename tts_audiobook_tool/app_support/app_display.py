@@ -1,21 +1,15 @@
+import os
+
 from tts_audiobook_tool.app_types import BookSegmentationSettings
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.menu_util import MenuUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool import text_util
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.system_support.terminal import get_terminal_width
-
-
-def print_text_groups(groups: list[PhraseGroup]) -> None:
-    s = f"Text segments ({COL_DIM}{len(groups)}{COL_DEFAULT}):"
-    MenuUtil.print_heading(None, s, non_menu=True)
-    printt()
-
-    for i, group in enumerate(groups):
-        printt(f"{make_hotkey_string(str(i + 1))} {group.presentable_text}")
-    printt()
 
 
 def print_book_sections(state: State) -> None:
@@ -24,7 +18,7 @@ def print_book_sections(state: State) -> None:
 
     project = state.project
     sections = project.book.sections
-    section_start_indices = project.get_section_start_indices()
+    section_start_indices = ProjectBookUtil.get_section_start_indices(project)
 
     if len(sections) == 0:
         printt("None")
@@ -72,7 +66,16 @@ def print_book_text_lines(
         for i, phrase_group in enumerate(phrase_groups):
             index_string = "[" + str(i + 1).rjust(index_width) + "]"
             if extant_indices is not None:
-                exists_string = "[" + ("generated" if i in extant_indices else " missing ") + "] "
+                if i in extant_indices:
+                    file_name = state.project.sound_segments.get_best_file_for(i)
+                    if file_name:
+                        file_path = os.path.join(state.project.sound_segments_path, file_name)
+                        generated_string = text_util.make_terminal_hyperlink(file_path, "generated", is_file=True)
+                    else:
+                        generated_string = "generated"
+                    exists_string = f"[{generated_string}] "
+                else:
+                    exists_string = "[ missing ] "
             else:
                 exists_string = ""
             if DEV:
@@ -83,21 +86,27 @@ def print_book_text_lines(
 
     printt()
 
+    # Print segmentation settings used
     printt(f"{COL_DIM}The text was segmented using the following settings:")
     printt(f"- Text segmenter language code: {COL_ACCENT}{segmentation_settings.language_code or 'none'}")
     if segmentation_settings.max_words_per_segment:
         printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{segmentation_settings.max_words_per_segment}")
     printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
-    if extant_indices is not None:
-        printt()
-        printt(f"Num audio segments generated: {COL_ACCENT}{len(extant_indices)} {COL_DIM}/ {COL_ACCENT}{len(phrase_groups)}")
     printt()
 
+    # Print line gen info
+    if extant_indices:
+        s = f"{COL_DIM}Lines with generated sound segments "
+        s += f"{COL_DIM}({COL_ACCENT}{len(extant_indices)} {COL_DIM}/ {COL_ACCENT}{len(phrase_groups)}{COL_DIM})\n"
+        s += COL_DEFAULT + RangeStringUtil.make_ranges_string(extant_indices, len(phrase_groups))
+        printt(s)
+        printt()
 
-def print_regen_lines(project: Project, indices: set[int]) -> None:
+
+def print_regen_lines(state: State, indices: set[int]) -> None:
     from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 
-    MenuUtil.print_heading(None, "Lines to be regenerated:", non_menu=True, dont_clear=True)
+    MenuUtil.print_heading(state, "Lines to be regenerated")
 
     if not indices:
         printt("None")
@@ -105,7 +114,7 @@ def print_regen_lines(project: Project, indices: set[int]) -> None:
         return
 
     for index in sorted(indices):
-        SegmentTranscriptUtil.print_info(index, project)
+        SegmentTranscriptUtil.print_info(index, state.project)
 
     printt()
 

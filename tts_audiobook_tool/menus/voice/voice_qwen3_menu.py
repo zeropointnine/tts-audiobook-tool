@@ -2,6 +2,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool import target_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
@@ -28,7 +29,7 @@ class VoiceQwen3Menu:
             else:
                 if not should_show_menu_status_details(state):
                     return "Select voice clone sample"
-                currently = make_currently_string(state.project.voice_label)
+                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:

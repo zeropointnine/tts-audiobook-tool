@@ -2,6 +2,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
@@ -20,7 +21,7 @@ class VoiceOmniVoiceMenu:
             if not state.project.omnivoice_voice_file_name:
                 currently = make_currently_string("none", value_prefix="", color_code=COL_DIM)
             else:
-                currently = make_currently_string(state.project.voice_label)
+                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
             return f"Select voice clone sample {currently}"
 
         def make_instruct_label(_) -> str:
@@ -50,7 +51,7 @@ class VoiceOmniVoiceMenu:
             return f"Inference steps {make_currently_string(steps, default=OmniVoiceBaseModel.DEFAULT_STEPS)}"
 
         def on_clear_voice(s: State, __: MenuItem) -> None:
-            s.project.clear_voice_and_save(TtsModelInfos.OMNIVOICE)
+            ProjectVoiceUtil.clear_voice_and_save(s.project, TtsModelInfos.OMNIVOICE)
             print_feedback("Voice clone cleared")
 
         def on_clear_instruct(s: State, __: MenuItem) -> None:

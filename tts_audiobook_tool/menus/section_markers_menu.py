@@ -27,39 +27,43 @@ class SectionMarkersMenu:
             state.project.save()
             print_feedback("Cleared section markers")
 
-        items = []
+        def make_items(_: State) -> list[MenuItem]:
 
-        items.append( 
-            MenuItem(
-                "Enter list", 
-                lambda _, __: SectionMarkersMenu.ask_section_markers(state, "section markers")
-            ) 
-        )
-        
-        items.append( 
-            MenuItem(
-                "Enter regular expression", 
-                lambda _, __: SectionMarkersMenu.ask_section_markers_regex(state)
-            ) 
-        )
-        
-        if state.project.markers:
-            items.append( MenuItem("Clear", on_clear) )
-        
-        items.append( MenuItem(make_mode_label, lambda _, __: mode_menu(state)) )
-        
-        if state.project.markers:
-            num = len(state.project.markers)
-            value = f"{num} {make_noun('item', 'items', num)}"
+            items = []
+
             items.append( 
                 MenuItem(
-                    f"Print section markers ({value})", lambda _, __: print_list(state), 
-                    superlabel=" ", superlabel_no_blank_line=True
-                ),
+                    "Enter list", 
+                    lambda _, __: SectionMarkersMenu.ask_section_markers(state, "section markers")
+                ) 
             )
+            
+            items.append( 
+                MenuItem(
+                    "Enter regular expression", 
+                    lambda _, __: SectionMarkersMenu.ask_section_markers_regex(state)
+                ) 
+            )
+            
+            if state.project.markers:
+                items.append( MenuItem("Clear", on_clear) )
+            
+            items.append( MenuItem(make_mode_label, lambda _, __: mode_menu(state)) )
+            
+            if state.project.markers:
+                num = len(state.project.markers)
+                value = f"{num} {make_noun('item', 'items', num)}"
+                items.append( 
+                    MenuItem(
+                        f"Print {COL_DIM}({value})", lambda _, __: print_section_markers(state), 
+                        superlabel=" ", superlabel_no_blank_line=True
+                    ),
+                )
+
+            return items
 
         MenuUtil.menu(
-            state, make_section_markers_label, items, subheading=SUBLABEL,
+            state, make_section_markers_label, make_items, subheading=SUBLABEL,
         )
 
     @staticmethod
@@ -163,13 +167,21 @@ def print_markers(markers: list[int], label: str) -> None:
     printt(f"Current {label}: {COL_DIM}{section_indices_string}")    
     printt()
 
-def print_list(state: State) -> None:
+def print_section_markers(state: State) -> None:
 
-    MenuUtil.print_screen_heading(state, "Print section markers")
+    MenuUtil.print_screen_heading(state, "Print")
 
-    for index in state.project.markers:
-        text = ellipsize(state.project.phrase_groups[index].presentable_text, 60)
-        s = f"Line {index+1}: {COL_DIM_ITALICS}{text}"
+    if not state.project.markers:
+        printt("None")
+        printt()
+    else:
+        for index in state.project.markers:
+            text = ellipsize(state.project.phrase_groups[index].presentable_text, 60)
+            s = f"Line {index+1}: {COL_DIM_ITALICS}{text}"
+            printt(s)
+
+        printt()
+        s = "Items: " + ", ".join( [ str(index+1) for index in state.project.markers ] )
         printt(s)
 
     if state.prefs.menu_clears_screen:

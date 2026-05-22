@@ -25,41 +25,51 @@ class ChatMenu:
             "response is generated as speech using the current TTS model settings.\n"
         )
 
-        items = [
-            MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
-            
-            MenuItem(
-                lambda _: make_menu_label(
-                    "Submit prompt immediately after transcription",
-                    state.prefs.conversation_stt_immediate,
-                    False
-                ),
-                lambda _, __: ChatMenu.conversation_stt_immediate_menu(state),
-                superlabel="Options"
-            )
-        ]
+        def make_items(_: State) -> list[MenuItem]:
 
-        if Tts.get_info().can_stream:
+            items = [
+                MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
+                
+                MenuItem(
+                    lambda _: make_menu_label(
+                        "Submit prompt immediately after transcription",
+                        state.prefs.conversation_stt_immediate,
+                        False
+                    ),
+                    lambda _, __: ChatMenu.conversation_stt_immediate_menu(state),
+                    superlabel="Options"
+                )
+            ]
+
+            if Tts.get_info().can_stream:
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("Streaming", state.project.streaming_chat, True),
+                        lambda _, __: ChatMenu.streaming_menu(state),
+                    )
+                )
+
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Streaming", state.project.streaming_chat, True),
-                    lambda _, __: ChatMenu.streaming_menu(state),
+                    lambda _: make_menu_label("Save output", state.prefs.chat_save),
+                    lambda _, __: ChatMenu.save_menu(state)
                 )
             )
 
-        items.append(
-            MenuItem(
-                lambda _: make_menu_label("Save output", state.project.chat_save),
-                lambda _, __: ChatMenu.save_menu(state)
-            )
-        )
+            if state.prefs.chat_save:
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label("Save mic input as well", state.prefs.chat_save_mic),
+                        lambda _, __: ChatMenu.save_mic_menu(state)
+                    )
+                )
 
-        # ...
+            return items
 
         MenuUtil.menu(
             state,
             f"LLM voice chat {COL_DIM}(experimental){COL_DEFAULT}",
-            items,
+            make_items,
             subheading=subheading,
             hint=HINT_LLM_CHAT,
             breadcrumb="LLM voice chat",
@@ -115,9 +125,8 @@ class ChatMenu:
     def save_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
-            state.project.chat_save = value
-            state.project.save()
-            print_feedback("Set to:", state.project.chat_save)
+            state.prefs.chat_save = value
+            print_feedback("Set to:", state.prefs.chat_save)
 
         dir_path = os.path.join(state.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
         if os.path.exists(dir_path):
@@ -131,8 +140,26 @@ class ChatMenu:
             subheading=subheading,
             labels=["True", "False"],
             values=[True, False],
-            current_value=state.project.chat_save,
+            current_value=state.prefs.chat_save,
             default_value=PROJECT_DEFAULT_CHAT_SAVE,
             on_select=on_select,
             breadcrumb="Save output",
+        )
+
+    @staticmethod
+    def save_mic_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.prefs.chat_save_mic = value
+            print_feedback("Set to:", state.prefs.chat_save_mic)
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Save mic input as well",
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.prefs.chat_save_mic,
+            default_value=PROJECT_DEFAULT_CHAT_SAVE_MIC,
+            on_select=on_select,
+            breadcrumb="Save mic input",
         )

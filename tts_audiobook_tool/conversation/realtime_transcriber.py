@@ -9,10 +9,11 @@ from typing import Callable, Iterator
 import numpy as np
 import sounddevice as sd
 
-from tts_audiobook_tool.app_types import Segment
+from tts_audiobook_tool.app_types import Segment, Sound
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.transcriber import Transcriber
 
 
 class RealtimeTranscriber:
@@ -30,7 +31,7 @@ class RealtimeTranscriber:
     def __init__(
         self,
         prefs: Prefs,
-        on_transcription: Callable[[list[Segment]], None],
+        on_transcription: Callable[[list[Segment], np.ndarray | None], None],
         language: str | None = None,
         word_timestamps: bool = True,
         silence_threshold: float = 0.01,
@@ -287,15 +288,16 @@ class RealtimeTranscriber:
 
     def _transcribe_and_callback(self, audio: np.ndarray) -> None:
         try:
+            prepared_sound = Transcriber.prepare_sound_for_whisper(Sound(audio, WHISPER_SAMPLERATE))
             with Stt.inference_lock:
                 segments, _ = Stt.get_whisper().transcribe(
-                    audio,
+                    prepared_sound.data,
                     word_timestamps=self.word_timestamps,
                     language=self.language,
                 )
                 segments_list = list(segments)
             if segments_list:
-                self.on_transcription(segments_list)
+                self.on_transcription(segments_list, np.copy(prepared_sound.data))
         except Exception as e:
             print(f"RealtimeTranscriber transcription error: {e}")
 
@@ -320,5 +322,3 @@ def block_sigint_during_stream_start() -> Iterator[None]:
         yield
     finally:
         pthread_sigmask(signal.SIG_SETMASK, old_mask)
-
-

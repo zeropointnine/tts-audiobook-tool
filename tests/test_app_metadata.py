@@ -118,7 +118,7 @@ class TestAppMetadata(unittest.TestCase):
             )
         })
 
-        with patch.object(Project, "get_section_ranges", return_value=[(0, 2), (2, 5), (5, 7)]):
+        with patch("tts_audiobook_tool.concat_util.ProjectBookUtil.get_section_ranges", return_value=[(0, 2), (2, 5), (5, 7)]):
             result = make_app_metadata_sections(
                 project=project,
                 index_start=1,
@@ -140,8 +140,7 @@ class TestAppMetadata(unittest.TestCase):
                 self.make_phrase_group("Two."),
             ])]),
         })
-
-        with patch.object(Project, "get_section_ranges", return_value=[(0, 2)]):
+        with patch("tts_audiobook_tool.concat_util.ProjectBookUtil.get_section_ranges", return_value=[(0, 2)]):
             result = make_app_metadata_sections(
                 project=project,
                 index_start=0,

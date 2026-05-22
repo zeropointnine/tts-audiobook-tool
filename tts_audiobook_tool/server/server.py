@@ -25,7 +25,7 @@ _DEMOS_DIR_RESOLVED = _DEMOS_DIR.resolve()
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp
@@ -49,7 +49,7 @@ class Server:
             printt(f"{COL_ERROR}Active project required")
             printt("Run tts-audiobook-tool and set up a new project. Then re-start the server.")
             exit(0)
-        result = ProjectUtil.load_using_dir_path(prefs.project_dir)
+        result = ProjectLoadUtil.load_using_dir_path(prefs.project_dir)
         if isinstance(result, str):
             printt(f"{COL_ERROR}Error: {result}")
             exit(0)

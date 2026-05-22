@@ -15,6 +15,7 @@ from tts_audiobook_tool import readiness
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.system_support.ansi import Ansi
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.state import State
@@ -207,10 +208,15 @@ class Conversation:
 
     def run_response_turn(self, assembled: str) -> None:
         self.util.pause()
+        user_input_sound = None
+        if self.prefs.chat_save_mic:
+            mic_audio = self.prompt_builder.take_finalized_mic_audio()
+            if mic_audio is not None and mic_audio.size > 0:
+                user_input_sound = Sound(mic_audio, WHISPER_SAMPLERATE)
         self.session = ResponseSession(
             ui=self.ui,
             llm=self.llm,
-            project=self.project,
+            state=self.state,
             chunking_config=self.chunking_config,
             stt_variant=self.prefs.stt_variant,
             stt_config=self.prefs.stt_config,
@@ -220,9 +226,12 @@ class Conversation:
             phrase_stt_enabled=self.phrase_stt_enabled,
             sound_stream=self.sound_stream,
         )
+        if user_input_sound is not None:
+            self.session.user_input_sound = user_input_sound
+            self.session.save_chat_mic_input_if_needed(assembled)
         self.in_response = True
         try:
-            self.session.run(assembled)
+            self.session.run(assembled, user_input_sound=user_input_sound)
             # Keep mic input paused briefly after playback so room/output
             # tail audio does not immediately get re-captured and
             # transcribed as the next user prompt. Flush both before and

@@ -251,6 +251,7 @@ class MenuUtil:
     def print_screen_heading(
         state: State,
         heading: StringOrMaker,
+        subheading: StringOrMaker | None = None,
         breadcrumb: StringOrMaker | None = None,
     ) -> None:
         """
@@ -266,6 +267,11 @@ class MenuUtil:
             heading_text = get_string_from(state, heading)
             breadcrumb_text = MenuUtil.make_breadcrumb_text(state)
             MenuUtil.print_heading(state, heading_text, breadcrumb_text=breadcrumb_text)
+            if subheading:
+                s = get_string_from(state, subheading)
+                if s:
+                    printt(s)
+
         finally:
             MenuUtil.menu_frames.pop()
 

@@ -12,6 +12,7 @@ from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import readiness
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -60,9 +61,7 @@ class GenerateMenu:
             return f"Regenerate segments with errors {currently}"
 
         def make_batch_size_label(state: State) -> str:
-            value = state.project.batch_size
-            if value == -1:
-                value = 1
+            value = ProjectVoiceUtil.get_batch_size(state.project)
             value_string = "disabled" if value == 1 else str(value)
             s = "Batch size "
             currently = make_currently_string(value_string)
@@ -362,7 +361,7 @@ def make_gen_auto_concat_label(state: State) -> str:
     )
 
 def ask_retries(state: State) -> None:
-    MenuUtil.print_heading(state, make_retries_label(state))
+    MenuUtil.print_screen_heading(state, make_retries_label(state))
     printt(RETRIES_DESC)
     ask.ask_number(
         state.project,
@@ -400,7 +399,7 @@ def regenerate_menu(state: State) -> None:
 
     def on_print(_: State, __: MenuItem) -> None:
         indices = state.project.sound_segments.get_failed_indices_in_generate_range()
-        app_display.print_regen_lines(state.project, indices)
+        app_display.print_regen_lines(state, indices)
         ask.ask_enter_to_continue()
 
     items = [
@@ -413,7 +412,7 @@ def regenerate_menu(state: State) -> None:
         "Regenerate segments with errors",
         items,
         subheading=make_regenerate_segments_with_errors_desc,
-        breadcrumb="Regenerate segments with errors",
+        breadcrumb="Regenerate segments",
     )
 
 def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> None:
@@ -479,7 +478,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
     did_interrupt = GenerateUtil.generate_files(
         state=state,
         indices_set=indices,
-        batch_size=state.project.batch_size,
+        batch_size=ProjectVoiceUtil.get_batch_size(state.project),
         is_regen=is_regen
     )
 

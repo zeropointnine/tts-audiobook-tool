@@ -5,6 +5,7 @@ import numpy as np
 
 from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant, Word
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
+from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.stt import Stt
 
 from tts_audiobook_tool.util import make_error_string
@@ -36,8 +37,7 @@ class Transcriber:
 
         Makes temporary resampled audio if necessary.
         """
-        if sound.sr != WHISPER_SAMPLERATE:
-            sound = Transcriber.resample_sound_for_whisper(sound)
+        sound = Transcriber.prepare_sound_for_whisper(sound)
 
         Stt.set_variant(stt_variant)
         Stt.set_config(stt_config)
@@ -61,6 +61,16 @@ class Transcriber:
         return words
 
     # ---
+
+    @staticmethod
+    def prepare_sound_for_whisper(sound: Sound) -> Sound:
+        data = np.nan_to_num(sound.data, nan=0.0, posinf=0.0, neginf=0.0)
+        data = np.clip(data, -1.0, 1.0)
+        data = SoundUtil.normalize(data)
+        prepared_sound = Sound(data, sound.sr)
+        if prepared_sound.sr != WHISPER_SAMPLERATE:
+            prepared_sound = Transcriber.resample_sound_for_whisper(prepared_sound)
+        return Sound(np.clip(prepared_sound.data, -1.0, 1.0), prepared_sound.sr)
 
     @staticmethod
     def get_words_from_segments(segments: Iterable[Segment]) -> list[Word]:
@@ -115,7 +125,6 @@ class Transcriber:
 
     @staticmethod
     def resample_sound_for_whisper(sound: Sound) -> Sound:
-        data = sound.data
         data = np.nan_to_num(sound.data, nan=0.0, posinf=0.0, neginf=0.0)
         data = np.clip(data, -1.0, 1.0)
         data = librosa.resample(data, orig_sr=sound.sr, target_sr=WHISPER_SAMPLERATE)
