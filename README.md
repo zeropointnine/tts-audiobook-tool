@@ -664,6 +664,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 # Update highlights
 
+**2026-05-25**
+
+- Added support for [**Darwin-TTS**](https://huggingface.co/FINAL-Bench/Darwin-TTS-1.7B-Cross) (use Qwen3-TTS virtual environment and select custom hf repo id: [`zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer`](https://huggingface.co/zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer))
+
 **2026-05-15**
 
 - Added support for **EPUB** text import
@@ -678,7 +682,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2026-05-07**
 
-- Added support for **OmniVoice TTS** (thanks @GNBS711)
+- Added support for [**OmniVoice TTS**](https://github.com/k2-fsa/OmniVoice) (thanks @GNBS711)
 
 **2026-05-05/06**
 
@@ -707,7 +711,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2026-04-22**
 
-- Added support for **Pocket TTS**, lightweight model suitable for non-GPU systems.
+- Added support for [**Pocket TTS**](https://github.com/kyutai-labs/pocket-tts), lightweight model suitable for non-GPU systems.
 
 **2026-04-13**
 
@@ -719,7 +723,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2026-04-07**
 
-- Added support for **Fish S2-Pro**
+- Added support for [**Fish S2-Pro**](https://huggingface.co/fishaudio/s2-pro)
 
 - Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments. 
 
@@ -727,7 +731,7 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 **2025-01-26**
 
-- Added support for **Qwen3-TTS** (Base, CustomVoice, and VoiceDesign models)
+- Added support for [**Qwen3-TTS**](https://github.com/QwenLM/Qwen3-TTS) (Base, CustomVoice, and VoiceDesign models)
 
 **2025-01-23**
 

@@ -10,7 +10,7 @@ and application behavior rather than acting as lightweight shared structures.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import cache
 import platform
@@ -402,12 +402,20 @@ class Book:
     text_source_kind: str = ""
     audio_source_kind: str = ""
     segmentation_settings: BookSegmentationSettings = BookSegmentationSettings()
+    flat_phrase_groups: list[PhraseGroup] = field(init=False, repr=False)
 
-    def phrase_groups(self) -> list[PhraseGroup]:
+    def __post_init__(self) -> None:
+        self.rebuild_flat_phrase_groups()
+
+    def rebuild_flat_phrase_groups(self) -> None:
         result: list[PhraseGroup] = []
         for section in self.sections:
             result.extend(section.phrase_groups)
-        return result
+        self.flat_phrase_groups = result
+
+    @property
+    def phrase_groups(self) -> list[PhraseGroup]:
+        return self.flat_phrase_groups
 
     def section_start_indices(self) -> list[int]:
         result: list[int] = []

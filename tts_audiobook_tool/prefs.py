@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 
-from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -84,6 +83,8 @@ class Prefs(Saveable):
             If any pref value is missing or invalid and therefore gets set to default value, 
             saves updated prefs file.
         """
+        from tts_audiobook_tool.app_support import hints
+        
         if not os.path.exists(Prefs.get_file_path()):
             return Prefs.new_and_save()
 

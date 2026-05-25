@@ -11,6 +11,7 @@ import sounddevice as sd
 
 from tts_audiobook_tool.app_types import Segment, Sound
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.transcriber import Transcriber
@@ -39,7 +40,7 @@ class RealtimeTranscriber:
         max_chunk_duration_s: float = 8.0,
         min_chunk_duration_s: float = 1.5,
         noise_window_s: float = 6.0,
-        speech_start_noise_ratio: float = 1.5,
+        speech_start_noise_ratio: float = 1.25,
         silence_noise_ratio: float = 1.4,
         peak_silence_ratio: float = 0.6,
         pre_speech_pad_s: float = 0.5,
@@ -204,12 +205,13 @@ class RealtimeTranscriber:
             noise_floor = recent_noise_floor()
 
             # Confirm that the buffer actually contains speech rather than a
-            # steady elevated noise floor.  The absolute threshold preserves the
-            # previous quiet-room sensitivity; the relative threshold adapts when
-            # the mic/background level changes.
+            # steady elevated noise floor. Keep this start gate somewhat more
+            # permissive than the stop gate because short conversational
+            # utterances often have a soft onset, and a conservative adaptive
+            # ratio can miss them entirely.
             has_noise_history = len(recent_rms) >= min_noise_blocks
             speech_start_threshold = max(
-                self.silence_threshold if has_noise_history else self.silence_threshold * 2.0,
+                self.silence_threshold if has_noise_history else self.silence_threshold * 1.25,
                 noise_floor * self.speech_start_noise_ratio,
             )
             if not speech_detected and rms >= speech_start_threshold:
@@ -247,7 +249,7 @@ class RealtimeTranscriber:
                 now = time.perf_counter()
                 if now - last_debug_at >= self.debug_vad_interval_s or should_dispatch:
                     last_debug_at = now
-                    print(
+                    L.i(
                         "[VAD] "
                         f"rms={rms:.5f} "
                         f"floor={noise_floor:.5f} "
@@ -258,8 +260,7 @@ class RealtimeTranscriber:
                         f"buffer={len(buffer) / WHISPER_SAMPLERATE:.2f}s "
                         f"history={len(recent_rms)}/{noise_window_blocks} "
                         f"speech={speech_detected} "
-                        f"dispatch={should_dispatch}",
-                        flush=True,
+                        f"dispatch={should_dispatch}"
                     )
 
             if should_dispatch and len(buffer) > 0:

@@ -216,9 +216,9 @@ def target_submenu(state: State) -> None:
 
 def ask_target(project: Project) -> None:
 
-    model_name = Tts.get_type().value.ui["short_name"],
+    model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
-    prompt += f"\n{COL_DIM}Eg, \"Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice\" or \"/path/to/checkpoint\""
+    prompt += f"\n{COL_DIM}Eg, \"zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer\" or \"/path/to/checkpoint\""
 
     VoiceMenuShared.ask_target(
         project=project,
@@ -260,6 +260,7 @@ def apply_model_and_validate(project: Project, target: str) -> None:
         
         project.save()
         print_feedback("Model set:", target)
+        ask.ask_enter_to_continue()
 
     except (OSError, Exception) as e:
         printt()

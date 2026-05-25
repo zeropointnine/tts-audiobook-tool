@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness
+from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
@@ -59,6 +59,25 @@ class Project(BaseModel):
         return self._sound_segments
 
     @property
+    def phrase_groups(self) -> list[PhraseGroup]:
+        return self.book.phrase_groups
+
+    @phrase_groups.setter
+    def phrase_groups(self, value: list[PhraseGroup]) -> None:
+        settings = self.book.segmentation_settings if self.book.sections else BookSegmentationSettings(
+            language_code=self.applied_language_code,
+            max_words_per_segment=self.applied_max_words,
+            strategy=self.applied_strategy or BookSegmentationSettings().strategy,
+        )
+        self.book = Book(
+            sections=[BookSection(phrase_groups=value)],
+            title=self.book.title,
+            text_source_kind=self.book.text_source_kind or "legacy_flat",
+            audio_source_kind=self.book.audio_source_kind or "unknown",
+            segmentation_settings=settings,
+        )
+
+    @property
     def on_stream_end(self) -> StreamEndCallback | None:
         return self._on_stream_end
 
@@ -96,8 +115,6 @@ class Project(BaseModel):
     language_code: str = PROJECT_DEFAULT_LANGUAGE
 
     book: Book = Field(default_factory=lambda: Book(sections=[]))
-    phrase_groups: list[PhraseGroup] = Field(default_factory=list)
-
     segmentation_strategy: SegmentationStrategy = PROJECT_DEFAULT_SEGMENTATION_STRATEGY
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
     word_substitutions: dict[str, str] = Field(default_factory=dict)
@@ -232,7 +249,7 @@ class Project(BaseModel):
 
     def __setattr__(self, name: str, value) -> None:
         super().__setattr__(name, value)
-        if name in ('book', 'phrase_groups') and not name.startswith('_'):
+        if name == 'book' and not name.startswith('_'):
             self._phrase_groups_dirty = True
         if name != '_autosave' and getattr(self, '_autosave', False):
             self.save()

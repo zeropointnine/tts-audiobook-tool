@@ -170,7 +170,7 @@ class ProjectSerializationUtil:
         if 'markers' in d:
             phrase_groups = d.get('phrase_groups', [])
             if not phrase_groups and isinstance(d.get('book'), Book):
-                phrase_groups = d['book'].phrase_groups()
+                phrase_groups = d['book'].phrase_groups
             lst = d['markers']
             if isinstance(lst, list):
                 is_valid = all(
@@ -190,7 +190,7 @@ class ProjectSerializationUtil:
         )
         book = d.get('book')
         if isinstance(book, Book):
-            ProjectBookUtil.sync_parse_dict_flat_text_from_book(d)
+            ProjectBookUtil.sync_parse_dict_legacy_segmentation_from_book(d)
         elif d.get('phrase_groups'):
             d['book'] = Book(
                 sections=[BookSection(phrase_groups=d.get('phrase_groups', []))],

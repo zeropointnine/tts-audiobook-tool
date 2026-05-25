@@ -1,28 +1,84 @@
 #!/usr/bin/env python3
 
 """
-Manual test: real-time mic transcription via RealtimeTranscriber.
+Manual testbed for conversation-style real-time mic transcription.
+
+Designed to mirror the conversation feature's use of
+[`RealtimeTranscriber`](tts_audiobook_tool/conversation/realtime_transcriber.py:19)
+more closely than a bare transcription demo, especially for VAD tuning.
 """
 
+import argparse
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import numpy as np
 import sounddevice as sd
-from faster_whisper.transcribe import Segment
 
+from tts_audiobook_tool.app_types import Segment
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
-from tts_audiobook_tool.prefs import Prefs
+from tts_audiobook_tool.constants_config import CHAT_SILENCE_THRESHOLD_CHUNKED, CHAT_SILENCE_THRESHOLD_IMMEDIATE
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.conversation.realtime_transcriber import RealtimeTranscriber
 
-DEBUG_VAD = True
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Manual VAD/STT testbed aligned with conversation-mode mic capture."
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("immediate", "chunked"),
+        default="immediate",
+        help="Mirror the conversation feature's immediate or chunked silence timeout.",
+    )
+    parser.add_argument(
+        "--debug-vad",
+        action="store_true",
+        help="Enable per-interval VAD diagnostics via [`L.i()`](tts_audiobook_tool/l.py:34).",
+    )
+    return parser.parse_args()
+
+
+def make_silence_duration_s(mode: str) -> float:
+    if mode == "immediate":
+        return CHAT_SILENCE_THRESHOLD_IMMEDIATE
+    return CHAT_SILENCE_THRESHOLD_CHUNKED
+
+
+def print_effective_settings(mode: str, util: RealtimeTranscriber) -> None:
+    print("  Conversation-mode proxy settings")
+    print(f"  Mode                : {mode}")
+    print(f"  Silence timeout     : {util.silence_duration_s:.2f}s")
+    print(f"  Silence threshold   : {util.silence_threshold:.5f}")
+    print(f"  Max chunk duration  : {util.max_chunk_duration_s:.2f}s")
+    print(f"  Min chunk duration  : {util.min_chunk_duration_s:.2f}s")
+    print(f"  Noise window        : {util.noise_window_s:.2f}s")
+    print(f"  Start ratio         : {util.speech_start_noise_ratio:.2f}")
+    print(f"  Silence ratio       : {util.silence_noise_ratio:.2f}")
+    print(f"  Peak silence ratio  : {util.peak_silence_ratio:.2f}")
+    print(f"  Pre-speech pad      : {util.pre_speech_pad_s:.2f}s")
+    print(f"  Debug VAD           : {util.debug_vad}")
+    print("=" * 60)
 
 
 def main() -> None:
+    
+    args = parse_args()
+    
+    from tts_audiobook_tool.prefs import Prefs
     prefs = Prefs()
+    
+    silence_duration_s = make_silence_duration_s(args.mode)
+
+    try:
+        L.init("tts_audiobook_tool")
+    except Exception:
+        pass
 
     # ── device info ───────────────────────────────────────────────────────────
     dev = sd.query_devices(kind="input")
@@ -47,6 +103,7 @@ def main() -> None:
     total_audio_s = 0.0
     total_words = 0
     chunk_dispatch_time: float | None = None
+    chunk_samples = 0
 
     def on_chunk_dispatched(duration_s: float) -> None:
         nonlocal chunk_count, total_audio_s, chunk_dispatch_time
@@ -59,8 +116,8 @@ def main() -> None:
             f"  |  {duration_s:.2f}s audio  →  Whisper ..."
         )
 
-    def on_transcription(segments: list[Segment]) -> None:
-        nonlocal total_words, chunk_dispatch_time
+    def on_transcription(segments: list[Segment], audio: np.ndarray | None = None) -> None:
+        nonlocal total_words, chunk_dispatch_time, chunk_samples
         now = time.perf_counter()
         inference_s = (now - chunk_dispatch_time) if chunk_dispatch_time is not None else 0.0
 
@@ -68,12 +125,19 @@ def main() -> None:
         total_words += len(words)
         avg_prob = sum(w.probability for w in words) / len(words) if words else 0.0
         text = " ".join(seg.text.strip() for seg in segments)
+        chunk_samples = int(audio.size) if audio is not None else 0
+        chunk_audio_s = chunk_samples / WHISPER_SAMPLERATE if chunk_samples else 0.0
 
         print(
             f"           ↳ {inference_s:.2f}s inference"
             f"  |  {len(segments)} seg  {len(words)} words"
             + (f"  avg_prob {avg_prob:.2f}" if words else "")
         )
+        if chunk_samples:
+            print(
+                f"             prepared audio: {chunk_samples} samples"
+                f"  ({chunk_audio_s:.2f}s @ {WHISPER_SAMPLERATE} Hz)"
+            )
         print(f"           \"{text}\"")
 
         if words:
@@ -85,10 +149,13 @@ def main() -> None:
 
     util = RealtimeTranscriber(
         prefs=prefs,
-        on_transcription=on_transcription,  # type: ignore  # TODO: revisit if needed
+        on_transcription=on_transcription,
+        silence_duration_s=silence_duration_s,
         on_chunk_dispatched=on_chunk_dispatched,
-        debug_vad=DEBUG_VAD,
+        debug_vad=args.debug_vad,
     )
+
+    print_effective_settings(args.mode, util)
 
     print("\nListening ...  (Ctrl+C to stop)\n")
     util.start()

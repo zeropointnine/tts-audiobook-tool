@@ -52,8 +52,8 @@ class TestBookSerialization(unittest.TestCase):
         self.assertEqual(result.segmentation_settings.max_words_per_segment, 120)
         self.assertEqual(result.segmentation_settings.strategy, SegmentationStrategy.MULTI_SENTENCE)
         self.assertEqual([section.title for section in result.sections], ["Chapter 1", "Chapter 2"])
-        self.assertEqual([group.text for group in result.phrase_groups()], ["Opening prose.", "Next chapter.\n\n"])
-        self.assertEqual(result.phrase_groups()[1].last_reason, Reason.PARAGRAPH)
+        self.assertEqual([group.text for group in result.phrase_groups], ["Opening prose.", "Next chapter.\n\n"])
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.section_start_indices(), [0, 1])
 
     def test_phrase_groups_v1_deserializes_to_legacy_flat_book(self):
@@ -91,7 +91,7 @@ class TestBookSerialization(unittest.TestCase):
         assert isinstance(result, Book)
         self.assertEqual(result.text_source_kind, "legacy_flat")
         self.assertEqual(len(result.sections), 1)
-        self.assertEqual(result.phrase_groups()[0].text, "Bare list.")
+        self.assertEqual(result.phrase_groups[0].text, "Bare list.")
 
     def test_invalid_payload_returns_error_string(self):
         result = book_from_project_text_json_dict({"format": "book.v1"})
@@ -116,7 +116,7 @@ class TestBookSerialization(unittest.TestCase):
         self.assertIsInstance(result, Book)
         assert isinstance(result, Book)
         self.assertEqual(result.title, "File Round Trip")
-        self.assertEqual(result.phrase_groups()[0].text, "From disk.")
+        self.assertEqual(result.phrase_groups[0].text, "From disk.")
 
 
 if __name__ == "__main__":

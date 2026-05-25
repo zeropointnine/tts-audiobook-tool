@@ -49,12 +49,11 @@ class ProjectBookUtil:
         )
 
     @staticmethod
-    def sync_parse_dict_flat_text_from_book(d: dict) -> None:
+    def sync_parse_dict_legacy_segmentation_from_book(d: dict) -> None:
         book = d.get('book')
         if not isinstance(book, Book):
             return
         settings = book.segmentation_settings
-        d['phrase_groups'] = book.phrase_groups()
         d['applied_language_code'] = settings.language_code
         d['applied_max_words'] = settings.max_words_per_segment
         d['applied_strategy'] = settings.strategy
@@ -62,26 +61,9 @@ class ProjectBookUtil:
     @staticmethod
     def sync_flat_text_from_book(project: Project) -> None:
         settings = project.book.segmentation_settings
-        super(type(project), project).__setattr__('phrase_groups', project.book.phrase_groups())
         super(type(project), project).__setattr__('applied_language_code', settings.language_code)
         super(type(project), project).__setattr__('applied_max_words', settings.max_words_per_segment)
         super(type(project), project).__setattr__('applied_strategy', settings.strategy)
-
-    @staticmethod
-    def ensure_book_from_flat_text(project: Project) -> None:
-        if project.book.sections or not project.phrase_groups:
-            return
-        settings = BookSegmentationSettings(
-            language_code=project.applied_language_code,
-            max_words_per_segment=project.applied_max_words,
-            strategy=project.applied_strategy or BookSegmentationSettings().strategy,
-        )
-        super(type(project), project).__setattr__('book', Book(
-            sections=[BookSection(phrase_groups=project.phrase_groups)],
-            segmentation_settings=settings,
-            text_source_kind="legacy_flat",
-            audio_source_kind="unknown",
-        ))
 
     @staticmethod
     def get_book_segmentation_settings(project: Project) -> BookSegmentationSettings:
@@ -95,7 +77,7 @@ class ProjectBookUtil:
 
     @staticmethod
     def get_flat_phrase_groups(project: Project) -> list[PhraseGroup]:
-        return project.book.phrase_groups() if project.book.sections else project.phrase_groups
+        return project.book.phrase_groups
 
     @staticmethod
     def get_section_start_indices(project: Project) -> list[int]:
@@ -111,5 +93,4 @@ class ProjectBookUtil:
 
     @staticmethod
     def phrase_groups_to_dict(project: Project) -> dict:
-        ProjectBookUtil.ensure_book_from_flat_text(project)
         return book_to_project_text_json_dict(project.book)
