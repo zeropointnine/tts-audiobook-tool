@@ -93,17 +93,20 @@ class GenerateMenu:
             )
             if state.project.sound_segments.num_generated() > 0:
                 items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
-            
+
+            show_batch_item = Tts.get_type().value.can_batch
+
             # Batch size
-            if Tts.get_type().value.can_batch:
+            if show_batch_item:
                 items.append(
                     MenuItem(make_batch_size_label, lambda _, __: ask_batch_size(state), superlabel="Options")
                 )
+
             # Tolerance
             items.append(
                 MenuItem(
                     make_tolerance_label, lambda _, __: GenerateMenu.tolerance_menu(state),
-                    superlabel="Options"
+                    superlabel="Options" if not show_batch_item else ""
                 )
             )
             

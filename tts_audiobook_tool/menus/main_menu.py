@@ -70,12 +70,14 @@ class MainMenu:
             )
             items.append(
                 MenuItem(
-                    "Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z",
-                    superlabel="Tools and options"
+                    "Options", lambda _, __: OptionsMenu.menu(state), hotkey="o",
+                    superlabel="Options and tools"                    
                 )
             )
             items.append(
-                MenuItem("Options", lambda _, __: OptionsMenu.menu(state), hotkey="o")
+                MenuItem(
+                    "Tools", lambda _, __: ToolsMenu.menu(state), hotkey="z"
+                )
             )
             items.append(
                 MenuItem("Quit", on_quit, hotkey="q")

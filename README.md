@@ -50,7 +50,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
 - [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
-- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice, at high temperature)
+- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice clone sample, at high temperature)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (with added emotional guidance voice sample)
 - [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
@@ -528,7 +528,7 @@ On Windows, download a pre-compiled wheel from a trustworthy source (for example
 
 # Usage notes
 
-The app uses sane, conservative defaults -- regardless of chosen TTS model -- which should allow you to start generating your first audiobook in just a couple minutes. From there, you can explore and adjust the app's various knobs and settings to your preference.
+The app uses sane, conservative defaults, which should allow you to start generating your first audiobook in just a couple minutes. From there, you can explore and adjust the app's various knobs and settings to your preference.
 
 The app saves its state between sessions, so you can interrupt the program at any time and resume later (important due to how long generating a full-length novel can take).
 
@@ -566,15 +566,6 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Emotion alpha
 - FP16 / FP8
 - Temperature, top_p, top_k, seed
-
-**VibeVoice**
-
-- Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
-- LoRA support!
-- Batch processing support
-- Streaming support
-- Music detection/rejection
-- CFG, steps, seed
 
 **Fish S1-mini**
 
@@ -622,9 +613,18 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **Qwen3-TTS**
 
 - CustomVoice and VoiceDesign model variants
+- Support for Darwin-TTS-1.7B-Cross finetune
 - Batch processing support
-- Temperature, seed
+- Temperature, top_p, top_k, repetition_penalty, seed
 
+**VibeVoice**
+
+- Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
+- LoRA support!
+- Batch processing support
+- Streaming support
+- Music detection/rejection
+- CFG, steps, seed
 
 
 ### Inference speeds, expectations

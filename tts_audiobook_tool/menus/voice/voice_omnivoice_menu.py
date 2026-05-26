@@ -205,7 +205,7 @@ def apply_target(project: Project, target: str) -> None:
 
 
 def ask_speed(project: Project) -> None:
-    prompt = f"Enter speech speed {COL_DIM}(0.5–2.0; default 1.0; or -1 to reset){COL_DEFAULT}: "
+    prompt = f"Enter speech speed {COL_DIM}(0.5–2.0; default 1.0){COL_DEFAULT}: "
     inp = ask.ask(prompt, lower=False)
     if not inp:
         return
@@ -214,8 +214,8 @@ def ask_speed(project: Project) -> None:
     except ValueError:
         print_feedback("Invalid value", is_error=True)
         return
-    if value != -1 and not (0.5 <= value <= 2.0):
-        print_feedback("Value must be between 0.5 and 2.0 (or -1 to reset)", is_error=True)
+    if value != -1 and not (0.5 <= value <= 2.0): # -1 is app convention for float values for 'reset'
+        print_feedback("Value must be between 0.5 and 2.0", is_error=True)
         return
     project.omnivoice_speed = value
     print_feedback("Speed set:", str(value) if value != -1 else "default (1.0)")
@@ -226,7 +226,7 @@ def ask_steps(project: Project) -> None:
         f"Enter number of inference steps: {COL_DIM}"
         f"({OmniVoiceBaseModel.MIN_STEPS}–{OmniVoiceBaseModel.MAX_STEPS}; "
         f"default {OmniVoiceBaseModel.DEFAULT_STEPS}) "
-        f"\nSmaller values = faster, reduced quality"
+        f"\nLarger values = enhanced quality, slower"
     )
     printt(s)
     inp = ask.ask()

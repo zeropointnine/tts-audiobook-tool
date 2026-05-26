@@ -1,6 +1,6 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool import target_util
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
@@ -27,18 +27,17 @@ class VoiceQwen3Menu:
             if not state.project.qwen3_voice_file_name:
                 currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
             else:
-                if not should_show_menu_status_details(state):
-                    return "Select voice clone sample"
-                currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
+                value = ProjectVoiceUtil.get_voice_label(state.project)
+                value = ellipsize_path_for_menu(value)
+                currently = make_currently_string(value)
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:
             value = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
-            if target_util.is_hf_repo_id_syntax(value):
-                value = value.removeprefix("Qwen/") # simplify display text
-            else:
-                value = ellipsize_path_for_menu(value)
+            value = value.removeprefix("Qwen/") # simplify display text
+            value = ellipsize_path_for_menu(value)
             label = make_currently_string(value, default=Qwen3BaseModel.DEFAULT_REPO_ID)
+            # Append model type. Eg: " (model type: base)"
             label += f" {COL_DIM}(model type: {COL_ACCENT}{Tts.get_qwen3().model_type}{COL_DIM})"
             return f"Select Qwen3-TTS model {label}"
 

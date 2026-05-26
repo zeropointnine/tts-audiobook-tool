@@ -3,7 +3,7 @@
 #################
 
 # Qwen3-TTS dependencies
-git+https://github.com/QwenLM/Qwen3-TTS.git@1ab0dd75353392f28a0d05d9ca960c9954b13c83
+git+https://github.com/QwenLM/Qwen3-TTS.git@022e286b98fbec7e1e916cb940cdf532cd9f488e
 
 # App dependencies
 faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'

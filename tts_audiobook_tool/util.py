@@ -174,7 +174,8 @@ def ellipsize_path_for_menu(path: str) -> str:
     """ 
     App style for displaying filepath in a menu item
     """
-    return ellipsize(path, 40, from_start=True)
+    s = ellipsize(path, 40, from_start=True)
+    return s
         
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
