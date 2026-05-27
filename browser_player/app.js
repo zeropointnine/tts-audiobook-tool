@@ -68,7 +68,11 @@ class App {
         });
 
         // Widgets (view controllers for pre-existing DOM elements or groups of elements)
-        this.player = new AudioPlayer({ audioElement: this.audio, container: this.playerHolder });
+        this.player = new AudioPlayer({
+            audioElement: this.audio,
+            container: this.playerHolder,
+            onPlay: () => this.playerPlay()
+        });
         this.navigationPanel = new NavigationPanel({
             mainEl: document.getElementById("navigationPanel"),
             onSelected: (index) => this.onNavigationItemSelected(index),
@@ -386,7 +390,10 @@ class App {
     }
 
     onAudioError(e) {
-        // error = e.target.error
+        if (this.file) {
+            console.error("Local audio file media error", e.target.error);
+            this.handleLocalAudioFileUnavailable();
+        }
     }
 
     onVisibilityChange() {
@@ -408,7 +415,7 @@ class App {
 
     onNavigationItemSelected(index) {
         this.bookText.seekBySegmentIndex(index);
-        this.audio.play();
+        this.playerPlay();
         this.overlayManager.hideAll();
     }
 
@@ -426,8 +433,7 @@ class App {
             let s = "The browser has dropped the handle to the local audio file.\n\n";
             s += "This can occur when the mobile browser tab is put into the background while the audio is paused, unfortunately.\n\n";
             s += "Please load the file again to resume.";
-            alert(s);
-            window.location.reload();
+            this.handleLocalAudioFileUnavailable(s);
         } else {
             // "Reload" the audio src to resolve
             this.audio.src = this.url;
@@ -490,6 +496,10 @@ class App {
 
     async playerPlay() {
         try {
+            const fileIsReadable = await this.validateLocalFileBeforePlayback();
+            if (!fileIsReadable) {
+                return;
+            }
             await this.audio.play();
         } catch (error) {
             if (error.name == "NotAllowedError") {
@@ -503,6 +513,33 @@ class App {
                 console.error("audio.play() error - code:", error.code, "name:", error.name, "message:", error.message);
             }
         }
+    }
+
+    async validateLocalFileBeforePlayback() {
+        if (!this.file) {
+            return true;
+        }
+
+        try {
+            if (this.file.getFile) {
+                await this.file.getFile();
+            } else if (this.file.slice) {
+                await this.file.slice(0, 1).arrayBuffer();
+            } else {
+                await this.file.arrayBuffer();
+            }
+            return true;
+        } catch (error) {
+            console.error("Local audio file validation failed", error);
+            this.handleLocalAudioFileUnavailable();
+            return false;
+        }
+    }
+
+    handleLocalAudioFileUnavailable(message = "File missing or renamed") {
+        alert(message);
+        this.storageController.clearLastOpened();
+        this.reset();
     }
 
     onOverlayStart() {

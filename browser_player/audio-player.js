@@ -9,10 +9,11 @@ class AudioPlayer {
      *
      * The class requires very little "api", as it were.
      */
-    constructor({ audioElement, container }) {
+    constructor({ audioElement, container, onPlay }) {
 
         this.audio = audioElement;
         this.container = container;
+        this.onPlay = onPlay;
         this.audio.style.display = 'none'; // Hide original player
 
         this._createUi();
@@ -197,7 +198,11 @@ class AudioPlayer {
 
     _togglePlayPause() {
         if (this.audio.paused) {
-            this.audio.play();
+            if (this.onPlay) {
+                this.onPlay();
+            } else {
+                this.audio.play();
+            }
         } else {
             this.audio.pause();
         }

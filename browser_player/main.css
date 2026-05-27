@@ -197,7 +197,7 @@ html, body {
     font-family: sans-serif;
 
     color: var(--color-text-dim);
-    margin-top:18px;
+    margin-top:6px;
     margin-bottom: 12px;
 }
 @media (max-width: 600px) {
@@ -299,7 +299,7 @@ html, body {
 /* --------------------------------------- */
 
 #noSleepInfo {
-    height:36px;
+    height:24px;
 }
 [data-sleep="on"] #noSleepInfo  {
     display: none;
@@ -348,6 +348,7 @@ html, body {
 
 #currentTitle {
     display: none;
+    font-weight: bold;
     margin-bottom: 18px;
 }
 

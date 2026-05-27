@@ -640,7 +640,6 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 |                         | Macbook Pro M1       | ~70% realtime   |
 | Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
-|                         | Macbook Pro M1 (MPS) | ~15% realtime   | 
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |

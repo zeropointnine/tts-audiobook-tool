@@ -73,7 +73,7 @@ FFMPEG_ARGUMENTS_OUTPUT_FLAC = [
     "-frame_size", "4096",
     "-compression_level", "6"
 ]
-AAC_BITRATES = ["64k", "96k"]
+AAC_BITRATES = ["64k", "96k", "128k"]
 AAC_BITRATE_DEFAULT = "96k"
 
 FFMPEG_ARGUMENTS_OUTPUT_AAC_TEMPLATE = [

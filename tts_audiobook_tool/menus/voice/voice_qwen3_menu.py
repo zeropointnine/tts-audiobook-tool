@@ -1,5 +1,4 @@
 from tts_audiobook_tool import ask
-from tts_audiobook_tool import target_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil

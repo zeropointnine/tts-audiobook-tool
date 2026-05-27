@@ -10,6 +10,15 @@ def get_terminal_width(fallback: int = 80) -> int:
     return max(20, width)
 
 
+def get_terminal_height(fallback: int = 24) -> int:
+    """Returns terminal height with a safe cross-platform fallback."""
+    try:
+        height = shutil.get_terminal_size(fallback=(80, fallback)).lines
+    except Exception:
+        height = fallback
+    return max(1, height)
+
+
 def clear_input_buffer() -> None:
     """Use before input() to prevent buffered keystrokes from being consumed."""
     import sys
