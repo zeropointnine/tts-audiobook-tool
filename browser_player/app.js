@@ -37,6 +37,8 @@ class App {
 
     constructor() {
 
+        cl("isTouchDevice", Util.isTouchDevice())
+
         // DOM elements
         this.playerHolder = document.getElementById("playerHolder");
         this.audio = document.getElementById("audio");

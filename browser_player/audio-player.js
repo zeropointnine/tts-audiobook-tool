@@ -118,8 +118,13 @@ class AudioPlayer {
 
         // Seeking
         this.progressBar.addEventListener('click', this._onProgressBarClick.bind(this));
-        this._makeDraggable(this.progressBarThumb, this.progressBar, (percent) => {
-            this.audio.currentTime = this.audio.duration * percent;
+        this._makeDraggable(this.progressBarThumb, this.progressBar, (percent, isFinal, isTouchDrag) => {
+            const time = this.audio.duration * percent;
+            if (Util.isTouchDevice() && isTouchDrag && !isFinal) {
+                this._updateProgressDisplay(time);
+                return;
+            }
+            this.audio.currentTime = time;
         });
 
         // Volume
@@ -145,6 +150,10 @@ class AudioPlayer {
     _updateTime() {
         let currentTime = this.audio.currentTime;
         let duration = this.audio.duration;
+        this._updateProgressDisplay(currentTime, duration);
+    }
+
+    _updateProgressDisplay(currentTime, duration = this.audio.duration) {
         if (!(duration > 0)) {
             currentTime = 0;
             duration = 0;
@@ -227,9 +236,14 @@ class AudioPlayer {
 
     _makeDraggable(thumb, bar, callback) {
         let isDragging = false;
+        let isTouchDrag = false;
+        let lastPercent = 0;
 
         const onMouseDown = (e) => {
             isDragging = true;
+            isTouchDrag = e.type.startsWith('touch');
+            const event = e.touches ? e.touches[0] : e;
+            lastPercent = this._clientXToPercent(event.clientX, thumb, bar);
             thumb.style.transition = 'none';
             document.addEventListener('mousemove', onMouseMove);
             document.addEventListener('touchmove', onMouseMove, { passive: false });
@@ -242,12 +256,17 @@ class AudioPlayer {
             if (!isDragging) return;
             const event = e.touches ? e.touches[0] : e;
             const percent = this._clientXToPercent(event.clientX, thumb, bar);
-            callback(percent);
+            lastPercent = percent;
+            callback(percent, false, isTouchDrag);
             e.preventDefault();
         };
 
         const onMouseUp = () => {
+            if (isDragging) {
+                callback(lastPercent, true, isTouchDrag);
+            }
             isDragging = false;
+            isTouchDrag = false;
             thumb.style.transition = '';
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
@@ -281,7 +300,7 @@ class AudioPlayer {
         const thumbWidth = this.progressBarThumb.offsetWidth;
         const width = this.progressBar.offsetWidth - thumbWidth;
         const thumbLeft = percent * width;
-        this.progressBarThumb.style.left = `${thumbLeft}px`;
+        return thumbLeft;
     }
 
     _clientXToPercent(clientX, thumb, bar) {
