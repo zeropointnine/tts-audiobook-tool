@@ -288,6 +288,7 @@ class Server:
 
     def clear(self) -> dict:
         self._generation_id += 1
+        Tts.clear_continuation()
         while not self._queue.empty():
             try:
                 self._queue.get_nowait()
@@ -354,13 +355,17 @@ class Server:
                 model.clear_stream_state()
 
         if self._generation_id != generation_id:
+            Tts.clear_continuation()
             return False
         if isinstance(result, str):
             printt(f"* TTS error: {result}")
+            Tts.clear_continuation()
             return False
         if streamed_audio_sample_count <= 0:
             printt("* No streamed audio output")
+            Tts.clear_continuation()
             return False
+        Tts.clear_continuation_if_reason(phrase_group.last_reason)
         return True
 
     def generate_non_streaming_output(
@@ -378,14 +383,17 @@ class Server:
         )
         if isinstance(result, str):
             printt(f"* TTS error: {result}")
+            Tts.clear_continuation()
             return False
         sound = result[0]
 
         if self._generation_id != generation_id:
+            Tts.clear_continuation()
             return False
 
         if sound.data.size == 0:
             printt("* Model output is empty or silence")
+            Tts.clear_continuation()
             return False
 
         sound = SoundPipeline.prepare_generated_sound_for_playback(
@@ -401,6 +409,7 @@ class Server:
             )
 
         if self._generation_id != generation_id:
+            Tts.clear_continuation()
             return False
 
         start, _ = self._audio_stream.append(sound, prompt_text)
@@ -412,6 +421,7 @@ class Server:
                 started_at=started_at,
             ),
         )
+        Tts.clear_continuation_if_reason(phrase_group.last_reason)
         return True
 
     def log_tts_inference_start(self, mode: str, text: str) -> None:
@@ -444,11 +454,13 @@ class Server:
             # Prevent audio buffer from growing past buffer-max-seconds
             while self._audio_stream.get_seconds_left() > BUFFER_MAX_SECONDS:
                 if self._generation_id != generation_id:
+                    Tts.clear_continuation()
                     break
                 time.sleep(1.0)
 
             # Discard if clear() was called while we were waiting
             if self._generation_id != generation_id:
+                Tts.clear_continuation()
                 self._queue.task_done()
                 continue
 

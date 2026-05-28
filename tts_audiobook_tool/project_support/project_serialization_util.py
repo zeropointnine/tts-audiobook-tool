@@ -22,6 +22,7 @@ from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossVoiceCloneMode
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -350,6 +351,74 @@ class ProjectSerializationUtil:
             seed = -1
         d['mira_seed'] = int(seed)
 
+        value = d.get('moss_target', '')
+        if not isinstance(value, str):
+            value = ''
+            add_warning('moss_target', value)
+        d['moss_target'] = value
+        moss_delay_config = MossConfigs.DELAY.value
+        moss_local_config = MossConfigs.LOCAL.value
+
+        value = d.get('moss_delay_temperature', d.get('moss_temperature', -1))
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (moss_delay_config.temperature_min <= value <= moss_delay_config.temperature_max):
+                value = -1
+                add_warning('moss_delay_temperature', value)
+        d['moss_delay_temperature'] = value
+
+        value = d.get('moss_delay_top_p', d.get('moss_top_p', -1))
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (moss_delay_config.top_p_min <= value <= moss_delay_config.top_p_max):
+                value = -1
+                add_warning('moss_delay_top_p', value)
+        d['moss_delay_top_p'] = value
+
+        value = d.get('moss_delay_top_k', d.get('moss_top_k', -1))
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (moss_delay_config.top_k_min <= value <= moss_delay_config.top_k_max):
+                value = -1
+                add_warning('moss_delay_top_k', value)
+            value = int(value)
+        d['moss_delay_top_k'] = value
+
+        value = d.get('moss_local_temperature', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (moss_local_config.temperature_min <= value <= moss_local_config.temperature_max):
+                value = -1
+                add_warning('moss_local_temperature', value)
+        d['moss_local_temperature'] = value
+
+        value = d.get('moss_local_top_p', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (moss_local_config.top_p_min <= value <= moss_local_config.top_p_max):
+                value = -1
+                add_warning('moss_local_top_p', value)
+        d['moss_local_top_p'] = value
+
+        value = d.get('moss_local_top_k', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (moss_local_config.top_k_min <= value <= moss_local_config.top_k_max):
+                value = -1
+                add_warning('moss_local_top_k', value)
+            value = int(value)
+        d['moss_local_top_k'] = value
+
+        value = d.get('moss_batch_size', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (1 <= value <= PROJECT_BATCH_SIZE_MAX):
+                value = PROJECT_BATCH_SIZE_DEFAULT
+                add_warning('moss_batch_size', value)
+            value = int(value)
+        d['moss_batch_size'] = value
+
+        normalize_by_id('moss_mode', MossVoiceCloneMode.get_by_id, MossVoiceCloneMode.get_default(), warn=True)
+
+        seed = d.get('moss_seed', -1)
+        if not (-1 <= seed <= SEED_MAX):
+            add_warning('moss_seed', -1)
+            seed = -1
+        d['moss_seed'] = int(seed)
+
         value = d.get('qwen3_temperature', -1)
         if value != -1:
             if not isinstance(value, (float, int)) or not (Qwen3BaseModel.TEMPERATURE_MIN <= value <= Qwen3BaseModel.TEMPERATURE_MAX):
@@ -515,6 +584,19 @@ class ProjectSerializationUtil:
             "mira_repetition_penalty": project.mira_repetition_penalty,
             "mira_batch_size": project.mira_batch_size,
             "mira_seed": project.mira_seed,
+
+            "moss_voice_file_name": project.moss_voice_file_name,
+            "moss_voice_text": project.moss_voice_transcript,
+            "moss_target": project.moss_target,
+            "moss_mode": project.moss_mode.id,
+            "moss_delay_temperature": project.moss_delay_temperature,
+            "moss_delay_top_p": project.moss_delay_top_p,
+            "moss_delay_top_k": project.moss_delay_top_k,
+            "moss_local_temperature": project.moss_local_temperature,
+            "moss_local_top_p": project.moss_local_top_p,
+            "moss_local_top_k": project.moss_local_top_k,
+            "moss_batch_size": project.moss_batch_size,
+            "moss_seed": project.moss_seed,
 
             "qwen3_target": project.qwen3_target,
             "qwen3_model_type": project.qwen3_model_type,

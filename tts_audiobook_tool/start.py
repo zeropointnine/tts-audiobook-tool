@@ -8,8 +8,8 @@ Imports must be staged carefully due to dependency checks etc
 """
 
 # --------------------------------------------------------------------------------------------------
-# Must be imported as soon as possible or else HF_HUB_CACHE can result in returning a relative path
-# due to unknown import side-effect (possibly from a specific model library?)
+# Must be imported as early as possible or else HF_HUB_CACHE can result in returning a relative path
+# due to unknown import side-effect (possibly from a specific model library?, not sure)
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
 from huggingface_hub import constants # type: ignore
@@ -41,39 +41,26 @@ class Startup:
         self.server_port: int = _args.port
 
     def start(self) -> None:
-
         """
         App entrypoint:
-        - Checks readiness blockers and exits on fail
+        - Checks environment-related prereqs
         - Prints one-time info messages as needed
         - Starts the app proper
         """
-
+        
         print()
-
-        self.exit_on_missing_ffmpeg()
-
         self.init_tts_or_exit(self.is_server)
-
+        if not self.is_server:
+            self.exit_on_missing_ffmpeg_exe()
+        self.exit_on_missing_ffmpeg_libs()
         self.exit_on_chatterbox_python_version()
-
         self.exit_on_missing_packages()
-
+        
         self.show_startup_hints()
-
         self.init_logging()
-
         self.start_app_or_server()
 
     # ---
-
-    def exit_on_missing_ffmpeg(self) -> None:
-        from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
-        if not self.is_server and not FfmpegUtil.is_ffmpeg_available():
-            printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
-            printt(f"{COL_ERROR}Please install it first:")
-            printt("https://ffmpeg.org/download.html")
-            exit(1)
 
     def init_tts_or_exit(self, is_server: bool) -> None:
         """ Inits TTS else prompt to continue anyway """
@@ -104,6 +91,24 @@ class Startup:
         hotkey = ask.ask_hotkey(prompt)
         if hotkey != "y":
             exit(0)
+
+    def exit_on_missing_ffmpeg_exe(self) -> None:        
+        from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
+        if not FfmpegUtil.is_ffmpeg_available():
+            printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
+            printt(f"{COL_ERROR}Please install it first:")
+            printt("https://ffmpeg.org/download.html")
+            exit(1)
+
+    def exit_on_missing_ffmpeg_libs(self) -> None:
+        if Tts.get_type().value.requires_ffmpeg_libs:
+            from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
+            if not FfmpegUtil.are_ffmpeg_libraries_available():
+                FfmpegUtil.attempt_add_ffmpeg_dll_windows()
+
+            if not FfmpegUtil.are_ffmpeg_libraries_available():
+                printt(COL_ERROR + FfmpegUtil.SHARED_LIBS_MISSING_MESSAGE)
+                exit(1)
 
     def exit_on_chatterbox_python_version(self) -> None:
         # Chatterbox special case, Python v3.11, legacy guard
@@ -203,7 +208,7 @@ class Startup:
         app_support.init_logging()
         printt()
         if DEV:
-            printt(f"### DEV ###")
+            printt(f"{Ansi.CLEAR_SCREEN_AND_SCROLLBACK}### DEV ###")
 
     def start_app_or_server(self) -> None:
         # Start

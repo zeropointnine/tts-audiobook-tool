@@ -14,6 +14,7 @@ from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_models.moss_base_model import MossVoiceCloneMode
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
@@ -218,6 +219,19 @@ class Project(BaseModel):
     mira_repetition_penalty: float = -1
     mira_batch_size: int = 1
     mira_seed: int = -1
+
+    moss_voice_file_name: str = ""
+    moss_voice_transcript: str = Field(default="", alias="moss_voice_text")
+    moss_target: str = ""
+    moss_mode: MossVoiceCloneMode = MossVoiceCloneMode.get_default()
+    moss_delay_temperature: float = -1
+    moss_delay_top_p: float = -1
+    moss_delay_top_k: int = -1
+    moss_local_temperature: float = -1
+    moss_local_top_p: float = -1
+    moss_local_top_k: int = -1
+    moss_batch_size: int = 1
+    moss_seed: int = -1
 
     qwen3_target: str = ""
     qwen3_model_type: str = ""

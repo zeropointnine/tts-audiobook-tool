@@ -14,6 +14,7 @@ from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
 
@@ -73,6 +74,84 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertNotIn("applied_language_code", payload)
         self.assertNotIn("applied_strategy", payload)
         self.assertNotIn("applied_max_words", payload)
+
+    def test_project_to_dict_includes_moss_audio_top_p_and_top_k(self):
+        project = Project.model_validate({
+            "moss_delay_top_p": 0.72,
+            "moss_delay_top_k": 37,
+            "moss_local_top_p": 0.82,
+            "moss_local_top_k": 47,
+        })
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(payload["moss_delay_top_p"], 0.72)
+        self.assertEqual(payload["moss_delay_top_k"], 37)
+        self.assertEqual(payload["moss_local_top_p"], 0.82)
+        self.assertEqual(payload["moss_local_top_k"], 47)
+
+    def test_project_model_validate_migrates_legacy_moss_audio_top_p_and_top_k(self):
+        project = Project.model_validate({
+            "moss_top_p": 0.72,
+            "moss_top_k": 37.0,
+        })
+
+        self.assertEqual(project.moss_delay_top_p, 0.72)
+        self.assertEqual(project.moss_delay_top_k, 37)
+
+    def test_project_to_dict_includes_moss_target(self):
+        target = "OpenMOSS-Team/MOSS-TTS-Local-Transformer"
+        project = Project.model_validate({
+            "moss_target": target,
+        })
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(payload["moss_target"], target)
+
+    def test_project_model_validate_normalizes_moss_audio_top_p_and_top_k(self):
+        project = Project.model_validate({
+            "moss_delay_top_p": 0.72,
+            "moss_delay_top_k": 37.0,
+            "moss_local_top_p": 0.82,
+            "moss_local_top_k": 47.0,
+        })
+
+        self.assertEqual(project.moss_delay_top_p, 0.72)
+        self.assertEqual(project.moss_delay_top_k, 37)
+        self.assertEqual(project.moss_local_top_p, 0.82)
+        self.assertEqual(project.moss_local_top_k, 47)
+
+    def test_project_model_validate_accepts_moss_audio_top_k_minimum(self):
+        moss_delay_top_k_min = MossConfigs.DELAY.value.top_k_min
+        moss_local_top_k_min = MossConfigs.LOCAL.value.top_k_min
+        project = Project.model_validate({
+            "moss_delay_top_k": moss_delay_top_k_min,
+            "moss_local_top_k": moss_local_top_k_min,
+        })
+
+        self.assertEqual(project.moss_delay_top_k, moss_delay_top_k_min)
+        self.assertEqual(project.moss_local_top_k, moss_local_top_k_min)
+
+    def test_project_model_validate_rejects_moss_audio_top_k_below_minimum(self):
+        moss_delay_top_k_min = MossConfigs.DELAY.value.top_k_min
+        moss_local_top_k_min = MossConfigs.LOCAL.value.top_k_min
+        project = Project.model_validate({
+            "moss_delay_top_k": moss_delay_top_k_min - 1,
+            "moss_local_top_k": moss_local_top_k_min - 1,
+        })
+
+        self.assertEqual(project.moss_delay_top_k, -1)
+        self.assertEqual(project.moss_local_top_k, -1)
+
+    def test_project_model_validate_preserves_moss_audio_top_k_default_sentinel(self):
+        project = Project.model_validate({
+            "moss_delay_top_k": -1,
+            "moss_local_top_k": -1,
+        })
+
+        self.assertEqual(project.moss_delay_top_k, -1)
+        self.assertEqual(project.moss_local_top_k, -1)
 
     def test_get_book_segmentation_settings_falls_back_to_legacy_fields_without_book_sections(self):
         project = Project.model_validate({

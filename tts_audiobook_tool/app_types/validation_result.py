@@ -18,6 +18,7 @@ class ValidationResult(ABC):
     generated_start_trim_time: float | None = field(default=None, kw_only=True)
     generated_end_trim_time: float | None = field(default=None, kw_only=True)
     generated_trim_original_duration: float | None = field(default=None, kw_only=True)
+    trailing_token_noise_trim_time: float | None = field(default=None, kw_only=True)
 
     @property
     @abstractmethod
@@ -59,10 +60,17 @@ class ValidationResult(ABC):
             return ""
         return s
 
+    def get_trailing_token_noise_trim_ui_message(self) -> str:
+        trim_time = self.trailing_token_noise_trim_time
+        if not trim_time:
+            return ""
+        return f"{COL_DEFAULT}Trimmed trailing token noise: {COL_DIM}{trim_time:.2f}s"
+
     def get_ui_message_with_post_processing(self) -> str:
         message = self.get_ui_message()
         extras = [
             self.get_generated_trim_ui_message(),
+            self.get_trailing_token_noise_trim_ui_message(),
             self.get_intra_sample_silence_ui_message(),
         ]
         extras = [item for item in extras if item]

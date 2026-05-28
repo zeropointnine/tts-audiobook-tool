@@ -17,6 +17,7 @@ from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
@@ -47,7 +48,7 @@ class GenerateUtil:
         Prints feedback at end of each item, and summary at end of loop.
 
         :param batch_size:
-            When set to 1, batch mode is either explicitly or effectively disabled
+            When set to 1, batch mode is effectively disabled.
 
         Returns:
             True if ended because interrupted.
@@ -155,6 +156,7 @@ class GenerateUtil:
                 printt()
                 first_oom = next(r for r in results if isinstance(r, str) and is_oom_error_message(r))
                 print_gen_oom_message(first_oom)
+                Tts.clear_continuation()
                 did_interrupt = True
                 break
 
@@ -163,22 +165,29 @@ class GenerateUtil:
 
             for i, result in enumerate(results):
 
+                if isinstance(result, str):
+                    error_string = result
+                    validation_result = None
+                else:
+                    error_string = ""
+                    validation_result = result
+
                 index = indices[i]
                 phrase_group = project.phrase_groups[index]
                 stt_info: SegmentTranscriptData | None = None
-                show_stt_visualization = False
+                should_show_viz = False
                 message_lines = []
 
                 retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
-                text_string = f"{COL_DEFAULT}{Ansi.ITALICS}{project.phrase_groups[index].presentable_text}{Ansi.RESET}"
                 item_line = f"{COL_ACCENT}Line {index + 1}{retry_string}:" # {COL_DEFAULT}{text_string}"
                 message_lines.append(item_line)
                 
                 new_retry_count = retry_counts[i] + 1
 
-                if isinstance(result, str):
+
+                if error_string:
                     # Model error
-                    val_line = f"{COL_ERROR}Error: {result}"
+                    val_line = f"{COL_ERROR}Error: {error_string}"
                     if new_retry_count > max_retries:
                         num_errored += 1
                         val_line += f"; {COL_ERROR}max retries reached"
@@ -187,9 +196,7 @@ class GenerateUtil:
                         val_line += f"; {COL_DEFAULT}will retry"
                     message_lines.append(val_line)
                 
-                else:
-                    # Process validation result
-                    validation_result = result
+                elif validation_result:
 
                     val_line = f"{validation_result.get_ui_message_with_post_processing()}"
 
@@ -211,6 +218,7 @@ class GenerateUtil:
 
                     # Failed or not
                     if validation_result.is_fail:
+                        Tts.clear_continuation()
                         if new_retry_count > max_retries:
                             num_failed += 1
                             val_line += f"; {COL_ERROR}max retries reached, tagging as failed"
@@ -230,7 +238,7 @@ class GenerateUtil:
                             index=index,
                             validation_result=validation_result
                         )
-                        show_stt_visualization = (
+                        should_show_viz = (
                             isinstance(validation_result, MusicFailResult)
                             or (isinstance(validation_result, WordErrorResult) and validation_result.num_errors > 0)
                         )
@@ -254,12 +262,16 @@ class GenerateUtil:
 
                 printt("\n".join(message_lines))
 
-                if not isinstance(result, str) and stt_info is not None:
+                if validation_result: 
                     printt()
-                    SegmentTranscriptUtil.print_stt_details(
-                        stt_info,
-                        show_visualization=show_stt_visualization
-                    )
+                    if stt_info is not None:
+                        SegmentTranscriptUtil.print_stt_details(
+                            stt_info,
+                            should_show_diff=should_show_viz
+                        )
+                    else:
+                        # Just print source text, in a similar style
+                        printt(f"{COL_DEFAULT}Source text: {COL_DIM_ITALICS}{phrase_group.presentable_text.strip()}")
                 
                 if i < len(results) - 1:
                     printt()
@@ -277,6 +289,7 @@ class GenerateUtil:
         # Print summary, metrics
         warnings_string = ""
         if did_interrupt:
+            Tts.clear_continuation()
             warnings_string += "Interrupted. "
         warnings_string += f"Elapsed: {duration_string(time.time() - start_time)}\n"
         ok = str(num_passed)
@@ -361,7 +374,7 @@ class GenerateUtil:
                 results.append(err)
                 continue
 
-            sound, gap_trims, start_trim_time, end_trim_time, original_duration = gen_result
+            sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time = gen_result
 
             if skip_reason:
                 validation_result = SkippedResult(sound=sound, message=skip_reason)
@@ -369,6 +382,7 @@ class GenerateUtil:
                 validation_result.generated_start_trim_time = start_trim_time
                 validation_result.generated_end_trim_time = end_trim_time
                 validation_result.generated_trim_original_duration = original_duration
+                validation_result.trailing_token_noise_trim_time = token_noise_trim_time
                 results.append((validation_result))
                 continue
 
@@ -391,6 +405,7 @@ class GenerateUtil:
             validation_result.generated_start_trim_time = start_trim_time
             validation_result.generated_end_trim_time = end_trim_time
             validation_result.generated_trim_original_duration = original_duration
+            validation_result.trailing_token_noise_trim_time = token_noise_trim_time
             results.append(validation_result)
 
             if save_debug_files and isinstance(validation_result, TrimmedResult):
@@ -418,7 +433,7 @@ class GenerateUtil:
             force_random_seed: bool, 
             is_realtime: bool,
             save_debug_files: bool
-        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float] | str]:
+        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str]:
         """
         Core audio generation function.
         
@@ -449,18 +464,21 @@ class GenerateUtil:
 
         # `result` is either n generated Sounds or a single error string
         if isinstance(result, str): 
+            Tts.clear_continuation()
             return [result for _ in range(len(prompts))] # return n error strings
 
         sounds = [result] if isinstance(result, Sound) else result
         
-        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float] | str] = []
+        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str] = []
 
         for i, sound in enumerate(sounds):
 
             if sound.data.size == 0:
                 result = "Model output is empty, discarding"
+                Tts.clear_continuation()
             elif np.sum(np.isnan(sound.data)) > 0:
-                    result = "Model outputted NaN, discarding"
+                result = "Model outputted NaN, discarding"
+                Tts.clear_continuation()
             else:
                 # Save "raw" output
                 if save_debug_files:
@@ -468,6 +486,20 @@ class GenerateUtil:
 
                 # Trim silence ends and peak-normalize
                 sound, start_trim_time, end_trim_time, original_duration = SoundPipeline.apply_generate_post_processing_with_info(sound)
+                token_noise_trim_time = None
+
+                # Trim model-specific short token-like trailing artifacts.
+                # Done before STT transcription so timestamps match the final audio.
+                if sound.data.size > 0 and Tts.get_class().should_trim_trailing_token_noise(project, Tts.get_instance_if_exists()):
+                    pre_token_noise_trim_duration = sound.duration
+                    if save_debug_files:
+                        GenerateUtil.save_debug_sound(project, indices[i], "pre_token_noise_trim", sound, is_realtime=is_realtime)
+                    trimmed_sound = SoundExtraUtil.trim_trailing_token_noise(sound)
+                    if len(trimmed_sound.data) != len(sound.data):
+                        sound = trimmed_sound
+                        token_noise_trim_time = pre_token_noise_trim_duration - sound.duration
+                        if save_debug_files:
+                            GenerateUtil.save_debug_sound(project, indices[i], "post_token_noise_trim", sound, is_realtime=is_realtime)
 
                 # Limit internal silence gaps (done before STT transcription so timestamps match)
                 if sound.data.size > 0 and project.limit_silence_gaps:
@@ -483,10 +515,12 @@ class GenerateUtil:
 
                 if sound.data.size == 0:
                     result = "Model output is silence, discarding"
+                    Tts.clear_continuation()
                 else:
-                    result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration)
-            
+                    result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time)
+             
             results.append(result)
+            Tts.clear_continuation_if_reason(phrase_groups[indices[i]].last_reason)
 
         return results
 

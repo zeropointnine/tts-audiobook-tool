@@ -99,6 +99,17 @@ class TtsBaseModel(ABC):
         self.stream_chunk_callback = None
         self.stream_end_callback = None
 
+    def clear_continuation(self) -> None:
+        """
+        Clears any cached continuation context used to bridge one generation
+        call/segment into the next.
+
+        Default is a no-op. Concrete models that support rolling continuation
+        can override this to reset model-specific cached text/audio state at
+        caller-defined boundaries, such as paragraph or section breaks.
+        """
+        pass
+
     def massage_for_inference(self, text: str) -> str:
         """
         Applies text transformations from `TtsModelInfo.substitutions` (usually single character punctuation)
@@ -269,6 +280,16 @@ class TtsBaseModel(ABC):
             "voice sample",
             f"Voice clone sample file not found: {voice_file_name}"
         )
+
+    @classmethod
+    def should_trim_trailing_token_noise(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> bool:
+        """ 
+        Should run "trailing token noise" detector/trimmer after gen
+        """
+        return False
+
 
     @classmethod
     def _get_standard_voice_blocker(cls, project: Project) -> ReadinessIssue | None:

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import metadata
 from importlib import util
 import os
 from typing import Callable
 
 from tts_audiobook_tool.app_types import StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types.phrase import Reason
 
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
@@ -14,6 +16,7 @@ from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.higgs_base_model import HiggsBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
+from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
@@ -35,6 +38,12 @@ class Tts:
 
     _type: TtsModelInfos
 
+    CONTINUATION_BREAK_REASONS = {
+        Reason.PARAGRAPH,
+        Reason.SPACE_BREAK,
+        Reason.SECTION_BREAK,
+    }
+
     _oute: OuteBaseModel | None = None
     _chatterbox: ChatterboxBaseModel | None = None
     _fish: FishS1BaseModel | None = None
@@ -44,6 +53,7 @@ class Tts:
     _indextts2: IndexTts2BaseModel | None = None
     _glm: GlmBaseModel | None = None
     _mira: MiraBaseModel | None = None
+    _moss: MossBaseModel | None = None
     _qwen3: Qwen3BaseModel | None = None
     _pocket: PocketBaseModel | None = None
     _omnivoice: OmniVoiceBaseModel | None = None
@@ -70,7 +80,12 @@ class Tts:
             for model_info in TtsModelInfos:
                 exists = False
                 try:
-                    exists = util.find_spec(model_info.value.module_test) is not None
+                    module_test = model_info.value.module_test
+                    if module_test.startswith("dist:"):
+                        metadata.version(module_test.removeprefix("dist:"))
+                        exists = True
+                    else:
+                        exists = util.find_spec(module_test) is not None
                 except:
                     ...
                 if exists:
@@ -113,6 +128,7 @@ class Tts:
         model_params["vibevoice_lora_path"] = project.vibevoice_lora_target
         model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
         model_params["glm_sr"] = project.glm_sr
+        model_params["moss_target"] = project.moss_target
         model_params["qwen3_target"] = project.qwen3_target
         model_params["fish_s1_compile_enabled"] = project.fish_s1_compile_enabled
         model_params["fish_s2_compile_enabled"] = project.fish_s2_compile_enabled
@@ -136,6 +152,7 @@ class Tts:
         dirty |= new_params.get("vibevoice_lora_path", "") != old_params.get("vibevoice_lora_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
         dirty |= new_params.get("glm_sr", 0) != old_params.get("glm_sr", 0)
+        dirty |= new_params.get("moss_target", "") != old_params.get("moss_target", "")
         dirty |= new_params.get("qwen3_target", "") != old_params.get("qwen3_target", "")
         dirty |= new_params.get("fish_s1_compile_enabled", False) != old_params.get("fish_s1_compile_enabled", False)
         dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
@@ -167,6 +184,7 @@ class Tts:
             TtsModelInfos.INDEXTTS2: IndexTts2BaseModel,
             TtsModelInfos.GLM: GlmBaseModel,
             TtsModelInfos.MIRA: MiraBaseModel,
+            TtsModelInfos.MOSS: MossBaseModel,
             TtsModelInfos.QWEN3TTS: Qwen3BaseModel,
             TtsModelInfos.POCKET: PocketBaseModel,
             TtsModelInfos.OMNIVOICE: OmniVoiceBaseModel,
@@ -192,6 +210,7 @@ class Tts:
             Tts._indextts2,
             Tts._glm,
             Tts._mira,
+            Tts._moss,
             Tts._qwen3,
             Tts._pocket,
             Tts._omnivoice,
@@ -214,6 +233,7 @@ class Tts:
             TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
             TtsModelInfos.GLM: Tts.get_glm,
             TtsModelInfos.MIRA: Tts.get_mira,
+            TtsModelInfos.MOSS: Tts.get_moss,
             TtsModelInfos.QWEN3TTS: Tts.get_qwen3,
             TtsModelInfos.POCKET: Tts.get_pocket,
             TtsModelInfos.OMNIVOICE: Tts.get_omnivoice,
@@ -233,7 +253,7 @@ class Tts:
             on_stream_end: StreamEndCallback | None = None,
     ):
         """
-        Shared high-level TTS generation entrypoint for app features.
+        All app-level TTS generation goes through this function.
 
         Applies the standard project/model text-preparation pipeline to each
         prompt exactly once, then delegates to the active concrete model's own
@@ -254,6 +274,17 @@ class Tts:
         )
 
     @staticmethod
+    def clear_continuation() -> None:
+        instance = Tts.get_instance_if_exists()
+        if instance is not None:
+            instance.clear_continuation()
+
+    @staticmethod
+    def clear_continuation_if_reason(reason: Reason) -> None:
+        if reason in Tts.CONTINUATION_BREAK_REASONS:
+            Tts.clear_continuation()
+
+    @staticmethod
     def get_instance_if_exists() -> TtsBaseModel | None:
         # Returns instance only if it already exists, else none
         MAP = {
@@ -266,6 +297,7 @@ class Tts:
             TtsModelInfos.INDEXTTS2: Tts._indextts2,
             TtsModelInfos.GLM: Tts._glm,
             TtsModelInfos.MIRA: Tts._mira,
+            TtsModelInfos.MOSS: Tts._moss,
             TtsModelInfos.QWEN3TTS: Tts._qwen3,
             TtsModelInfos.POCKET: Tts._pocket,
             TtsModelInfos.OMNIVOICE: Tts._omnivoice,
@@ -417,6 +449,25 @@ class Tts:
         return Tts._mira
 
     @staticmethod
+    def get_moss() -> MossBaseModel:
+        if not Tts._moss:
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
+            target_string = target.removeprefix("OpenMOSS-Team/")
+            target_string = ellipsize_path_for_menu(target_string)
+
+            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
+            if looks_like_path and not os.path.exists(target):
+                raise ValueError(f"MOSS model path not found: '{target}'")
+
+            Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device))
+
+            from tts_audiobook_tool.tts_models.moss_model import MossModel
+            Tts._moss = MossModel(device=device, model_target=target)
+            printt()
+        return Tts._moss
+
+    @staticmethod
     def get_qwen3() -> Qwen3BaseModel:
         
         if not Tts._qwen3:
@@ -498,6 +549,7 @@ class Tts:
             Tts._indextts2 = None
             Tts._glm = None
             Tts._mira = None
+            Tts._moss = None
             Tts._qwen3 = None
             Tts._pocket = None
             Tts._omnivoice = None

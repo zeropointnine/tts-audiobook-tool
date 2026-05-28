@@ -1,26 +1,28 @@
 # tts-audiobook-tool
 
 Generative-AI audiobook creation tool focused on high-quality output which supports a growing list of text-to-speech models:
-[Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox),
-[Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech),
-[GLM-TTS](https://github.com/zai-org/GLM-TTS),
-[Higgs Audio V2](https://github.com/boson-ai/higgs-audio),
-[IndexTTS2](https://github.com/index-tts/index-tts),
-[MiraTTS](https://github.com/ysharma3501/MiraTTS),
-[OmniVoice](https://github.com/k2-fsa/OmniVoice),
-[Oute TTS](https://github.com/edwko/OuteTTS),
-[Pocket TTS](https://github.com/kyutai-labs/pocket-tts),
-[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS), and
-[VibeVoice](https://github.com/microsoft/VibeVoice).
 
-The app employs various techniques, many of them configurable, to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
+- [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
+- [Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech)
+- [GLM-TTS](https://github.com/zai-org/GLM-TTS)
+- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
+- [IndexTTS2](https://github.com/index-tts/index-tts)
+- [MiraTTS](https://github.com/ysharma3501/MiraTTS)
+- [MOSS-TTS (v1.5 9B and Local-Transformer 1.7B)](https://github.com/OpenMOSS/MOSS-TTS)
+- [OmniVoice](https://github.com/k2-fsa/OmniVoice)
+- [Oute TTS](https://github.com/edwko/OuteTTS)
+- [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
+- [VibeVoice](https://github.com/microsoft/VibeVoice)
+
+The app employs various techniques to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
 
 - Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
 - Segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling, plus EBU R128 loudness normalization
 
-The app uses a plain-text interface in the console. It also includes optional realtime modes for low-latency audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
+The app uses a plain-text interface in the console. It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
 
 ### How to create an audiobook (quick summary)
@@ -54,6 +56,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (with added emotional guidance voice sample)
 - [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
+- [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a)
 - [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a)
 - [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
@@ -93,7 +96,7 @@ A separate virtual environment must be created for each model you want to use. P
 
 ### Step 4 (Windows only)
 
-To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128). This extra step is not required when using Linux.
+To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v1/cu128). This extra step is not required when using Linux.
 
     pip uninstall -y torch torchaudio
     pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
@@ -179,7 +182,7 @@ Authenticate the model on HuggingFace:
 ## Virtual environment for Fish S2-Pro:
 
 > **ℹ️ Note!**
-> For CUDA acceleration, 24 GB VRAM is required (yes really)
+> For CUDA acceleration, 24 GB VRAM is required
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s2". For example:
 
@@ -347,6 +350,47 @@ Activate the virtual environment:
 Install dependencies:
 
     pip install -r requirements-mira.txt
+
+
+## Virtual environment for MOSS-TTS v1.5
+
+> ℹ️
+> For CUDA acceleration, 24 GB VRAM or more is required
+
+Initialize a **Python v3.12** virtual environment named `venv-moss`. For example:
+
+- Linux/Mac
+
+        python -m venv venv-moss
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-moss
+
+Activate the virtual environment:
+
+- Linux/Mac
+
+        source venv-moss/bin/activate
+
+- Windows
+
+        venv-moss\Scripts\activate.bat
+
+Update pip:
+
+        python -m pip install --upgrade pip setuptools wheel
+
+Install dependencies:
+
+    pip install -r requirements-moss.txt
+
+For CUDA on Windows, uninstall the vanilla version of torch, and install the CUDA version of torch 2.9.1:
+
+    pip uninstall -y torch torchaudio
+    pip install torch==2.9.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+
+Finally, install [Flash Attention](#installing-flash-attention) (optional but recommended).
 
 
 ## Virtual environment for OmniVoice
@@ -520,7 +564,7 @@ On Linux, enter:
 
     pip install flash-attn==2.8.3 --no-build-isolation
 
-On Windows, download a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version: 
+On Windows, download a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version and torch version: 
 
 - flash_attn-2.7.4+cu128torch2.8-cp311-cp311-win_amd64.whl
 - flash_attn-2.7.4+cu128torch2.8-cp312-cp312-win_amd64.whl
@@ -592,6 +636,13 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Batch processing support
 - Temperature, top_p, top_k, repetition_penalty, seed
 
+**MOSS-TTS**
+
+- MOSS-TTS v1.5 9B and MOSS-TTS-Local-Transformer 1.7B models
+- Batch processing support
+- Experimental rolling continuation mode
+- Temperature, top_p, top_k, seed
+
 **OmniVoice**
 
 - Voice design
@@ -644,7 +695,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
 |                         | GTX 3080 Ti, Windows | ~90% realtime   |
 |                         | Macbook Pro M1 (MPS) | ~20% realtime   |
+| MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
+| MOSS-TTS v1.5           | GTS 4090, Windows    | ~80% realtime   | batch size=2, flash attn enabled
 | OmniVoice TTS           | GTX 3080 Ti, Linux   | 800% realtime   |
+|                         | Macbook Pro M1 (MPS) | 20% realtime    |
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | CUDA enabled
 |                         | Macbook Pro M1       | 350% realtime   | 
 |                         | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
@@ -662,6 +716,10 @@ Listed below are my anecdotal TTS inference speeds. The app adopts each respecti
 
 
 # Update highlights
+
+**2026-05-28**
+
+- Added support for [**MOSS-TTS**](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5) (MOSS-TTS v1.5 9B and MOSS-TTS-Local-Transformer 1.7B)
 
 **2026-05-25**
 

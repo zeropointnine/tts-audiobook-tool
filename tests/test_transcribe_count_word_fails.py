@@ -135,7 +135,7 @@ class TestTranscribeGranular(unittest.TestCase):
         visualization = text_util.strip_ansi_codes(SegmentTranscriptUtil.make_word_error_visualization(info))
 
         self.assertIn("one", visualization)
-        self.assertIn("[x: two]", visualization)
+        self.assertIn("[-: two]", visualization)
         self.assertIn("three", visualization)
 
 

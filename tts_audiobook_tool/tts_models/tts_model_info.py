@@ -42,6 +42,9 @@ class TtsModelInfo(NamedTuple):
     # Does the model have a propensity for generating spurious music sounds
     # (ie, should the STT validator check for music)
     hallucinates_music: bool
+    # Does the model require FFmpeg shared libraries (dll/so/dylib), not just the ffmpeg executable
+    # In practice, this is usually because the model depends on TorchCodec
+    requires_ffmpeg_libs: bool
     # Forces lowercase on prompts that start out all-caps (see `un_all_caps_prompt()`)
     un_all_caps: bool
     # The requirements.txt file that should be used to install the virtual environment for the given tts model
@@ -77,6 +80,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="",
         ui = {
@@ -104,6 +108,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False, # TODO: check this
         requirements_file_name="requirements-oute.txt",
         ui = {
@@ -134,6 +139,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=True,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-chatterbox.txt",
         ui = {
@@ -163,6 +169,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
         requirements_file_name="requirements-fish-s1.txt",
         ui = {
@@ -192,6 +199,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-fish-s2.txt",
         ui = {
@@ -221,6 +229,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
         requirements_file_name="requirements-higgs.txt",
         ui = {
@@ -250,6 +259,7 @@ class TtsModelInfos(Enum):
         can_stream=True,
         semantic_trim_last=False,
         hallucinates_music=True,
+        requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-vibevoice.txt",
         ui = {
@@ -281,6 +291,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-indextts2.txt",
         ui = {
@@ -311,6 +322,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-glm.txt",
         ui = {
@@ -342,6 +354,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=True, # falls down badly with all caps phrases
         requirements_file_name="requirements-mira.txt",
         ui = {
@@ -373,6 +386,7 @@ class TtsModelInfos(Enum):
         can_stream=True,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-pocket.txt",
         ui={
@@ -385,6 +399,36 @@ class TtsModelInfos(Enum):
         },
         substitutions=[
             ("—", ", "), ("─", ", ")
+        ]
+    )
+
+    MOSS = TtsModelInfo(
+        module_test="dist:moss-tts",
+        file_tag="moss",
+        torch_devices=["cuda", "cpu"],
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_file_name_attr="moss_voice_file_name",
+        requires_voice=False,
+        voice_transcript_attr="moss_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_project_field="moss_batch_size",
+        can_stream=False,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=True,
+        un_all_caps=False,
+        requirements_file_name="requirements-moss.txt",
+        ui={
+            "proper_name": "MOSS-TTS",
+            "short_name": "MOSS",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/OpenMOSS/MOSS-TTS", "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5"]
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ")
         ]
     )
 
@@ -403,6 +447,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=True, # is only slightly more error-prone when all-caps
         requirements_file_name="requirements-qwen3tts.txt",
         ui = {
@@ -432,6 +477,7 @@ class TtsModelInfos(Enum):
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
+        requires_ffmpeg_libs=False,
         un_all_caps=True, # slightly more error-prone when all-caps
         requirements_file_name="requirements-omnivoice.txt",
         ui={

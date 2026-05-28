@@ -8,6 +8,7 @@ from .voice_vibevoice_menu import VoiceVibeVoiceMenu
 from .voice_indextts2_menu import VoiceIndexTts2Menu
 from .voice_glm_menu import VoiceGlmMenu
 from .voice_mira_menu import VoiceMiraMenu
+from .voice_moss_menu import VoiceMossMenu
 from .voice_qwen3_menu import VoiceQwen3Menu
 from .voice_pocket_menu import VoicePocketMenu
 from .voice_omnivoice_menu import VoiceOmniVoiceMenu
@@ -23,6 +24,7 @@ __all__ = [
     "VoiceIndexTts2Menu",
     "VoiceGlmMenu",
     "VoiceMiraMenu",
+    "VoiceMossMenu",
     "VoiceQwen3Menu",
     "VoicePocketMenu",
     "VoiceOmniVoiceMenu",

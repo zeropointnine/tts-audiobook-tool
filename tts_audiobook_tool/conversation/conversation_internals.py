@@ -531,9 +531,13 @@ class ConversationStreamingTts:
                 model.clear_stream_state()
 
         if isinstance(result, str):
+            Tts.clear_continuation()
             return None, None, result
         if stream_start is None or speech_end is None or speech_end <= stream_start:
+            Tts.clear_continuation()
             return None, None, "No streamed audio output"
+
+        Tts.clear_continuation_if_reason(reason)
 
         saved_sound = None
         if saved_chunks:
@@ -665,6 +669,7 @@ class ResponseSession:
                 break
             text, reason = item
             if self.interrupt_requested.is_set() or self.response_aborted.is_set():
+                Tts.clear_continuation()
                 continue
             if not text.strip():
                 with self.state_lock:
@@ -714,12 +719,14 @@ class ResponseSession:
                         )
 
                     if self.interrupt_requested.is_set() or self.response_aborted.is_set():
+                        Tts.clear_continuation()
                         with self.state_lock:
                             if self.pending_sentences and self.pending_sentences[0] == text:
                                 self.pending_sentences.pop(0)
                         continue
 
                     if err is not None:
+                        Tts.clear_continuation()
                         if not self.response_aborted.is_set():
                             self.ui.println(f"[TTS error: {err}]")
                         with self.state_lock:
@@ -746,11 +753,13 @@ class ResponseSession:
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
                     result = SoundPipeline.generate_processed_using_project(self.project, [text])
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
+                    Tts.clear_continuation()
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     continue
                 if isinstance(result, str):
+                    Tts.clear_continuation()
                     if not self.response_aborted.is_set():
                         self.ui.println(f"[TTS error: {result}]")
                     with self.state_lock:
@@ -760,12 +769,14 @@ class ResponseSession:
                     continue
                 sound = result[0]
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
+                    Tts.clear_continuation()
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     continue
                 
                 if sound.data.size == 0:
+                    Tts.clear_continuation()
                     if not self.response_aborted.is_set():
                         self.ui.println(f"[TTS error: empty/silent output]")
                     with self.state_lock:
@@ -801,14 +812,17 @@ class ResponseSession:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                         self.spoken_segments.extend(spoken_segments)
+                    Tts.clear_continuation_if_reason(reason)
                     self.render_response()
                 else:
+                    Tts.clear_continuation()
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     self.render_response()
-                    
+                     
             except Exception as e:
+                Tts.clear_continuation()
                 if not self.response_aborted.is_set():
                     self.ui.println(f"[TTS exception: {e}]")
                 with self.state_lock:
@@ -922,6 +936,7 @@ class ResponseSession:
         model = Tts.get_instance_if_exists()
         if model is not None:
             model.clear_stream_state()
+            model.clear_continuation()
         while not self.tts_q.empty():
             try:
                 self.tts_q.get_nowait()

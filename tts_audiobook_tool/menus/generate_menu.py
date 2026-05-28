@@ -147,8 +147,9 @@ class GenerateMenu:
                 label += f" {COL_DIM}(default)"
             return label
 
-        def items_maker(_: State) -> list[MenuItem]:
+        def make_items(_: State) -> list[MenuItem]:
             items = []
+            
             # Enabled
             items.append(
                 MenuItem(
@@ -175,7 +176,7 @@ class GenerateMenu:
         MenuUtil.menu(
             state=state,
             heading="Limit silence gaps",
-            items=items_maker,
+            items=make_items,
             subheading=LIMIT_SILENCE_GAPS_MENU_SUBHEADING,
             breadcrumb="Limit silence gaps",
         )
@@ -190,7 +191,7 @@ class GenerateMenu:
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Enabled",
+            heading_text="Limit silence gaps",
             labels=["True", "False"],
             values=[True, False],
             current_value=state.project.limit_silence_gaps,
@@ -240,7 +241,7 @@ class GenerateMenu:
             low_desc = "Allows more word errors. Segments pass unless notably off."
             medium_desc = "Balanced. Reasonable choice for most languages."
             high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration."
-            intolerant_desc = "Zero tolerance. Segments with even one word error are flagged for regeneration.\n      Best net accuracy; for the time and compute unconstrained only."
+            intolerant_desc = "Zero tolerance. Segments with even one word error are flagged for regeneration.\n      Best net accuracy. For the time and compute unconstrained only."
 
         MenuUtil.options_menu(
             state=state,

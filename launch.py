@@ -125,13 +125,17 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
     tests_json = json.dumps(QUALIFIED_MODELS)
 
     probe_code = (
+        "import importlib.metadata\n"
         "import importlib.util\n"
         "import json\n"
         "tests = " + tests_json + "\n"
         "def check(mod):\n"
         "    try:\n"
+        "        if mod.startswith('dist:'):\n"
+        "            importlib.metadata.version(mod.removeprefix('dist:'))\n"
+        "            return True\n"
         "        return importlib.util.find_spec(mod) is not None\n"
-        "    except ModuleNotFoundError:\n"
+        "    except Exception:\n"
         "        return False\n"
         "matched = [i for i, (mod, _) in enumerate(tests) if check(mod)]\n"
         "infos = [tests[i] for i in matched]\n"

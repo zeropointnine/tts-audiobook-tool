@@ -1,15 +1,11 @@
-# ################
-# Use Python v3.11
-# ################
+#################
+# Use Python 3.12
+#################
 
-# Most recent commit of IndexTTS2.
-# Use GitHub's commit source archive instead of a git+https requirement because
-# upstream tracks example WAVs in Git LFS and their LFS quota is often exceeded.
-# A normal pip git clone then fails during checkout/smudge before installation,
-# even though the app does not need those example files. The archive URL keeps
-# the same pinned commit while avoiding Git LFS downloads.
-indextts @ https://github.com/index-tts/index-tts/archive/db5b39bb6ad903c219b2dd33d60b0f0bdaede664.zip
-ninja
+# TTS model dependencies
+git+https://github.com/OpenMOSS/MOSS-TTS@4cf2dab88fc8711aef93089b3b75c0ae07373e47#egg=MOSS-TTS
+transformers==5.0.0
+torchcodec==0.8.1
 
 # App dependencies
 faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
@@ -17,15 +13,15 @@ ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
 mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
 git+https://github.com/zeropointnine/tts-audiobook-tool-sidon; sys_platform != 'darwin'
 
-torch==2.8.0
+torch==2.9.1
+torchaudio==2.9.1
 
 audiotsm==0.1.2
 chardet==5.2.0
 beautifulsoup4==4.12.3
 EbookLib==0.18
 ffmpeg-python==0.2.0
-hf_xet
-librosa
+librosa==0.11.0
 loguru==0.7.3
 metaphone==0.6
 mutagen==1.47.0
@@ -36,8 +32,8 @@ psutil
 pydantic
 pyloudnorm==0.1.1
 pysbd==0.3.4
-requests
 pywin32; sys_platform == 'win32'
+requests
 sounddevice==0.5.2
 soundfile==0.13.1
 watchdog==6.0.0

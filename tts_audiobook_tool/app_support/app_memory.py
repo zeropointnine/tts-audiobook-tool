@@ -11,7 +11,7 @@ else:
 
 
 def gc_ram_vram() -> None:
-    """ Trigger Python garbage collector, plus torch"""
+    """ Trigger Python garbage collector, plus torch cuda "empty_cache" """
     gc.collect()
     import torch
     if torch.cuda.is_available():

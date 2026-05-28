@@ -24,8 +24,10 @@ from tts_audiobook_tool.app_types.validation_result import ValidationResult
 
 """
 Coordinates and drives TTS playback in "real time".
-Manages buffer growth, validate-and-retry handling
-intra-segment pauses, and clean interruption/shutdown behavior.
+Manages output buffer growth, validate-and-retry handling
+intra-segment pauses, interruption/shutdown behavior.
+
+Similar to `GenerateUtil.generate_files()` but outputs to sound device instead of to files.
 
 Is blocking.
 """
@@ -116,6 +118,7 @@ def start(
             state, phrase_groups, one_second, has_runway=has_runway
         )
         if did_interrupt:
+            Tts.clear_continuation()
             break
         if not did_interrupt:
             # generate_full_flow() clears Interrupts at the end, so re-arm
@@ -272,6 +275,7 @@ def generate_full_flow(
         # Check for OOM in results and break early to avoid wasting time
         if isinstance(gen_result, str) and is_oom_error_message(gen_result):
             print_gen_oom_message(gen_result)
+            Tts.clear_continuation()
             did_interrupt = True
             break
 
@@ -280,6 +284,7 @@ def generate_full_flow(
             err = gen_result
             printt(f"{COL_ERROR}Model fail: {err}")
             printt()
+            Tts.clear_continuation()
         else:
             printt(f"Transcript validation: {gen_result.get_ui_message_with_post_processing()}")
 
@@ -287,17 +292,22 @@ def generate_full_flow(
             did_interrupt = True
 
         if did_interrupt:
+            Tts.clear_continuation()
             break
         is_pass = isinstance(gen_result, ValidationResult) and not gen_result.is_fail
+        if isinstance(gen_result, ValidationResult) and gen_result.is_fail:
+            Tts.clear_continuation()
         if is_pass:
             break
 
     Interrupts().clear()
 
     if isinstance(gen_result, str):
+        Tts.clear_continuation()
         return None, did_interrupt  # is error
     else:
         validation_result = gen_result
+        Tts.clear_continuation_if_reason(phrase_group.last_reason)
         if project.realtime_save:
             err, saved_path = GenerateUtil.save_sound_and_timing_json(
                 state, phrase_group, index, validation_result, is_real_time=True

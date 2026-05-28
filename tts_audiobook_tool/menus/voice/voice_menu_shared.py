@@ -5,7 +5,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, should_show_menu_status_details
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -54,24 +54,23 @@ class VoiceMenuShared:
             case TtsModelInfos.MIRA:
                 from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
-
+            case TtsModelInfos.MOSS:
+                from tts_audiobook_tool.menus.voice import VoiceMossMenu
+                VoiceMossMenu.menu(state)
+            case TtsModelInfos.OMNIVOICE:
+                from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
+                VoiceOmniVoiceMenu.menu(state)
+            case TtsModelInfos.POCKET:
+                from tts_audiobook_tool.menus.voice import VoicePocketMenu
+                VoicePocketMenu.menu(state)
             case TtsModelInfos.QWEN3TTS:
-
-                # Special case for Qwen: Pre-emptively instantiate model 
+                # Special case: Pre-emptively instantiate model 
                 has_instance = bool( Tts.get_instance_if_exists() )
                 if not has_instance:
                     _ = Tts.get_instance() 
                     print_feedback("Model loaded")
-
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
-
-            case TtsModelInfos.POCKET:
-                from tts_audiobook_tool.menus.voice import VoicePocketMenu
-                VoicePocketMenu.menu(state)
-            case TtsModelInfos.OMNIVOICE:
-                from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
-                VoiceOmniVoiceMenu.menu(state)
             case _:
                 ...
 
@@ -98,12 +97,8 @@ class VoiceMenuShared:
         if Tts.get_type().value.requires_voice and not ProjectVoiceUtil.has_voice(state.project):
             currently = make_currently_string("required", value_prefix="", color_code=COL_ERROR)
         elif not ProjectVoiceUtil.has_voice(state.project):
-            if not should_show_menu_status_details(state):
-                return "Select voice clone sample"
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
-            if not should_show_menu_status_details(state):
-                return "Select voice clone sample"
             currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
         return f"Select voice clone sample {currently}"
 
@@ -275,13 +270,14 @@ class VoiceMenuShared:
             attr: str,
             default_value: float,
             min_value: float,
-            max_value: float
+            max_value: float,
+            base_label: str="Temperature"
     ) -> MenuItem:
 
         return MenuUtil.make_number_item(
             state=state,
             attr=attr,
-            base_label="Temperature", 
+            base_label=base_label,
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,

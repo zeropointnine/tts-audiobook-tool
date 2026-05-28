@@ -9,6 +9,152 @@ from tts_audiobook_tool.util import *
 class SoundExtraUtil:
 
     @staticmethod
+    def trim_trailing_token_noise(
+        sound: Sound,
+        max_noise_ms: int = 65,
+        max_trailing_silence_ms: int = 10,
+        lead_in_ms: int = 120,
+        analysis_frame_ms: int = 5,
+        min_quiet_lead_in_ms: int = 25,
+        quiet_rms_ratio_to_peak: float = 0.06,
+        min_noise_rms_ratio_to_peak: float = 0.045,
+        min_rise_ratio: float = 2.0,
+        min_noise_peak_ratio_to_peak: float = 0.07,
+    ) -> Sound:
+        """
+        Trims a short, isolated burst at the very end of a sound.
+
+        Intended for codec/token-tail artifacts that appear after a quiet lead-in,
+        not for general de-clicking or semantic end trimming. 
+
+        Default argument values currently target output behavior of 
+        MOSS-TTS MOSS-TTS-Local-Transformer, specifically.
+        
+        Defaults require:
+
+        - a final or near-final high-energy run no longer than `max_noise_ms`
+        - no more than `max_trailing_silence_ms` after that run
+        - a low-energy lead-in immediately before that run
+        - an abrupt RMS rise from the quiet lead-in into the final run
+
+        All thresholds are parameters so callers can tune less conservatively if
+        needed. Returns the original Sound unchanged when any guard fails.
+        """
+
+        if sound.data.size == 0 or sound.sr <= 0:
+            return sound
+
+        max_noise_samples = int(sound.sr * max(0, max_noise_ms) / 1000)
+        max_trailing_silence_samples = int(sound.sr * max(0, max_trailing_silence_ms) / 1000)
+        lead_in_samples = int(sound.sr * max(0, lead_in_ms) / 1000)
+        frame_samples = int(sound.sr * max(1, analysis_frame_ms) / 1000)
+        min_quiet_samples = int(sound.sr * max(0, min_quiet_lead_in_ms) / 1000)
+
+        if max_noise_samples <= 0 or lead_in_samples <= 0 or frame_samples <= 0:
+            return sound
+
+        data = sound.data.astype(np.float32, copy=False)
+        mono = SoundExtraUtil._to_mono_float(data)
+        if mono.size <= max_noise_samples + min_quiet_samples:
+            return sound
+
+        peak = float(np.max(np.abs(mono)))
+        if peak <= 0:
+            return sound
+
+        quiet_rms_threshold = peak * max(0.0, quiet_rms_ratio_to_peak)
+        noise_rms_threshold = peak * max(0.0, min_noise_rms_ratio_to_peak)
+        noise_peak_threshold = peak * max(0.0, min_noise_peak_ratio_to_peak)
+
+        search_start = max(0, mono.size - max_noise_samples)
+        tail = mono[search_start:]
+        frame_rms = SoundExtraUtil._frame_rms(tail, frame_samples)
+        if frame_rms.size == 0:
+            return sound
+
+        noisy_frames = frame_rms >= noise_rms_threshold
+        noisy_frame_indices = np.where(noisy_frames)[0]
+        if noisy_frame_indices.size == 0:
+            return sound
+
+        last_noisy_frame = int(noisy_frame_indices[-1])
+        trailing_silence_samples = mono.size - min(mono.size, search_start + (last_noisy_frame + 1) * frame_samples)
+        if trailing_silence_samples > max_trailing_silence_samples:
+            return sound
+
+        run_start_frame = last_noisy_frame
+        while run_start_frame > 0 and noisy_frames[run_start_frame - 1]:
+            run_start_frame -= 1
+
+        noise_start = search_start + run_start_frame * frame_samples
+        noise_end = min(mono.size, search_start + (last_noisy_frame + 1) * frame_samples)
+        noise_duration = noise_end - noise_start
+        if noise_duration <= 0 or noise_duration > max_noise_samples:
+            return sound
+
+        noise_region = mono[noise_start:noise_end]
+        noise_rms = SoundExtraUtil._rms(noise_region)
+        noise_peak = float(np.max(np.abs(noise_region)))
+        if noise_rms < noise_rms_threshold or noise_peak < noise_peak_threshold:
+            return sound
+
+        lead_start = max(0, noise_start - lead_in_samples)
+        lead_region = mono[lead_start:noise_start]
+        if lead_region.size < min_quiet_samples:
+            return sound
+
+        quiet_frame_rms = SoundExtraUtil._frame_rms(lead_region, frame_samples)
+        if quiet_frame_rms.size == 0:
+            return sound
+
+        quiet_frames = quiet_frame_rms <= quiet_rms_threshold
+        quiet_frames_required = max(1, int(np.ceil(min_quiet_samples / frame_samples)))
+        quiet_run = 0
+        for is_quiet in quiet_frames[::-1]:
+            if not is_quiet:
+                break
+            quiet_run += 1
+        if quiet_run < quiet_frames_required:
+            return sound
+
+        quiet_lead_rms = float(np.median(quiet_frame_rms[-quiet_run:]))
+        effective_quiet_rms = max(quiet_lead_rms, peak * 1e-5)
+        if noise_rms / effective_quiet_rms < min_rise_ratio:
+            return sound
+
+        if noise_start <= 0:
+            return sound
+
+        return Sound(np.copy(sound.data[:noise_start]), sound.sr)
+
+    @staticmethod
+    def _to_mono_float(data: np.ndarray) -> np.ndarray:
+        if data.ndim == 1:
+            return data
+        if data.ndim == 2:
+            return np.mean(data, axis=1)
+        return data.reshape(-1)
+
+    @staticmethod
+    def _rms(data: np.ndarray) -> float:
+        if data.size == 0:
+            return 0.0
+        return float(np.sqrt(np.mean(np.square(data, dtype=np.float32))))
+
+    @staticmethod
+    def _frame_rms(data: np.ndarray, frame_samples: int) -> np.ndarray:
+        if data.size == 0 or frame_samples <= 0:
+            return np.array([], dtype=np.float32)
+
+        frame_count = int(np.ceil(data.size / frame_samples))
+        rms = np.empty(frame_count, dtype=np.float32)
+        for i in range(frame_count):
+            start = i * frame_samples
+            end = min(data.size, start + frame_samples)
+            rms[i] = SoundExtraUtil._rms(data[start:end])
+        return rms
+
+    @staticmethod
     def high_shelf_eq(sound: Sound, strength: float, boost_start_hz: float, q_like: float = 1.0) -> Sound:
         """
         Applies a simple high-shelf EQ style boost to improve clarity in muffled speech.
@@ -281,4 +427,3 @@ class SoundExtraUtil:
         # Save
         img.save(dest_path_png)
         print(f"Waveform visualization saved to: {dest_path_png}")
-

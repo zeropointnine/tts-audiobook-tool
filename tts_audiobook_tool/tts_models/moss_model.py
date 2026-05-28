@@ -1,0 +1,478 @@
+import os
+import random
+import tempfile
+from importlib import util as importlib_util
+
+import numpy as np
+import torch
+import soundfile as sf
+import huggingface_hub
+
+from tts_audiobook_tool import app_support, target_util
+from tts_audiobook_tool.app_support import app_memory
+from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.constants import SEED_MAX
+from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel, MossVoiceCloneMode
+from tts_audiobook_tool.util import *
+
+from transformers import AutoModel, AutoProcessor  # type: ignore
+
+
+class MossModel(MossBaseModel):
+
+    def __init__(self, device: str, model_target: str = MossConfigs.get_default_repo_id()):
+
+        self.model_target = model_target
+        self.device = device or "cpu"
+        self.dtype = self.resolve_dtype()
+        self.cached_voice_path = ""
+        self.cached_voice_stat: tuple[int, int] | None = None
+        self.cached_voice_codes: torch.Tensor | None = None
+        self.cached_continuation_text = ""
+        self.cached_continuation_audio_path = ""
+        self.cached_continuation_audio_codes: torch.Tensor | None = None
+        self.audio_tokenizer_is_on_device = False
+
+        if self.device == "cuda":
+            # Recommended by MOSS-TTS upstream for the remote-code generation path.
+            torch.backends.cuda.enable_cudnn_sdp(False)
+            torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+            torch.backends.cuda.enable_math_sdp(True)
+
+        attn_implementation = self.resolve_attn_implementation()
+        printt(f"Attention implementation: {attn_implementation}")
+
+        if target_util.is_hf_repo_id_syntax(model_target):
+            
+            preset = MossConfigs.get_preset_by_target(model_target)
+            revision = preset.value.revision if preset else None
+            if revision:
+                printt(f"Using pinned MOSS-TTS revision: {revision[:12]}")
+            
+            local_path = huggingface_hub.snapshot_download(
+                repo_id=model_target,
+                revision=revision,
+                cache_dir=huggingface_hub.constants.HF_HUB_CACHE,
+                local_files_only=False,
+            )
+        else:
+            local_path = model_target
+
+        # Due to transformers bug, can't simply use hf repo id here bc on Windows, 
+        # it mangles the repo id (uses backslash instead of forward slash)
+
+        self.processor = AutoProcessor.from_pretrained(
+            local_path,
+            trust_remote_code=True,
+        )
+        if hasattr(self.processor, "audio_tokenizer"):
+            self.processor.audio_tokenizer.eval()
+
+        # Rem, this can raise exception (eg OOM) and must be handled properly by instantiator
+        self.model = self.load_model(local_path, attn_implementation)
+        self.model.eval()
+
+    def resolve_dtype(self) -> torch.dtype:
+        if self.device != "cuda":
+            return torch.float32
+        if torch.cuda.is_bf16_supported():
+            return torch.bfloat16
+        return torch.float16
+
+    def resolve_attn_implementation(self) -> str:
+        device = torch.device(self.device if torch.cuda.is_available() else "cpu")
+        if (
+                device.type == "cuda"
+                and importlib_util.find_spec("flash_attn") is not None
+                and self.dtype in {torch.float16, torch.bfloat16}
+        ):
+            major, _ = torch.cuda.get_device_capability(device)
+            if major >= 8:
+                return "flash_attention_2"
+        if device.type == "cuda":
+            return "sdpa"
+        return "eager"
+
+    def load_model(self, local_path: str, attn_implementation: str):
+        printt(f"Loading MOSS-TTS with attention implementation: {attn_implementation}")
+        return AutoModel.from_pretrained(
+            local_path,
+            trust_remote_code=True,
+            attn_implementation=attn_implementation,
+            dtype=self.dtype,
+        ).to(self.device)
+
+    def get_memory_usage(self) -> str:
+        parts = []
+        if torch.cuda.is_available():
+            allocated_gb = torch.cuda.memory_allocated() / (1024 ** 3)
+            reserved_gb = torch.cuda.memory_reserved() / (1024 ** 3)
+            parts.append(f"torch_allocated={allocated_gb:.2f}GB")
+            parts.append(f"torch_reserved={reserved_gb:.2f}GB")
+        nv_vram = app_memory.get_nv_vram()
+        if nv_vram:
+            used, total = nv_vram
+            parts.append(f"nv_used={used / (1024 ** 3):.2f}GB")
+            parts.append(f"nv_total={total / (1024 ** 3):.2f}GB")
+        return ", ".join(parts) if parts else "unavailable"
+
+    def prepare_audio_tokenizer(self, label: str) -> None:
+        if self.processor is None:
+            raise RuntimeError("Processor is not initialized")
+        if not hasattr(self.processor, "audio_tokenizer"):
+            return
+        if self.audio_tokenizer_is_on_device:
+            return
+        self.processor.audio_tokenizer = self.processor.audio_tokenizer.to(self.device)
+        self.processor.audio_tokenizer.eval()
+        self.audio_tokenizer_is_on_device = True
+
+    @staticmethod
+    def build_continuation_text(previous_text: str, prompt: str) -> str:
+        parts = [part.strip() for part in [previous_text, prompt] if part.strip()]
+        return " ".join(parts)
+
+    def kill(self) -> None:
+        if self.processor:
+            if hasattr(self.processor, "audio_tokenizer"):
+                self.processor.audio_tokenizer = None
+        if self.model is not None and hasattr(self.model, "cpu"):
+            self.model.cpu()
+        self.processor = None
+        self.model = None
+        self.cached_voice_path = ""
+        self.cached_voice_stat = None
+        self.cached_voice_codes = None
+        self.clear_continuation()
+
+    def generate_outputs(
+            self,
+            conversations,
+            processor_mode: str,
+            temperature: float,
+            top_p: float,
+            top_k: int,
+    ):
+        if self.model is None or self.processor is None:
+            raise RuntimeError("Model or processor is not initialized")
+
+        batch = self.processor(conversations, mode=processor_mode)
+        input_ids = batch["input_ids"].to(self.device)
+        attention_mask = batch["attention_mask"].to(self.device)
+
+        with torch.inference_mode():
+
+            # Regarding hyperparams:
+
+            # We are only setting audio_temperature (not also text_temperature),
+            # matching project's demo behavior:
+            # https://github.com/OpenMOSS/MOSS-TTS/blob/main/clis/moss_tts_app.py
+
+            outputs = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=MossBaseModel.MAX_NEW_TOKENS,
+                audio_temperature=temperature,
+                audio_top_p=top_p,
+                audio_top_k=top_k,
+            )
+            return outputs
+
+    def decode_outputs_to_sounds_and_audio(self, outputs) -> tuple[list[Sound], list[torch.Tensor]] | str:
+        if self.processor is None:
+            return "Processor is not initialized"
+
+        sounds = []
+        audio_tensors = []
+        sample_rate = getattr(self.processor.model_config, "sampling_rate", MossBaseModel.INFO.sample_rate)
+        self.prepare_audio_tokenizer("decode")
+        messages = self.processor.decode(outputs)
+        for message in messages:
+            if not message.audio_codes_list:
+                return "No audio output"
+            audio = message.audio_codes_list[0]
+            audio_tensors.append(audio.detach().cpu() if isinstance(audio, torch.Tensor) else torch.as_tensor(audio))
+            audio_np = audio.to(torch.float32).cpu().numpy().astype(np.float32, copy=False)
+            sounds.append(Sound(audio_np, sample_rate))
+
+        return sounds, audio_tensors
+
+    def decode_outputs_to_sounds(self, outputs) -> list[Sound] | str:
+        decoded = self.decode_outputs_to_sounds_and_audio(outputs)
+        if isinstance(decoded, str):
+            return decoded
+        sounds, _ = decoded
+        return sounds
+
+    def clear_cached_continuation_audio_file(self) -> None:
+        if self.cached_continuation_audio_path:
+            try:
+                os.remove(self.cached_continuation_audio_path)
+            except OSError:
+                pass
+            self.cached_continuation_audio_path = ""
+
+    def clear_continuation(self) -> None:
+        super().clear_continuation()
+        self.cached_continuation_text = ""
+        self.clear_cached_continuation_audio_file()
+        self.cached_continuation_audio_codes = None
+
+    def cache_continuation(
+            self,
+            prompt: str,
+            audio: torch.Tensor,
+            sample_rate: int,
+    ) -> None:
+        self.cached_continuation_audio_codes = None
+        self.clear_cached_continuation_audio_file()
+        if MODE_CC_USE_CACHED_SOUND_DATA:
+            if self.processor is None:
+                raise RuntimeError("Processor is not initialized")
+            self.prepare_audio_tokenizer("continuation wav encode")
+            wav = audio.detach().to(torch.float32).cpu()
+            if wav.ndim == 1:
+                wav = wav.unsqueeze(0)
+            elif wav.ndim > 2:
+                wav = wav.reshape(-1).unsqueeze(0)
+            self.cached_continuation_audio_codes = self.processor.encode_audios_from_wav([wav], sample_rate)[0]
+        else:
+            self.clear_cached_continuation_audio_file()
+            temp_file = tempfile.NamedTemporaryFile(prefix="moss-continuation-", suffix=".wav", delete=False)
+            temp_file.close()
+            audio_np = audio.detach().to(torch.float32).cpu().numpy().astype(np.float32, copy=False)
+            if audio_np.ndim > 1:
+                audio_np = np.squeeze(audio_np)
+            sf.write(temp_file.name, audio_np, sample_rate)
+            self.cached_continuation_audio_path = temp_file.name
+        self.cached_continuation_text = prompt.strip()
+
+    def get_voice_codes(self, voice_path: str) -> torch.Tensor | None:
+        if not voice_path:
+            return None
+        if self.processor is None:
+            raise RuntimeError("Processor is not initialized")
+
+        normalized_voice_path = os.path.abspath(voice_path)
+        stat = os.stat(normalized_voice_path)
+        voice_stat = (stat.st_mtime_ns, stat.st_size)
+        if (
+                normalized_voice_path == self.cached_voice_path
+                and voice_stat == self.cached_voice_stat
+                and self.cached_voice_codes is not None
+        ):
+            return self.cached_voice_codes
+
+        self.prepare_audio_tokenizer("voice path encode")
+        voice_codes = self.processor.encode_audios_from_path([normalized_voice_path])[0]
+        self.cached_voice_path = normalized_voice_path
+        self.cached_voice_stat = voice_stat
+        self.cached_voice_codes = voice_codes
+        return voice_codes
+
+    def generate_using_project(
+            self,
+            project: Project,
+            prompts: list[str],
+            force_random_seed: bool=False,
+            on_stream_chunk: StreamChunkCallback | None = None,
+            on_stream_end: StreamEndCallback | None = None,
+    ) -> list[Sound] | str:
+
+        if project.moss_voice_file_name:
+            voice_path = os.path.join(project.dir_path, project.moss_voice_file_name)
+        else:
+            voice_path = ""
+
+        target = project.moss_target
+        config = MossConfigs.get_by_target(target)
+
+        temperature = project.moss_local_temperature if config == MossConfigs.LOCAL else project.moss_delay_temperature
+        if temperature == -1:
+            temperature = config.value.temperature_default
+
+        top_p = project.moss_local_top_p if config == MossConfigs.LOCAL else project.moss_delay_top_p
+        if top_p == -1:
+            top_p = config.value.top_p_default
+
+        top_k = project.moss_local_top_k if config == MossConfigs.LOCAL else project.moss_delay_top_k
+        if top_k == -1:
+            top_k = config.value.top_k_default
+
+        seed = -1 if force_random_seed else project.moss_seed
+        language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""
+
+        return self.generate(
+            prompts=prompts,
+            voice_path=voice_path,
+            voice_transcript=project.moss_voice_transcript,
+            moss_mode=project.moss_mode,
+            language=language,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            seed=seed,
+        )
+
+    def generate(
+            self,
+            prompts: list[str],
+            voice_path: str,
+            voice_transcript: str,
+            moss_mode: MossVoiceCloneMode,
+            language: str,
+            temperature: float,
+            top_p: float,
+            top_k: int,
+            seed: int,
+    ) -> list[Sound] | str:
+
+        if self.model is None or self.processor is None:
+            return "Model or processor is not initialized"
+
+        voice_reference = os.path.abspath(voice_path) if voice_path else ""
+        if voice_path and not os.path.exists(voice_reference):
+            return "Missing voice reference audio"
+        moss_mode = MossVoiceCloneMode.normalize(moss_mode)
+
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
+        app_support.set_seed(seed)
+
+        try:
+
+            if moss_mode == MossVoiceCloneMode.CONTINUATION:
+
+                if not voice_reference:
+                    return "MOSS continuation requires voice reference audio"
+                if not voice_transcript.strip():
+                    return "MOSS continuation requires voice transcript"
+
+                conversations = [
+                    [
+                        self.processor.build_user_message(
+                            text=self.build_continuation_text(voice_transcript, prompt),
+                            language=language or None,
+                        ),
+                        self.processor.build_assistant_message(audio_codes_list=[voice_reference]),
+                    ]
+                    for prompt in prompts
+                ]
+                processor_mode = "continuation"
+
+                outputs = self.generate_outputs(conversations, processor_mode, temperature, top_p, top_k)
+                decoded = self.decode_outputs_to_sounds(outputs)
+
+                if isinstance(decoded, str):
+                    return decoded
+
+                return decoded
+
+            if moss_mode == MossVoiceCloneMode.ROLLING_CONTINUATION:
+
+                sounds = []
+
+                for prompt_index, prompt in enumerate(prompts):
+                    previous_text = self.cached_continuation_text
+                    previous_audio = self.cached_continuation_audio_codes if MODE_CC_USE_CACHED_SOUND_DATA else self.cached_continuation_audio_path
+
+                    if previous_text and previous_audio is not None and not (isinstance(previous_audio, str) and not previous_audio):
+                        conversation_text = self.build_continuation_text(previous_text, prompt)
+                        print(f"MOSS continuation: prompt_index={prompt_index}")
+                        print(f"MOSS continuation: previous_text={previous_text!r}")
+                        print(f"MOSS continuation: previous_audio={previous_audio!r}")
+                        print(f"MOSS continuation: current_prompt={prompt!r}")
+                        print(f"MOSS continuation: conversation_text={conversation_text!r}")
+                        conversations = [[
+                            self.processor.build_user_message(
+                                text=conversation_text,
+                                language=language or None,
+                                reference=[voice_reference] if moss_mode == MossVoiceCloneMode.ROLLING_CONTINUATION and voice_reference else None,
+                            ),
+                            self.processor.build_assistant_message(audio_codes_list=[previous_audio]),
+                        ]]
+                        processor_mode = "continuation"
+                    elif voice_reference:
+                        print(f"MOSS rolling continuation clone bootstrap: prompt_index={prompt_index}")
+                        print(f"MOSS rolling continuation clone bootstrap: voice_audio={voice_reference!r}")
+                        print(f"MOSS rolling continuation clone bootstrap: current_prompt={prompt!r}")
+                        conversations = [[
+                            self.processor.build_user_message(
+                                text=prompt,
+                                language=language or None,
+                                reference=[voice_reference],
+                            )
+                        ]]
+                        processor_mode = "generation"
+                    else:
+                        conversations = [[self.processor.build_user_message(text=prompt, language=language or None)]]
+                        processor_mode = "generation"
+
+                    outputs = self.generate_outputs(conversations, processor_mode, temperature, top_p, top_k)
+                    decoded = self.decode_outputs_to_sounds_and_audio(outputs)
+
+                    if isinstance(decoded, str):
+                        return decoded
+
+                    prompt_sounds, prompt_audios = decoded
+                    sounds.extend(prompt_sounds)
+                    if prompt_audios:
+                        self.cache_continuation(
+                            prompt,
+                            prompt_audios[-1],
+                            prompt_sounds[-1].sr,
+                        )
+
+                return sounds
+
+            if moss_mode == MossVoiceCloneMode.CLONE and voice_reference:
+
+                conversations = [
+                    [
+                        self.processor.build_user_message(
+                            text=prompt,
+                            language=language or None,
+                            reference=[voice_reference],
+                        )
+                    ]
+                    for prompt in prompts
+                ]
+                processor_mode = "generation"
+
+            else:
+                
+                # No voice clone data
+                conversations = [
+                    [self.processor.build_user_message(text=prompt, language=language or None)]
+                    for prompt in prompts
+                ]
+                processor_mode = "generation"
+
+            outputs = self.generate_outputs(conversations, processor_mode, temperature, top_p, top_k)
+            decoded = self.decode_outputs_to_sounds(outputs)
+
+            if isinstance(decoded, str):
+                # return error string
+                return decoded 
+
+            return decoded
+
+        except Exception as e:
+            
+            return make_error_string(e)
+
+
+# True: cache continuation audio in memory as MOSS audio codes by re-encoding the
+# generated waveform with the processor audio tokenizer. This avoids temporary
+# file I/O on the next continuation prompt, but still pays the waveform-to-codes
+# encode cost (API does not allow for feeding back in fully transformed token data or whatever).
+
+# False: cache continuation audio as a temporary WAV file path. This is slower
+# due to file write/read work, but follows the project reference code's path-based 
+# audio input behavior more closely. Not sure how much slower but yea.
+
+# Outputs do differ between True vs False. I think I prefer True; hard to say.
+
+MODE_CC_USE_CACHED_SOUND_DATA = False

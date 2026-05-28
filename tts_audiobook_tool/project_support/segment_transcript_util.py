@@ -260,12 +260,12 @@ class SegmentTranscriptUtil:
             printt(f"{COL_DEFAULT}Exception: {COL_DIM}{info.exception}")
         printt()
 
-        SegmentTranscriptUtil.print_stt_details(info, show_visualization=num_word_errors > 0)
+        SegmentTranscriptUtil.print_stt_details(info, should_show_diff=num_word_errors > 0)
 
         printt()
 
     @staticmethod
-    def print_stt_details(info: SegmentTranscriptData, show_visualization: bool) -> None:
+    def print_stt_details(info: SegmentTranscriptData, should_show_diff: bool) -> None:
         printt(f"{COL_DEFAULT}Source text               : {COL_DIM_ITALICS}{info.source.strip()}")
         printt(f"{COL_DEFAULT}TTS prompt                : {COL_DIM_ITALICS}{info.prompt.strip()}")
         printt(f"{COL_DEFAULT}STT transcript            : {COL_DIM_ITALICS}{info.transcript}")
@@ -273,9 +273,9 @@ class SegmentTranscriptUtil:
         printt(f"{COL_DEFAULT}Source text normalized    : {COL_DIM_ITALICS}{info.normalized_source}")
         printt(f"{COL_DEFAULT}STT transcript normalized : {COL_DIM_ITALICS}{info.normalized_transcript}")
 
-        if show_visualization:
+        if should_show_diff:
             printt()
-            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[x: missing], [+: extra], [=/=: expected/heard], <word> = skipped uncommon word")
+            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], <word> = skipped uncommon word")
             printt(SegmentTranscriptUtil.make_word_error_visualization(info))
 
     @staticmethod
@@ -323,7 +323,7 @@ class SegmentTranscriptUtil:
             elif step.action == "mismatch_sub":
                 parts.append(f"{COL_DIM}[=/=: {COL_ERROR}{step.source_text}/{step.transcript_text}{COL_DIM}]{Ansi.RESET}")
             elif step.action == "skip_source":
-                parts.append(f"{COL_DIM}[x: {COL_ERROR}{step.source_text}{COL_DIM}]{Ansi.RESET}")
+                parts.append(f"{COL_DIM}[-: {COL_ERROR}{step.source_text}{COL_DIM}]{Ansi.RESET}")
             elif step.action == "skip_transcript":
                 parts.append(f"{COL_DIM}[+: {COL_ERROR}{step.transcript_text}{COL_DIM}]{Ansi.RESET}")
         return " ".join(parts)
