@@ -11,7 +11,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel, FishS2VoiceCloneMode
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossVoiceCloneMode
@@ -176,6 +176,7 @@ class Project(BaseModel):
 
     fish_s2_voice_file_name: str = ""
     fish_s2_voice_transcript: str = Field(default="", alias="fish_s2_voice_text")
+    fish_s2_mode: FishS2VoiceCloneMode = FishS2VoiceCloneMode.get_default()
     fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s2_temperature: float = -1
     fish_s2_top_p: float = -1

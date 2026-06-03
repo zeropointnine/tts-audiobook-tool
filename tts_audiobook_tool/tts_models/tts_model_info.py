@@ -8,7 +8,7 @@ class TtsModelInfo(NamedTuple):
     Hardcoded properties of a supported TTS model
     """
 
-    # Module name to test for that implies the TTS model library exists in the current py env
+    # Module name, or "dist:<package>" / "dist:<package>==<version>", to test for that implies the TTS model library exists in the current py env
     module_test: str
     # Supported device types
     torch_devices: list[str]
@@ -155,7 +155,7 @@ class TtsModelInfos(Enum):
     )
 
     FISH_S1 = TtsModelInfo(
-        module_test="fish_speech", # NB, this module path comes back positive for both S1 ad S2
+        module_test="dist:fish-speech==0.1.0",
         file_tag="s1-mini",
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
@@ -185,7 +185,7 @@ class TtsModelInfos(Enum):
     )
 
     FISH_S2 = TtsModelInfo(
-        module_test="fish_speech.callbacks", # NB, this module path comes back positive for S2 only (not S1)
+        module_test="dist:fish-speech==2.0.0",
         file_tag="s2-pro",
         torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,

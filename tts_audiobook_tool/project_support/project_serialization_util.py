@@ -20,6 +20,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2VoiceCloneMode
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossVoiceCloneMode
@@ -282,6 +283,7 @@ class ProjectSerializationUtil:
         d['fish_s1_seed'] = seed
 
         normalize_bool('fish_s2_compile_enabled', True)
+        normalize_by_id('fish_s2_mode', FishS2VoiceCloneMode.get_by_id, FishS2VoiceCloneMode.get_default(), warn=True)
 
         seed = d.get('fish_s2_seed', -1)
         if not (-1 <= seed <= SEED_MAX):
@@ -541,6 +543,7 @@ class ProjectSerializationUtil:
 
             "fish_s2_voice_file_name": project.fish_s2_voice_file_name,
             "fish_s2_voice_text": project.fish_s2_voice_transcript,
+            "fish_s2_mode": project.fish_s2_mode.id,
             "fish_s2_temperature": project.fish_s2_temperature,
             "fish_s2_top_p": project.fish_s2_top_p,
             "fish_s2_top_k": project.fish_s2_top_k,

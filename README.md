@@ -1,6 +1,6 @@
 # tts-audiobook-tool
 
-Generative-AI audiobook creation tool focused on high-quality output which supports a growing list of text-to-speech models:
+Generative-AI audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models:
 
 - [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
 - [Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech)
@@ -22,7 +22,9 @@ The app employs various techniques to manage and improve on the inherently nonde
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling, plus EBU R128 loudness normalization
 
-The app uses a plain-text interface in the console. It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
+It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use. 
+
+The app uses a plain-text interface in the console. 
 
 
 ### How to create an audiobook (quick summary)
@@ -620,6 +622,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 - Emotion tags
 - Torch compile 
+- Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
 
 **GLM-TTS**
@@ -680,42 +683,46 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 ### Inference speeds, expectations
 
-Listed below are my anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note how CUDA inference speeds on Linux are usually significantly faster than on Windows.
+Listed below are some anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note how CUDA inference speeds on Linux are usually significantly faster than on Windows.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
 | Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | 
-|                         | GTX 3080 Ti, Windows | ~130% realtime  | 
-|                         | Macbook Pro M1 (MPS) | 20-35% realtime |
+| Chatterbox Multilingual | GTX 3080 Ti, Windows | ~130% realtime  | 
+| Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
-|                         | Macbook Pro M1       | ~70% realtime   |
+| Chatterbox Turbo        | Macbook Pro M1       | ~70% realtime   |
 | Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 | Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
-|                         | GTX 3080 Ti, Windows | ~90% realtime   |
-|                         | Macbook Pro M1 (MPS) | ~20% realtime   |
+| IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
+| IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
-| MOSS-TTS v1.5           | GTS 4090, Windows    | ~80% realtime   | batch size=2, flash attn enabled
-| OmniVoice TTS           | GTX 3080 Ti, Linux   | 800% realtime   |
-|                         | Macbook Pro M1 (MPS) | 20% realtime    |
-| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | CUDA enabled
-|                         | Macbook Pro M1       | 350% realtime   | 
-|                         | Ryzen 7 7700, Linux  | ~200% realtime  | CUDA disabled (CPU)
+| MOSS-TTS v1.5           | GTS 4090, Windows    | ~80% realtime   | batch size=2, flash attn
+| OmniVoice TTS           | GTX 3080 Ti, Linux   | 800% realtime   | default steps
+| OmniVoice TTS           | Macbook Pro M1 (MPS) | 20% realtime    | default steps
+| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
+| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU (CUDA disabled)
+| Pocket TTS              | Macbook Pro M1       | 350% realtime   | 
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 300% realtime   | batch size=5
-|                         | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
+| Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
-|                         | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
+| MiraTTS                 | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
 | VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10, default steps
-|                         | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
-|                         | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
-|                         | Macbook Pro M1       | ~40% realtime   |
+| VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
+| VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
+| VibeVoice 1.5B          | Macbook Pro M1       | ~40% realtime   |
 
 
 # Update highlights
+
+**2026-06-02**
+
+- Added experimental rolling continuation mode for Fish S2 Pro
 
 **2026-05-28**
 

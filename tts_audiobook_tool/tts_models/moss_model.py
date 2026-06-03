@@ -335,7 +335,6 @@ class MossModel(MossBaseModel):
         voice_reference = os.path.abspath(voice_path) if voice_path else ""
         if voice_path and not os.path.exists(voice_reference):
             return "Missing voice reference audio"
-        moss_mode = MossVoiceCloneMode.normalize(moss_mode)
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)

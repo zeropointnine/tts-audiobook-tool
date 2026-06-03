@@ -1,7 +1,7 @@
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel, FishS2VoiceCloneMode
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -33,6 +33,13 @@ class VoiceFishS2Menu:
                 )
             )
 
+            item = MenuItem(
+                make_voice_clone_mode_label,
+                lambda _, __: VoiceFishS2Menu.voice_clone_mode_menu(state)
+            )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
             temperature_item = VoiceMenuShared.make_temperature_item(
                 state=state,
                 attr="fish_s2_temperature",
@@ -40,7 +47,6 @@ class VoiceFishS2Menu:
                 min_value=FishS2BaseModel.MIN_TEMPERATURE,
                 max_value=FishS2BaseModel.MAX_TEMPERATURE
             )
-            temperature_item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(temperature_item)
 
             items.append(
@@ -68,6 +74,27 @@ class VoiceFishS2Menu:
         VoiceMenuShared.menu_wrapper(state, make_items)
 
     @staticmethod
+    def voice_clone_mode_menu(state: State) -> None:
+        voice_clone_modes = list(FishS2VoiceCloneMode)
+
+        def on_select(value: FishS2VoiceCloneMode) -> None:
+            if state.project.fish_s2_mode != value:
+                state.project.fish_s2_mode = value
+                state.project.save()
+            print_feedback("Set to:", value.label)
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Voice clone mode",
+            labels=[mode.label for mode in voice_clone_modes],
+            sublabels=[mode.description for mode in voice_clone_modes],
+            values=voice_clone_modes,
+            current_value=state.project.fish_s2_mode,
+            default_value=FishS2VoiceCloneMode.get_default(),
+            on_select=on_select,
+        )
+
+    @staticmethod
     def compile_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
@@ -87,3 +114,10 @@ class VoiceFishS2Menu:
             default_value=True,
             on_select=on_select
         )
+
+# ---
+
+def make_voice_clone_mode_label(state: State) -> str:
+    value = state.project.fish_s2_mode.id
+    default_value = FishS2VoiceCloneMode.get_default().id
+    return make_menu_label("Voice clone mode", value, default_value)

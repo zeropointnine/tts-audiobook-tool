@@ -35,10 +35,6 @@ class VoiceMossMenu:
             items.append(
                 MenuItem(make_target_label, lambda _, __: target_submenu(state))
             )
-            if state.project.moss_target:
-                items.append(
-                    MenuItem("Clear custom model", on_clear_model_target)
-                )
 
             item = MenuItem(
                 make_voice_clone_mode_label,
@@ -53,7 +49,7 @@ class VoiceMossMenu:
             items.append(make_audio_top_k_item(state, config))
 
             prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
-            prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
+            prompt += f"\n{COL_DIM}(Note, audio generations may not be idempotent when using batch mode): "
             items.append(VoiceMenuShared.make_seed_item(state, "moss_seed", prompt_override=prompt))
 
             return items
@@ -84,7 +80,7 @@ class VoiceMossMenu:
 # ---
 
 def make_voice_clone_mode_label(state: State) -> str:
-    value = MossVoiceCloneMode.normalize(state.project.moss_mode).id
+    value = state.project.moss_mode.id
     default_value = MossVoiceCloneMode.get_default().id
     return make_menu_label("Voice clone mode", value, default_value)
 

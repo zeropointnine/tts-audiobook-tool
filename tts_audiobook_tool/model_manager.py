@@ -57,8 +57,9 @@ class ModelManager:
             try:
                 _ = Tts.get_instance()
             except Exception as e:
-                err_msg = str(e)
                 Interrupts().clear()
+                app_memory.gc_ram_vram()
+                err_msg = str(e)
                 return ModelWarmUpResult(error=err_msg)
 
         if Interrupts().did_interrupt:
@@ -70,8 +71,9 @@ class ModelManager:
             try:
                 Stt.eager_warm_up_for_inference()
             except Exception as e:
-                err_msg = str(e)
                 Interrupts().clear()
+                app_memory.gc_ram_vram()
+                err_msg = str(e)
                 return ModelWarmUpResult(error=err_msg)
 
         if Interrupts().did_interrupt:
@@ -83,8 +85,9 @@ class ModelManager:
             try:
                 _ = MusicDetector.get_model()
             except Exception as e:
-                err_msg = str(e)
                 Interrupts().clear()
+                app_memory.gc_ram_vram()
+                err_msg = str(e)
                 return ModelWarmUpResult(error=err_msg)
 
         if Interrupts().did_interrupt:

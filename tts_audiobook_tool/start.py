@@ -49,6 +49,7 @@ class Startup:
         """
         
         print()
+        self.exit_on_wrong_torch_flavor_windows()
         self.init_tts_or_exit(self.is_server)
         if not self.is_server:
             self.exit_on_missing_ffmpeg_exe()
@@ -91,6 +92,20 @@ class Startup:
         hotkey = ask.ask_hotkey(prompt)
         if hotkey != "y":
             exit(0)
+
+    def exit_on_wrong_torch_flavor_windows(self) -> None:
+        if not _is_probably_cpu_only_torch_on_cuda_machine():
+            return
+
+        printt(f"{COL_ERROR}An NVIDIA GPU was detected, but the installed PyTorch build does not include CUDA support.")
+        printt(f"{COL_DEFAULT}Reinstall torch using the CUDA wheel appropriate for your model requirements.")
+        printt()
+
+        prompt = f"Or press {make_hotkey_string('Y')} to run anyway without CUDA support: "
+        from tts_audiobook_tool import ask
+        hotkey = ask.ask_hotkey(prompt)
+        if hotkey != "y":
+            exit(1)
 
     def exit_on_missing_ffmpeg_exe(self) -> None:        
         from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
@@ -223,3 +238,43 @@ class Startup:
 
 def main() -> None:
     Startup().start()
+
+# ---
+
+def _is_probably_cpu_only_torch_on_cuda_machine() -> bool:
+    if sys.platform != "win32":
+        return False
+
+    try:
+        import torch
+    except Exception:
+        return False
+
+    return (
+        not torch.cuda.is_available()
+        and torch.version.cuda is None
+        and _has_nvidia_gpu_windows()
+    )
+
+def _has_nvidia_gpu_windows() -> bool:
+    """ Return result of True is reliable evidence that CUDA 'exists' """
+
+    if sys.platform != "win32":
+        return False
+
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except Exception:
+        return False
+
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+

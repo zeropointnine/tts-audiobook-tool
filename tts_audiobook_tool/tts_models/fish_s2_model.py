@@ -9,8 +9,9 @@ from huggingface_hub.errors import GatedRepoError
 
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel, FishS2VoiceCloneMode
 from tts_audiobook_tool.util import *
 
 
@@ -85,6 +86,7 @@ class FishS2Model(FishS2BaseModel):
         )
 
         self._voice_clone: VoiceClone | None = None
+        self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
 
         # Now that fish has printed init info, lower log level
         from loguru import logger
@@ -93,8 +95,14 @@ class FishS2Model(FishS2BaseModel):
 
     def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
 
-        if self._voice_clone and source_path == self._voice_clone.source_path:
+        if (
+                self._voice_clone
+                and source_path == self._voice_clone.source_path
+                and transcribed_text == self._voice_clone.transcribed_text
+        ):
             return
+
+        self.clear_continuation()
 
         ref_audio, sr = torchaudio.load(source_path) # TODO error handling
         if ref_audio.shape[0] > 1:
@@ -107,10 +115,93 @@ class FishS2Model(FishS2BaseModel):
         )
 
     def clear_voice_clone(self) -> None:
+        if self._voice_clone:
+            self.clear_continuation()
         self._voice_clone = None
 
+    @staticmethod
+    def get_prompt_log_preview(prompt: str) -> str:
+        return prompt.replace("\n", " ")[:50]
+
+    def clear_continuation(self) -> None:
+        L.i("")
+        self.cached_continuation_history.clear()
+
+    def cache_continuation(self, prompt: str, tokens: torch.Tensor) -> None:
+        self.cached_continuation_history.append((prompt.strip(), tokens.detach().cpu().clone()))
+
+    @staticmethod
+    def is_prompt_too_long_error(e: Exception) -> bool:
+        return isinstance(e, ValueError) and "Prompt is too long" in str(e)
+
+    def build_prompt_reference(self, use_continuation: bool) -> tuple[list[str] | None, list[torch.Tensor] | None]:
+
+        text_parts: list[str] = []
+        token_parts: list[torch.Tensor] = []
+
+        if self._voice_clone and self._voice_clone.prompt_tokens is not None:
+            text_parts.append(self._voice_clone.transcribed_text)
+            token_parts.append(self._voice_clone.prompt_tokens)
+
+        if use_continuation:
+            for continuation_text, continuation_tokens in self.cached_continuation_history:
+                text_parts.append(continuation_text)
+                token_parts.append(continuation_tokens)
+
+        if not token_parts:
+            return None, None
+
+        combined_text = " ".join(part.strip() for part in text_parts if part.strip())
+        token_parts_on_device = [tokens.to(self.device) for tokens in token_parts]
+        combined_tokens = torch.cat(token_parts_on_device, dim=1)
+
+        return [combined_text], [combined_tokens]
+
+    def generate_semantic_tokens(
+            self,
+            prompt: str,
+            prompt_text: list[str] | None,
+            prompt_tokens: list[torch.Tensor] | None,
+            temperature: float,
+            top_p: float,
+            top_k: int,
+    ) -> torch.Tensor | str:
+
+        from fish_speech.models.text2semantic.inference import generate_long # type: ignore
+
+        for response in generate_long(
+            model=self.t2s_model,
+            device=self.device,
+            decode_one_token=self.decode_one_token,  # type: ignore
+            text=prompt,
+            prompt_text=prompt_text,
+            prompt_tokens=prompt_tokens,
+            max_new_tokens=FISH_S2_MAX_NEW_TOKENS,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k, # type: ignore  # rem, when venv is s1, gets flagged as an error
+            
+            # the app already segments audiobook/conversation text into bounded
+            # prompt-sized units before model inference. Keep Fish S2 from doing
+            # its own internal text chunking so this wrapper remains responsible
+            # for segment boundaries, continuation cache updates, and validation
+            # semantics. If a prompt plus continuation context is still too long,
+            # Fish's encoded prompt-length check will raise and generate() retries
+            # once after clearing generated continuation history.
+            chunk_length=FISH_S2_DISABLE_INTERNAL_CHUNKING_LENGTH,
+        ):
+            if response.action == "sample":
+                if response.codes is None:
+                    return "No tensor while generating semantic tokens"
+                codes = response.codes.detach().cpu()
+                if codes.shape[1] >= FISH_S2_MAX_NEW_TOKENS - 1:
+                    return FISH_S2_MAX_TOKEN_LIMIT_ERROR
+                return codes
+
+        return "Semantic token generation failed"
 
     def kill(self) -> None:
+        self.clear_continuation()
         # Clear all member variables in attempt to clear all resources
         self.dac_model = None
         self._voice_clone = None
@@ -155,13 +246,15 @@ class FishS2Model(FishS2BaseModel):
             top_k = project.fish_s2_top_k
 
         seed = -1 if force_random_seed else project.fish_s2_seed
+        fish_s2_mode = project.fish_s2_mode
 
         result = self.generate(
             prompt=prompt,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            seed=seed
+            seed=seed,
+            fish_s2_mode=fish_s2_mode,
         )
 
         if isinstance(result, Sound):
@@ -175,7 +268,8 @@ class FishS2Model(FishS2BaseModel):
             temperature: float,
             top_p: float,
             top_k: int,
-            seed: int
+            seed: int,
+            fish_s2_mode: FishS2VoiceCloneMode,
     ) -> Sound | str:
 
         if seed == -1:
@@ -191,50 +285,83 @@ class FishS2Model(FishS2BaseModel):
 
                 if self._voice_clone and self._voice_clone.prompt_tokens is None:
                     audio_lengths = torch.tensor([self._voice_clone.audios.shape[2]], device=self.device, dtype=torch.long)
-                    prompt_tokens, _ = self.dac_model.encode(self._voice_clone.audios, audio_lengths)
-                    if prompt_tokens.ndim == 3:
-                        prompt_tokens = prompt_tokens[0]
-                    self._voice_clone.prompt_tokens = prompt_tokens
+                    voice_prompt_tokens, _ = self.dac_model.encode(self._voice_clone.audios, audio_lengths)
+                    if voice_prompt_tokens.ndim == 3:
+                        voice_prompt_tokens = voice_prompt_tokens[0]
+                    self._voice_clone.prompt_tokens = voice_prompt_tokens
 
-                prompt_tokens = [self._voice_clone.prompt_tokens] if self._voice_clone else None
+                use_continuation = fish_s2_mode == FishS2VoiceCloneMode.ROLLING_CONTINUATION and bool(self.cached_continuation_history)
+
+                prompt_text, prompt_tokens = self.build_prompt_reference(use_continuation)
+                if use_continuation:
+                    L.i(
+                        "Fish S2: Generating with continuation | "
+                        f"history_items={len(self.cached_continuation_history)} | "
+                        f"text={self.get_prompt_log_preview(prompt)!r}"
+                    )
+                else:
+                    L.i(
+                        "Fish S2: Generating new | "
+                        f"text={self.get_prompt_log_preview(prompt)!r}"
+                    )
 
                 # Step 2: Make semantic tokens using prompt tokens
 
-                from fish_speech.models.text2semantic.inference import generate_long # type: ignore
+                def generate_without_continuation() -> torch.Tensor | str:
+                    self.clear_continuation()
+                    prompt_text_without_continuation, prompt_tokens_without_continuation = self.build_prompt_reference(False)
+                    return self.generate_semantic_tokens(
+                        prompt,
+                        prompt_text_without_continuation,
+                        prompt_tokens_without_continuation,
+                        temperature,
+                        top_p,
+                        top_k,
+                    )
 
-                prompt_text = [self._voice_clone.transcribed_text] if self._voice_clone else None
+                try:
+                    generated_tokens = self.generate_semantic_tokens(
+                        prompt,
+                        prompt_text,
+                        prompt_tokens,
+                        temperature,
+                        top_p,
+                        top_k,
+                    )
+                except Exception as e:
+                    if self.is_prompt_too_long_error(e) and use_continuation:
+                        L.i(
+                            "Fish S2: Generating with continuation - must retry | "
+                            f"text={self.get_prompt_log_preview(prompt)!r}"
+                        )
+                        generated_tokens = generate_without_continuation()
+                    else:
+                        raise
 
-                semantic_tokens = None
-                for response in generate_long(
-                    model=self.t2s_model,
-                    device=self.device,
-                    decode_one_token=self.decode_one_token,  # type: ignore
-                    text=prompt,
-                    prompt_text=prompt_text,
-                    prompt_tokens=prompt_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k, # type: ignore  # rem, when venv is s1, gets flagged as an error
-                ):
-                    if response.action == "sample":
-                        if response.codes is None:
-                            return "No tensor while generating semantic tokens"
-                        semantic_tokens = response.codes.cpu().numpy()
-                        break  # Assuming we only need the first sample
+                if generated_tokens == FISH_S2_MAX_TOKEN_LIMIT_ERROR and use_continuation:
+                    L.i(
+                        "Fish S2: Generating with continuation - must retry | "
+                        f"text={self.get_prompt_log_preview(prompt)!r}"
+                    )
+                    generated_tokens = generate_without_continuation()
 
                 del prompt_tokens
 
-                if semantic_tokens is None:
-                    return "Semantic token generation failed"
+                if isinstance(generated_tokens, str):
+                    return generated_tokens
+
+                if fish_s2_mode == FishS2VoiceCloneMode.ROLLING_CONTINUATION:
+                    self.cache_continuation(prompt, generated_tokens)
+                semantic_tokens = generated_tokens.numpy()
 
                 # Step 3: Make audio data using semantic tokens
 
-                prompt_tokens = torch.from_numpy(semantic_tokens).to(self.device).long()
-                if prompt_tokens.ndim == 2:
-                    prompt_tokens = prompt_tokens[None]  # Add batch dimension
-                tensor = self.dac_model.from_indices(prompt_tokens)
+                decode_tokens = torch.from_numpy(semantic_tokens).to(self.device).long()
+                if decode_tokens.ndim == 2:
+                    decode_tokens = decode_tokens[None]  # Add batch dimension
+                tensor = self.dac_model.from_indices(decode_tokens)
 
-                del prompt_tokens
+                del decode_tokens
                 del semantic_tokens
 
                 data = tensor[0, 0].float().cpu().detach().numpy()
@@ -261,3 +388,8 @@ class VoiceClone:
 
         # Gets set on first generation
         self.prompt_tokens: Any = None
+
+
+FISH_S2_MAX_NEW_TOKENS = 2048
+FISH_S2_MAX_TOKEN_LIMIT_ERROR = "Fish S2 generation reached max token limit without terminating"
+FISH_S2_DISABLE_INTERNAL_CHUNKING_LENGTH = 1_000_000

@@ -114,8 +114,7 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
     Inside *venv_path*, run a subprocess that checks each module_test.
 
     Returns (list_of_proper_names, match_count) where match_count is the
-    number of matched models *after* Fish S2 dedup (matching tts.py's
-    init_model_type logic).  If match_count > 1 the venv is ambiguous
+    number of matched models.  If match_count > 1 the venv is ambiguous
     and should not be used.
     """
     python_exe = get_venv_python(venv_path)
@@ -132,16 +131,17 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
         "def check(mod):\n"
         "    try:\n"
         "        if mod.startswith('dist:'):\n"
-        "            importlib.metadata.version(mod.removeprefix('dist:'))\n"
+        "            dist_test = mod.removeprefix('dist:').strip()\n"
+        "            if '==' in dist_test:\n"
+        "                dist_name, expected_version = [part.strip() for part in dist_test.split('==', 1)]\n"
+        "                return importlib.metadata.version(dist_name) == expected_version\n"
+        "            importlib.metadata.version(dist_test)\n"
         "            return True\n"
         "        return importlib.util.find_spec(mod) is not None\n"
         "    except Exception:\n"
         "        return False\n"
         "matched = [i for i, (mod, _) in enumerate(tests) if check(mod)]\n"
         "infos = [tests[i] for i in matched]\n"
-        "mod_list = [m for m, _ in infos]\n"
-        "if 'fish_speech' in mod_list and 'fish_speech.callbacks' in mod_list:\n"
-        "    infos = [(m, n) for m, n in infos if m != 'fish_speech']\n"
         "names = [n for _, n in infos]\n"
         "match_count = len(infos)\n"
         "print(json.dumps({'names': names, 'match_count': match_count}))\n"
@@ -167,10 +167,9 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
 def build_venv_list(base_dir: str) -> list[tuple[str, str, list[str]]]:
     """
     Returns list of (venv_path, display_name, detected_models).
-    Only includes venvs that have exactly one detected model (after Fish S2
-    dedup), mirroring tts.py's init_model_type assertion that exactly 0 or 1
-    model should match.  Ambiguous venvs (>1 match) are printed as warnings
-    and skipped.
+    Only includes venvs that have exactly one detected model, mirroring tts.py's
+    init_model_type assertion that exactly 0 or 1 model should match.
+    Ambiguous venvs (>1 match) are printed as warnings and skipped.
     """
     results: list[tuple[str, str, list[str]]] = []
     for vp in find_venvs(base_dir):

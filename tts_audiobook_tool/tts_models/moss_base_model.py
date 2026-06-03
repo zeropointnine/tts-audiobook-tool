@@ -68,16 +68,6 @@ class MossBaseModel(TtsBaseModel):
     def get_language_name(language_code: str) -> str:
         return MossBaseModel.LANGUAGE_NAMES_BY_CODE.get(language_code.strip().lower(), "")
 
-    def clear_continuation(self) -> None:
-        """
-        Clears cached MOSS rolling-continuation state.
-
-        Concrete MOSS implementations should override-and-super to reset any
-        cached continuation transcript/audio data between caller-defined
-        boundaries, such as paragraph or section breaks.
-        """
-        super().clear_continuation()
-
     @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
@@ -198,7 +188,7 @@ class MossConfigs(Enum):
 class MossVoiceCloneMode(tuple[str, str, str], Enum):    
     CLONE = (
         "clone", 
-        "Clone", 
+        "Default", 
         "Use reference audio as a speaker/timbre prompt."
     )
     CONTINUATION = (
@@ -227,12 +217,6 @@ class MossVoiceCloneMode(tuple[str, str, str], Enum):
     @staticmethod
     def get_default() -> "MossVoiceCloneMode":
         return MossVoiceCloneMode.CLONE
-
-    @staticmethod
-    def normalize(mode: object) -> "MossVoiceCloneMode":
-        if isinstance(mode, MossVoiceCloneMode):
-            return mode
-        return MossVoiceCloneMode.get_default()
 
     @staticmethod
     def get_by_id(id: str) -> "MossVoiceCloneMode | None":

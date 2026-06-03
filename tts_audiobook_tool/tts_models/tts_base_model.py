@@ -187,8 +187,13 @@ class TtsBaseModel(ABC):
         # Remove file suffix
         voice_file_name = Path(voice_file_name).stem
         
-        # Remove filename 'postfix decorator'; not great
-        voice_file_name = voice_file_name.strip("_" + cls.INFO.file_tag)
+        # Remove filename postfix decorator without treating the model tag as a
+        # set of removable edge characters. For example, str.strip("_moss")
+        # would incorrectly turn "suzie_yeung_hanya_1" into
+        # "uzie_yeung_hanya_1".
+        postfix_decorator = "_" + cls.INFO.file_tag
+        if voice_file_name.endswith(postfix_decorator):
+            voice_file_name = voice_file_name[:-len(postfix_decorator)]
         
         tag = app_text.sanitize_for_filename(voice_file_name[:30])
         return tag

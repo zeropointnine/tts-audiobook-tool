@@ -351,9 +351,13 @@ def make_retries_label(state: State) -> str:
     )
 
 def make_limit_silence_gaps_label(state: State) -> str:
+    if state.project.limit_silence_gaps:
+        value = f"True {state.project.limit_silence_gaps_duration:.2f}s" 
+    else:
+        value = "False"
     return make_menu_label(
         label="Limit silence gaps",
-        value=state.project.limit_silence_gaps,
+        value=value,
         default=PROJECT_DEFAULT_LIMIT_SILENCE_GAPS
     )
 

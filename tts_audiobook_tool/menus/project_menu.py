@@ -285,7 +285,7 @@ LANGUAGE_CODE_DESC = "" + \
 - Semantic segmentation of imported text
 - Prompt pre-processing 
 - Whisper transcription
-- TTS inference (Chatterbox)"""
+- TTS inference (Chatterbox, MOSS)"""
 
 SUBSTITUTIONS_DESC = \
 f"""List of words to be replaced in the TTS prompt at inference-time.

@@ -82,8 +82,13 @@ class Tts:
                 try:
                     module_test = model_info.value.module_test
                     if module_test.startswith("dist:"):
-                        metadata.version(module_test.removeprefix("dist:"))
-                        exists = True
+                        dist_test = module_test.removeprefix("dist:").strip()
+                        if "==" in dist_test:
+                            dist_name, expected_version = [part.strip() for part in dist_test.split("==", 1)]
+                            exists = metadata.version(dist_name) == expected_version
+                        else:
+                            metadata.version(dist_test)
+                            exists = True
                     else:
                         exists = util.find_spec(module_test) is not None
                 except:
@@ -94,10 +99,6 @@ class Tts:
         
         matches = get_matches()
         
-        # Fish S2 special case
-        if TtsModelInfos.FISH_S1 in matches and TtsModelInfos.FISH_S2 in matches:
-            matches = [TtsModelInfos.FISH_S2]
-
         match len(matches):
             case 0:
                 # No match
