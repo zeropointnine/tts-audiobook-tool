@@ -18,7 +18,8 @@ class MossBaseModel(TtsBaseModel):
 
     INFO = TtsModelInfos.MOSS.value
 
-    MAX_NEW_TOKENS = 512
+    MAX_NEW_TOKENS = 1024
+    ROLLING_CONTINUATION_MAX_LENGTH = 3
 
     # Rem, when temp, audio_top_p, or audio_top_k are too low,
     # model can fail to emit termination token, etc.
@@ -72,7 +73,7 @@ class MossBaseModel(TtsBaseModel):
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:
-        b = project.moss_batch_size > 1 and project.moss_mode == MossVoiceCloneMode.ROLLING_CONTINUATION
+        b = project.moss_batch_size > 1 and project.moss_rolling_cont > 0
         if b:
             return [
                 ReadinessIssue(
@@ -182,45 +183,3 @@ class MossConfigs(Enum):
         if self.value.desc_extra:
             parts.append(self.value.desc_extra)
         return ", ".join(parts)
-
-# ---
-
-class MossVoiceCloneMode(tuple[str, str, str], Enum):    
-    CLONE = (
-        "clone", 
-        "Default", 
-        "Use reference audio as a speaker/timbre prompt."
-    )
-    CONTINUATION = (
-        "continuation", 
-        "Continuation (experimental)", 
-        "Continue from the reference audio by prepending its transcript to the prompt."
-    )
-    ROLLING_CONTINUATION = (
-        "rolling_continuation", 
-        "Rolling Continuation (experimental)", 
-        "Within a paragraph, uses each generated segment as context for the next\n      while keeping the reference audio as a speaker/timbre prompt."
-    )
-
-    @property
-    def id(self) -> str:
-        return self.value[0]
-
-    @property
-    def label(self) -> str:
-        return self.value[1]
-
-    @property
-    def description(self) -> str:
-        return self.value[2]
-
-    @staticmethod
-    def get_default() -> "MossVoiceCloneMode":
-        return MossVoiceCloneMode.CLONE
-
-    @staticmethod
-    def get_by_id(id: str) -> "MossVoiceCloneMode | None":
-        for item in list(MossVoiceCloneMode):
-            if id == item.id:
-                return item
-        return None

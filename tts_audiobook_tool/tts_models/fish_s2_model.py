@@ -11,7 +11,7 @@ from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCa
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel, FishS2VoiceCloneMode
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.util import *
 
 
@@ -124,15 +124,34 @@ class FishS2Model(FishS2BaseModel):
         return prompt.replace("\n", " ")[:50]
 
     def clear_continuation(self) -> None:
-        L.i("")
         self.cached_continuation_history.clear()
 
     def cache_continuation(self, prompt: str, tokens: torch.Tensor) -> None:
         self.cached_continuation_history.append((prompt.strip(), tokens.detach().cpu().clone()))
 
+    def cache_continuation_with_budget(self, prompt: str, tokens: torch.Tensor, max_items: int) -> None:
+        if max_items <= 0:
+            self.clear_continuation()
+            return
+        self.cache_continuation(prompt, tokens)
+        while self.is_continuation_history_over_budget(max_items):
+            self.cached_continuation_history.pop(0)
+
+    def is_continuation_history_over_budget(self, max_items: int) -> bool:
+        return (
+            len(self.cached_continuation_history) > max_items
+            or self.get_continuation_history_word_count() > ROLLING_CONTINUATION_MAX_WORDS
+        )
+
+    def get_continuation_history_word_count(self) -> int:
+        return sum(
+            self.get_word_count(prompt)
+            for prompt, _ in self.cached_continuation_history
+        )
+
     @staticmethod
-    def is_prompt_too_long_error(e: Exception) -> bool:
-        return isinstance(e, ValueError) and "Prompt is too long" in str(e)
+    def get_word_count(text: str) -> int:
+        return len(text.split())
 
     def build_prompt_reference(self, use_continuation: bool) -> tuple[list[str] | None, list[torch.Tensor] | None]:
 
@@ -186,8 +205,7 @@ class FishS2Model(FishS2BaseModel):
             # its own internal text chunking so this wrapper remains responsible
             # for segment boundaries, continuation cache updates, and validation
             # semantics. If a prompt plus continuation context is still too long,
-            # Fish's encoded prompt-length check will raise and generate() retries
-            # once after clearing generated continuation history.
+            # Fish's encoded prompt-length check will raise.
             chunk_length=FISH_S2_DISABLE_INTERNAL_CHUNKING_LENGTH,
         ):
             if response.action == "sample":
@@ -246,7 +264,7 @@ class FishS2Model(FishS2BaseModel):
             top_k = project.fish_s2_top_k
 
         seed = -1 if force_random_seed else project.fish_s2_seed
-        fish_s2_mode = project.fish_s2_mode
+        rolling_continuation_max_segments = project.fish_s2_rolling_cont
 
         result = self.generate(
             prompt=prompt,
@@ -254,7 +272,7 @@ class FishS2Model(FishS2BaseModel):
             top_p=top_p,
             top_k=top_k,
             seed=seed,
-            fish_s2_mode=fish_s2_mode,
+            rolling_continuation_max_segments=rolling_continuation_max_segments,
         )
 
         if isinstance(result, Sound):
@@ -269,8 +287,13 @@ class FishS2Model(FishS2BaseModel):
             top_p: float,
             top_k: int,
             seed: int,
-            fish_s2_mode: FishS2VoiceCloneMode,
+            rolling_continuation_max_segments: int,
     ) -> Sound | str:
+
+        rolling_continuation = rolling_continuation_max_segments > 0
+
+        if not rolling_continuation:
+            self.clear_continuation()
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
@@ -290,68 +313,38 @@ class FishS2Model(FishS2BaseModel):
                         voice_prompt_tokens = voice_prompt_tokens[0]
                     self._voice_clone.prompt_tokens = voice_prompt_tokens
 
-                use_continuation = fish_s2_mode == FishS2VoiceCloneMode.ROLLING_CONTINUATION and bool(self.cached_continuation_history)
+                if rolling_continuation:
+                    printt(
+                        "xxx using rolling continuation history - "
+                        f"num segs: {len(self.cached_continuation_history)}, "
+                        f"max segs: {rolling_continuation_max_segments}, "
+                        f"num words: {self.get_continuation_history_word_count()}"
+                    )
+
+                use_continuation = rolling_continuation and bool(self.cached_continuation_history)
 
                 prompt_text, prompt_tokens = self.build_prompt_reference(use_continuation)
-                if use_continuation:
-                    L.i(
-                        "Fish S2: Generating with continuation | "
-                        f"history_items={len(self.cached_continuation_history)} | "
-                        f"text={self.get_prompt_log_preview(prompt)!r}"
-                    )
-                else:
-                    L.i(
-                        "Fish S2: Generating new | "
-                        f"text={self.get_prompt_log_preview(prompt)!r}"
-                    )
+                if use_continuation and self.cached_continuation_history:
+                    printt(f"{COL_DIM_ITALICS}Rolling continuation enabled, history length: {len(self.cached_continuation_history)}")
 
                 # Step 2: Make semantic tokens using prompt tokens
 
-                def generate_without_continuation() -> torch.Tensor | str:
-                    self.clear_continuation()
-                    prompt_text_without_continuation, prompt_tokens_without_continuation = self.build_prompt_reference(False)
-                    return self.generate_semantic_tokens(
-                        prompt,
-                        prompt_text_without_continuation,
-                        prompt_tokens_without_continuation,
-                        temperature,
-                        top_p,
-                        top_k,
-                    )
-
-                try:
-                    generated_tokens = self.generate_semantic_tokens(
-                        prompt,
-                        prompt_text,
-                        prompt_tokens,
-                        temperature,
-                        top_p,
-                        top_k,
-                    )
-                except Exception as e:
-                    if self.is_prompt_too_long_error(e) and use_continuation:
-                        L.i(
-                            "Fish S2: Generating with continuation - must retry | "
-                            f"text={self.get_prompt_log_preview(prompt)!r}"
-                        )
-                        generated_tokens = generate_without_continuation()
-                    else:
-                        raise
-
-                if generated_tokens == FISH_S2_MAX_TOKEN_LIMIT_ERROR and use_continuation:
-                    L.i(
-                        "Fish S2: Generating with continuation - must retry | "
-                        f"text={self.get_prompt_log_preview(prompt)!r}"
-                    )
-                    generated_tokens = generate_without_continuation()
+                generated_tokens = self.generate_semantic_tokens(
+                    prompt,
+                    prompt_text,
+                    prompt_tokens,
+                    temperature,
+                    top_p,
+                    top_k,
+                )
 
                 del prompt_tokens
 
                 if isinstance(generated_tokens, str):
                     return generated_tokens
 
-                if fish_s2_mode == FishS2VoiceCloneMode.ROLLING_CONTINUATION:
-                    self.cache_continuation(prompt, generated_tokens)
+                if rolling_continuation:
+                    self.cache_continuation_with_budget(prompt, generated_tokens, rolling_continuation_max_segments)
                 semantic_tokens = generated_tokens.numpy()
 
                 # Step 3: Make audio data using semantic tokens

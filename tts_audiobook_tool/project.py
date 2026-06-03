@@ -11,10 +11,9 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel, FishS2VoiceCloneMode
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
-from tts_audiobook_tool.tts_models.moss_base_model import MossVoiceCloneMode
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
@@ -176,7 +175,7 @@ class Project(BaseModel):
 
     fish_s2_voice_file_name: str = ""
     fish_s2_voice_transcript: str = Field(default="", alias="fish_s2_voice_text")
-    fish_s2_mode: FishS2VoiceCloneMode = FishS2VoiceCloneMode.get_default()
+    fish_s2_rolling_cont: int = 0
     fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s2_temperature: float = -1
     fish_s2_top_p: float = -1
@@ -224,7 +223,7 @@ class Project(BaseModel):
     moss_voice_file_name: str = ""
     moss_voice_transcript: str = Field(default="", alias="moss_voice_text")
     moss_target: str = ""
-    moss_mode: MossVoiceCloneMode = MossVoiceCloneMode.get_default()
+    moss_rolling_cont: int = 0
     moss_delay_temperature: float = -1
     moss_delay_top_p: float = -1
     moss_delay_top_k: int = -1
@@ -238,6 +237,7 @@ class Project(BaseModel):
     qwen3_model_type: str = ""
     qwen3_voice_file_name: str = ""
     qwen3_voice_transcript: str = Field(default="", alias="qwen3_voice_text")
+    qwen3_rolling_cont: int = 0
     qwen3_speaker_id: str = ""
     qwen3_instructions: str = ""
     qwen3_batch_size: int = 1

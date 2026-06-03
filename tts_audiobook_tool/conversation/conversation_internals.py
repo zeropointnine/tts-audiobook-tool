@@ -584,6 +584,11 @@ class ResponseSession:
         self.user_input_sound: Sound | None = None
 
     def run(self, assembled: str, user_input_sound: Sound | None = None) -> None:
+        # Each Enter-press/LLM response turn is its own rolling-continuation
+        # context. Continuation may still bridge generated chunks within this
+        # turn, but must not leak across independent turns.
+        Tts.clear_continuation()
+
         self.user_input_sound = user_input_sound
         self.tts_q: queue.Queue[tuple[str, Reason] | None] = queue.Queue()
         self.tts_buffer = ""
@@ -661,6 +666,7 @@ class ResponseSession:
         self.ui.wait_idle()
         if not llm_failed and not was_interrupted:
             self.save_chat_output_if_needed()
+        Tts.clear_continuation()
 
     def tts_worker(self) -> None:
         while True:

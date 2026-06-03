@@ -74,6 +74,11 @@ def start(
     printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
     printt()
 
+    # Realtime playback is a top-level generation run. If the previous run ended
+    # normally within one paragraph, there may be no phrase-level break reason to
+    # clear rolling continuation state, so force a fresh context at run start.
+    Tts.clear_continuation()
+
     # Outer loop
 
     Interrupts().set("generating")
@@ -211,6 +216,9 @@ def start(
         ask.ask_enter_to_continue()
     if stream:
         stream.shut_down()
+
+    # Do not let rolling continuation state leak into the next realtime run.
+    Tts.clear_continuation()
 
     if not should_prompt_before_shutdown:
         printt()

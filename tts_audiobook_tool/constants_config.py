@@ -6,6 +6,7 @@ TODO: consider making this a config file proper
 import os
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_MAX
 
 DEV = os.getenv("TTS_AUDIOBOOK_TOOL_DEV", "").lower() in ("true", "1", "yes") and True
 
@@ -60,3 +61,5 @@ DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT = (
     "Be conversational and brief. "
     "Respond in plain, natural language that sounds good when spoken aloud. Avoid emojis, decorative or nonverbal punctuation. Use only simple ASCII-friendly characters, prefer the regular dash `-`, and avoid em dashes, en dashes, or unusual symbols.`"
 )
+
+ROLLING_CONTINUATION_MAX_WORDS = MAX_WORDS_PER_SEGMENT_MAX * 2

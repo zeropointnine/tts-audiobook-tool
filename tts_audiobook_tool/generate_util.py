@@ -106,6 +106,10 @@ class GenerateUtil:
         Interrupts().set("generating")
         did_interrupt = False
 
+        # Audiobook generation is a top-level generation run. Start from a
+        # fresh rolling-continuation context, independent of any prior run.
+        Tts.clear_continuation()
+
         # Loop through items in the batch
         while items:
 
@@ -311,6 +315,10 @@ class GenerateUtil:
                     warnings_string += f"Num music fails: {num_failed_music}\n"
             warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
         printt(warnings_string)
+
+        # Prevent rolling-continuation state from leaking into a later run when
+        # this run ends successfully without a paragraph/section break.
+        Tts.clear_continuation()
 
         Interrupts().clear()
         return did_interrupt

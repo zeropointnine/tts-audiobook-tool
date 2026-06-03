@@ -1,11 +1,10 @@
 import os
 import random
-import tempfile
+import time
 from importlib import util as importlib_util
 
 import numpy as np
 import torch
-import soundfile as sf
 import huggingface_hub
 
 from tts_audiobook_tool import app_support, target_util
@@ -13,7 +12,7 @@ from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel, MossVoiceCloneMode
+from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
 
 from transformers import AutoModel, AutoProcessor  # type: ignore
@@ -29,9 +28,7 @@ class MossModel(MossBaseModel):
         self.cached_voice_path = ""
         self.cached_voice_stat: tuple[int, int] | None = None
         self.cached_voice_codes: torch.Tensor | None = None
-        self.cached_continuation_text = ""
-        self.cached_continuation_audio_path = ""
-        self.cached_continuation_audio_codes: torch.Tensor | None = None
+        self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
         self.audio_tokenizer_is_on_device = False
 
         if self.device == "cuda":
@@ -134,6 +131,10 @@ class MossModel(MossBaseModel):
         parts = [part.strip() for part in [previous_text, prompt] if part.strip()]
         return " ".join(parts)
 
+    @staticmethod
+    def get_prompt_log_preview(prompt: str) -> str:
+        return prompt.replace("\n", " ")[:50]
+
     def kill(self) -> None:
         if self.processor:
             if hasattr(self.processor, "audio_tokenizer"):
@@ -206,48 +207,69 @@ class MossModel(MossBaseModel):
         sounds, _ = decoded
         return sounds
 
-    def clear_cached_continuation_audio_file(self) -> None:
-        if self.cached_continuation_audio_path:
-            try:
-                os.remove(self.cached_continuation_audio_path)
-            except OSError:
-                pass
-            self.cached_continuation_audio_path = ""
-
     def clear_continuation(self) -> None:
         super().clear_continuation()
-        self.cached_continuation_text = ""
-        self.clear_cached_continuation_audio_file()
-        self.cached_continuation_audio_codes = None
+        self.cached_continuation_history.clear()
 
     def cache_continuation(
             self,
             prompt: str,
             audio: torch.Tensor,
             sample_rate: int,
+            max_items: int,
     ) -> None:
-        self.cached_continuation_audio_codes = None
-        self.clear_cached_continuation_audio_file()
-        if MODE_CC_USE_CACHED_SOUND_DATA:
-            if self.processor is None:
-                raise RuntimeError("Processor is not initialized")
-            self.prepare_audio_tokenizer("continuation wav encode")
-            wav = audio.detach().to(torch.float32).cpu()
-            if wav.ndim == 1:
-                wav = wav.unsqueeze(0)
-            elif wav.ndim > 2:
-                wav = wav.reshape(-1).unsqueeze(0)
-            self.cached_continuation_audio_codes = self.processor.encode_audios_from_wav([wav], sample_rate)[0]
-        else:
-            self.clear_cached_continuation_audio_file()
-            temp_file = tempfile.NamedTemporaryFile(prefix="moss-continuation-", suffix=".wav", delete=False)
-            temp_file.close()
-            audio_np = audio.detach().to(torch.float32).cpu().numpy().astype(np.float32, copy=False)
-            if audio_np.ndim > 1:
-                audio_np = np.squeeze(audio_np)
-            sf.write(temp_file.name, audio_np, sample_rate)
-            self.cached_continuation_audio_path = temp_file.name
-        self.cached_continuation_text = prompt.strip()
+        if max_items <= 0:
+            self.clear_continuation()
+            return
+        if self.processor is None:
+            raise RuntimeError("Processor is not initialized")
+
+        self.prepare_audio_tokenizer("continuation wav encode")
+        wav = audio.detach().to(torch.float32).cpu()
+        if wav.ndim == 1:
+            wav = wav.unsqueeze(0)
+        elif wav.ndim > 2:
+            wav = wav.reshape(-1).unsqueeze(0)
+
+        encode_start = time.perf_counter()
+        audio_codes = self.processor.encode_audios_from_wav([wav], sample_rate)[0]
+        encode_duration = time.perf_counter() - encode_start
+
+        self.cached_continuation_history.append((prompt.strip(), audio_codes.detach().cpu().clone()))
+        while self.is_continuation_history_over_budget(max_items):
+            self.cached_continuation_history.pop(0)
+
+    def is_continuation_history_over_budget(self, max_items: int) -> bool:
+        return (
+            len(self.cached_continuation_history) > max_items
+            or self.get_continuation_history_word_count() > ROLLING_CONTINUATION_MAX_WORDS
+        )
+
+    def get_continuation_history_word_count(self) -> int:
+        return sum(
+            self.get_word_count(prompt)
+            for prompt, _ in self.cached_continuation_history
+        )
+
+    @staticmethod
+    def get_word_count(text: str) -> int:
+        return len(text.split())
+
+    def build_rolling_continuation_reference(self) -> tuple[str, list[torch.Tensor]]:
+        previous_text = " ".join(
+            prompt.strip()
+            for prompt, _ in self.cached_continuation_history
+            if prompt.strip()
+        )
+        previous_audio_codes = [
+            audio_codes.detach().cpu()
+            for _, audio_codes in self.cached_continuation_history
+        ]
+        return previous_text, previous_audio_codes
+
+    @staticmethod
+    def build_audio_placeholder_content(num_items: int) -> str:
+        return MOSS_AUDIO_PLACEHOLDER * num_items
 
     def get_voice_codes(self, voice_path: str) -> torch.Tensor | None:
         if not voice_path:
@@ -307,8 +329,7 @@ class MossModel(MossBaseModel):
         return self.generate(
             prompts=prompts,
             voice_path=voice_path,
-            voice_transcript=project.moss_voice_transcript,
-            moss_mode=project.moss_mode,
+            rolling_continuation_max_segments=project.moss_rolling_cont,
             language=language,
             temperature=temperature,
             top_p=top_p,
@@ -320,8 +341,7 @@ class MossModel(MossBaseModel):
             self,
             prompts: list[str],
             voice_path: str,
-            voice_transcript: str,
-            moss_mode: MossVoiceCloneMode,
+            rolling_continuation_max_segments: int,
             language: str,
             temperature: float,
             top_p: float,
@@ -342,61 +362,29 @@ class MossModel(MossBaseModel):
 
         try:
 
-            if moss_mode == MossVoiceCloneMode.CONTINUATION:
-
-                if not voice_reference:
-                    return "MOSS continuation requires voice reference audio"
-                if not voice_transcript.strip():
-                    return "MOSS continuation requires voice transcript"
-
-                conversations = [
-                    [
-                        self.processor.build_user_message(
-                            text=self.build_continuation_text(voice_transcript, prompt),
-                            language=language or None,
-                        ),
-                        self.processor.build_assistant_message(audio_codes_list=[voice_reference]),
-                    ]
-                    for prompt in prompts
-                ]
-                processor_mode = "continuation"
-
-                outputs = self.generate_outputs(conversations, processor_mode, temperature, top_p, top_k)
-                decoded = self.decode_outputs_to_sounds(outputs)
-
-                if isinstance(decoded, str):
-                    return decoded
-
-                return decoded
-
-            if moss_mode == MossVoiceCloneMode.ROLLING_CONTINUATION:
+            if rolling_continuation_max_segments > 0:
 
                 sounds = []
 
                 for prompt_index, prompt in enumerate(prompts):
-                    previous_text = self.cached_continuation_text
-                    previous_audio = self.cached_continuation_audio_codes if MODE_CC_USE_CACHED_SOUND_DATA else self.cached_continuation_audio_path
+                    previous_text, previous_audio_codes = self.build_rolling_continuation_reference()
 
-                    if previous_text and previous_audio is not None and not (isinstance(previous_audio, str) and not previous_audio):
+                    if previous_text and previous_audio_codes:
                         conversation_text = self.build_continuation_text(previous_text, prompt)
-                        print(f"MOSS continuation: prompt_index={prompt_index}")
-                        print(f"MOSS continuation: previous_text={previous_text!r}")
-                        print(f"MOSS continuation: previous_audio={previous_audio!r}")
-                        print(f"MOSS continuation: current_prompt={prompt!r}")
-                        print(f"MOSS continuation: conversation_text={conversation_text!r}")
+                        printt(f"{COL_DIM_ITALICS}Rolling continuation enabled, history length: {len(self.cached_continuation_history)}")
                         conversations = [[
                             self.processor.build_user_message(
                                 text=conversation_text,
                                 language=language or None,
-                                reference=[voice_reference] if moss_mode == MossVoiceCloneMode.ROLLING_CONTINUATION and voice_reference else None,
+                                reference=[voice_reference] if voice_reference else None,
                             ),
-                            self.processor.build_assistant_message(audio_codes_list=[previous_audio]),
+                            self.processor.build_assistant_message(
+                                audio_codes_list=previous_audio_codes,
+                                content=self.build_audio_placeholder_content(len(previous_audio_codes)),
+                            ),
                         ]]
                         processor_mode = "continuation"
                     elif voice_reference:
-                        print(f"MOSS rolling continuation clone bootstrap: prompt_index={prompt_index}")
-                        print(f"MOSS rolling continuation clone bootstrap: voice_audio={voice_reference!r}")
-                        print(f"MOSS rolling continuation clone bootstrap: current_prompt={prompt!r}")
                         conversations = [[
                             self.processor.build_user_message(
                                 text=prompt,
@@ -422,11 +410,12 @@ class MossModel(MossBaseModel):
                             prompt,
                             prompt_audios[-1],
                             prompt_sounds[-1].sr,
+                            rolling_continuation_max_segments,
                         )
 
                 return sounds
 
-            if moss_mode == MossVoiceCloneMode.CLONE and voice_reference:
+            if voice_reference:
 
                 conversations = [
                     [
@@ -462,16 +451,4 @@ class MossModel(MossBaseModel):
             
             return make_error_string(e)
 
-
-# True: cache continuation audio in memory as MOSS audio codes by re-encoding the
-# generated waveform with the processor audio tokenizer. This avoids temporary
-# file I/O on the next continuation prompt, but still pays the waveform-to-codes
-# encode cost (API does not allow for feeding back in fully transformed token data or whatever).
-
-# False: cache continuation audio as a temporary WAV file path. This is slower
-# due to file write/read work, but follows the project reference code's path-based 
-# audio input behavior more closely. Not sure how much slower but yea.
-
-# Outputs do differ between True vs False. I think I prefer True; hard to say.
-
-MODE_CC_USE_CACHED_SOUND_DATA = False
+MOSS_AUDIO_PLACEHOLDER = "<|audio|>"

@@ -669,6 +669,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - CustomVoice and VoiceDesign model variants
 - Support for Darwin-TTS-1.7B-Cross finetune
 - Batch processing support
+- Experimental rolling continuation mode
 - Temperature, top_p, top_k, repetition_penalty, seed
 
 **VibeVoice**
@@ -700,7 +701,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~80% realtime   | batch size=2, flash attn
-| OmniVoice TTS           | GTX 3080 Ti, Linux   | 800% realtime   | default steps
+| OmniVoice TTS           | GTX 3080 Ti, Linux   | 300% realtime   | default steps
 | OmniVoice TTS           | Macbook Pro M1 (MPS) | 20% realtime    | default steps
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
 | Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU (CUDA disabled)
@@ -720,9 +721,9 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
-**2026-06-02**
+**2026-06-03**
 
-- Added experimental rolling continuation mode for Fish S2 Pro
+- Added experimental **rolling continuation mode** for Fish S2 Pro and Qwen3-TTS Base (this is already available for MOSS-TTS)
 
 **2026-05-28**
 

@@ -13,14 +13,13 @@ from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
 class VoiceQwen3Menu:
     """
-    Note, unlike the other model voice/settings menus, 
-    this will instantiate model by necessity if not already
+    Note, menu requires knowing qwen3 model type,
+    which requires model being instantiated
+    (unlike the other model voice menus, which do not require this)
     """
 
     @staticmethod
     def menu(state: State) -> None:
-        """
-        """
 
         def make_voice_label(_) -> str:
             if not state.project.qwen3_voice_file_name:
@@ -122,8 +121,20 @@ class VoiceQwen3Menu:
                 items.append(
                     MenuItem("Clear custom model", on_clear_model_target)
                 )
-            
-            # Other params
+
+            # Always show rolling cont setting even though requires type 'base' and batch 1            
+            item = MenuItem(
+                VoiceMenuShared.make_rolling_continuation_label(state.project.qwen3_rolling_cont),
+                lambda _, __: VoiceMenuShared.ask_rolling_continuation(
+                    state=state, 
+                    attribute_name="qwen3_rolling_cont", 
+                    max_value=Qwen3BaseModel.ROLLING_CONTINUATION_MAX_LENGTH, 
+                    qualifier_line="Qwen3-TTS model must be of type \"base\", and batch size must be 1."
+                )
+            )
+            item.superlabel = VOICE_ADVANCED_SUPERLABEL
+            items.append(item)
+
             default_temp = Tts.get_qwen3().generate_defaults.get(
                 "temperature", Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
             )
@@ -134,7 +145,6 @@ class VoiceQwen3Menu:
                 min_value=Qwen3BaseModel.TEMPERATURE_MIN,
                 max_value=Qwen3BaseModel.TEMPERATURE_MAX
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             default_top_p = Tts.get_qwen3().generate_defaults.get(

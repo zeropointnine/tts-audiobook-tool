@@ -62,6 +62,9 @@ class Conversation:
         self.print_various()
 
         self.init_session_state()
+        # Conversation is a top-level session. Do not inherit continuation
+        # history from earlier app flows or previous chat sessions.
+        Tts.clear_continuation()
         try:
             self.install_runtime()
             self.run_main_loop()
@@ -273,6 +276,7 @@ class Conversation:
         model = Tts.get_instance_if_exists()
         if model is not None:
             model.clear_stream_state()
+            model.clear_continuation()
         self.ui.stop()
         self.stop_capture()
         self.sound_stream.shut_down()

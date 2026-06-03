@@ -146,3 +146,11 @@ OPT_IN_INSTRUCTIONS = (
     "[2] Run `hf auth login` and enter valid Hugging Face access token.\n"
     "[3] Restart the app"
 )
+
+ROLLING_CONTINUATION_DESC = \
+"""Within a paragraph, uses up to this many previous 
+generated segments as context for the next segment.
+
+Larger values may improve continuity; 
+lower values may allow for more natural variation.
+"""

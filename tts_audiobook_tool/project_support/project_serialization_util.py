@@ -20,10 +20,9 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
-from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2VoiceCloneMode
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
-from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossVoiceCloneMode
+from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -283,7 +282,7 @@ class ProjectSerializationUtil:
         d['fish_s1_seed'] = seed
 
         normalize_bool('fish_s2_compile_enabled', True)
-        normalize_by_id('fish_s2_mode', FishS2VoiceCloneMode.get_by_id, FishS2VoiceCloneMode.get_default(), warn=True)
+        normalize_int('fish_s2_rolling_cont', 0, min_value=0, max_value=3, warn=True)
 
         seed = d.get('fish_s2_seed', -1)
         if not (-1 <= seed <= SEED_MAX):
@@ -413,13 +412,15 @@ class ProjectSerializationUtil:
             value = int(value)
         d['moss_batch_size'] = value
 
-        normalize_by_id('moss_mode', MossVoiceCloneMode.get_by_id, MossVoiceCloneMode.get_default(), warn=True)
+        normalize_int('moss_rolling_cont', 0, min_value=0, warn=True)
 
         seed = d.get('moss_seed', -1)
         if not (-1 <= seed <= SEED_MAX):
             add_warning('moss_seed', -1)
             seed = -1
         d['moss_seed'] = int(seed)
+
+        normalize_int('qwen3_rolling_cont', 0, min_value=0, warn=True)
 
         value = d.get('qwen3_temperature', -1)
         if value != -1:
@@ -543,7 +544,7 @@ class ProjectSerializationUtil:
 
             "fish_s2_voice_file_name": project.fish_s2_voice_file_name,
             "fish_s2_voice_text": project.fish_s2_voice_transcript,
-            "fish_s2_mode": project.fish_s2_mode.id,
+            "fish_s2_rolling_cont": project.fish_s2_rolling_cont,
             "fish_s2_temperature": project.fish_s2_temperature,
             "fish_s2_top_p": project.fish_s2_top_p,
             "fish_s2_top_k": project.fish_s2_top_k,
@@ -591,7 +592,7 @@ class ProjectSerializationUtil:
             "moss_voice_file_name": project.moss_voice_file_name,
             "moss_voice_text": project.moss_voice_transcript,
             "moss_target": project.moss_target,
-            "moss_mode": project.moss_mode.id,
+            "moss_rolling_cont": project.moss_rolling_cont,
             "moss_delay_temperature": project.moss_delay_temperature,
             "moss_delay_top_p": project.moss_delay_top_p,
             "moss_delay_top_k": project.moss_delay_top_k,
@@ -605,6 +606,7 @@ class ProjectSerializationUtil:
             "qwen3_model_type": project.qwen3_model_type,
             "qwen3_voice_file_name": project.qwen3_voice_file_name,
             "qwen3_voice_text": project.qwen3_voice_transcript,
+            "qwen3_rolling_cont": project.qwen3_rolling_cont,
             "qwen3_speaker_id": project.qwen3_speaker_id,
             "qwen3_instructions": project.qwen3_instructions,
             "qwen3_batch_size": project.qwen3_batch_size,

@@ -145,14 +145,14 @@ class SoundPipeline:
     ) -> Sound:
         
         b = SoundPipeline.should_append_break_sound_effect(
-            reason,
-            use_break_sound_effect=use_break_sound_effect,
-            is_first_in_section=is_first_in_section,
+                reason,
+                use_break_sound_effect=use_break_sound_effect,
+                is_first_in_section=is_first_in_section,
         )
         if b:
             if reason == Reason.SPACE_BREAK:
                 return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
-            if reason == Reason.SECTION_BREAK:
+            elif reason == Reason.SECTION_BREAK:
                 return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
         
         if reason.pause_duration > 0:

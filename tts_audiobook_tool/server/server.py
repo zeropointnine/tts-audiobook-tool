@@ -37,6 +37,7 @@ class PromptItem:
     phrase_group: PhraseGroup
     can_eager: bool
     use_tts_streaming: bool
+    is_prompt_start: bool = False
 
 
 class Server:
@@ -272,13 +273,13 @@ class Server:
 
         if should_segment:
             phrase_groups = PhraseGrouper.text_to_groups(prompt, self._project.max_words, self._project.segmentation_strategy, self._project.language_code)
-            for phrase_group in phrase_groups:
+            for i, phrase_group in enumerate(phrase_groups):
                 prompt_texts.append(phrase_group.text)
-                self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, can_eager, use_tts_streaming)))
+                self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, can_eager, use_tts_streaming, is_prompt_start=(i == 0))))
         else:
             phrase_group = PhraseGroup( [Phrase(text=prompt, reason=Reason.UNDEFINED)] )
             prompt_texts.append(prompt)
-            self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, False, use_tts_streaming)))
+            self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, False, use_tts_streaming, is_prompt_start=True)))
        
         return {
             "input": prompt,
@@ -465,6 +466,12 @@ class Server:
                 continue
 
             phrase_group = prompt_item.phrase_group
+
+            if prompt_item.is_prompt_start:
+                # Each /prompt request is a top-level generation run. Keep
+                # rolling continuation within segmented chunks from this prompt,
+                # but never inherit context from earlier requests.
+                Tts.clear_continuation()
 
             if (
                 not prompt_item.use_tts_streaming

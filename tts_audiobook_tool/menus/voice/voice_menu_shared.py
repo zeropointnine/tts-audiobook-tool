@@ -401,3 +401,32 @@ class VoiceMenuShared:
             return
         
         callback(project, new_target)
+
+    @staticmethod
+    def make_rolling_continuation_label(value: int) -> str:
+        if value > 0:
+            val = f"enabled, length {value}"
+        else:
+            val = f"disabled {COL_DIM}default"
+        return "Rolling continuation " + make_currently_string(val)
+
+
+    @staticmethod
+    def ask_rolling_continuation(state: State, attribute_name: str, max_value: int, qualifier_line: str="") -> None:
+        """
+        :param qualifier_line: Should describe any prereqs (eg, batch size 1)
+        """
+        subheading = ROLLING_CONTINUATION_DESC
+        if qualifier_line:
+            subheading += f"\n{qualifier_line}\n"
+        
+        MenuUtil.print_screen_heading(
+            state, 
+            f"Rolling continuation {COL_DIM}(experimental)",
+            subheading=subheading
+        )
+        ask.ask_number(
+            state.project, attribute_name, "Enter value", 
+            min_value=0, max_value=max_value, default_value=0, 
+            success_prefix="Rolling continuation num segments set to", is_int=True
+        )

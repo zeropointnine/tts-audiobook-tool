@@ -32,6 +32,8 @@ class Qwen3BaseModel(TtsBaseModel):
     TOP_K_DEFAULT = 50
     TOP_P_DEFAULT = 1.0
     REPETITION_PENALTY_DEFAULT = 1.05
+
+    ROLLING_CONTINUATION_MAX_LENGTH = 3 # fyi, quality degrades quickly as segments goes up with this model
             
     def clear_voice(self) -> None:
         ...
@@ -123,6 +125,22 @@ class Qwen3BaseModel(TtsBaseModel):
 
         if instance and not instance.is_model_type_supported:
             return [ ReadinessIssue("supported model type", f"Model type {instance.model_type} is unsupported") ]
+
+        if project.qwen3_rolling_cont > 0: 
+            if instance and instance.model_type != "base":
+                items.append(
+                    ReadinessIssue(
+                        "model type \"base\" for rolling cont",
+                        "Rolling continuation requires Qwen3-TTS model type \"base\""
+                    )
+                )
+            if project.qwen3_batch_size > 1:
+                items.append(
+                    ReadinessIssue(
+                        "batch size 1 for rolling cont",
+                        "Rolling continuation requires batch size 1"
+                    )
+                )
 
         match project.qwen3_model_type:            
             case "custom_voice":
@@ -228,4 +246,3 @@ class Qwen3ModelType(str, Enum):
     CUSTOM_VOICE = "custom_voice"
     VOICE_DESIGN = "voice_design"
     UNKNOWN = "unknown"
-

@@ -3,7 +3,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossVoiceCloneMode
+from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -37,10 +37,15 @@ class VoiceMossMenu:
             )
 
             item = MenuItem(
-                make_voice_clone_mode_label,
-                lambda _, __: VoiceMossMenu.voice_clone_mode_menu(state)
+                VoiceMenuShared.make_rolling_continuation_label(state.project.moss_rolling_cont),
+                lambda _, __: VoiceMenuShared.ask_rolling_continuation(
+                    state=state,
+                    attribute_name="moss_rolling_cont",
+                    max_value=MossBaseModel.ROLLING_CONTINUATION_MAX_LENGTH,
+                    qualifier_line="MOSS-TTS rolling continuation requires batch size 1."
+                ),
+                superlabel=VOICE_ADVANCED_SUPERLABEL
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             config = MossConfigs.get_by_target(state.project.moss_target)
@@ -56,33 +61,7 @@ class VoiceMossMenu:
 
         VoiceMenuShared.menu_wrapper(state, make_items)
 
-    @staticmethod
-    def voice_clone_mode_menu(state: State) -> None:
-        voice_clone_modes = list(MossVoiceCloneMode)
-
-        def on_select(value: MossVoiceCloneMode) -> None:
-            if state.project.moss_mode != value:
-                state.project.moss_mode = value
-                state.project.save()
-            print_feedback("Set to:", value.label)
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Voice clone mode",
-            labels=[mode.label for mode in voice_clone_modes],
-            sublabels=[mode.description for mode in voice_clone_modes],
-            values=voice_clone_modes,
-            current_value=state.project.moss_mode,
-            default_value=MossVoiceCloneMode.get_default(),
-            on_select=on_select,
-        )
-
 # ---
-
-def make_voice_clone_mode_label(state: State) -> str:
-    value = state.project.moss_mode.id
-    default_value = MossVoiceCloneMode.get_default().id
-    return make_menu_label("Voice clone mode", value, default_value)
 
 def target_submenu(state: State) -> None:
 
