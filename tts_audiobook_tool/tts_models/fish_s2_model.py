@@ -313,19 +313,11 @@ class FishS2Model(FishS2BaseModel):
                         voice_prompt_tokens = voice_prompt_tokens[0]
                     self._voice_clone.prompt_tokens = voice_prompt_tokens
 
-                if rolling_continuation:
-                    printt(
-                        "xxx using rolling continuation history - "
-                        f"num segs: {len(self.cached_continuation_history)}, "
-                        f"max segs: {rolling_continuation_max_segments}, "
-                        f"num words: {self.get_continuation_history_word_count()}"
-                    )
-
                 use_continuation = rolling_continuation and bool(self.cached_continuation_history)
+                if use_continuation:
+                    printt(f"{COL_DIM_ITALICS}Rolling continuation enabled, history length: {len(self.cached_continuation_history)}")
 
                 prompt_text, prompt_tokens = self.build_prompt_reference(use_continuation)
-                if use_continuation and self.cached_continuation_history:
-                    printt(f"{COL_DIM_ITALICS}Rolling continuation enabled, history length: {len(self.cached_continuation_history)}")
 
                 # Step 2: Make semantic tokens using prompt tokens
 
