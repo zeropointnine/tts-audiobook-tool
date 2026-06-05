@@ -132,7 +132,8 @@ class Conversation:
 
     def init_session_state(self) -> None:
         state = self.state
-        system_prompt = DEFAULT_LLM_CONVERSATION_SYSTEM_PROMPT if state.prefs.llm_system_prompt_default else state.prefs.llm_system_prompt.strip()
+        from tts_audiobook_tool.menus.chat_menu import ChatMenu
+        system_prompt = ChatMenu.get_resolved_system_prompt(state)
         self.llm = LlmSession(
             api_endpoint_url=state.prefs.llm_url,
             token=state.prefs.llm_api_key,
@@ -263,7 +264,7 @@ class Conversation:
         self.ui.commit_render(1)
         self.ui.wait_idle()
         self.restore_console()
-        print_feedback("Exited")
+        print_feedback("Exiting LLM Chat")
         print("", end="", flush=True)
         self.stop_capture()
 

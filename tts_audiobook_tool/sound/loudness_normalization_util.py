@@ -199,6 +199,11 @@ class LoudnessNormalizationUtil:
             "-af", filter_string
         ]
 
+        # The loudnorm filter upsamples for true-peak processing and can leave the
+        # filtered stream at a higher sample rate. Pin the final output back to the
+        # app's expected rate so AAC exports do not inherit that high-rate stream.
+        partial_command.extend(["-ar", f"{APP_SAMPLE_RATE}"])
+
         output_suffix = Path(output_file_path).suffix.lower()
         if output_suffix == ".flac":
             partial_command.extend(FFMPEG_ARGUMENTS_OUTPUT_FLAC)

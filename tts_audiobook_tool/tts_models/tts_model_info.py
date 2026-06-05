@@ -1,3 +1,4 @@
+from __future__ import annotations
 from enum import Enum
 from functools import cache
 from typing import NamedTuple
@@ -8,10 +9,16 @@ class TtsModelInfo(NamedTuple):
     Hardcoded properties of a supported TTS model
     """
 
+    # identifier used for serialization
+    id: str
+    # Whether the model is backed by an external backend rather than local inference
+    is_sgl_omni: bool
+    # Substring to use for simple model matching against SGL-Omni model name (empty = not applicable)
+    server_model_id_substring: str
     # Module name, or "dist:<package>" / "dist:<package>==<version>", to test for that implies the TTS model library exists in the current py env
-    module_test: str
-    # Supported device types
-    torch_devices: list[str]
+    local_module_test: str
+    # Supported torch device types for local inference
+    local_torch_devices: list[str]
     # identifier used in file names
     file_tag: str
     # The model's sound output sample rate
@@ -31,7 +38,7 @@ class TtsModelInfo(NamedTuple):
     extra_file_attrs: list[str]
     # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
     
-    batch_size_project_field: str
+    batch_size_attr: str
     # Whether the model supports streaming chunk callbacks
     can_stream: bool
     # Should semantic trim at end of last word
@@ -45,7 +52,8 @@ class TtsModelInfo(NamedTuple):
     # Does the model require FFmpeg shared libraries (dll/so/dylib), not just the ffmpeg executable
     # In practice, this is usually because the model depends on TorchCodec
     requires_ffmpeg_libs: bool
-    # Forces lowercase on prompts that start out all-caps (see `un_all_caps_prompt()`)
+    # Forces lowercase on prompts that start out all-caps (see `un_all_caps_prompt()`).
+    # Should be set for models that perform poorly on all-caps text
     un_all_caps: bool
     # The requirements.txt file that should be used to install the virtual environment for the given tts model
     requirements_file_name: str
@@ -57,7 +65,7 @@ class TtsModelInfo(NamedTuple):
 
     @property
     def can_batch(self) -> bool:
-        return bool(self.batch_size_project_field)
+        return bool(self.batch_size_attr)
 
 class TtsModelInfos(Enum):
     """
@@ -66,9 +74,12 @@ class TtsModelInfos(Enum):
 
     # Placeholder
     NONE = TtsModelInfo(
-        module_test="",
+        id="none",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="",
+        local_torch_devices = [],
         file_tag="",
-        torch_devices = [],
         sample_rate=0,
         max_words_default=0,
         max_words_reco_range=(0, 0),
@@ -76,7 +87,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -94,9 +105,12 @@ class TtsModelInfos(Enum):
     )
 
     OUTE = TtsModelInfo(
-        module_test="outetts",
+        id="oute",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="outetts",
+        local_torch_devices = [], # not applicable
         file_tag="oute",
-        torch_devices = [], # not applicable
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 40),
@@ -104,7 +118,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -125,9 +139,12 @@ class TtsModelInfos(Enum):
     )
 
     CHATTERBOX = TtsModelInfo(
-        module_test="chatterbox",
+        id="chatterbox",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="chatterbox",
+        local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="chatterbox",
-        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
@@ -135,7 +152,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=True,
         hallucinates_music=False,
@@ -155,9 +172,12 @@ class TtsModelInfos(Enum):
     )
 
     FISH_S1 = TtsModelInfo(
-        module_test="dist:fish-speech==0.1.0",
+        id="fish_s1",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="dist:fish-speech==0.1.0",
+        local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="s1-mini",
-        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -165,7 +185,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="fish_s1_voice_transcript",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -185,9 +205,12 @@ class TtsModelInfos(Enum):
     )
 
     FISH_S2 = TtsModelInfo(
-        module_test="dist:fish-speech==2.0.0",
+        id="fish_s2",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="dist:fish-speech==2.0.0",
+        local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="s2-pro",
-        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -195,7 +218,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="fish_s2_voice_transcript",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -214,10 +237,13 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    HIGGS = TtsModelInfo(
-        module_test="boson_multimodal",
-        file_tag="higgs",
-        torch_devices = ["cuda", "mps", "cpu"],
+    HIGGS_V2 = TtsModelInfo(
+        id="higgs_v2",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="boson_multimodal",
+        local_torch_devices = ["cuda", "mps", "cpu"],
+        file_tag="higgs_v2",
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
@@ -225,16 +251,16 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="higgs_voice_transcript",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
         requires_ffmpeg_libs=False,
-        un_all_caps=False, # TODO: did very ltd (cpu-bound) test only
-        requirements_file_name="requirements-higgs.txt",
+        un_all_caps=False,
+        requirements_file_name="requirements-higgs-v2.txt",
         ui = {
             "proper_name": "Higgs Audio V2",
-            "short_name": "higgs",
+            "short_name": "Higgs v2",
             "voice_path_console": "Enter voice clone audio clip file path (~15 seconds recommended): ",
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/boson-ai/higgs-audio", "https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base"]
@@ -245,9 +271,12 @@ class TtsModelInfos(Enum):
     )
 
     VIBEVOICE = TtsModelInfo(
-        module_test="vibevoice",
+        id="vibevoice",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="vibevoice",
+        local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="vibevoice",
-        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -255,7 +284,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_project_field="vibevoice_batch_size",
+        batch_size_attr="vibevoice_batch_size",
         can_stream=True,
         semantic_trim_last=False,
         hallucinates_music=True,
@@ -277,9 +306,12 @@ class TtsModelInfos(Enum):
     )
 
     INDEXTTS2 = TtsModelInfo(
-        module_test="indextts",
+        id="indextts2",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="indextts",
+        local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="indextts2",
-        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=22050,
         max_words_default=40,
         max_words_reco_range=(40, 60),
@@ -287,7 +319,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=["indextts2_emo_voice_file_name"],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -308,9 +340,12 @@ class TtsModelInfos(Enum):
     )
 
     GLM = TtsModelInfo(
-        module_test="glm_tts",
+        id="glm",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="glm_tts",
+        local_torch_devices = ["cuda"], # cuda-only atm
         file_tag="glm",
-        torch_devices = ["cuda"], # cuda-only atm
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
@@ -318,7 +353,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         voice_transcript_attr="glm_voice_transcript",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -340,9 +375,12 @@ class TtsModelInfos(Enum):
     )
 
     MIRA = TtsModelInfo(
-        module_test="mira",
+        id="mira",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="mira",
+        local_torch_devices = [], # does not take in a device as a parameters
         file_tag="mira",
-        torch_devices = [], # does not take in a device as a parameters
         sample_rate=48000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -350,7 +388,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_project_field="mira_batch_size",
+        batch_size_attr="mira_batch_size",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -372,9 +410,12 @@ class TtsModelInfos(Enum):
     )
 
     POCKET = TtsModelInfo(
-        module_test="pocket_tts",
+        id="pocket",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="pocket_tts",
+        local_torch_devices=["cuda", "mps", "cpu"],
         file_tag="pocket",
-        torch_devices=["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -382,7 +423,7 @@ class TtsModelInfos(Enum):
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=True,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -403,9 +444,12 @@ class TtsModelInfos(Enum):
     )
 
     MOSS = TtsModelInfo(
-        module_test="dist:moss-tts",
+        id="moss",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="dist:moss-tts",
+        local_torch_devices=["cuda", "cpu"],
         file_tag="moss",
-        torch_devices=["cuda", "cpu"],
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -413,7 +457,7 @@ class TtsModelInfos(Enum):
         requires_voice=False,
         voice_transcript_attr="moss_voice_transcript",
         extra_file_attrs=[],
-        batch_size_project_field="moss_batch_size",
+        batch_size_attr="moss_batch_size",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -433,9 +477,12 @@ class TtsModelInfos(Enum):
     )
 
     QWEN3TTS = TtsModelInfo(
-        module_test="qwen_tts",
+        id="qwen3tts",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="qwen_tts",
+        local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="qwen3",
-        torch_devices = ["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
@@ -443,7 +490,7 @@ class TtsModelInfos(Enum):
         requires_voice=True, # this applies to 'base' model type only
         voice_transcript_attr="qwen3_voice_transcript",
         extra_file_attrs=[],
-        batch_size_project_field="qwen3_batch_size",
+        batch_size_attr="qwen3_batch_size",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -463,9 +510,12 @@ class TtsModelInfos(Enum):
     )
 
     OMNIVOICE = TtsModelInfo(
-        module_test="omnivoice",
+        id="omnivoice",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="omnivoice",
+        local_torch_devices=["cuda", "mps", "cpu"],
         file_tag="omnivoice",
-        torch_devices=["cuda", "mps", "cpu"],
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80), 
@@ -473,7 +523,7 @@ class TtsModelInfos(Enum):
         requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
         voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
         extra_file_attrs=[],
-        batch_size_project_field="",
+        batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
         hallucinates_music=False,
@@ -492,6 +542,79 @@ class TtsModelInfos(Enum):
         ]
     )
 
+    SERVER_HIGGS_V3 = TtsModelInfo(
+        id="server_higgs_v3",
+        is_sgl_omni=True,
+        server_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model which is v3
+        local_module_test="",
+        local_torch_devices = [],
+        file_tag="higgs_v3",
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80), # xxx
+        voice_file_name_attr="higgs_v3_voice_file_path", # xxx is this the right way to use this?
+        requires_voice=False, # xxx
+        voice_transcript_attr="higgs_v3_voice_transcript", 
+        extra_file_attrs=[],
+        batch_size_attr="higgs_v3_batch_size",
+        can_stream=True,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui = {
+            "proper_name": "Higgs Audio V3",
+            "short_name": "Higgs v3",
+            "voice_path_console": "", # not applicable
+            "voice_path_requestor": "", # not applicable
+            "project_links": ["https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"]
+        },
+        substitutions=[ (
+            "\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
+    SERVER_MOSS = TtsModelInfo(
+        id="server_moss",
+        is_sgl_omni=True,
+        server_model_id_substring="moss",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="moss",
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_file_name_attr="moss_voice_file_name",
+        requires_voice=False,
+        voice_transcript_attr="moss_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="moss_batch_size",
+        can_stream=False,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=True,
+        un_all_caps=False,
+        requirements_file_name="requirements-moss.txt",
+        ui={
+            "proper_name": "MOSS-TTS",
+            "short_name": "MOSS",
+            "voice_path_console": "",
+            "voice_path_requestor": "",
+            "project_links": ["https://github.com/OpenMOSS/MOSS-TTS", "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5", "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"]
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
+    @staticmethod
+    def get_by_id(id: str) -> TtsModelInfos:
+        for item in TtsModelInfos:
+            if item.value.id == id:
+                return item
+        return TtsModelInfos.NONE
+
     @staticmethod
     def recommended_range_string(info: TtsModelInfo) -> str:
         if info.max_words_reco_range[1] == info.max_words_reco_range[0]:
@@ -503,3 +626,31 @@ class TtsModelInfos(Enum):
     @cache
     def all_file_tags() -> set[str]:
          return { item.value.file_tag for item in TtsModelInfos }
+    
+    @staticmethod
+    @cache
+    def get_sgl_omni_items() -> list[TtsModelInfos]:
+        result = []
+        for item in TtsModelInfos:
+            if item.value.is_sgl_omni:
+                result.append(item)
+        return result
+
+    @staticmethod
+    def find_type_item_using_sgl_omni_model_id(model_id: str) -> TtsModelInfos | None:
+        """
+        Chooses TtsModelInfos item using the model id returned by 
+        the SGM-Omni models endpoint (typically an hf repo id),
+        using simple substring comparison.
+        """
+        if not model_id:
+            return None
+        
+        model_id = model_id.lower().strip()
+        
+        for item in TtsModelInfos.get_sgl_omni_items():
+            substring = item.value.server_model_id_substring.lower()                
+            if substring and substring in model_id:
+                return item
+            
+        return None

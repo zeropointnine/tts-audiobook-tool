@@ -7,6 +7,7 @@ from tts_audiobook_tool.menus.options_menu import OptionsMenu
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.project_menu import ProjectMenu
 from tts_audiobook_tool.menus.tools_menu import ToolsMenu
+from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.text_menu import TextMenu
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
@@ -85,12 +86,25 @@ class MainMenu:
             return items
 
         if should_show_menu_status_details(state):
-            s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
+            s = make_tts_model_heading_detail(state)
             heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
         else:
             heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)}"
         
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
+
+# ---
+
+def make_tts_model_heading_detail(state: State) -> str:
+    s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
+    if not Tts.is_sgl_mode():
+        return s
+    SglOmniUtil.update_model_id()
+    if SglOmniUtil.get_model_id():
+        s += f" {COL_DIM}server model id: {SglOmniUtil.get_model_id()}{COL_ACCENT}"
+    else:
+        s += f" {COL_ERROR}SGL-Omni offline{COL_ACCENT}"
+    return s
 
 # ---
 
@@ -122,6 +136,7 @@ def make_voice_label(state: State) -> str:
     return f"{base_label} {COL_DIM}({combined}{COL_DIM})"
 
 def on_voice(state: State, __) -> None:
+    Tts.update_tts_type()
     if Tts.get_type() == TtsModelInfos.NONE:
         print_feedback("Requires TTS model", is_error=True)
         return
@@ -150,9 +165,6 @@ def on_text(state: State, __) -> None:
     TextMenu.menu(state)
 
 def on_generate(state: State, _: MenuItem) -> None:
-    if Tts.get_type() == TtsModelInfos.NONE:
-        print_feedback("Requires TTS model", is_error=True)
-        return
     if not state.project.dir_path:
         print_feedback(REQUIRES_PROJECT, is_error=True)
         return
@@ -165,15 +177,13 @@ def on_concat(state: State, _: MenuItem) -> None:
     ConcatMenu.menu(state)
 
 def on_realtime_audiobook(state: State, _: MenuItem) -> None:
-    if Tts.get_type() == TtsModelInfos.NONE:
-        print_feedback(REQUIRES_TTS_MODEL, is_error=True)
-        return
     if not state.project.dir_path:
         print_feedback(REQUIRES_PROJECT, is_error=True)
         return
     RealTimePlaybackMenu.menu(state)
 
 def on_chat(state: State, _: MenuItem) -> None:
+    Tts.update_tts_type()
     if Tts.get_type() == TtsModelInfos.NONE:
         print_feedback(REQUIRES_TTS_MODEL, is_error=True)
         return

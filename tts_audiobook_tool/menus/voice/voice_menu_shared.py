@@ -3,7 +3,7 @@ from typing import Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.app_types import Hint, SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
 from tts_audiobook_tool.project import Project
@@ -27,9 +27,6 @@ class VoiceMenuShared:
         Simply delegates to the correct model-specific voice menu
         """
         match Tts.get_type():
-            case TtsModelInfos.OUTE:
-                from tts_audiobook_tool.menus.voice import VoiceOuteMenu
-                VoiceOuteMenu.menu(state)
             case TtsModelInfos.CHATTERBOX:
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)
@@ -39,18 +36,15 @@ class VoiceMenuShared:
             case TtsModelInfos.FISH_S2:
                 from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
                 VoiceFishS2Menu.menu(state)
-            case TtsModelInfos.HIGGS:
-                from tts_audiobook_tool.menus.voice import VoiceHiggsMenu
-                VoiceHiggsMenu.menu(state)
-            case TtsModelInfos.VIBEVOICE:
-                from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
-                VoiceVibeVoiceMenu.menu(state)
-            case TtsModelInfos.INDEXTTS2:
-                from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
-                VoiceIndexTts2Menu.menu(state)
             case TtsModelInfos.GLM:
                 from tts_audiobook_tool.menus.voice import VoiceGlmMenu
                 VoiceGlmMenu.menu(state)
+            case TtsModelInfos.HIGGS_V2:
+                from tts_audiobook_tool.menus.voice import VoiceHiggsV2Menu
+                VoiceHiggsV2Menu.menu(state)
+            case TtsModelInfos.INDEXTTS2:
+                from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
+                VoiceIndexTts2Menu.menu(state)
             case TtsModelInfos.MIRA:
                 from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
@@ -60,6 +54,9 @@ class VoiceMenuShared:
             case TtsModelInfos.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
+            case TtsModelInfos.OUTE:
+                from tts_audiobook_tool.menus.voice import VoiceOuteMenu
+                VoiceOuteMenu.menu(state)
             case TtsModelInfos.POCKET:
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
@@ -71,6 +68,16 @@ class VoiceMenuShared:
                     print_feedback("Model loaded")
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
+            case TtsModelInfos.VIBEVOICE:
+                from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
+                VoiceVibeVoiceMenu.menu(state)
+
+            case TtsModelInfos.SERVER_HIGGS_V3:
+                from tts_audiobook_tool.menus.voice import VoiceHiggsV3Menu
+                VoiceHiggsV3Menu.menu(state)
+            case TtsModelInfos.SERVER_MOSS:
+                from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
+                VoiceMossServerMenu.menu(state) 
             case _:
                 ...
 
@@ -265,26 +272,63 @@ class VoiceMenuShared:
 
 
     @staticmethod
+    def ask_temperature(
+            state: State,
+            attr: str,
+            prompt: str,
+            min_value: float,
+            max_value: float,
+            default_value: float,
+            hint: Hint | None = None
+    ) -> None:
+        if hint:
+            hints.show_hint_if_necessary(state.prefs, hint)
+
+        ask.ask_number(
+            state.project,
+            attr,
+            prompt,
+            min_value,
+            max_value,
+            default_value,
+            "Value set:",
+            is_int=False
+        )
+
+    @staticmethod
     def make_temperature_item(
             state: State,
             attr: str,
             default_value: float,
             min_value: float,
             max_value: float,
-            base_label: str="Temperature"
+            base_label: str="Temperature",
+            hint: Hint | None = None
     ) -> MenuItem:
 
-        return MenuUtil.make_number_item(
-            state=state,
+        prompt = "Enter temperature"
+
+        def on_item(_: State, __: MenuItem) -> None:
+            VoiceMenuShared.ask_temperature(
+                state=state,
+                attr=attr,
+                prompt=prompt,
+                min_value=min_value,
+                max_value=max_value,
+                default_value=default_value,
+                hint=hint
+            )
+
+        label = MenuUtil.make_number_label(
+            project=state.project,
             attr=attr,
             base_label=base_label,
             default_value=default_value,
             is_minus_one_default=True,
-            num_decimals=2,
-            prompt=f"Enter temperature {COL_DIM}({min_value} to {max_value}){COL_DEFAULT}:",
-            min_value=min_value,
-            max_value=max_value
+            num_decimals=2
         )
+
+        return MenuItem(label, on_item)
 
     @staticmethod
     def make_top_k_item(
@@ -351,13 +395,23 @@ class VoiceMenuShared:
         )
 
     @staticmethod
-    def make_seed_item(state: State, attr: str, prompt_override: str="") -> MenuItem:
+    def make_seed_item(
+            state: State,
+            attr: str,
+            prompt_override: str="",
+            add_batch_warning: bool=False
+    ) -> MenuItem:
         """ Makes "self-contained" menu item for seed setting, including handler """
 
         if prompt_override:
             prompt = prompt_override
         else:
-            prompt = "Enter a static seed value (-1 = random): "
+            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
+            if not add_batch_warning:
+                prompt += ": "
+
+        if add_batch_warning:
+            prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
 
         def on_item(_: State, __: MenuItem) -> None:
             ask.ask_number(
@@ -368,12 +422,14 @@ class VoiceMenuShared:
                 max_value=2**32-1,
                 default_value=-1,
                 success_prefix="Seed set:",
-                is_int=True
+                is_int=True,
+                print_range_info=False
             )
 
         seed_value: int | None = getattr(state.project, attr, None)
         if seed_value is None:
             raise ValueError(f"Attribute doesn't exist: {attr}")
+        
         suffix = str(seed_value) if seed_value != -1 else "random"
         label = make_menu_label("Seed", suffix)
         return MenuItem(label, on_item)

@@ -1,7 +1,7 @@
 import time
 
 import numpy as np
-from tts_audiobook_tool import app_support
+from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil
@@ -323,7 +323,10 @@ def generate_full_flow(
             if err:
                 printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")
             else:
-                printt(f"{COL_DEFAULT}Saved: {COL_DIM}{Path(saved_path).name}")
+                url = saved_path
+                text = Path(saved_path).name
+                link = text_util.make_terminal_hyperlink(url=url, text=text, is_file=True)
+                printt(f"Saved: {COL_DIM}{link}")
         return validation_result.sound, did_interrupt
 
 # ---

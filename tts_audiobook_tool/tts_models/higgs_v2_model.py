@@ -29,7 +29,7 @@ from huggingface_hub import snapshot_download as _hf_snapshot_download # type: i
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
 from tts_audiobook_tool.util import *
 
 # --------------------------------------------------------------------------------------------------
@@ -73,7 +73,7 @@ _LOCAL_HUBERT_PATH = _pinned_snapshot(
     _PINNED_REVISIONS["bosonai/hubert_base"],
 )
 
-class HiggsModel(HiggsBaseModel):
+class HiggsV2Model(HiggsV2BaseModel):
     """
     Pared-down logic from higgs-audio lib script `generation.py`
     """
@@ -137,17 +137,17 @@ class HiggsModel(HiggsBaseModel):
             voice_transcript = ""
 
         if project.higgs_temperature == -1:
-            temperature = HiggsBaseModel.DEFAULT_TEMPERATURE
+            temperature = HiggsV2BaseModel.DEFAULT_TEMPERATURE
         else:
             temperature = project.higgs_temperature
 
         if project.higgs_top_k == -1:
-            top_k = HiggsBaseModel.DEFAULT_TOP_K
+            top_k = HiggsV2BaseModel.DEFAULT_TOP_K
         else:
             top_k = project.higgs_top_k
 
         if project.higgs_top_p == -1:
-            top_p = HiggsBaseModel.DEFAULT_TOP_P
+            top_p = HiggsV2BaseModel.DEFAULT_TOP_P
         else:
             top_p = project.higgs_top_p
 

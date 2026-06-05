@@ -2,10 +2,19 @@
 # Base virtual environment
 # Has only app dependencies, no TTS model-specific dependencies
 #
-# These items get manually copied into the other requirements files.
+# All model-specific venvs use this full set of entries (with small exceptions)
+# and then add their own.
 # 
-# Use Python 3.11 as 'base version'
+# Use Python 3.11, since this is the lowest version used by
+# any of the app's venv.
+#
+# Note use of artificial "launcher marker" to identify venv as 
+# meant for SGL-Omni use. (Server-related mechanics require no 
+# extra libraries beyond base app deps).
 ###############################################################
+
+# Launcher marker for the dedicated "SGL-Omni server mode" venv
+./launcher_markers/sgl_omni
 
 # App dependencies
 faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
@@ -21,6 +30,7 @@ chardet==5.2.0
 beautifulsoup4==4.12.3
 EbookLib==0.18
 ffmpeg-python==0.2.0
+httpx==0.28.1
 librosa==0.11.0
 loguru==0.7.3
 metaphone==0.6
@@ -43,3 +53,4 @@ xxhash==3.5.0
 
 # dev
 pillow==12.1.0
+

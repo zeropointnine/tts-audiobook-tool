@@ -12,11 +12,14 @@ from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.tts_models.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
+from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
+from tts_audiobook_tool.tts_models.moss_server_model import MossServerModel
 from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
@@ -26,6 +29,8 @@ from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo, TtsModelI
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.app_support import app_memory
+from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -48,12 +53,14 @@ class Tts:
     _chatterbox: ChatterboxBaseModel | None = None
     _fish: FishS1BaseModel | None = None
     _fish_s2: FishS2BaseModel | None = None
-    _higgs: HiggsBaseModel | None = None
+    _higgs: HiggsV2BaseModel | None = None
+    _higgs_v3: HiggsV3ServerBaseModel | None = None
     _vibevoice: VibeVoiceBaseModel | None = None
     _indextts2: IndexTts2BaseModel | None = None
     _glm: GlmBaseModel | None = None
     _mira: MiraBaseModel | None = None
     _moss: MossBaseModel | None = None
+    _moss_server: MossServerBaseModel | None = None
     _qwen3: Qwen3BaseModel | None = None
     _pocket: PocketBaseModel | None = None
     _omnivoice: OmniVoiceBaseModel | None = None
@@ -63,10 +70,10 @@ class Tts:
 
     _model_params: dict = {}
     _force_cpu: bool = False
-    
+    _sgl_omni_type: TtsModelInfos | None = None
 
     @staticmethod
-    def init_model_type() -> tuple[TtsModelInfos, int]:
+    def init_local_model_type() -> tuple[TtsModelInfos, int]:
         """
         Sets the tts model type by checking the installed modules in the python environment.
         Does not instantiate the TtsModel as such.
@@ -80,7 +87,9 @@ class Tts:
             for model_info in TtsModelInfos:
                 exists = False
                 try:
-                    module_test = model_info.value.module_test
+                    module_test = model_info.value.local_module_test
+                    if model_info.value.is_sgl_omni or not module_test:
+                        continue
                     if module_test.startswith("dist:"):
                         dist_test = module_test.removeprefix("dist:").strip()
                         if "==" in dist_test:
@@ -116,6 +125,31 @@ class Tts:
     @staticmethod
     def get_type() -> TtsModelInfos:
         return Tts._type
+
+    @staticmethod
+    def set_type(value: TtsModelInfos) -> None:
+        if Tts._type != value:
+            Tts.clear_tts_model()
+        Tts._type = value
+
+    @staticmethod
+    def set_sgl_omni_type(value: TtsModelInfos | None) -> None:
+        if value is not None and (value == TtsModelInfos.NONE or not value.value.is_sgl_omni):
+            value = None
+        Tts._sgl_omni_type = value
+        Tts.update_tts_type()
+   
+    @staticmethod
+    def is_local_model() -> bool:
+        return Tts._type != TtsModelInfos.NONE and not Tts._type.value.is_sgl_omni
+
+    @staticmethod
+    def is_sgl_mode() -> bool:
+        """
+        Internal nomenclature
+        TODO: Ideally, this should be reflected by a formal construction of some kind, but yea
+        """
+        return not Tts.is_local_model()
 
     @staticmethod
     def set_model_params_using_project(project) -> None:
@@ -180,7 +214,7 @@ class Tts:
             TtsModelInfos.CHATTERBOX: ChatterboxBaseModel,
             TtsModelInfos.FISH_S1: FishS1BaseModel,
             TtsModelInfos.FISH_S2: FishS2BaseModel,
-            TtsModelInfos.HIGGS: HiggsBaseModel,
+            TtsModelInfos.HIGGS_V2: HiggsV2BaseModel,
             TtsModelInfos.VIBEVOICE: VibeVoiceBaseModel,
             TtsModelInfos.INDEXTTS2: IndexTts2BaseModel,
             TtsModelInfos.GLM: GlmBaseModel,
@@ -189,6 +223,9 @@ class Tts:
             TtsModelInfos.QWEN3TTS: Qwen3BaseModel,
             TtsModelInfos.POCKET: PocketBaseModel,
             TtsModelInfos.OMNIVOICE: OmniVoiceBaseModel,
+
+            TtsModelInfos.SERVER_HIGGS_V3: HiggsV3ServerBaseModel,
+            TtsModelInfos.SERVER_MOSS: MossServerModel,
         }
         cls = MAP.get(Tts._type, None)
         if cls is None:
@@ -207,6 +244,7 @@ class Tts:
             Tts._fish,
             Tts._fish_s2,
             Tts._higgs,
+            Tts._higgs_v3,
             Tts._vibevoice,
             Tts._indextts2,
             Tts._glm,
@@ -229,7 +267,7 @@ class Tts:
             TtsModelInfos.CHATTERBOX: Tts.get_chatterbox,
             TtsModelInfos.FISH_S1: Tts.get_fish,
             TtsModelInfos.FISH_S2: Tts.get_fish_s2,
-            TtsModelInfos.HIGGS: Tts.get_higgs,
+            TtsModelInfos.HIGGS_V2: Tts.get_higgs,
             TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
             TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
             TtsModelInfos.GLM: Tts.get_glm,
@@ -238,6 +276,8 @@ class Tts:
             TtsModelInfos.QWEN3TTS: Tts.get_qwen3,
             TtsModelInfos.POCKET: Tts.get_pocket,
             TtsModelInfos.OMNIVOICE: Tts.get_omnivoice,
+            TtsModelInfos.SERVER_HIGGS_V3: Tts.get_higgs_v3,
+            TtsModelInfos.SERVER_MOSS: Tts.get_moss_server
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -252,6 +292,7 @@ class Tts:
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            print_generation_request: bool = False,
     ):
         """
         All app-level TTS generation goes through this function.
@@ -265,13 +306,24 @@ class Tts:
         transforms such as VibeVoice speaker tagging.
         """
         instance = Tts.get_instance()
+        L.i(
+            f"Tts.generate_using_project dispatch: type={Tts._type.value.id} "
+            f"instance={type(instance).__name__} prompts={len(prompts)} "
+            f"has_on_stream_chunk={on_stream_chunk is not None} has_on_stream_end={on_stream_end is not None}"
+        )
         prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
+        kwargs = {
+            "on_stream_chunk": on_stream_chunk,
+            "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
+        }
+        if Tts._type in (TtsModelInfos.SERVER_HIGGS_V3, TtsModelInfos.SERVER_MOSS):
+            kwargs["print_generation_request"] = print_generation_request
+
         return instance.generate_using_project(
             project,
             prepared_prompts,
             force_random_seed,
-            on_stream_chunk=on_stream_chunk,
-            on_stream_end=on_stream_end if on_stream_end is not None else project.on_stream_end,
+            **kwargs,
         )
 
     @staticmethod
@@ -293,7 +345,8 @@ class Tts:
             TtsModelInfos.CHATTERBOX: Tts._chatterbox,
             TtsModelInfos.FISH_S1: Tts._fish,
             TtsModelInfos.FISH_S2: Tts._fish_s2,
-            TtsModelInfos.HIGGS: Tts._higgs,
+            TtsModelInfos.HIGGS_V2: Tts._higgs,
+            TtsModelInfos.SERVER_HIGGS_V3: Tts._higgs_v3,
             TtsModelInfos.VIBEVOICE: Tts._vibevoice,
             TtsModelInfos.INDEXTTS2: Tts._indextts2,
             TtsModelInfos.GLM: Tts._glm,
@@ -308,7 +361,7 @@ class Tts:
     @staticmethod
     def get_oute() -> OuteBaseModel:
         if not Tts._oute:
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
             from tts_audiobook_tool.tts_models.oute_model import OuteModel
             Tts._oute = OuteModel()
             printt()
@@ -320,7 +373,7 @@ class Tts:
             model_type = Tts._model_params.get("chatterbox_type")
             assert isinstance(model_type, ChatterboxType), "chatterbox_type not set"
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(model_type.label, device))
+            Tts._set_instance_info(InstanceDisplayInfo(model_type.label, device))
             
             from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(model_type, device)
@@ -342,7 +395,7 @@ class Tts:
             else:
                 extra = ""
             
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
             
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
             Tts._fish = FishS1Model(device, compile_enabled)
@@ -365,7 +418,7 @@ class Tts:
             else:
                 extra = ""
             
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
             
             from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
             Tts._fish_s2 = FishS2Model(device, compile_enabled)
@@ -374,16 +427,34 @@ class Tts:
         return Tts._fish_s2
 
     @staticmethod
-    def get_higgs() -> HiggsBaseModel:
+    def get_higgs() -> HiggsV2BaseModel:
         if not Tts._higgs:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
             
-            from tts_audiobook_tool.tts_models.higgs_model import HiggsModel
-            Tts._higgs = HiggsModel(device)
+            from tts_audiobook_tool.tts_models.higgs_v2_model import HiggsV2Model
+            Tts._higgs = HiggsV2Model(device)
             printt()
 
         return Tts._higgs
+
+    @staticmethod
+    def get_higgs_v3() -> HiggsV3ServerBaseModel:
+        if not Tts._higgs_v3:
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
+            from tts_audiobook_tool.tts_models.higgs_v3_server_model import HiggsV3ServerModel
+            Tts._higgs_v3 = HiggsV3ServerModel()
+            printt()
+        return Tts._higgs_v3
+
+    @staticmethod
+    def get_moss_server() -> MossServerBaseModel:
+        if not Tts._moss_server:
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
+            from tts_audiobook_tool.tts_models.moss_server_model import MossServerModel
+            Tts._moss_server = MossServerModel()
+            printt()
+        return Tts._moss_server
 
     @staticmethod
     def get_vibevoice() -> VibeVoiceBaseModel:
@@ -402,7 +473,7 @@ class Tts:
             lora_path = Tts._model_params.get("vibevoice_lora_path", "")
             extra = "with lora" if lora_path else ""
 
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device, extra))
+            Tts._set_instance_info(InstanceDisplayInfo(target_string, device, extra))
 
             from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
@@ -420,7 +491,7 @@ class Tts:
         if not Tts._indextts2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
 
             from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
@@ -432,7 +503,7 @@ class Tts:
         if not Tts._glm:
             device = "cuda" # cpu not currently supported
             sr = Tts._model_params["glm_sr"]
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
 
             from tts_audiobook_tool.tts_models.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
@@ -442,7 +513,7 @@ class Tts:
     @staticmethod
     def get_mira() -> MiraBaseModel:
         if not Tts._mira:
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
             
             from tts_audiobook_tool.tts_models.mira_model import MiraModel
             Tts._mira = MiraModel()
@@ -461,7 +532,7 @@ class Tts:
             if looks_like_path and not os.path.exists(target):
                 raise ValueError(f"MOSS model path not found: '{target}'")
 
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device))
+            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
 
             from tts_audiobook_tool.tts_models.moss_model import MossModel
             Tts._moss = MossModel(device=device, model_target=target)
@@ -485,7 +556,7 @@ class Tts:
             if looks_like_path and not os.path.exists(target):
                 raise ValueError(f"Qwen3 model path not found: '{target}'")
 
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(target_string, device))
+            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
 
             from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             try:
@@ -502,7 +573,7 @@ class Tts:
         if not Tts._pocket:
             language = Tts._model_params.get("pocket_model_code", "")
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
             
             from tts_audiobook_tool.tts_models.pocket_model import PocketModel
             Tts._pocket = PocketModel(device=device, language=language)
@@ -526,7 +597,7 @@ class Tts:
             else:
                 model_description = f"{short_name} {COL_DIM}({target_string}){COL_DEFAULT}"
 
-            Tts._set_and_print_instance_info(InstanceDisplayInfo(model_description, device))
+            Tts._set_instance_info(InstanceDisplayInfo(model_description, device))
 
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
             Tts._omnivoice = OmniVoiceModel(
@@ -546,6 +617,7 @@ class Tts:
             Tts._fish = None
             Tts._fish_s2 = None
             Tts._higgs = None
+            Tts._higgs_v3 = None
             Tts._vibevoice = None
             Tts._indextts2 = None
             Tts._glm = None
@@ -570,12 +642,13 @@ class Tts:
         if torch.backends.mps.is_available():
             available_devices.append("mps")
         available_devices.append("cpu")
-        supported_devices = Tts.get_type().value.torch_devices
+        supported_devices = Tts.get_type().value.local_torch_devices
         intersection = [item for item in available_devices if item in supported_devices]
         return intersection[0] if intersection else ""
 
     @staticmethod
-    def _set_and_print_instance_info(info: InstanceDisplayInfo) -> None:
+    def _set_instance_info(info: InstanceDisplayInfo, and_print: bool=True) -> None:
+        # TODO: refactor yek
         
         Tts._instance_display_info = info
 
@@ -587,8 +660,44 @@ class Tts:
             extra = info.device
         else: # extra
             extra = info.extra        
-        print_model_init(model_description=info.model_description, extra=extra)
+        if and_print:
+            print_model_init(model_description=info.model_description, extra=extra)
 
+    @staticmethod
+    def update_tts_type() -> None:
+        """ 
+        Applies only when tts type is NONE or is_sgl_omni
+
+        Dynamically updates tts type based on SGL Omni model name,
+        and also updates _sgl_model_id.
+        """
+
+        if Tts.is_local_model():
+            return
+        
+        original_type = Tts.get_type()
+
+        if not SglOmniUtil.get_base_url() and Tts.get_type() != TtsModelInfos.NONE:
+            Tts.set_type(TtsModelInfos.NONE)
+            # print(f"xxx changed tts type from {original_type} to {Tts.get_type()}")
+            return
+        
+        if Tts._sgl_omni_type is None:
+            # Auto-detect
+            SglOmniUtil.update_model_id()
+
+            new_type = TtsModelInfos.find_type_item_using_sgl_omni_model_id( SglOmniUtil.get_model_id() )
+            if new_type is None:
+                new_type = TtsModelInfos.NONE
+        else:
+            new_type = Tts._sgl_omni_type
+        if new_type == original_type:
+            return        
+        Tts.set_type(new_type)
+        # print(f"xxx changed tts type from {original_type} to {new_type}")
+
+
+# ---
 
 @dataclass
 class InstanceDisplayInfo:

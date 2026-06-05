@@ -1,3 +1,4 @@
+import copy
 import json
 import math
 import re
@@ -77,17 +78,15 @@ def print_init(s: str) -> None:
     printt(f"{COL_DIM_ITALICS}{s}")
     print()
 
-def print_model_init(model_description: str, extra: str = "") -> str:
+def print_model_init(model_description: str, extra: str = "") -> None:
     """ 
     Prints model init message in a consistent style 
-    Also returns plain text concated string value yes rly
     """
     s = f"Initializing {model_description} model"
     if extra:
         s += f" {COL_DIM}({extra})"
     s += "..."
     print_init(s)
-    return f"{model_description} {extra}"
 
 def make_error_string(e: Exception) -> str:
     """
@@ -514,3 +513,30 @@ def is_oom_error_message(error_string: str) -> bool:
         if re.search(pattern, lower):
             return True
     return False
+
+def pretty_json_string(payload: dict, ellipsize_at: int=60) -> str:
+    """
+    Returns pretty json string of dict, ellipsizing long strings
+    
+    Main use case is to prevent data uri's from flooding the console
+    """
+
+    def ellipsize_strings(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if isinstance(item, str):
+                    value[key] = ellipsize(item, ellipsize_at)
+                else:
+                    ellipsize_strings(item)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, str):
+                    value[index] = ellipsize(item, ellipsize_at)
+                else:
+                    ellipsize_strings(item)
+
+    obj = copy.deepcopy(payload)
+    ellipsize_strings(obj)
+    
+    s = json.dumps(obj, indent=2)
+    return s

@@ -7,6 +7,7 @@ save-back helpers for project/prefs values.
 """
 
 import os
+import re
 import sys
 from typing import Callable
 from tts_audiobook_tool import text_util
@@ -21,6 +22,16 @@ from tts_audiobook_tool.util import *
 # to False if a low-level hotkey read fails unexpectedly.
 can_hotkey = sys.stdin.isatty()
 
+# Common ANSI/VT terminal escape sequences produced by cursor/function keys.
+terminal_escape_sequence_pattern = re.compile(
+    r"\x1b(?:"
+    r"[@-Z\\-_]"
+    r"|\[[0-?]*[ -/]*[@-~]"
+    r"|\][^\x1b\x07]*(?:\x07|\x1b\\)"
+    r"|[PX^_].*?(?:\x1b\\)"
+    r")"
+)
+
 
 def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
     """
@@ -32,7 +43,7 @@ def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
 
     message = f"{message}{Ansi.RESET}{COL_INPUT}"
     try:
-        inp = input(message).strip()
+        inp = _strip_terminal_escape_sequences(input(message)).strip()
     except (ValueError, EOFError):
         return ""
     if lower:
@@ -193,7 +204,8 @@ def ask_number(
     max_value: float,
     default_value: float,
     success_prefix: str,
-    is_int: bool=False
+    is_int: bool=False,
+    print_range_info: bool=True
 ) -> None:
     from tts_audiobook_tool.prefs import Prefs
     from tts_audiobook_tool.project import Project
@@ -211,7 +223,10 @@ def ask_number(
     prompt = prompt.strip()
     if not prompt.endswith(":"):
         prompt += ":"
-    prompt += " " + f"{COL_DIM}(valid range: {min_value}-{max_value}; default: {default_value})"
+
+    if print_range_info:
+        prompt += " " + f"{COL_DIM}(valid range: {min_value}-{max_value}; default: {default_value})"
+
     printt(prompt)
     value = ask()
     if not value:
@@ -301,7 +316,7 @@ def ask_string_and_save(
                 if loop_on_error:
                     continue
                 return
-            break
+        break
 
     setattr(saveable, project_attr_name, value)
     if not isinstance(saveable, Project):
@@ -324,6 +339,12 @@ def _clear_input_buffer() -> None:
             termios.tcflush(sys.stdin, termios.TCIFLUSH) # type: ignore
         except termios.error:
             return
+
+
+def _strip_terminal_escape_sequences(value: str) -> str:
+    """Remove ANSI/VT terminal escape sequences from line input."""
+    return terminal_escape_sequence_pattern.sub("", value)
+
 
 def _read_hotkey_windows(block: bool=True) -> str | None:
     """

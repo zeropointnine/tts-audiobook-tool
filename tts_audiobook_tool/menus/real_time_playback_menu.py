@@ -216,6 +216,6 @@ REAL_TIME_SUBHEADING = (
     'Uses the same quality checks as the normal audiobook creation workflow,\n'
     'except for loudness normalization and generative upsampling.\n\n'
     'Uninterrupted playback requires faster-than-realtime inference.\n'
-    'Validation/retry logic activates when buffer exceeds 60 seconds.\n'
+    'Validation/retry logic activates when buffered audio exceeds 60 seconds.\n'
 )
 

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import ReadinessIssue, SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.conversation.sound_input_device_util import SoundInputDeviceInfo
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
@@ -15,11 +14,6 @@ def get_generate_blockers(state: State, is_realtime_audiobook: bool=False) -> li
     from tts_audiobook_tool.tts import Tts
 
     items = []
-
-    if Tts.get_type() == TtsModelInfos.NONE:
-        items.append(
-            ReadinessIssue("TTS model", "TTS model is required")
-        )
 
     if is_realtime_audiobook:
         if not state.real_time.custom_phrase_groups and not state.project.phrase_groups:

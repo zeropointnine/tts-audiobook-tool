@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import numpy as np
 
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.util import *
@@ -46,6 +47,7 @@ class Server:
         
         # Load current project
         prefs = Prefs.load()
+        SglOmniUtil.set_base_url(prefs.sgl_omni_url)
         if not prefs.project_dir:
             printt(f"{COL_ERROR}Active project required")
             printt("Run tts-audiobook-tool and set up a new project. Then re-start the server.")

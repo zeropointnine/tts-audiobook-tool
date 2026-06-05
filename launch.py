@@ -85,7 +85,10 @@ QUALIFIED_MODELS: list[tuple[str, str]] = []
 for member in TtsModelInfos:
     if member.name == "NONE":
         continue
-    QUALIFIED_MODELS.append((member.value.module_test, member.value.ui["proper_name"]))
+    QUALIFIED_MODELS.append((member.value.local_module_test, member.value.ui["proper_name"]))
+
+SGL_OMNI_MARKER_MODULE = "tts_audiobook_tool_sgl_omni_marker"
+SGL_OMNI_DISPLAY_MODEL = "SGL-Omni server mode"
 
 
 def find_venvs(base_dir: str) -> list[str]:
@@ -164,6 +167,29 @@ def probe_venv(venv_path: str) -> tuple[list[str], int]:
         return [], 0
 
 
+def has_sgl_omni_marker(venv_path: str) -> bool:
+    """Return True if *venv_path* has the dedicated SGL-Omni launcher marker package."""
+    python_exe = get_venv_python(venv_path)
+    if python_exe is None:
+        return False
+
+    probe_code = (
+        "import importlib.util\n"
+        f"raise SystemExit(0 if importlib.util.find_spec({SGL_OMNI_MARKER_MODULE!r}) is not None else 1)\n"
+    )
+
+    try:
+        result = subprocess.run(
+            [python_exe, "-c", probe_code],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return False
+
+
 def build_venv_list(base_dir: str) -> list[tuple[str, str, list[str]]]:
     """
     Returns list of (venv_path, display_name, detected_models).
@@ -176,6 +202,8 @@ def build_venv_list(base_dir: str) -> list[tuple[str, str, list[str]]]:
         name = os.path.basename(vp)
         models, match_count = probe_venv(vp)
         if match_count == 0:
+            if has_sgl_omni_marker(vp):
+                results.append((vp, name, [SGL_OMNI_DISPLAY_MODEL]))
             continue
         if match_count > 1:
             print(

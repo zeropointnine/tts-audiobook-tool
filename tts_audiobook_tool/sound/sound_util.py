@@ -1,3 +1,5 @@
+import base64
+import mimetypes
 import librosa
 import numpy as np
 from numpy import ndarray
@@ -132,4 +134,16 @@ class SoundUtil:
 
         new_data = numpy.concatenate((base_sound.data, appended_sound.data))
         return Sound(new_data, base_sound.sr)
+
+    @staticmethod
+    def make_audio_data_uri(sound_file_path: str) -> str:
+        mime_type, _ = mimetypes.guess_type(sound_file_path)
+        if not mime_type:
+            mime_type = "audio/wav"
+
+        with open(sound_file_path, "rb") as sound_file:
+            encoded_audio = base64.b64encode(sound_file.read()).decode("ascii")
+
+        return f"data:{mime_type};base64,{encoded_audio}"
+
 

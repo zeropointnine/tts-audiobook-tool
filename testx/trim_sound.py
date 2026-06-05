@@ -14,7 +14,7 @@ DIR = "/home/lee/Documents/w/w/_tests/trim_trailing"
 
 print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK)
 
-Tts.init_model_type()
+Tts.init_local_model_type()
 
 flacs_and_jsons = []
 

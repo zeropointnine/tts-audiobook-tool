@@ -38,7 +38,7 @@ API_ENDPOINT_URL = "https://api.deepseek.com/v1/chat/completions"
 TOKEN  = ""
 MODEL  = "deepseek-v4-flash"
 PARAMS = {"thinking": {"type": "disabled"}}
-SYSTEM_PROMPT = "You are have a voice conversation with a user. The user is speaking using voice, transcribed by STT. Your responses are vocalized using TTS. Be conversational and use short responses to facilitate interactive conversational flow. Do not use unnecessary text formatting or emojies."
+CHAT_SYSTEM_PROMPT = "You are have a voice conversation with a user. The user is speaking using voice, transcribed by STT. Your responses are vocalized using TTS. Be conversational and use short responses to facilitate interactive conversational flow. Do not use unnecessary text formatting or emojies."
 DEBUG_VAD = False
 
 ORANGE  = "\033[38;5;208m"
@@ -99,7 +99,7 @@ def main() -> None:
 
     # Init:
 
-    Tts.init_model_type()
+    Tts.init_local_model_type()
 
     state = State()
     prefs = state.prefs    
@@ -127,7 +127,7 @@ def main() -> None:
         api_endpoint_url=API_ENDPOINT_URL,
         token=TOKEN,
         model=MODEL,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=CHAT_SYSTEM_PROMPT,
         extra_params=PARAMS,
         verbose=False,
     )

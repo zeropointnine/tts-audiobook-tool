@@ -61,9 +61,7 @@ class VoiceMiraMenu:
             )
             items.append(item)
 
-            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
-            prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
-            items.append(VoiceMenuShared.make_seed_item(state, "mira_seed", prompt_override=prompt))
+            items.append(VoiceMenuShared.make_seed_item(state, "mira_seed", add_batch_warning=True))
             return items
         
         VoiceMenuShared.menu_wrapper(state, make_items)

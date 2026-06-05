@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 import queue
 import re
@@ -362,44 +361,25 @@ class MuteCurrentThreadOutput:
     """
     Context manager that suppresses output from the current thread for the
     duration of the `with` block. Mutes any QueuedStream installed on
-    sys.stdout/sys.stderr, attaches a logging filter that drops records
-    emitted on this thread, and redirects fd 2 to /dev/null to silence native
-    code that writes directly to the stderr file descriptor.
+    sys.stdout/sys.stderr, and redirects fd 2 to /dev/null to silence native
+    code that writes directly to the stderr file descriptor. Python logging is
+    intentionally left alone so app diagnostics still reach the log file.
     """
 
     def __init__(self, real_stderr: object, fd2_redirect_lock: threading.Lock) -> None:
         self.real_stderr = real_stderr
         self.fd2_redirect_lock = fd2_redirect_lock
         self.muted: list[QueuedStream] = []
-        self.log_filter: logging.Filter | None = None
-        self.filtered_handlers: list[logging.Handler] = []
         self.saved_stderr_fd: int | None = None
         self.devnull_fd: int | None = None
 
     def __enter__(self) -> None:
+
         for name in ("stdout", "stderr"):
             stream = getattr(sys, name)
             if isinstance(stream, QueuedStream):
                 stream.mute()
                 self.muted.append(stream)
-
-        muted_thread_id = threading.get_ident()
-
-        class CurrentThreadLogFilter(logging.Filter):
-            def filter(self, record: logging.LogRecord) -> bool:
-                return record.thread != muted_thread_id
-
-        self.log_filter = CurrentThreadLogFilter()
-        seen: set[int] = set()
-        for logger_obj in [logging.getLogger(), *logging.Logger.manager.loggerDict.values()]:
-            if not isinstance(logger_obj, logging.Logger):
-                continue
-            for handler in logger_obj.handlers:
-                if id(handler) in seen:
-                    continue
-                seen.add(id(handler))
-                handler.addFilter(self.log_filter)
-                self.filtered_handlers.append(handler)
 
         # Some TTS backends emit directly to the process stderr file
         # descriptor from native code, bypassing Python's sys.stderr and
@@ -442,11 +422,6 @@ class MuteCurrentThreadOutput:
             if self.fd2_redirect_lock.locked():
                 self.fd2_redirect_lock.release()
 
-        if self.log_filter is not None:
-            for handler in self.filtered_handlers:
-                handler.removeFilter(self.log_filter)
-            self.filtered_handlers.clear()
-            self.log_filter = None
         for stream in self.muted:
             stream.unmute()
         self.muted.clear()

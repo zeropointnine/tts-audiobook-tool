@@ -51,6 +51,7 @@ chardet==5.2.0
 beautifulsoup4==4.12.3
 EbookLib==0.18
 ffmpeg-python==0.2.0
+httpx==0.28.1
 librosa==0.11.0
 loguru==0.7.3
 metaphone==0.6

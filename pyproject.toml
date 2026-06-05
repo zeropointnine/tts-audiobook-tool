@@ -7,8 +7,10 @@ name = "tts-audiobook-tool"
 version = "0.1.0"
 description = "Audiobook creation tool"
 
+# ####################################################################
 # Dependencies should be handled using "pip install requirements*.txt"
 dependencies = []
+# ####################################################################
 
 [project.optional-dependencies]
 dev = [
@@ -17,6 +19,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]  # Tells setuptools to look in the root for packages
+
+[tool.setuptools.package-data]
+tts_audiobook_tool = ["assets/*.flac", "assets/*.json", "assets/*.txt", "assets/*.wav"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -12,6 +12,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
@@ -90,6 +91,60 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(payload["moss_local_top_p"], 0.82)
         self.assertEqual(payload["moss_local_top_k"], 47)
 
+    def test_project_to_dict_includes_higgs_v3_voice_generation_settings(self):
+        project = Project.model_validate({
+            "higgs_v3_temperature": 0.43,
+            "higgs_v3_top_p": 0.87,
+            "higgs_v3_top_k": 42,
+            "higgs_v3_seed": 12345,
+        })
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(payload["higgs_v3_temperature"], 0.43)
+        self.assertEqual(payload["higgs_v3_top_p"], 0.87)
+        self.assertEqual(payload["higgs_v3_top_k"], 42)
+        self.assertEqual(payload["higgs_v3_seed"], 12345)
+
+    def test_project_model_validate_normalizes_higgs_v3_seed(self):
+        project = Project.model_validate({
+            "higgs_v3_seed": 12345.0,
+        })
+
+        self.assertEqual(project.higgs_v3_seed, 12345)
+
+    def test_project_model_validate_rejects_invalid_higgs_v3_seed(self):
+        project = Project.model_validate({
+            "higgs_v3_seed": -2,
+        })
+
+        self.assertEqual(project.higgs_v3_seed, -1)
+
+    def test_project_transfer_copies_higgs_v3_voice_transcript(self):
+        source = Project.model_validate({
+            "higgs_v3_voice_file_path": "/voices/sample.wav",
+            "higgs_v3_voice_transcript": "Reference sample transcript.",
+            "higgs_v3_temperature": 0.43,
+            "higgs_v3_top_p": 0.87,
+            "higgs_v3_top_k": 42,
+            "higgs_v3_batch_size": 3,
+            "higgs_v3_seed": 12345,
+        })
+        dest = Project.model_validate({})
+
+        ProjectTransferUtil.apply_project_settings(dest, source)
+
+        self.assertEqual(dest.higgs_v3_voice_file_path, "/voices/sample.wav")
+        self.assertEqual(dest.higgs_v3_voice_transcript, "Reference sample transcript.")
+        self.assertEqual(dest.higgs_v3_temperature, 0.43)
+        self.assertEqual(dest.higgs_v3_top_p, 0.87)
+        self.assertEqual(dest.higgs_v3_top_k, 42)
+        self.assertEqual(dest.higgs_v3_batch_size, 3)
+        self.assertEqual(dest.higgs_v3_seed, 12345)
+
+    def test_project_transfer_field_set_matches_serialized_project_settings(self):
+        self.assertEqual(ProjectTransferUtil.get_missing_project_settings_transfer_fields(Project), [])
+
     def test_project_model_validate_migrates_legacy_moss_audio_top_p_and_top_k(self):
         project = Project.model_validate({
             "moss_top_p": 0.72,
@@ -123,8 +178,8 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.moss_local_top_k, 47)
 
     def test_project_model_validate_accepts_moss_audio_top_k_minimum(self):
-        moss_delay_top_k_min = MossConfigs.DELAY.value.top_k_min
-        moss_local_top_k_min = MossConfigs.LOCAL.value.top_k_min
+        moss_delay_top_k_min = MossConfigs.DELAY.value.audio_top_k_min
+        moss_local_top_k_min = MossConfigs.LOCAL.value.audio_top_k_min
         project = Project.model_validate({
             "moss_delay_top_k": moss_delay_top_k_min,
             "moss_local_top_k": moss_local_top_k_min,
@@ -134,8 +189,8 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.moss_local_top_k, moss_local_top_k_min)
 
     def test_project_model_validate_rejects_moss_audio_top_k_below_minimum(self):
-        moss_delay_top_k_min = MossConfigs.DELAY.value.top_k_min
-        moss_local_top_k_min = MossConfigs.LOCAL.value.top_k_min
+        moss_delay_top_k_min = MossConfigs.DELAY.value.audio_top_k_min
+        moss_local_top_k_min = MossConfigs.LOCAL.value.audio_top_k_min
         project = Project.model_validate({
             "moss_delay_top_k": moss_delay_top_k_min - 1,
             "moss_local_top_k": moss_local_top_k_min - 1,

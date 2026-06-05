@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
+from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -19,12 +20,14 @@ class Prefs(Saveable):
             stt_variant: SttVariant = SttVariant.get_default(),
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
+            sgl_omni_type: TtsModelInfos | None = None,
+            sgl_omni_url: str = SGL_OMNI_URL_DEFAULT,
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
             llm_url: str = "",
             llm_api_key: str = "",
             llm_model: str = "",
             llm_system_prompt: str = "",
-            llm_system_prompt_default: bool = True,
+            system_prompt_preset: str = CHAT_SYSTEM_PROMPTS[0][0],
             llm_extra_params: dict = {},
             last_voice_dir: str = "",
             last_project_dir: str = "",
@@ -42,12 +45,19 @@ class Prefs(Saveable):
         self._stt_variant = stt_variant
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu
+
+        # When in "sgl-omni mode", this is the active TTS type
+        # When value is None, it autodetects based on server model id
+        self._sgl_omni_type: TtsModelInfos | None = sgl_omni_type
+        
+        self._sgl_omni_url = sgl_omni_url
+        
         self._aac_bitrate = aac_bitrate
         self._llm_url = llm_url
         self._llm_api_key = llm_api_key
         self._llm_model = llm_model
         self._llm_system_prompt = llm_system_prompt
-        self._llm_system_prompt_default = llm_system_prompt_default
+        self._system_prompt_preset = system_prompt_preset
         self._llm_extra_params = llm_extra_params
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
@@ -144,6 +154,25 @@ class Prefs(Saveable):
             tts_force_cpu = False
             dirty = True
 
+        # SGL-Omni base url
+        sgl_omni_url = prefs_dict.get("sgl_omni_url", SGL_OMNI_URL_DEFAULT)
+        if not isinstance(sgl_omni_url, str) or not sgl_omni_url.strip():
+            sgl_omni_url = SGL_OMNI_URL_DEFAULT
+            dirty = True
+
+        # SGL-Omni TTS type
+        s = prefs_dict.get("sgl_omni_type", "")
+        if s is None or s == "":
+            sgl_omni_type = None
+        elif isinstance(s, str):
+            sgl_omni_type = TtsModelInfos.get_by_id(s)
+            if sgl_omni_type == TtsModelInfos.NONE or not sgl_omni_type.value.is_sgl_omni:
+                sgl_omni_type = None
+                dirty = True
+        else:
+            sgl_omni_type = None
+            dirty = True
+
         # AAC/M4B bitrate
         # Back-compat: support legacy key "aac_bitrate"
         aac_bitrate = prefs_dict.get("aac_bitrate", prefs_dict.get("aac_m4b_bitrate", AAC_BITRATE_DEFAULT))
@@ -173,9 +202,14 @@ class Prefs(Saveable):
             llm_system_prompt = ""
             dirty = True
 
-        llm_system_prompt_default = prefs_dict.get("llm_system_prompt_default", True)
-        if not isinstance(llm_system_prompt_default, bool):
-            llm_system_prompt_default = True
+        system_prompt_preset_default = CHAT_SYSTEM_PROMPTS[0][0]
+        system_prompt_preset_files = [file_name for file_name, _ in CHAT_SYSTEM_PROMPTS]
+        system_prompt_preset = prefs_dict.get("system_prompt_preset", system_prompt_preset_default)
+        if not isinstance(system_prompt_preset, str):
+            system_prompt_preset = system_prompt_preset_default
+            dirty = True
+        elif system_prompt_preset and system_prompt_preset not in system_prompt_preset_files:
+            system_prompt_preset = system_prompt_preset_default
             dirty = True
 
         llm_extra_params = prefs_dict.get("llm_extra_params", {})
@@ -258,12 +292,14 @@ class Prefs(Saveable):
             stt_variant=stt_variant,
             stt_config=stt_config,
             tts_force_cpu=tts_force_cpu,
+            sgl_omni_type=sgl_omni_type,
+            sgl_omni_url=sgl_omni_url,
             aac_bitrate=aac_bitrate,
             llm_url=llm_url,
             llm_api_key=llm_api_key,
             llm_model=llm_model,
             llm_system_prompt=llm_system_prompt,
-            llm_system_prompt_default=llm_system_prompt_default,
+            system_prompt_preset=system_prompt_preset,
             llm_extra_params=llm_extra_params,
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
@@ -371,6 +407,28 @@ class Prefs(Saveable):
         Tts.set_force_cpu(value)
 
     @property
+    def sgl_omni_type(self) -> TtsModelInfos | None:
+        return self._sgl_omni_type
+
+    @sgl_omni_type.setter
+    def sgl_omni_type(self, value: TtsModelInfos | None) -> None:
+        if value is not None and (value == TtsModelInfos.NONE or not value.value.is_sgl_omni):
+            value = None
+        self._sgl_omni_type = value
+        self.save()
+        from tts_audiobook_tool.tts import Tts
+        Tts.set_sgl_omni_type(value)
+
+    @property
+    def sgl_omni_url(self) -> str:
+        return self._sgl_omni_url
+
+    @sgl_omni_url.setter
+    def sgl_omni_url(self, value: str) -> None:
+        self._sgl_omni_url = value.strip() or SGL_OMNI_URL_DEFAULT
+        self.save()
+
+    @property
     def aac_bitrate(self) -> str:
         return self._aac_bitrate
 
@@ -418,12 +476,14 @@ class Prefs(Saveable):
         self.save()
 
     @property
-    def llm_system_prompt_default(self) -> bool:
-        return self._llm_system_prompt_default
+    def system_prompt_preset(self) -> str:
+        return self._system_prompt_preset
 
-    @llm_system_prompt_default.setter
-    def llm_system_prompt_default(self, value: bool) -> None:
-        self._llm_system_prompt_default = value
+    @system_prompt_preset.setter
+    def system_prompt_preset(self, value: str) -> None:
+        if not isinstance(value, str):
+            value = ""
+        self._system_prompt_preset = value
         self.save()
 
     @property
@@ -503,12 +563,14 @@ class Prefs(Saveable):
             "stt_variant": self._stt_variant.id,
             "stt_config": self._stt_config.id,
             "tts_force_cpu": self._tts_force_cpu,
+            "sgl_omni_type": "" if self._sgl_omni_type is None else self._sgl_omni_type.value.id,
+            "sgl_omni_url": self._sgl_omni_url,
             "aac_bitrate": self._aac_bitrate,
             "llm_url": self._llm_url,
             "llm_api_key": self._llm_api_key,
             "llm_model": self._llm_model,
             "llm_system_prompt": self._llm_system_prompt,
-            "llm_system_prompt_default": self._llm_system_prompt_default,
+            "system_prompt_preset": self._system_prompt_preset,
             "llm_extra_params": self._llm_extra_params,
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,

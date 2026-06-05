@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import RealTimeMenuState
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
@@ -71,6 +72,8 @@ class State:
         Stt.set_variant(self.prefs.stt_variant)
         Stt.set_config(self.prefs.stt_config)
         Tts.set_force_cpu(self.prefs.tts_force_cpu)
+        SglOmniUtil.set_base_url(self.prefs.sgl_omni_url)
+        Tts.set_sgl_omni_type(self.prefs.sgl_omni_type)
 
     def make_and_set_new_project(self, path: str) -> str:
         """
@@ -135,4 +138,3 @@ class State:
         self.prefs.project_dir = ""
         self.project = Project(dir_path="")
         self.real_time = RealTimeMenuState()
-

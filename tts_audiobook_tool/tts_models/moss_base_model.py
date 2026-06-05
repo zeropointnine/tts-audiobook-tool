@@ -105,12 +105,12 @@ class MossConfig:
     temperature_default: float
     temperature_min: float
     temperature_max: float
-    top_p_default: float
-    top_p_min: float
-    top_p_max: float
-    top_k_default: int
-    top_k_min: int
-    top_k_max: int
+    audio_top_p_default: float
+    audio_top_p_min: float
+    audio_top_p_max: float
+    audio_top_k_default: int
+    audio_top_k_min: int
+    audio_top_k_max: int
 
 class MossConfigs(Enum):
 
@@ -126,12 +126,12 @@ class MossConfigs(Enum):
         temperature_default=1.7,
         temperature_min=0.8,
         temperature_max=3.0,
-        top_p_default=0.8,
-        top_p_min=0.5,
-        top_p_max=TOP_P_MAX_DEFAULT,
-        top_k_default=25,
-        top_k_min=10,
-        top_k_max=TOP_K_MAX_DEFAULT,
+        audio_top_p_default=0.8,
+        audio_top_p_min=0.5,
+        audio_top_p_max=TOP_P_MAX_DEFAULT,
+        audio_top_k_default=25,
+        audio_top_k_min=10,
+        audio_top_k_max=TOP_K_MAX_DEFAULT,
     )
 
     LOCAL = MossConfig(
@@ -143,12 +143,12 @@ class MossConfigs(Enum):
         temperature_default=1.0,
         temperature_min=0.8,
         temperature_max=3.0,
-        top_p_default=0.95,
-        top_p_min=0.5,
-        top_p_max=TOP_P_MAX_DEFAULT,
-        top_k_default=50,
-        top_k_min=10,
-        top_k_max=TOP_K_MAX_DEFAULT,
+        audio_top_p_default=0.95,
+        audio_top_p_min=0.5,
+        audio_top_p_max=TOP_P_MAX_DEFAULT,
+        audio_top_k_default=50,
+        audio_top_k_min=10,
+        audio_top_k_max=TOP_K_MAX_DEFAULT,
     )
 
     @staticmethod

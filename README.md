@@ -1,11 +1,18 @@
-# tts-audiobook-tool
+# Table of contents
 
-Generative-AI audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models:
+- [Description](#description)
+- [Installation](#installation)
+- [Usage notes](#usage-notes)
+- [Update highlights](#update-highlights)
+
+# Description
+
+`tts-audiobook-tool` is a generative-AI audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models:
 
 - [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
 - [Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
-- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
+- [Higgs Audio (V2, V3)](https://github.com/boson-ai/higgs-audio)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [MOSS-TTS (v1.5 9B and Local-Transformer 1.7B)](https://github.com/OpenMOSS/MOSS-TTS)
@@ -15,16 +22,16 @@ Generative-AI audiobook creation tool focused on high-quality output, supporting
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
 
-The app employs various techniques to manage and improve on the inherently nondeterministic output of text-to-speech models. Eg:
+The app employs various techniques to manage and improve on the nondeterministic output of generative text-to-speech models. Eg:
 
-- Automatic detection and correction of inference errors using speech-to-text verification, with retry logic that keeps the most accurate take
+- Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
 - Segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
-- 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling, plus EBU R128 loudness normalization
+- EBU R128 loudness normalization plus optional 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling
 
 It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use. 
 
-The app uses a plain-text interface in the console. 
+The app uses a plain-text, hotkey-based console interface. 
 
 
 ### How to create an audiobook (quick summary)
@@ -34,14 +41,14 @@ The app uses a plain-text interface in the console.
 3. Select the source EPUB or text file, and optionally define file split points.
 4. Generate
 5. Concatenate the generated audio segments to create the finished audiobook file/s.
-6. Use the optional web player to play and read your audiobook.
+6. Use the optional web browser player to play and read your audiobook.
 
 <video src="https://github.com/user-attachments/assets/5516ce38-ef61-4126-91f5-71861e63eba5" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-full" style="max-height:640px;" autoplay="autoplay" loop="loop">
 </video>
 
 ### Browser player
 
-The included web player displays text highlighted in sync with the generated audio — similar to the Kindle Whispersync or Google Play Books read-along experience. This works because the app embeds the text and word-level timing data directly into the metadata of the FLAC and M4B files it produces.
+The included browser player displays text highlighted in sync with the generated audio — similar to the Kindle Whispersync or Google Play Books read-along experience. This works because the app embeds the text and word-level timing data directly into the metadata of the FLAC and M4B files it produces.
 
 The player is a static HTML page — no web server or install required. Open `browser_player/index.html` directly in any browser, or use the [hosted version](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/).
 
@@ -55,6 +62,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
 - [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice clone sample, at high temperature)
+- [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (with added emotional guidance voice sample)
 - [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
@@ -98,7 +106,7 @@ A separate virtual environment must be created for each model you want to use. P
 
 ### Step 4 (Windows only)
 
-To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v1/cu128). This extra step is not required when using Linux.
+To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128). This extra step is not required when using Linux.
 
     pip uninstall -y torch torchaudio
     pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
@@ -119,25 +127,15 @@ Note that any settings and features that are specific to a given TTS model will 
 
 ## Virtual environment for Chatterbox:
 
-Initialize a **Python v3.11** virtual environment named "venv-chatterbox". For example:
+Initialize a **Python v3.11** virtual environment named "venv-chatterbox":
 
-- Linux/Mac
-
-        python -m venv venv-chatterbox
-
-- Windows
-
-        C:\path\to\python3.11\python.exe -m venv venv-chatterbox
+    python -m venv venv-chatterbox # linux/mac
+    C:\path\to\python3.11\python.exe -m venv venv-chatterbox # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-chatterbox/bin/activate
-
-- Windows
-
-        venv-chatterbox\Scripts\activate.bat
+    source venv-chatterbox/bin/activate # linux/mac
+    venv-chatterbox\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -150,7 +148,7 @@ Windows CUDA support (unlike the other models, we must use torch 2.6/cu124 here)
 
 ## Virtual environment for Fish S1-mini:
 
-Initialize a **Python v3.12** virtual environment named "venv-fish-s1". For example:
+Initialize a **Python v3.12** virtual environment named "venv-fish-s1":
 
 - Linux/Mac
 
@@ -184,9 +182,9 @@ Authenticate the model on HuggingFace:
 ## Virtual environment for Fish S2-Pro:
 
 > **ℹ️ Note!**
-> For CUDA acceleration, 24 GB VRAM is required
+> Requires 24GB VRAM 
 
-Initialize a **Python v3.12** virtual environment named "venv-fish-s2". For example:
+Initialize a **Python v3.12** virtual environment named "venv-fish-s2":
 
 - Linux/Mac
 
@@ -223,7 +221,7 @@ Authenticate the model on HuggingFace:
 
 ### Linux
 
-Initialize a **Python v3.11** virtual environment named `venv-glm`. For example:
+Initialize a **Python v3.11** virtual environment named `venv-glm`:
 
 - Linux
 
@@ -245,7 +243,7 @@ Requires setting up a "hybrid conda environment" due to a transitive dependency 
 
 Install [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install#quickstart-install-instructions) if not already.
 
-Initialize the conda environment. For example:
+Initialize the conda environment:
 
     conda create --prefix "c:\path\to\conda-glm" python=3.11 -y
 
@@ -267,19 +265,19 @@ Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-
 ## Virtual environment for Higgs Audio V2:
 
 > **ℹ️ Note!**
-> For CUDA acceleration, 24 GB VRAM is recommended
+> 24GB VRAM recommended
 
 On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install portaudio`)
 
-Initialize a **Python v3.12** virtual environment named `venv-higgs`. For example:
+Initialize a **Python v3.12** virtual environment named `venv-higgs-v2`:
 
 - Linux/Mac
 
-        python -m venv venv-higgs
+        python -m venv venv-higgs-v2
 
 - Windows
 
-        C:\path\to\python3.12\python.exe -m venv venv-higgs
+        C:\path\to\python3.12\python.exe -m venv venv-higgs-v2
 
 Activate the virtual environment:
 
@@ -293,14 +291,14 @@ Activate the virtual environment:
 
 Install dependencies:
 
-    pip install -r requirements-higgs.txt
+    pip install -r requirements-higgs-v2.txt
 
 Note that the above `requirements` file draws from a personal fork of the `higgs-audio` library due to the fact that the higgs repo is missing `__init__.py` files required for module use.
 
 
 ## Virtual environment for IndexTTS2
 
-Initialize a **Python v3.11** virtual environment named `venv-indextts2`. For example:
+Initialize a **Python v3.11** virtual environment named `venv-indextts2`:
 
 - Linux/Mac
 
@@ -329,7 +327,7 @@ Install dependencies:
 
 > **ℹ️ Requires CUDA** 
 
-Initialize a **Python v3.12** virtual environment named `venv-mira`. For example:
+Initialize a **Python v3.12** virtual environment named `venv-mira`:
 
 - Linux/Mac
 
@@ -356,10 +354,10 @@ Install dependencies:
 
 ## Virtual environment for MOSS-TTS v1.5
 
-> ℹ️
-> For CUDA acceleration, 24 GB VRAM or more is required
+> **ℹ️ Note!**
+> Requires 24GB+ VRAM
 
-Initialize a **Python v3.12** virtual environment named `venv-moss`. For example:
+Initialize a **Python v3.12** virtual environment named `venv-moss`:
 
 - Linux/Mac
 
@@ -397,7 +395,7 @@ Finally, install [Flash Attention](#installing-flash-attention) (optional but re
 
 ## Virtual environment for OmniVoice
 
-Initialize a **Python v3.12** virtual environment named `venv-omnivoice`. For example:
+Initialize a **Python v3.12** virtual environment named `venv-omnivoice`:
 
 - Linux/Mac
 
@@ -424,7 +422,7 @@ Install dependencies:
 
 ## Virtual environment for Pocket TTS:
 
-Initialize a **Python v3.12** virtual environment named "venv-pocket". For example:
+Initialize a **Python v3.12** virtual environment named "venv-pocket":
 
 - Linux/Mac
 
@@ -457,7 +455,7 @@ Authenticate the model on HuggingFace:
 
 ## Virtual environment for Qwen3-TTS 
 
-Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`. For example:
+Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`:
 
 - Linux/Mac
 
@@ -485,7 +483,7 @@ Install [Flash Attention](#installing-flash-attention) if using CUDA (optional b
 
 ## Virtual environment for VibeVoice
 
-Initialize a **Python v3.11** virtual environment named `venv-vibevoice`. For example:
+Initialize a **Python v3.11** virtual environment named `venv-vibevoice`:
 
 - Linux/Mac
 
@@ -515,7 +513,7 @@ Note that because Microsoft famously removed the source code from their github r
 
 ## Virtual environment for Oute TTS:
 
-Initialize a **Python v3.12** virtual environment named "venv-oute". For example:
+Initialize a **Python v3.12** virtual environment named "venv-oute":
 
 - Linux/Mac
 
@@ -544,19 +542,60 @@ Install dependencies:
 
 Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends, model sizes and quantizations. You will need to review and hand-edit the source file **`config_oute.py`** accordingly.
 
-The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. But here are some recommendations based on my own testing...
+The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. But here are initial recommendations:
 
-**Nvidia cards (CUDA):**
+**CUDA:**
 
-Prefer the *ExLllama2* backend if at all possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires successfully installing into the environment three extra things:
+Prefer the *ExLllama2* backend if possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires installing:
 - exllama2 library (`pip install exllamav2`)
 - [Flash Attention](#installing-flash-attention)
 
-Alternatively, `Backend.HF` is also hardware accelerated but considerably slower. Flash Attention is optional in this case.
+Alternatively, `Backend.HF` is also hardware accelerated but slower. Flash Attention is optional in this case.
 
 **Mac with Apple silicon:**
 
 Use `Backend.LLAMACPP`.
+
+## Virtual environment for SGL-Omni server
+
+The app supports server-based TTS inference using SGL-Omni for the following models:
+- [**Higgs Audio V3**](https://huggingface.co/bosonai/higgs-audio-v3-tts-4b) (24GB VRAM recommended)
+- [**MOSS-TTS v1.5**](https://github.com/OpenMOSS/MOSS-TTS)
+
+Install instructions for SGL-Omni can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially true for Windows).
+
+Start the SGL-Omni server for a supported TTS model. Eg:
+- `sgl-omni serve --model-path bosonai/higgs-audio-v3-tts-4b --port 8000`
+- `sgl-omni serve --model-path OpenMOSS-Team/MOSS-TTS-v1.5 --port 8000`
+
+Once SGL-Omni is set up, continue to creating the app's virtual environment:
+
+Initialize a **Python v3.12** virtual environment named `venv-sgl-omni`:
+
+- Linux/Mac
+
+        python -m venv venv-sgl-omni
+
+- Windows
+
+        C:\path\to\python3.12\python.exe -m venv venv-sgl-omni
+
+Activate the virtual environment:
+
+- Linux/Mac
+
+        source venv-sgl-omni/bin/activate
+
+- Windows
+
+        venv-sgl-omni\Scripts\activate.bat
+
+Install dependencies:
+
+    pip install -r requirements-sgl-omni.txt
+
+Upon running the app for the first time, be sure to set the SGL-Omni server URL under `Options`.
+
 
 ### Installing Flash Attention
 
@@ -634,6 +673,12 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 - Temperature, top_p, top_k, seed
 
+**Higgs Audio V3**
+- Requires running SGL-Omni server
+- Concurrent processing support
+- Streaming support (for the stand-alone server and LLM chat mode)
+- Temperature, top_p, top_k
+
 **MiraTTS**
 
 - Batch processing support
@@ -641,7 +686,8 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **MOSS-TTS**
 
-- MOSS-TTS v1.5 9B and MOSS-TTS-Local-Transformer 1.7B models
+- Local inference support for both MOSS-TTS v1.5 9B and MOSS-TTS-Local-Transformer 1.7B models
+- SGL-Omni backend inference support for MOSS-TTS v1.5
 - Batch processing support
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
@@ -660,7 +706,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 - Selectable language models (english, french_241, german_241, italian, portuguese, spanish_241)
 - Predefined voices (alba, anna, azelma, etc)
-- Streaming support
+- Streaming support (for the stand-alone server and LLM chat mode)
 - Supports CUDA acceleration (this is not mentioned in the project page)
 - Temperature, seed
 
@@ -677,7 +723,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Alternate VibeVoice models (eg, VibeVoice-7B or custom finetunes)
 - LoRA support!
 - Batch processing support
-- Streaming support
+- Streaming support (for the stand-alone server and LLM chat mode)
 - Music detection/rejection
 - CFG, steps, seed
 
@@ -695,7 +741,9 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | Chatterbox Turbo        | Macbook Pro M1       | ~70% realtime   |
 | Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
-| Higgs V2 3B             | GTX 4090, Windows    | ~200% realtime  | 
+| Higgs V2                | GTX 4090, Windows    | ~200% realtime  | 
+| Higgs V3                | GTX 4090, Windows    | 300%+ realtime  | SGL-Omni; concurrent requests=1
+| Higgs V3                | GTX 4090, Windows    | 900%+ realtime  | SGL-Omni; concurrent requests=5
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
 | IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
@@ -721,6 +769,15 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
+**2026-06-07**
+
+- Added support using [**SGL-Omni**](https://sgl-project.github.io/sglang-omni) as a backend inference engine. Currently supported TTS models using SGL-Omni are:
+
+  - [**Higgs V3**](https://huggingface.co/bosonai/higgs-audio-v3-tts-4b)
+  - MOSS-TTS v1.5
+
+Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, which elicit "tagged output" from the LLM. Fun way to test the expressiveness of models' respective custom tag features.
+
 **2026-06-03**
 
 - Added experimental **rolling continuation mode** for Fish S2 Pro and Qwen3-TTS Base (this is already available for MOSS-TTS)
@@ -743,7 +800,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 **2026-05-11**
 
-- Added Spanish language support for more accurate dictionary-based audio word error validation (less false positives), along with English. This makes using "Strictness level: High" more useful and more efficient.
+- Added **first-class language support for Spanish**. This results in more accurate dictionary-based audio word error validation (less false positives), alongside English, and makes using "Strictness level: High" more useful and more efficient.
 
 **2026-05-07**
 
@@ -751,8 +808,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 **2026-05-05/06**
 
-- Added **streaming** option for LLM chat feature (applies to Vibevoice and Pocket TTS), which minimizes "time to first audio".
-- Added equivalent model-side streaming option for standalone server
+- Added **streaming** option for LLM chat feature and stand-alone server, which minimizes "time to first audio". Currently supported for Vibevoice and Pocket TTS.
 
 **2026-04-28**
 
@@ -761,7 +817,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 **2026-04-25**
 
-- Added **virtual environment convenience launcher** (`python launch.py`)
+- Added **multi-venv convenience launcher** (`python launch.py`)
 
 **2026-04-24**
 

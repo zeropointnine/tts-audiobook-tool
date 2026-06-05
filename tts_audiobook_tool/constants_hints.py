@@ -194,3 +194,10 @@ HINT_UPDATED_UI = Hint(
 """The app's menu system has been updated. Menus now always appear on a cleared screen. 
 You can revert this change the Options menu if you prefer the old behavior."""
 )
+
+HINT_MOSS_TEMPERATURE = Hint(
+    "moss_temperature",
+    "Note",
+"""MOSS-TTS is susceptible to failing to properly terminate generations when 
+temperature is set too low. Use low values with caution..."""
+)

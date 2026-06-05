@@ -157,7 +157,7 @@ class ConcatUtil:
             stem_path: Destination file path w/o file suffix
         
         Prints to console along the way
-        Returns successfull file path, error message if any
+        Returns successful file path, error message if any
         """
 
         # Load raw text for app metadata. If unavailable, continue with a

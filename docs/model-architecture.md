@@ -64,7 +64,7 @@ Key fields of `TtsModelInfo` most relevant to integration:
 | `voice_file_name_attr` | Name of the `Project` attribute that stores the voice clone filename (empty if not applicable) |
 | `requires_voice` | Whether generation is blocked without a voice clone |
 | `requires_voice_transcript` | Whether the model API needs the text transcript of the voice clone audio |
-| `batch_size_project_field` | Name of the `Project` field for batch size; empty string means no batch support |
+| `batch_size_attr` | Name of the `Project` field for batch size; empty string means no batch support |
 | `ui` | Dict of UI strings: `proper_name`, `short_name`, `voice_path_console`, `voice_path_requestor` |
 | `substitutions` | List of `(before, after)` string pairs applied to prompts before inference |
 

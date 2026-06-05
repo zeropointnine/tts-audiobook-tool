@@ -177,7 +177,7 @@ class ProjectVoiceUtil:
     @staticmethod
     def get_batch_size(project: Project) -> int:
         from tts_audiobook_tool.tts import Tts
-        field = Tts.get_type().value.batch_size_project_field
+        field = Tts.get_type().value.batch_size_attr
         if not field:
             return 1
         if not hasattr(project, field):
@@ -192,7 +192,7 @@ class ProjectVoiceUtil:
     @staticmethod
     def set_batch_size(project: Project, value: int) -> None:
         from tts_audiobook_tool.tts import Tts
-        field = Tts.get_type().value.batch_size_project_field
+        field = Tts.get_type().value.batch_size_attr
         if not field:
             raise ValueError(f"No support for batch_size for the current model")
         if not hasattr(project, field):

@@ -261,7 +261,12 @@ class GenerateUtil:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
                         project.sound_segments.delete_redundants_for(index)
-                        save_line = f"Saved: {COL_DIM}{text_util.make_terminal_hyperlink(saved_path, is_file=True)}{Ansi.RESET}"
+
+                        url = saved_path
+                        text = Path(saved_path).name
+                        link = text_util.make_terminal_hyperlink(url=url, text=text, is_file=True)
+                        save_line = f"Saved: {COL_DIM}{link}{Ansi.RESET}"
+
                     message_lines.append(save_line)
 
                 printt("\n".join(message_lines))
@@ -357,7 +362,8 @@ class GenerateUtil:
             phrase_groups=phrase_groups,
             force_random_seed=force_random_seed,
             is_realtime=is_realtime,
-            save_debug_files=save_debug_files
+            save_debug_files=save_debug_files,
+            print_generation_request=True
         )        
         printt() # Restore print color, print blank line
         
@@ -440,7 +446,8 @@ class GenerateUtil:
             phrase_groups: list[PhraseGroup],
             force_random_seed: bool, 
             is_realtime: bool,
-            save_debug_files: bool
+            save_debug_files: bool,
+            print_generation_request: bool = False
         ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str]:
         """
         Core audio generation function.
@@ -468,7 +475,12 @@ class GenerateUtil:
         if Tts.get_type() == TtsModelInfos.NONE:
             result = "No active TTS model"
         else:
-            result = Tts.generate_using_project(project, prompts, force_random_seed)
+            result = Tts.generate_using_project(
+                project,
+                prompts,
+                force_random_seed,
+                print_generation_request=print_generation_request
+            )
 
         # `result` is either n generated Sounds or a single error string
         if isinstance(result, str): 

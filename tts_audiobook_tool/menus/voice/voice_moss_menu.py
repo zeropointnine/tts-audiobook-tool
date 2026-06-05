@@ -1,15 +1,19 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.voice.voice_moss_shared import VoiceMossShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
 class VoiceMossMenu:
+    """
+    MOSS model settings menu
+    Is used for both MOSS and SERVER_MOSS
+    """
 
     @staticmethod
     def menu(state: State) -> None:
@@ -22,15 +26,10 @@ class VoiceMossMenu:
             return f"Select MOSS-TTS model {label}"
 
         def make_items(_: State) -> list[MenuItem]:
+
             items = []
-            items.append(
-                MenuItem(
-                    VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.MOSS)
-                )
-            )
-            if state.project.moss_voice_file_name:
-                items.append(VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.MOSS))
+
+            VoiceMossShared.append_voice_items(items, state)
 
             items.append(
                 MenuItem(make_target_label, lambda _, __: target_submenu(state))
@@ -49,13 +48,15 @@ class VoiceMossMenu:
             items.append(item)
 
             config = MossConfigs.get_by_target(state.project.moss_target)
-            items.append(make_temperature_item(state, config))
-            items.append(make_audio_top_p_item(state, config))
-            items.append(make_audio_top_k_item(state, config))
 
-            prompt = f"Enter a static seed value {COL_DIM}(or -1 for random){COL_DEFAULT}"
-            prompt += f"\n{COL_DIM}(Note, audio generations may not be idempotent when using batch mode): "
-            items.append(VoiceMenuShared.make_seed_item(state, "moss_seed", prompt_override=prompt))
+            items.append(VoiceMossShared.make_temperature_item(state, config))
+
+            items.append(VoiceMossShared.make_audio_top_p_item(state, config))
+
+            items.append(VoiceMossShared.make_audio_top_k_item(state, config))
+
+            item = VoiceMenuShared.make_seed_item(state, "moss_seed", add_batch_warning=True)
+            items.append(item)
 
             return items
 
@@ -135,55 +136,3 @@ def on_clear_model_target(state: State, __: MenuItem) -> None:
     Tts.set_model_params_using_project(state.project)
     Tts.clear_tts_model()
     print_feedback("Cleared, will use default model")
-
-def get_temperature_attr(arch_type: MossConfigs) -> str:
-    return "moss_local_temperature" if arch_type == MossConfigs.LOCAL else "moss_delay_temperature"
-
-def get_top_p_attr(arch_type: MossConfigs) -> str:
-    return "moss_local_top_p" if arch_type == MossConfigs.LOCAL else "moss_delay_top_p"
-
-def get_top_k_attr(arch_type: MossConfigs) -> str:
-    return "moss_local_top_k" if arch_type == MossConfigs.LOCAL else "moss_delay_top_k"
-
-def make_temperature_item(state: State, arch_type: MossConfigs) -> MenuItem:
-    arch_values = arch_type.value
-    return VoiceMenuShared.make_temperature_item(
-        state=state,
-        attr=get_temperature_attr(arch_type),
-        base_label=f"{arch_values.arch_name} temperature",
-        default_value=arch_values.temperature_default,
-        min_value=arch_values.temperature_min,
-        max_value=arch_values.temperature_max,
-    )
-
-def make_audio_top_p_item(state: State, arch_type: MossConfigs) -> MenuItem:
-
-    arch_values = arch_type.value
-
-    return MenuUtil.make_number_item(
-        state=state,
-        attr=get_top_p_attr(arch_type),
-        base_label=f"{arch_values.arch_name} audio top-p",
-        default_value=arch_values.top_p_default,
-        is_minus_one_default=True,
-        num_decimals=2,
-        prompt=f"Enter Audio top-p {COL_DIM}({arch_values.top_p_min} to {arch_values.top_p_max}){COL_DEFAULT}:",
-        min_value=arch_values.top_p_min,
-        max_value=arch_values.top_p_max
-    )
-
-def make_audio_top_k_item(state: State, arch_type: MossConfigs) -> MenuItem:
-
-    arch_values = arch_type.value
-
-    return MenuUtil.make_number_item(
-        state=state,
-        attr=get_top_k_attr(arch_type),
-        base_label=f"{arch_values.arch_name} audio top-k",
-        default_value=arch_values.top_k_default,
-        is_minus_one_default=True,
-        num_decimals=0,
-        prompt=f"Enter Audio top-K {COL_DIM}({arch_values.top_k_min} to {arch_values.top_k_max}){COL_DEFAULT}:",
-        min_value=arch_values.top_k_min,
-        max_value=arch_values.top_k_max
-    )

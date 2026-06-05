@@ -49,8 +49,8 @@ class Startup:
         """
         
         print()
-        self.exit_on_wrong_torch_flavor_windows()
         self.init_tts_or_exit(self.is_server)
+        self.exit_on_wrong_torch_flavor_windows()
         if not self.is_server:
             self.exit_on_missing_ffmpeg_exe()
         self.exit_on_missing_ffmpeg_libs()
@@ -66,7 +66,7 @@ class Startup:
     def init_tts_or_exit(self, is_server: bool) -> None:
         """ Inits TTS else prompt to continue anyway """
 
-        tts_model_infos, num_matches = Tts.init_model_type()
+        tts_model_infos, num_matches = Tts.init_local_model_type()
 
         if tts_model_infos != TtsModelInfos.NONE:
             return
@@ -78,23 +78,13 @@ class Startup:
             printt(COL_ERROR + error)
             exit(1)
 
-        warning = f"\n{COL_ERROR}None of the supported TTS models are currently installed.\n"
-        warning += f"{COL_DEFAULT}If you've already set up a virtual environment following the instructions\n"
-        warning += f"from the project's README, make sure that it is activated."
-        printt(warning)
-        printt()
-
-        if is_server:
-            exit(0)
-
-        prompt = f"Press {make_hotkey_string('Y')} to run the app without sound generation functionality: "
-        from tts_audiobook_tool import ask
-        hotkey = ask.ask_hotkey(prompt)
-        if hotkey != "y":
+        if is_server: # xxx
             exit(0)
 
     def exit_on_wrong_torch_flavor_windows(self) -> None:
         if not _is_probably_cpu_only_torch_on_cuda_machine():
+            return
+        if Tts.get_type().value.is_sgl_omni:
             return
 
         printt(f"{COL_ERROR}An NVIDIA GPU was detected, but the installed PyTorch build does not include CUDA support.")
@@ -160,7 +150,7 @@ class Startup:
         
         new_packages = [
             "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", 
-            "pydantic", "requests", "text_to_num", "ebooklib", "bs4"
+            "pydantic", "requests", "text_to_num", "ebooklib", "bs4", "httpx"
         ]
 
         # win32 + linux
@@ -276,5 +266,4 @@ def _has_nvidia_gpu_windows() -> bool:
         return False
 
     return result.returncode == 0 and bool(result.stdout.strip())
-
 

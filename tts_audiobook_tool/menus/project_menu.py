@@ -119,7 +119,7 @@ class ProjectMenu:
         max_count = ProjectBookUtil.get_book_segmentation_settings(state.project).max_words_per_segment
         # TODO: Not doing this for now: ... or PhraseGroup.get_max_num_words(state.project.phrase_groups)
         reco_range: tuple[int, int] = Tts.get_type().value.max_words_reco_range
-        if max_count > reco_range[1]:
+        if max_count > reco_range[1] and Tts.get_type() != TtsModelInfos.NONE:
             message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
             message = message.replace("%1", str(max_count))
             reco_str = TtsModelInfos.recommended_range_string(Tts.get_type().value)

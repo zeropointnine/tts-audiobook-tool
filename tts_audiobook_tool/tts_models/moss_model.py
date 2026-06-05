@@ -153,8 +153,8 @@ class MossModel(MossBaseModel):
             conversations,
             processor_mode: str,
             temperature: float,
-            top_p: float,
-            top_k: int,
+            audio_top_p: float,
+            audio_top_k: int,
     ):
         if self.model is None or self.processor is None:
             raise RuntimeError("Model or processor is not initialized")
@@ -176,8 +176,8 @@ class MossModel(MossBaseModel):
                 attention_mask=attention_mask,
                 max_new_tokens=MossBaseModel.MAX_NEW_TOKENS,
                 audio_temperature=temperature,
-                audio_top_p=top_p,
-                audio_top_k=top_k,
+                audio_top_p=audio_top_p,
+                audio_top_k=audio_top_k,
             )
             return outputs
 
@@ -315,13 +315,13 @@ class MossModel(MossBaseModel):
         if temperature == -1:
             temperature = config.value.temperature_default
 
-        top_p = project.moss_local_top_p if config == MossConfigs.LOCAL else project.moss_delay_top_p
-        if top_p == -1:
-            top_p = config.value.top_p_default
+        audio_top_p = project.moss_local_top_p if config == MossConfigs.LOCAL else project.moss_delay_top_p
+        if audio_top_p == -1:
+            audio_top_p = config.value.audio_top_p_default
 
-        top_k = project.moss_local_top_k if config == MossConfigs.LOCAL else project.moss_delay_top_k
-        if top_k == -1:
-            top_k = config.value.top_k_default
+        audio_top_k = project.moss_local_top_k if config == MossConfigs.LOCAL else project.moss_delay_top_k
+        if audio_top_k == -1:
+            audio_top_k = config.value.audio_top_k_default
 
         seed = -1 if force_random_seed else project.moss_seed
         language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""
@@ -332,8 +332,8 @@ class MossModel(MossBaseModel):
             rolling_continuation_max_segments=project.moss_rolling_cont,
             language=language,
             temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
+            audio_top_p=audio_top_p,
+            audio_top_k=audio_top_k,
             seed=seed,
         )
 
@@ -344,8 +344,8 @@ class MossModel(MossBaseModel):
             rolling_continuation_max_segments: int,
             language: str,
             temperature: float,
-            top_p: float,
-            top_k: int,
+            audio_top_p: float,
+            audio_top_k: int,
             seed: int,
     ) -> list[Sound] | str:
 
@@ -397,7 +397,7 @@ class MossModel(MossBaseModel):
                         conversations = [[self.processor.build_user_message(text=prompt, language=language or None)]]
                         processor_mode = "generation"
 
-                    outputs = self.generate_outputs(conversations, processor_mode, temperature, top_p, top_k)
+                    outputs = self.generate_outputs(conversations, processor_mode, temperature, audio_top_p, audio_top_k)
                     decoded = self.decode_outputs_to_sounds_and_audio(outputs)
 
                     if isinstance(decoded, str):
@@ -438,7 +438,7 @@ class MossModel(MossBaseModel):
                 ]
                 processor_mode = "generation"
 
-            outputs = self.generate_outputs(conversations, processor_mode, temperature, top_p, top_k)
+            outputs = self.generate_outputs(conversations, processor_mode, temperature, audio_top_p, audio_top_k)
             decoded = self.decode_outputs_to_sounds(outputs)
 
             if isinstance(decoded, str):

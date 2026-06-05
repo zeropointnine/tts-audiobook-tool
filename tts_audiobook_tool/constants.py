@@ -55,6 +55,12 @@ CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
 OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
 
+CHAT_SYSTEM_PROMPTS = [
+    ("chat_system_prompt_default.txt", "Default system prompt"),
+    ("chat_system_prompt_higgs_v3.txt", "System prompt showcasing Higgs V3 \"control tokens\" feature"),
+    ("chat_system_prompt_fish_s2.txt", "System prompt showcasing Fish S2 \"tags\" feature")
+]
+
 MENU_CLEARS_SCREEN_DEFAULT = True
 
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)
@@ -139,6 +145,8 @@ pattern = r'\[([0-9a-fA-F]{16})\]'
 HASH_PATTERN = re.compile(pattern)
 
 VOICE_ADVANCED_SUPERLABEL = "Advanced:"
+
+SGL_OMNI_URL_DEFAULT = "http://localhost:8000"
 
 OPT_IN_INSTRUCTIONS = (
     "[1] Visit %1\n"

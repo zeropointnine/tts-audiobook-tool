@@ -189,6 +189,14 @@ class Project(BaseModel):
     higgs_top_p: float = -1
     higgs_seed: int = -1
 
+    higgs_v3_voice_file_path: str = ""
+    higgs_v3_voice_transcript: str = ""
+    higgs_v3_temperature: float = -1
+    higgs_v3_top_p: float = -1
+    higgs_v3_top_k: int = -1
+    higgs_v3_batch_size: int = 1
+    higgs_v3_seed: int = -1
+
     vibevoice_voice_file_name: str = ""
     vibevoice_target: str = ""
     vibevoice_lora_target: str = Field(default="", alias="vibevoice_lora_path")

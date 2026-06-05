@@ -4,7 +4,8 @@ import re
 from typing import Callable
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import Hint, SttVariant
+from tts_audiobook_tool.app_types import Hint
+from tts_audiobook_tool.menus.menu_status import MenuStatus
 import tts_audiobook_tool.util as util_module
 
 from tts_audiobook_tool import ask
@@ -22,6 +23,7 @@ class MenuFrame:
     breadcrumb: StringOrMaker | None = None
 
 class MenuItem:
+
     def __init__(
             self,
             label: StringOrMaker,
@@ -102,6 +104,9 @@ class MenuUtil:
         MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
         try:
             while True:
+
+                from tts_audiobook_tool.tts import Tts
+                Tts.update_tts_type()
 
                 # Initialize items list
                 if isinstance(items, list):
@@ -262,6 +267,12 @@ class MenuUtil:
         breadcrumb rendering works the same way as MenuUtil.menu(...), while
         keeping direct print_heading(...) calls breadcrumb-free by default.
         """
+
+        # ---------------------------- xxx
+        from tts_audiobook_tool.tts import Tts
+        Tts.update_tts_type()
+        # ----------------------------
+        
         MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
         try:
             heading_text = get_string_from(state, heading)
@@ -291,7 +302,7 @@ class MenuUtil:
 
         if state and state.prefs.menu_clears_screen and not dont_clear and not non_menu:
             os.system('cls' if os.name == 'nt' else 'clear')
-            MenuUtil._print_status_block(state)
+            MenuStatus.print_block(state)
             printt()
         elif util_module._menu_clears_screen and not dont_clear:
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -305,94 +316,6 @@ class MenuUtil:
             printt(f"{COL_DIM}{breadcrumb_text}")
         printt(f"{color}{text}")
         printt()
-
-    @staticmethod
-    def _print_status_block(state: State) -> None:
-        
-        from tts_audiobook_tool import app_support
-        from tts_audiobook_tool.stt import Stt
-        from tts_audiobook_tool.tts import Tts
-
-        label_color = COL_DIM
-        value_color = COL_MEDIUM
-        qualifier_color = COL_DIM
-
-        # Project line
-        if state.project.dir_path:
-            project_line = value_color + text_util.make_terminal_hyperlink(state.project.dir_path)
-        else:
-            project_line = value_color + "none"
-
-        language_code = state.project.language_code.strip()
-        if state.project.dir_path and language_code:
-            project_line += f" {qualifier_color}({language_code})"
-
-        # TTS line
-        if Tts._instance_display_info:            
-            # Instance exists - display extra info
-            tts_line = value_color + Tts._instance_display_info.model_description
-            match (bool(Tts._instance_display_info.device), bool(Tts._instance_display_info.extra)):
-                case (True, True):
-                    extra = f"{Tts._instance_display_info.device}, {Tts._instance_display_info.extra}"
-                case (True, False):
-                    extra = Tts._instance_display_info.device
-                case (False, True):
-                    extra = Tts._instance_display_info.extra
-                case (False, False):
-                    extra = ""
-            if extra:
-                extra = f"({extra})"
-            extra += " (loaded)"
-            tts_line += f" {qualifier_color}{extra}"
-        else:
-            # No instance exists - display basic info
-            tts_line = value_color + Tts.get_class().INFO.ui['proper_name']
-            if state.prefs.tts_force_cpu:
-                # Note, showing "force cpu" qualifier only if no instance exists
-                # b/c if instance exists, will already show device value cpus
-                tts_line += f" {qualifier_color}(force cpu)"
-
-        # Voice line
-        voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
-            state.project,
-            Tts.get_instance_if_exists()
-        )
-        voice_prefix = text_util.strip_ansi_codes(voice_prefix).strip().rstrip(":")
-        voice_value = text_util.strip_ansi_codes(voice_value).strip()
-        voice_line = value_color + (voice_value or voice_prefix or "none")
-
-        # Text line
-        total_lines = len(state.project.phrase_groups)
-        num_complete = state.project.sound_segments.num_generated()
-        text_text = value_color + f"{total_lines} lines"
-        text_text += f" {COL_DIM}({num_complete} segments generated)"
-
-        # STT line
-        stt_model = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
-        stt_line = value_color + stt_model
-        if state.prefs.stt_variant == SttVariant.DISABLED:
-            stt_line += f" disabled" # not dim
-        else:
-            if Stt.has_instance():
-                stt_variant = Stt.get_variant().id
-                fw_config = state.prefs.stt_config.description if not Stt.should_use_mlx_whisper() else ""
-                stt_line += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"            
-            else:
-                stt_line += f""
-
-        # Memory line
-        memory_line = text_util.strip_ansi_codes(app_support.make_memory_string())
-        memory_line = memory_line.replace(":", "") # careful
-        memory_line = value_color + memory_line if memory_line else ""
-
-        printt(f"{label_color}Project:     {project_line}")
-        printt(f"{label_color}TTS model:   {tts_line}")
-        printt(f"{label_color}Voice clone: {voice_line}")
-        printt(f"{label_color}Text:        {text_text}")
-        printt(f"{label_color}STT model:   {stt_line}")
-        if memory_line:
-            printt(f"{label_color}Memory:      {memory_line}")
-
 
     @staticmethod
     def options_menu(

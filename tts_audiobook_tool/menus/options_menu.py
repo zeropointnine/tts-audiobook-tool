@@ -1,5 +1,6 @@
 import torch
 from tts_audiobook_tool import app_support
+from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool import ask, text_util
@@ -20,7 +21,8 @@ class OptionsMenu:
             memory_string = app_support.make_memory_string()
             if memory_string:
                 memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
-            return f"Attempt to unload models {memory_string}"
+            qualifier = "" if Tts.is_local_model() else "local "
+            return f"Attempt to unload {qualifier}models {memory_string}"
 
         def on_unload(_: State, __: MenuItem) -> None:
             before_string = app_support.make_memory_string()
@@ -46,6 +48,29 @@ class OptionsMenu:
 
             items = []
 
+            if Tts.is_sgl_mode():
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label(
+                            "SGL-Omni server URL",
+                            text_util.make_terminal_hyperlink(
+                                state.prefs.sgl_omni_url,
+                                ellipsize(state.prefs.sgl_omni_url, 50)
+                            ) if state.prefs.sgl_omni_url else f"{COL_ERROR}required"
+                        ),
+                        lambda _, __: OptionsMenu.ask_sgl_omni_url(state)
+                    )
+                )
+                items.append(
+                    MenuItem(
+                        lambda _: make_menu_label(
+                            "SGL-Omni TTS model type",
+                            OptionsMenu.make_sgl_omni_type_label(state)
+                        ),
+                        lambda _, __: OptionsMenu.sgl_omni_type_menu(state)
+                    )
+                )
+
             # Whisper model
             from tts_audiobook_tool.stt import Stt
             if not Stt.should_use_mlx_whisper():
@@ -53,7 +78,7 @@ class OptionsMenu:
                     MenuItem(
                         lambda _: make_menu_label("Whisper model", state.prefs.stt_variant.id, SttVariant.get_default().id),
                         lambda _, __: OptionsMenu.stt_model_menu(state),
-                        superlabel="Model options", superlabel_no_blank_line=True
+                        superlabel="Model options", superlabel_no_blank_line=Tts.is_local_model()
                     )
                 )
 
@@ -68,7 +93,7 @@ class OptionsMenu:
 
             # TTS force cpu
             import torch
-            model_devices = Tts.get_type().value.torch_devices
+            model_devices = Tts.get_type().value.local_torch_devices
             has_gpu = (
                 (torch.cuda.is_available() and "cuda" in model_devices) or
                 (torch.backends.mps.is_available() and "mps" in model_devices)
@@ -94,7 +119,6 @@ class OptionsMenu:
             items.append( MenuItem(make_unload_label, on_unload) )
 
             # Various:
-            
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
@@ -108,12 +132,14 @@ class OptionsMenu:
                     superlabel="Various"
                 )
             )
+
             items.append(
                 MenuItem(
                     make_menu_label("AAC/M4B bitrate", state.prefs.aac_bitrate, AAC_BITRATE_DEFAULT),
                     lambda _, __: OptionsMenu.aac_bitrate_menu(state)
                 )
             )
+            
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
@@ -260,6 +286,55 @@ class OptionsMenu:
             default_value=AAC_BITRATE_DEFAULT,
             on_select=on_select
         )
+
+    @staticmethod
+    def make_sgl_omni_type_label(state: State) -> str:
+        value = state.prefs.sgl_omni_type
+        if value is None:
+            return "auto-detect"
+        return value.value.ui["proper_name"]
+
+    @staticmethod
+    def sgl_omni_type_menu(state: State) -> None:
+
+        def on_select(value: TtsModelInfos | None) -> None:
+            if state.prefs.sgl_omni_type != value:
+                state.prefs.sgl_omni_type = value
+            print_feedback("Set SGL-Omni TTS model type to:", OptionsMenu.make_sgl_omni_type_label(state))
+
+        values: list[TtsModelInfos | None] = [None] + TtsModelInfos.get_sgl_omni_items()
+        labels = ["Auto-detect"] + [item.value.ui["proper_name"] for item in TtsModelInfos.get_sgl_omni_items()]
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="SGL-Omni TTS model type",
+            labels=labels,
+            values=values,
+            current_value=state.prefs.sgl_omni_type,
+            default_value=None,
+            on_select=on_select,
+            breadcrumb="SGL-Omni TTS model type",
+        )
+
+    @staticmethod
+    def ask_sgl_omni_url(state: State) -> None:
+        s = f"Enter SGL-Omni URL:\n"
+        s += f"{COL_DIM}(Eg, http://localhost:8000)"
+        printt(s)
+
+        value = ask.ask("", lower=False)
+        value = value.strip().rstrip("/")
+        if not value:
+            return
+        
+        if "://" not in value:
+            value = f"http://{value}"
+        
+        state.prefs.sgl_omni_url = value
+        SglOmniUtil.set_base_url(state.prefs.sgl_omni_url)
+        Tts.update_tts_type()
+
+        print_feedback("Set SGL-Omni URL to:", state.prefs.sgl_omni_url)
 
 # ---
 

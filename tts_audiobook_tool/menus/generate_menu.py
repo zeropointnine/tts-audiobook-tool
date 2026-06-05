@@ -63,7 +63,7 @@ class GenerateMenu:
         def make_batch_size_label(state: State) -> str:
             value = ProjectVoiceUtil.get_batch_size(state.project)
             value_string = "disabled" if value == 1 else str(value)
-            s = "Batch size "
+            s = "Concurrent requests " if Tts.get_type().value.is_sgl_omni else "Batch size "
             currently = make_currently_string(value_string)
             s = s + currently
             return s
@@ -380,17 +380,23 @@ def ask_retries(state: State) -> None:
 
 def ask_batch_size(state: State) -> None:
 
-    field_name = Tts.get_type().value.batch_size_project_field
+    field_name = Tts.get_type().value.batch_size_attr
     if not field_name:
         return # silently ignore (shouldn't happen)
 
     hints.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
-    prompt = "Enter batch size:"
+    prompt = "Enter max concurrent requests:" if Tts.get_type().value.is_sgl_omni else "Enter batch size:"
+    
+    # Note that if there is a TtsModelInfos local and server "pair" for the same TTS model
+    # and the two share the same Project "batch_size" attribute, that value can be out of range
+    # compared to the 'correct' max value. 
+    max_value = PROJECT_CONCURRENT_REQUESTS_MAX if Tts.get_type().value.is_sgl_omni else PROJECT_BATCH_SIZE_MAX
+
     ask.ask_number(
         state.project, field_name, prompt,
-        1, PROJECT_BATCH_SIZE_MAX,
-        PROJECT_BATCH_SIZE_DEFAULT, "Set batch size:", is_int=True
+        1, max_value, PROJECT_BATCH_SIZE_DEFAULT, 
+        "Set batch size:", is_int=True
     )
 
 def make_regenerate_segments_with_errors_desc(state: State) -> str:

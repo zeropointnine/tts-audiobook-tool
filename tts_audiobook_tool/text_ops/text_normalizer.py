@@ -4,7 +4,6 @@ import string
 import unicodedata
 from whisper_normalizer.english import EnglishNumberNormalizer
 
-from tts_audiobook_tool.l import L
 from tts_audiobook_tool.text_ops.spanish_number_normalizer import SpanishNumberNormalizer
 from tts_audiobook_tool.app_support import app_text
 
@@ -101,12 +100,12 @@ def normalize_common_en_specific(text: str) -> str:
     # Text-to-numbers
     result = TextNormalizer._whisper_number_normalizer_en(text)
 
-    if result != text:
-        try:
-            L.d(f"before: \"{text}\"")
-            L.d(f"after:  \"{result}\"")
-        except AttributeError:
-            pass
+    # if result != text:
+    #     try:
+    #         L.d(f"before: \"{text}\"")
+    #         L.d(f"after:  \"{result}\"")
+    #     except AttributeError:
+    #         pass
 
     return result
 

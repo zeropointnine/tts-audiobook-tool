@@ -18,7 +18,6 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
@@ -261,6 +260,8 @@ class ProjectSerializationUtil:
         if not chatterbox_type:
             chatterbox_type = list(ChatterboxType)[0]
             try:
+                from tts_audiobook_tool.tts import Tts
+
                 if Tts.get_type() == TtsModelInfos.CHATTERBOX:
                     add_warning('chatterbox_type', chatterbox_type.id)
             except AttributeError:
@@ -295,6 +296,18 @@ class ProjectSerializationUtil:
             add_warning('higgs_seed', -1)
             seed = -1
         d['higgs_seed'] = int(seed)
+
+        seed = d.get('higgs_v3_seed', -1)
+        if not (-1 <= seed <= SEED_MAX):
+            add_warning('higgs_v3_seed', -1)
+            seed = -1
+        d['higgs_v3_seed'] = int(seed)
+
+        value = d.get('higgs_v3_batch_size', PROJECT_BATCH_SIZE_DEFAULT)
+        if not isinstance(value, (float, int)) or not (1 <= value <= PROJECT_BATCH_SIZE_MAX):
+            value = PROJECT_BATCH_SIZE_DEFAULT
+            add_warning('higgs_v3_batch_size', value)
+        d['higgs_v3_batch_size'] = int(value)
 
         value = d.get('vibevoice_batch_size', -1)
         if value != -1:
@@ -369,14 +382,14 @@ class ProjectSerializationUtil:
 
         value = d.get('moss_delay_top_p', d.get('moss_top_p', -1))
         if value != -1:
-            if not isinstance(value, (float, int)) or not (moss_delay_config.top_p_min <= value <= moss_delay_config.top_p_max):
+            if not isinstance(value, (float, int)) or not (moss_delay_config.audio_top_p_min <= value <= moss_delay_config.audio_top_p_max):
                 value = -1
                 add_warning('moss_delay_top_p', value)
         d['moss_delay_top_p'] = value
 
         value = d.get('moss_delay_top_k', d.get('moss_top_k', -1))
         if value != -1:
-            if not isinstance(value, (float, int)) or not (moss_delay_config.top_k_min <= value <= moss_delay_config.top_k_max):
+            if not isinstance(value, (float, int)) or not (moss_delay_config.audio_top_k_min <= value <= moss_delay_config.audio_top_k_max):
                 value = -1
                 add_warning('moss_delay_top_k', value)
             value = int(value)
@@ -391,14 +404,14 @@ class ProjectSerializationUtil:
 
         value = d.get('moss_local_top_p', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (moss_local_config.top_p_min <= value <= moss_local_config.top_p_max):
+            if not isinstance(value, (float, int)) or not (moss_local_config.audio_top_p_min <= value <= moss_local_config.audio_top_p_max):
                 value = -1
                 add_warning('moss_local_top_p', value)
         d['moss_local_top_p'] = value
 
         value = d.get('moss_local_top_k', -1)
         if value != -1:
-            if not isinstance(value, (float, int)) or not (moss_local_config.top_k_min <= value <= moss_local_config.top_k_max):
+            if not isinstance(value, (float, int)) or not (moss_local_config.audio_top_k_min <= value <= moss_local_config.audio_top_k_max):
                 value = -1
                 add_warning('moss_local_top_k', value)
             value = int(value)
@@ -557,6 +570,14 @@ class ProjectSerializationUtil:
             "higgs_top_k": project.higgs_top_k,
             "higgs_top_p": project.higgs_top_p,
             "higgs_seed": project.higgs_seed,
+
+            "higgs_v3_voice_file_path": project.higgs_v3_voice_file_path,
+            "higgs_v3_voice_transcript": project.higgs_v3_voice_transcript,
+            "higgs_v3_temperature": project.higgs_v3_temperature,
+            "higgs_v3_top_p": project.higgs_v3_top_p,
+            "higgs_v3_top_k": project.higgs_v3_top_k,
+            "higgs_v3_batch_size": project.higgs_v3_batch_size,
+            "higgs_v3_seed": project.higgs_v3_seed,
 
             "vibevoice_voice_file_name": project.vibevoice_voice_file_name,
             "vibevoice_target": project.vibevoice_target,

@@ -31,7 +31,9 @@ is_logging_initialized = False
 
 
 def init_logging() -> None:
+
     global is_logging_initialized
+    import warnings
 
     if is_logging_initialized:
         return
@@ -41,21 +43,20 @@ def init_logging() -> None:
     L.i("START " + "-" * 60)
 
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("filelock").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)
-    logging.getLogger("faster_whisper").setLevel(logging.WARNING)
     logging.getLogger("watchdog.observers.inotify_buffer").setLevel(logging.WARNING)
-
-    logging.getLogger("pocket_tts.models.tts_model").setLevel(logging.WARNING)
-    import warnings
     warnings.filterwarnings("ignore", module="pyloud")
+    logging.getLogger("faster_whisper").setLevel(logging.WARNING)
+    logging.getLogger("pocket_tts.models.tts_model").setLevel(logging.WARNING)
     warnings.filterwarnings(
         "ignore",
         message="This search incorrectly ignores the root element.*",
         category=FutureWarning,
         module="ebooklib\\.epub",
     )
-
 
 def set_seed(seed: int) -> None:
     """
@@ -207,12 +208,6 @@ def log_unload_memory_snapshot(label: str) -> None:
         parts.append(f"nvml_error={e}")
 
     L.i(f"Unload memory snapshot [{label}] | " + " | ".join(parts))
-
-
-def get_chromium_info() -> tuple[str, str] | None:
-    from tts_audiobook_tool.system_support.browser import get_chromium_info as browser_get_chromium_info
-
-    return browser_get_chromium_info()
 
 
 def print_warm_up_result_stop(result: ModelWarmUpResult) -> None:

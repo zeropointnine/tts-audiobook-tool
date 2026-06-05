@@ -11,7 +11,6 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import printt
 
@@ -107,6 +106,8 @@ class ProjectLoadUtil:
                 return err
             L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
 
+        from tts_audiobook_tool.tts import Tts
+
         if Tts.get_type() == TtsModelInfos.OUTE:
             ProjectVoiceUtil.load_oute_voice_json(project)
 
@@ -142,6 +143,7 @@ class ProjectLoadUtil:
             ('fish_voice_text', 'fish_s1_voice_text'),
             ('fish_temperature', 'fish_s1_temperature'),
             ('fish_seed', 'fish_s1_seed'),
+            ('higgs_v3_voice_text', 'higgs_v3_voice_transcript'),
         ]:
             if new not in d and old in d:
                 d[new] = d.pop(old)

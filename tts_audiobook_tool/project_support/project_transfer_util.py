@@ -4,9 +4,12 @@ import os
 import shutil
 from typing import TYPE_CHECKING
 
+from pydantic.fields import FieldInfo
+
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
-from tts_audiobook_tool.util import APP_META_FLAC_FIELD, APP_META_MP4_MEAN, APP_META_MP4_TAG
+from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -16,6 +19,24 @@ class ProjectTransferUtil:
     """
     Snapshot import/export and supporting-project-file transfer helpers.
     """
+
+    PROJECT_SETTINGS_TRANSFER_SKIP = {
+        'dir_path',
+        'sound_segments',
+        # Runtime-loaded from oute_voice_file_name after the supporting JSON file is copied.
+        'oute_voice_json',
+    }
+
+    PROJECT_SETTINGS_TRANSFER_EXTRA_FIELDS = {
+        # Stored in the project text payload rather than directly in project.json.
+        'book',
+        # Serialized as word_substitutions_json_string for backwards compatibility.
+        'word_substitutions',
+        # Legacy compatibility fields used while loading older projects.
+        'applied_strategy',
+        'applied_max_words',
+        'applied_language_code',
+    }
 
     @staticmethod
     def load_raw_abr_metadata_string(abr_path: str) -> str:
@@ -37,11 +58,44 @@ class ProjectTransferUtil:
 
     @staticmethod
     def apply_project_settings(dest_project: Project, source_project: Project) -> None:
-        skip = {'dir_path', 'sound_segments', 'oute_voice_json'}
         with dest_project.batch():
-            for field_name in source_project.model_fields:
-                if field_name not in skip:
-                    setattr(dest_project, field_name, getattr(source_project, field_name))
+            for field_name in ProjectTransferUtil.get_project_settings_transfer_field_names(source_project):
+                setattr(dest_project, field_name, getattr(source_project, field_name))
+
+    @staticmethod
+    def get_project_settings_transfer_field_names(project: Project | type[Project]) -> list[str]:
+        model_fields = project.model_fields if isinstance(project, type) else type(project).model_fields
+        return [
+            field_name
+            for field_name in model_fields
+            if field_name not in ProjectTransferUtil.PROJECT_SETTINGS_TRANSFER_SKIP
+        ]
+
+    @staticmethod
+    def get_missing_project_settings_transfer_fields(project: type[Project]) -> list[str]:
+        serialized_field_names = ProjectTransferUtil.get_project_json_serialized_field_names(project)
+        return [
+            field_name
+            for field_name in ProjectTransferUtil.get_project_settings_transfer_field_names(project)
+            if field_name not in serialized_field_names
+            and field_name not in ProjectTransferUtil.PROJECT_SETTINGS_TRANSFER_EXTRA_FIELDS
+        ]
+
+    @staticmethod
+    def get_project_json_serialized_field_names(project: type[Project]) -> set[str]:
+        from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project())
+        alias_to_field_name = ProjectTransferUtil.make_project_alias_to_field_name_map(project)
+        return {alias_to_field_name[key] if key in alias_to_field_name else key for key in payload}
+
+    @staticmethod
+    def make_project_alias_to_field_name_map(project: type[Project]) -> dict[str, str]:
+        result: dict[str, str] = {}
+        for field_name, field_info in project.model_fields.items():
+            if isinstance(field_info, FieldInfo) and field_info.alias:
+                result[str(field_info.alias)] = field_name
+        return result
 
     @staticmethod
     def get_snapshot_source_dir(project_snapshot: dict) -> str:
@@ -52,7 +106,6 @@ class ProjectTransferUtil:
 
     @staticmethod
     def make_supporting_project_file_names(project: Project) -> list[str]:
-        from tts_audiobook_tool.constants import PROJECT_TEXT_EPUB_FILE_NAME, PROJECT_TEXT_FILE_NAME, PROJECT_TEXT_RAW_FILE_NAME
 
         file_names = [
             PROJECT_TEXT_FILE_NAME,

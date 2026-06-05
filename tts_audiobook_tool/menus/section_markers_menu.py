@@ -213,7 +213,7 @@ def mode_menu(state: State) -> None:
     )
 
 SUBLABEL = \
-"""Section markers are line numbers where new sections begin. 
-Depending on the selected mode, they are used to either split the audiobook 
+"""Section markers are line numbers which define where new sections begin. 
+Depending on the selected mode, this is used to either split the audiobook 
 into separate files or to add web player bookmarks to a single audiobook file.
 """

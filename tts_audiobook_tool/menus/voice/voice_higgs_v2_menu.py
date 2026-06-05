@@ -1,12 +1,12 @@
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_models.higgs_base_model import HiggsBaseModel
+from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
 from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
-class VoiceHiggsMenu:
+class VoiceHiggsV2Menu:
 
     @staticmethod
     def menu(state: State) -> None:
@@ -15,18 +15,18 @@ class VoiceHiggsMenu:
             items = [
                 MenuItem(
                     VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS_V2)
                 )
             ]
             if state.project.higgs_voice_file_name:
                 items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS) 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS_V2) 
                 )
             
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
                 attr="higgs_temperature",
-                default_value=HiggsBaseModel.DEFAULT_TEMPERATURE,
+                default_value=HiggsV2BaseModel.DEFAULT_TEMPERATURE,
                 min_value=0.01,
                 max_value=2.0
             )
@@ -37,7 +37,7 @@ class VoiceHiggsMenu:
                 VoiceMenuShared.make_top_p_item(
                     state=state,
                     attr="higgs_top_p",
-                    default_value=HiggsBaseModel.DEFAULT_TOP_P
+                    default_value=HiggsV2BaseModel.DEFAULT_TOP_P
                 )
             )
 
@@ -45,7 +45,7 @@ class VoiceHiggsMenu:
                 VoiceMenuShared.make_top_k_item(
                     state=state,
                     attr="higgs_top_k",
-                    default_value=HiggsBaseModel.DEFAULT_TOP_K
+                    default_value=HiggsV2BaseModel.DEFAULT_TOP_K
                 )
             )
 
