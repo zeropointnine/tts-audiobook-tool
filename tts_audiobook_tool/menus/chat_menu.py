@@ -22,8 +22,8 @@ class ChatMenu:
             return label
 
         subheading = (
-            f"{COL_DIM}Mic input is transcribed and sent to the configured LLM, and the text\n"
-            "response is generated as speech using the current TTS model settings.\n"
+            f"{COL_DIM}Interactive chat with a configured LLM where each assistant reply is\n"
+            "generated as speech using the current TTS model and voice settings.\n"
         )
 
         def make_items(_: State) -> list[MenuItem]:
@@ -32,18 +32,14 @@ class ChatMenu:
                 MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
 
                 MenuItem(
-                    lambda _: make_menu_label("LLM system prompt", ChatMenu.get_system_prompt_label_value(state)),
-                    lambda _, __: ChatMenu.system_prompt_menu(state),
+                    lambda _: make_menu_label("Input mode", ChatMenu.get_chat_input_mode_label_value(state)),
+                    lambda _, __: ChatMenu.input_mode_menu(state),
                     superlabel="Options"
                 ),
 
                 MenuItem(
-                    lambda _: make_menu_label(
-                        "Submit prompt immediately after transcription",
-                        state.prefs.conversation_stt_immediate,
-                        False
-                    ),
-                    lambda _, __: ChatMenu.conversation_stt_immediate_menu(state),
+                    lambda _: make_menu_label("LLM system prompt", ChatMenu.get_system_prompt_label_value(state)),
+                    lambda _, __: ChatMenu.system_prompt_menu(state),
                 )
             ]
 
@@ -82,24 +78,32 @@ class ChatMenu:
         )
 
     @staticmethod
-    def conversation_stt_immediate_menu(state: State) -> None:
+    def input_mode_menu(state: State) -> None:
 
-        def on_select(value: bool) -> None:
-            state.prefs.conversation_stt_immediate = value
+        def on_select(value: str) -> None:
+            state.prefs.chat_input_mode = value
             print_feedback(
-                "Submit prompt immediately after transcription set to:",
-                state.prefs.conversation_stt_immediate,
+                "Input mode set to:",
+                ChatMenu.get_chat_input_mode_label_value(state),
             )
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Submit prompt immediately after transcription",
-            labels=["True", "False"],
-            values=[True, False],
-            current_value=state.prefs.conversation_stt_immediate,
-            default_value=False,
+            heading_text="LLM chat input mode",
+            labels=[
+                "Microphone (submit immediately after silence)",
+                "Microphone (submit by pressing ENTER)",
+                "Text input",
+            ],
+            values=[
+                CHAT_INPUT_MODE_MIC_IMMEDIATE,
+                CHAT_INPUT_MODE_MIC_ENTER,
+                CHAT_INPUT_MODE_TEXT,
+            ],
+            current_value=state.prefs.chat_input_mode,
+            default_value=PREFS_DEFAULT_CHAT_INPUT_MODE,
             on_select=on_select,
-            breadcrumb="Submit prompt immediately",
+            breadcrumb="Input mode",
         )
 
     @staticmethod
@@ -281,6 +285,13 @@ class ChatMenu:
         if prefs.system_prompt_preset:
             return ChatMenu.get_system_prompt_preset_label_value(state)
         return ellipsize(prefs.llm_system_prompt, 50) or "none"
+
+    @staticmethod
+    def get_chat_input_mode_label_value(state: State) -> str:
+        value = state.prefs.chat_input_mode
+        if value == CHAT_INPUT_MODE_TEXT:
+            return "text"
+        return "microphone"
 
     @staticmethod
     def get_system_prompt_preset_label_value(state: State) -> str:

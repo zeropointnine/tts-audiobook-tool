@@ -6,7 +6,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -51,7 +51,7 @@ class VoiceOmniVoiceMenu:
             return f"Inference steps {make_currently_string(steps, default=OmniVoiceBaseModel.DEFAULT_STEPS)}"
 
         def on_clear_voice(s: State, __: MenuItem) -> None:
-            ProjectVoiceUtil.clear_voice_and_save(s.project, TtsModelInfos.OMNIVOICE)
+            ProjectVoiceUtil.clear_voice_and_save(s.project, TtsModelType.OMNIVOICE)
             print_feedback("Voice clone cleared")
 
         def on_clear_instruct(s: State, __: MenuItem) -> None:
@@ -71,7 +71,7 @@ class VoiceOmniVoiceMenu:
             items.append(
                 MenuItem(
                     make_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.OMNIVOICE)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.OMNIVOICE)
                 )
             )
             if state.project.omnivoice_voice_file_name:

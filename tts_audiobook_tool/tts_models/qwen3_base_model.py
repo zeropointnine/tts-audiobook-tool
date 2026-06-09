@@ -4,7 +4,7 @@ from enum import Enum
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 from typing import TYPE_CHECKING
@@ -15,7 +15,7 @@ else:
 
 class Qwen3BaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.QWEN3TTS.value
+    INFO = TtsModelType.QWEN3TTS.value
 
     PRESET_REPO_IDS = [
         "Qwen/Qwen3-TTS-12Hz-1.7B-Base",

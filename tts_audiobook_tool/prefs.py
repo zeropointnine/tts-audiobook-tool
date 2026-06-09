@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -20,7 +20,7 @@ class Prefs(Saveable):
             stt_variant: SttVariant = SttVariant.get_default(),
             stt_config: SttConfig | None = None,
             tts_force_cpu: bool = False,
-            sgl_omni_type: TtsModelInfos | None = None,
+            sgl_omni_type: TtsModelType | None = None,
             sgl_omni_url: str = SGL_OMNI_URL_DEFAULT,
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
             llm_url: str = "",
@@ -32,7 +32,7 @@ class Prefs(Saveable):
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
-            conversation_stt_immediate: bool = False,
+            chat_input_mode: str = PREFS_DEFAULT_CHAT_INPUT_MODE,
             chat_save: bool = PROJECT_DEFAULT_CHAT_SAVE,
             chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
@@ -48,7 +48,7 @@ class Prefs(Saveable):
 
         # When in "sgl-omni mode", this is the active TTS type
         # When value is None, it autodetects based on server model id
-        self._sgl_omni_type: TtsModelInfos | None = sgl_omni_type
+        self._sgl_omni_type: TtsModelType | None = sgl_omni_type
         
         self._sgl_omni_url = sgl_omni_url
         
@@ -62,7 +62,7 @@ class Prefs(Saveable):
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
-        self._conversation_stt_immediate = conversation_stt_immediate
+        self._chat_input_mode = chat_input_mode if chat_input_mode in CHAT_INPUT_MODES else PREFS_DEFAULT_CHAT_INPUT_MODE
         self._chat_save = chat_save
         self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
@@ -165,8 +165,8 @@ class Prefs(Saveable):
         if s is None or s == "":
             sgl_omni_type = None
         elif isinstance(s, str):
-            sgl_omni_type = TtsModelInfos.get_by_id(s)
-            if sgl_omni_type == TtsModelInfos.NONE or not sgl_omni_type.value.is_sgl_omni:
+            sgl_omni_type = TtsModelType.get_by_id(s)
+            if sgl_omni_type == TtsModelType.NONE or not sgl_omni_type.value.is_sgl_omni:
                 sgl_omni_type = None
                 dirty = True
         else:
@@ -250,10 +250,10 @@ class Prefs(Saveable):
             last_text_dir = ""
             dirty = True
 
-        # Conversation STT immediate submit
-        conversation_stt_immediate = prefs_dict.get("conversation_stt_immediate", False)
-        if not isinstance(conversation_stt_immediate, bool):
-            conversation_stt_immediate = False
+        # Chat input mode
+        chat_input_mode = prefs_dict.get("chat_input_mode", PREFS_DEFAULT_CHAT_INPUT_MODE)
+        if not isinstance(chat_input_mode, str) or chat_input_mode not in CHAT_INPUT_MODES:
+            chat_input_mode = PREFS_DEFAULT_CHAT_INPUT_MODE
             dirty = True
 
         # Chat save
@@ -304,7 +304,7 @@ class Prefs(Saveable):
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
-            conversation_stt_immediate=conversation_stt_immediate,
+            chat_input_mode=chat_input_mode,
             chat_save=chat_save,
             chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
@@ -407,12 +407,12 @@ class Prefs(Saveable):
         Tts.set_force_cpu(value)
 
     @property
-    def sgl_omni_type(self) -> TtsModelInfos | None:
+    def sgl_omni_type(self) -> TtsModelType | None:
         return self._sgl_omni_type
 
     @sgl_omni_type.setter
-    def sgl_omni_type(self, value: TtsModelInfos | None) -> None:
-        if value is not None and (value == TtsModelInfos.NONE or not value.value.is_sgl_omni):
+    def sgl_omni_type(self, value: TtsModelType | None) -> None:
+        if value is not None and (value == TtsModelType.NONE or not value.value.is_sgl_omni):
             value = None
         self._sgl_omni_type = value
         self.save()
@@ -525,12 +525,14 @@ class Prefs(Saveable):
         self.save()
 
     @property
-    def conversation_stt_immediate(self) -> bool:
-        return self._conversation_stt_immediate
+    def chat_input_mode(self) -> str:
+        return self._chat_input_mode
 
-    @conversation_stt_immediate.setter
-    def conversation_stt_immediate(self, value: bool) -> None:
-        self._conversation_stt_immediate = value
+    @chat_input_mode.setter
+    def chat_input_mode(self, value: str) -> None:
+        if value not in CHAT_INPUT_MODES:
+            value = PREFS_DEFAULT_CHAT_INPUT_MODE
+        self._chat_input_mode = value
         self.save()
 
     @property
@@ -575,7 +577,7 @@ class Prefs(Saveable):
             "last_voice_dir": self._last_voice_dir,
             "last_project_dir": self._last_project_dir,
             "last_text_dir": self._last_text_dir,
-            "conversation_stt_immediate": self._conversation_stt_immediate,
+            "chat_input_mode": self._chat_input_mode,
             "chat_save": self._chat_save,
             "chat_save_mic": self._chat_save_mic,
             "save_debug_files": self._save_debug_files,

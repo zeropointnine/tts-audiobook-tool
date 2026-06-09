@@ -1,10 +1,10 @@
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class MiraBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.MIRA.value
+    INFO = TtsModelType.MIRA.value
 
     TEMPERATURE_DEFAULT = 0.7
     TEMPERATURE_MIN = 0.0

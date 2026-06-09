@@ -11,7 +11,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import printt
 
 if TYPE_CHECKING:
@@ -108,7 +108,7 @@ class ProjectLoadUtil:
 
         from tts_audiobook_tool.tts import Tts
 
-        if Tts.get_type() == TtsModelInfos.OUTE:
+        if Tts.get_type() == TtsModelType.OUTE:
             ProjectVoiceUtil.load_oute_voice_json(project)
 
         did_clear_invalid_voice_files = ProjectVoiceUtil.verify_voice_files_exist(project)

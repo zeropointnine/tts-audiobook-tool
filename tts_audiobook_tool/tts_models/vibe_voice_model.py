@@ -12,7 +12,7 @@ from peft import PeftModel  # type: ignore
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.util import *
 
@@ -264,7 +264,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 tensor_data = tensor_data.to(torch.float32)
 
             ndarray_data = tensor_data.cpu().numpy()
-            sound = Sound(ndarray_data, TtsModelInfos.VIBEVOICE.value.sample_rate)
+            sound = Sound(ndarray_data, TtsModelType.VIBEVOICE.value.sample_rate)
             sounds.append(sound)
 
         return sounds

@@ -7,7 +7,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ValidationResult, WordErrorResult
 
@@ -55,7 +55,7 @@ class SoundSegmentUtil:
         if not app_hashing.is_app_hash(hash):
             return None
 
-        model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelInfos.all_file_tags() else ""
+        model = tags[2] if len(tags) >= 3 and tags[2] in TtsModelType.all_file_tags() else ""
         voice = tags[3] if len(tags) >= 4 else ""
         num_errors = int(tags[4]) if len(tags) >= 5 and tags[4].isdigit() else -1
 
@@ -107,14 +107,14 @@ class SoundSegmentUtil:
         index: int,
         phrase_group: PhraseGroup,
         project: Project,
-        tts_model_info: TtsModelInfo,
+        tts_model_type: TtsModelSpec,
         validation_result: ValidationResult,
         is_real_time: bool,
         suffix=".flac"
     ) -> str:
 
         idx = str(index + 1).zfill(5)
-        model = tts_model_info.file_tag
+        model = tts_model_type.file_tag
         
         voice = Tts.get_class().get_voice_tag(project)
         

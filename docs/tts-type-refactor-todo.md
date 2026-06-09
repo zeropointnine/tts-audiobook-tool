@@ -2,7 +2,7 @@
 
 ## Problem
 
-[`TtsModelInfos`](../tts_audiobook_tool/tts_models/tts_model_info.py) is currently both the full catalog of supported model variants and an implicit catalog of SGL-Omni-backed variants via [`TtsModelInfo.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_info.py:15).
+[`TtsModelType`](../tts_audiobook_tool/tts_models/tts_model_type.py) is currently both the full catalog of supported model variants and an implicit catalog of SGL-Omni-backed variants via [`TtsModelSpec.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_type.py:15).
 
 That means the list is doing double duty:
 
@@ -44,9 +44,9 @@ flowchart TD
 
 ## Recommended direction
 
-Keep [`TtsModelInfos`](../tts_audiobook_tool/tts_models/tts_model_info.py:70) as the canonical app-level model catalog, but make backend classification explicit.
+Keep [`TtsModelType`](../tts_audiobook_tool/tts_models/tts_model_type.py:70) as the canonical app-level model catalog, but make backend classification explicit.
 
-Avoid immediately splitting [`TtsModelInfos`](../tts_audiobook_tool/tts_models/tts_model_info.py:70) into separate unrelated enums. The app still needs one canonical selected model identity for serialization, menus, voice settings, project fields, and generation. A full split would likely increase adapter code.
+Avoid immediately splitting [`TtsModelType`](../tts_audiobook_tool/tts_models/tts_model_type.py:70) into separate unrelated enums. The app still needs one canonical selected model identity for serialization, menus, voice settings, project fields, and generation. A full split would likely increase adapter code.
 
 Instead, use one canonical model catalog plus explicit backend classification.
 
@@ -54,28 +54,28 @@ Instead, use one canonical model catalog plus explicit backend classification.
 
 Add a backend enum, for example:
 
-- [`TtsBackendKind.LOCAL`](../tts_audiobook_tool/tts_models/tts_model_info.py)
-- [`TtsBackendKind.SGL_OMNI`](../tts_audiobook_tool/tts_models/tts_model_info.py)
-- [`TtsBackendKind.NONE`](../tts_audiobook_tool/tts_models/tts_model_info.py)
+- [`TtsBackendKind.LOCAL`](../tts_audiobook_tool/tts_models/tts_model_type.py)
+- [`TtsBackendKind.SGL_OMNI`](../tts_audiobook_tool/tts_models/tts_model_type.py)
+- [`TtsBackendKind.NONE`](../tts_audiobook_tool/tts_models/tts_model_type.py)
 
 Replace:
 
-- [`TtsModelInfo.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_info.py:15)
+- [`TtsModelSpec.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_type.py:15)
 
 With something like:
 
-- [`TtsModelInfo.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_info.py)
+- [`TtsModelSpec.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_type.py)
 
 Then call sites can ask what backend kind a model uses instead of checking an SGL-specific boolean.
 
 ## Proposed SGL-specific metadata changes
 
-[`TtsModelInfo.server_model_id_substring`](../tts_audiobook_tool/tts_models/tts_model_info.py:17) is currently only meaningful for SGL-Omni matching.
+[`TtsModelSpec.server_model_id_substring`](../tts_audiobook_tool/tts_models/tts_model_type.py:17) is currently only meaningful for SGL-Omni matching.
 
 Options:
 
-1. Rename it to make the scope explicit, such as [`TtsModelInfo.sgl_omni_model_id_substring`](../tts_audiobook_tool/tts_models/tts_model_info.py).
-2. Move it into a nested SGL-specific metadata object, such as [`TtsModelInfo.sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_info.py).
+1. Rename it to make the scope explicit, such as [`TtsModelSpec.sgl_omni_model_id_substring`](../tts_audiobook_tool/tts_models/tts_model_type.py).
+2. Move it into a nested SGL-specific metadata object, such as [`TtsModelSpec.sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_type.py).
 3. Move SGL model-id matching into a separate registry if SGL-Omni support becomes more dynamic.
 
 For a first pass, a rename is probably enough.
@@ -86,16 +86,16 @@ Replace scattered backend checks with named catalog queries.
 
 Potential helpers:
 
-- [`TtsModelInfos.get_items_by_backend()`](../tts_audiobook_tool/tts_models/tts_model_info.py)
-- [`TtsModelInfos.get_local_items()`](../tts_audiobook_tool/tts_models/tts_model_info.py)
-- [`TtsModelInfos.get_sgl_omni_items()`](../tts_audiobook_tool/tts_models/tts_model_info.py:632)
-- [`TtsModelInfos.is_backend()`](../tts_audiobook_tool/tts_models/tts_model_info.py)
+- [`TtsModelType.get_items_by_backend()`](../tts_audiobook_tool/tts_models/tts_model_type.py)
+- [`TtsModelType.get_local_items()`](../tts_audiobook_tool/tts_models/tts_model_type.py)
+- [`TtsModelType.get_sgl_omni_items()`](../tts_audiobook_tool/tts_models/tts_model_type.py:632)
+- [`TtsModelType.is_backend()`](../tts_audiobook_tool/tts_models/tts_model_type.py)
 
-[`TtsModelInfos.get_sgl_omni_items()`](../tts_audiobook_tool/tts_models/tts_model_info.py:632) already exists, but it is currently implemented by checking [`TtsModelInfo.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_info.py:15). After the refactor, it should be implemented in terms of [`TtsModelInfo.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_info.py).
+[`TtsModelType.get_sgl_omni_items()`](../tts_audiobook_tool/tts_models/tts_model_type.py:632) already exists, but it is currently implemented by checking [`TtsModelSpec.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_type.py:15). After the refactor, it should be implemented in terms of [`TtsModelSpec.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_type.py).
 
 ## Runtime terminology cleanup
 
-[`Tts.is_sgl_mode()`](../tts_audiobook_tool/tts.py:147) is currently misleading because it means “not local,” not strictly “SGL-Omni.” In particular, [`TtsModelInfos.NONE`](../tts_audiobook_tool/tts_models/tts_model_info.py:76) currently counts as this mode.
+[`Tts.is_sgl_mode()`](../tts_audiobook_tool/tts.py:147) is currently misleading because it means “not local,” not strictly “SGL-Omni.” In particular, [`TtsModelType.NONE`](../tts_audiobook_tool/tts_models/tts_model_type.py:76) currently counts as this mode.
 
 Potential replacements depend on intended behavior:
 
@@ -114,25 +114,25 @@ The replacement should not hide the distinction between:
 
 ### 1. Add backend classification
 
-- Add [`TtsBackendKind`](../tts_audiobook_tool/tts_models/tts_model_info.py).
-- Add [`TtsModelInfo.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_info.py).
-- Convert local models to [`TtsBackendKind.LOCAL`](../tts_audiobook_tool/tts_models/tts_model_info.py).
-- Convert server models to [`TtsBackendKind.SGL_OMNI`](../tts_audiobook_tool/tts_models/tts_model_info.py).
-- Convert [`TtsModelInfos.NONE`](../tts_audiobook_tool/tts_models/tts_model_info.py:76) to [`TtsBackendKind.NONE`](../tts_audiobook_tool/tts_models/tts_model_info.py).
+- Add [`TtsBackendKind`](../tts_audiobook_tool/tts_models/tts_model_type.py).
+- Add [`TtsModelSpec.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_type.py).
+- Convert local models to [`TtsBackendKind.LOCAL`](../tts_audiobook_tool/tts_models/tts_model_type.py).
+- Convert server models to [`TtsBackendKind.SGL_OMNI`](../tts_audiobook_tool/tts_models/tts_model_type.py).
+- Convert [`TtsModelType.NONE`](../tts_audiobook_tool/tts_models/tts_model_type.py:76) to [`TtsBackendKind.NONE`](../tts_audiobook_tool/tts_models/tts_model_type.py).
 
 ### 2. Replace boolean checks
 
 Replace checks like:
 
-- [`item.value.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_info.py:635)
+- [`item.value.is_sgl_omni`](../tts_audiobook_tool/tts_models/tts_model_type.py:635)
 - [`Tts.get_type().value.is_sgl_omni`](../tts_audiobook_tool/menus/menu_status.py:23)
 
 With explicit backend predicates or helper methods.
 
 ### 3. Rename SGL-specific fields
 
-- Rename [`TtsModelInfo.server_model_id_substring`](../tts_audiobook_tool/tts_models/tts_model_info.py:17) to something SGL-specific.
-- Update [`TtsModelInfos.find_type_item_using_sgl_omni_model_id()`](../tts_audiobook_tool/tts_models/tts_model_info.py:640) accordingly.
+- Rename [`TtsModelSpec.server_model_id_substring`](../tts_audiobook_tool/tts_models/tts_model_type.py:17) to something SGL-specific.
+- Update [`TtsModelType.find_type_item_using_sgl_omni_model_id()`](../tts_audiobook_tool/tts_models/tts_model_type.py:640) accordingly.
 
 ### 4. Clarify runtime methods
 
@@ -156,9 +156,9 @@ Until then, backend classification in the main model catalog should be sufficien
 
 The app should read as:
 
-- model catalog logic lives in [`TtsModelInfos`](../tts_audiobook_tool/tts_models/tts_model_info.py:70)
-- backend classification lives in [`TtsModelInfo.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_info.py)
+- model catalog logic lives in [`TtsModelType`](../tts_audiobook_tool/tts_models/tts_model_type.py:70)
+- backend classification lives in [`TtsModelSpec.backend_kind`](../tts_audiobook_tool/tts_models/tts_model_type.py)
 - SGL-Omni-specific matching lives behind explicitly named SGL helpers
 - runtime state methods say exactly what state they test
 
-This should make the SGL-Omni branch legible without turning [`TtsModelInfos`](../tts_audiobook_tool/tts_models/tts_model_info.py:70) into an implicit subgrouping mechanism.
+This should make the SGL-Omni branch legible without turning [`TtsModelType`](../tts_audiobook_tool/tts_models/tts_model_type.py:70) into an implicit subgrouping mechanism.

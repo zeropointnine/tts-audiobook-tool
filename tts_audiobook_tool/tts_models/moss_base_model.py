@@ -5,7 +5,7 @@ from enum import Enum
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.constants import TOP_K_MAX_DEFAULT, TOP_P_MAX_DEFAULT
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ else:
 
 class MossBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.MOSS.value
+    INFO = TtsModelType.MOSS.value
 
     MAX_NEW_TOKENS = 1024
     ROLLING_CONTINUATION_MAX_LENGTH = 3

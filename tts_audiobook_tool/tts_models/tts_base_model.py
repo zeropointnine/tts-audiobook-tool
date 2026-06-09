@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, Strictness
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -36,7 +36,7 @@ class TtsBaseModel(ABC):
     """
 
     # Gets assigned by concrete class
-    INFO: TtsModelInfo
+    INFO: TtsModelSpec
 
     # Optional persistent callback for streamed audio chunks
     stream_chunk_callback: StreamChunkCallback | None = None
@@ -112,7 +112,7 @@ class TtsBaseModel(ABC):
 
     def massage_for_inference(self, text: str) -> str:
         """
-        Applies text transformations from `TtsModelInfo.substitutions` (usually single character punctuation)
+        Applies text transformations from `TtsModelSpec.substitutions` (usually single character punctuation)
         to address any model-specific idiosyncrasies, etc.
 
         Concrete class may want to override-and-super with extra logic, as needed.

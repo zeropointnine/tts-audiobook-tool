@@ -15,7 +15,7 @@ from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseMo
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import make_error_string
 
 
@@ -154,7 +154,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         try:
             data = self._chatterbox.generate(text, **dic)
             data = data.cpu().numpy().squeeze()
-            return Sound(data, TtsModelInfos.CHATTERBOX.value.sample_rate)
+            return Sound(data, TtsModelType.CHATTERBOX.value.sample_rate)
         except Exception as e:
             traceback.print_exc()
             return make_error_string(e)

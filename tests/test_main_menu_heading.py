@@ -5,7 +5,7 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_ERROR
 
 
@@ -38,7 +38,7 @@ def restore_tts_and_sgl_state(saved) -> None:
 def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelInfos.SERVER_HIGGS_V3
+        Tts._type = TtsModelType.SERVER_HIGGS_V3
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
@@ -52,7 +52,7 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
 def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelInfos.SERVER_HIGGS_V3
+        Tts._type = TtsModelType.SERVER_HIGGS_V3
         SglOmniUtil._model_id = ""
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
@@ -67,7 +67,7 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
 def test_tts_model_heading_detail_keeps_local_model_unchanged():
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelInfos.CHATTERBOX
+        Tts._type = TtsModelType.CHATTERBOX
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         state = make_state()
 
@@ -82,7 +82,7 @@ def test_tts_model_heading_detail_keeps_local_model_unchanged():
 def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelInfos.SERVER_MOSS
+        Tts._type = TtsModelType.SERVER_MOSS
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3-tts-4b"
 
         def update_model_id():

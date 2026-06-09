@@ -10,7 +10,7 @@ from tts_audiobook_tool.menus.tools_menu import ToolsMenu
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.text_menu import TextMenu
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
@@ -137,7 +137,7 @@ def make_voice_label(state: State) -> str:
 
 def on_voice(state: State, __) -> None:
     Tts.update_tts_type()
-    if Tts.get_type() == TtsModelInfos.NONE:
+    if Tts.get_type() == TtsModelType.NONE:
         print_feedback("Requires TTS model", is_error=True)
         return
     if not state.project.dir_path:
@@ -184,7 +184,7 @@ def on_realtime_audiobook(state: State, _: MenuItem) -> None:
 
 def on_chat(state: State, _: MenuItem) -> None:
     Tts.update_tts_type()
-    if Tts.get_type() == TtsModelInfos.NONE:
+    if Tts.get_type() == TtsModelType.NONE:
         print_feedback(REQUIRES_TTS_MODEL, is_error=True)
         return
     if not state.project.dir_path:

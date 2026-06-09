@@ -388,7 +388,7 @@ def ask_batch_size(state: State) -> None:
 
     prompt = "Enter max concurrent requests:" if Tts.get_type().value.is_sgl_omni else "Enter batch size:"
     
-    # Note that if there is a TtsModelInfos local and server "pair" for the same TTS model
+    # Note that if there is a TtsModelType local and server "member pair" for the same underlying TTS model,
     # and the two share the same Project "batch_size" attribute, that value can be out of range
     # compared to the 'correct' max value. 
     max_value = PROJECT_CONCURRENT_REQUESTS_MAX if Tts.get_type().value.is_sgl_omni else PROJECT_BATCH_SIZE_MAX

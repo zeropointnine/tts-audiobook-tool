@@ -21,7 +21,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.tts import Tts
 
 
@@ -66,9 +66,9 @@ class Startup:
     def init_tts_or_exit(self, is_server: bool) -> None:
         """ Inits TTS else prompt to continue anyway """
 
-        tts_model_infos, num_matches = Tts.init_local_model_type()
+        tts_model_type, num_matches = Tts.init_local_model_type()
 
-        if tts_model_infos != TtsModelInfos.NONE:
+        if tts_model_type != TtsModelType.NONE:
             return
 
         if num_matches > 1: # Rly shouldn't happen
@@ -117,7 +117,7 @@ class Startup:
 
     def exit_on_chatterbox_python_version(self) -> None:
         # Chatterbox special case, Python v3.11, legacy guard
-        if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+        if Tts.get_type() == TtsModelType.CHATTERBOX:
             if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
                 hints.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
                 exit(1)
@@ -169,11 +169,11 @@ class Startup:
             new_packages.append("win32api") # ie, pywin32
 
         # chatterbox 
-        if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+        if Tts.get_type() == TtsModelType.CHATTERBOX:
             new_packages.append("chatterbox.tts_turbo")
 
         # vibevoice
-        if Tts.get_type() in [TtsModelInfos.VIBEVOICE]:
+        if Tts.get_type() in [TtsModelType.VIBEVOICE]:
             new_packages.append("peft")
 
         return new_packages
@@ -196,7 +196,7 @@ class Startup:
             hints.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
 
         # Oute
-        if Tts.get_type() == TtsModelInfos.OUTE:
+        if Tts.get_type() == TtsModelType.OUTE:
             hints.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
 
         # Updated UI

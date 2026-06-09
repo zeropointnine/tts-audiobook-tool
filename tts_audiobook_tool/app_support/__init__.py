@@ -21,7 +21,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
@@ -83,9 +83,9 @@ def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
 
     project: Project = p_project
 
-    if Tts.get_type() == TtsModelInfos.FISH_S1 and project.fish_s1_compile_enabled:
+    if Tts.get_type() == TtsModelType.FISH_S1 and project.fish_s1_compile_enabled:
         hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
-    elif Tts.get_type() == TtsModelInfos.FISH_S2 and project.fish_s2_compile_enabled:
+    elif Tts.get_type() == TtsModelType.FISH_S2 and project.fish_s2_compile_enabled:
         hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
 
     import torch

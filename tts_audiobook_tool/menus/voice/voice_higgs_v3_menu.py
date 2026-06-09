@@ -3,7 +3,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 from tts_audiobook_tool.util import ellipsize_path_for_menu, make_menu_label, truncate_pretty
 
@@ -66,7 +66,7 @@ class VoiceHiggsV3Menu:
             ]
             if state.project.higgs_v3_voice_file_path:
                 items.append(
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.SERVER_HIGGS_V3)
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.SERVER_HIGGS_V3)
                 )
 
             item = VoiceMenuShared.make_temperature_item(

@@ -2,7 +2,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -20,11 +20,11 @@ class VoiceChatterboxMenu:
             items.append(
                 MenuItem(
                     VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.CHATTERBOX)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.CHATTERBOX)
             ))
             if state.project.chatterbox_voice_file_name:
                 items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.CHATTERBOX) 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.CHATTERBOX) 
                 )
 
             items.append( 

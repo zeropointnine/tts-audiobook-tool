@@ -1,7 +1,7 @@
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -15,12 +15,12 @@ class VoiceHiggsV2Menu:
             items = [
                 MenuItem(
                     VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.HIGGS_V2)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.HIGGS_V2)
                 )
             ]
             if state.project.higgs_voice_file_name:
                 items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.HIGGS_V2) 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.HIGGS_V2) 
                 )
             
             item = VoiceMenuShared.make_temperature_item(

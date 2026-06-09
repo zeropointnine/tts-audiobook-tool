@@ -8,7 +8,7 @@ from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJ
 from tts_audiobook_tool.constants import OUTE_DEFAULT_VOICE_JSON_FILE_PATH
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR, ellipsize_path_for_menu, printt
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class ProjectVoiceUtil:
             sound: Sound,
             voice_file_stem: str,
             transcript: str,
-            tts_type: TtsModelInfos,
+            tts_type: TtsModelType,
             is_secondary: bool=False,
     ) -> str:
         dest_file_name = f"{voice_file_stem}_{tts_type.value.file_tag}.flac"
@@ -60,7 +60,7 @@ class ProjectVoiceUtil:
         voice_transcript_attr = info.voice_transcript_attr
 
         with project.batch():
-            if tts_type == TtsModelInfos.INDEXTTS2 and is_secondary:
+            if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
                 project.indextts2_emo_voice_file_name = dest_file_name
             else:
                 if not voice_file_name_attr:
@@ -70,19 +70,19 @@ class ProjectVoiceUtil:
             if voice_transcript_attr:
                 setattr(project, voice_transcript_attr, transcript)
 
-            if tts_type == TtsModelInfos.POCKET:
+            if tts_type == TtsModelType.POCKET:
                 project.pocket_predefined_voice = ""
 
         return ""
 
     @staticmethod
-    def clear_voice_and_save(project: Project, tts_type: TtsModelInfos, is_secondary: bool=False) -> None:
+    def clear_voice_and_save(project: Project, tts_type: TtsModelType, is_secondary: bool=False) -> None:
         info = tts_type.value
         voice_file_name_attr = info.voice_file_name_attr
         voice_transcript_attr = info.voice_transcript_attr
 
         with project.batch():
-            if tts_type == TtsModelInfos.INDEXTTS2 and is_secondary:
+            if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
                 project.indextts2_emo_voice_file_name = ""
             else:
                 if not voice_file_name_attr:
@@ -92,13 +92,13 @@ class ProjectVoiceUtil:
             if voice_transcript_attr:
                 setattr(project, voice_transcript_attr, "")
 
-            if tts_type == TtsModelInfos.POCKET:
+            if tts_type == TtsModelType.POCKET:
                 project.pocket_predefined_voice = ""
 
     @staticmethod
     def get_voice_label(project: Project) -> str:
         from tts_audiobook_tool.tts import Tts
-        if Tts.get_type() == TtsModelInfos.POCKET:
+        if Tts.get_type() == TtsModelType.POCKET:
             if project.pocket_predefined_voice:
                 return project.pocket_predefined_voice
             value = project.pocket_voice_file_name
@@ -115,7 +115,7 @@ class ProjectVoiceUtil:
     @staticmethod
     def has_voice(project: Project) -> bool:
         from tts_audiobook_tool.tts import Tts
-        if Tts.get_type() == TtsModelInfos.POCKET:
+        if Tts.get_type() == TtsModelType.POCKET:
             return bool(project.pocket_predefined_voice or project.pocket_voice_file_name)
         value = getattr(project, Tts.get_type().value.voice_file_name_attr, "")
         return bool(value)
@@ -140,7 +140,7 @@ class ProjectVoiceUtil:
         if info.voice_file_name_attr:
             attribs.append(info.voice_file_name_attr)
 
-        if model_type == TtsModelInfos.INDEXTTS2:
+        if model_type == TtsModelType.INDEXTTS2:
             attribs.append("indextts2_emo_voice_file_name")
 
         attribs = [attrib for attrib in attribs if attrib.endswith("_voice_file_name")]

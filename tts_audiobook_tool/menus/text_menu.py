@@ -9,7 +9,7 @@ from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextI
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 
@@ -321,7 +321,7 @@ def on_ask_max_size(state: State, _) -> None:
     MenuUtil.print_screen_heading(state, "Max words per segment")
 
     printt("On text import, this is the maximum number of words to be used for a single text segment.")
-    printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelInfos.recommended_range_string(Tts.get_type().value)}")
+    printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelType.recommended_range_string(Tts.get_type().value)}")
     printt()
 
     ask.ask_number(

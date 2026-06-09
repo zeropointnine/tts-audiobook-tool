@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class OmniVoiceBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.OMNIVOICE.value
+    INFO = TtsModelType.OMNIVOICE.value
 
     DEFAULT_REPO_ID = "k2-fsa/OmniVoice"
     SAMPLE_RATE     = 24_000   # OmniVoice's default generation frequency

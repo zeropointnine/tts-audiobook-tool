@@ -8,7 +8,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -30,7 +30,7 @@ class VoiceIndexTts2Menu:
 
         def on_voice(_: State, __: MenuItem) -> None:
             hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
-            VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.INDEXTTS2)
+            VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.INDEXTTS2)
 
         def make_emo_voice_label(_) -> str:
             if project.indextts2_emo_voice_file_name:
@@ -45,13 +45,13 @@ class VoiceIndexTts2Menu:
             hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN)
             VoiceMenuShared.ask_and_set_voice_file(
                 state=state,
-                tts_type=TtsModelInfos.INDEXTTS2,
+                tts_type=TtsModelType.INDEXTTS2,
                 is_secondary=True,
                 message_override="Enter emotion reference audio clip file path:"
             )
 
         def on_clear_emo(_: State, __: MenuItem) -> None:
-            ProjectVoiceUtil.clear_voice_and_save(project, TtsModelInfos.INDEXTTS2, is_secondary=True)
+            ProjectVoiceUtil.clear_voice_and_save(project, TtsModelType.INDEXTTS2, is_secondary=True)
             print_feedback("Cleared")
 
         def make_vector_label(_) -> str:
@@ -73,7 +73,7 @@ class VoiceIndexTts2Menu:
             )
             if state.project.indextts2_voice_file_name:
                 items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.INDEXTTS2) 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.INDEXTTS2) 
                 )
             items.append(
                 MenuItem(make_emo_voice_label, on_emo_voice)

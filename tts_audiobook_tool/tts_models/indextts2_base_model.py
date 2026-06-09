@@ -1,6 +1,6 @@
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -11,7 +11,7 @@ else:
 
 class IndexTts2BaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.INDEXTTS2.value
+    INFO = TtsModelType.INDEXTTS2.value
 
     DEFAULT_EMO_VOICE_ALPHA = 0.65 # project gradio demo default
     DEFAULT_TEMPERATURE = 0.8 # project api default

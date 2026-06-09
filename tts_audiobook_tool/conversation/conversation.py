@@ -50,7 +50,12 @@ class Conversation:
         # code falls back gracefully, but bad timing data can cause subtle sync issues.
         self.state = state
         self.phrase_stt_enabled = phrase_stt_enabled
-        self.stt_immediate = state.prefs.conversation_stt_immediate if stt_immediate is None else stt_immediate
+        self.chat_input_mode = state.prefs.chat_input_mode
+        self.is_text_input = self.chat_input_mode == CHAT_INPUT_MODE_TEXT
+        if stt_immediate is None:
+            self.stt_immediate = self.chat_input_mode == CHAT_INPUT_MODE_MIC_IMMEDIATE
+        else:
+            self.stt_immediate = stt_immediate
 
     def start(self) -> None:
 
@@ -82,18 +87,22 @@ class Conversation:
             printt(f"{COL_DIM_ITALICS}{s}")
             printt()
 
-        # Mic info
-        printt(f"{COL_DIM_ITALICS}Using sound input device:")
-        printt(f"{COL_DIM_ITALICS}  {SoundInputDeviceInfo.get_input_device_description()}")
-        printt()
-
-        # Instructions
-        if not self.stt_immediate:
-            printt(f"Speak into the microphone to build your prompt:")
-            printt(f"  {make_hotkey_string('Left/Right', outer_color=COL_DIM)} - select transcribed phrase")
-            printt(f"  {make_hotkey_string('Delete', outer_color=COL_DIM)} - delete selected phrase")
-            printt(f"  {make_hotkey_string('Enter', outer_color=COL_DIM)} - submit phrase")
+        if self.is_text_input:
+            printt(f"Type a prompt and press {make_hotkey_string('Enter', outer_color=COL_DIM)} to submit")
             printt()
+        else:
+            # Mic info
+            printt(f"{COL_DIM_ITALICS}Using sound input device:")
+            printt(f"{COL_DIM_ITALICS}  {SoundInputDeviceInfo.get_input_device_description()}")
+            printt()
+
+            # Instructions
+            if not self.stt_immediate:
+                printt(f"Speak into the microphone to build your prompt:")
+                printt(f"  {make_hotkey_string('Left/Right', outer_color=COL_DIM)} - select transcribed phrase")
+                printt(f"  {make_hotkey_string('Delete', outer_color=COL_DIM)} - delete selected phrase")
+                printt(f"  {make_hotkey_string('Enter', outer_color=COL_DIM)} - submit phrase")
+                printt()
         printt(f"  {make_hotkey_string('Ctrl-C', outer_color=COL_DIM)} to interrupt audio or exit")
         printt()
 
@@ -149,24 +158,28 @@ class Conversation:
         self.real_stdout, self.real_stderr = sys.stdout, sys.stderr
         self.fd2_redirect_lock = threading.Lock()
         self.ui = Ui(self.real_stdout)
-        self.console = ConsoleSession.create(real_stdout=self.real_stdout, real_stderr=self.real_stderr)
         self.ctrl_c_requested = threading.Event()
-        self.prompt_builder = PromptBuilder(
-            ui=self.ui,
-            console=self.console,
-            ctrl_c_requested=self.ctrl_c_requested,
-            stt_immediate=self.stt_immediate,
-        )
-        silence_duration_s = (
-            CHAT_SILENCE_THRESHOLD_IMMEDIATE
-            if self.stt_immediate
-            else CHAT_SILENCE_THRESHOLD_CHUNKED
-        )
-        self.util = RealtimeTranscriber(
-            prefs=self.prefs,
-            on_transcription=self.prompt_builder.on_transcription,
-            silence_duration_s=silence_duration_s,
-        )
+        self.console: ConsoleSession | None = None
+        self.prompt_builder: PromptBuilder | None = None
+        self.util: RealtimeTranscriber | None = None
+        if not self.is_text_input:
+            self.console = ConsoleSession.create(real_stdout=self.real_stdout, real_stderr=self.real_stderr)
+            self.prompt_builder = PromptBuilder(
+                ui=self.ui,
+                console=self.console,
+                ctrl_c_requested=self.ctrl_c_requested,
+                stt_immediate=self.stt_immediate,
+            )
+            silence_duration_s = (
+                CHAT_SILENCE_THRESHOLD_IMMEDIATE
+                if self.stt_immediate
+                else CHAT_SILENCE_THRESHOLD_CHUNKED
+            )
+            self.util = RealtimeTranscriber(
+                prefs=self.prefs,
+                on_transcription=self.prompt_builder.on_transcription,
+                silence_duration_s=silence_duration_s,
+            )
 
         # Note, when streaming, output sound device samplerate is that of the
         # native samplerate of the TTS engine because we skip any post-processing.
@@ -191,10 +204,12 @@ class Conversation:
         # with the cursor-relative render model in the UI worker.
         sys.stdout = QueuedStream(self.real_stdout, self.ui.queue)
         sys.stderr = QueuedStream(self.real_stderr, self.ui.queue)
-        self.console.start()
-        self.real_stdout.write(Ansi.CURSOR_HIDE)
-        self.real_stdout.flush()
-        self.util.start()
+        if self.console is not None:
+            self.console.start()
+            self.real_stdout.write(Ansi.CURSOR_HIDE)
+            self.real_stdout.flush()
+        if self.util is not None:
+            self.util.start()
         self.sound_stream.start()
         self.ui.println()
 
@@ -202,18 +217,42 @@ class Conversation:
         self.ctrl_c_requested.set()
         if self.exiting:
             return
-        if self.in_response:
+        if self.in_response or self.is_text_input:
             raise KeyboardInterrupt
 
     def run_main_loop(self) -> None:
         while True:
-            assembled = self.prompt_builder.build()
+            assembled = self.build_prompt()
             self.run_response_turn(assembled)
 
+    def build_prompt(self) -> str:
+        if self.is_text_input:
+            return self.build_text_prompt()
+        if self.prompt_builder is None:
+            raise RuntimeError("Missing microphone prompt builder")
+        return self.prompt_builder.build()
+
+    def build_text_prompt(self) -> str:
+        self.ui.wait_idle()
+        self.real_stdout.write(Ansi.CURSOR_SHOW)
+        self.real_stdout.write("> ")
+        self.real_stdout.flush()
+        try:
+            text = input().strip()
+        except EOFError:
+            raise KeyboardInterrupt
+        finally:
+            self.real_stdout.write(Ansi.CURSOR_HIDE)
+            self.real_stdout.flush()
+        self.real_stdout.write("\n")
+        self.real_stdout.flush()
+        return text
+
     def run_response_turn(self, assembled: str) -> None:
-        self.util.pause()
+        if self.util is not None:
+            self.util.pause()
         user_input_sound = None
-        if self.prefs.chat_save_mic:
+        if self.prefs.chat_save_mic and self.prompt_builder is not None:
             mic_audio = self.prompt_builder.take_finalized_mic_audio()
             if mic_audio is not None and mic_audio.size > 0:
                 user_input_sound = Sound(mic_audio, WHISPER_SAMPLERATE)
@@ -240,14 +279,18 @@ class Conversation:
             # tail audio does not immediately get re-captured and
             # transcribed as the next user prompt. Flush both before and
             # after the settle window to discard buffered STT state.
-            self.util.flush()
+            if self.util is not None:
+                self.util.flush()
             settle_s = max(0.25, min(0.6, self.sound_stream.output_latency + 0.1))
             time.sleep(settle_s)
-            self.util.flush()
+            if self.util is not None:
+                self.util.flush()
         finally:
             self.in_response = False
-            self.util.resume()
-        self.prompt_builder.resume()
+            if self.util is not None:
+                self.util.resume()
+        if self.prompt_builder is not None:
+            self.prompt_builder.resume()
 
     def handle_top_level_interrupt(self) -> None:
         self.exiting = True
@@ -297,12 +340,15 @@ class Conversation:
             pass
         if self.old_input_sigint is not None:
             signal.signal(signal.SIGINT, self.old_input_sigint)
-        self.console.restore()
+        if self.console is not None:
+            self.console.restore()
 
     def stop_capture(self) -> None:
         if self.capture_stopped:
             return
         self.capture_stopped = True
+        if self.util is None:
+            return
         try:
             self.util.stop()
         except Exception:

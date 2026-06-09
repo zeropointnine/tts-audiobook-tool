@@ -5,7 +5,7 @@ from enum import Enum
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ else:
 
 class ChatterboxBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.CHATTERBOX.value
+    INFO = TtsModelType.CHATTERBOX.value
 
     DEFAULT_EXAGGERATION = 0.5 # ml only, not turbo
     DEFAULT_CFG = 0.5 # ml only, not turbo

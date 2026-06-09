@@ -3,7 +3,7 @@ from __future__ import annotations
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -14,7 +14,7 @@ else:
 
 class HiggsV3ServerBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.SERVER_HIGGS_V3.value
+    INFO = TtsModelType.SERVER_HIGGS_V3.value
     DEFAULT_TEMPERATURE = 1.0
     MAX_TEMPERATURE = 2.0
     DEFAULT_TOP_P = 1.0

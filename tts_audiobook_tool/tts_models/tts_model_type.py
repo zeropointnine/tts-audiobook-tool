@@ -4,7 +4,7 @@ from functools import cache
 from typing import NamedTuple
 
 
-class TtsModelInfo(NamedTuple):
+class TtsModelSpec(NamedTuple):
     """
     Hardcoded properties of a supported TTS model
     """
@@ -67,13 +67,13 @@ class TtsModelInfo(NamedTuple):
     def can_batch(self) -> bool:
         return bool(self.batch_size_attr)
 
-class TtsModelInfos(Enum):
+class TtsModelType(Enum):
     """
-    Enumerates `TtsModelInfo` instances for all supported TTS models
+    Enumerates all supported TTS models using `TtsModelSpec` instances
     """
 
     # Placeholder
-    NONE = TtsModelInfo(
+    NONE = TtsModelSpec(
         id="none",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -104,7 +104,7 @@ class TtsModelInfos(Enum):
         substitutions=[]
     )
 
-    OUTE = TtsModelInfo(
+    OUTE = TtsModelSpec(
         id="oute",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -138,7 +138,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    CHATTERBOX = TtsModelInfo(
+    CHATTERBOX = TtsModelSpec(
         id="chatterbox",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -171,7 +171,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    FISH_S1 = TtsModelInfo(
+    FISH_S1 = TtsModelSpec(
         id="fish_s1",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -204,7 +204,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    FISH_S2 = TtsModelInfo(
+    FISH_S2 = TtsModelSpec(
         id="fish_s2",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -237,7 +237,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    HIGGS_V2 = TtsModelInfo(
+    HIGGS_V2 = TtsModelSpec(
         id="higgs_v2",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -270,7 +270,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    VIBEVOICE = TtsModelInfo(
+    VIBEVOICE = TtsModelSpec(
         id="vibevoice",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -305,7 +305,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    INDEXTTS2 = TtsModelInfo(
+    INDEXTTS2 = TtsModelSpec(
         id="indextts2",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -339,7 +339,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    GLM = TtsModelInfo(
+    GLM = TtsModelSpec(
         id="glm",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -374,7 +374,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    MIRA = TtsModelInfo(
+    MIRA = TtsModelSpec(
         id="mira",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -409,7 +409,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    POCKET = TtsModelInfo(
+    POCKET = TtsModelSpec(
         id="pocket",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -443,7 +443,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    MOSS = TtsModelInfo(
+    MOSS = TtsModelSpec(
         id="moss",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -476,7 +476,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    QWEN3TTS = TtsModelInfo(
+    QWEN3TTS = TtsModelSpec(
         id="qwen3tts",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -509,7 +509,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    OMNIVOICE = TtsModelInfo(
+    OMNIVOICE = TtsModelSpec(
         id="omnivoice",
         is_sgl_omni=False,
         server_model_id_substring="",
@@ -542,7 +542,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    SERVER_HIGGS_V3 = TtsModelInfo(
+    SERVER_HIGGS_V3 = TtsModelSpec(
         id="server_higgs_v3",
         is_sgl_omni=True,
         server_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model which is v3
@@ -575,7 +575,7 @@ class TtsModelInfos(Enum):
         ]
     )
 
-    SERVER_MOSS = TtsModelInfo(
+    SERVER_MOSS = TtsModelSpec(
         id="server_moss",
         is_sgl_omni=True,
         server_model_id_substring="moss",
@@ -609,14 +609,14 @@ class TtsModelInfos(Enum):
     )
 
     @staticmethod
-    def get_by_id(id: str) -> TtsModelInfos:
-        for item in TtsModelInfos:
+    def get_by_id(id: str) -> TtsModelType:
+        for item in TtsModelType:
             if item.value.id == id:
                 return item
-        return TtsModelInfos.NONE
+        return TtsModelType.NONE
 
     @staticmethod
-    def recommended_range_string(info: TtsModelInfo) -> str:
+    def recommended_range_string(info: TtsModelSpec) -> str:
         if info.max_words_reco_range[1] == info.max_words_reco_range[0]:
             return f"up to {info.max_words_reco_range[1]}"
         else:
@@ -625,22 +625,22 @@ class TtsModelInfos(Enum):
     @staticmethod
     @cache
     def all_file_tags() -> set[str]:
-         return { item.value.file_tag for item in TtsModelInfos }
+         return { item.value.file_tag for item in TtsModelType }
     
     @staticmethod
     @cache
-    def get_sgl_omni_items() -> list[TtsModelInfos]:
+    def get_sgl_omni_items() -> list[TtsModelType]:
         result = []
-        for item in TtsModelInfos:
+        for item in TtsModelType:
             if item.value.is_sgl_omni:
                 result.append(item)
         return result
 
     @staticmethod
-    def find_type_item_using_sgl_omni_model_id(model_id: str) -> TtsModelInfos | None:
+    def find_tts_type_using_sgl_omni_model_id(model_id: str) -> TtsModelType | None:
         """
-        Chooses TtsModelInfos item using the model id returned by 
-        the SGM-Omni models endpoint (typically an hf repo id),
+        Chooses TtsModelType member using the model id returned by 
+        the SGL-Omni models endpoint (typically an hf repo id),
         using simple substring comparison.
         """
         if not model_id:
@@ -648,7 +648,7 @@ class TtsModelInfos(Enum):
         
         model_id = model_id.lower().strip()
         
-        for item in TtsModelInfos.get_sgl_omni_items():
+        for item in TtsModelType.get_sgl_omni_items():
             substring = item.value.server_model_id_substring.lower()                
             if substring and substring in model_id:
                 return item

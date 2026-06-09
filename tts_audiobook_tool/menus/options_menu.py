@@ -9,7 +9,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 class OptionsMenu:
@@ -107,7 +107,7 @@ class OptionsMenu:
                 )
                 
             # About TTS model
-            if Tts.get_type() != TtsModelInfos.NONE:
+            if Tts.get_type() != TtsModelType.NONE:
                 items.append(
                     MenuItem(
                         lambda _: f"TTS model - About {Tts.get_type().value.ui['proper_name']}",
@@ -297,13 +297,13 @@ class OptionsMenu:
     @staticmethod
     def sgl_omni_type_menu(state: State) -> None:
 
-        def on_select(value: TtsModelInfos | None) -> None:
+        def on_select(value: TtsModelType | None) -> None:
             if state.prefs.sgl_omni_type != value:
                 state.prefs.sgl_omni_type = value
             print_feedback("Set SGL-Omni TTS model type to:", OptionsMenu.make_sgl_omni_type_label(state))
 
-        values: list[TtsModelInfos | None] = [None] + TtsModelInfos.get_sgl_omni_items()
-        labels = ["Auto-detect"] + [item.value.ui["proper_name"] for item in TtsModelInfos.get_sgl_omni_items()]
+        values: list[TtsModelType | None] = [None] + TtsModelType.get_sgl_omni_items()
+        labels = ["Auto-detect"] + [item.value.ui["proper_name"] for item in TtsModelType.get_sgl_omni_items()]
 
         MenuUtil.options_menu(
             state=state,

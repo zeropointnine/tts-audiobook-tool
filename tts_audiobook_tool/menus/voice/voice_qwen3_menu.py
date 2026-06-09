@@ -5,7 +5,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -86,11 +86,11 @@ class VoiceQwen3Menu:
                     items.append(
                         MenuItem(
                             make_voice_label,
-                            lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.QWEN3TTS)
+                            lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.QWEN3TTS)
                         )                
                     )
                     if state.project.qwen3_voice_file_name:
-                        items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.QWEN3TTS))
+                        items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelType.QWEN3TTS))
                 case "custom_voice":
                     # Speaker id, instructions
                     items.append(

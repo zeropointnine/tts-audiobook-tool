@@ -14,7 +14,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.validator import Validator
@@ -119,10 +119,10 @@ class ProjectMenu:
         max_count = ProjectBookUtil.get_book_segmentation_settings(state.project).max_words_per_segment
         # TODO: Not doing this for now: ... or PhraseGroup.get_max_num_words(state.project.phrase_groups)
         reco_range: tuple[int, int] = Tts.get_type().value.max_words_reco_range
-        if max_count > reco_range[1] and Tts.get_type() != TtsModelInfos.NONE:
+        if max_count > reco_range[1] and Tts.get_type() != TtsModelType.NONE:
             message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
             message = message.replace("%1", str(max_count))
-            reco_str = TtsModelInfos.recommended_range_string(Tts.get_type().value)
+            reco_str = TtsModelType.recommended_range_string(Tts.get_type().value)
             message = message.replace("%2", reco_str)
             hint = Hint("", "FYI", message)
             hints.show_hint(hint, and_prompt=True)
@@ -235,7 +235,7 @@ def on_language(state: State, __: MenuItem) -> None:
     required_model_languages = []
 
     # Chatterbox Multilingual special case
-    if Tts.get_type() == TtsModelInfos.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+    if Tts.get_type() == TtsModelType.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
         instance = Tts.get_instance() # Force model instantiation
         assert(isinstance(instance, ChatterboxBaseModel))
         required_model_languages = instance.supported_languages_multi()

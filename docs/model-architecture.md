@@ -47,13 +47,13 @@ When studying pre-existing model implementations, avoid Oute, which departs from
 
 ---
 
-## `TtsModelInfos` Enum
+## `TtsModelType` Enum
 
-**File:** [tts_audiobook_tool/tts_model/tts_model_info.py](tts_audiobook_tool/tts_model/tts_model_info.py)
+**File:** [tts_audiobook_tool/tts_model/tts_model_type.py](tts_audiobook_tool/tts_model/tts_model_type.py)
 
-`TtsModelInfo` is a `NamedTuple` holding all hardcoded, static properties for a model. `TtsModelInfos` is an `Enum` whose values are `TtsModelInfo` instances — it acts as the central registry of every supported model.
+`TtsModelType` is a `NamedTuple` holding all hardcoded, static properties for a model. `TtsModelType` is an `Enum` whose values are `TtsModelSpec` instances — it acts as the central registry of every supported model.
 
-Key fields of `TtsModelInfo` most relevant to integration:
+Key fields of `TtsModelType` most relevant to integration:
 
 | Field | Purpose |
 |---|---|
@@ -70,6 +70,8 @@ Key fields of `TtsModelInfo` most relevant to integration:
 
 `module_test` is how `Tts.detect_and_set_type()` auto-detects the active model on startup — it tries to import this module in the current Python environment. This means the field must be an importable module name present only when the model's library is installed (see the Fish S1 vs S2 distinction for a nuanced example).
 
+TODO: Describe new fields related to SGL-Omni; better still, refactor those out somewhat first.
+
 ---
 
 ## Two-Level Class Hierarchy
@@ -84,7 +86,7 @@ Every model is implemented with exactly two subclass levels. This is enforced by
 
 Defines the interface all models must satisfy:
 
-- `INFO: TtsModelInfo` — class-level attribute; `__init_subclass__` raises `TypeError` if missing
+- `INFO: TtsModelType` — class-level attribute; `__init_subclass__` raises `TypeError` if missing
 - `kill() -> None` — abstract; nulls out internal model references to aid garbage collection
 - `generate_using_project(project, prompts, force_random_seed) -> list[Sound] | str` — abstract; the main generation entry point
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
@@ -102,13 +104,13 @@ Classmethods with default implementations (override when the defaults don't appl
 Example: [tts_audiobook_tool/tts_model/glm_base_model.py](tts_audiobook_tool/tts_model/glm_base_model.py)
 
 - Must **not** import any model library at module level
-- Assigns `INFO = TtsModelInfos.###.value`
+- Assigns `INFO = TtsModelType.###.value`
 - Implements classmethods and any model-specific constants or static helpers
 - This is the class registered in `Tts.get_class()` and used for all non-instance operations (prereq checks, voice display info, etc.)
 
 ```python
 class GlmBaseModel(TtsBaseModel):
-    INFO = TtsModelInfos.GLM.value
+    INFO = TtsModelType.GLM.value
     SAMPLE_RATES = [24000, 32000]
 ```
 
@@ -160,7 +162,7 @@ Contains shared operations used by most model menus:
 
 ### Per-model menu pattern
 
-Each `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2) are added inline alongside the shared voice clone item. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelInfos` argument rather than being baked into the menu class.
+Each `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to `VoiceMenuShared.menu_wrapper()`. Model-specific options (e.g. sample rate for GLM, emotion clip for IndexTTS2) are added inline alongside the shared voice clone item. Shared operations like `ask_and_set_voice_file` and `make_clear_voice_item` accept a `TtsModelType` argument rather than being baked into the menu class.
 
 ---
 
@@ -168,17 +170,17 @@ Each `VoiceAbcMenu.menu(state)` builds a list of `MenuItem`s and passes them to 
 
 Implementing the class hierarchy and voice menu is necessary but not sufficient. The following locations contain explicit per-model dispatching that does not auto-discover new additions. Each must be updated when adding a new model (Consider devising abstraction patterns for some of these).
 
-### `tts_audiobook_tool/tts_model/tts_model_info.py`
+### `tts_audiobook_tool/tts_model/tts_model_type.py`
 
-Add a new `TtsModelInfos` enum member with a fully populated `TtsModelInfo`.
+Add a new `TtsModelType` enum member with a fully populated `TtsModelType`.
 
 ### `tts_audiobook_tool/tts.py`
 
 Three `dict` maps must each gain a new entry:
 
-- **`Tts.get_class()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.ABC` → `AbcBaseModel`
-- **`Tts.get_instance()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.ABC` → a factory function (e.g. `Tts.get_abc`) that lazily instantiates `AbcModel`
-- **`Tts.get_instance_if_exists()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelInfos.ABC` → the cached instance variable `Tts._abc`
+- **`Tts.get_class()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelType.ABC` → `AbcBaseModel`
+- **`Tts.get_instance()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelType.ABC` → a factory function (e.g. `Tts.get_abc`) that lazily instantiates `AbcModel`
+- **`Tts.get_instance_if_exists()` MAP** ([tts.py](tts_audiobook_tool/tts.py)) — maps `TtsModelType.ABC` → the cached instance variable `Tts._abc`
 
 If the model has any constructor parameters sourced from `Project` (device flags, sample rate, variant type, etc.), also update:
 
@@ -187,7 +189,7 @@ If the model has any constructor parameters sourced from `Project` (device flags
 
 ### `tts_audiobook_tool/voice_menu/voice_menu_shared.py`
 
-Add a `case TtsModelInfos.ABC:` branch to `VoiceMenuShared.menu()` ([voice_menu_shared.py](tts_audiobook_tool/voice_menu/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`.
+Add a `case TtsModelType.ABC:` branch to `VoiceMenuShared.menu()` ([voice_menu_shared.py](tts_audiobook_tool/voice_menu/voice_menu_shared.py)) that imports and calls the new `VoiceAbcMenu.menu(state)`.
 
 ### `tts_audiobook_tool/voice_menu/__init__.py`
 

@@ -5,7 +5,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -49,12 +49,12 @@ class VoiceVibeVoiceMenu:
             items.append(
                 MenuItem(
                     make_select_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.VIBEVOICE)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.VIBEVOICE)
                 )
             )
             if state.project.vibevoice_voice_file_name:
                 items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.VIBEVOICE) 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.VIBEVOICE) 
                 )
             
             # LoRA

@@ -8,7 +8,7 @@ from pydantic.fields import FieldInfo
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
@@ -113,7 +113,7 @@ class ProjectTransferUtil:
             PROJECT_TEXT_EPUB_FILE_NAME,
         ]
 
-        for model_info in TtsModelInfos:
+        for model_info in TtsModelType:
             attrs = [model_info.value.voice_file_name_attr, *model_info.value.extra_file_attrs]
             for attr in attrs:
                 if not attr:

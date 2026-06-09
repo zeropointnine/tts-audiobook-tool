@@ -25,7 +25,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -472,7 +472,7 @@ class GenerateUtil:
             prompts.append(prompt)
 
         # Generate
-        if Tts.get_type() == TtsModelInfos.NONE:
+        if Tts.get_type() == TtsModelType.NONE:
             result = "No active TTS model"
         else:
             result = Tts.generate_using_project(
@@ -575,7 +575,7 @@ class GenerateUtil:
             phrase_group=phrase_group,
             project=project,
             validation_result=validation_result,
-            tts_model_info=Tts.get_type().value,
+            tts_model_type=Tts.get_type().value,
             is_real_time=is_real_time
         )
         sound_path = os.path.join(dir_path, file_name)

@@ -16,7 +16,7 @@ from tts_audiobook_tool.project_support.project_transfer_util import ProjectTran
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class TestProjectBookIntegration(unittest.TestCase):
@@ -233,7 +233,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(os.path.join(project_dir, PROJECT_TEXT_FILE_NAME), "w", encoding="utf-8") as file:
                 json.dump(text_payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -257,7 +257,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(text_payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -295,7 +295,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(book_to_project_text_json_dict(book), file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -322,7 +322,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(text_payload, file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -347,7 +347,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(book_to_project_text_json_dict(book), file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -547,7 +547,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(text_path, "w", encoding="utf-8") as file:
                 json.dump(book_to_project_text_json_dict(book), file)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 result = ProjectUtil.load_using_dir_path(project_dir)
 
@@ -578,7 +578,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             project.markers = [1]
             project.save(force_phrase_groups=True)
 
-            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelInfos.NONE), \
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
                 reloaded = ProjectUtil.load_using_dir_path(project_dir)
 

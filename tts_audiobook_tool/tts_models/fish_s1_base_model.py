@@ -1,10 +1,10 @@
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class FishS1BaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.FISH_S1.value
+    INFO = TtsModelType.FISH_S1.value
 
     DEFAULT_COMPILE_ENABLED = True
 

@@ -15,7 +15,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool import target_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
 
@@ -27,40 +27,40 @@ class VoiceMenuShared:
         Simply delegates to the correct model-specific voice menu
         """
         match Tts.get_type():
-            case TtsModelInfos.CHATTERBOX:
+            case TtsModelType.CHATTERBOX:
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)
-            case TtsModelInfos.FISH_S1:
+            case TtsModelType.FISH_S1:
                 from tts_audiobook_tool.menus.voice import VoiceFishS1Menu
                 VoiceFishS1Menu.menu(state)
-            case TtsModelInfos.FISH_S2:
+            case TtsModelType.FISH_S2:
                 from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
                 VoiceFishS2Menu.menu(state)
-            case TtsModelInfos.GLM:
+            case TtsModelType.GLM:
                 from tts_audiobook_tool.menus.voice import VoiceGlmMenu
                 VoiceGlmMenu.menu(state)
-            case TtsModelInfos.HIGGS_V2:
+            case TtsModelType.HIGGS_V2:
                 from tts_audiobook_tool.menus.voice import VoiceHiggsV2Menu
                 VoiceHiggsV2Menu.menu(state)
-            case TtsModelInfos.INDEXTTS2:
+            case TtsModelType.INDEXTTS2:
                 from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)
-            case TtsModelInfos.MIRA:
+            case TtsModelType.MIRA:
                 from tts_audiobook_tool.menus.voice import VoiceMiraMenu
                 VoiceMiraMenu.menu(state)
-            case TtsModelInfos.MOSS:
+            case TtsModelType.MOSS:
                 from tts_audiobook_tool.menus.voice import VoiceMossMenu
                 VoiceMossMenu.menu(state)
-            case TtsModelInfos.OMNIVOICE:
+            case TtsModelType.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
-            case TtsModelInfos.OUTE:
+            case TtsModelType.OUTE:
                 from tts_audiobook_tool.menus.voice import VoiceOuteMenu
                 VoiceOuteMenu.menu(state)
-            case TtsModelInfos.POCKET:
+            case TtsModelType.POCKET:
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
-            case TtsModelInfos.QWEN3TTS:
+            case TtsModelType.QWEN3TTS:
                 # Special case: Pre-emptively instantiate model 
                 has_instance = bool( Tts.get_instance_if_exists() )
                 if not has_instance:
@@ -68,14 +68,14 @@ class VoiceMenuShared:
                     print_feedback("Model loaded")
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
-            case TtsModelInfos.VIBEVOICE:
+            case TtsModelType.VIBEVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
 
-            case TtsModelInfos.SERVER_HIGGS_V3:
+            case TtsModelType.SERVER_HIGGS_V3:
                 from tts_audiobook_tool.menus.voice import VoiceHiggsV3Menu
                 VoiceHiggsV3Menu.menu(state)
-            case TtsModelInfos.SERVER_MOSS:
+            case TtsModelType.SERVER_MOSS:
                 from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
                 VoiceMossServerMenu.menu(state) 
             case _:
@@ -112,7 +112,7 @@ class VoiceMenuShared:
     @staticmethod
     def ask_and_set_voice_file(
             state: State,
-            tts_type: TtsModelInfos,
+            tts_type: TtsModelType,
             is_secondary: bool=False,
             message_override: str=""
     ) -> None:
@@ -223,7 +223,7 @@ class VoiceMenuShared:
             ask.ask_enter_to_continue()
 
     @staticmethod
-    def ask_voice_file(default_dir_path: str, tts_type: TtsModelInfos, message_override: str="") -> str:
+    def ask_voice_file(default_dir_path: str, tts_type: TtsModelType, message_override: str="") -> str:
         """
         Asks for voice file path.
         Validates file and shows error prompt if necessary.
@@ -259,10 +259,10 @@ class VoiceMenuShared:
         return path
 
     @staticmethod
-    def make_clear_voice_item(state: State, info_item: TtsModelInfos, callback: Callable | None=None) -> MenuItem: # type: ignore
+    def make_clear_voice_item(state: State, info_item: TtsModelType, callback: Callable | None=None) -> MenuItem: # type: ignore
 
         def on_clear_voice(_: State, item: MenuItem) -> None:
-            info_item: TtsModelInfos = item.data
+            info_item: TtsModelType = item.data
             ProjectVoiceUtil.clear_voice_and_save(state.project, info_item, is_secondary=False)
             if callback:
                 callback()

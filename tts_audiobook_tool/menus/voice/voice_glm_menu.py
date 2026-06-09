@@ -2,7 +2,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -18,12 +18,12 @@ class VoiceGlmMenu:
             items.append(
                 MenuItem(
                     VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.GLM)
+                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.GLM)
                 )
             )
             if state.project.glm_voice_file_name:
                 items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.GLM) 
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.GLM) 
                 )
             items.append(
                 MenuItem(

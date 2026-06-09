@@ -1,7 +1,7 @@
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -12,7 +12,7 @@ else:
 
 class NoneBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.NONE.value
+    INFO = TtsModelType.NONE.value
 
     def set_voice_clone(self, path: str) -> None:
         ...

@@ -3,7 +3,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class VoiceMossShared:
@@ -13,11 +13,11 @@ class VoiceMossShared:
         items.append(
             MenuItem(
                 VoiceMenuShared.make_resolved_voice_label,
-                lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.MOSS)
+                lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.MOSS)
             )
         )
         if state.project.moss_voice_file_name:
-            items.append(VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.MOSS))
+            items.append(VoiceMenuShared.make_clear_voice_item(state, TtsModelType.MOSS))
 
     @staticmethod
     def get_temperature_attr(arch_type: MossConfigs) -> str:

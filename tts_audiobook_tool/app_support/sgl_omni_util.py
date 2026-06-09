@@ -10,7 +10,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import COL_DIM_ITALICS
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 
@@ -209,7 +209,7 @@ class SglOmniUtil:
             if on_stream_end is not None:
                 on_stream_end()
 
-            return Sound(np.concatenate(chunks), sample_rate or TtsModelInfos.SERVER_HIGGS_V3.value.sample_rate)
+            return Sound(np.concatenate(chunks), sample_rate or TtsModelType.SERVER_HIGGS_V3.value.sample_rate)
 
         except Exception as e:
             return make_error_string(e)
@@ -241,7 +241,7 @@ class SglOmniUtil:
             sr = Tts.get_type().value.sample_rate
             L.i(f"Samplerate unknown, falling back to TtsInfo value {sr}")
 
-        return Sound(data, sr or TtsModelInfos.SERVER_HIGGS_V3.value.sample_rate)
+        return Sound(data, sr or TtsModelType.SERVER_HIGGS_V3.value.sample_rate)
 
     @staticmethod
     def generate_concurrent(endpoint: str, payloads: list[dict], print_request: bool = False) -> list[Sound] | str:

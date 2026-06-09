@@ -4,7 +4,7 @@ from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 
@@ -20,7 +20,7 @@ class MenuStatus:
         project_line = _make_project_line(state)
         printt(f"{LABEL_COLOR}Project:     {project_line}")
 
-        if Tts.get_type().value.is_sgl_omni or Tts.get_type() == TtsModelInfos.NONE:
+        if Tts.get_type().value.is_sgl_omni or Tts.get_type() == TtsModelType.NONE:
             sgl_omni_line = _make_sgl_omni_line(state)
             printt(f"{LABEL_COLOR}SGL-Omni:    {sgl_omni_line}")
         else:
@@ -83,7 +83,7 @@ def _make_tts_line(state: State) -> str:
 def _make_sgl_omni_line(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
     
-    if Tts.get_type() == TtsModelInfos.NONE:
+    if Tts.get_type() == TtsModelType.NONE:
         if SglOmniUtil.get_model_id():
             label = f"{COL_ERROR}Unknown/unsupported"
             model_id = ellipsize(SglOmniUtil.get_model_id(), 40, from_start=True)

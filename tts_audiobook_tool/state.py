@@ -8,7 +8,7 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -114,7 +114,7 @@ class State:
         self.prefs.project_dir = str(project_dir_path)
         self.project = Project( dir_path=str(project_dir_path) )
 
-        if Tts.get_type() == TtsModelInfos.OUTE:
+        if Tts.get_type() == TtsModelType.OUTE:
             # Set Oute default voice
             result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
             if isinstance(result, str):

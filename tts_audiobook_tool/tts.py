@@ -25,7 +25,7 @@ from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfo, TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.app_support import app_memory
@@ -41,7 +41,7 @@ class Tts:
     and remains unchanged during the app's runtime.
     """
 
-    _type: TtsModelInfos
+    _type: TtsModelType
 
     CONTINUATION_BREAK_REASONS = {
         Reason.PARAGRAPH,
@@ -70,10 +70,10 @@ class Tts:
 
     _model_params: dict = {}
     _force_cpu: bool = False
-    _sgl_omni_type: TtsModelInfos | None = None
+    _sgl_omni_type: TtsModelType | None = None
 
     @staticmethod
-    def init_local_model_type() -> tuple[TtsModelInfos, int]:
+    def init_local_model_type() -> tuple[TtsModelType, int]:
         """
         Sets the tts model type by checking the installed modules in the python environment.
         Does not instantiate the TtsModel as such.
@@ -82,9 +82,9 @@ class Tts:
         Returns the model type that was set, and num matches (should be either 1 or 0).
         """
 
-        def get_matches() -> list[TtsModelInfos]:
+        def get_matches() -> list[TtsModelType]:
             model_infos = []
-            for model_info in TtsModelInfos:
+            for model_info in TtsModelType:
                 exists = False
                 try:
                     module_test = model_info.value.local_module_test
@@ -111,7 +111,7 @@ class Tts:
         match len(matches):
             case 0:
                 # No match
-                Tts._type = TtsModelInfos.NONE
+                Tts._type = TtsModelType.NONE
                 return Tts._type, 0
             case 1:
                 # Happy path
@@ -123,25 +123,25 @@ class Tts:
                 return Tts._type, len(matches)
 
     @staticmethod
-    def get_type() -> TtsModelInfos:
+    def get_type() -> TtsModelType:
         return Tts._type
 
     @staticmethod
-    def set_type(value: TtsModelInfos) -> None:
+    def set_type(value: TtsModelType) -> None:
         if Tts._type != value:
             Tts.clear_tts_model()
         Tts._type = value
 
     @staticmethod
-    def set_sgl_omni_type(value: TtsModelInfos | None) -> None:
-        if value is not None and (value == TtsModelInfos.NONE or not value.value.is_sgl_omni):
+    def set_sgl_omni_type(value: TtsModelType | None) -> None:
+        if value is not None and (value == TtsModelType.NONE or not value.value.is_sgl_omni):
             value = None
         Tts._sgl_omni_type = value
         Tts.update_tts_type()
    
     @staticmethod
     def is_local_model() -> bool:
-        return Tts._type != TtsModelInfos.NONE and not Tts._type.value.is_sgl_omni
+        return Tts._type != TtsModelType.NONE and not Tts._type.value.is_sgl_omni
 
     @staticmethod
     def is_sgl_mode() -> bool:
@@ -209,23 +209,23 @@ class Tts:
         Gets the current tts model's class, used for accessing static methods.
         """
         MAP = {
-            TtsModelInfos.NONE: NoneBaseModel,
-            TtsModelInfos.OUTE: OuteBaseModel,
-            TtsModelInfos.CHATTERBOX: ChatterboxBaseModel,
-            TtsModelInfos.FISH_S1: FishS1BaseModel,
-            TtsModelInfos.FISH_S2: FishS2BaseModel,
-            TtsModelInfos.HIGGS_V2: HiggsV2BaseModel,
-            TtsModelInfos.VIBEVOICE: VibeVoiceBaseModel,
-            TtsModelInfos.INDEXTTS2: IndexTts2BaseModel,
-            TtsModelInfos.GLM: GlmBaseModel,
-            TtsModelInfos.MIRA: MiraBaseModel,
-            TtsModelInfos.MOSS: MossBaseModel,
-            TtsModelInfos.QWEN3TTS: Qwen3BaseModel,
-            TtsModelInfos.POCKET: PocketBaseModel,
-            TtsModelInfos.OMNIVOICE: OmniVoiceBaseModel,
+            TtsModelType.NONE: NoneBaseModel,
+            TtsModelType.OUTE: OuteBaseModel,
+            TtsModelType.CHATTERBOX: ChatterboxBaseModel,
+            TtsModelType.FISH_S1: FishS1BaseModel,
+            TtsModelType.FISH_S2: FishS2BaseModel,
+            TtsModelType.HIGGS_V2: HiggsV2BaseModel,
+            TtsModelType.VIBEVOICE: VibeVoiceBaseModel,
+            TtsModelType.INDEXTTS2: IndexTts2BaseModel,
+            TtsModelType.GLM: GlmBaseModel,
+            TtsModelType.MIRA: MiraBaseModel,
+            TtsModelType.MOSS: MossBaseModel,
+            TtsModelType.QWEN3TTS: Qwen3BaseModel,
+            TtsModelType.POCKET: PocketBaseModel,
+            TtsModelType.OMNIVOICE: OmniVoiceBaseModel,
 
-            TtsModelInfos.SERVER_HIGGS_V3: HiggsV3ServerBaseModel,
-            TtsModelInfos.SERVER_MOSS: MossServerModel,
+            TtsModelType.SERVER_HIGGS_V3: HiggsV3ServerBaseModel,
+            TtsModelType.SERVER_MOSS: MossServerModel,
         }
         cls = MAP.get(Tts._type, None)
         if cls is None:
@@ -233,7 +233,7 @@ class Tts:
         return cls
     
     @staticmethod
-    def get_info() -> TtsModelInfo:
+    def get_info() -> TtsModelSpec:
         return Tts.get_class().INFO
 
     @staticmethod
@@ -262,22 +262,22 @@ class Tts:
     @staticmethod
     def get_instance() -> TtsBaseModel:
         # Returns existing or newly instantiated instance
-        MAP: dict[TtsModelInfos, Callable] = {
-            TtsModelInfos.OUTE: Tts.get_oute,
-            TtsModelInfos.CHATTERBOX: Tts.get_chatterbox,
-            TtsModelInfos.FISH_S1: Tts.get_fish,
-            TtsModelInfos.FISH_S2: Tts.get_fish_s2,
-            TtsModelInfos.HIGGS_V2: Tts.get_higgs,
-            TtsModelInfos.VIBEVOICE: Tts.get_vibevoice,
-            TtsModelInfos.INDEXTTS2: Tts.get_indextts2,
-            TtsModelInfos.GLM: Tts.get_glm,
-            TtsModelInfos.MIRA: Tts.get_mira,
-            TtsModelInfos.MOSS: Tts.get_moss,
-            TtsModelInfos.QWEN3TTS: Tts.get_qwen3,
-            TtsModelInfos.POCKET: Tts.get_pocket,
-            TtsModelInfos.OMNIVOICE: Tts.get_omnivoice,
-            TtsModelInfos.SERVER_HIGGS_V3: Tts.get_higgs_v3,
-            TtsModelInfos.SERVER_MOSS: Tts.get_moss_server
+        MAP: dict[TtsModelType, Callable] = {
+            TtsModelType.OUTE: Tts.get_oute,
+            TtsModelType.CHATTERBOX: Tts.get_chatterbox,
+            TtsModelType.FISH_S1: Tts.get_fish,
+            TtsModelType.FISH_S2: Tts.get_fish_s2,
+            TtsModelType.HIGGS_V2: Tts.get_higgs,
+            TtsModelType.VIBEVOICE: Tts.get_vibevoice,
+            TtsModelType.INDEXTTS2: Tts.get_indextts2,
+            TtsModelType.GLM: Tts.get_glm,
+            TtsModelType.MIRA: Tts.get_mira,
+            TtsModelType.MOSS: Tts.get_moss,
+            TtsModelType.QWEN3TTS: Tts.get_qwen3,
+            TtsModelType.POCKET: Tts.get_pocket,
+            TtsModelType.OMNIVOICE: Tts.get_omnivoice,
+            TtsModelType.SERVER_HIGGS_V3: Tts.get_higgs_v3,
+            TtsModelType.SERVER_MOSS: Tts.get_moss_server
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -316,7 +316,7 @@ class Tts:
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
         }
-        if Tts._type in (TtsModelInfos.SERVER_HIGGS_V3, TtsModelInfos.SERVER_MOSS):
+        if Tts._type in (TtsModelType.SERVER_HIGGS_V3, TtsModelType.SERVER_MOSS):
             kwargs["print_generation_request"] = print_generation_request
 
         return instance.generate_using_project(
@@ -341,20 +341,20 @@ class Tts:
     def get_instance_if_exists() -> TtsBaseModel | None:
         # Returns instance only if it already exists, else none
         MAP = {
-            TtsModelInfos.OUTE: Tts._oute,
-            TtsModelInfos.CHATTERBOX: Tts._chatterbox,
-            TtsModelInfos.FISH_S1: Tts._fish,
-            TtsModelInfos.FISH_S2: Tts._fish_s2,
-            TtsModelInfos.HIGGS_V2: Tts._higgs,
-            TtsModelInfos.SERVER_HIGGS_V3: Tts._higgs_v3,
-            TtsModelInfos.VIBEVOICE: Tts._vibevoice,
-            TtsModelInfos.INDEXTTS2: Tts._indextts2,
-            TtsModelInfos.GLM: Tts._glm,
-            TtsModelInfos.MIRA: Tts._mira,
-            TtsModelInfos.MOSS: Tts._moss,
-            TtsModelInfos.QWEN3TTS: Tts._qwen3,
-            TtsModelInfos.POCKET: Tts._pocket,
-            TtsModelInfos.OMNIVOICE: Tts._omnivoice,
+            TtsModelType.OUTE: Tts._oute,
+            TtsModelType.CHATTERBOX: Tts._chatterbox,
+            TtsModelType.FISH_S1: Tts._fish,
+            TtsModelType.FISH_S2: Tts._fish_s2,
+            TtsModelType.HIGGS_V2: Tts._higgs,
+            TtsModelType.SERVER_HIGGS_V3: Tts._higgs_v3,
+            TtsModelType.VIBEVOICE: Tts._vibevoice,
+            TtsModelType.INDEXTTS2: Tts._indextts2,
+            TtsModelType.GLM: Tts._glm,
+            TtsModelType.MIRA: Tts._mira,
+            TtsModelType.MOSS: Tts._moss,
+            TtsModelType.QWEN3TTS: Tts._qwen3,
+            TtsModelType.POCKET: Tts._pocket,
+            TtsModelType.OMNIVOICE: Tts._omnivoice,
         }
         return MAP.get(Tts._type, None)
 
@@ -677,8 +677,8 @@ class Tts:
         
         original_type = Tts.get_type()
 
-        if not SglOmniUtil.get_base_url() and Tts.get_type() != TtsModelInfos.NONE:
-            Tts.set_type(TtsModelInfos.NONE)
+        if not SglOmniUtil.get_base_url() and Tts.get_type() != TtsModelType.NONE:
+            Tts.set_type(TtsModelType.NONE)
             # print(f"xxx changed tts type from {original_type} to {Tts.get_type()}")
             return
         
@@ -686,9 +686,9 @@ class Tts:
             # Auto-detect
             SglOmniUtil.update_model_id()
 
-            new_type = TtsModelInfos.find_type_item_using_sgl_omni_model_id( SglOmniUtil.get_model_id() )
+            new_type = TtsModelType.find_tts_type_using_sgl_omni_model_id( SglOmniUtil.get_model_id() )
             if new_type is None:
-                new_type = TtsModelInfos.NONE
+                new_type = TtsModelType.NONE
         else:
             new_type = Tts._sgl_omni_type
         if new_type == original_type:

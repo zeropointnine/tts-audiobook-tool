@@ -24,7 +24,7 @@ from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import printt
 
 if TYPE_CHECKING:
@@ -262,7 +262,7 @@ class ProjectSerializationUtil:
             try:
                 from tts_audiobook_tool.tts import Tts
 
-                if Tts.get_type() == TtsModelInfos.CHATTERBOX:
+                if Tts.get_type() == TtsModelType.CHATTERBOX:
                     add_warning('chatterbox_type', chatterbox_type.id)
             except AttributeError:
                 pass

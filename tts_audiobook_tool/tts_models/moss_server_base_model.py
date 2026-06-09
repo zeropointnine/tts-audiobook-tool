@@ -4,7 +4,7 @@ from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -18,7 +18,7 @@ class MossServerBaseModel(MossBaseModel):
     Base model for the 'server' version of MOSS (v1.5)
     """
 
-    INFO = TtsModelInfos.SERVER_MOSS.value
+    INFO = TtsModelType.SERVER_MOSS.value
 
     # Rem, MOSS can fail to properly terminate gens when hyperparams are out of a certain range,
     # so max tokens should be set as "small" as possble

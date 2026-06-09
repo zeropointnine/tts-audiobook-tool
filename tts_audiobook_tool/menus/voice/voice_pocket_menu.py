@@ -3,7 +3,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
@@ -50,7 +50,7 @@ class VoicePocketMenu:
 
             if state.project.pocket_voice_file_name or state.project.pocket_predefined_voice:
                 items.append(
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelInfos.POCKET)
+                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.POCKET)
                 )
 
             items.append(
@@ -156,7 +156,7 @@ def ask_language(state: State) -> None:
 
 def on_voice_file(state: State, _) -> None:
 
-    VoiceMenuShared.ask_and_set_voice_file(state, TtsModelInfos.POCKET)
+    VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.POCKET)
 
     if state.project.pocket_voice_file_name:
 

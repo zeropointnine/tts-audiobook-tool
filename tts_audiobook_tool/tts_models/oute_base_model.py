@@ -2,7 +2,7 @@ from pathlib import Path
 
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_info import TtsModelInfos
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import ellipsize_path_for_menu
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM, COL_ERROR
@@ -16,7 +16,7 @@ else:
 
 class OuteBaseModel(TtsBaseModel):
 
-    INFO = TtsModelInfos.OUTE.value
+    INFO = TtsModelType.OUTE.value
 
     DEFAULT_TEMPERATURE = 0.4 # from model library code
 
