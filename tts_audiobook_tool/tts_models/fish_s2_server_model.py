@@ -4,11 +4,12 @@ from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
+from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_server_base_model import FishS2ServerBaseModel
 from tts_audiobook_tool.util import *
 
 
-class HiggsV3ServerModel(HiggsV3ServerBaseModel):
+class FishS2ServerModel(FishS2ServerBaseModel):
 
     def kill(self):
         pass
@@ -22,15 +23,18 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
-       
-        voice_path = project.higgs_v3_voice_target
-        voice_transcript = project.higgs_v3_voice_transcript
 
-        temperature = project.higgs_v3_temperature if project.higgs_v3_temperature != -1 else HiggsV3ServerBaseModel.DEFAULT_TEMPERATURE
-        top_p = project.higgs_v3_top_p if project.higgs_v3_top_p != -1 else HiggsV3ServerBaseModel.DEFAULT_TOP_P
-        top_k = project.higgs_v3_top_k if project.higgs_v3_top_k != -1 else HiggsV3ServerBaseModel.DEFAULT_TOP_K
+        voice_path = project.fish_s2_server_voice_target
+        voice_transcript = project.fish_s2_server_voice_transcript
+
+        temperature = project.fish_s2_temperature if project.fish_s2_temperature != -1 else FishS2BaseModel.TEMPERATURE_DEFAULT
         
-        seed = -1 if force_random_seed else project.higgs_v3_seed
+        top_p = project.fish_s2_top_p if project.fish_s2_top_p != -1 else FishS2BaseModel.TOP_P_DEFAULT
+        top_p = min(top_p, FishS2ServerBaseModel.TOP_K_MAX) # upper limit of server version of fish s2 is lower than local version
+        
+        top_k = project.fish_s2_top_k if project.fish_s2_top_k != -1 else FishS2BaseModel.TOP_K_DEFAULT
+        
+        seed = -1 if force_random_seed else project.fish_s2_seed
         if seed == -1:
             seed = random.randrange(0, SEED_MAX) # use same seed for all prompts just to be safe
 
@@ -44,11 +48,11 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
                 "stream": is_streaming,
                 "temperature": temperature,
                 "top_p": top_p,
-                "top_k": top_k,
-                "max_tokens": HiggsV3ServerBaseModel.MAX_TOKENS
+                "top_k": top_k
+                # Rem, sgl-omni fish s2 does NOT support seed
+                # xxx "max_tokens": MAX_TOKENS
             }
-            # TODO: Re-add seed after presumed upstream bug is fixed: "seed": seed
-
+            
             if voice_path:
                 reference = {"audio_path": voice_path}
                 if voice_transcript:

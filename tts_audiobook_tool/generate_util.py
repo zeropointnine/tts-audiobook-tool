@@ -96,10 +96,11 @@ class GenerateUtil:
         num_errored = 0
         num_failed = 0
         num_failed_music = 0
-        num_failed_but_improved = 0
+        num_improved = 0
         num_passed = 0
         word_counts: dict[int, int] = {}
         preexisting_word_error_counts = project.sound_segments.get_word_error_counts_in_generate_range()
+        best_word_error_counts = dict(preexisting_word_error_counts)
         gen_val_sum_time = 0
         start_time = time.time()
 
@@ -203,6 +204,22 @@ class GenerateUtil:
                 elif validation_result:
 
                     val_line = f"{validation_result.get_ui_message_with_post_processing()}"
+                    validation_word_error_count: int | None = None
+                    if isinstance(validation_result, TranscriptResult):
+                        validation_word_error_count = SegmentTranscriptUtil.make_generation_word_error_count(validation_result)
+                    previous_word_error_count = best_word_error_counts.get(index, None)
+                    did_improve = (
+                        (is_regen or retry_counts[i] > 0)
+                        and validation_word_error_count is not None
+                        and previous_word_error_count is not None
+                        and validation_word_error_count < previous_word_error_count
+                    )
+                    if did_improve:
+                        num_improved += 1
+                    if validation_word_error_count is not None and (
+                        previous_word_error_count is None or validation_word_error_count < previous_word_error_count
+                    ):
+                        best_word_error_counts[index] = validation_word_error_count
 
                     # Modify validation ui message if needed
                     if not validation_result.is_fail:
@@ -219,6 +236,8 @@ class GenerateUtil:
                                 if preexisting_count is not None and validation_result.num_errors < preexisting_count:
                                     val_line += f" (improved from {preexisting_count} to {new_count} word errors)"
                                     preexisting_word_error_counts[index] = new_count
+                        elif did_improve and isinstance(validation_result, WordErrorResult):
+                            val_line += f" (improved from {previous_word_error_count} to {validation_result.num_errors} word errors)"
 
                     # Failed or not
                     if validation_result.is_fail:
@@ -304,20 +323,19 @@ class GenerateUtil:
         ok = str(num_passed)
         if num_passed == len(sorted_indices):
             ok += " (all)"
-        warnings_string += f"Num lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
+        warnings_string += f"Lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
+        if num_improved:
+            warnings_string += f"Lines improved on retry: {COL_OK}{num_improved}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
         if num_failed:
-            warnings_string += f"Num lines saved, but with word errors: {col}{num_failed}{COL_DEFAULT} "
-            if is_regen and num_failed_but_improved > 0:
-                warnings_string += f"(num improved: {num_failed_but_improved})"
-            warnings_string += "\n"
+            warnings_string += f"Lines saved, but with excess word errors: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
-            warnings_string += f"Num lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
+            warnings_string += f"Lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
             warnings_string += f"Num words: {sum(word_counts.values())}\n"
             if Stt.has_instance():
                 if MusicDetector.has_instance():
-                    warnings_string += f"Num music fails: {num_failed_music}\n"
+                    warnings_string += f"Lines with music fails: {num_failed_music}\n"
             warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
         printt(warnings_string)
 

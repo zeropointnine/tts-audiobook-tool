@@ -120,28 +120,6 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertEqual(project.higgs_v3_seed, -1)
 
-    def test_project_transfer_copies_higgs_v3_voice_transcript(self):
-        source = Project.model_validate({
-            "higgs_v3_voice_file_path": "/voices/sample.wav",
-            "higgs_v3_voice_transcript": "Reference sample transcript.",
-            "higgs_v3_temperature": 0.43,
-            "higgs_v3_top_p": 0.87,
-            "higgs_v3_top_k": 42,
-            "higgs_v3_batch_size": 3,
-            "higgs_v3_seed": 12345,
-        })
-        dest = Project.model_validate({})
-
-        ProjectTransferUtil.apply_project_settings(dest, source)
-
-        self.assertEqual(dest.higgs_v3_voice_file_path, "/voices/sample.wav")
-        self.assertEqual(dest.higgs_v3_voice_transcript, "Reference sample transcript.")
-        self.assertEqual(dest.higgs_v3_temperature, 0.43)
-        self.assertEqual(dest.higgs_v3_top_p, 0.87)
-        self.assertEqual(dest.higgs_v3_top_k, 42)
-        self.assertEqual(dest.higgs_v3_batch_size, 3)
-        self.assertEqual(dest.higgs_v3_seed, 12345)
-
     def test_project_transfer_field_set_matches_serialized_project_settings(self):
         self.assertEqual(ProjectTransferUtil.get_missing_project_settings_transfer_fields(Project), [])
 

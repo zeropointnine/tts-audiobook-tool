@@ -48,9 +48,9 @@ class VoiceFishS2Menu:
             temperature_item = VoiceMenuShared.make_temperature_item(
                 state=state,
                 attr="fish_s2_temperature",
-                default_value=FishS2BaseModel.DEFAULT_TEMPERATURE,
-                min_value=FishS2BaseModel.MIN_TEMPERATURE,
-                max_value=FishS2BaseModel.MAX_TEMPERATURE
+                default_value=FishS2BaseModel.TEMPERATURE_DEFAULT,
+                min_value=FishS2BaseModel.TEMPERATURE_MIN,
+                max_value=FishS2BaseModel.TEMPERATURE_MAX
             )
             items.append(temperature_item)
 
@@ -58,7 +58,7 @@ class VoiceFishS2Menu:
                 VoiceMenuShared.make_top_p_item(
                     state=state,
                     attr="fish_s2_top_p",
-                    default_value=FishS2BaseModel.DEFAULT_TOP_P
+                    default_value=FishS2BaseModel.TOP_P_DEFAULT
                 )
             )
 
@@ -66,7 +66,7 @@ class VoiceFishS2Menu:
                 VoiceMenuShared.make_top_k_item(
                     state=state,
                     attr="fish_s2_top_k",
-                    default_value=FishS2BaseModel.DEFAULT_TOP_K
+                    default_value=FishS2BaseModel.TOP_K_DEFAULT
                 )
             )
 

@@ -36,12 +36,18 @@ class VoiceMenuShared:
             case TtsModelType.FISH_S2:
                 from tts_audiobook_tool.menus.voice import VoiceFishS2Menu
                 VoiceFishS2Menu.menu(state)
+            case TtsModelType.FISH_S2_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceFishS2ServerMenu
+                VoiceFishS2ServerMenu.menu(state)
             case TtsModelType.GLM:
                 from tts_audiobook_tool.menus.voice import VoiceGlmMenu
                 VoiceGlmMenu.menu(state)
             case TtsModelType.HIGGS_V2:
                 from tts_audiobook_tool.menus.voice import VoiceHiggsV2Menu
                 VoiceHiggsV2Menu.menu(state)
+            case TtsModelType.HIGGS_V3_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceHiggsV3Menu
+                VoiceHiggsV3Menu.menu(state)
             case TtsModelType.INDEXTTS2:
                 from tts_audiobook_tool.menus.voice import VoiceIndexTts2Menu
                 VoiceIndexTts2Menu.menu(state)
@@ -51,6 +57,9 @@ class VoiceMenuShared:
             case TtsModelType.MOSS:
                 from tts_audiobook_tool.menus.voice import VoiceMossMenu
                 VoiceMossMenu.menu(state)
+            case TtsModelType.MOSS_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
+                VoiceMossServerMenu.menu(state) 
             case TtsModelType.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
@@ -71,15 +80,8 @@ class VoiceMenuShared:
             case TtsModelType.VIBEVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
-
-            case TtsModelType.SERVER_HIGGS_V3:
-                from tts_audiobook_tool.menus.voice import VoiceHiggsV3Menu
-                VoiceHiggsV3Menu.menu(state)
-            case TtsModelType.SERVER_MOSS:
-                from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
-                VoiceMossServerMenu.menu(state) 
             case _:
-                ...
+                raise NotImplementedError(f"value: {Tts.get_type()}")
 
     @staticmethod
     def menu_wrapper(
@@ -123,7 +125,7 @@ class VoiceMenuShared:
         Prints feedback on success or fail.
         """
 
-        if not tts_type.value.voice_file_name_attr:
+        if not tts_type.value.voice_target_attr:
             # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
@@ -486,3 +488,93 @@ class VoiceMenuShared:
             min_value=0, max_value=max_value, default_value=0, 
             success_prefix="Rolling continuation num segments set to", is_int=True
         )
+
+    @staticmethod
+    def make_manual_voice_menu_items(
+        state: State, 
+        path_attribute: str, 
+        transcript_attribute: str,
+        is_required: bool=False
+    ) -> tuple[MenuItem, MenuItem]:
+        """
+        Creates pair of MenuItems for voice path and voice transcript for "SGL-Omni mode"
+        (specifically for cases where the server api for the given TTS model does NOT support handling data uri)
+        """
+
+        def make_path_label(_) -> str:
+            
+            prefix = "Enter voice clone sample filepath"
+            value = getattr(state.project, path_attribute)
+
+            if value:
+                value = ellipsize_path_for_menu(value)
+                value_prefix = "currently: "
+                color = COL_ACCENT
+            else:
+                if is_required:
+                    value = "required"
+                    value_prefix = ""
+                    color = COL_ERROR
+                else:
+                    value = "none"
+                    value_prefix = "currently: "
+                    color = COL_ERROR
+
+            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
+
+        def ask_path() -> None:
+            s = (
+                "Enter voice clone reference audio path:\n"
+                f"{COL_DIM}This must be either a file path accessible from the\n"
+                f"running server environment or a URL"
+            )    
+            ask.ask_string_and_save(state.project, s, path_attribute, "Voice clone sample path set:")
+
+        path_item = MenuItem(make_path_label, lambda _, __: ask_path())
+        
+        # ---
+
+        def make_transcript_label(_) -> str:
+
+            prefix = "Enter voice clone sample transcript"
+            value = getattr(state.project, transcript_attribute)
+            has_path = bool( getattr(state.project, path_attribute) )
+
+            if value:
+                value = truncate_pretty(value, 40, content_color=COL_ACCENT)
+                value_prefix = "currently: "
+                color = COL_ACCENT
+            else:
+                if is_required or has_path:
+                    value = "required"
+                    value_prefix = ""
+                    color = COL_ERROR
+                else:
+                    value = "none"
+                    value_prefix = "currently: "
+                    color = COL_ERROR
+
+            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
+
+
+            # prefix = "Enter voice clone sample transcript"
+            # value = getattr(state.project, transcript_attribute)
+            # has_path = bool( getattr(state.project, path_attribute) )
+            
+            # if not value and has_path:
+            #     return f"{prefix} {COL_DIM}({COL_ERROR}required{COL_DIM})"
+
+            # label_value = truncate_pretty(value, 40) if value else "none"
+            # return make_menu_label(prefix, label_value)
+
+        def ask_transcript() -> None:
+            ask.ask_string_and_save(
+                state.project,
+                "Enter voice clone sample transcript:",
+                transcript_attribute,
+                "Voice clone sample transcript set:",
+            )
+
+        transcript_item = MenuItem(make_transcript_label, lambda _, __: ask_transcript())
+
+        return path_item, transcript_item

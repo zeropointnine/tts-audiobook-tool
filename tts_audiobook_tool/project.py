@@ -174,13 +174,17 @@ class Project(BaseModel):
     fish_s1_seed: int = -1
 
     fish_s2_voice_file_name: str = ""
-    fish_s2_voice_transcript: str = Field(default="", alias="fish_s2_voice_text")
+    fish_s2_voice_transcript: str = ""
     fish_s2_rolling_cont: int = 0
     fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s2_temperature: float = -1
     fish_s2_top_p: float = -1
     fish_s2_top_k: int = -1
     fish_s2_seed: int = -1
+
+    fish_s2_server_voice_target: str = ""
+    fish_s2_server_voice_transcript: str = ""
+    fish_s2_server_concurrent_requests: int = 1
 
     higgs_voice_file_name: str = ""
     higgs_voice_transcript: str = Field(default="", alias="higgs_voice_text")
@@ -189,7 +193,7 @@ class Project(BaseModel):
     higgs_top_p: float = -1
     higgs_seed: int = -1
 
-    higgs_v3_voice_file_path: str = ""
+    higgs_v3_voice_target: str = Field(default="", alias="higgs_v3_voice_file_path") # Rem, this server path or url
     higgs_v3_voice_transcript: str = ""
     higgs_v3_temperature: float = -1
     higgs_v3_top_p: float = -1
@@ -229,7 +233,7 @@ class Project(BaseModel):
     mira_seed: int = -1
 
     moss_voice_file_name: str = ""
-    moss_voice_transcript: str = Field(default="", alias="moss_voice_text")
+    moss_voice_transcript: str = ""
     moss_target: str = ""
     moss_rolling_cont: int = 0
     moss_delay_temperature: float = -1
@@ -244,7 +248,7 @@ class Project(BaseModel):
     qwen3_target: str = ""
     qwen3_model_type: str = ""
     qwen3_voice_file_name: str = ""
-    qwen3_voice_transcript: str = Field(default="", alias="qwen3_voice_text")
+    qwen3_voice_transcript: str = ""
     qwen3_rolling_cont: int = 0
     qwen3_speaker_id: str = ""
     qwen3_instructions: str = ""

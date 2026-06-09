@@ -38,7 +38,7 @@ def restore_tts_and_sgl_state(saved) -> None:
 def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.SERVER_HIGGS_V3
+        Tts._type = TtsModelType.HIGGS_V3_SERVER
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
@@ -52,7 +52,7 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
 def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.SERVER_HIGGS_V3
+        Tts._type = TtsModelType.HIGGS_V3_SERVER
         SglOmniUtil._model_id = ""
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
@@ -82,7 +82,7 @@ def test_tts_model_heading_detail_keeps_local_model_unchanged():
 def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.SERVER_MOSS
+        Tts._type = TtsModelType.MOSS_SERVER
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3-tts-4b"
 
         def update_model_id():

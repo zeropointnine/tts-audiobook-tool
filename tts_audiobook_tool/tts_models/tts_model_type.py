@@ -29,7 +29,7 @@ class TtsModelSpec(NamedTuple):
     max_words_reco_range: tuple[int, int]
     
     # Project attribute of voice clone file name (when applicable)
-    voice_file_name_attr: str
+    voice_target_attr: str
     # Does the model require a voice clone sample to generate audio
     requires_voice: bool
     # Project attribute of voice clone transcript (when applicable; empty = none)
@@ -83,7 +83,7 @@ class TtsModelType(Enum):
         sample_rate=0,
         max_words_default=0,
         max_words_reco_range=(0, 0),
-        voice_file_name_attr="",
+        voice_target_attr="",
         requires_voice=False,
         voice_transcript_attr="",
         extra_file_attrs=[],
@@ -114,7 +114,7 @@ class TtsModelType(Enum):
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        voice_file_name_attr="oute_voice_json", # rem, special case, is not a sound file
+        voice_target_attr="oute_voice_json", # rem, special case, is not a sound file
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=[],
@@ -148,7 +148,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        voice_file_name_attr="chatterbox_voice_file_name",
+        voice_target_attr="chatterbox_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="",
         extra_file_attrs=[],
@@ -181,7 +181,7 @@ class TtsModelType(Enum):
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="fish_s1_voice_file_name",
+        voice_target_attr="fish_s1_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="fish_s1_voice_transcript",
         extra_file_attrs=[],
@@ -214,7 +214,7 @@ class TtsModelType(Enum):
         sample_rate=44100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="fish_s2_voice_file_name",
+        voice_target_attr="fish_s2_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="fish_s2_voice_transcript",
         extra_file_attrs=[],
@@ -247,7 +247,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        voice_file_name_attr="higgs_voice_file_name",
+        voice_target_attr="higgs_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="higgs_voice_transcript",
         extra_file_attrs=[],
@@ -280,7 +280,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="vibevoice_voice_file_name",
+        voice_target_attr="vibevoice_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="",
         extra_file_attrs=[],
@@ -315,7 +315,7 @@ class TtsModelType(Enum):
         sample_rate=22050,
         max_words_default=40,
         max_words_reco_range=(40, 60),
-        voice_file_name_attr="indextts2_voice_file_name",
+        voice_target_attr="indextts2_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=["indextts2_emo_voice_file_name"],
@@ -349,7 +349,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
-        voice_file_name_attr="glm_voice_file_name",
+        voice_target_attr="glm_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="glm_voice_transcript",
         extra_file_attrs=[],
@@ -384,7 +384,7 @@ class TtsModelType(Enum):
         sample_rate=48000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="mira_voice_file_name",
+        voice_target_attr="mira_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=[],
@@ -419,7 +419,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="pocket_voice_file_name",
+        voice_target_attr="pocket_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
         extra_file_attrs=[],
@@ -453,7 +453,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="moss_voice_file_name",
+        voice_target_attr="moss_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="moss_voice_transcript",
         extra_file_attrs=[],
@@ -486,7 +486,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="qwen3_voice_file_name",
+        voice_target_attr="qwen3_voice_file_name",
         requires_voice=True, # this applies to 'base' model type only
         voice_transcript_attr="qwen3_voice_transcript",
         extra_file_attrs=[],
@@ -519,7 +519,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80), 
-        voice_file_name_attr="omnivoice_voice_file_name",
+        voice_target_attr="omnivoice_voice_file_name",
         requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
         voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
         extra_file_attrs=[],
@@ -542,7 +542,9 @@ class TtsModelType(Enum):
         ]
     )
 
-    SERVER_HIGGS_V3 = TtsModelSpec(
+    # ---
+
+    HIGGS_V3_SERVER = TtsModelSpec(
         id="server_higgs_v3",
         is_sgl_omni=True,
         server_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model which is v3
@@ -552,7 +554,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80), # xxx
-        voice_file_name_attr="higgs_v3_voice_file_path", # xxx is this the right way to use this?
+        voice_target_attr="higgs_v3_voice_target",
         requires_voice=False, # xxx
         voice_transcript_attr="higgs_v3_voice_transcript", 
         extra_file_attrs=[],
@@ -568,14 +570,18 @@ class TtsModelType(Enum):
             "short_name": "Higgs v3",
             "voice_path_console": "", # not applicable
             "voice_path_requestor": "", # not applicable
-            "project_links": ["https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"]
+            "project_links": [
+                "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"
+            ]
         },
         substitutions=[ (
             "\u2014", ", "), ("\u2500", ", ")
         ]
     )
 
-    SERVER_MOSS = TtsModelSpec(
+    MOSS_SERVER = TtsModelSpec(
         id="server_moss",
         is_sgl_omni=True,
         server_model_id_substring="moss",
@@ -585,7 +591,7 @@ class TtsModelType(Enum):
         sample_rate=24000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_file_name_attr="moss_voice_file_name",
+        voice_target_attr="moss_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="moss_voice_transcript",
         extra_file_attrs=[],
@@ -595,16 +601,58 @@ class TtsModelType(Enum):
         hallucinates_music=False,
         requires_ffmpeg_libs=True,
         un_all_caps=False,
-        requirements_file_name="requirements-moss.txt",
+        requirements_file_name="requirements-sgl-omni.txt",
         ui={
             "proper_name": "MOSS-TTS",
             "short_name": "MOSS",
             "voice_path_console": "",
             "voice_path_requestor": "",
-            "project_links": ["https://github.com/OpenMOSS/MOSS-TTS", "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5", "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"]
+            "project_links": [
+                "https://github.com/OpenMOSS/MOSS-TTS", 
+                "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"
+            ]
         },
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
+    FISH_S2_SERVER = TtsModelSpec(
+        id="server_fish_s2",
+        is_sgl_omni=True,
+        server_model_id_substring="fish",
+        local_module_test="",
+        local_torch_devices = [],
+        file_tag="s2-pro",
+        sample_rate=44100,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="fish_s2_server_voice_target",
+        requires_voice=False, 
+        voice_transcript_attr="fish_s2_server_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="fish_s2_server_concurrent_requests",
+        can_stream=True,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-fish-s2.txt",
+        ui = {
+            "proper_name": "Fish S2-Pro",
+            "short_name": "S2-Pro",
+            "voice_path_console": "",
+            "voice_path_requestor": "",
+            "project_links": [
+                "https://github.com/fishaudio/fish-speech", 
+                "https://huggingface.co/fishaudio/s2-pro", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html"
+            ]
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
         ]
     )
 

@@ -18,7 +18,7 @@ class MossServerBaseModel(MossBaseModel):
     Base model for the 'server' version of MOSS (v1.5)
     """
 
-    INFO = TtsModelType.SERVER_MOSS.value
+    INFO = TtsModelType.MOSS_SERVER.value
 
     # Rem, MOSS can fail to properly terminate gens when hyperparams are out of a certain range,
     # so max tokens should be set as "small" as possble

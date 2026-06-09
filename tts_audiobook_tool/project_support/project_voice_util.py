@@ -56,7 +56,7 @@ class ProjectVoiceUtil:
             return err
 
         info = tts_type.value
-        voice_file_name_attr = info.voice_file_name_attr
+        voice_file_name_attr = info.voice_target_attr
         voice_transcript_attr = info.voice_transcript_attr
 
         with project.batch():
@@ -78,7 +78,7 @@ class ProjectVoiceUtil:
     @staticmethod
     def clear_voice_and_save(project: Project, tts_type: TtsModelType, is_secondary: bool=False) -> None:
         info = tts_type.value
-        voice_file_name_attr = info.voice_file_name_attr
+        voice_file_name_attr = info.voice_target_attr
         voice_transcript_attr = info.voice_transcript_attr
 
         with project.batch():
@@ -106,7 +106,7 @@ class ProjectVoiceUtil:
                 return "none"
             return ellipsize_path_for_menu(value.removesuffix("_pocket.flac"))
 
-        value = getattr(project, Tts.get_type().value.voice_file_name_attr, "")
+        value = getattr(project, Tts.get_type().value.voice_target_attr, "")
         if not value:
             return "none"
         value = value.removesuffix(f"_{Tts.get_type().value.file_tag}.flac")
@@ -117,7 +117,7 @@ class ProjectVoiceUtil:
         from tts_audiobook_tool.tts import Tts
         if Tts.get_type() == TtsModelType.POCKET:
             return bool(project.pocket_predefined_voice or project.pocket_voice_file_name)
-        value = getattr(project, Tts.get_type().value.voice_file_name_attr, "")
+        value = getattr(project, Tts.get_type().value.voice_target_attr, "")
         return bool(value)
 
     @staticmethod
@@ -137,8 +137,8 @@ class ProjectVoiceUtil:
         info = model_type.value
 
         attribs: list[str] = []
-        if info.voice_file_name_attr:
-            attribs.append(info.voice_file_name_attr)
+        if info.voice_target_attr:
+            attribs.append(info.voice_target_attr)
 
         if model_type == TtsModelType.INDEXTTS2:
             attribs.append("indextts2_emo_voice_file_name")

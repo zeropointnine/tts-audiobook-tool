@@ -560,13 +560,15 @@ Use `Backend.LLAMACPP`.
 
 The app supports server-based TTS inference using SGL-Omni for the following models:
 - [**Higgs Audio V3**](https://huggingface.co/bosonai/higgs-audio-v3-tts-4b) (24GB VRAM recommended)
-- [**MOSS-TTS v1.5**](https://github.com/OpenMOSS/MOSS-TTS)
+- [**MOSS-TTS v1.5**](https://github.com/OpenMOSS/MOSS-TTS) (24GB+ VRAM recommended)
+- [**Fish S2 Pro**](https://github.com/fishaudio/fish-speech) (24GB VRAM recommended)
 
 Install instructions for SGL-Omni can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially true for Windows).
 
 Start the SGL-Omni server for a supported TTS model. Eg:
 - `sgl-omni serve --model-path bosonai/higgs-audio-v3-tts-4b --port 8000`
 - `sgl-omni serve --model-path OpenMOSS-Team/MOSS-TTS-v1.5 --port 8000`
+- `sgl-omni serve --model-path fishaudio/s2-pro --config examples/configs/s2pro_tts.yaml --port 8000`
 
 Once SGL-Omni is set up, continue to creating the app's virtual environment:
 
@@ -663,6 +665,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Torch compile 
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
+- SGL-Omni backend inference support (including concurrent requests and streaming)
 
 **GLM-TTS**
 

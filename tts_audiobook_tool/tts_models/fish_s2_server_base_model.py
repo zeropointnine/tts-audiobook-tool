@@ -12,14 +12,11 @@ else:
     Project = object
 
 
-class HiggsV3ServerBaseModel(TtsBaseModel):
+class FishS2ServerBaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.HIGGS_V3_SERVER.value
-    DEFAULT_TEMPERATURE = 1.0
-    MAX_TEMPERATURE = 2.0
-    DEFAULT_TOP_P = 1.0
-    DEFAULT_TOP_K = 100
-    MAX_TOKENS = 1536 # 1024 is probably enough for 80 words but
+    INFO = TtsModelType.FISH_S2_SERVER.value 
+
+    TOP_K_MAX = 30 # Note, this differs from local inference versoin
 
     @classmethod
     def get_blocking_issues(
@@ -27,7 +24,7 @@ class HiggsV3ServerBaseModel(TtsBaseModel):
     ) -> list[ReadinessIssue]:
 
         # If has voice file path, must also have transcript
-        if project.higgs_v3_voice_target and not project.higgs_v3_voice_transcript:
+        if project.fish_s2_server_voice_target and not project.fish_s2_server_voice_transcript:
             return [
                 ReadinessIssue(
                     "voice clone transcript",
@@ -41,3 +38,12 @@ class HiggsV3ServerBaseModel(TtsBaseModel):
             return [readiness_issue]
         
         return []
+
+    def get_warning_issues(self, project: Project) -> list[str]:
+        results = []
+        results.extend(super().get_warning_issues(project))
+        if project.fish_s2_top_k > 30:
+            s = f"Top_k ({project.fish_s2_top_k}) out of range for server version of Fish S2 Pro inference, "
+            s += f"will clamp to {FishS2ServerBaseModel.TOP_K_MAX}"
+            results.append(s)
+        return results

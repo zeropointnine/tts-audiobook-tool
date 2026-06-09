@@ -3,6 +3,7 @@ from .voice_oute_menu import VoiceOuteMenu
 from .voice_chatterbox_menu import VoiceChatterboxMenu
 from .voice_fish_s1_menu import VoiceFishS1Menu
 from .voice_fish_s2_menu import VoiceFishS2Menu
+from .voice_fish_s2_server_menu import VoiceFishS2ServerMenu
 from .voice_higgs_v2_menu import VoiceHiggsV2Menu
 from .voice_higgs_v3_menu import VoiceHiggsV3Menu
 from .voice_vibevoice_menu import VoiceVibeVoiceMenu
@@ -21,6 +22,7 @@ __all__ = [
     "VoiceChatterboxMenu",
     "VoiceFishS1Menu",
     "VoiceFishS2Menu",
+    "VoiceFishS2ServerMenu",
     "VoiceHiggsV2Menu",
     "VoiceHiggsV3Menu",
     "VoiceVibeVoiceMenu",

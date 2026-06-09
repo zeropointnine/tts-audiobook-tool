@@ -3,7 +3,7 @@ from pathlib import Path
 import random
 import sys
 import torch
-import torchaudio # type: ignore
+import torchaudio
 import huggingface_hub
 from huggingface_hub.errors import GatedRepoError
 
@@ -248,17 +248,17 @@ class FishS2Model(FishS2BaseModel):
             self.clear_voice_clone()
 
         if project.fish_s2_temperature == -1:
-            temperature = FishS2BaseModel.DEFAULT_TEMPERATURE
+            temperature = FishS2BaseModel.TEMPERATURE_DEFAULT
         else:
             temperature = project.fish_s2_temperature
 
         if project.fish_s2_top_p == -1:
-            top_p = FishS2BaseModel.DEFAULT_TOP_P
+            top_p = FishS2BaseModel.TOP_P_DEFAULT
         else:
             top_p = project.fish_s2_top_p
 
         if project.fish_s2_top_k == -1:
-            top_k = FishS2BaseModel.DEFAULT_TOP_K
+            top_k = FishS2BaseModel.TOP_K_DEFAULT
         else:
             top_k = project.fish_s2_top_k
 

@@ -284,6 +284,7 @@ class ProjectSerializationUtil:
 
         normalize_bool('fish_s2_compile_enabled', True)
         normalize_int('fish_s2_rolling_cont', 0, min_value=0, max_value=3, warn=True)
+        normalize_int('fish_s2_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
 
         seed = d.get('fish_s2_seed', -1)
         if not (-1 <= seed <= SEED_MAX):
@@ -563,6 +564,9 @@ class ProjectSerializationUtil:
             "fish_s2_top_k": project.fish_s2_top_k,
             "fish_s2_seed": project.fish_s2_seed,
             "fish_s2_compile_enabled": project.fish_s2_compile_enabled,
+            "fish_s2_server_voice_target": project.fish_s2_server_voice_target,
+            "fish_s2_server_voice_transcript": project.fish_s2_server_voice_transcript,
+            "fish_s2_server_concurrent_requests": project.fish_s2_server_concurrent_requests,
 
             "higgs_voice_file_name": project.higgs_voice_file_name,
             "higgs_voice_text": project.higgs_voice_transcript,
@@ -571,7 +575,7 @@ class ProjectSerializationUtil:
             "higgs_top_p": project.higgs_top_p,
             "higgs_seed": project.higgs_seed,
 
-            "higgs_v3_voice_file_path": project.higgs_v3_voice_file_path,
+            "higgs_v3_voice_target": project.higgs_v3_voice_target,
             "higgs_v3_voice_transcript": project.higgs_v3_voice_transcript,
             "higgs_v3_temperature": project.higgs_v3_temperature,
             "higgs_v3_top_p": project.higgs_v3_top_p,

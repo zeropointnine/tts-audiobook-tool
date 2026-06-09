@@ -12,6 +12,7 @@ from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
+from tts_audiobook_tool.tts_models.fish_s2_server_base_model import FishS2ServerBaseModel
 from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
@@ -43,34 +44,30 @@ class Tts:
 
     _type: TtsModelType
 
-    CONTINUATION_BREAK_REASONS = {
-        Reason.PARAGRAPH,
-        Reason.SPACE_BREAK,
-        Reason.SECTION_BREAK,
-    }
-
-    _oute: OuteBaseModel | None = None
     _chatterbox: ChatterboxBaseModel | None = None
-    _fish: FishS1BaseModel | None = None
+    _fish_s1: FishS1BaseModel | None = None
     _fish_s2: FishS2BaseModel | None = None
-    _higgs: HiggsV2BaseModel | None = None
-    _higgs_v3: HiggsV3ServerBaseModel | None = None
-    _vibevoice: VibeVoiceBaseModel | None = None
-    _indextts2: IndexTts2BaseModel | None = None
+    _fish_s2_server: FishS2ServerBaseModel | None = None
     _glm: GlmBaseModel | None = None
+    _higgs_v2: HiggsV2BaseModel | None = None
+    _higgs_v3: HiggsV3ServerBaseModel | None = None
+    _indextts2: IndexTts2BaseModel | None = None
     _mira: MiraBaseModel | None = None
     _moss: MossBaseModel | None = None
     _moss_server: MossServerBaseModel | None = None
-    _qwen3: Qwen3BaseModel | None = None
-    _pocket: PocketBaseModel | None = None
     _omnivoice: OmniVoiceBaseModel | None = None
+    _oute: OuteBaseModel | None = None
+    _pocket: PocketBaseModel | None = None
+    _qwen3: Qwen3BaseModel | None = None
+    _vibevoice: VibeVoiceBaseModel | None = None
+
+    _sgl_omni_type: TtsModelType | None = None
 
     # Salient details of the current instance for display
     _instance_display_info: InstanceDisplayInfo | None = None
 
     _model_params: dict = {}
     _force_cpu: bool = False
-    _sgl_omni_type: TtsModelType | None = None
 
     @staticmethod
     def init_local_model_type() -> tuple[TtsModelType, int]:
@@ -210,26 +207,26 @@ class Tts:
         """
         MAP = {
             TtsModelType.NONE: NoneBaseModel,
-            TtsModelType.OUTE: OuteBaseModel,
             TtsModelType.CHATTERBOX: ChatterboxBaseModel,
             TtsModelType.FISH_S1: FishS1BaseModel,
             TtsModelType.FISH_S2: FishS2BaseModel,
-            TtsModelType.HIGGS_V2: HiggsV2BaseModel,
-            TtsModelType.VIBEVOICE: VibeVoiceBaseModel,
-            TtsModelType.INDEXTTS2: IndexTts2BaseModel,
+            TtsModelType.FISH_S2_SERVER: FishS2ServerBaseModel,
             TtsModelType.GLM: GlmBaseModel,
+            TtsModelType.HIGGS_V2: HiggsV2BaseModel,
+            TtsModelType.HIGGS_V3_SERVER: HiggsV3ServerBaseModel,
+            TtsModelType.INDEXTTS2: IndexTts2BaseModel,
             TtsModelType.MIRA: MiraBaseModel,
             TtsModelType.MOSS: MossBaseModel,
-            TtsModelType.QWEN3TTS: Qwen3BaseModel,
-            TtsModelType.POCKET: PocketBaseModel,
+            TtsModelType.MOSS_SERVER: MossServerModel,
             TtsModelType.OMNIVOICE: OmniVoiceBaseModel,
-
-            TtsModelType.SERVER_HIGGS_V3: HiggsV3ServerBaseModel,
-            TtsModelType.SERVER_MOSS: MossServerModel,
+            TtsModelType.OUTE: OuteBaseModel,
+            TtsModelType.POCKET: PocketBaseModel,
+            TtsModelType.QWEN3TTS: Qwen3BaseModel,
+            TtsModelType.VIBEVOICE: VibeVoiceBaseModel,            
         }
         cls = MAP.get(Tts._type, None)
         if cls is None:
-            raise Exception("Not supported")
+            raise Exception(f"Not implemented: {Tts._type}")
         return cls
     
     @staticmethod
@@ -239,20 +236,22 @@ class Tts:
     @staticmethod
     def instance_exists() -> bool:
         items = [
-            Tts._oute,
             Tts._chatterbox,
-            Tts._fish,
+            Tts._fish_s1,
             Tts._fish_s2,
-            Tts._higgs,
-            Tts._higgs_v3,
-            Tts._vibevoice,
-            Tts._indextts2,
+            Tts._fish_s2_server,
             Tts._glm,
+            Tts._higgs_v2,
+            Tts._higgs_v3,
+            Tts._indextts2,
             Tts._mira,
             Tts._moss,
-            Tts._qwen3,
-            Tts._pocket,
+            Tts._moss_server,
             Tts._omnivoice,
+            Tts._oute,
+            Tts._pocket,
+            Tts._qwen3,
+            Tts._vibevoice,
         ]
         for item in items:
             if item is not None:
@@ -263,21 +262,22 @@ class Tts:
     def get_instance() -> TtsBaseModel:
         # Returns existing or newly instantiated instance
         MAP: dict[TtsModelType, Callable] = {
-            TtsModelType.OUTE: Tts.get_oute,
             TtsModelType.CHATTERBOX: Tts.get_chatterbox,
-            TtsModelType.FISH_S1: Tts.get_fish,
+            TtsModelType.FISH_S1: Tts.get_fish_s1,
             TtsModelType.FISH_S2: Tts.get_fish_s2,
-            TtsModelType.HIGGS_V2: Tts.get_higgs,
-            TtsModelType.VIBEVOICE: Tts.get_vibevoice,
-            TtsModelType.INDEXTTS2: Tts.get_indextts2,
+            TtsModelType.FISH_S2_SERVER: Tts.get_fish_s2_server,
             TtsModelType.GLM: Tts.get_glm,
+            TtsModelType.HIGGS_V2: Tts.get_higgs,
+            TtsModelType.HIGGS_V3_SERVER: Tts.get_higgs_v3,
+            TtsModelType.INDEXTTS2: Tts.get_indextts2,
             TtsModelType.MIRA: Tts.get_mira,
             TtsModelType.MOSS: Tts.get_moss,
-            TtsModelType.QWEN3TTS: Tts.get_qwen3,
-            TtsModelType.POCKET: Tts.get_pocket,
+            TtsModelType.MOSS_SERVER: Tts.get_moss_server,
             TtsModelType.OMNIVOICE: Tts.get_omnivoice,
-            TtsModelType.SERVER_HIGGS_V3: Tts.get_higgs_v3,
-            TtsModelType.SERVER_MOSS: Tts.get_moss_server
+            TtsModelType.OUTE: Tts.get_oute,
+            TtsModelType.POCKET: Tts.get_pocket,
+            TtsModelType.QWEN3TTS: Tts.get_qwen3,
+            TtsModelType.VIBEVOICE: Tts.get_vibevoice
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -316,7 +316,7 @@ class Tts:
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
         }
-        if Tts._type in (TtsModelType.SERVER_HIGGS_V3, TtsModelType.SERVER_MOSS):
+        if Tts._type.value.is_sgl_omni: # xxx verify
             kwargs["print_generation_request"] = print_generation_request
 
         return instance.generate_using_project(
@@ -334,7 +334,7 @@ class Tts:
 
     @staticmethod
     def clear_continuation_if_reason(reason: Reason) -> None:
-        if reason in Tts.CONTINUATION_BREAK_REASONS:
+        if reason in { Reason.PARAGRAPH, Reason.SPACE_BREAK, Reason.SECTION_BREAK }:
             Tts.clear_continuation()
 
     @staticmethod
@@ -343,29 +343,22 @@ class Tts:
         MAP = {
             TtsModelType.OUTE: Tts._oute,
             TtsModelType.CHATTERBOX: Tts._chatterbox,
-            TtsModelType.FISH_S1: Tts._fish,
+            TtsModelType.FISH_S1: Tts._fish_s1,
             TtsModelType.FISH_S2: Tts._fish_s2,
-            TtsModelType.HIGGS_V2: Tts._higgs,
-            TtsModelType.SERVER_HIGGS_V3: Tts._higgs_v3,
+            TtsModelType.FISH_S2_SERVER: Tts._fish_s2,
+            TtsModelType.HIGGS_V2: Tts._higgs_v2,
+            TtsModelType.HIGGS_V3_SERVER: Tts._higgs_v3,
             TtsModelType.VIBEVOICE: Tts._vibevoice,
             TtsModelType.INDEXTTS2: Tts._indextts2,
             TtsModelType.GLM: Tts._glm,
             TtsModelType.MIRA: Tts._mira,
             TtsModelType.MOSS: Tts._moss,
+            TtsModelType.MOSS_SERVER: Tts._moss,
             TtsModelType.QWEN3TTS: Tts._qwen3,
             TtsModelType.POCKET: Tts._pocket,
             TtsModelType.OMNIVOICE: Tts._omnivoice,
         }
         return MAP.get(Tts._type, None)
-
-    @staticmethod
-    def get_oute() -> OuteBaseModel:
-        if not Tts._oute:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
-            from tts_audiobook_tool.tts_models.oute_model import OuteModel
-            Tts._oute = OuteModel()
-            printt()
-        return Tts._oute
 
     @staticmethod
     def get_chatterbox() -> ChatterboxBaseModel:
@@ -381,8 +374,8 @@ class Tts:
         return Tts._chatterbox
 
     @staticmethod
-    def get_fish() -> FishS1BaseModel:
-        if not Tts._fish:
+    def get_fish_s1() -> FishS1BaseModel:
+        if not Tts._fish_s1:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
 
             if device == "cuda":
@@ -398,10 +391,10 @@ class Tts:
             Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
             
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
-            Tts._fish = FishS1Model(device, compile_enabled)
+            Tts._fish_s1 = FishS1Model(device, compile_enabled)
             printt()
 
-        return Tts._fish
+        return Tts._fish_s1
 
     @staticmethod
     def get_fish_s2() -> FishS2BaseModel:
@@ -427,16 +420,37 @@ class Tts:
         return Tts._fish_s2
 
     @staticmethod
+    def get_fish_s2_server() -> FishS2ServerBaseModel:
+        if not Tts._fish_s2_server:
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
+            from tts_audiobook_tool.tts_models.fish_s2_server_model import FishS2ServerModel
+            Tts._fish_s2_server = FishS2ServerModel()
+            printt()
+        return Tts._fish_s2_server
+
+    @staticmethod
+    def get_glm() -> GlmBaseModel:
+        if not Tts._glm:
+            device = "cuda" # cpu not currently supported
+            sr = Tts._model_params["glm_sr"]
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
+
+            from tts_audiobook_tool.tts_models.glm_model import GlmModel
+            Tts._glm = GlmModel(device, sr)
+            printt()
+        return Tts._glm
+
+    @staticmethod
     def get_higgs() -> HiggsV2BaseModel:
-        if not Tts._higgs:
+        if not Tts._higgs_v2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
             
             from tts_audiobook_tool.tts_models.higgs_v2_model import HiggsV2Model
-            Tts._higgs = HiggsV2Model(device)
+            Tts._higgs_v2 = HiggsV2Model(device)
             printt()
 
-        return Tts._higgs
+        return Tts._higgs_v2
 
     @staticmethod
     def get_higgs_v3() -> HiggsV3ServerBaseModel:
@@ -448,6 +462,47 @@ class Tts:
         return Tts._higgs_v3
 
     @staticmethod
+    def get_indextts2() -> IndexTts2BaseModel:
+        if not Tts._indextts2:
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
+
+            from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
+            Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
+            printt()
+        return Tts._indextts2
+
+    @staticmethod
+    def get_mira() -> MiraBaseModel:
+        if not Tts._mira:
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
+            
+            from tts_audiobook_tool.tts_models.mira_model import MiraModel
+            Tts._mira = MiraModel()
+            printt()
+        return Tts._mira
+
+    @staticmethod
+    def get_moss() -> MossBaseModel:
+        if not Tts._moss:
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
+            target_string = target.removeprefix("OpenMOSS-Team/")
+            target_string = ellipsize_path_for_menu(target_string)
+
+            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
+            if looks_like_path and not os.path.exists(target):
+                raise ValueError(f"MOSS model path not found: '{target}'")
+
+            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
+
+            from tts_audiobook_tool.tts_models.moss_model import MossModel
+            Tts._moss = MossModel(device=device, model_target=target)
+            printt()
+        return Tts._moss
+
+    @staticmethod
     def get_moss_server() -> MossServerBaseModel:
         if not Tts._moss_server:
             Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
@@ -455,6 +510,83 @@ class Tts:
             Tts._moss_server = MossServerModel()
             printt()
         return Tts._moss_server
+
+    @staticmethod
+    def get_omnivoice() -> OmniVoiceBaseModel:
+        if not Tts._omnivoice:
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            model_target = Tts._model_params.get("omnivoice_target", "") \
+                        or OmniVoiceBaseModel.DEFAULT_REPO_ID
+            short_name = Tts.get_type().value.ui["short_name"]
+
+            target_string = model_target
+            target_string = target_string.removeprefix("k2-fsa/")
+            target_string = ellipsize_path_for_menu(target_string)
+
+            if model_target == OmniVoiceBaseModel.DEFAULT_REPO_ID:
+                model_description = short_name
+            else:
+                model_description = f"{short_name} {COL_DIM}({target_string}){COL_DEFAULT}"
+
+            Tts._set_instance_info(InstanceDisplayInfo(model_description, device))
+
+            from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
+            Tts._omnivoice = OmniVoiceModel(
+                device=device,
+                model_target=model_target,
+            )
+            printt()
+        return Tts._omnivoice
+
+    @staticmethod
+    def get_oute() -> OuteBaseModel:
+        if not Tts._oute:
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
+            from tts_audiobook_tool.tts_models.oute_model import OuteModel
+            Tts._oute = OuteModel()
+            printt()
+        return Tts._oute
+
+    @staticmethod
+    def get_pocket() -> PocketBaseModel:
+        if not Tts._pocket:
+            language = Tts._model_params.get("pocket_model_code", "")
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
+            
+            from tts_audiobook_tool.tts_models.pocket_model import PocketModel
+            Tts._pocket = PocketModel(device=device, language=language)
+            printt()
+        return Tts._pocket
+    
+    @staticmethod
+    def get_qwen3() -> Qwen3BaseModel:
+        
+        if not Tts._qwen3:
+
+            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+
+            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
+
+            target_string = target
+            target_string = target_string.removeprefix("Qwen/")
+            target_string = ellipsize_path_for_menu(target_string)
+
+            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
+            if looks_like_path and not os.path.exists(target):
+                raise ValueError(f"Qwen3 model path not found: '{target}'")
+
+            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
+
+            from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
+            try:
+                Tts._qwen3 = Qwen3Model(target, device)
+            except Exception as e:
+                Tts._qwen3 = None
+                raise RuntimeError(f"Failed to load Qwen3 model from '{target}': {e}") from e
+            printt()
+
+        return Tts._qwen3
 
     @staticmethod
     def get_vibevoice() -> VibeVoiceBaseModel:
@@ -487,136 +619,15 @@ class Tts:
         return Tts._vibevoice
 
     @staticmethod
-    def get_indextts2() -> IndexTts2BaseModel:
-        if not Tts._indextts2:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
-
-            from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
-            Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
-            printt()
-        return Tts._indextts2
-
-    @staticmethod
-    def get_glm() -> GlmBaseModel:
-        if not Tts._glm:
-            device = "cuda" # cpu not currently supported
-            sr = Tts._model_params["glm_sr"]
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
-
-            from tts_audiobook_tool.tts_models.glm_model import GlmModel
-            Tts._glm = GlmModel(device, sr)
-            printt()
-        return Tts._glm
-
-    @staticmethod
-    def get_mira() -> MiraBaseModel:
-        if not Tts._mira:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
-            
-            from tts_audiobook_tool.tts_models.mira_model import MiraModel
-            Tts._mira = MiraModel()
-            printt()
-        return Tts._mira
-
-    @staticmethod
-    def get_moss() -> MossBaseModel:
-        if not Tts._moss:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
-            target_string = target.removeprefix("OpenMOSS-Team/")
-            target_string = ellipsize_path_for_menu(target_string)
-
-            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
-            if looks_like_path and not os.path.exists(target):
-                raise ValueError(f"MOSS model path not found: '{target}'")
-
-            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
-
-            from tts_audiobook_tool.tts_models.moss_model import MossModel
-            Tts._moss = MossModel(device=device, model_target=target)
-            printt()
-        return Tts._moss
-
-    @staticmethod
-    def get_qwen3() -> Qwen3BaseModel:
-        
-        if not Tts._qwen3:
-
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-
-            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
-
-            target_string = target
-            target_string = target_string.removeprefix("Qwen/")
-            target_string = ellipsize_path_for_menu(target_string)
-
-            looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
-            if looks_like_path and not os.path.exists(target):
-                raise ValueError(f"Qwen3 model path not found: '{target}'")
-
-            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
-
-            from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
-            try:
-                Tts._qwen3 = Qwen3Model(target, device)
-            except Exception as e:
-                Tts._qwen3 = None
-                raise RuntimeError(f"Failed to load Qwen3 model from '{target}': {e}") from e
-            printt()
-
-        return Tts._qwen3
-
-    @staticmethod
-    def get_pocket() -> PocketBaseModel:
-        if not Tts._pocket:
-            language = Tts._model_params.get("pocket_model_code", "")
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
-            
-            from tts_audiobook_tool.tts_models.pocket_model import PocketModel
-            Tts._pocket = PocketModel(device=device, language=language)
-            printt()
-        return Tts._pocket
-    
-    @staticmethod
-    def get_omnivoice() -> OmniVoiceBaseModel:
-        if not Tts._omnivoice:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            model_target = Tts._model_params.get("omnivoice_target", "") \
-                        or OmniVoiceBaseModel.DEFAULT_REPO_ID
-            short_name = Tts.get_type().value.ui["short_name"]
-
-            target_string = model_target
-            target_string = target_string.removeprefix("k2-fsa/")
-            target_string = ellipsize_path_for_menu(target_string)
-
-            if model_target == OmniVoiceBaseModel.DEFAULT_REPO_ID:
-                model_description = short_name
-            else:
-                model_description = f"{short_name} {COL_DIM}({target_string}){COL_DEFAULT}"
-
-            Tts._set_instance_info(InstanceDisplayInfo(model_description, device))
-
-            from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
-            Tts._omnivoice = OmniVoiceModel(
-                device=device,
-                model_target=model_target,
-            )
-            printt()
-        return Tts._omnivoice
-
-    @staticmethod
     def clear_tts_model() -> None:
         model = Tts.get_instance_if_exists()
         if model:
             model.kill()
             Tts._oute = None
             Tts._chatterbox = None
-            Tts._fish = None
+            Tts._fish_s1 = None
             Tts._fish_s2 = None
-            Tts._higgs = None
+            Tts._higgs_v2 = None
             Tts._higgs_v3 = None
             Tts._vibevoice = None
             Tts._indextts2 = None

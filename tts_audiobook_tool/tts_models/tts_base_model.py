@@ -178,7 +178,7 @@ class TtsBaseModel(ABC):
         # Default implementation is for model whose 'salient info' consists of voice clone only
         
         # Get voice filename
-        if not cls.INFO.voice_file_name_attr:
+        if not cls.INFO.voice_target_attr:
             raise Exception("Logic error - must override this method")
         voice_file_name = cls.get_voice_value(project)
         if not voice_file_name:
@@ -228,7 +228,7 @@ class TtsBaseModel(ABC):
         # Default implementation is for model where 'salient info' consists of voice clone only
         
         info = cls.INFO
-        if not info.voice_file_name_attr:
+        if not info.voice_target_attr:
             raise Exception("Logic error - must override this method")
 
         voice_file_name = cls.get_voice_value(project)
@@ -257,7 +257,7 @@ class TtsBaseModel(ABC):
         Returns the active voice reference for this model and project (could be filename or other).
         Override for models that store voice across multiple fields.
         """
-        return getattr(project, cls.INFO.voice_file_name_attr, "")
+        return getattr(project, cls.INFO.voice_target_attr, "")
 
     @classmethod
     def get_missing_voice_file_issue(
@@ -269,7 +269,7 @@ class TtsBaseModel(ABC):
         Returns a blocking issue if the given configured voice filename is non-empty
         but does not exist under the project directory.
         """
-        voice_file_name_attr = voice_file_name_attr or cls.INFO.voice_file_name_attr
+        voice_file_name_attr = voice_file_name_attr or cls.INFO.voice_target_attr
         if not voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
@@ -299,10 +299,10 @@ class TtsBaseModel(ABC):
     @classmethod
     def _get_standard_voice_blocker(cls, project: Project) -> ReadinessIssue | None:
 
-        if not cls.INFO.voice_file_name_attr:
+        if not cls.INFO.voice_target_attr:
             raise Exception("Logic error - must override this method")
 
-        if cls.INFO.requires_voice and not getattr(project, cls.INFO.voice_file_name_attr, ""):
+        if cls.INFO.requires_voice and not getattr(project, cls.INFO.voice_target_attr, ""):
             return ReadinessIssue("voice sample", "A voice clone sample is required")
 
         err = cls.get_missing_voice_file_issue(project)
@@ -315,7 +315,7 @@ class TtsBaseModel(ABC):
 
         if self.INFO.requires_voice:
             return ""
-        if not self.INFO.voice_file_name_attr:
+        if not self.INFO.voice_target_attr:
             return ""
 
         if self.get_voice_value(project):

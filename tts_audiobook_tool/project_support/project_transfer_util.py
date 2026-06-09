@@ -114,7 +114,7 @@ class ProjectTransferUtil:
         ]
 
         for model_info in TtsModelType:
-            attrs = [model_info.value.voice_file_name_attr, *model_info.value.extra_file_attrs]
+            attrs = [model_info.value.voice_target_attr, *model_info.value.extra_file_attrs]
             for attr in attrs:
                 if not attr:
                     continue

@@ -18,6 +18,8 @@ class VoiceMossServerMenu:
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
+            # Rem, we CAN utilize local voice clone path because it gets transmitted
+            # as data uri (many other sgl-omni per-model apis do NOT support this)
             VoiceMossShared.append_voice_items(items, state)
             items.append(VoiceMossShared.make_temperature_item(state, MossServerBaseModel.CONFIG))
             items.append(VoiceMossShared.make_audio_top_p_item(state, MossServerBaseModel.CONFIG))

@@ -209,7 +209,7 @@ class SglOmniUtil:
             if on_stream_end is not None:
                 on_stream_end()
 
-            return Sound(np.concatenate(chunks), sample_rate or TtsModelType.SERVER_HIGGS_V3.value.sample_rate)
+            return Sound(np.concatenate(chunks), sample_rate or TtsModelType.HIGGS_V3_SERVER.value.sample_rate)
 
         except Exception as e:
             return make_error_string(e)
@@ -241,7 +241,7 @@ class SglOmniUtil:
             sr = Tts.get_type().value.sample_rate
             L.i(f"Samplerate unknown, falling back to TtsInfo value {sr}")
 
-        return Sound(data, sr or TtsModelType.SERVER_HIGGS_V3.value.sample_rate)
+        return Sound(data, sr or TtsModelType.HIGGS_V3_SERVER.value.sample_rate)
 
     @staticmethod
     def generate_concurrent(endpoint: str, payloads: list[dict], print_request: bool = False) -> list[Sound] | str:
