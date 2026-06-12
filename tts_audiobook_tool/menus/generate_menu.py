@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tts_audiobook_tool.app_types import Strictness, SttVariant
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_support import app_display, hints
+from tts_audiobook_tool.app_support import app_display, app_hint_util, hints
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.constants_config import *
@@ -456,7 +456,9 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
     if is_regen:
         hints.show_hint_if_necessary(state.prefs, HINT_REGEN)
     else:
-        app_support.show_pre_inference_hints(state.prefs, state.project)
+        should_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
+        if not should_continue:
+            return
 
     # Print confirmation info, and confirm
     if not is_regen:

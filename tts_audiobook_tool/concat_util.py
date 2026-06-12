@@ -9,7 +9,7 @@ import numpy as np
 from numpy import ndarray
 
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_support import hints
+from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_manager import ModelManager
@@ -132,7 +132,7 @@ class ConcatUtil:
 
         ModelManager.clear_sidon_upsampler()
 
-        hints.show_player_hint_if_necessary(state.prefs)
+        app_hint_util.show_player_hint(state.prefs)
 
         hotkey = ask.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file explorer: ")
         printt()

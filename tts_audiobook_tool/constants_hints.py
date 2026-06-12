@@ -195,6 +195,14 @@ HINT_UPDATED_UI = Hint(
 You can revert this change the Options menu if you prefer the old behavior."""
 )
 
+HINT_MOSS_REMOTE_CODE = Hint(
+    "moss_remote_code",
+    "Caution",
+"""MOSS-TTS utilizes remotely downloaded code to operate:
+%1
+Be aware of the risks before continuing."""
+)
+
 HINT_MOSS_TEMPERATURE = Hint(
     "moss_temperature",
     "Note",

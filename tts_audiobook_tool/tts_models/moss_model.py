@@ -43,6 +43,7 @@ class MossModel(MossBaseModel):
 
         if target_util.is_hf_repo_id_syntax(model_target):
             
+            # TODO: Should not derive revision by repo id. Should pass revision into ctor.
             preset = MossConfigs.get_preset_by_target(model_target)
             revision = preset.value.revision if preset else None
             if revision:

@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import numpy as np
 
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -64,6 +65,11 @@ class Server:
         s += f"{COL_ACCENT}{text_util.make_terminal_hyperlink(self._project.dir_path, is_file=True)}"
         printt(s)
         printt()
+
+        can_continue = app_hint_util.show_pre_inference_hints(prefs, self._project)
+        if not can_continue:
+            printt("Exiting")
+            exit(0)
 
         # PriorityQueue allows for inserting items at front
         self._queue: queue.PriorityQueue[tuple[int, int, PromptItem]] = queue.PriorityQueue()

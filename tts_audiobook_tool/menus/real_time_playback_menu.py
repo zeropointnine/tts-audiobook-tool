@@ -1,6 +1,6 @@
-from tts_audiobook_tool import app_support
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool import ask_phrase_groups
+from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import readiness
@@ -198,7 +198,9 @@ def do_start(state: State) -> None:
         return
 
     # Show pre-inference hint/warning if necessary
-    app_support.show_pre_inference_hints(state.prefs, state.project)
+    can_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
+    if not can_continue:
+        return
 
     # Confirm and start proper
     if ask.can_hotkey:

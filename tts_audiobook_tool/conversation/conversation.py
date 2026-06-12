@@ -10,7 +10,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.conversation.conversation_internals import PromptBuilder, ResponseSession, Ui
-from tts_audiobook_tool.app_support import app_memory
+from tts_audiobook_tool.app_support import app_hint_util, app_memory
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.util import *
 
@@ -120,6 +120,10 @@ class Conversation:
             lines = [item.verbose for item in errors]
             s = "\n".join(lines)
             print_feedback(s, is_error=True)
+            return False
+
+        can_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
+        if not can_continue:
             return False
 
         # Warm up models

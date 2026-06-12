@@ -13,19 +13,13 @@ while the more domain-specific support code lives in dedicated submodules.
 import logging
 import os
 import random
-from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_support import app_memory
-from tts_audiobook_tool.app_types import ModelWarmUpResult, SttVariant
+from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
-
-if TYPE_CHECKING:
-    from tts_audiobook_tool.prefs import Prefs
 
 is_logging_initialized = False
 
@@ -74,26 +68,6 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
     np.random.seed(seed)
-
-
-def show_pre_inference_hints(prefs: Prefs, p_project) -> None:
-    """ Shows one-time hints or warnings related to doing inference """
-    from tts_audiobook_tool.project import Project
-    from tts_audiobook_tool.tts import Tts
-
-    project: Project = p_project
-
-    if Tts.get_type() == TtsModelType.FISH_S1 and project.fish_s1_compile_enabled:
-        hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
-    elif Tts.get_type() == TtsModelType.FISH_S2 and project.fish_s2_compile_enabled:
-        hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
-
-    import torch
-    if platform.system() == "Linux" and torch.cuda.is_available():
-        if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
-            version = torch.backends.cudnn.version()
-            if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
-                hints.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
 
 
 def play_done_sound() -> None:

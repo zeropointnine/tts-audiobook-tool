@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import pickle
 import time
-from tts_audiobook_tool.app_support import app_hashing, app_paths, hints
+from tts_audiobook_tool.app_support import app_hashing, app_paths, hints, app_hint_util
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool import ask
@@ -238,7 +238,7 @@ def make(
         ask.ask_enter_to_continue()
 
     if not save_error:
-        hints.show_player_hint_if_necessary(prefs)
+        app_hint_util.show_player_hint(prefs)
 
     return bool(save_error)
 
