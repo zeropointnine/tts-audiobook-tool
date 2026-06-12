@@ -15,8 +15,9 @@ def gc_ram_vram() -> None:
     gc.collect()
     import torch
     if torch.cuda.is_available():
+        torch.cuda.synchronize() 
         torch.cuda.empty_cache()
-
+        torch.cuda.ipc_collect()
 
 def get_system_ram() -> tuple[int, int] | None:
     """

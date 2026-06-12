@@ -2,6 +2,7 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.enhance import enhance_flow
+from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil, EpubPromptMessages
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.sound.mp3_concat import SoundConcatTranscodeUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
@@ -21,6 +22,10 @@ class ToolsMenu:
 
         def item_maker(_: State) -> list[MenuItem]:
 
+            epub_to_text_item = MenuItem(
+                "Convert EPUB to text file",
+                lambda _, __: ToolsMenu.ask_convert_epub_to_text_file(state)
+            )
             enhance_item = MenuItem(
                 "Enhance a pre-existing audiobook", 
                 lambda _, __: enhance_flow.ask_and_make(state)
@@ -35,9 +40,44 @@ class ToolsMenu:
             )
             speed_item = MenuItem("Speed up voice sample", speed_handler)
             
-            return [enhance_item, mp3s_item, transcode_item, speed_item]
+            return [epub_to_text_item, enhance_item, mp3s_item, transcode_item, speed_item]
         
         MenuUtil.menu(state, "Tools", item_maker, breadcrumb="Tools")
+
+    @staticmethod
+    def ask_convert_epub_to_text_file(state: State) -> None:
+        epub_path = EpubMenuUtil.ask_epub_path(
+            state.prefs,
+            EpubPromptMessages(
+                console_message="Enter file path to EPUB file",
+                dialog_title="Select EPUB file",
+            )
+        )
+        if not epub_path:
+            return
+
+        epub_import_result = EpubMenuUtil.import_epub(
+            epub_path=epub_path,
+            max_words=state.project.max_words,
+            segmentation_strategy=state.project.segmentation_strategy,
+            language_code=state.project.language_code,
+        )
+        if epub_import_result is None:
+            return
+        if not epub_import_result.raw_text.strip():
+            printt()
+            ask.ask_enter_to_continue("No text found in EPUB.")
+            return
+
+        EpubMenuUtil.print_import_info(epub_import_result)
+        text_file_path = EpubMenuUtil.make_text_file_path(epub_path)
+        err = EpubMenuUtil.save_text_file(epub_import_result.raw_text, text_file_path)
+        if err:
+            ask.ask_error(err)
+            return
+
+        EpubMenuUtil.print_text_file_created(text_file_path)
+        ask.ask_enter_to_continue()
 
     @staticmethod
     def ask_save_speed_up_audio() -> None:

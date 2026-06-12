@@ -3,6 +3,7 @@ from tts_audiobook_tool.app_support import app_display
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
+from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
@@ -182,24 +183,16 @@ def on_set_text(state: State, item: MenuItem) -> bool:
                 return False
 
         case "epub":
-            epub_path = ask_epub_path(state)
+            epub_path = EpubMenuUtil.ask_epub_path(state.prefs)
             if not epub_path:
                 return False
-            try:
-                printt(f"{COL_DIM_ITALICS}Importing epub file... ")
-                epub_import_result = EpubExtractor.import_epub(
-                    epub_path=epub_path,
-                    max_words=state.project.max_words,
-                    segmentation_strategy=state.project.segmentation_strategy,
-                    language_code=state.project.language_code,
-                )
-            except ImportError as e:
-                printt()
-                ask.ask_error(str(e))
-                return False
-            except Exception as e:
-                printt()
-                ask.ask_error(f"Error importing EPUB: {e}")
+            epub_import_result = EpubMenuUtil.import_epub(
+                epub_path=epub_path,
+                max_words=state.project.max_words,
+                segmentation_strategy=state.project.segmentation_strategy,
+                language_code=state.project.language_code,
+            )
+            if epub_import_result is None:
                 return False
 
             phrase_groups = epub_import_result.phrase_groups
@@ -211,14 +204,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
                 return False
 
             # Print info/warnings
-            printt()
-            printt(f"{COL_ACCENT}Import info:{COL_DEFAULT}")
-            for warning in epub_import_result.significant_warnings:
-                printt(f"- {warning}")
-            num_sections = len(epub_import_result.chapters)
-            noun = make_noun("EPUB section", "EPUB sections", num_sections)
-            printt(f"- Imported {COL_ACCENT}{num_sections}{COL_DEFAULT} {noun} using the EPUB's built-in structure.")
-            printt()
+            EpubMenuUtil.print_import_info(epub_import_result)
 
             ask.ask_enter_to_continue("Press enter to review text segmentation info: ", is_replacement=True)
 
@@ -293,28 +279,6 @@ def on_set_text(state: State, item: MenuItem) -> bool:
         print_feedback("Project text has been set")
 
     return True
-
-def ask_epub_path(state: State) -> str:
-    if state.prefs.last_text_dir and os.path.exists(state.prefs.last_text_dir):
-        initial_dir = state.prefs.last_text_dir
-    else:
-        initial_dir = ""
-    path = ask.ask_file_path(
-        "Enter EPUB file path: ",
-        "Select EPUB file",
-        filetypes=[("EPUB files", "*.epub"), ("All files", "*.*")],
-        initialdir=initial_dir
-    )
-    if not path:
-        return ""
-    if not os.path.exists(path):
-        ask.ask_error("No such file")
-        return ""
-    if os.path.splitext(path)[1].lower() != ".epub":
-        ask.ask_error("Must select an .epub file")
-        return ""
-    state.prefs.last_text_dir = str(Path(path).parent)
-    return path
 
 def on_ask_max_size(state: State, _) -> None:
 
