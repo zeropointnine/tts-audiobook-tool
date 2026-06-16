@@ -21,7 +21,7 @@ class SoundUtil:
         """        
         if sound.sr == target_sr:
             return sound
-        new_data = librosa.resample(sound.data, orig_sr=sound.sr, target_sr=target_sr)
+        new_data = librosa.resample(sound.data, orig_sr=sound.sr, target_sr=target_sr, res_type="soxr_hq")
         return Sound(new_data, target_sr)
 
     @staticmethod

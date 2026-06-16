@@ -439,7 +439,7 @@ class TtsModelType(Enum):
             "opt_in_url": "https://github.com/kyutai-labs/pocket-tts" # special case
         },
         substitutions=[
-            ("—", ", "), ("─", ", ")
+            # Generally handles caesura-related punctuation decently and with natural variations in duration
         ]
     )
 
@@ -538,7 +538,7 @@ class TtsModelType(Enum):
             "project_links": ["https://github.com/k2-fsa/OmniVoice", "https://huggingface.co/k2-fsa/OmniVoice"]
         },
         substitutions=[
-            ("\u2014", ", "), ("\u2500", ", ")  # em-dash and box-drawing
+            # Generally handles caesura-related punctuation decently and with natural variations in duration
         ]
     )
 
@@ -553,9 +553,9 @@ class TtsModelType(Enum):
         file_tag="higgs_v3",
         sample_rate=24000,
         max_words_default=40,
-        max_words_reco_range=(40, 80), # xxx
+        max_words_reco_range=(40, 80),
         voice_target_attr="higgs_v3_voice_target",
-        requires_voice=False, # xxx
+        requires_voice=False,
         voice_transcript_attr="higgs_v3_voice_transcript", 
         extra_file_attrs=[],
         batch_size_attr="higgs_v3_batch_size",
@@ -622,7 +622,7 @@ class TtsModelType(Enum):
     FISH_S2_SERVER = TtsModelSpec(
         id="server_fish_s2",
         is_sgl_omni=True,
-        server_model_id_substring="fish",
+        server_model_id_substring="fish", # b/c sgl omni only supports one type of fish model which is v2
         local_module_test="",
         local_torch_devices = [],
         file_tag="s2-pro",

@@ -75,7 +75,7 @@ def get_from_std_in(
     if platform.system() == "Windows":
         s = f"Finish with {COL_ACCENT}[CTRL-Z + ENTER] {COL_DEFAULT}on its own line"
     else:
-        s = "Finish with [ENTER + CTRL-D]"
+        s = f"Finish with {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT}"
     printt(s)
     printt()
     raw_text = ask.ask_multiline()
