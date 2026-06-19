@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 import os
 import time
 
@@ -34,6 +35,11 @@ from tts_audiobook_tool.app_types.validation_result import MusicFailResult, Skip
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.transcriber import Transcriber
 
+
+@dataclass(frozen=True)
+class TtsModelError:
+    message: str
+
 class GenerateUtil:
 
     @staticmethod
@@ -51,7 +57,8 @@ class GenerateUtil:
             When set to 1, batch mode is effectively disabled.
 
         Returns:
-            True if ended because interrupted.
+            True if ended because interrupted (user pressed control-c)
+            or aborted (OOM detected or too many consecutive model errors)
         """
 
         project = state.project
@@ -103,9 +110,12 @@ class GenerateUtil:
         best_word_error_counts = dict(preexisting_word_error_counts)
         gen_val_sum_time = 0
         start_time = time.time()
+        consecutive_model_errors = 0
+        max_consecutive_model_errors = 5
 
         Interrupts().set("generating")
         did_interrupt = False
+        did_abort_model_errors = False
 
         # Audiobook generation is a top-level generation run. Start from a
         # fresh rolling-continuation context, independent of any prior run.
@@ -157,9 +167,9 @@ class GenerateUtil:
             gen_val_sum_time += (time.time() - gen_start_time)
 
             # Check for OOM in results and break early if detected
-            if any(isinstance(r, str) and is_oom_error_message(r) for r in results):
+            if any(GenerateUtil.is_error_result_oom(r) for r in results):
                 printt()
-                first_oom = next(r for r in results if isinstance(r, str) and is_oom_error_message(r))
+                first_oom = next(GenerateUtil.get_error_result_message(r) for r in results if GenerateUtil.is_error_result_oom(r))
                 print_gen_oom_message(first_oom)
                 Tts.clear_continuation()
                 did_interrupt = True
@@ -170,7 +180,11 @@ class GenerateUtil:
 
             for i, result in enumerate(results):
 
-                if isinstance(result, str):
+                is_model_error = isinstance(result, TtsModelError)
+                if isinstance(result, TtsModelError):
+                    error_string = result.message
+                    validation_result = None
+                elif isinstance(result, str):
                     error_string = result
                     validation_result = None
                 else:
@@ -192,16 +206,24 @@ class GenerateUtil:
 
                 if error_string:
                     # Model error
+                    if is_model_error:
+                        consecutive_model_errors += 1
+                    else:
+                        consecutive_model_errors = 0
+                    did_abort_model_errors = consecutive_model_errors >= max_consecutive_model_errors
                     val_line = f"{COL_ERROR}Error: {error_string}"
-                    if new_retry_count > max_retries:
+                    if did_abort_model_errors:
+                        val_line += f"; {COL_ERROR}too many TTS model errors in a row"
+                    elif new_retry_count > max_retries:
                         num_errored += 1
                         val_line += f"; {COL_ERROR}max retries reached"
                     else:
                         re_adds.append((index, new_retry_count))
                         val_line += f"; {COL_DEFAULT}will retry"
                     message_lines.append(val_line)
-                
+                 
                 elif validation_result:
+                    consecutive_model_errors = 0
 
                     val_line = f"{validation_result.get_ui_message_with_post_processing()}"
                     validation_word_error_count: int | None = None
@@ -304,6 +326,16 @@ class GenerateUtil:
                 if i < len(results) - 1:
                     printt()
 
+                if did_abort_model_errors:
+                    break
+
+            if did_abort_model_errors:
+                printt()
+                GenerateUtil.print_consecutive_model_errors_message(max_consecutive_model_errors)
+                Tts.clear_continuation()
+                did_interrupt = True
+                break
+
             # Print current memory usage
             printt()
             s = f"Memory: {COL_DIM}{text_util.strip_ansi_codes(app_support.make_memory_string())}"
@@ -356,7 +388,7 @@ class GenerateUtil:
         force_random_seed: bool,
         is_realtime: bool,
         is_skip_reason_buffer: bool=False
-    ) -> list[ValidationResult | str]:
+    ) -> list[ValidationResult | str | TtsModelError]:
         """
         Generates and validates a batch of prompts from the Project text.
         Prints updates.
@@ -394,11 +426,17 @@ class GenerateUtil:
             printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets overwritten
 
         val_start_time = time.time()
-        results: list[ValidationResult | str] = []
+        results: list[ValidationResult | str | TtsModelError] = []
 
         for i, gen_result in enumerate(gen_results):
 
             index = indices[i]
+
+            if isinstance(gen_result, TtsModelError):
+                err = gen_result.message
+                printt(f"Text segment {index+1} - error: {err}")
+                results.append(gen_result)
+                continue
 
             if isinstance(gen_result, str):
                 err = gen_result
@@ -466,7 +504,7 @@ class GenerateUtil:
             is_realtime: bool,
             save_debug_files: bool,
             print_generation_request: bool = False
-        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str]:
+        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str | TtsModelError]:
         """
         Core audio generation function.
         
@@ -503,13 +541,20 @@ class GenerateUtil:
         # `result` is either n generated Sounds or a single error string
         if isinstance(result, str): 
             Tts.clear_continuation()
-            return [result for _ in range(len(prompts))] # return n error strings
+            return [TtsModelError(result) for _ in range(len(prompts))] # return n model errors
 
         sounds = [result] if isinstance(result, Sound) else result
         
-        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str] = []
+        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str | TtsModelError] = []
 
         for i, sound in enumerate(sounds):
+
+            if isinstance(sound, str):
+                result = TtsModelError(sound)
+                results.append(result)
+                Tts.clear_continuation()
+                Tts.clear_continuation_if_reason(phrase_groups[indices[i]].last_reason)
+                continue
 
             if sound.data.size == 0:
                 result = "Model output is empty, discarding"
@@ -561,6 +606,27 @@ class GenerateUtil:
             Tts.clear_continuation_if_reason(phrase_groups[indices[i]].last_reason)
 
         return results
+
+    @staticmethod
+    def get_error_result_message(result: ValidationResult | str | TtsModelError) -> str:
+        if isinstance(result, TtsModelError):
+            return result.message
+        if isinstance(result, str):
+            return result
+        return ""
+
+    @staticmethod
+    def is_error_result_oom(result: ValidationResult | str | TtsModelError) -> bool:
+        return is_oom_error_message(GenerateUtil.get_error_result_message(result))
+
+    @staticmethod
+    def print_consecutive_model_errors_message(max_consecutive_model_errors: int) -> None:
+        printt(
+            f"{COL_ERROR}Stopping generation: "
+            f"{max_consecutive_model_errors} TTS model errors occurred in a row."
+        )
+        printt(f"{COL_ERROR}Check the TTS model/server before retrying.")
+        printt()
 
     @staticmethod
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:

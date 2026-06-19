@@ -358,7 +358,7 @@ class Tts:
             TtsModelType.GLM: Tts._glm,
             TtsModelType.MIRA: Tts._mira,
             TtsModelType.MOSS: Tts._moss,
-            TtsModelType.MOSS_SERVER: Tts._moss,
+            TtsModelType.MOSS_SERVER: Tts._moss_server,
             TtsModelType.QWEN3TTS: Tts._qwen3,
             TtsModelType.QWEN3TTS_SERVER: Tts._qwen3tts_server,
             TtsModelType.POCKET: Tts._pocket,

@@ -558,6 +558,10 @@ Use `Backend.LLAMACPP`.
 
 ## Virtual environment for SGL-Omni server
 
+> **ℹ️ Note!**
+> SGL-Omni is under active development. Should be treated as experimental for the time being.
+
+
 The app supports server-based TTS inference using SGL-Omni. Install instructions can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially for Windows). You may also need to perform additional per-model install steps as described in the docs.
 
 The following models served through SGL-Omni are supported:

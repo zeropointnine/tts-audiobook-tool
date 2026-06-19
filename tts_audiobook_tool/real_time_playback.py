@@ -4,7 +4,7 @@ import numpy as np
 from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.model_manager import ModelManager
@@ -85,6 +85,8 @@ def start(
     did_interrupt = False
     stream = None
     count = 0
+    consecutive_model_errors = 0
+    max_consecutive_model_errors = 5
 
     start_index, end_index = line_range
     start_index -= 1
@@ -119,17 +121,22 @@ def start(
         # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 x max_retries...
         has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.project.max_retries))
 
-        sound_opt, did_interrupt = generate_full_flow(
-            state, phrase_groups, one_second, has_runway=has_runway
+        sound_opt, did_interrupt, consecutive_model_errors = generate_full_flow(
+            state,
+            phrase_groups,
+            one_second,
+            has_runway=has_runway,
+            consecutive_model_errors=consecutive_model_errors,
+            max_consecutive_model_errors=max_consecutive_model_errors,
         )
-        if did_interrupt:
-            Tts.clear_continuation()
-            break
         if not did_interrupt:
             # generate_full_flow() clears Interrupts at the end, so re-arm
             # Ctrl-C handling for the outer realtime loop and buffer-throttle sleep.
             Interrupts().set("generating")
         if not sound_opt:
+            if did_interrupt:
+                Tts.clear_continuation()
+                break
             printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
             printt()
             continue
@@ -206,6 +213,10 @@ def start(
 
         count += 1
 
+        if did_interrupt:
+            Tts.clear_continuation()
+            break
+
     # Finished
     Interrupts().clear()
 
@@ -250,11 +261,13 @@ def generate_full_flow(
         state: State,
         phrase_groups: list[PhraseGroup],
         index: int,
-        has_runway: bool
-) -> tuple[Sound | None, bool]:
+        has_runway: bool,
+        consecutive_model_errors: int = 0,
+        max_consecutive_model_errors: int = 5,
+) -> tuple[Sound | None, bool, int]:
     """
     Similar to `GenerateUtil.generate_full_flow()` but simpler control flow.
-    Returns tuple: (Sound or None if problem, did_interrupt)
+    Returns tuple: (Sound or None if problem, did_interrupt, consecutive_model_errors)
     """
 
     Interrupts().set("generating")
@@ -278,7 +291,19 @@ def generate_full_flow(
             is_realtime=True,
             is_skip_reason_buffer=not has_runway
         )
-        gen_result = results[0]
+        result = results[0]
+        if isinstance(result, TtsModelError):
+            consecutive_model_errors += 1
+            gen_result = result.message
+        else:
+            consecutive_model_errors = 0
+            gen_result = result
+
+        if consecutive_model_errors >= max_consecutive_model_errors:
+            GenerateUtil.print_consecutive_model_errors_message(max_consecutive_model_errors)
+            Tts.clear_continuation()
+            did_interrupt = True
+            break
 
         # Check for OOM in results and break early to avoid wasting time
         if isinstance(gen_result, str) and is_oom_error_message(gen_result):
@@ -312,7 +337,7 @@ def generate_full_flow(
 
     if isinstance(gen_result, str):
         Tts.clear_continuation()
-        return None, did_interrupt  # is error
+        return None, did_interrupt, consecutive_model_errors  # is error
     else:
         validation_result = gen_result
         Tts.clear_continuation_if_reason(phrase_group.last_reason)
@@ -327,7 +352,7 @@ def generate_full_flow(
                 text = Path(saved_path).name
                 link = text_util.make_terminal_hyperlink(url=url, text=text, is_file=True)
                 printt(f"Saved: {COL_DIM}{link}")
-        return validation_result.sound, did_interrupt
+        return validation_result.sound, did_interrupt, consecutive_model_errors
 
 # ---
 

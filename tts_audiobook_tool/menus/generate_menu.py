@@ -117,18 +117,17 @@ class GenerateMenu:
                 )
             )
 
+            items.append(
+                MenuItem(
+                    make_gen_auto_concat_label, lambda _, __: GenerateMenu.gen_auto_concat_menu(state),
+                )
+            )
+
             # Limit silence gaps
             items.append(
                 MenuItem(
                     make_limit_silence_gaps_label, lambda _, __: GenerateMenu.limit_silence_gaps_menu(state),
                     superlabel="Post-processing"
-                )
-            )
-
-            items.append(
-                MenuItem(
-                    make_gen_auto_concat_label, lambda _, __: GenerateMenu.gen_auto_concat_menu(state),
-                    superlabel=" ", superlabel_no_blank_line=True
                 )
             )
 
@@ -208,7 +207,7 @@ class GenerateMenu:
             state.project.save()
             print_feedback(f"Concatenate when finished set to: {value}")
 
-        SUBHEADING = 'Automatically runs concatenation step ("Create audiobook file")\nwhen generation job is finished.\n'
+        SUBHEADING = 'Automatically runs concatenation step ("Create audiobook file")\nwhen job is finished.\n'
 
         MenuUtil.options_menu(
             state=state,
@@ -345,7 +344,7 @@ def make_tolerance_label(state: State) -> str:
 
 def make_retries_label(state: State) -> str:
     return make_menu_label(
-        label="Generation max retries",
+        label="Max retries",
         value=state.project.max_retries, 
         default=PROJECT_MAX_RETRIES_DEFAULT
     )
