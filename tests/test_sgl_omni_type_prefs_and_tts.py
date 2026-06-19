@@ -57,6 +57,21 @@ def test_sgl_omni_type_ids_are_unique():
     assert len(ids) == len(set(ids))
 
 
+def test_qwen3tts_server_is_sgl_omni_and_non_streaming():
+    info = TtsModelType.QWEN3TTS_SERVER.value
+
+    assert info.is_sgl_omni
+    assert info.server_model_id_substring == "qwen"
+    assert info.voice_target_attr == "qwen3_voice_file_name"
+    assert info.voice_transcript_attr == "qwen3_voice_transcript"
+    assert info.batch_size_attr == "qwen3_server_concurrent_requests"
+    assert not info.can_stream
+
+
+def test_find_tts_type_using_sgl_omni_model_id_finds_qwen3tts_server():
+    assert TtsModelType.find_tts_type_using_sgl_omni_model_id("Qwen/Qwen3-TTS") == TtsModelType.QWEN3TTS_SERVER
+
+
 def test_update_tts_type_uses_explicit_sgl_omni_type_without_model_id_probe(monkeypatch):
     original_type = getattr(Tts, "_type", None)
     had_original_type = hasattr(Tts, "_type")

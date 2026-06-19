@@ -259,6 +259,8 @@ class Project(BaseModel):
     qwen3_repetition_penalty: float = -1
     qwen3_seed: int = -1
 
+    qwen3_server_concurrent_requests: int = 1
+
     pocket_voice_file_name: str = ""
     pocket_predefined_voice: str = ""
     pocket_model_code: str = ""

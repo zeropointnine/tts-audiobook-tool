@@ -237,6 +237,43 @@ class TtsModelType(Enum):
         ]
     )
 
+    FISH_S2_SERVER = TtsModelSpec(
+        id="server_fish_s2",
+        is_sgl_omni=True,
+        server_model_id_substring="fish", # b/c sgl omni only supports one type of fish model which is v2
+        local_module_test="",
+        local_torch_devices = [],
+        file_tag="s2-pro",
+        sample_rate=44100,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="fish_s2_server_voice_target",
+        requires_voice=False, 
+        voice_transcript_attr="fish_s2_server_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="fish_s2_server_concurrent_requests",
+        can_stream=True,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-fish-s2.txt",
+        ui = {
+            "proper_name": "Fish S2-Pro",
+            "short_name": "S2-Pro",
+            "voice_path_console": "",
+            "voice_path_requestor": "",
+            "project_links": [
+                "https://github.com/fishaudio/fish-speech", 
+                "https://huggingface.co/fishaudio/s2-pro", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html"
+            ]
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
+        ]
+    )
+
     HIGGS_V2 = TtsModelSpec(
         id="higgs_v2",
         is_sgl_omni=False,
@@ -264,6 +301,42 @@ class TtsModelType(Enum):
             "voice_path_console": "Enter voice clone audio clip file path (~15 seconds recommended): ",
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/boson-ai/higgs-audio", "https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base"]
+        },
+        substitutions=[ (
+            "\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
+    HIGGS_V3_SERVER = TtsModelSpec(
+        id="server_higgs_v3",
+        is_sgl_omni=True,
+        server_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model, which is v3
+        local_module_test="",
+        local_torch_devices = [],
+        file_tag="higgs_v3",
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="higgs_v3_voice_target",
+        requires_voice=False,
+        voice_transcript_attr="higgs_v3_voice_transcript", 
+        extra_file_attrs=[],
+        batch_size_attr="higgs_v3_batch_size",
+        can_stream=True,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui = {
+            "proper_name": "Higgs Audio V3",
+            "short_name": "Higgs v3",
+            "voice_path_console": "", # not applicable
+            "voice_path_requestor": "", # not applicable
+            "project_links": [
+                "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"
+            ]
         },
         substitutions=[ (
             "\u2014", ", "), ("\u2500", ", ")
@@ -476,6 +549,43 @@ class TtsModelType(Enum):
         ]
     )
 
+    MOSS_SERVER = TtsModelSpec(
+        id="server_moss",
+        is_sgl_omni=True,
+        server_model_id_substring="moss",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="moss",
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="moss_voice_file_name",
+        requires_voice=False,
+        voice_transcript_attr="moss_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="moss_batch_size",
+        can_stream=False,
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=True,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui={
+            "proper_name": "MOSS-TTS",
+            "short_name": "MOSS",
+            "voice_path_console": "",
+            "voice_path_requestor": "",
+            "project_links": [
+                "https://github.com/OpenMOSS/MOSS-TTS", 
+                "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5", 
+                "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"
+            ]
+        },
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
     QWEN3TTS = TtsModelSpec(
         id="qwen3tts",
         is_sgl_omni=False,
@@ -504,9 +614,46 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/QwenLM/Qwen3-TTS", "https://huggingface.co/collections/Qwen/qwen3-tts"]
         },
-        substitutions=[
-            # Does rly well w/ various punctuation
-        ]
+        substitutions=[] # Does well w/ various punctuation
+    )
+
+    QWEN3TTS_SERVER = TtsModelSpec(
+        id="server_qwen3tts",
+        is_sgl_omni=True,
+        server_model_id_substring="qwen",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="qwen3",
+        sample_rate=24000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="qwen3_voice_file_name",
+        requires_voice=True, # Note, this diverges from the local version
+        voice_transcript_attr="qwen3_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="qwen3_server_concurrent_requests",
+        
+        # SGL-Omni API formally supports streaming, and the app is hooked up to handle it,
+        # but it DOES NOT STREAM in practice (chunks come in a burst all at the end), 2026-06.
+        can_stream=False,
+        
+        semantic_trim_last=False,
+        hallucinates_music=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=True,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui={
+            "proper_name": "Qwen3-TTS",
+            "short_name": "Qwen3-TTS",
+            "voice_path_console": "",
+            "voice_path_requestor": "",
+            "project_links": [
+                "https://github.com/QwenLM/Qwen3-TTS",
+                "https://huggingface.co/collections/Qwen/qwen3-tts",
+                "https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html"
+            ]
+        },
+        substitutions=[] # Does well w/ various punctuation
     )
 
     OMNIVOICE = TtsModelSpec(
@@ -543,118 +690,6 @@ class TtsModelType(Enum):
     )
 
     # ---
-
-    HIGGS_V3_SERVER = TtsModelSpec(
-        id="server_higgs_v3",
-        is_sgl_omni=True,
-        server_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model which is v3
-        local_module_test="",
-        local_torch_devices = [],
-        file_tag="higgs_v3",
-        sample_rate=24000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
-        voice_target_attr="higgs_v3_voice_target",
-        requires_voice=False,
-        voice_transcript_attr="higgs_v3_voice_transcript", 
-        extra_file_attrs=[],
-        batch_size_attr="higgs_v3_batch_size",
-        can_stream=True,
-        semantic_trim_last=False,
-        hallucinates_music=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=False,
-        requirements_file_name="requirements-sgl-omni.txt",
-        ui = {
-            "proper_name": "Higgs Audio V3",
-            "short_name": "Higgs v3",
-            "voice_path_console": "", # not applicable
-            "voice_path_requestor": "", # not applicable
-            "project_links": [
-                "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", 
-                "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html", 
-                "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"
-            ]
-        },
-        substitutions=[ (
-            "\u2014", ", "), ("\u2500", ", ")
-        ]
-    )
-
-    MOSS_SERVER = TtsModelSpec(
-        id="server_moss",
-        is_sgl_omni=True,
-        server_model_id_substring="moss",
-        local_module_test="",
-        local_torch_devices=[],
-        file_tag="moss",
-        sample_rate=24000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
-        voice_target_attr="moss_voice_file_name",
-        requires_voice=False,
-        voice_transcript_attr="moss_voice_transcript",
-        extra_file_attrs=[],
-        batch_size_attr="moss_batch_size",
-        can_stream=False,
-        semantic_trim_last=False,
-        hallucinates_music=False,
-        requires_ffmpeg_libs=True,
-        un_all_caps=False,
-        requirements_file_name="requirements-sgl-omni.txt",
-        ui={
-            "proper_name": "MOSS-TTS",
-            "short_name": "MOSS",
-            "voice_path_console": "",
-            "voice_path_requestor": "",
-            "project_links": [
-                "https://github.com/OpenMOSS/MOSS-TTS", 
-                "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5", 
-                "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html", 
-                "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"
-            ]
-        },
-        substitutions=[
-            ("\u2014", ", "), ("\u2500", ", ")
-        ]
-    )
-
-    FISH_S2_SERVER = TtsModelSpec(
-        id="server_fish_s2",
-        is_sgl_omni=True,
-        server_model_id_substring="fish", # b/c sgl omni only supports one type of fish model which is v2
-        local_module_test="",
-        local_torch_devices = [],
-        file_tag="s2-pro",
-        sample_rate=44100,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
-        voice_target_attr="fish_s2_server_voice_target",
-        requires_voice=False, 
-        voice_transcript_attr="fish_s2_server_voice_transcript",
-        extra_file_attrs=[],
-        batch_size_attr="fish_s2_server_concurrent_requests",
-        can_stream=True,
-        semantic_trim_last=False,
-        hallucinates_music=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=False,
-        requirements_file_name="requirements-fish-s2.txt",
-        ui = {
-            "proper_name": "Fish S2-Pro",
-            "short_name": "S2-Pro",
-            "voice_path_console": "",
-            "voice_path_requestor": "",
-            "project_links": [
-                "https://github.com/fishaudio/fish-speech", 
-                "https://huggingface.co/fishaudio/s2-pro", 
-                "https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html"
-            ]
-        },
-        substitutions=[
-            ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
-        ]
-    )
 
     @staticmethod
     def get_by_id(id: str) -> TtsModelType:

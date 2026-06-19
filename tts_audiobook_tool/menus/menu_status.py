@@ -126,7 +126,7 @@ def _make_text_line(state: State) -> str:
     total_lines = len(state.project.phrase_groups)
     num_complete = state.project.sound_segments.num_generated()
     text_line = VALUE_COLOR + f"{total_lines} lines"
-    text_line += f" {COL_DIM}({num_complete} segments generated)"
+    text_line += f" {COL_DIM}({num_complete} generated)"
     return text_line
 
 

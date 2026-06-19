@@ -13,6 +13,7 @@ from .voice_mira_menu import VoiceMiraMenu
 from .voice_moss_menu import VoiceMossMenu
 from .voice_moss_server_menu import VoiceMossServerMenu
 from .voice_qwen3_menu import VoiceQwen3Menu
+from .voice_qwen3_server_menu import VoiceQwen3ServerMenu
 from .voice_pocket_menu import VoicePocketMenu
 from .voice_omnivoice_menu import VoiceOmniVoiceMenu
 
@@ -32,6 +33,7 @@ __all__ = [
     "VoiceMossMenu",
     "VoiceMossServerMenu",
     "VoiceQwen3Menu",
+    "VoiceQwen3ServerMenu",
     "VoicePocketMenu",
     "VoiceOmniVoiceMenu",
 ]

@@ -58,7 +58,7 @@ def get_chat_blockers(state: State) -> list[ReadinessIssue]:
 
     # STT not disabled
     if state.prefs.stt_variant == SttVariant.DISABLED:
-        errors.append(ReadinessIssue("STT enabled", "Speech-to-text must be enabled (see Options menu > Whisper model)"))
+        errors.append(ReadinessIssue("Whisper model enabled", "Speech-to-text must be enabled (see Options menu > Whisper model)"))
 
     # TTS Model generation readiness
     from tts_audiobook_tool.tts import Tts

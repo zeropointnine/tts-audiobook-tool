@@ -709,7 +709,7 @@ class ResponseSession:
                     if err is not None:
                         Tts.clear_continuation()
                         if not self.response_aborted.is_set():
-                            self.ui.println(f"[TTS error: {err}]")
+                            self.ui.println(f"{COL_ERROR}[TTS error: {err}]{COL_DEFAULT}")
                         with self.state_lock:
                             if self.pending_sentences and self.pending_sentences[0] == text:
                                 self.pending_sentences.pop(0)
@@ -742,7 +742,7 @@ class ResponseSession:
                 if isinstance(result, str):
                     Tts.clear_continuation()
                     if not self.response_aborted.is_set():
-                        self.ui.println(f"[TTS error: {result}]")
+                        self.ui.println(f"{COL_ERROR}[TTS error: {result}]{COL_DEFAULT}")
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
@@ -759,7 +759,7 @@ class ResponseSession:
                 if sound.data.size == 0:
                     Tts.clear_continuation()
                     if not self.response_aborted.is_set():
-                        self.ui.println(f"[TTS error: empty/silent output]")
+                        self.ui.println(f"{COL_ERROR}[TTS error: empty/silent output]{COL_DEFAULT}")
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)

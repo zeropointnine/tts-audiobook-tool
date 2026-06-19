@@ -77,6 +77,9 @@ class VoiceMenuShared:
                     print_feedback("Model loaded")
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state)
+            case TtsModelType.QWEN3TTS_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceQwen3ServerMenu
+                VoiceQwen3ServerMenu.menu(state)
             case TtsModelType.VIBEVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)

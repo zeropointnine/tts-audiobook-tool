@@ -558,41 +558,41 @@ Use `Backend.LLAMACPP`.
 
 ## Virtual environment for SGL-Omni server
 
-The app supports server-based TTS inference using SGL-Omni for the following models:
-- [**Higgs Audio V3**](https://huggingface.co/bosonai/higgs-audio-v3-tts-4b) (24GB VRAM recommended)
-- [**MOSS-TTS v1.5**](https://github.com/OpenMOSS/MOSS-TTS) (24GB+ VRAM recommended)
-- [**Fish S2 Pro**](https://github.com/fishaudio/fish-speech) (24GB VRAM recommended)
+The app supports server-based TTS inference using SGL-Omni. Install instructions can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially for Windows). You may also need to perform additional per-model install steps as described in the docs.
 
-Install instructions for SGL-Omni can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially true for Windows).
+The following models served through SGL-Omni are supported:
+- [**Higgs Audio V3**](https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html) (24GB VRAM recommended)
+- [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (24GB+ VRAM recommended)
+- [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
+- [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html) 
+
 
 Start the SGL-Omni server for a supported TTS model. Eg:
 - `sgl-omni serve --model-path bosonai/higgs-audio-v3-tts-4b --port 8000`
 - `sgl-omni serve --model-path OpenMOSS-Team/MOSS-TTS-v1.5 --port 8000`
 - `sgl-omni serve --model-path fishaudio/s2-pro --config examples/configs/s2pro_tts.yaml --port 8000`
+- `sgl-omni serve --model-path Qwen/Qwen3-TTS-12Hz-1.7B-Base --config examples/configs/qwen3_tts_1_7b.yaml --port 8000`
+- `sgl-omni serve --model-path Qwen/Qwen3-TTS-12Hz-0.6B-Base --config examples/configs/qwen3_tts_0_6b.yaml --port 8000`
 
-Once SGL-Omni is set up, continue to creating the app's virtual environment:
+Once SGL-Omni is set up, continue to creating the app's virtual environment on your "client" computer:
 
 Initialize a **Python v3.12** virtual environment named `venv-sgl-omni`:
 
-- Linux/Mac
-
+        # Linux/Mac
         python -m venv venv-sgl-omni
 
-- Windows
-
+        # Windows
         C:\path\to\python3.12\python.exe -m venv venv-sgl-omni
 
 Activate the virtual environment:
 
-- Linux/Mac
-
+        # Linux/Mac
         source venv-sgl-omni/bin/activate
 
-- Windows
-
+        # Windows
         venv-sgl-omni\Scripts\activate.bat
 
-Install dependencies:
+Install the dependencies:
 
     pip install -r requirements-sgl-omni.txt
 

@@ -285,6 +285,7 @@ class ProjectSerializationUtil:
         normalize_bool('fish_s2_compile_enabled', True)
         normalize_int('fish_s2_rolling_cont', 0, min_value=0, max_value=3, warn=True)
         normalize_int('fish_s2_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
+        normalize_int('qwen3_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
 
         seed = d.get('fish_s2_seed', -1)
         if not (-1 <= seed <= SEED_MAX):
@@ -557,7 +558,7 @@ class ProjectSerializationUtil:
             "fish_s1_compile_enabled": project.fish_s1_compile_enabled,
 
             "fish_s2_voice_file_name": project.fish_s2_voice_file_name,
-            "fish_s2_voice_text": project.fish_s2_voice_transcript,
+            "fish_s2_voice_transcript": project.fish_s2_voice_transcript,
             "fish_s2_rolling_cont": project.fish_s2_rolling_cont,
             "fish_s2_temperature": project.fish_s2_temperature,
             "fish_s2_top_p": project.fish_s2_top_p,
@@ -615,7 +616,7 @@ class ProjectSerializationUtil:
             "mira_seed": project.mira_seed,
 
             "moss_voice_file_name": project.moss_voice_file_name,
-            "moss_voice_text": project.moss_voice_transcript,
+            "moss_voice_transcript": project.moss_voice_transcript,
             "moss_target": project.moss_target,
             "moss_rolling_cont": project.moss_rolling_cont,
             "moss_delay_temperature": project.moss_delay_temperature,
@@ -630,7 +631,7 @@ class ProjectSerializationUtil:
             "qwen3_target": project.qwen3_target,
             "qwen3_model_type": project.qwen3_model_type,
             "qwen3_voice_file_name": project.qwen3_voice_file_name,
-            "qwen3_voice_text": project.qwen3_voice_transcript,
+            "qwen3_voice_transcript": project.qwen3_voice_transcript,
             "qwen3_rolling_cont": project.qwen3_rolling_cont,
             "qwen3_speaker_id": project.qwen3_speaker_id,
             "qwen3_instructions": project.qwen3_instructions,
@@ -640,6 +641,7 @@ class ProjectSerializationUtil:
             "qwen3_top_p": project.qwen3_top_p,
             "qwen3_repetition_penalty": project.qwen3_repetition_penalty,
             "qwen3_seed": project.qwen3_seed,
+            "qwen3_server_concurrent_requests": project.qwen3_server_concurrent_requests,
 
             "pocket_voice_file_name": project.pocket_voice_file_name,
             "pocket_predefined_voice": project.pocket_predefined_voice,

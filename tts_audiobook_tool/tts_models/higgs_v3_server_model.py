@@ -70,10 +70,10 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             if isinstance(result, str):
                 return result
             return [result]
-
-        results = SglOmniUtil.generate_concurrent(
-            SglOmniUtil.get_base_url(),
-            payloads,
-            print_request=print_generation_request,
-        )
-        return results
+        else:
+            results = SglOmniUtil.generate_concurrent(
+                SglOmniUtil.get_base_url(),
+                payloads,
+                print_request=print_generation_request,
+            )
+            return results
