@@ -261,18 +261,14 @@ class MenuUtil:
     ) -> None:
         """
         Prints a heading for a blocking prompt/screen that is not a full menu,
-        but should still participate in the current breadcrumb trail. Think "pseudo-menu".
+        but should still participate in the current breadcrumb trail. 
+        Think "pseudo-menu".
 
-        This temporarily pushes a MenuFrame so existing ancestor-only
+        Temporarily pushes a MenuFrame so existing ancestor-only
         breadcrumb rendering works the same way as MenuUtil.menu(...), while
         keeping direct print_heading(...) calls breadcrumb-free by default.
         """
 
-        # ---------------------------- xxx
-        from tts_audiobook_tool.tts import Tts
-        Tts.update_tts_type()
-        # ----------------------------
-        
         MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
         try:
             heading_text = get_string_from(state, heading)

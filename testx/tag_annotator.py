@@ -274,7 +274,7 @@ def make_llm(prefs: Prefs) -> LlmSession:
         token=prefs.llm_api_key,
         model=prefs.llm_model,
         system_prompt=SYSTEM_PROMPT,
-        # xxx extra_params=prefs.llm_extra_params,
+        extra_params=prefs.llm_extra_params,
         verbose=False,
     )
 

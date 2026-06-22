@@ -50,7 +50,7 @@ class ConcatUtil:
     # duration, no silence is inserted. Break sound effects are not affected.
     PSEUDO_SILENCE_COMPENSATION_ENABLED = True
     PSEUDO_SILENCE_MAX_SECONDS = 1.0
-    PSEUDO_SILENCE_THRESHOLD_DB = -20.0 # xxx
+    PSEUDO_SILENCE_THRESHOLD_DB = -20.0 # very permissive
 
     @staticmethod
     def make_files(

@@ -22,13 +22,13 @@ class ToolsMenu:
 
         def item_maker(_: State) -> list[MenuItem]:
 
-            epub_to_text_item = MenuItem(
-                "Convert EPUB to text file",
-                lambda _, __: ToolsMenu.ask_convert_epub_to_text_file(state)
-            )
             enhance_item = MenuItem(
                 "Enhance a pre-existing audiobook", 
                 lambda _, __: enhance_flow.ask_and_make(state)
+            )
+            epub_to_text_item = MenuItem(
+                "Convert EPUB to text file",
+                lambda _, __: ToolsMenu.ask_convert_epub_to_text_file(state)
             )
             mp3s_item = MenuItem(
                 "Concatenate a directory of audio files",

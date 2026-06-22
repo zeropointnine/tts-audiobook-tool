@@ -321,7 +321,7 @@ class Tts:
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
         }
-        if Tts._type.value.is_sgl_omni: # xxx verify
+        if Tts._type.value.is_sgl_omni: 
             kwargs["print_generation_request"] = print_generation_request
 
         return instance.generate_using_project(
@@ -707,7 +707,6 @@ class Tts:
 
         if not SglOmniUtil.get_base_url() and Tts.get_type() != TtsModelType.NONE:
             Tts.set_type(TtsModelType.NONE)
-            # print(f"xxx changed tts type from {original_type} to {Tts.get_type()}")
             return
         
         if Tts._sgl_omni_type is None:
@@ -722,8 +721,6 @@ class Tts:
         if new_type == original_type:
             return        
         Tts.set_type(new_type)
-        # print(f"xxx changed tts type from {original_type} to {new_type}")
-
 
 # ---
 

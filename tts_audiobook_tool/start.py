@@ -78,9 +78,6 @@ class Startup:
             printt(COL_ERROR + error)
             exit(1)
 
-        if is_server: # xxx
-            exit(0)
-
     def exit_on_wrong_torch_flavor_windows(self) -> None:
         if not _is_probably_cpu_only_torch_on_cuda_machine():
             return
