@@ -79,6 +79,7 @@ class SoundPipeline:
         high_shelf: HighShelfEq,
         is_first_in_section: bool = False,
         use_upsampler: bool = False,
+        add_pause: bool = True,
     ) -> Sound | str:
         """
         Loads a saved segment file and applies concat/export rendering steps:
@@ -86,7 +87,13 @@ class SoundPipeline:
         - Applies upsampler (optional)
         - Resamples to 48k
         - Applies high shelf filter (optional)
-        - Adds ending silence
+        - Adds ending silence (unless `add_pause` is False)
+
+        When `add_pause` is False, the trailing pause/section effect is omitted
+        and the caller is responsible for appending it (e.g. via
+        `append_pause_or_section_effect`). This is used by the concat flow so
+        that the pause duration can be adjusted based on pseudo-silence measured
+        across adjacent segments.
         """
 
         result = SoundFileUtil.load(path)
@@ -104,13 +111,14 @@ class SoundPipeline:
         sound = SoundPipeline.resample_for_app(sound)
 
         sound = SoundPipeline.apply_high_shelf(sound, high_shelf)
-        
-        sound = SoundPipeline.append_pause_or_section_effect(
-            sound,
-            reason=phrase.reason,
-            use_break_sound_effect=use_break_sound_effect,
-            is_first_in_section=is_first_in_section,
-        )
+
+        if add_pause:
+            sound = SoundPipeline.append_pause_or_section_effect(
+                sound,
+                reason=phrase.reason,
+                use_break_sound_effect=use_break_sound_effect,
+                is_first_in_section=is_first_in_section,
+            )
         return sound
 
     @staticmethod
@@ -142,8 +150,19 @@ class SoundPipeline:
         reason: Reason,
         use_break_sound_effect: bool,
         is_first_in_section: bool = False,
+        pause_duration_override: float | None = None,
     ) -> Sound:
-        
+        """
+        Appends the trailing pause or section break sound effect for a segment.
+
+        :param pause_duration_override:
+            When not None, uses this duration (in seconds) instead of
+            `reason.pause_duration` for the inserted silence. Only affects the
+            pure-silence branch; break sound effects ignore it. Used by the
+            concat flow to compensate for pseudo-silence already present at
+            segment boundaries.
+        """
+
         b = SoundPipeline.should_append_break_sound_effect(
                 reason,
                 use_break_sound_effect=use_break_sound_effect,
@@ -154,10 +173,15 @@ class SoundPipeline:
                 return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
             elif reason == Reason.SECTION_BREAK:
                 return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
-        
-        if reason.pause_duration > 0:
-            return SoundUtil.add_silence(sound, reason.pause_duration)
-        
+
+        pause_duration = (
+            pause_duration_override
+            if pause_duration_override is not None
+            else reason.pause_duration
+        )
+        if pause_duration > 0:
+            return SoundUtil.add_silence(sound, pause_duration)
+
         return sound
 
     @staticmethod

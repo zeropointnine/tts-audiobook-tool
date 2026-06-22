@@ -10,7 +10,7 @@ from numpy import ndarray
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_hint_util
-from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
+from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
@@ -22,6 +22,7 @@ from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -37,6 +38,19 @@ from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:
+
+    # Pseudo-silence compensation for inter-segment pauses during concatenation.
+    #
+    # Segments are already trimmed of true silence, but may still contain
+    # low-volume but natural-sounding non-verbal audio at their ends/starts
+    # (e.g. trailing breaths). When enabled, the silence inserted between two
+    # adjacent segments is reduced by the combined duration of this "pseudo-
+    # silence" present at the end of the previous segment and the start of the
+    # next. If the combined pseudo-silence meets or exceeds the hardcoded pause
+    # duration, no silence is inserted. Break sound effects are not affected.
+    PSEUDO_SILENCE_COMPENSATION_ENABLED = True
+    PSEUDO_SILENCE_MAX_SECONDS = 1.0
+    PSEUDO_SILENCE_THRESHOLD_DB = -20.0 # xxx
 
     @staticmethod
     def make_files(
@@ -383,18 +397,86 @@ class ConcatUtil:
         On error, returns error string
         """
 
-        duration_sum = 0
-        durations = []
+        duration_sum = 0.0
+        # Pre-allocate so durations stays aligned with phrases_and_paths indices
+        # even though each segment is flushed one iteration late (the look-ahead
+        # buffer holds a segment until the next one is rendered).
+        durations: list[float] = [0.0] * len(phrases_and_paths)
 
         to_aac_not_flac = dest_path.lower().endswith(tuple(AAC_SUFFIXES))
         process = ConcatUtil.init_ffmpeg_stream(dest_path, to_aac_not_flac, aac_bitrate)
 
         Interrupts().set("concat")
 
-        for (phrase, path, is_first_in_section) in phrases_and_paths:
+        # Look-ahead buffer. The previous present segment is held (rendered, but
+        # without its trailing pause) until the next present segment is rendered,
+        # so the inserted pause can be adjusted using the pseudo-silence measured
+        # at the end of the held segment and the start of the next one.
+        # pending = (sound_no_pause, phrase, is_first_in_section, index, path)
+        pending: tuple[Sound, Phrase, bool, int, str] | None = None
+
+        def flush_pending(next_sound: Sound | None) -> None:
+            """
+            Appends the (possibly compensated) trailing pause to the held
+            segment and streams it to ffmpeg. `next_sound` is the following
+            segment's rendered sound (without pause), or None for the final
+            segment (no compensation applied).
+            """
+            nonlocal duration_sum
+            assert pending is not None
+            sound, phrase, is_first, idx, path = pending
+
+            override: float | None = None
+            use_effect = SoundPipeline.should_append_break_sound_effect(
+                phrase.reason,
+                use_break_sound_effect=use_break_sound_effect,
+                is_first_in_section=is_first,
+            )
+            if (not use_effect
+                    and ConcatUtil.PSEUDO_SILENCE_COMPENSATION_ENABLED
+                    and next_sound is not None):
+                # get_end_silence returns the *start timestamp* of the trailing
+                # silence (sound.duration - silence_duration), so convert it to a
+                # duration. get_start_silence returns the end time of the initial
+                # silence, which (starting at 0) is already a duration.
+                end_silence_start = SilenceUtil.get_end_silence(
+                    sound,
+                    max_seconds=ConcatUtil.PSEUDO_SILENCE_MAX_SECONDS,
+                    threshold_db_relative_to_peak=ConcatUtil.PSEUDO_SILENCE_THRESHOLD_DB,
+                )
+                end_pseudo = (sound.duration - end_silence_start) if end_silence_start is not None else 0.0
+                end_pseudo = max(0.0, min(end_pseudo, sound.duration))
+                start_pseudo = SilenceUtil.get_start_silence(
+                    next_sound,
+                    max_seconds=ConcatUtil.PSEUDO_SILENCE_MAX_SECONDS,
+                    threshold_db_relative_to_peak=ConcatUtil.PSEUDO_SILENCE_THRESHOLD_DB,
+                ) or 0.0
+                base = phrase.reason.pause_duration
+                override = max(0.0, base - end_pseudo - start_pseudo)
+                
+                if override < base:
+                    L.d(f"\n\npseudosilence - base={base:.3f} end={end_pseudo:.3f} start={start_pseudo:.3f} override={override:.3f} AMOUNT={end_pseudo + start_pseudo}\n")
+
+            sound = SoundPipeline.append_pause_or_section_effect(
+                sound,
+                reason=phrase.reason,
+                use_break_sound_effect=use_break_sound_effect,
+                is_first_in_section=is_first,
+                pause_duration_override=override,
+            )
+
+            durations[idx] = sound.duration
+            duration_sum += sound.duration
+            ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
+
+            if print_progress:
+                s = f"{time_stamp(duration_sum, with_tenth=False)} {Path(path).stem[:80]} ... "
+                print("\x1b[1G" + s, end="\033[K", flush=True)
+
+        for i, (phrase, path, is_first_in_section) in enumerate(phrases_and_paths):
 
             if not path:
-                durations.append(0)
+                # durations[i] already 0.0
                 continue
             if Interrupts().did_interrupt:
                 Interrupts().clear()
@@ -405,26 +487,33 @@ class ConcatUtil:
             result = SoundPipeline.make_concat_rendered_sound_segment(
                 phrase, path, use_break_sound_effect, high_shelf,
                 is_first_in_section=is_first_in_section,
-                use_upsampler=use_upsampler
+                use_upsampler=use_upsampler,
+                add_pause=False,
             )
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
                 return result
-            
-            sound = result
-            durations.append(sound.duration)
-            duration_sum += sound.duration
+
+            curr_sound = result
+
             if Interrupts().did_interrupt:
                 Interrupts().clear()
                 ConcatUtil.close_ffmpeg_stream(process)
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
 
-            ConcatUtil.add_audio_to_ffmpeg_stream(process, sound.data)
+            # Flush the previously-held segment using the current segment as the
+            # "next" segment for pseudo-silence compensation.
+            if pending is not None:
+                flush_pending(curr_sound)
 
-            if print_progress:
-                s = f"{time_stamp(duration_sum, with_tenth=False)} {Path(path).stem[:80]} ... "
-                print("\x1b[1G" + s, end="\033[K", flush=True)
+            pending = (curr_sound, phrase, is_first_in_section, i, path)
+
+        # Flush the final held segment. No following segment exists, so no
+        # pseudo-silence compensation is applied (hardcoded pause is used),
+        # preserving the original trailing-pause behavior.
+        if pending is not None:
+            flush_pending(None)
 
         if print_progress:
             printt()
