@@ -9,6 +9,7 @@ This module supports the "enhance existing audiobook" flow by:
 - aligning source phrases to transcript words to build TimedPhrases.
 """
 
+from dataclasses import dataclass
 from typing import Generator, List, NamedTuple
 import ffmpeg
 import numpy as np
@@ -24,6 +25,12 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.transcriber import Transcriber
 
 
+@dataclass
+class AlignmentState:
+    cursor: int = 0
+    max_skip_words: int = 45
+
+
 def make_timed_phrases(
     phrases: List[Phrase],
     transcribed_words: List[Word],
@@ -37,15 +44,6 @@ def make_timed_phrases(
     Returns list and if did interrupt
     """
 
-    result: List[TimedPhrase] = []
-
-    if not phrases:
-        return [], False
-    if not transcribed_words:
-        for phrase in phrases:
-            result.append(TimedPhrase(phrase.text, 0.0, 0.0))
-        return result, False
-
     if DEBUG:
         print(Ansi.CLEAR_SCREEN_AND_SCROLLBACK)
         print("\nsource text:\n")
@@ -58,19 +56,61 @@ def make_timed_phrases(
         print(f"\ntranscribed text:\n{s}\n")
 
     Interrupts().set("thinking")
-
     debug_start_time = time.time()
 
-    max_skip_words = MAX_SKIP_WORDS_BASE
-    current_skip_span = 0
+    timed_phrases, _, did_interrupt = align_phrases_with_state(
+        phrases,
+        transcribed_words,
+        AlignmentState(),
+        print_info=print_info,
+    )
 
-    cursor = 0
+    if did_interrupt:
+        Interrupts().clear()
+        return [], True
+
+    if DEBUG:
+        elapsed_sec = (time.time() - debug_start_time)
+        printt(f"\nElapsed: {elapsed_sec}\n")
+
+        for i, item in enumerate(timed_phrases):
+            printt(f"{i}  {item}")
+        printt()
+
+    Interrupts().clear()
+    return timed_phrases, False
+
+
+def align_phrases_with_state(
+    phrases: List[Phrase],
+    transcribed_words: List[Word],
+    state: AlignmentState | None=None,
+    print_info: bool=True,
+    line_offset: int=0,
+) -> tuple[List[TimedPhrase], AlignmentState, bool]:
+    """
+    Aligns phrases against transcribed words while preserving a caller-owned transcript cursor.
+
+    This is used by EPUB enhancement to align each section independently without resetting
+    transcript progress at section boundaries.
+    """
+
+    result: List[TimedPhrase] = []
+    state = state or AlignmentState()
+
+    if not phrases:
+        return [], state, False
+    if not transcribed_words:
+        for phrase in phrases:
+            result.append(TimedPhrase(phrase.text, 0.0, 0.0))
+        return result, state, False
+
+    current_skip_span = 0
 
     for segment_index, segment in enumerate(phrases):
 
         if Interrupts().did_interrupt:
-            Interrupts().clear()
-            return [], True
+            return [], state, True
 
         text_normed = normalize_text(segment.text)
         num_words = len(text_normed.split())
@@ -81,8 +121,8 @@ def make_timed_phrases(
 
         best_match: MatchInfo | None = None
 
-        trans_index_start_min = cursor
-        trans_index_start_max = cursor + max_skip_words
+        trans_index_start_min = state.cursor
+        trans_index_start_max = state.cursor + state.max_skip_words
         trans_index_start_max = min(trans_index_start_max, len(transcribed_words))
 
         for trans_index_start in range(trans_index_start_min, trans_index_start_max):
@@ -96,7 +136,7 @@ def make_timed_phrases(
             trans_index_end_max = trans_index_start + phrase_length_max
             trans_index_end_max = min(trans_index_end_max, len(transcribed_words))
 
-            for trans_index_end in range(trans_index_end_min, trans_index_end_max):
+            for trans_index_end in range(trans_index_end_min, trans_index_end_max + 1):
 
                 trans_words = transcribed_words[trans_index_start : trans_index_end]
                 if not trans_words:
@@ -110,12 +150,12 @@ def make_timed_phrases(
                 modded_segment_text_normed = text_normed
                 modded_trans_text_normed = trans_text_normed
 
-                if cursor > 0 and trans_index_start > 0:
+                if segment_index > 0 and state.cursor > 0 and trans_index_start > 0:
                     previous_segment = phrases[segment_index - 1]
                     previous_segment_word = normalize_text(previous_segment.text).split(" ")[-1]
                     previous_segment_word = normalize_text(previous_segment_word)
 
-                    previous_trans_word = transcribed_words[cursor - 1].word
+                    previous_trans_word = transcribed_words[state.cursor - 1].word
                     previous_trans_word = normalize_text(previous_trans_word)
 
                     if previous_segment_word and previous_trans_word:
@@ -135,7 +175,7 @@ def make_timed_phrases(
                     current_skip_span = trans_index_start - trans_index_start_min
 
         def print_result(is_success: bool):
-            printt(f"line {segment_index + 1}/{len(phrases)}")
+            printt(f"line {line_offset + segment_index + 1}")
             printt(f"{COL_DIM}    source text: {truncate_pretty(text_normed, 50)}")
             if best_match:
                 printt(f"{COL_DIM}    transcribed: {truncate_pretty(best_match.trans_text, 50)}")
@@ -163,12 +203,12 @@ def make_timed_phrases(
             if print_info:
                 print_result(True)
 
-            cursor = best_match.trans_index_end
-            max_skip_words = MAX_SKIP_WORDS_BASE
+            state.cursor = best_match.trans_index_end
+            state.max_skip_words = MAX_SKIP_WORDS_BASE
 
             if DEBUG:
                 print(f"had to skip {current_skip_span} words")
-                print(f"cursor is now: [{cursor+1}] {make_words_string(transcribed_words, cursor)}")
+                print(f"cursor is now: [{state.cursor+1}] {make_words_string(transcribed_words, state.cursor)}")
                 print()
 
         else:
@@ -176,20 +216,20 @@ def make_timed_phrases(
                 TimedPhrase(segment.text, 0.0, 0.0)
             )
 
-            was_max_skip = max_skip_words
-            max_skip_words += len( segment.text.split(" ") ) * 2
-            max_skip_words = min(max_skip_words, MAX_SKIP_WORDS_LIMIT)
+            was_max_skip = state.max_skip_words
+            state.max_skip_words += len( segment.text.split(" ") ) * 2
+            state.max_skip_words = min(state.max_skip_words, MAX_SKIP_WORDS_LIMIT)
 
             if print_info:
                 print_result(False)
 
             if DEBUG:
-                print(f"scanned transcript in this range: {make_words_string(transcribed_words, cursor, was_max_skip)}")
-                print(f"cursor stays at: [{cursor+1}] ")
-                print(f"max_skip_words has increased to: {max_skip_words}")
+                print(f"scanned transcript in this range: {make_words_string(transcribed_words, state.cursor, was_max_skip)}")
+                print(f"cursor stays at: [{state.cursor+1}] ")
+                print(f"max_skip_words has increased to: {state.max_skip_words}")
                 print()
 
-        if cursor >= len(transcribed_words) - 1:
+        if state.cursor >= len(transcribed_words) - 1:
             for remaining_segment_index in range(segment_index + 1, len(phrases)):
                 remaining_seg = phrases[remaining_segment_index]
                 result.append(TimedPhrase(
@@ -197,16 +237,7 @@ def make_timed_phrases(
                 ))
             break
 
-    if DEBUG:
-        elapsed_sec = (time.time() - debug_start_time)
-        printt(f"\nElapsed: {elapsed_sec}\n")
-
-        for i, item in enumerate(result):
-            printt(f"{i}  {item}")
-        printt()
-
-    Interrupts().clear()
-    return result, False
+    return result, state, False
 
 
 def transcribe_to_words(path: str) -> list[Word] | None:

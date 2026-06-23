@@ -40,7 +40,7 @@ class ToolsMenu:
             )
             speed_item = MenuItem("Speed up voice sample", speed_handler)
             
-            return [epub_to_text_item, enhance_item, mp3s_item, transcode_item, speed_item]
+            return [enhance_item, epub_to_text_item, mp3s_item, transcode_item, speed_item]
         
         MenuUtil.menu(state, "Tools", item_maker, breadcrumb="Tools")
 
