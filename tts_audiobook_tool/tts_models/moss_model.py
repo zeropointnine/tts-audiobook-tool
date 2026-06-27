@@ -443,9 +443,10 @@ class MossModel(MossBaseModel):
             decoded = self.decode_outputs_to_sounds(outputs)
 
             if isinstance(decoded, str):
-                # return error string
+                # Return single error string
                 return decoded 
 
+            # Return list of Sounds
             return decoded
 
         except Exception as e:

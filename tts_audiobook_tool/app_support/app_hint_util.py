@@ -31,6 +31,7 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
         hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
     elif Tts.get_type() == TtsModelType.MOSS:
         target = project.moss_target or MossConfigs.get_default().value.repo_id
+        target = "huggingface repo id: " + target
         hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
         can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)
 

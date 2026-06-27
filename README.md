@@ -22,7 +22,7 @@
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
 
-The app employs various techniques to manage and improve on the nondeterministic output of generative text-to-speech models. Eg:
+The app employs various techniques to make the nondeterministic output of generative text-to-speech models reliable enough for bulk long-form speech synthesis. For example:
 
 - Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
 - Segmentation of long-form text at paragraph/sentence/phrase boundaries
@@ -67,6 +67,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (with added emotional guidance voice sample)
 - [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
 - [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a)
+- [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a)
 - [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a)
 - [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
@@ -355,7 +356,7 @@ Install dependencies:
 ## Virtual environment for MOSS-TTS v1.5
 
 > **ℹ️ Note!**
-> Requires 24GB+ VRAM
+> 9B model requires 24GB+ VRAM
 
 Initialize a **Python v3.12** virtual environment named `venv-moss`:
 
@@ -566,7 +567,7 @@ The app supports server-based TTS inference using SGL-Omni. Install instructions
 
 The following models served through SGL-Omni are supported:
 - [**Higgs Audio V3**](https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html) (24GB VRAM recommended)
-- [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (24GB+ VRAM recommended)
+- [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (> 24GB VRAM required)
 - [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
 - [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html) 
 
@@ -750,12 +751,13 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
 | Higgs V2                | GTX 4090, Windows    | ~200% realtime  | 
 | Higgs V3                | GTX 4090, Windows    | 300%+ realtime  | SGL-Omni; concurrent requests=1
-| Higgs V3                | GTX 4090, Windows    | 900%+ realtime  | SGL-Omni; concurrent requests=5
+| Higgs V3                | GTX 4090, Windows    | 2000%+ realtime | SGL-Omni; concurrent requests=10
 | IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
 | IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~80% realtime   | batch size=2, flash attn
+| MOSS-TTS-Local-Transformer-v1.5           | GTS 4090, Windows    | 500% realtime   | batch size=20, flash attn
 | OmniVoice TTS           | GTX 3080 Ti, Linux   | 300% realtime   | default steps
 | OmniVoice TTS           | Macbook Pro M1 (MPS) | 20% realtime    | default steps
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 

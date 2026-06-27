@@ -106,7 +106,11 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Loudness normalization", state.project.normalization_type.value.label),
+                    lambda _: make_menu_label(
+                        label="Loudness normalization", 
+                        value=state.project.normalization_type.value.label,
+                        default=NormalizationType.DEFAULT.value.label
+                    ),
                     lambda _, __: ConcatMenu.normalization_menu(state),
                     superlabel="Post-processing options"
                 )
@@ -115,14 +119,22 @@ class ConcatMenu:
             if torch.cuda.is_available() and SidonUtil.has_sidon():
                 items.append(
                     MenuItem(
-                        lambda _: make_menu_label("Generative upsampling", state.project.use_upsampler),
+                        lambda _: make_menu_label(
+                            label="Generative upsampling", 
+                            value=state.project.use_upsampler, 
+                            default=PROJECT_DEFAULT_GENERATIVE_UPSAMPLING
+                        ),
                         lambda _, __: ConcatMenu.upsample_menu(state)
                     )
                 )
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Treble lift", state.project.get_high_shelf().id),
+                    lambda _: make_menu_label(
+                        label="Treble lift", 
+                        value=state.project.get_high_shelf().id,
+                        default=PROJECT_DEFAULT_HIGH_SHELF_EQ.id
+                    ),
                     lambda _, __: ConcatMenu.high_shelf_menu(state)
                 )
             )
@@ -195,7 +207,7 @@ class ConcatMenu:
             labels=[item.id.capitalize() for item in list(HighShelfEq)],
             values=[item for item in list(HighShelfEq)],
             current_value=current,
-            default_value=HighShelfEq.DISABLED,
+            default_value=PROJECT_DEFAULT_HIGH_SHELF_EQ,
             on_select=on_select,
             subheading=HIGH_SHELF_SUBHEADING
         )
@@ -222,7 +234,7 @@ class ConcatMenu:
             labels=["True", "False"],
             values=[True, False],
             current_value=state.project.use_upsampler,
-            default_value=False,
+            default_value=PROJECT_DEFAULT_GENERATIVE_UPSAMPLING,
             on_select=on_select
         )
 

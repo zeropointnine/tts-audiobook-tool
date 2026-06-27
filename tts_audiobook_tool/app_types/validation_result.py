@@ -107,7 +107,7 @@ class WordErrorResult(TranscriptResult):
 
     def get_ui_message(self) -> str:
         base_message = f"{COL_ERROR}Word error fail" if self.is_fail else "Passed"
-        return f"{base_message} {COL_DIM}(word_errors={COL_DEFAULT}{self.num_errors}{COL_DIM}, words={COL_DEFAULT}{self.num_words}{COL_DIM}, threshold={COL_DEFAULT}{self.threshold}{COL_DIM})"
+        return f"{base_message} {COL_DIM}(words={COL_DEFAULT}{self.num_words}{COL_DIM}, word_errors={COL_DEFAULT}{self.num_errors}{COL_DIM}, threshold={COL_DEFAULT}{self.threshold}{COL_DIM})"
 
 @dataclass
 class TrimmedResult(TranscriptResult):
@@ -159,4 +159,4 @@ class SkippedResult(ValidationResult):
         return False
 
     def get_ui_message(self) -> str:
-        return f"Skipped validation: {COL_DIM}{self.message}"
+        return f"Skipped {COL_DIM}({self.message})"

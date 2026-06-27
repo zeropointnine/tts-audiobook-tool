@@ -142,7 +142,7 @@ class OptionsMenu:
             
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, False),
+                    lambda _: make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, MENU_CLEARS_SCREEN_DEFAULT),
                     lambda _, __: OptionsMenu.menu_clears_screen_menu(state)
                 )
             )
@@ -265,7 +265,7 @@ class OptionsMenu:
             labels=["True", "False"],
             values=[True, False],
             current_value=state.prefs.menu_clears_screen,
-            default_value=False,
+            default_value=MENU_CLEARS_SCREEN_DEFAULT,
             on_select=on_select
         )
 

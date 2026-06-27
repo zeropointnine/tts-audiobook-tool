@@ -49,7 +49,7 @@ class MossServerModel(MossServerBaseModel):
                 "audio_top_p": audio_top_p,
                 "audio_top_k": audio_top_k,
                 "seed": seed,
-                "max_tokens": MossServerBaseModel.MAX_NEW_TOKENS
+                "max_new_tokens": MossServerBaseModel.MAX_NEW_TOKENS
             }
 
             language = MossBaseModel.get_language_name(project.language_code)
