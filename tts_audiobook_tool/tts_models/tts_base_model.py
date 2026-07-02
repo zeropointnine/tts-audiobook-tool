@@ -295,6 +295,17 @@ class TtsBaseModel(ABC):
         """
         return False
 
+    @classmethod
+    def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
+        """
+        Does the model have a propensity for generating spurious music sounds 
+        (ie, should the STT validator check for music).
+
+        Should utilize project or TTS model instance arguments to make that determination
+        if necessary.
+        """
+        return False
+
 
     @classmethod
     def _get_standard_voice_blocker(cls, project: Project) -> ReadinessIssue | None:

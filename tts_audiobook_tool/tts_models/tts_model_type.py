@@ -46,9 +46,6 @@ class TtsModelSpec(NamedTuple):
     # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
     # hallucinate past the end of teh prompt (eg, for Chatterbox)
     semantic_trim_last: bool
-    # Does the model have a propensity for generating spurious music sounds
-    # (ie, should the STT validator check for music)
-    hallucinates_music: bool
     # Does the model require FFmpeg shared libraries (dll/so/dylib), not just the ffmpeg executable
     # In practice, this is usually because the model depends on TorchCodec
     requires_ffmpeg_libs: bool
@@ -90,7 +87,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="",
@@ -121,7 +117,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False, # TODO: check this
         requirements_file_name="requirements-oute.txt",
@@ -155,7 +150,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=True,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-chatterbox.txt",
@@ -188,7 +182,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
         requirements_file_name="requirements-fish-s1.txt",
@@ -221,7 +214,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-fish-s2.txt",
@@ -254,7 +246,6 @@ class TtsModelType(Enum):
         batch_size_attr="fish_s2_server_concurrent_requests",
         can_stream=True,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-fish-s2.txt",
@@ -291,7 +282,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-higgs-v2.txt",
@@ -324,7 +314,6 @@ class TtsModelType(Enum):
         batch_size_attr="higgs_v3_batch_size",
         can_stream=True,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -360,7 +349,6 @@ class TtsModelType(Enum):
         batch_size_attr="vibevoice_batch_size",
         can_stream=True,
         semantic_trim_last=False,
-        hallucinates_music=True,
         requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-vibevoice.txt",
@@ -395,7 +383,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-indextts2.txt",
@@ -429,7 +416,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-glm.txt",
@@ -464,7 +450,6 @@ class TtsModelType(Enum):
         batch_size_attr="mira_batch_size",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # falls down badly with all caps phrases
         requirements_file_name="requirements-mira.txt",
@@ -499,7 +484,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=True,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-pocket.txt",
@@ -533,7 +517,6 @@ class TtsModelType(Enum):
         batch_size_attr="moss_batch_size",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=True,
         un_all_caps=False,
         requirements_file_name="requirements-moss.txt",
@@ -566,7 +549,6 @@ class TtsModelType(Enum):
         batch_size_attr="moss_batch_size",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=True,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -603,7 +585,6 @@ class TtsModelType(Enum):
         batch_size_attr="qwen3_batch_size",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # is only slightly more error-prone when all-caps
         requirements_file_name="requirements-qwen3tts.txt",
@@ -638,7 +619,6 @@ class TtsModelType(Enum):
         can_stream=False,
         
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -673,7 +653,6 @@ class TtsModelType(Enum):
         batch_size_attr="",
         can_stream=False,
         semantic_trim_last=False,
-        hallucinates_music=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # slightly more error-prone when all-caps
         requirements_file_name="requirements-omnivoice.txt",

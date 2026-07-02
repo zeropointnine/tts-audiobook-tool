@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
+from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
-from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
@@ -65,8 +65,8 @@ class Validator:
         )
 
         # Always does music detect if instance exists
-        if MusicDetector.has_instance():
-            if MusicDetector.get_model().has_music(sound, threshold=0.1):
+        if ModelManager.has_yamnet_detector():
+            if ModelManager.get_yamnet_detector().has_music(sound, threshold=0.1):
                 return MusicFailResult(sound, transcript_words)
 
         word_error_result = WordErrorResult(

@@ -14,6 +14,12 @@ else:
     Project = object
 
 
+class MossArchType(Enum):
+    LOCAL = "local"
+    DELAY = "delay"
+    UNKNOWN = "unknown"
+
+
 class MossBaseModel(TtsBaseModel):
 
     INFO = TtsModelType.MOSS.value
@@ -68,6 +74,19 @@ class MossBaseModel(TtsBaseModel):
     @staticmethod
     def get_language_name(language_code: str) -> str:
         return MossBaseModel.LANGUAGE_NAMES_BY_CODE.get(language_code.strip().lower(), "")
+
+    def get_loaded_arch_type(self) -> MossArchType:
+        raise NotImplementedError()
+
+    @classmethod
+    def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
+        
+        if instance is not None:
+            assert isinstance(instance, MossBaseModel)
+            is_local = (instance.get_loaded_arch_type() == MossArchType.LOCAL)
+            return is_local
+
+        return MossConfigs.get_by_target(project.moss_target) == MossConfigs.LOCAL
 
     @classmethod
     def get_blocking_issues(

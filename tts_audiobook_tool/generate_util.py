@@ -12,7 +12,6 @@ from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
-from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project import Project
@@ -366,7 +365,7 @@ class GenerateUtil:
         if DEV:
             warnings_string += f"Num words: {sum(word_counts.values())}\n"
             if Stt.has_instance():
-                if MusicDetector.has_instance():
+                if ModelManager.has_yamnet_detector():
                     warnings_string += f"Lines with music fails: {num_failed_music}\n"
             warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
         printt(warnings_string)

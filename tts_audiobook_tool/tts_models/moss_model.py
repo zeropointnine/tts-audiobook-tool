@@ -12,7 +12,7 @@ from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
+from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
 
 from transformers import AutoModel, AutoProcessor  # type: ignore
@@ -68,9 +68,11 @@ class MossModel(MossBaseModel):
         if hasattr(self.processor, "audio_tokenizer"):
             self.processor.audio_tokenizer.eval()
 
-        # Rem, this can raise exception (eg OOM) and must be handled properly by instantiator
+        # Rem, this can raise exception (eg OOM), which should handled properly by instantiator
         self.model = self.load_model(local_path, attn_implementation)
         self.model.eval()
+
+        printt(f"MOSS loaded arch type: {self.get_loaded_arch_type().value}")
 
     def resolve_dtype(self) -> torch.dtype:
         if self.device != "cuda":
@@ -101,6 +103,22 @@ class MossModel(MossBaseModel):
             attn_implementation=attn_implementation,
             dtype=self.dtype,
         ).to(self.device)
+
+    def get_loaded_arch_type(self) -> MossArchType:
+
+        if self.model is None:
+            raise RuntimeError("Model is not initialized")
+
+        # To infer if model is of the 'Local' type, must test for layer info or local transformer
+        config = getattr(self.model, "config", None)
+        local_num_layers = getattr(config, "local_num_layers", None)
+        has_local_transformer = hasattr(self.model, "local_transformer")
+        
+        if has_local_transformer or local_num_layers is not None:
+            return MossArchType.LOCAL
+        if type(self.model).__name__ == "MossTTSDelayModel":
+            return MossArchType.DELAY
+        return MossArchType.UNKNOWN
 
     def get_memory_usage(self) -> str:
         parts = []

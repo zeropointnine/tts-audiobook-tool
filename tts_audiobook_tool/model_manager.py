@@ -3,8 +3,8 @@ import torch
 from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.sound.music_detector import MusicDetector
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.yamnet_detector import YamnetDetector
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
@@ -15,10 +15,11 @@ class ModelManager:
     """
     Multiple-model management utils.
 
-    Including YamnetDetector and Sidonmodel (which it holds a static instance)
+    Including YamnetDetector and SidonModel (which it holds as static instance)
     """
 
     sidon_upsampler: SidonUtil | None = None
+    yamnet_detector: YamnetDetector | None = None
 
 
     @staticmethod
@@ -35,11 +36,15 @@ class ModelManager:
 
         should_tts = not Tts.instance_exists()        
         should_stt = not Stt.should_skip(state) and not Stt.has_instance()
-        should_yamnet = Tts.get_type().value.hallucinates_music and not MusicDetector.has_instance() and not skip_yamnet
-        
-        shoulds = [should_tts, should_stt, should_yamnet]
+        shoulds = [should_tts, should_stt]
         num_shoulds = sum(1 for item in shoulds if item)
-        if num_shoulds == 0:
+        
+        if skip_yamnet:
+            # "Lazy unload", relevant for user flows like: 
+            # Do inference with MossLocal, select MossDelay model, do inference
+            ModelManager.clear_yamnet_detector()
+        
+        if num_shoulds == 0 and (ModelManager.has_yamnet_detector() or skip_yamnet):
             return ModelWarmUpResult()
 
         if not should_stt:
@@ -55,13 +60,24 @@ class ModelManager:
         # Init TTS
         if should_tts:
             try:
-                _ = Tts.get_instance()
+                tts_instance = Tts.get_instance()
             except Exception as e:
                 Interrupts().clear()
                 app_memory.gc_ram_vram()
                 err_msg = str(e)
                 return ModelWarmUpResult(error=err_msg)
+        else:
+            tts_instance = Tts.get_instance_if_exists()
+            if tts_instance is None:
+                try:
+                    tts_instance = Tts.get_instance()
+                except Exception as e:
+                    Interrupts().clear()
+                    app_memory.gc_ram_vram()
+                    err_msg = str(e)
+                    return ModelWarmUpResult(error=err_msg)
 
+        # Check for interrupt
         if Interrupts().did_interrupt:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
@@ -76,20 +92,31 @@ class ModelManager:
                 err_msg = str(e)
                 return ModelWarmUpResult(error=err_msg)
 
+        # Check for interrupt
         if Interrupts().did_interrupt:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
         
         # Init YAMNet
+        should_yamnet = (
+            Tts.get_class().can_hallucinate_music(state.project, tts_instance)
+            and not ModelManager.has_yamnet_detector()
+            and not skip_yamnet
+        )
         if should_yamnet:
             try:
-                _ = MusicDetector.get_model()
+                _ = ModelManager.get_yamnet_detector()
             except Exception as e:
                 Interrupts().clear()
                 app_memory.gc_ram_vram()
                 err_msg = str(e)
                 return ModelWarmUpResult(error=err_msg)
+        else:
+            # "Lazy unload", relevant for user flows like: 
+            # Do inference with MossLocal, select MossDelay model, do inference
+            ModelManager.clear_yamnet_detector()
 
+        # Check for interrupt
         if Interrupts().did_interrupt:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
@@ -102,7 +129,7 @@ class ModelManager:
 
         Stt.clear_stt_model()
         Tts.clear_tts_model()
-        MusicDetector.clear_model()
+        ModelManager.clear_yamnet_detector()
         if not except_sidon:
             ModelManager.clear_sidon_upsampler()
 
@@ -113,8 +140,26 @@ class ModelManager:
     def is_any_model_loaded() -> bool:
         return Stt.has_instance() or \
             Tts.instance_exists() or \
-            MusicDetector.has_instance() or \
+            ModelManager.has_yamnet_detector() or \
             ModelManager.sidon_upsampler is not None
+
+    @staticmethod
+    def get_yamnet_detector() -> YamnetDetector:
+        if ModelManager.yamnet_detector is None:
+            print_init("Initializing YAMNet...")
+            ModelManager.yamnet_detector = YamnetDetector()
+        return ModelManager.yamnet_detector
+
+    @staticmethod
+    def has_yamnet_detector() -> bool:
+        return ModelManager.yamnet_detector is not None
+
+    @staticmethod
+    def clear_yamnet_detector() -> None:
+        if ModelManager.yamnet_detector is not None:
+            ModelManager.yamnet_detector.kill()
+            ModelManager.yamnet_detector = None
+            app_memory.gc_ram_vram()
 
     @staticmethod
     def get_sidon_upsampler() -> SidonUtil | None:

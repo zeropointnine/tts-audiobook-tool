@@ -42,6 +42,10 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         ...
 
     @classmethod
+    def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
+        return True
+
+    @classmethod
     def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
         errors = []
         if instance:
