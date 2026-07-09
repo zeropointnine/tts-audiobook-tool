@@ -1,6 +1,6 @@
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.menus.main_menu import make_tts_model_heading_detail
+from tts_audiobook_tool.menus.main_menu import get_heading_tts_text
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -42,7 +42,7 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
-        result = make_tts_model_heading_detail(make_state())
+        result = get_heading_tts_text(make_state())
 
         assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni model id: bosonai/higgs-audio-v3"
     finally:
@@ -56,7 +56,7 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
         SglOmniUtil._model_id = ""
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
-        result = make_tts_model_heading_detail(make_state())
+        result = get_heading_tts_text(make_state())
 
         assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 offline"
         assert COL_ERROR in result
@@ -71,9 +71,9 @@ def test_tts_model_heading_detail_keeps_local_model_unchanged():
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         state = make_state()
 
-        result = make_tts_model_heading_detail(state)
+        result = get_heading_tts_text(state)
 
-        assert result == Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
+        assert result == Tts.get_class().get_menu_text(state.project, Tts.get_instance_if_exists())
         assert "bosonai/higgs-audio-v3" not in text_util.strip_ansi_codes(result)
     finally:
         restore_tts_and_sgl_state(saved)
@@ -90,7 +90,7 @@ def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch)
 
         monkeypatch.setattr(SglOmniUtil, "update_model_id", update_model_id)
 
-        result = make_tts_model_heading_detail(make_state())
+        result = get_heading_tts_text(make_state())
 
         stripped = text_util.strip_ansi_codes(result)
         assert stripped == "MOSS-TTS offline"

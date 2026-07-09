@@ -21,6 +21,8 @@ class PocketModel(PocketBaseModel):
         # Rem, "language" dictates model
         self.model: TTSModel | None = TTSModel.load_model(language=language or None)
         assert self.model
+
+        self._device = device
         self.model.to(device)
         self.last_voice_path = ""
         self.cached_voice_state = None

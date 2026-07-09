@@ -10,77 +10,82 @@ from tts_audiobook_tool.util import *
 
 class MenuStatus:
     """
-    Prints "menu status block" at top of console
+    Prints "menu status block" at top of console when in "clear screen mode"
     """
 
     @staticmethod
     def print_block(state: State) -> None:
         from tts_audiobook_tool.tts import Tts
 
-        project_line = _make_project_line(state)
-        printt(f"{LABEL_COLOR}Project:     {project_line}")
+        lines = []
+
+        project_text = _make_project_text(state)
+        lines.append(("Project", project_text))
 
         if Tts.get_type().value.is_sgl_omni or Tts.get_type() == TtsModelType.NONE:
-            sgl_omni_line = _make_sgl_omni_line(state)
-            printt(f"{LABEL_COLOR}SGL-Omni:    {sgl_omni_line}")
+            server_tts_text = _make_server_tts_text(state)
+            lines.append(("SGL-Omni", server_tts_text))
         else:
-            tts_line = _make_tts_line(state)        
-            printt(f"{LABEL_COLOR}TTS model:   {tts_line}")
+            local_tts_text = _make_local_tts_text(state)        
+            lines.append(("TTS model", local_tts_text))
 
-        voice_line = _make_voice_line(state)
-        printt(f"{LABEL_COLOR}Voice clone: {voice_line}")
+        voice_text = _make_voice_text(state)
+        lines.append(("Voice clone", voice_text))
         
-        text_line = _make_text_line(state)
-        printt(f"{LABEL_COLOR}Text:        {text_line}")
+        text_text = _make_text_text(state)
+        lines.append(("Text", text_text))
 
-        stt_line = _make_stt_line(state)
-        printt(f"{LABEL_COLOR}STT model:   {stt_line}")
+        stt_text = _make_stt_text(state)
+        lines.append(("STT model", stt_text))
         
-        memory_line = _make_memory_line()        
-        if memory_line:
-            printt(f"{LABEL_COLOR}Memory:      {memory_line}")
+        memory_text = _make_memory_text()
+        if memory_text:
+            lines.append(("Memory", memory_text))
+
+        label_len = 0
+        for label, _ in lines:
+            label_len = max(label_len, len(label))
+
+        for label, value in lines:
+            label = (label + ":").ljust(label_len + 1)
+            s = f"{LABEL_COLOR}{label} {VALUE_COLOR}{value}"
+            printt(s)
 
 
-def _make_project_line(state: State) -> str:
+def _make_project_text(state: State) -> str:
     if state.project.dir_path:
-        project_line = VALUE_COLOR + text_util.make_terminal_hyperlink(state.project.dir_path)
+        text = text_util.make_terminal_hyperlink(state.project.dir_path)
     else:
-        project_line = VALUE_COLOR + "none"
+        text = "none"
 
     language_code = state.project.language_code.strip()
     if state.project.dir_path and language_code:
-        project_line += f" {QUALIFIER_COLOR}({language_code})"
+        text += f" {QUALIFIER_COLOR}({language_code})"
 
-    return project_line
+    return text
 
-def _make_tts_line(state: State) -> str:
+def _make_local_tts_text(state: State) -> str:
+    """ Eg: Some TTS (special sauce: True) (cuda, loaded)"""
+    
     from tts_audiobook_tool.tts import Tts
 
-    if Tts._instance_display_info:
-        tts_line = VALUE_COLOR + Tts._instance_display_info.model_description
-        match (bool(Tts._instance_display_info.device), bool(Tts._instance_display_info.extra)):
-            case (True, True):
-                extra = f"{Tts._instance_display_info.device}, {Tts._instance_display_info.extra}"
-            case (True, False):
-                extra = Tts._instance_display_info.device
-            case (False, True):
-                extra = Tts._instance_display_info.extra
-            case (False, False):
-                extra = ""
-        if extra:
-            extra = f"({extra})"
-        extra += " (loaded)"
-        tts_line += f" {QUALIFIER_COLOR}{extra}"
-    else:
-        tts_line = VALUE_COLOR + Tts.get_class().INFO.ui['proper_name']
-        if state.prefs.tts_force_cpu:
-            # Note, showing "force cpu" qualifier only if no instance exists
-            # b/c if instance exists, will already show device value cpus
-            tts_line += f" {QUALIFIER_COLOR}(force cpu)"
+    instance = Tts.get_instance_if_exists()
+    text = Tts.get_class().get_menu_text(state.project, instance)
+    
+    extras = []
+    if instance and instance.get_device():
+        extras.append(instance.get_device())
+    if instance:
+        extras.append("loaded")
+    if not instance and state.prefs.tts_force_cpu:
+        # Note, showing "force cpu" qualifier only if no instance exists
+        extras.append("will force cpu")
 
-    return tts_line
+    if extras:
+        text += f" {QUALIFIER_COLOR}({', '.join(extras)})"
+    return text
 
-def _make_sgl_omni_line(state: State) -> str:
+def _make_server_tts_text(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
     
     if Tts.get_type() == TtsModelType.NONE:
@@ -108,9 +113,9 @@ def _make_sgl_omni_line(state: State) -> str:
             else:
                 qualifier = f"{COL_ERROR}(offline)"
     
-    return f"{VALUE_COLOR}{label}" + (f" {qualifier}" if qualifier else "")
+    return f"{label}" + (f" {qualifier}" if qualifier else "")
 
-def _make_voice_line(state: State) -> str:
+def _make_voice_text(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
 
     voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
@@ -119,40 +124,41 @@ def _make_voice_line(state: State) -> str:
     )
     voice_prefix = text_util.strip_ansi_codes(voice_prefix).strip().rstrip(":")
     voice_value = text_util.strip_ansi_codes(voice_value).strip()
-    return VALUE_COLOR + (voice_value or voice_prefix or "none")
+    return voice_value or voice_prefix or "none"
 
-
-def _make_text_line(state: State) -> str:
+def _make_text_text(state: State) -> str:
     total_lines = len(state.project.phrase_groups)
     num_complete = state.project.sound_segments.num_generated()
-    text_line = VALUE_COLOR + f"{total_lines} lines"
-    text_line += f" {COL_DIM}({num_complete} generated)"
-    return text_line
+    text = f"{total_lines} lines"
+    text += f" {COL_DIM}({num_complete} generated)"
+    return text
 
 
-def _make_stt_line(state: State) -> str:
+def _make_stt_text(state: State) -> str:
     from tts_audiobook_tool.stt import Stt
 
-    stt_model = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
-    stt_line = VALUE_COLOR + stt_model
+    text = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
     if state.prefs.stt_variant == SttVariant.DISABLED:
-        stt_line += " disabled" # not dim
-    else:
-        if Stt.has_instance():
-            stt_variant = Stt.get_variant().id
-            fw_config = state.prefs.stt_config.description if not Stt.should_use_mlx_whisper() else ""
-            stt_line += f" {stt_variant} {COL_DIM}({fw_config}) {COL_DIM}(loaded)"
-        else:
-            stt_line += ""
+        text += " - disabled" # not dim
 
-    return stt_line
+    qualifiers = []
+    if not Stt.should_use_mlx_whisper():
+        qualifiers.append(Stt.get_variant().id) # eg, "large-v3"
+        qualifiers.append(state.prefs.stt_config.device) # eg, "cuda"
+    if Stt.has_instance():
+        qualifiers.append("loaded")
+    if qualifiers:
+        s2 = ", ".join(qualifiers)
+        text += f" {COL_DIM}({s2})"
+    
+    return text
 
+def _make_memory_text() -> str:
+    text = text_util.strip_ansi_codes(app_support.make_memory_string())
+    text = text.replace(":", "") # careful
+    return text if text else ""
 
-def _make_memory_line() -> str:
-    memory_line = text_util.strip_ansi_codes(app_support.make_memory_string())
-    memory_line = memory_line.replace(":", "") # careful
-    return VALUE_COLOR + memory_line if memory_line else ""
-
+# ---
 
 LABEL_COLOR = COL_DIM
 VALUE_COLOR = COL_MEDIUM

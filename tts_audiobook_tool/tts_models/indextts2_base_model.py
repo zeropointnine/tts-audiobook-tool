@@ -1,4 +1,5 @@
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -33,6 +34,14 @@ class IndexTts2BaseModel(TtsBaseModel):
             errors.append(err)
 
         return errors
+
+    @classmethod 
+    def get_menu_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> str:
+        s = cls.INFO.ui.get("proper_name") or ""
+        s += f" {COL_DIM}(fp16: {project.indextts2_use_fp16})"
+        return s
 
     @classmethod
     def get_voice_display_info(

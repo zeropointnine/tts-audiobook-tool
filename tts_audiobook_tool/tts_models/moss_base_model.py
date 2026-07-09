@@ -8,6 +8,8 @@ from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
+
+from tts_audiobook_tool import util
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -27,8 +29,8 @@ class MossBaseModel(TtsBaseModel):
     MAX_NEW_TOKENS = 1024
     ROLLING_CONTINUATION_MAX_LENGTH = 3
 
-    # Rem, when temp, audio_top_p, or audio_top_k are too low,
-    # model can fail to emit termination token, etc.
+    # Rem, when temperature, audio_top_p, or audio_top_k are too low
+    # respectively, model can fail to emit termination token, etc.
 
     # MOSS-TTS does not expose a structured supported-languages object in its
     # remote processor/config code. The processor accepts `language` as a
@@ -112,6 +114,15 @@ class MossBaseModel(TtsBaseModel):
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> bool:
         return MossConfigs.get_by_target(project.moss_target) == MossConfigs.LOCAL
+
+    @classmethod
+    def get_menu_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> str:
+        s = project.moss_target or MossConfigs.get_default_repo_id()
+        s = s.removeprefix("OpenMOSS-Team/")
+        s = util.ellipsize_path_for_menu(s)
+        return s
 
 # ---
 

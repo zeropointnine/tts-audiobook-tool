@@ -62,11 +62,11 @@ class PocketBaseModel(TtsBaseModel):
         return project.pocket_voice_file_name or project.pocket_predefined_voice
 
     @classmethod
-    def get_model_display_text(
+    def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        s = f"{cls.INFO.ui['proper_name']} {COL_DIM}{project.pocket_model_code}"
-        return s
+        model_code = project.pocket_model_code or PocketBaseModel.DEFAULT_LANGUAGE
+        return f"{cls.INFO.ui['proper_name']} {COL_DIM}({project.pocket_model_code})"
 
     @classmethod
     def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:

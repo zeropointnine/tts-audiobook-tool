@@ -1,10 +1,12 @@
 """
 Application entry-point
 
-Does dependency checks, shows one-time warnings, etc, and launches App.
-If argument "server" exists, bypasses interactive app and runs `Server` instead.
+- Sets global tts type based on current environment introspection
+- Does other dependency checks and blocks or shows warning if necessary
+- Shows other one-time warnings as needed
+- Launches either `App` or `Server`
 
-Imports must be staged carefully due to dependency checks etc
+Imports must be staged carefully due to dependency checks, etc.
 """
 
 # --------------------------------------------------------------------------------------------------
@@ -22,10 +24,13 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+# This pulls in some dependencies we would ideally first like to test for the existence of,
+# but can't be helped
 from tts_audiobook_tool.tts import Tts
 
 
-class Startup:
+class Start:
 
     def __init__(self) -> None:
 
@@ -41,12 +46,7 @@ class Startup:
         self.server_port: int = _args.port
 
     def start(self) -> None:
-        """
-        App entrypoint:
-        - Checks environment-related prereqs
-        - Prints one-time info messages as needed
-        - Starts the app proper
-        """
+        """ App entrypoint """
         
         print()
         self.init_tts_or_exit(self.is_server)
@@ -55,7 +55,7 @@ class Startup:
             self.exit_on_missing_ffmpeg_exe()
         self.exit_on_missing_ffmpeg_libs()
         self.exit_on_chatterbox_python_version()
-        self.exit_on_missing_packages()
+        self.exit_on_missing_new_packages()
         
         self.show_startup_hints()
         self.init_logging()
@@ -79,7 +79,7 @@ class Startup:
             exit(1)
 
     def exit_on_wrong_torch_flavor_windows(self) -> None:
-        if not _is_probably_cpu_only_torch_on_cuda_machine():
+        if not _is_cpu_only_torch_on_windows_nvidia_system():
             return
         if Tts.get_type().value.is_sgl_omni:
             return
@@ -119,7 +119,7 @@ class Startup:
                 hints.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
                 exit(1)
 
-    def exit_on_missing_packages(self) -> None:
+    def exit_on_missing_new_packages(self) -> None:
 
         new_packages = self.get_new_packages()
 
@@ -128,7 +128,7 @@ class Startup:
         missing_packages = [package for package in new_packages if not util.find_spec(package)]
         if not missing_packages:
             return
-
+        
         hint = Hint(
             "none",
             "The app's dependencies have changed",
@@ -224,11 +224,12 @@ class Startup:
 
 
 def main() -> None:
-    Startup().start()
+    Start().start()
 
 # ---
 
-def _is_probably_cpu_only_torch_on_cuda_machine() -> bool:
+def _is_cpu_only_torch_on_windows_nvidia_system() -> bool:
+    """ Infers whether vanilla Torch is installed on CUDA-capable Windows system """
     if sys.platform != "win32":
         return False
 
@@ -244,7 +245,7 @@ def _is_probably_cpu_only_torch_on_cuda_machine() -> bool:
     )
 
 def _has_nvidia_gpu_windows() -> bool:
-    """ Return result of True is reliable evidence that CUDA 'exists' """
+    """ Infers whether Nvidia CUDA exists on Windows """
 
     if sys.platform != "win32":
         return False
@@ -263,4 +264,3 @@ def _has_nvidia_gpu_windows() -> bool:
         return False
 
     return result.returncode == 0 and bool(result.stdout.strip())
-

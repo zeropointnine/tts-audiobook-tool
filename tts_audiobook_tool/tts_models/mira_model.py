@@ -17,6 +17,9 @@ class MiraModel(MiraBaseModel):
         self.mira_tts = MiraTTS('YatharthS/MiraTTS')
         self.context_tokens = None
         self.last_voice_path: str = ""
+        
+        # model does not use this value; is CUDA-only under the hood 
+        self._device = "" 
 
     def set_voice_clone(self, path: str) -> None:
         assert(self.mira_tts is not None)

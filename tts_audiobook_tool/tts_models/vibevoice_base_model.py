@@ -36,6 +36,17 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     # Slightly above the library default to reduce end truncation on longer prompts
     MAX_LENGTH_TIMES = 2.5
 
+    @classmethod
+    def get_menu_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+) -> str:
+        target = project.vibevoice_target or VibeVoiceBaseModel.DEFAULT_REPO_ID
+        target = target.removeprefix("vibevoice/")
+        target = target.removeprefix("microsoft/")
+        target = ellipsize_path_for_menu(target)
+        s = f"{cls.INFO.ui['proper_name']} {COL_DIM}({target})"
+        return s
+
     @property
     @abstractmethod
     def has_lora(self) -> bool:

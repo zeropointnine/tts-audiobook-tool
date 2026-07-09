@@ -42,6 +42,8 @@ class TtsBaseModel(ABC):
     stream_chunk_callback: StreamChunkCallback | None = None
     # Optional persistent callback invoked when a streaming generation finishes
     stream_end_callback: StreamEndCallback | None = None
+    # Describes the active inference device if pytorch
+    _device: str = ""
 
     def __init_subclass__(cls, **kwargs):
         # Called whenever a new subclass is created
@@ -143,9 +145,24 @@ class TtsBaseModel(ABC):
         text = self.massage_for_inference(text)
         return text
 
+    def get_device(self) -> str:
+        """ Returns instance's pytorch device (if applicable) """
+        return self._device
+
     # ---
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 
+    @classmethod 
+    def get_menu_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> str:
+        """ 
+        Compact display text identifying model, used for menu status line, plus.
+        May include variant info; may be more specific when `instance` exists.
+        Format should be: SomeModel {COL_DIM}(optional qualifier)
+        """
+        return cls.INFO.ui.get("proper_name") or ""
+    
     @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
@@ -197,18 +214,7 @@ class TtsBaseModel(ABC):
         
         tag = app_text.sanitize_for_filename(voice_file_name[:30])
         return tag
-    
-    @classmethod
-    def get_model_display_text(
-        cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> str:
-        """ 
-        Formatted text describing model including potential 'variant' info, used for main menu, plus.
-        Color formatting convention is: White-Model-Text Gray-Qualification-Text, with no parens
 
-        TODO: No longer used; revisit
-        """
-        return cls.INFO.ui['proper_name']
 
     @classmethod
     def get_voice_display_info(

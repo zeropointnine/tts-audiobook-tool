@@ -29,7 +29,7 @@ class FishS2Model(FishS2BaseModel):
 
         # TODO verify mpc; also mpc + compile? probably not presumably?
         
-        self.device = device
+        self._device = device
         self._compile_enabled = (device == "cuda" and compile_enabled)
 
         # ------------------------------------------------------------------------------------------
@@ -77,11 +77,11 @@ class FishS2Model(FishS2BaseModel):
             exit(1)
 
         dac_path = os.path.join(model_dir, "codec.pth")
-        self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, self.device)
+        self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, self._device)
 
         t2s_path = model_dir
         self.t2s_model, self.decode_one_token = init_t2s_model(
-            t2s_path, self.device, torch.float16, compile=self._compile_enabled
+            t2s_path, self._device, torch.float16, compile=self._compile_enabled
         )
 
         self._voice_clone: VoiceClone | None = None
@@ -107,7 +107,7 @@ class FishS2Model(FishS2BaseModel):
         if ref_audio.shape[0] > 1:
             ref_audio = ref_audio.mean(0, keepdim=True)
         ref_audio = torchaudio.functional.resample(ref_audio, sr, self.dac_model.sample_rate)
-        audios = ref_audio[None].to(self.device)
+        audios = ref_audio[None].to(self._device)
 
         self._voice_clone = VoiceClone(
             source_path=source_path, transcribed_text=transcribed_text, audios=audios
@@ -170,7 +170,7 @@ class FishS2Model(FishS2BaseModel):
             return None, None
 
         combined_text = " ".join(part.strip() for part in text_parts if part.strip())
-        token_parts_on_device = [tokens.to(self.device) for tokens in token_parts]
+        token_parts_on_device = [tokens.to(self._device) for tokens in token_parts]
         combined_tokens = torch.cat(token_parts_on_device, dim=1)
 
         return [combined_text], [combined_tokens]
@@ -189,7 +189,7 @@ class FishS2Model(FishS2BaseModel):
 
         for response in generate_long(
             model=self.t2s_model,
-            device=self.device,
+            device=self._device,
             decode_one_token=self.decode_one_token,  # type: ignore
             text=prompt,
             prompt_text=prompt_text,
@@ -306,7 +306,7 @@ class FishS2Model(FishS2BaseModel):
                 # Step 1: Prompt tokens
 
                 if self._voice_clone and self._voice_clone.prompt_tokens is None:
-                    audio_lengths = torch.tensor([self._voice_clone.audios.shape[2]], device=self.device, dtype=torch.long)
+                    audio_lengths = torch.tensor([self._voice_clone.audios.shape[2]], device=self._device, dtype=torch.long)
                     voice_prompt_tokens, _ = self.dac_model.encode(self._voice_clone.audios, audio_lengths)
                     if voice_prompt_tokens.ndim == 3:
                         voice_prompt_tokens = voice_prompt_tokens[0]
@@ -340,7 +340,7 @@ class FishS2Model(FishS2BaseModel):
 
                 # Step 3: Make audio data using semantic tokens
 
-                decode_tokens = torch.from_numpy(semantic_tokens).to(self.device).long()
+                decode_tokens = torch.from_numpy(semantic_tokens).to(self._device).long()
                 if decode_tokens.ndim == 2:
                     decode_tokens = decode_tokens[None]  # Add batch dimension
                 tensor = self.dac_model.from_indices(decode_tokens)
@@ -352,7 +352,7 @@ class FishS2Model(FishS2BaseModel):
                 # print(data.shape)  # Should be (N,) where N is total elements
 
                 del tensor
-                if self.device == "cuda":
+                if self._device == "cuda":
                     torch.cuda.empty_cache()
 
                 return Sound(data, self.dac_model.sample_rate)

@@ -40,13 +40,11 @@ from tts_audiobook_tool.util import *
 # To find commit hashes, go to each model's "Commits" tab on HuggingFace and copy the hash
 # of the last known-working commit.
 # --------------------------------------------------------------------------------------------------
-
 _PINNED_REVISIONS = {
     "bosonai/higgs-audio-v2-tokenizer": "9d4988fbd4ad07b4cac3a5fa462741a41810dbec",
     "bosonai/higgs-audio-v2-generation-3B-base": "10840182ca4ad5d9d9113b60b9bb3c1ef1ba3f84",
     "bosonai/hubert_base": "b4b85f1652c16ad63fdc818221b215b79ff55934",
 }
-
 
 def _pinned_snapshot(repo_id: str, revision: str) -> str:
     """Download (or retrieve from cache) a specific revision of a HuggingFace model.
@@ -79,6 +77,8 @@ class HiggsV2Model(HiggsV2BaseModel):
     """
 
     def __init__(self, device: str):
+
+        self._device = device
 
         if device == "cuda":
             device = f"cuda:0"

@@ -435,9 +435,6 @@ class MenuUtil:
 
 # ---
 
-def should_show_menu_status_details(state: State) -> bool:
-    return not state.prefs.menu_clears_screen
-
 def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
     if isinstance(string_or_maker, str):
         return string_or_maker

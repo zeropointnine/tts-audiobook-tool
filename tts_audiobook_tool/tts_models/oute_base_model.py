@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from tts_audiobook_tool.app_types import Strictness
+from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_support import app_text
@@ -66,6 +67,18 @@ class OuteBaseModel(TtsBaseModel):
 
         tag = app_text.sanitize_for_filename(voice_file_name[:30])
         return tag
+
+    @classmethod
+    def get_missing_voice_file_issue(
+            cls,
+            project: Project,
+            voice_file_name_attr: str | None = None,
+    ) -> ReadinessIssue | None:
+        """
+        Override to validate Oute's persisted voice json file name instead of
+        its in-memory voice dict.
+        """
+        return super().get_missing_voice_file_issue(project, "oute_voice_file_name")
 
     @classmethod
     def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:

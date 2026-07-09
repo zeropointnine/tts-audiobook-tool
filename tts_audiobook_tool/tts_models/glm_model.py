@@ -19,7 +19,7 @@ from tts_audiobook_tool.util import printt
 
 class GlmModel(GlmBaseModel):
     """
-    Code adapted from: https://github.com/zai-org/GLM-TTS, glmtts_inference.py
+    Adapted code from: https://github.com/zai-org/GLM-TTS, glmtts_inference.py
     """
 
     def __init__(self, device: str, sample_rate: int, use_phoneme: bool=False):
@@ -27,7 +27,7 @@ class GlmModel(GlmBaseModel):
         if not device.startswith("cuda"):
             # TODO: reference code only mentions cuda and cpu; try mps
             raise ValueError("Only CUDA is supported for the GLM-TTS model at the moment")
-        self.device = device
+        self._device = device
 
         if sample_rate not in [24000, 32000]:
             raise ValueError(f"Unsupported sampling_rate: {sample_rate}")
@@ -135,7 +135,7 @@ class GlmModel(GlmBaseModel):
         cache_speech_token = [prompt_speech_token.squeeze().tolist()]
         flow_prompt_token = torch.tensor(
             cache_speech_token, dtype=torch.int32
-        ).to(self.device)
+        ).to(self._device)
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
@@ -162,7 +162,7 @@ class GlmModel(GlmBaseModel):
             seed=seed,
             flow_prompt_token=flow_prompt_token,
             speech_feat=speech_feat,
-            device=self.device,
+            device=self._device,
             use_phoneme=self.use_phoneme,
         )
 

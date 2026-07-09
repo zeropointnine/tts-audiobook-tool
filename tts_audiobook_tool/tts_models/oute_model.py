@@ -14,7 +14,9 @@ class OuteModel(OuteBaseModel):
 
     def __init__(self):
 
-        from tts_audiobook_tool.config_oute import MODEL_CONFIG # let app crash on error
+        # Do not catch any error here (let app crash):
+        from tts_audiobook_tool.config_oute import MODEL_CONFIG 
+
         try:
             # Overwrite with dev version if exists
             from ..config_oute_dev import MODEL_CONFIG # type: ignore

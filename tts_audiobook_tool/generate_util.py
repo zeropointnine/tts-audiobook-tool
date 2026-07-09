@@ -212,7 +212,7 @@ class GenerateUtil:
                     did_abort_model_errors = consecutive_model_errors >= max_consecutive_model_errors
                     val_line = f"{COL_ERROR}Error: {error_string}"
                     if did_abort_model_errors:
-                        val_line += f"; {COL_ERROR}too many TTS model errors in a row"
+                        val_line += f"; {COL_ERROR}too many consecutive TTS model errors"
                     elif new_retry_count > max_retries:
                         num_errored += 1
                         val_line += f"; {COL_ERROR}max retries reached"
@@ -355,6 +355,8 @@ class GenerateUtil:
         if num_passed == len(sorted_indices):
             ok += " (all)"
         warnings_string += f"Lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
+        if Stt.has_instance() and ModelManager.has_yamnet_detector():
+            warnings_string += f"Num retries triggered due to detected music: {num_failed_music}\n"
         if num_improved:
             warnings_string += f"Lines improved on retry: {COL_OK}{num_improved}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
@@ -364,9 +366,6 @@ class GenerateUtil:
             warnings_string += f"Lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
             warnings_string += f"Num words: {sum(word_counts.values())}\n"
-            if Stt.has_instance():
-                if ModelManager.has_yamnet_detector():
-                    warnings_string += f"Lines with music fails: {num_failed_music}\n"
             warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
         printt(warnings_string)
 
@@ -622,9 +621,8 @@ class GenerateUtil:
     def print_consecutive_model_errors_message(max_consecutive_model_errors: int) -> None:
         printt(
             f"{COL_ERROR}Stopping generation: "
-            f"{max_consecutive_model_errors} TTS model errors occurred in a row."
+            f"Too many consecutive TTS model errors ({max_consecutive_model_errors})."
         )
-        printt(f"{COL_ERROR}Check the TTS model/server before retrying.")
         printt()
 
     @staticmethod

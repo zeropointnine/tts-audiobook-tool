@@ -1,8 +1,16 @@
 # tts_audiobook_tool/tts_model/omnivoice_base_model.py
 from __future__ import annotations
 
+from tts_audiobook_tool import util
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from tts_audiobook_tool.project import Project
+else:
+    Project = object
 
 
 class OmniVoiceBaseModel(TtsBaseModel):
@@ -19,8 +27,17 @@ class OmniVoiceBaseModel(TtsBaseModel):
     MIN_STEPS       = 8
     MAX_STEPS       = 64
 
-    def __init__(self) -> None:
-        raise NotImplementedError
+    @classmethod 
+    def get_menu_text(
+        cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> str:
+        if not project.omnivoice_target or project.omnivoice_target == OmniVoiceBaseModel.DEFAULT_REPO_ID:
+            s = cls.INFO.ui.get("proper_name") or ""
+        else:
+            s = cls.INFO.ui.get("short_name") or ""
+            target = util.ellipsize_path_for_menu(project.omnivoice_target)
+            s += f" {COL_DIM}({target})"
+        return s
 
     def generate(
         self,

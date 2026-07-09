@@ -46,16 +46,15 @@ class VibeVoiceModel(VibeVoiceBaseModel):
     VibeVoice TTS inference logic
     Mostly copy-pasted from: VibeVoice/demo/inference_from_file.py
     """
-
     def __init__(
             self,
-            device_map: str,
+            device: str,
             model_target: str = "",
             lora_path: str | None = None,
             max_new_tokens: int | None = None,
     ):
 
-        self._device_map = device_map
+        self._device = device
         if not model_target:
             model_target = VibeVoiceBaseModel.DEFAULT_REPO_ID
         self.max_new_tokens = max_new_tokens
@@ -66,7 +65,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         self.processor = VibeVoiceProcessor.from_pretrained(model_target)
 
         # Determine attention implementation type
-        if "cuda" in device_map:
+        if "cuda" in device:
             try:
                 from flash_attn import flash_attn_func # type: ignore
                 attn_implementation = "flash_attention_2"
@@ -81,7 +80,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             model_target,
             torch_dtype=torch.bfloat16,
-            device_map=device_map,
+            device_map=device,
             attn_implementation=attn_implementation
         )
         

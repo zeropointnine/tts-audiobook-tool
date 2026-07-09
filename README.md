@@ -699,6 +699,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Batch processing support
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
+- Music detection/rejection (for MOSS-TTS-Local-Transformer)
 
 **OmniVoice**
 

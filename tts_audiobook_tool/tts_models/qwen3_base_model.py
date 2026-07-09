@@ -176,12 +176,13 @@ class Qwen3BaseModel(TtsBaseModel):
     # ---
 
     @classmethod
-    def get_model_display_text(
+    def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
 ) -> str:
-        path = project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
-        path = ellipsize_path_middle(path)        
-        s = f"{cls.INFO.ui['proper_name']} {COL_DIM}{path}"
+        s = project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
+        s = s.removeprefix("Qwen/")
+        s = ellipsize_path_for_menu(s)
+        s = f"{cls.INFO.ui['proper_name']} {COL_DIM}({s})"
         return s
 
     @classmethod

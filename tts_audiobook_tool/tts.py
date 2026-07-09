@@ -65,9 +65,6 @@ class Tts:
 
     _sgl_omni_type: TtsModelType | None = None
 
-    # Salient details of the current instance for display
-    _instance_display_info: InstanceDisplayInfo | None = None
-
     _model_params: dict = {}
     _force_cpu: bool = False
 
@@ -372,7 +369,6 @@ class Tts:
             model_type = Tts._model_params.get("chatterbox_type")
             assert isinstance(model_type, ChatterboxType), "chatterbox_type not set"
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_instance_info(InstanceDisplayInfo(model_type.label, device))
             
             from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(model_type, device)
@@ -393,8 +389,6 @@ class Tts:
                 extra = f"compile: {compile_enabled}"
             else:
                 extra = ""
-            
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
             
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
             Tts._fish_s1 = FishS1Model(device, compile_enabled)
@@ -417,8 +411,6 @@ class Tts:
             else:
                 extra = ""
             
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, extra))
-            
             from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
             Tts._fish_s2 = FishS2Model(device, compile_enabled)
             printt()
@@ -428,7 +420,6 @@ class Tts:
     @staticmethod
     def get_fish_s2_server() -> FishS2ServerBaseModel:
         if not Tts._fish_s2_server:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
             from tts_audiobook_tool.tts_models.fish_s2_server_model import FishS2ServerModel
             Tts._fish_s2_server = FishS2ServerModel()
             printt()
@@ -439,7 +430,6 @@ class Tts:
         if not Tts._glm:
             device = "cuda" # cpu not currently supported
             sr = Tts._model_params["glm_sr"]
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"{sr}hz"))
 
             from tts_audiobook_tool.tts_models.glm_model import GlmModel
             Tts._glm = GlmModel(device, sr)
@@ -450,8 +440,6 @@ class Tts:
     def get_higgs() -> HiggsV2BaseModel:
         if not Tts._higgs_v2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
-            
             from tts_audiobook_tool.tts_models.higgs_v2_model import HiggsV2Model
             Tts._higgs_v2 = HiggsV2Model(device)
             printt()
@@ -461,7 +449,6 @@ class Tts:
     @staticmethod
     def get_higgs_v3() -> HiggsV3ServerBaseModel:
         if not Tts._higgs_v3:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
             from tts_audiobook_tool.tts_models.higgs_v3_server_model import HiggsV3ServerModel
             Tts._higgs_v3 = HiggsV3ServerModel()
             printt()
@@ -472,8 +459,6 @@ class Tts:
         if not Tts._indextts2:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device, f"fp16: {use_fp16}"))
-
             from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
             printt()
@@ -482,8 +467,6 @@ class Tts:
     @staticmethod
     def get_mira() -> MiraBaseModel:
         if not Tts._mira:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], "cuda"))
-            
             from tts_audiobook_tool.tts_models.mira_model import MiraModel
             Tts._mira = MiraModel()
             printt()
@@ -494,14 +477,10 @@ class Tts:
         if not Tts._moss:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
-            target_string = target.removeprefix("OpenMOSS-Team/")
-            target_string = ellipsize_path_for_menu(target_string)
 
             looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
             if looks_like_path and not os.path.exists(target):
                 raise ValueError(f"MOSS model path not found: '{target}'")
-
-            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
 
             from tts_audiobook_tool.tts_models.moss_model import MossModel
             Tts._moss = MossModel(device=device, model_target=target)
@@ -511,7 +490,6 @@ class Tts:
     @staticmethod
     def get_moss_server() -> MossServerBaseModel:
         if not Tts._moss_server:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]), and_print=False)
             from tts_audiobook_tool.tts_models.moss_server_model import MossServerModel
             Tts._moss_server = MossServerModel()
             printt()
@@ -523,31 +501,14 @@ class Tts:
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             model_target = Tts._model_params.get("omnivoice_target", "") \
                         or OmniVoiceBaseModel.DEFAULT_REPO_ID
-            short_name = Tts.get_type().value.ui["short_name"]
-
-            target_string = model_target
-            target_string = target_string.removeprefix("k2-fsa/")
-            target_string = ellipsize_path_for_menu(target_string)
-
-            if model_target == OmniVoiceBaseModel.DEFAULT_REPO_ID:
-                model_description = short_name
-            else:
-                model_description = f"{short_name} {COL_DIM}({target_string}){COL_DEFAULT}"
-
-            Tts._set_instance_info(InstanceDisplayInfo(model_description, device))
-
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
-            Tts._omnivoice = OmniVoiceModel(
-                device=device,
-                model_target=model_target,
-            )
+            Tts._omnivoice = OmniVoiceModel(device=device, model_target=model_target)
             printt()
         return Tts._omnivoice
 
     @staticmethod
     def get_oute() -> OuteBaseModel:
         if not Tts._oute:
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"]))
             from tts_audiobook_tool.tts_models.oute_model import OuteModel
             Tts._oute = OuteModel()
             printt()
@@ -558,8 +519,6 @@ class Tts:
         if not Tts._pocket:
             language = Tts._model_params.get("pocket_model_code", "")
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-            Tts._set_instance_info(InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"], device))
-            
             from tts_audiobook_tool.tts_models.pocket_model import PocketModel
             Tts._pocket = PocketModel(device=device, language=language)
             printt()
@@ -571,18 +530,11 @@ class Tts:
         if not Tts._qwen3:
 
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-
             target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
-
-            target_string = target
-            target_string = target_string.removeprefix("Qwen/")
-            target_string = ellipsize_path_for_menu(target_string)
 
             looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
             if looks_like_path and not os.path.exists(target):
                 raise ValueError(f"Qwen3 model path not found: '{target}'")
-
-            Tts._set_instance_info(InstanceDisplayInfo(target_string, device))
 
             from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             try:
@@ -597,8 +549,6 @@ class Tts:
     @staticmethod
     def get_qwen3tts_server() -> Qwen3ServerBaseModel:
         if not Tts._qwen3tts_server:
-            info = InstanceDisplayInfo(Tts.get_type().value.ui["proper_name"])
-            Tts._set_instance_info(info, and_print=False)
             from tts_audiobook_tool.tts_models.qwen3_server_model import Qwen3ServerModel
             Tts._qwen3tts_server = Qwen3ServerModel()
             printt()
@@ -610,22 +560,12 @@ class Tts:
         if not Tts._vibevoice:
 
             device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
-
             target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
+            lora_path = Tts._model_params.get("vibevoice_lora_path", "") 
             
-            target_string = target
-            target_string = target_string.removeprefix("microsoft/")
-            target_string = target_string.removeprefix("vibevoice/")
-            target_string = ellipsize_path_for_menu(target_string)
-            
-            lora_path = Tts._model_params.get("vibevoice_lora_path", "")
-            extra = "with lora" if lora_path else ""
-
-            Tts._set_instance_info(InstanceDisplayInfo(target_string, device, extra))
-
             from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
-                device_map=device,
+                device=device,
                 model_target=target,
                 lora_path=lora_path,
                 max_new_tokens=VibeVoiceBaseModel.MAX_TOKENS
@@ -654,7 +594,6 @@ class Tts:
             Tts._qwen3tts_server = None
             Tts._pocket = None
             Tts._omnivoice = None
-            Tts._instance_display_info = None
         app_memory.gc_ram_vram()
 
     @staticmethod
@@ -673,23 +612,6 @@ class Tts:
         supported_devices = Tts.get_type().value.local_torch_devices
         intersection = [item for item in available_devices if item in supported_devices]
         return intersection[0] if intersection else ""
-
-    @staticmethod
-    def _set_instance_info(info: InstanceDisplayInfo, and_print: bool=True) -> None:
-        # TODO: refactor yek
-        
-        Tts._instance_display_info = info
-
-        if not info.device and not info.extra:
-            extra = ""
-        elif info.device and info.extra:
-            extra = f"{info.device}, {info.extra}"
-        elif info.device:
-            extra = info.device
-        else: # extra
-            extra = info.extra        
-        if and_print:
-            print_model_init(model_description=info.model_description, extra=extra)
 
     @staticmethod
     def update_tts_type() -> None:

@@ -5,7 +5,7 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types import Hint
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
@@ -89,7 +89,7 @@ class ProjectMenu:
             return items
 
         value = text_util.make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
-        heading = make_menu_label("Project", value) if should_show_menu_status_details(state) else "Project"
+        heading = make_menu_label("Project", value) if not state.prefs.menu_clears_screen else "Project"
         MenuUtil.menu(
             state, 
             heading,

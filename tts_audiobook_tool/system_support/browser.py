@@ -74,7 +74,10 @@ def launch_player_with_chromium(
         index_html_path = Path(package_dir).parent / "browser_player" / "index.html"
     else:
         index_html_path = Path("browser_player") / "index.html"
-    index_html_url = index_html_path.resolve().as_uri()
+    if platform.system() == "Windows":
+        index_html_url = index_html_path.absolute().as_uri()
+    else:
+        index_html_url = index_html_path.resolve().as_uri()
     browser_url = text_util.make_url_with_params(index_html_url, {"url": audio_file_path})
 
     command: list[str] = [chromium_path]

@@ -1,7 +1,7 @@
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.chat_menu import ChatMenu
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil, should_show_menu_status_details
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.real_time_playback_menu import RealTimePlaybackMenu
 from tts_audiobook_tool.menus.options_menu import OptionsMenu
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
@@ -85,18 +85,17 @@ class MainMenu:
             )
             return items
 
-        if should_show_menu_status_details(state):
-            s = make_tts_model_heading_detail(state)
-            heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)} {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
-        else:
-            heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)}"
-        
+        heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)}"
+        if not state.prefs.menu_clears_screen:
+            s = get_heading_tts_text(state)
+            heading += f" {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
         MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
 
 # ---
 
-def make_tts_model_heading_detail(state: State) -> str:
-    s = Tts.get_class().get_model_display_text(state.project, Tts.get_instance_if_exists())
+def get_heading_tts_text(state: State) -> str:
+    
+    s = Tts.get_class().get_menu_text(state.project, Tts.get_instance_if_exists())
     if not Tts.is_sgl_mode():
         return s
     SglOmniUtil.update_model_id()
@@ -110,7 +109,7 @@ def make_tts_model_heading_detail(state: State) -> str:
 
 # Project
 def make_project_label(state: State) -> str:
-    if should_show_menu_status_details(state):
+    if not state.prefs.menu_clears_screen:
         currently = make_currently_string(
             state.project.dir_path, 
             required_predicate=lambda: not bool(state.project.dir_path),
@@ -124,9 +123,11 @@ def make_project_label(state: State) -> str:
 
 # Voice
 def make_voice_label(state: State) -> str:
+    
     base_label = f"Voice clone and model settings"
-    if not should_show_menu_status_details(state):
+    if state.prefs.menu_clears_screen:
         return base_label
+    
     prefix, value = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
     if not value:
         combined = prefix

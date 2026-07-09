@@ -15,7 +15,6 @@ from tts_audiobook_tool.util import *
 
 class Qwen3Model(Qwen3BaseModel):
     """
-    App wrapper for `Qwen3TTSModel`
     """
 
     def __init__(self, model_target: str, device: str): 

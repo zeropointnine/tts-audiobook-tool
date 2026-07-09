@@ -49,7 +49,7 @@ class ChatterboxBaseModel(TtsBaseModel):
         return ""
 
     @classmethod
-    def get_model_display_text(
+    def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
         return project.chatterbox_type.label # eg, "Chatterbox-Multilingual"

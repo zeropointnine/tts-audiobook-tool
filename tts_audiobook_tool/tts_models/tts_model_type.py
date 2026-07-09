@@ -69,7 +69,7 @@ class TtsModelType(Enum):
     Enumerates all supported TTS models using `TtsModelSpec` instances
     """
 
-    # Placeholder
+    # Placeholder model type when no other models are detected
     NONE = TtsModelSpec(
         id="none",
         is_sgl_omni=False,
@@ -92,45 +92,12 @@ class TtsModelType(Enum):
         requirements_file_name="",
         ui = {
             "proper_name": "None",
-            "short_name": "none",
+            "short_name": "None",
             "voice_path_console": "",
             "voice_path_requestor": "",
             "project_links": ["https://www.example.com"]
         },
         substitutions=[]
-    )
-
-    OUTE = TtsModelSpec(
-        id="oute",
-        is_sgl_omni=False,
-        server_model_id_substring="",
-        local_module_test="outetts",
-        local_torch_devices = [], # not applicable
-        file_tag="oute",
-        sample_rate=44100,
-        max_words_default=40,
-        max_words_reco_range=(40, 40),
-        voice_target_attr="oute_voice_json", # rem, special case, is not a sound file
-        requires_voice=True,
-        voice_transcript_attr="",
-        extra_file_attrs=[],
-        batch_size_attr="",
-        can_stream=False,
-        semantic_trim_last=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=False, # TODO: check this
-        requirements_file_name="requirements-oute.txt",
-        ui = {
-            "proper_name": "Oute TTS",
-            "short_name": "Oute",
-            "voice_path_console": "Enter voice clone audio clip file path (up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (up to 15s)",
-            "project_links": ["https://github.com/edwko/OuteTTS", "https://huggingface.co/OuteAI"]
-        },
-        substitutions=[
-            # fyi u2500 = "box drawing light horizontal". have seen it in the wild used as an em-dash.
-            ("\u2014", ", "), ("\u2500", ", ")
-        ]
     )
 
     CHATTERBOX = TtsModelSpec(
@@ -140,7 +107,7 @@ class TtsModelType(Enum):
         local_module_test="chatterbox",
         local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="chatterbox",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
         voice_target_attr="chatterbox_voice_file_name",
@@ -172,7 +139,7 @@ class TtsModelType(Enum):
         local_module_test="dist:fish-speech==0.1.0",
         local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="s1-mini",
-        sample_rate=44100,
+        sample_rate=44_100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="fish_s1_voice_file_name",
@@ -204,7 +171,7 @@ class TtsModelType(Enum):
         local_module_test="dist:fish-speech==2.0.0",
         local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="s2-pro",
-        sample_rate=44100,
+        sample_rate=44_100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="fish_s2_voice_file_name",
@@ -236,7 +203,7 @@ class TtsModelType(Enum):
         local_module_test="",
         local_torch_devices = [],
         file_tag="s2-pro",
-        sample_rate=44100,
+        sample_rate=44_100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="fish_s2_server_voice_target",
@@ -265,6 +232,40 @@ class TtsModelType(Enum):
         ]
     )
 
+    GLM = TtsModelSpec(
+        id="glm",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="glm_tts",
+        local_torch_devices = ["cuda"], # cuda-only atm
+        file_tag="glm",
+        sample_rate=24_000,
+        max_words_default=40,
+        max_words_reco_range=(40, 40),
+        voice_target_attr="glm_voice_file_name",
+        requires_voice=True,
+        voice_transcript_attr="glm_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="",
+        can_stream=False,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-glm.txt",
+        ui = {
+            "proper_name": "GLM-TTS",
+            "short_name": "GLM",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/zai-org/GLM-TTS", "https://huggingface.co/zai-org/GLM-TTS"]
+        },
+        substitutions=[
+            (";", ","), # semicolon generates random syllable
+            ("\u2014", ", "), ("\u2500", ", "), # em-dash doesn't create caesura
+            (" \u2013 ", ", ") # space-en-dash-space doesn't create caesura
+        ]
+    )
+
     HIGGS_V2 = TtsModelSpec(
         id="higgs_v2",
         is_sgl_omni=False,
@@ -272,7 +273,7 @@ class TtsModelType(Enum):
         local_module_test="boson_multimodal",
         local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="higgs_v2",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 40),
         voice_target_attr="higgs_voice_file_name",
@@ -304,7 +305,7 @@ class TtsModelType(Enum):
         local_module_test="",
         local_torch_devices = [],
         file_tag="higgs_v3",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="higgs_v3_voice_target",
@@ -332,40 +333,6 @@ class TtsModelType(Enum):
         ]
     )
 
-    VIBEVOICE = TtsModelSpec(
-        id="vibevoice",
-        is_sgl_omni=False,
-        server_model_id_substring="",
-        local_module_test="vibevoice",
-        local_torch_devices = ["cuda", "mps", "cpu"],
-        file_tag="vibevoice",
-        sample_rate=24000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
-        voice_target_attr="vibevoice_voice_file_name",
-        requires_voice=False,
-        voice_transcript_attr="",
-        extra_file_attrs=[],
-        batch_size_attr="vibevoice_batch_size",
-        can_stream=True,
-        semantic_trim_last=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=True,
-        requirements_file_name="requirements-vibevoice.txt",
-        ui = {
-            "proper_name": "VibeVoice",
-            "short_name": "VibeVoice",
-            "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip",
-            "project_links": ["https://github.com/vibevoice-community/VibeVoice"]
-        },
-        substitutions=[
-            ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
-            ("\u2019", "'"), # fancy apostrophe causes rest of word to not be spoken
-            ("…", ","), ("...", ",") # ellipsis can wreck gen badly
-        ]
-    )
-
     INDEXTTS2 = TtsModelSpec(
         id="indextts2",
         is_sgl_omni=False,
@@ -373,7 +340,7 @@ class TtsModelType(Enum):
         local_module_test="indextts",
         local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="indextts2",
-        sample_rate=22050,
+        sample_rate=22_050,
         max_words_default=40,
         max_words_reco_range=(40, 60),
         voice_target_attr="indextts2_voice_file_name",
@@ -399,40 +366,6 @@ class TtsModelType(Enum):
         ]
     )
 
-    GLM = TtsModelSpec(
-        id="glm",
-        is_sgl_omni=False,
-        server_model_id_substring="",
-        local_module_test="glm_tts",
-        local_torch_devices = ["cuda"], # cuda-only atm
-        file_tag="glm",
-        sample_rate=24000,
-        max_words_default=40,
-        max_words_reco_range=(40, 40),
-        voice_target_attr="glm_voice_file_name",
-        requires_voice=True,
-        voice_transcript_attr="glm_voice_transcript",
-        extra_file_attrs=[],
-        batch_size_attr="",
-        can_stream=False,
-        semantic_trim_last=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=False,
-        requirements_file_name="requirements-glm.txt",
-        ui = {
-            "proper_name": "GLM-TTS",
-            "short_name": "GLM",
-            "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip",
-            "project_links": ["https://github.com/zai-org/GLM-TTS", "https://huggingface.co/zai-org/GLM-TTS"]
-        },
-        substitutions=[
-            (";", ","), # semicolon generates random syllable
-            ("\u2014", ", "), ("\u2500", ", "), # em-dash doesn't create caesura
-            (" \u2013 ", ", ") # space-en-dash-space doesn't create caesura
-        ]
-    )
-
     MIRA = TtsModelSpec(
         id="mira",
         is_sgl_omni=False,
@@ -440,7 +373,7 @@ class TtsModelType(Enum):
         local_module_test="mira",
         local_torch_devices = [], # does not take in a device as a parameters
         file_tag="mira",
-        sample_rate=48000,
+        sample_rate=48_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="mira_voice_file_name",
@@ -467,39 +400,6 @@ class TtsModelType(Enum):
         ]
     )
 
-    POCKET = TtsModelSpec(
-        id="pocket",
-        is_sgl_omni=False,
-        server_model_id_substring="",
-        local_module_test="pocket_tts",
-        local_torch_devices=["cuda", "mps", "cpu"],
-        file_tag="pocket",
-        sample_rate=24000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
-        voice_target_attr="pocket_voice_file_name",
-        requires_voice=True,
-        voice_transcript_attr="",
-        extra_file_attrs=[],
-        batch_size_attr="",
-        can_stream=True,
-        semantic_trim_last=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=False,
-        requirements_file_name="requirements-pocket.txt",
-        ui={
-            "proper_name": "Pocket TTS",
-            "short_name": "Pocket",
-            "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)",
-            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"],
-            "opt_in_url": "https://github.com/kyutai-labs/pocket-tts" # special case
-        },
-        substitutions=[
-            # Generally handles caesura-related punctuation decently and with natural variations in duration
-        ]
-    )
-
     MOSS = TtsModelSpec(
         id="moss",
         is_sgl_omni=False,
@@ -507,7 +407,7 @@ class TtsModelType(Enum):
         local_module_test="dist:moss-tts",
         local_torch_devices=["cuda", "cpu"],
         file_tag="moss",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="moss_voice_file_name",
@@ -539,7 +439,7 @@ class TtsModelType(Enum):
         local_module_test="",
         local_torch_devices=[],
         file_tag="moss",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="moss_voice_file_name",
@@ -568,6 +468,104 @@ class TtsModelType(Enum):
         ]
     )
 
+    OMNIVOICE = TtsModelSpec(
+        id="omnivoice",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="omnivoice",
+        local_torch_devices=["cuda", "mps", "cpu"],
+        file_tag="omnivoice",
+        sample_rate=24_000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80), 
+        voice_target_attr="omnivoice_voice_file_name",
+        requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
+        voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
+        extra_file_attrs=[],
+        batch_size_attr="",
+        can_stream=False,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=True, # slightly more error-prone when all-caps
+        requirements_file_name="requirements-omnivoice.txt",
+        ui={
+            "proper_name": "OmniVoice",
+            "short_name": "OmniVoice",
+            "voice_path_console": "Enter voice clone audio clip file path (3-10s recommended, up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (3-10s recommended, up to 15s)",
+            "project_links": ["https://github.com/k2-fsa/OmniVoice", "https://huggingface.co/k2-fsa/OmniVoice"]
+        },
+        substitutions=[
+            # Generally handles caesura-related punctuation decently and with natural variations in duration
+        ]
+    )
+
+    OUTE = TtsModelSpec(
+        id="oute",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="outetts",
+        local_torch_devices = [], # not applicable
+        file_tag="oute",
+        sample_rate=44_100,
+        max_words_default=40,
+        max_words_reco_range=(40, 40),
+        voice_target_attr="oute_voice_json", # rem, special case, is not a sound file
+        requires_voice=True,
+        voice_transcript_attr="",
+        extra_file_attrs=[],
+        batch_size_attr="",
+        can_stream=False,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False, # TODO: check this
+        requirements_file_name="requirements-oute.txt",
+        ui = {
+            "proper_name": "Oute TTS",
+            "short_name": "Oute",
+            "voice_path_console": "Enter voice clone audio clip file path (up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (up to 15s)",
+            "project_links": ["https://github.com/edwko/OuteTTS", "https://huggingface.co/OuteAI"]
+        },
+        substitutions=[
+            # fyi u2500 = "box drawing light horizontal". have seen it in the wild used as an em-dash.
+            ("\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
+    POCKET = TtsModelSpec(
+        id="pocket",
+        is_sgl_omni=False,
+        server_model_id_substring="",
+        local_module_test="pocket_tts",
+        local_torch_devices=["cuda", "mps", "cpu"],
+        file_tag="pocket",
+        sample_rate=24_000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="pocket_voice_file_name",
+        requires_voice=True,
+        voice_transcript_attr="",
+        extra_file_attrs=[],
+        batch_size_attr="",
+        can_stream=True,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-pocket.txt",
+        ui={
+            "proper_name": "Pocket TTS",
+            "short_name": "Pocket",
+            "voice_path_console": "Enter voice clone audio clip file path (5-10s, up to 15s): ",
+            "voice_path_requestor": "Select voice clone audio clip (5-10s, up to 15s)",
+            "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"],
+            "opt_in_url": "https://github.com/kyutai-labs/pocket-tts" # special case
+        },
+        substitutions=[
+            # Generally handles caesura-related punctuation decently and with natural variations in duration
+        ]
+    )
+
     QWEN3TTS = TtsModelSpec(
         id="qwen3tts",
         is_sgl_omni=False,
@@ -575,7 +573,7 @@ class TtsModelType(Enum):
         local_module_test="qwen_tts",
         local_torch_devices = ["cuda", "mps", "cpu"],
         file_tag="qwen3",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="qwen3_voice_file_name",
@@ -605,7 +603,7 @@ class TtsModelType(Enum):
         local_module_test="",
         local_torch_devices=[],
         file_tag="qwen3",
-        sample_rate=24000,
+        sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
         voice_target_attr="qwen3_voice_file_name",
@@ -636,35 +634,37 @@ class TtsModelType(Enum):
         substitutions=[] # Does well w/ various punctuation
     )
 
-    OMNIVOICE = TtsModelSpec(
-        id="omnivoice",
+    VIBEVOICE = TtsModelSpec(
+        id="vibevoice",
         is_sgl_omni=False,
         server_model_id_substring="",
-        local_module_test="omnivoice",
-        local_torch_devices=["cuda", "mps", "cpu"],
-        file_tag="omnivoice",
-        sample_rate=24000,
+        local_module_test="vibevoice",
+        local_torch_devices = ["cuda", "mps", "cpu"],
+        file_tag="vibevoice",
+        sample_rate=24_000,
         max_words_default=40,
-        max_words_reco_range=(40, 80), 
-        voice_target_attr="omnivoice_voice_file_name",
-        requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
-        voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
+        max_words_reco_range=(40, 80),
+        voice_target_attr="vibevoice_voice_file_name",
+        requires_voice=False,
+        voice_transcript_attr="",
         extra_file_attrs=[],
-        batch_size_attr="",
-        can_stream=False,
+        batch_size_attr="vibevoice_batch_size",
+        can_stream=True,
         semantic_trim_last=False,
         requires_ffmpeg_libs=False,
-        un_all_caps=True, # slightly more error-prone when all-caps
-        requirements_file_name="requirements-omnivoice.txt",
-        ui={
-            "proper_name": "OmniVoice",
-            "short_name": "OmniVoice",
-            "voice_path_console": "Enter voice clone audio clip file path (3-10s recommended, up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (3-10s recommended, up to 15s)",
-            "project_links": ["https://github.com/k2-fsa/OmniVoice", "https://huggingface.co/k2-fsa/OmniVoice"]
+        un_all_caps=True,
+        requirements_file_name="requirements-vibevoice.txt",
+        ui = {
+            "proper_name": "VibeVoice",
+            "short_name": "VibeVoice",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": ["https://github.com/vibevoice-community/VibeVoice"]
         },
         substitutions=[
-            # Generally handles caesura-related punctuation decently and with natural variations in duration
+            ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
+            ("\u2019", "'"), # fancy apostrophe causes rest of word to not be spoken
+            ("…", ","), ("...", ",") # ellipsis can wreck gen badly
         ]
     )
 
