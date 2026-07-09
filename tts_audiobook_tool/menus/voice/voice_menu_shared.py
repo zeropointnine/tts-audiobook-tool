@@ -73,6 +73,8 @@ class VoiceMenuShared:
                 # Special case: Pre-emptively instantiate model 
                 has_instance = bool( Tts.get_instance_if_exists() )
                 if not has_instance:
+                    printt(f"{COL_DIM_ITALICS}Initializing model...")
+                    printt()
                     _ = Tts.get_instance() 
                     print_feedback("Model loaded")
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
@@ -462,6 +464,77 @@ class VoiceMenuShared:
             return
         
         callback(project, new_target)
+
+    @staticmethod
+    def make_target_label(
+            label_prefix: str,
+            target: str,
+            default_target: str,
+            remove_prefixes: list[str] | None = None,
+            extra_suffix: str = "",
+    ) -> str:
+        value = target or default_target
+        default_value = default_target
+
+        for prefix in remove_prefixes or []:
+            value = value.removeprefix(prefix)
+            default_value = default_value.removeprefix(prefix)
+
+        value = ellipsize_path_for_menu(value)
+        default_value = ellipsize_path_for_menu(default_value)
+        label = make_currently_string(value, default=default_value)
+        return f"{label_prefix} {label}{extra_suffix}"
+
+    @staticmethod
+    def target_submenu(
+            state: State,
+            heading: str,
+            preset_targets: list[str],
+            current_target: str,
+            default_target: str,
+            ask_custom_target: Callable[[], None],
+            apply_target: Callable[[str], None],
+            sublabels: list[str] | None = None,
+            custom_label: str = "Enter custom hf repo id or local path",
+            breadcrumb: str | None = None,
+    ) -> None:
+        if sublabels and len(sublabels) != len(preset_targets):
+            raise ValueError("sublabels and preset_targets lists must have same size")
+
+        def make_preset_label(target: str) -> str:
+            label = target
+            if target == default_target:
+                label += f" {COL_DIM}(default)"
+            if target == current_target:
+                label += f" {COL_ACCENT}(selected)"
+            return label
+
+        def make_custom_label() -> str:
+            label = custom_label
+            is_custom = bool(current_target) and not any(
+                target_util.is_same_target(current_target, target) for target in preset_targets
+            )
+            if is_custom:
+                value = ellipsize_path_for_menu(current_target)
+                label += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
+            return label
+
+        items = []
+        for i, target in enumerate(preset_targets):
+            item = MenuItem(make_preset_label(target), lambda _, __, target=target: apply_target(target))
+            if sublabels:
+                item.sublabel = sublabels[i]
+            items.append(item)
+
+        items.append(MenuItem(make_custom_label(), lambda _, __: ask_custom_target()))
+
+        MenuUtil.menu(
+            state=state,
+            heading=heading,
+            items=items,
+            one_shot=True,
+            breadcrumb=breadcrumb,
+        )
 
     @staticmethod
     def make_rolling_continuation_label(value: int) -> str:

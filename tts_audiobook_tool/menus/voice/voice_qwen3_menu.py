@@ -1,5 +1,5 @@
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
@@ -8,7 +8,6 @@ from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.menus.voice import VoiceMenuShared
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
 class VoiceQwen3Menu:
@@ -31,13 +30,14 @@ class VoiceQwen3Menu:
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:
-            value = state.project.qwen3_target or Qwen3BaseModel.DEFAULT_REPO_ID
-            value = value.removeprefix("Qwen/") # simplify display text
-            value = ellipsize_path_for_menu(value)
-            label = make_currently_string(value, default=Qwen3BaseModel.DEFAULT_REPO_ID)
-            # Append model type. Eg: " (model type: base)"
-            label += f" {COL_DIM}(model type: {COL_ACCENT}{Tts.get_qwen3().model_type}{COL_DIM})"
-            return f"Select Qwen3-TTS model {label}"
+            extra_suffix = f" {COL_DIM}(model type: {COL_ACCENT}{Tts.get_qwen3().model_type}{COL_DIM})"
+            return VoiceMenuShared.make_target_label(
+                label_prefix="Select Qwen3-TTS model",
+                target=state.project.qwen3_target,
+                default_target=Qwen3BaseModel.DEFAULT_REPO_ID,
+                remove_prefixes=["Qwen/"],
+                extra_suffix=extra_suffix,
+            )
 
         def make_speaker_label(_) -> str:
             speakers = Tts.get_qwen3().supported_speakers
@@ -199,25 +199,14 @@ class VoiceQwen3Menu:
 # ---
 
 def target_submenu(state: State) -> None:
-
-    def make_preset_label(target: str) -> str:
-        label = target
-        if target == Qwen3BaseModel.DEFAULT_REPO_ID:
-            label += f" {COL_DIM}(default)"
-        if target == state.project.qwen3_target:
-            label += f" {COL_ACCENT}(selected)"
-        return label
-
-    items = []
-    for t in Qwen3BaseModel.PRESET_REPO_IDS:
-        items.append(MenuItem(make_preset_label(t), lambda _, __, t=t: apply_model_and_validate(state.project, t)))
-    items.append(MenuItem("Enter custom hf repo id or local path", lambda _, __: ask_target(state.project)))
-
-    MenuUtil.menu(
+    VoiceMenuShared.target_submenu(
         state=state,
         heading="Select Qwen3-TTS model",
-        items=items,
-        one_shot=True
+        preset_targets=Qwen3BaseModel.PRESET_REPO_IDS,
+        current_target=state.project.qwen3_target,
+        default_target=Qwen3BaseModel.DEFAULT_REPO_ID,
+        ask_custom_target=lambda: ask_target(state.project),
+        apply_target=lambda target: apply_model_and_validate(state.project, target),
     )
 
 def ask_target(project: Project) -> None:
@@ -245,6 +234,9 @@ def apply_model_and_validate(project: Project, target: str) -> None:
     project.qwen3_target = target
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model() # for good measure
+
+    printt(f"{COL_DIM_ITALICS}Initializing model...")
+    printt()
 
     # Instantiate model with new settings and check if valid
     try:

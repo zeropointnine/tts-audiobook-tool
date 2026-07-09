@@ -1,5 +1,5 @@
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.voice.voice_moss_shared import VoiceMossShared
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -19,11 +19,12 @@ class VoiceMossMenu:
     def menu(state: State) -> None:
 
         def make_target_label(_) -> str:
-            value = state.project.moss_target or MossConfigs.get_default_repo_id()
-            value = value.removeprefix("OpenMOSS-Team/")
-            value = ellipsize_path_for_menu(value)
-            label = make_currently_string(value, default=MossConfigs.get_default_repo_id())
-            return f"Select MOSS-TTS model {label}"
+            return VoiceMenuShared.make_target_label(
+                label_prefix="Select MOSS-TTS model",
+                target=state.project.moss_target,
+                default_target=MossConfigs.get_default_repo_id(),
+                remove_prefixes=["OpenMOSS-Team/"],
+            )
 
         def make_items(_: State) -> list[MenuItem]:
 
@@ -65,27 +66,16 @@ class VoiceMossMenu:
 # ---
 
 def target_submenu(state: State) -> None:
-
-    def make_preset_label(target: str) -> str:
-        label = target
-        if target == MossConfigs.get_default_repo_id():
-            label += f" {COL_DIM}(default)"
-        if target == state.project.moss_target:
-            label += f" {COL_ACCENT}(selected)"
-        return label
-
-    items = []
-    for config in list(MossConfigs):
-        target = config.value.repo_id
-        items.append(MenuItem(make_preset_label(target), lambda _, __, target=target: apply_model_and_validate(state.project, target)))
-        items[-1].sublabel = config.preset_description
-    items.append(MenuItem("Enter custom hf repo id or local path", lambda _, __: ask_target(state.project)))
-
-    MenuUtil.menu(
+    configs = list(MossConfigs)
+    VoiceMenuShared.target_submenu(
         state=state,
         heading="Select MOSS-TTS model",
-        items=items,
-        one_shot=True
+        preset_targets=[config.value.repo_id for config in configs],
+        current_target=state.project.moss_target,
+        default_target=MossConfigs.get_default_repo_id(),
+        ask_custom_target=lambda: ask_target(state.project),
+        apply_target=lambda target: apply_model_and_validate(state.project, target),
+        sublabels=[config.preset_description for config in configs],
     )
 
 def ask_target(project: Project) -> None:
@@ -114,6 +104,9 @@ def apply_model_and_validate(project: Project, target: str) -> None:
     project.moss_target = target
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model()
+
+    printt(f"{COL_DIM_ITALICS}Initializing model...")
+    printt()
 
     try:
         _ = Tts.get_moss()

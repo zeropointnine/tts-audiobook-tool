@@ -29,9 +29,11 @@ class VoiceVibeVoiceMenu:
             return f"Select voice clone sample {currently}"
 
         def make_model_target_label(_) -> str:
-            value = project.vibevoice_target or VibeVoiceBaseModel.DEFAULT_REPO_ID
-            label = make_currently_string(value, default=VibeVoiceBaseModel.DEFAULT_REPO_ID)
-            return f"Select model {label}"
+            return VoiceMenuShared.make_target_label(
+                label_prefix="Select model",
+                target=project.vibevoice_target,
+                default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
+            )
 
         def make_lora_target_label(_) -> str:
             if project.vibevoice_lora_target:
@@ -112,24 +114,14 @@ class VoiceVibeVoiceMenu:
 # ---
 
 def target_submenu(state: State) -> None:
-
-    def make_preset_label(target: str) -> str:
-        label = target
-        if target == VibeVoiceBaseModel.DEFAULT_REPO_ID:
-            label += f" {COL_DIM}(default)"
-        if target == state.project.vibevoice_target:
-            label += f" {COL_ACCENT}(selected)"
-        return label
-
-    items = []
-    for t in VibeVoiceBaseModel.PRESET_REPO_IDS:
-        items.append(MenuItem(make_preset_label(t), lambda _, __, t=t: apply_model_and_validate(state.project, t)))
-    items.append(MenuItem("Enter custom hf repo id or local path", lambda _, __: ask_model_target(state.project)))
-    MenuUtil.menu(
+    VoiceMenuShared.target_submenu(
         state=state,
         heading="Select VibeVoice model",
-        items=items,
-        one_shot=True
+        preset_targets=VibeVoiceBaseModel.PRESET_REPO_IDS,
+        current_target=state.project.vibevoice_target,
+        default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
+        ask_custom_target=lambda: ask_model_target(state.project),
+        apply_target=lambda target: apply_model_and_validate(state.project, target),
     )
 
 def ask_model_target(project: Project) -> None: 
@@ -153,6 +145,10 @@ def apply_model_and_validate(project: Project, target: str) -> None:
     project.save()
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model() # for good measure
+
+    printt(f"{COL_DIM_ITALICS}Initializing model...")
+    printt()
+
     try:
         _ = Tts.get_vibevoice()
     except (OSError, Exception) as e:
@@ -197,6 +193,10 @@ def apply_lora_and_validate(project: Project, target: str) -> None:
     project.save()
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model() # for good measure
+
+    printt(f"{COL_DIM_ITALICS}Initializing model...")
+    printt()
+
     try:
         instance = Tts.get_vibevoice()
     except Exception as e:
@@ -206,6 +206,7 @@ def apply_lora_and_validate(project: Project, target: str) -> None:
 
     if instance.has_lora:
         print_feedback("\nLoRA set:", target)
+        ask.ask_enter_to_continue()
     else:
         revert()
         ask.ask_error("\n{COL_ERROR}Couldn't load LoRA")
