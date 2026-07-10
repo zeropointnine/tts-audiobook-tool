@@ -514,3 +514,8 @@ class SoundSegment(NamedTuple):
     num_errors: int
     model: str
     voice: str
+
+class DeviceType(Enum):
+    CUDA = "cuda"
+    MPS = "mps"
+    CPU = "cpu"

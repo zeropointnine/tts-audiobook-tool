@@ -14,7 +14,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import make_error_string
 
@@ -24,9 +24,10 @@ class ChatterboxModel(ChatterboxBaseModel):
     Chatterbox inference logic
     """
 
-    def __init__(self, model_type: ChatterboxType, device: str):
+    def __init__(self, model_type: ChatterboxType, device: DeviceType):
         
-        self._device = device
+        self._device_type = device
+        device_value = device.value
         self._model_type = model_type
         
         multilingual_loader: Any = ChatterboxMultilingualTTS
@@ -37,9 +38,9 @@ class ChatterboxModel(ChatterboxBaseModel):
                 # Pass the normalized device string instead of torch.device(...).
                 # Upstream Chatterbox checks for values like "cpu" and "mps"
                 # before deciding whether to remap CUDA-saved checkpoints to CPU.
-                self._chatterbox = multilingual_loader.from_pretrained(device=self._device)
+                self._chatterbox = multilingual_loader.from_pretrained(device=device_value)
             case ChatterboxType.TURBO:
-                self._chatterbox = turbo_loader.from_pretrained(device=self._device)
+                self._chatterbox = turbo_loader.from_pretrained(device=device_value)
 
     def supported_languages_multi(self) -> list[str]:
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)

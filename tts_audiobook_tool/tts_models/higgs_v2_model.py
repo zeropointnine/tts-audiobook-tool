@@ -26,7 +26,7 @@ from transformers import AutoConfig, AutoModel, AutoTokenizer # type: ignore
 from transformers.cache_utils import StaticCache # type: ignore
 from huggingface_hub import snapshot_download as _hf_snapshot_download # type: ignore
 
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
@@ -76,15 +76,15 @@ class HiggsV2Model(HiggsV2BaseModel):
     Pared-down logic from higgs-audio lib script `generation.py`
     """
 
-    def __init__(self, device: str):
+    def __init__(self, device: DeviceType):
 
-        self._device = device
+        self._device_type = device
+        device_value = device.value
 
-        if device == "cuda":
-            device = f"cuda:0"
+        if device == DeviceType.CUDA:
+            device_value = f"cuda:0"
             use_static_kv_cache = True
         else:
-            device = device
             use_static_kv_cache = False
 
         # Temporarily patch AutoModel.from_pretrained so the hardcoded
@@ -99,14 +99,14 @@ class HiggsV2Model(HiggsV2BaseModel):
 
         AutoModel.from_pretrained = staticmethod(_patched_from_pretrained)
         try:
-            self.audio_tokenizer = load_higgs_audio_tokenizer(AUDIO_TOKENIZER_PATH, device=device)
+            self.audio_tokenizer = load_higgs_audio_tokenizer(AUDIO_TOKENIZER_PATH, device=device_value)
         finally:
             AutoModel.from_pretrained = _orig_from_pretrained
 
         self.model_client = HiggsAudioModelClient(
             model_path=MODEL_PATH,
             audio_tokenizer=self.audio_tokenizer,
-            device=device,
+            device=device_value,
             max_new_tokens=MAX_NEW_TOKENS,
             use_static_kv_cache=use_static_kv_cache,
         )

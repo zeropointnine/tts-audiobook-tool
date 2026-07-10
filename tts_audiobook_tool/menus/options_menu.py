@@ -93,10 +93,11 @@ class OptionsMenu:
 
             # TTS force cpu
             import torch
+            from tts_audiobook_tool.app_types import DeviceType
             model_devices = Tts.get_type().value.local_torch_devices
             has_gpu = (
-                (torch.cuda.is_available() and "cuda" in model_devices) or
-                (torch.backends.mps.is_available() and "mps" in model_devices)
+                (torch.cuda.is_available() and DeviceType.CUDA in model_devices) or
+                (torch.backends.mps.is_available() and DeviceType.MPS in model_devices)
             )
             if model_devices and has_gpu:
                 items.append(

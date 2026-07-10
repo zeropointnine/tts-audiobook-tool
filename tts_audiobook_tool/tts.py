@@ -6,7 +6,7 @@ from importlib import util
 import os
 from typing import Callable
 
-from tts_audiobook_tool.app_types import StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.app_types.phrase import Reason
 
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
@@ -67,6 +67,21 @@ class Tts:
 
     _model_params: dict = {}
     _force_cpu: bool = False
+
+    @staticmethod
+    def get_best_supported_device_type(model_type: TtsModelType) -> DeviceType:
+        supported_devices = model_type.value.local_torch_devices
+        if Tts._force_cpu:
+            if DeviceType.CPU in supported_devices:
+                return DeviceType.CPU
+            raise RuntimeError(f"{model_type.value.ui.get('proper_name') or model_type.value.id} does not support CPU inference")
+
+        available_devices = Tts.get_available_device_types()
+        intersection = [item for item in available_devices if item in supported_devices]
+        if not intersection:
+            supported = ", ".join(item.value for item in supported_devices) or "none"
+            raise RuntimeError(f"No supported torch device is available for {model_type.value.ui.get('proper_name') or model_type.value.id} ({supported})")
+        return intersection[0]
 
     @staticmethod
     def init_local_model_type() -> tuple[TtsModelType, int]:
@@ -368,30 +383,30 @@ class Tts:
         if not Tts._chatterbox:
             model_type = Tts._model_params.get("chatterbox_type")
             assert isinstance(model_type, ChatterboxType), "chatterbox_type not set"
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.CHATTERBOX)
             
             from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
-            Tts._chatterbox = ChatterboxModel(model_type, device)
+            Tts._chatterbox = ChatterboxModel(model_type, device_type)
             printt()
         return Tts._chatterbox
 
     @staticmethod
     def get_fish_s1() -> FishS1BaseModel:
         if not Tts._fish_s1:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.FISH_S1)
 
-            if device == "cuda":
+            if device_type == DeviceType.CUDA:
                 compile_enabled = Tts._model_params.get("fish_compile_enabled", True) # TODO: needs to be hooked up
             else:
                 compile_enabled = False
             
-            if device == "cuda":
+            if device_type == DeviceType.CUDA:
                 extra = f"compile: {compile_enabled}"
             else:
                 extra = ""
             
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
-            Tts._fish_s1 = FishS1Model(device, compile_enabled)
+            Tts._fish_s1 = FishS1Model(device_type, compile_enabled)
             printt()
 
         return Tts._fish_s1
@@ -399,20 +414,20 @@ class Tts:
     @staticmethod
     def get_fish_s2() -> FishS2BaseModel:
         if not Tts._fish_s2:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.FISH_S2)
 
-            if device == "cuda":
+            if device_type == DeviceType.CUDA:
                 compile_enabled = Tts._model_params.get("fish_s2_compile_enabled", True)
             else:
                 compile_enabled = False
             
-            if device == "cuda":
+            if device_type == DeviceType.CUDA:
                 extra = f"compile: {compile_enabled}"
             else:
                 extra = ""
             
             from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
-            Tts._fish_s2 = FishS2Model(device, compile_enabled)
+            Tts._fish_s2 = FishS2Model(device_type, compile_enabled)
             printt()
 
         return Tts._fish_s2
@@ -428,20 +443,20 @@ class Tts:
     @staticmethod
     def get_glm() -> GlmBaseModel:
         if not Tts._glm:
-            device = "cuda" # cpu not currently supported
+            device_type = Tts.get_best_supported_device_type(TtsModelType.GLM)
             sr = Tts._model_params["glm_sr"]
 
             from tts_audiobook_tool.tts_models.glm_model import GlmModel
-            Tts._glm = GlmModel(device, sr)
+            Tts._glm = GlmModel(device_type, sr)
             printt()
         return Tts._glm
 
     @staticmethod
     def get_higgs() -> HiggsV2BaseModel:
         if not Tts._higgs_v2:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.HIGGS_V2)
             from tts_audiobook_tool.tts_models.higgs_v2_model import HiggsV2Model
-            Tts._higgs_v2 = HiggsV2Model(device)
+            Tts._higgs_v2 = HiggsV2Model(device_type)
             printt()
 
         return Tts._higgs_v2
@@ -457,7 +472,6 @@ class Tts:
     @staticmethod
     def get_indextts2() -> IndexTts2BaseModel:
         if not Tts._indextts2:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
             from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
             Tts._indextts2 = IndexTts2Model(use_fp16=use_fp16) # model will use cuda if available
@@ -475,7 +489,7 @@ class Tts:
     @staticmethod
     def get_moss() -> MossBaseModel:
         if not Tts._moss:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.MOSS)
             target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
 
             looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
@@ -483,7 +497,7 @@ class Tts:
                 raise ValueError(f"MOSS model path not found: '{target}'")
 
             from tts_audiobook_tool.tts_models.moss_model import MossModel
-            Tts._moss = MossModel(device=device, model_target=target)
+            Tts._moss = MossModel(device=device_type, model_target=target)
             printt()
         return Tts._moss
 
@@ -498,11 +512,11 @@ class Tts:
     @staticmethod
     def get_omnivoice() -> OmniVoiceBaseModel:
         if not Tts._omnivoice:
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.OMNIVOICE)
             model_target = Tts._model_params.get("omnivoice_target", "") \
                         or OmniVoiceBaseModel.DEFAULT_REPO_ID
             from tts_audiobook_tool.tts_models.omnivoice_model import OmniVoiceModel
-            Tts._omnivoice = OmniVoiceModel(device=device, model_target=model_target)
+            Tts._omnivoice = OmniVoiceModel(device=device_type, model_target=model_target)
             printt()
         return Tts._omnivoice
 
@@ -518,9 +532,9 @@ class Tts:
     def get_pocket() -> PocketBaseModel:
         if not Tts._pocket:
             language = Tts._model_params.get("pocket_model_code", "")
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.POCKET)
             from tts_audiobook_tool.tts_models.pocket_model import PocketModel
-            Tts._pocket = PocketModel(device=device, language=language)
+            Tts._pocket = PocketModel(device=device_type, language=language)
             printt()
         return Tts._pocket
     
@@ -529,7 +543,7 @@ class Tts:
         
         if not Tts._qwen3:
 
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.QWEN3TTS)
             target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
 
             looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
@@ -538,7 +552,7 @@ class Tts:
 
             from tts_audiobook_tool.tts_models.qwen3_model import Qwen3Model
             try:
-                Tts._qwen3 = Qwen3Model(target, device)
+                Tts._qwen3 = Qwen3Model(target, device_type)
             except Exception as e:
                 Tts._qwen3 = None
                 raise RuntimeError(f"Failed to load Qwen3 model from '{target}': {e}") from e
@@ -559,13 +573,13 @@ class Tts:
 
         if not Tts._vibevoice:
 
-            device = "cpu" if Tts._force_cpu else Tts.get_resolved_torch_device()
+            device_type = Tts.get_best_supported_device_type(TtsModelType.VIBEVOICE)
             target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
             lora_path = Tts._model_params.get("vibevoice_lora_path", "") 
             
             from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
-                device=device,
+                device=device_type,
                 model_target=target,
                 lora_path=lora_path,
                 max_new_tokens=VibeVoiceBaseModel.MAX_TOKENS
@@ -597,21 +611,16 @@ class Tts:
         app_memory.gc_ram_vram()
 
     @staticmethod
-    def get_resolved_torch_device() -> str:
-        """
-        Gets the best torch device available which is supported by the current Tts model
-        Can return empty string (eg, Oute. or a model that supports only cuda on an environment that does not have cuda)
-        """
+    def get_available_device_types() -> list[DeviceType]:
+        """Gets available torch device types in preferred inference order."""
         import torch
-        available_devices = []
+        available_devices: list[DeviceType] = []
         if torch.cuda.is_available():
-            available_devices.append("cuda")
+            available_devices.append(DeviceType.CUDA)
         if torch.backends.mps.is_available():
-            available_devices.append("mps")
-        available_devices.append("cpu")
-        supported_devices = Tts.get_type().value.local_torch_devices
-        intersection = [item for item in available_devices if item in supported_devices]
-        return intersection[0] if intersection else ""
+            available_devices.append(DeviceType.MPS)
+        available_devices.append(DeviceType.CPU)
+        return available_devices
 
     @staticmethod
     def update_tts_type() -> None:

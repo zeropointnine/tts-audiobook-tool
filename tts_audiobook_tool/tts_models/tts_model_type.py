@@ -3,6 +3,8 @@ from enum import Enum
 from functools import cache
 from typing import NamedTuple
 
+from tts_audiobook_tool.app_types import DeviceType
+
 
 class TtsModelSpec(NamedTuple):
     """
@@ -18,7 +20,7 @@ class TtsModelSpec(NamedTuple):
     # Module name, or "dist:<package>" / "dist:<package>==<version>", to test for that implies the TTS model library exists in the current py env
     local_module_test: str
     # Supported torch device types for local inference
-    local_torch_devices: list[str]
+    local_torch_devices: list[DeviceType]
     # identifier used in file names
     file_tag: str
     # The model's sound output sample rate
@@ -105,7 +107,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="chatterbox",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="chatterbox",
         sample_rate=24_000,
         max_words_default=40,
@@ -137,7 +139,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="dist:fish-speech==0.1.0",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="s1-mini",
         sample_rate=44_100,
         max_words_default=40,
@@ -169,7 +171,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="dist:fish-speech==2.0.0",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="s2-pro",
         sample_rate=44_100,
         max_words_default=40,
@@ -237,7 +239,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="glm_tts",
-        local_torch_devices = ["cuda"], # cuda-only atm
+        local_torch_devices = [DeviceType.CUDA], # cuda-only atm
         file_tag="glm",
         sample_rate=24_000,
         max_words_default=40,
@@ -271,7 +273,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="boson_multimodal",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="higgs_v2",
         sample_rate=24_000,
         max_words_default=40,
@@ -338,7 +340,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="indextts",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="indextts2",
         sample_rate=22_050,
         max_words_default=40,
@@ -405,7 +407,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="dist:moss-tts",
-        local_torch_devices=["cuda", "cpu"],
+        local_torch_devices=[DeviceType.CUDA, DeviceType.CPU],
         file_tag="moss",
         sample_rate=24_000,
         max_words_default=40,
@@ -473,7 +475,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="omnivoice",
-        local_torch_devices=["cuda", "mps", "cpu"],
+        local_torch_devices=[DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="omnivoice",
         sample_rate=24_000,
         max_words_default=40,
@@ -538,7 +540,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="pocket_tts",
-        local_torch_devices=["cuda", "mps", "cpu"],
+        local_torch_devices=[DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="pocket",
         sample_rate=24_000,
         max_words_default=40,
@@ -571,7 +573,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="qwen_tts",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="qwen3",
         sample_rate=24_000,
         max_words_default=40,
@@ -639,7 +641,7 @@ class TtsModelType(Enum):
         is_sgl_omni=False,
         server_model_id_substring="",
         local_module_test="vibevoice",
-        local_torch_devices = ["cuda", "mps", "cpu"],
+        local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="vibevoice",
         sample_rate=24_000,
         max_words_default=40,

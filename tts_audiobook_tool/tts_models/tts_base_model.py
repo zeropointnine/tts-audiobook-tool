@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, Strictness
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, Strictness
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
@@ -43,7 +43,13 @@ class TtsBaseModel(ABC):
     # Optional persistent callback invoked when a streaming generation finishes
     stream_end_callback: StreamEndCallback | None = None
     # Describes the active inference device if pytorch
-    _device: str = ""
+    _device_type: DeviceType | None = None
+
+    @property
+    def device_value(self) -> str:
+        if self._device_type is None:
+            return ""
+        return self._device_type.value
 
     def __init_subclass__(cls, **kwargs):
         # Called whenever a new subclass is created
@@ -145,9 +151,9 @@ class TtsBaseModel(ABC):
         text = self.massage_for_inference(text)
         return text
 
-    def get_device(self) -> str:
+    def get_device_type(self) -> DeviceType | None:
         """ Returns instance's pytorch device (if applicable) """
-        return self._device
+        return self._device_type
 
     # ---
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"

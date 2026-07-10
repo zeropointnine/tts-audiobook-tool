@@ -4,7 +4,7 @@ import random
 import numpy as np
 
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
@@ -16,14 +16,14 @@ from pocket_tts import TTSModel  # type: ignore
 
 class PocketModel(PocketBaseModel):
 
-    def __init__(self, device: str, language: str = ""):
+    def __init__(self, device: DeviceType, language: str = ""):
 
         # Rem, "language" dictates model
         self.model: TTSModel | None = TTSModel.load_model(language=language or None)
         assert self.model
 
-        self._device = device
-        self.model.to(device)
+        self._device_type = device
+        self.model.to(device.value)
         self.last_voice_path = ""
         self.cached_voice_state = None
 

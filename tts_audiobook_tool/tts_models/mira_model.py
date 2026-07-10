@@ -19,7 +19,7 @@ class MiraModel(MiraBaseModel):
         self.last_voice_path: str = ""
         
         # model does not use this value; is CUDA-only under the hood 
-        self._device = "" 
+        self._device_type = None 
 
     def set_voice_clone(self, path: str) -> None:
         assert(self.mira_tts is not None)

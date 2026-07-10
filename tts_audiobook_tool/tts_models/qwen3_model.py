@@ -7,7 +7,7 @@ from qwen_tts import Qwen3TTSModel # type: ignore
 from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: ignore
 
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.util import *
@@ -17,21 +17,21 @@ class Qwen3Model(Qwen3BaseModel):
     """
     """
 
-    def __init__(self, model_target: str, device: str): 
+    def __init__(self, model_target: str, device: DeviceType): 
         
         self._model_target = model_target
         self._voice_info: tuple[str, str] | None = None
         self._voice_clone_prompt: VoiceClonePromptItem | None = None
         self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
-        self._device = device
+        self._device_type = device
 
-        if device == "cuda":             
+        if device == DeviceType.CUDA:
             device_map = "cuda:0"
         else:
-            device_map = device
+            device_map = device.value
 
         attn_implementation = None
-        if device == "cuda":
+        if device == DeviceType.CUDA:
             try:
                 from flash_attn import flash_attn_func # type: ignore
                 attn_implementation = "flash_attention_2"

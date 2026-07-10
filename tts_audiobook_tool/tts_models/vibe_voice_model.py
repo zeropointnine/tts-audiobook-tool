@@ -9,7 +9,7 @@ from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForCondition
 from vibevoice.modular.streamer import AudioStreamer # type: ignore
 from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor # type: ignore
 from peft import PeftModel  # type: ignore
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -48,13 +48,14 @@ class VibeVoiceModel(VibeVoiceBaseModel):
     """
     def __init__(
             self,
-            device: str,
+            device: DeviceType,
             model_target: str = "",
             lora_path: str | None = None,
             max_new_tokens: int | None = None,
     ):
 
-        self._device = device
+        self._device_type = device
+        device_value = device.value
         if not model_target:
             model_target = VibeVoiceBaseModel.DEFAULT_REPO_ID
         self.max_new_tokens = max_new_tokens
@@ -65,7 +66,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         self.processor = VibeVoiceProcessor.from_pretrained(model_target)
 
         # Determine attention implementation type
-        if "cuda" in device:
+        if device == DeviceType.CUDA:
             try:
                 from flash_attn import flash_attn_func # type: ignore
                 attn_implementation = "flash_attention_2"
@@ -80,7 +81,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         self.model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             model_target,
             torch_dtype=torch.bfloat16,
-            device_map=device,
+            device_map=device_value,
             attn_implementation=attn_implementation
         )
         

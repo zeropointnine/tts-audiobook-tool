@@ -9,7 +9,7 @@ import huggingface_hub
 
 from tts_audiobook_tool import app_support, target_util
 from tts_audiobook_tool.app_support import app_memory
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConfigs, MossBaseModel
@@ -20,9 +20,9 @@ from transformers import AutoModel, AutoProcessor  # type: ignore
 
 class MossModel(MossBaseModel):
 
-    def __init__(self, device: str, model_target: str = MossConfigs.get_default_repo_id()):
+    def __init__(self, device: DeviceType, model_target: str = MossConfigs.get_default_repo_id()):
 
-        self._device = device or "cpu"
+        self._device_type = device
         self.model_target = model_target
         self.dtype = self.resolve_dtype()
         self.cached_voice_path = ""
@@ -31,7 +31,7 @@ class MossModel(MossBaseModel):
         self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
         self.audio_tokenizer_is_on_device = False
 
-        if self._device == "cuda":
+        if self._device_type == DeviceType.CUDA:
             # Recommended by MOSS-TTS upstream for the remote-code generation path.
             torch.backends.cuda.enable_cudnn_sdp(False)
             torch.backends.cuda.enable_flash_sdp(True)
@@ -75,14 +75,14 @@ class MossModel(MossBaseModel):
         printt(f"MOSS loaded arch type: {self.get_loaded_arch_type().value}")
 
     def resolve_dtype(self) -> torch.dtype:
-        if self._device != "cuda":
+        if self._device_type != DeviceType.CUDA:
             return torch.float32
         if torch.cuda.is_bf16_supported():
             return torch.bfloat16
         return torch.float16
 
     def resolve_attn_implementation(self) -> str:
-        device = torch.device(self._device if torch.cuda.is_available() else "cpu")
+        device = torch.device(self.device_value if torch.cuda.is_available() else "cpu")
         if (
                 device.type == "cuda"
                 and importlib_util.find_spec("flash_attn") is not None
@@ -102,7 +102,7 @@ class MossModel(MossBaseModel):
             trust_remote_code=True,
             attn_implementation=attn_implementation,
             dtype=self.dtype,
-        ).to(self._device)
+        ).to(self.device_value)
 
     def get_loaded_arch_type(self) -> MossArchType:
 
@@ -141,7 +141,7 @@ class MossModel(MossBaseModel):
             return
         if self.audio_tokenizer_is_on_device:
             return
-        self.processor.audio_tokenizer = self.processor.audio_tokenizer.to(self._device)
+        self.processor.audio_tokenizer = self.processor.audio_tokenizer.to(self.device_value)
         self.processor.audio_tokenizer.eval()
         self.audio_tokenizer_is_on_device = True
 
@@ -179,8 +179,8 @@ class MossModel(MossBaseModel):
             raise RuntimeError("Model or processor is not initialized")
 
         batch = self.processor(conversations, mode=processor_mode)
-        input_ids = batch["input_ids"].to(self._device)
-        attention_mask = batch["attention_mask"].to(self._device)
+        input_ids = batch["input_ids"].to(self.device_value)
+        attention_mask = batch["attention_mask"].to(self.device_value)
 
         with torch.inference_mode():
 

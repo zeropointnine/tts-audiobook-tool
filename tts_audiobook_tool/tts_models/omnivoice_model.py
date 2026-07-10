@@ -8,7 +8,7 @@ from omnivoice.models.omnivoice import OmniVoiceGenerationConfig  # type: ignore
 from omnivoice.models.omnivoice import VoiceClonePrompt  # type: ignore
 
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
@@ -24,19 +24,19 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     # Effectively disable OmniVoice's own long-text chunker
     AUDIO_CHUNK_THRESHOLD_SECONDS = 999.0
 
-    def __init__(self, model_target: str, device: str):
+    def __init__(self, model_target: str, device: DeviceType):
 
         self._model_target = model_target
-        self._device = device
+        self._device_type = device
         self._voice_info: tuple[str, str] | None = None
         self._voice_clone_prompt: VoiceClonePrompt | None = None
 
-        if device == "cuda":
+        if device == DeviceType.CUDA:
             device_map = "cuda:0"
         else:
-            device_map = device  # "mps" or "cpu"
+            device_map = device.value  # "mps" or "cpu"
 
-        if device == "cuda":
+        if device == DeviceType.CUDA:
             dtype = torch.float16
         else:
             dtype = torch.float32

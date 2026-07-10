@@ -73,8 +73,10 @@ def _make_local_tts_text(state: State) -> str:
     text = Tts.get_class().get_menu_text(state.project, instance)
     
     extras = []
-    if instance and instance.get_device():
-        extras.append(instance.get_device())
+    if instance:
+        device_type = instance.get_device_type()
+        if device_type:
+            extras.append(device_type.value)
     if instance:
         extras.append("loaded")
     if not instance and state.prefs.tts_force_cpu:

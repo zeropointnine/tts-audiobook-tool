@@ -11,7 +11,7 @@ from glm_tts.llm.glmtts import GLMTTS # type: ignore
 from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
 
-from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
@@ -22,12 +22,13 @@ class GlmModel(GlmBaseModel):
     Adapted code from: https://github.com/zai-org/GLM-TTS, glmtts_inference.py
     """
 
-    def __init__(self, device: str, sample_rate: int, use_phoneme: bool=False):
+    def __init__(self, device: DeviceType, sample_rate: int, use_phoneme: bool=False):
 
-        if not device.startswith("cuda"):
+        if device != DeviceType.CUDA:
             # TODO: reference code only mentions cuda and cpu; try mps
             raise ValueError("Only CUDA is supported for the GLM-TTS model at the moment")
-        self._device = device
+        self._device_type = device
+        device_value = device.value
 
         if sample_rate not in [24000, 32000]:
             raise ValueError(f"Unsupported sampling_rate: {sample_rate}")
@@ -73,7 +74,7 @@ class GlmModel(GlmBaseModel):
         self.speech_tokenizer, \
         self.llm, \
         self.flow \
-            = load_models(device=device, ckpt_path=ckpt_path, use_phoneme=self.use_phoneme, sample_rate=sample_rate)
+            = load_models(device=device_value, ckpt_path=ckpt_path, use_phoneme=self.use_phoneme, sample_rate=sample_rate)
 
     def kill(self) -> None:
         self.frontend = None
@@ -135,7 +136,7 @@ class GlmModel(GlmBaseModel):
         cache_speech_token = [prompt_speech_token.squeeze().tolist()]
         flow_prompt_token = torch.tensor(
             cache_speech_token, dtype=torch.int32
-        ).to(self._device)
+        ).to(self.device_value)
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
@@ -162,7 +163,7 @@ class GlmModel(GlmBaseModel):
             seed=seed,
             flow_prompt_token=flow_prompt_token,
             speech_feat=speech_feat,
-            device=self._device,
+            device=self.device_value,
             use_phoneme=self.use_phoneme,
         )
 
