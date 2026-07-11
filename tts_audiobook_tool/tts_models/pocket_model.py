@@ -12,6 +12,7 @@ from tts_audiobook_tool.util import *
 
 import torch
 from pocket_tts import TTSModel  # type: ignore
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class PocketModel(PocketBaseModel):
@@ -69,9 +70,11 @@ class PocketModel(PocketBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
-        if project.pocket_voice_file_name:
-            voice_path = os.path.join(project.dir_path, project.pocket_voice_file_name)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "pocket_voice_file_name", voice_rotation_index)
+        if voice_file_name:
+            voice_path = os.path.join(project.dir_path, voice_file_name)
         else:
             voice_path = project.pocket_predefined_voice
 

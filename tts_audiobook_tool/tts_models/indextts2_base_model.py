@@ -4,6 +4,7 @@ from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -50,7 +51,7 @@ class IndexTts2BaseModel(TtsBaseModel):
 
         prefix, value = super().get_voice_display_info(project, instance)
 
-        if project.indextts2_voice_file_name:
+        if ProjectVoiceUtil.primary_voice_value(project, "indextts2_voice_file_name"):
             if project.indextts2_emo_vector or project.indextts2_emo_voice_file_name:
                 value += " + emotion"
 

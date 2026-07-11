@@ -119,7 +119,7 @@ COL_OK = Ansi.hex("00ff00")
 COL_DEFAULT = Ansi.RESET # default text color being that of the terminal; we're assuming this is probably a light color
 COL_DIM_ITALICS = COL_DIM + Ansi.ITALICS
 
-GEN_OOM_ERROR_MESSAGE = "Likely out-of-memory error.\nStopping generation to prevent further failed attempts:"
+GEN_OOM_ERROR_MESSAGE = "Likely out-of-memory error detected.\nStopping generation to prevent further failed attempts:"
 
 PLAYER_URL = "https://zeropointnine.github.io/tts-audiobook-tool/browser_player/"
 

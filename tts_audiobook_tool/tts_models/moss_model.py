@@ -16,6 +16,7 @@ from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConf
 from tts_audiobook_tool.util import *
 
 from transformers import AutoModel, AutoProcessor  # type: ignore
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class MossModel(MossBaseModel):
@@ -320,10 +321,12 @@ class MossModel(MossBaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
 
-        if project.moss_voice_file_name:
-            voice_path = os.path.join(project.dir_path, project.moss_voice_file_name)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "moss_voice_file_name", voice_rotation_index)
+        if voice_file_name:
+            voice_path = os.path.join(project.dir_path, voice_file_name)
         else:
             voice_path = ""
 

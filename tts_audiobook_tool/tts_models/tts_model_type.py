@@ -608,16 +608,12 @@ class TtsModelType(Enum):
         sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_target_attr="qwen3_voice_file_name",
+        voice_target_attr="qwen3_voice_file_name", # shares same value as local qwen3tts
+        voice_transcript_attr="qwen3_voice_transcript", # shares same value as local qwen3tts
         requires_voice=True, # Note, this diverges from the local version
-        voice_transcript_attr="qwen3_voice_transcript",
         extra_file_attrs=[],
         batch_size_attr="qwen3_server_concurrent_requests",
-        
-        # SGL-Omni API formally supports streaming, and the app is hooked up to handle it,
-        # but it DOES NOT STREAM in practice (chunks come in a burst all at the end), 2026-06.
-        can_stream=False,
-        
+        can_stream=False, # DOES NOT stream in practice even though claims to in sgl-omni qwen3tts docs, 2026-06
         semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True,

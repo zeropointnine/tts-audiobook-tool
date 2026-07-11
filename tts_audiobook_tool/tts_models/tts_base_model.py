@@ -8,6 +8,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -73,6 +74,7 @@ class TtsBaseModel(ABC):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
         """
         Generates Sound/s using the relevant TTS model attributes in the `project` object.
@@ -207,19 +209,11 @@ class TtsBaseModel(ABC):
         if not voice_file_name:
             return "none"
         
-        # Remove file suffix
-        voice_file_name = Path(voice_file_name).stem
-        
-        # Remove filename postfix decorator without treating the model tag as a
-        # set of removable edge characters. For example, str.strip("_moss")
-        # would incorrectly turn "suzie_yeung_hanya_1" into
-        # "uzie_yeung_hanya_1".
-        postfix_decorator = "_" + cls.INFO.file_tag
-        if voice_file_name.endswith(postfix_decorator):
-            voice_file_name = voice_file_name[:-len(postfix_decorator)]
-        
-        tag = app_text.sanitize_for_filename(voice_file_name[:30])
-        return tag
+        return ProjectVoiceUtil.make_voice_file_name_tag(voice_file_name, cls.INFO.file_tag)
+
+    @classmethod
+    def get_voice_tag_for_value(cls, voice_value: str) -> str:
+        return ProjectVoiceUtil.make_voice_file_name_tag(voice_value, cls.INFO.file_tag)
 
 
     @classmethod
@@ -269,7 +263,7 @@ class TtsBaseModel(ABC):
         Returns the active voice reference for this model and project (could be filename or other).
         Override for models that store voice across multiple fields.
         """
-        return getattr(project, cls.INFO.voice_target_attr, "")
+        return ProjectVoiceUtil.primary_voice_value(project, cls.INFO.voice_target_attr)
 
     @classmethod
     def get_missing_voice_file_issue(
@@ -285,7 +279,7 @@ class TtsBaseModel(ABC):
         if not voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
-        voice_file_name = getattr(project, voice_file_name_attr, "")
+        voice_file_name = ProjectVoiceUtil.primary_voice_value(project, voice_file_name_attr)
         if not voice_file_name:
             return None
 
@@ -325,7 +319,7 @@ class TtsBaseModel(ABC):
         if not cls.INFO.voice_target_attr:
             raise Exception("Logic error - must override this method")
 
-        if cls.INFO.requires_voice and not getattr(project, cls.INFO.voice_target_attr, ""):
+        if cls.INFO.requires_voice and not cls.get_voice_value(project):
             return ReadinessIssue("voice sample", "A voice clone sample is required")
 
         err = cls.get_missing_voice_file_issue(project)

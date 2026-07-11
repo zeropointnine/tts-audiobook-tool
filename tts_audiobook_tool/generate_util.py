@@ -119,6 +119,7 @@ class GenerateUtil:
         # Audiobook generation is a top-level generation run. Start from a
         # fresh rolling-continuation context, independent of any prior run.
         Tts.clear_continuation()
+        Tts.reset_voice_rotation_index()
 
         # Loop through items in the batch
         while items:
@@ -295,7 +296,13 @@ class GenerateUtil:
 
                     # Save
                     err, saved_path = GenerateUtil.save_sound_and_timing_json(
-                        state, phrase_group, index, validation_result, is_real_time=False, stt_info=stt_info
+                        state,
+                        phrase_group,
+                        index,
+                        validation_result,
+                        is_real_time=False,
+                        voice_tag=getattr(validation_result, "voice_tag", ""),
+                        stt_info=stt_info,
                     )
                     if err:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
@@ -442,7 +449,7 @@ class GenerateUtil:
                 results.append(err)
                 continue
 
-            sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time = gen_result
+            sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag = gen_result
 
             if skip_reason:
                 validation_result = SkippedResult(sound=sound, message=skip_reason)
@@ -451,6 +458,7 @@ class GenerateUtil:
                 validation_result.generated_end_trim_time = end_trim_time
                 validation_result.generated_trim_original_duration = original_duration
                 validation_result.trailing_token_noise_trim_time = token_noise_trim_time
+                validation_result.voice_tag = voice_tag
                 results.append((validation_result))
                 continue
 
@@ -474,6 +482,7 @@ class GenerateUtil:
             validation_result.generated_end_trim_time = end_trim_time
             validation_result.generated_trim_original_duration = original_duration
             validation_result.trailing_token_noise_trim_time = token_noise_trim_time
+            validation_result.voice_tag = voice_tag
             results.append(validation_result)
 
             if save_debug_files and isinstance(validation_result, TrimmedResult):
@@ -502,7 +511,7 @@ class GenerateUtil:
             is_realtime: bool,
             save_debug_files: bool,
             print_generation_request: bool = False
-        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str | TtsModelError]:
+        ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError]:
         """
         Core audio generation function.
         
@@ -526,13 +535,17 @@ class GenerateUtil:
             prompts.append(prompt)
 
         # Generate
+        voice_rotation_index = -1
         if Tts.get_type() == TtsModelType.NONE:
             result = "No active TTS model"
         else:
+            voice_rotation_index = Tts.get_next_voice_rotation_index()
+            voice_tag = Tts.get_voice_tag_for_rotation_index(project, voice_rotation_index)
             result = Tts.generate_using_project(
                 project,
                 prompts,
                 force_random_seed,
+                voice_rotation_index=voice_rotation_index,
                 print_generation_request=print_generation_request
             )
 
@@ -598,7 +611,7 @@ class GenerateUtil:
                     result = "Model output is silence, discarding"
                     Tts.clear_continuation()
                 else:
-                    result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time)
+                    result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag)
              
             results.append(result)
             Tts.clear_continuation_if_reason(phrase_groups[indices[i]].last_reason)
@@ -638,6 +651,7 @@ class GenerateUtil:
         index: int,
         validation_result: ValidationResult,
         is_real_time: bool,
+        voice_tag: str = "",
         stt_info: SegmentTranscriptData | None = None
     ) -> tuple[str, str]:
         """
@@ -657,7 +671,8 @@ class GenerateUtil:
             project=project,
             validation_result=validation_result,
             tts_model_type=Tts.get_type().value,
-            is_real_time=is_real_time
+            is_real_time=is_real_time,
+            voice_tag=voice_tag,
         )
         sound_path = os.path.join(dir_path, file_name)
 

@@ -16,15 +16,8 @@ class VoiceGlmMenu:
 
             items = []
             items.append(
-                MenuItem(
-                    VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.GLM)
-                )
+                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.GLM)
             )
-            if state.project.glm_voice_file_name:
-                items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.GLM) 
-                )
             items.append(
                 MenuItem(
                     make_menu_label("Model samplerate", str(state.project.glm_sr) + "hz"),

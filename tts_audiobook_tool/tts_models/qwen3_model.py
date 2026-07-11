@@ -11,6 +11,7 @@ from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback,
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class Qwen3Model(Qwen3BaseModel):
@@ -146,6 +147,7 @@ class Qwen3Model(Qwen3BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
@@ -159,11 +161,14 @@ class Qwen3Model(Qwen3BaseModel):
             
             case "base":
 
-                can = project.qwen3_voice_file_name and project.qwen3_voice_transcript
+                voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+                    project, "qwen3_voice_file_name", "qwen3_voice_transcript", voice_rotation_index
+                )
+                can = voice_file_name and voice_transcript
                 if can:
                     voice_info = (
-                        os.path.join(project.dir_path, project.qwen3_voice_file_name),
-                        project.qwen3_voice_transcript
+                        os.path.join(project.dir_path, voice_file_name),
+                        voice_transcript
                     )
                     result = self.generate_base(
                         prompts=prompts,

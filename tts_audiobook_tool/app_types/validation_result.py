@@ -19,6 +19,7 @@ class ValidationResult(ABC):
     generated_end_trim_time: float | None = field(default=None, kw_only=True)
     generated_trim_original_duration: float | None = field(default=None, kw_only=True)
     trailing_token_noise_trim_time: float | None = field(default=None, kw_only=True)
+    voice_tag: str = field(default="", kw_only=True)
 
     @property
     @abstractmethod

@@ -4,6 +4,7 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
 
@@ -26,7 +27,7 @@ class VoicePocketMenu:
             if not state.project.pocket_voice_file_name and not state.project.pocket_predefined_voice:
                 label += f" {COL_DIM}({COL_ERROR}voice clone or predefined voice required{COL_DIM})"
             else:
-                value = state.project.pocket_voice_file_name
+                value = ProjectVoiceUtil.primary_voice_value(state.project, "pocket_voice_file_name")
                 if value:
                     currently = make_currently_string(ellipsize_path_for_menu(value.removesuffix("_pocket.flac")))
                     label += currently
@@ -42,16 +43,13 @@ class VoicePocketMenu:
             items = []
 
             items.append(
-                MenuItem(
-                    make_voice_file_label,
-                    on_voice_file
+                VoiceMenuShared.make_manage_voice_samples_item(
+                    state,
+                    TtsModelType.POCKET,
+                    no_samples_label=make_voice_file_label,
+                    on_set_callback=lambda: validate_voice_file(state),
                 )
             )
-
-            if state.project.pocket_voice_file_name or state.project.pocket_predefined_voice:
-                items.append(
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.POCKET)
-                )
 
             items.append(
                 MenuItem(
@@ -98,7 +96,7 @@ def select_predefined_voice(state: State) -> None:
     def on_select(voice: str) -> None:
         with state.project.batch():
             state.project.pocket_predefined_voice = voice
-            state.project.pocket_voice_file_name = ""
+            state.project.pocket_voice_file_name = []
 
     MenuUtil.options_menu(
         state=state,
@@ -157,6 +155,10 @@ def ask_language(state: State) -> None:
 def on_voice_file(state: State, _) -> None:
 
     VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.POCKET)
+
+    validate_voice_file(state)
+
+def validate_voice_file(state: State) -> None:
 
     if state.project.pocket_voice_file_name:
 

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from importlib import metadata
 from importlib import util
 import os
+import threading
 from typing import Callable
 
 from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, StreamEndCallback
@@ -67,6 +68,32 @@ class Tts:
 
     _model_params: dict = {}
     _force_cpu: bool = False
+    _voice_rotation_counter: int = 0
+    _voice_rotation_lock = threading.Lock()
+
+    @staticmethod
+    def get_next_voice_rotation_index() -> int:
+        with Tts._voice_rotation_lock:
+            index = Tts._voice_rotation_counter
+            Tts._voice_rotation_counter += 1
+        return index
+
+    @staticmethod
+    def reset_voice_rotation_index() -> None:
+        with Tts._voice_rotation_lock:
+            Tts._voice_rotation_counter = 0
+
+    @staticmethod
+    def get_voice_tag_for_rotation_index(project, voice_rotation_index: int) -> str:
+        info = Tts.get_info()
+        if not info.voice_target_attr:
+            return Tts.get_class().get_voice_tag(project)
+
+        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        voice_value = ProjectVoiceUtil.current_voice_value(project, info.voice_target_attr, voice_rotation_index)
+        if not voice_value:
+            return Tts.get_class().get_voice_tag(project)
+        return Tts.get_class().get_voice_tag_for_value(voice_value)
 
     @staticmethod
     def get_best_supported_device_type(model_type: TtsModelType) -> DeviceType:
@@ -310,6 +337,7 @@ class Tts:
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             print_generation_request: bool = False,
+            voice_rotation_index: int | None = None,
     ):
         """
         All app-level TTS generation goes through this function.
@@ -323,15 +351,19 @@ class Tts:
         transforms such as VibeVoice speaker tagging.
         """
         instance = Tts.get_instance()
+        if voice_rotation_index is None:
+            voice_rotation_index = Tts.get_next_voice_rotation_index()
         L.i(
             f"Tts.generate_using_project dispatch: type={Tts._type.value.id} "
             f"instance={type(instance).__name__} prompts={len(prompts)} "
+            f"voice_rotation_index={voice_rotation_index} "
             f"has_on_stream_chunk={on_stream_chunk is not None} has_on_stream_end={on_stream_end is not None}"
         )
         prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
         kwargs = {
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
+            "voice_rotation_index": voice_rotation_index,
         }
         if Tts._type.value.is_sgl_omni: 
             kwargs["print_generation_request"] = print_generation_request

@@ -13,16 +13,9 @@ class VoiceHiggsV2Menu:
 
         def make_items(_: State) -> list[MenuItem]:
             items = [
-                MenuItem(
-                    VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.HIGGS_V2)
-                )
+                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.HIGGS_V2)
             ]
-            if state.project.higgs_voice_file_name:
-                items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.HIGGS_V2) 
-                )
-            
+             
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
                 attr="higgs_temperature",

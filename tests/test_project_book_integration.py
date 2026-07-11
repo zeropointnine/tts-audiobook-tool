@@ -100,6 +100,55 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertEqual(payload["qwen3_server_concurrent_requests"], 3)
 
+    def test_project_model_validate_normalizes_legacy_voice_strings_to_lists(self):
+        project = Project.model_validate({
+            "fish_s1_voice_file_name": "sample_s1.flac",
+            "fish_s1_voice_text": "sample text",
+            "glm_voice_file_name": "sample_glm.flac",
+            "glm_voice_text": "glm text",
+        })
+
+        self.assertEqual(project.fish_s1_voice_file_name, ["sample_s1.flac"])
+        self.assertEqual(project.fish_s1_voice_transcript, ["sample text"])
+        self.assertEqual(project.glm_voice_file_name, ["sample_glm.flac"])
+        self.assertEqual(project.glm_voice_transcript, ["glm text"])
+
+    def test_project_model_validate_preserves_voice_lists_and_filters_invalid_items(self):
+        project = Project.model_validate({
+            "moss_voice_file_name": ["one.flac", "", 3, "two.flac"],
+            "moss_voice_transcript": ["one", None, "two"],
+        })
+
+        self.assertEqual(project.moss_voice_file_name, ["one.flac", "two.flac"])
+        self.assertEqual(project.moss_voice_transcript, ["one", "two"])
+
+    def test_project_to_dict_serializes_single_voice_item_as_string_and_multiple_as_list(self):
+        project = Project.model_validate({
+            "qwen3_voice_file_name": ["one.flac"],
+            "qwen3_voice_transcript": ["one"],
+            "fish_s2_voice_file_name": ["one.flac", "two.flac"],
+            "fish_s2_voice_transcript": ["one", "two"],
+        })
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(payload["qwen3_voice_file_name"], "one.flac")
+        self.assertEqual(payload["qwen3_voice_transcript"], "one")
+        self.assertEqual(payload["fish_s2_voice_file_name"], ["one.flac", "two.flac"])
+        self.assertEqual(payload["fish_s2_voice_transcript"], ["one", "two"])
+
+    def test_project_to_dict_keeps_oute_voice_json_as_dict(self):
+        voice_json = {"speaker": "default"}
+        project = Project.model_validate({
+            "oute_voice_json": voice_json,
+        })
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(project.oute_voice_json, voice_json)
+        self.assertNotIsInstance(project.oute_voice_json, list)
+        self.assertNotIn("oute_voice_json", payload)
+
     def test_project_normalizes_qwen3_server_concurrent_requests(self):
         project = Project.model_validate({
             "qwen3_server_concurrent_requests": 0,

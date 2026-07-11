@@ -91,6 +91,7 @@ class Server:
         self._worker_thread.start()
 
     def run(self, host: str = "127.0.0.1", port: int = 5001):
+        Tts.reset_voice_rotation_index()
         
         _server = self
 

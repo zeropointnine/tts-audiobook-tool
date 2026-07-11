@@ -69,12 +69,13 @@ class VoiceIndexTts2Menu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
             items.append(
-                MenuItem(voice_label, on_voice)
-            )
-            if state.project.indextts2_voice_file_name:
-                items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.INDEXTTS2) 
+                VoiceMenuShared.make_manage_voice_samples_item(
+                    state,
+                    TtsModelType.INDEXTTS2,
+                    no_samples_label=voice_label,
+                    on_before_set_callback=lambda: hints.show_hint_if_necessary(state.prefs, HINT_INDEX_SAMPLE_LEN),
                 )
+            )
             items.append(
                 MenuItem(make_emo_voice_label, on_emo_voice)
             )

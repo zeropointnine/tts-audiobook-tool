@@ -572,7 +572,7 @@ The following models served through SGL-Omni are supported:
 - [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html) 
 
 
-Start the SGL-Omni server for a supported TTS model. Eg:
+Launch SGL-Omni server, specifying one of the supported TTS model as described in their docs. Eg:
 - `sgl-omni serve --model-path bosonai/higgs-audio-v3-tts-4b --port 8000`
 - `sgl-omni serve --model-path OpenMOSS-Team/MOSS-TTS-v1.5 --port 8000`
 - `sgl-omni serve --model-path fishaudio/s2-pro --config examples/configs/s2pro_tts.yaml --port 8000`
@@ -779,12 +779,18 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
-**2026-06-07**
+**2026-07-13**
 
-- Added support using [**SGL-Omni**](https://sgl-project.github.io/sglang-omni) as a backend inference engine. Currently supported TTS models using SGL-Omni are:
+- Added ability to add multiple voice clone samples, which get rotated after each generation (applies to most of the supported TTS models).
+
+**2026-06-07+**
+
+- Added support for using [**SGL-Omni**](https://sgl-project.github.io/sglang-omni) as the backend inference engine. Currently supported TTS models using SGL-Omni are:
 
   - [**Higgs V3**](https://huggingface.co/bosonai/higgs-audio-v3-tts-4b)
   - MOSS-TTS v1.5
+  - Qwen3TTS
+  - Fish S2
 
 Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, which elicit "tagged output" from the LLM. Fun way to test the expressiveness of models' respective custom tag features.
 

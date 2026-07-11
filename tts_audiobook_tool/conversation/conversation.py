@@ -70,6 +70,7 @@ class Conversation:
         # Conversation is a top-level session. Do not inherit continuation
         # history from earlier app flows or previous chat sessions.
         Tts.clear_continuation()
+        Tts.reset_voice_rotation_index()
         try:
             self.install_runtime()
             self.run_main_loop()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttVariant
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -119,6 +120,14 @@ def _make_server_tts_text(state: State) -> str:
 
 def _make_voice_text(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
+
+    voice_attr = Tts.get_type().value.voice_target_attr
+    if voice_attr:
+        voice_values = ProjectVoiceUtil.voice_values(getattr(state.project, voice_attr, ""))
+        if len(voice_values) > 1:
+            first_value = voice_values[0].removesuffix(f"_{Tts.get_type().value.file_tag}.flac")
+            first_value = ellipsize_path_for_menu(first_value)
+            return f"{first_value} {COL_DIM}(+{len(voice_values) - 1} more)"
 
     voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
         state.project,

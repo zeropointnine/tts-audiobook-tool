@@ -84,13 +84,12 @@ class VoiceQwen3Menu:
                 case "base":
                     # Voice clone, clear voice clone
                     items.append(
-                        MenuItem(
-                            make_voice_label,
-                            lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.QWEN3TTS)
-                        )                
+                        VoiceMenuShared.make_manage_voice_samples_item(
+                            state,
+                            TtsModelType.QWEN3TTS,
+                            no_samples_label=make_voice_label,
+                        )
                     )
-                    if state.project.qwen3_voice_file_name:
-                        items.append( VoiceMenuShared.make_clear_voice_item(state, TtsModelType.QWEN3TTS))
                 case "custom_voice":
                     # Speaker id, instructions
                     items.append(

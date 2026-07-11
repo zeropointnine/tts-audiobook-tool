@@ -8,6 +8,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.qwen3_server_base_model import Qwen3ServerBaseModel
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class Qwen3ServerModel(Qwen3ServerBaseModel):
@@ -22,10 +23,13 @@ class Qwen3ServerModel(Qwen3ServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
 
-        voice_transcript = project.qwen3_voice_transcript
+        voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "qwen3_voice_file_name", "qwen3_voice_transcript", voice_rotation_index
+        )
 
         temperature = project.qwen3_temperature
         if temperature == -1:
@@ -60,8 +64,8 @@ class Qwen3ServerModel(Qwen3ServerBaseModel):
             if repetition_penalty != -1:
                 payload["repetition_penalty"] = repetition_penalty
 
-            if project.qwen3_voice_file_name:
-                voice_path = os.path.join(project.dir_path, project.qwen3_voice_file_name)
+            if voice_file_name:
+                voice_path = os.path.join(project.dir_path, voice_file_name)
                 data_uri = SoundUtil.make_audio_data_uri(voice_path)
                 reference = {"audio_path": data_uri}
                 if voice_transcript:

@@ -50,10 +50,6 @@ class VoiceOmniVoiceMenu:
             steps = state.project.omnivoice_num_step
             return f"Inference steps {make_currently_string(steps, default=OmniVoiceBaseModel.DEFAULT_STEPS)}"
 
-        def on_clear_voice(s: State, __: MenuItem) -> None:
-            ProjectVoiceUtil.clear_voice_and_save(s.project, TtsModelType.OMNIVOICE)
-            print_feedback("Voice clone cleared")
-
         def on_clear_instruct(s: State, __: MenuItem) -> None:
             s.project.omnivoice_instruct = ""
             print_feedback("Instructions cleared")
@@ -69,13 +65,12 @@ class VoiceOmniVoiceMenu:
             items = []
 
             items.append(
-                MenuItem(
-                    make_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.OMNIVOICE)
+                VoiceMenuShared.make_manage_voice_samples_item(
+                    state,
+                    TtsModelType.OMNIVOICE,
+                    no_samples_label=make_voice_label,
                 )
             )
-            if state.project.omnivoice_voice_file_name:
-                items.append(MenuItem("Clear voice clone sample", on_clear_voice))
 
             items.append(
                 MenuItem(make_instruct_label, lambda _, __: ask_instruct(state.project))

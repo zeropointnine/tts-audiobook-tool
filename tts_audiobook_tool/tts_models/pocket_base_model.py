@@ -8,6 +8,7 @@ from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -59,7 +60,7 @@ class PocketBaseModel(TtsBaseModel):
 
     @classmethod
     def get_voice_value(cls, project: Project) -> str:
-        return project.pocket_voice_file_name or project.pocket_predefined_voice
+        return ProjectVoiceUtil.primary_voice_value(project, "pocket_voice_file_name") or project.pocket_predefined_voice
 
     @classmethod
     def get_menu_text(
@@ -79,7 +80,7 @@ class PocketBaseModel(TtsBaseModel):
                 errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
         
-        if not project.pocket_voice_file_name and not project.pocket_predefined_voice:
+        if not ProjectVoiceUtil.primary_voice_value(project, "pocket_voice_file_name") and not project.pocket_predefined_voice:
             errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
 
         return errors
@@ -94,7 +95,7 @@ class PocketBaseModel(TtsBaseModel):
 
         Rem, use "make_gated_error_message_ui" for user-facing error message with remediation info
         """
-        voice_file_name = project.pocket_voice_file_name
+        voice_file_name = ProjectVoiceUtil.primary_voice_value(project, "pocket_voice_file_name")
         if not voice_file_name:
             return ""
 

@@ -6,6 +6,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class HiggsV3ServerModel(HiggsV3ServerBaseModel):
@@ -20,11 +21,13 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        
-        voice_path = project.higgs_v3_voice_target
-        voice_transcript = project.higgs_v3_voice_transcript
+        voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "higgs_v3_voice_target", "higgs_v3_voice_transcript", voice_rotation_index
+        )
 
         temperature = project.higgs_v3_temperature if project.higgs_v3_temperature != -1 else HiggsV3ServerBaseModel.DEFAULT_TEMPERATURE
         top_p = project.higgs_v3_top_p if project.higgs_v3_top_p != -1 else HiggsV3ServerBaseModel.DEFAULT_TOP_P

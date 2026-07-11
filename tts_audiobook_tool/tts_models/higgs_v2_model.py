@@ -31,6 +31,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.higgs_v2_base_model import HiggsV2BaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 # --------------------------------------------------------------------------------------------------
 # Pin HuggingFace model revisions to known-working commits.
@@ -123,15 +124,18 @@ class HiggsV2Model(HiggsV2BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        if project.higgs_voice_file_name:
-            voice_path = os.path.join(project.dir_path, project.higgs_voice_file_name)
-            voice_transcript = project.higgs_voice_transcript
+        voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "higgs_voice_file_name", "higgs_voice_transcript", voice_rotation_index
+        )
+        if voice_file_name:
+            voice_path = os.path.join(project.dir_path, voice_file_name)
         else:
             voice_path = ""
             voice_transcript = ""

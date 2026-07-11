@@ -13,6 +13,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class OmniVoiceModel(OmniVoiceBaseModel):
@@ -91,12 +92,14 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             prompts: list[str],
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
-            on_stream_end: StreamEndCallback | None = None
+            on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
 
-        voice_path = os.path.join(project.dir_path, project.omnivoice_voice_file_name) \
-                     if project.omnivoice_voice_file_name else ""
-        ref_text = project.omnivoice_voice_transcript
+        voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "omnivoice_voice_file_name", "omnivoice_voice_transcript", voice_rotation_index
+        )
+        voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
         instruct = project.omnivoice_instruct
         cfg      = project.omnivoice_cfg if project.omnivoice_cfg != -1 else self.CFG_DEFAULT
         speed    = project.omnivoice_speed if project.omnivoice_speed != -1 else self.DEFAULT_SPEED

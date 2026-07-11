@@ -8,6 +8,7 @@ from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
 from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class MossServerModel(MossServerBaseModel):
@@ -26,10 +27,13 @@ class MossServerModel(MossServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        
-        voice_transcript = project.moss_voice_transcript
+        voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "moss_voice_file_name", "moss_voice_transcript", voice_rotation_index
+        )
 
         temperature = project.moss_delay_temperature if project.moss_delay_temperature != -1 else MossServerBaseModel.CONFIG.value.temperature_default
         audio_top_p = project.moss_delay_top_p if project.moss_delay_top_p != -1 else MossServerBaseModel.CONFIG.value.audio_top_p_default
@@ -57,7 +61,7 @@ class MossServerModel(MossServerBaseModel):
                 payload["language"] = language
 
             # Add voice clone arguments
-            if project.moss_voice_file_name:
+            if voice_file_name:
                 """
                 Note how we send the voice clone data as a base64 data uri ("audio_path").
                 Server docs mention that soundfile is required in the server environment,
@@ -69,7 +73,7 @@ class MossServerModel(MossServerBaseModel):
                 Also note that data uri functionality does exist for server's MOSS implementation
                 but not for Higgs V3.
                 """
-                voice_path = os.path.join(project.dir_path, project.moss_voice_file_name)
+                voice_path = os.path.join(project.dir_path, voice_file_name)
                 data_uri = SoundUtil.make_audio_data_uri(voice_path)
                 reference = {"audio_path": data_uri}
                 

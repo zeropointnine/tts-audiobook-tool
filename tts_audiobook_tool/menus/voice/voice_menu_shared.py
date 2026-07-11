@@ -5,7 +5,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint, SttVariant
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker
+from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -121,7 +121,8 @@ class VoiceMenuShared:
             state: State,
             tts_type: TtsModelType,
             is_secondary: bool=False,
-            message_override: str=""
+            message_override: str="",
+            append: bool=False,
     ) -> None:
         """
         Asks for voice sound file path.
@@ -217,6 +218,7 @@ class VoiceMenuShared:
             transcript,
             tts_type,
             is_secondary=is_secondary,
+            append=append,
         )
         if err:
             ask.ask_error(err)
@@ -228,6 +230,138 @@ class VoiceMenuShared:
 
         if force_enter_prompt:
             ask.ask_enter_to_continue()
+
+    @staticmethod
+    def make_manage_voice_samples_item(
+            state: State,
+            tts_type: TtsModelType,
+            no_samples_label: StringOrMaker | None = None,
+            on_before_set_callback: Callable | None = None,
+            on_set_callback: Callable | None = None,
+            on_clear_callback: Callable | None = None,
+    ) -> MenuItem:
+
+        def make_label(s: State) -> str:
+            voices = VoiceMenuShared.get_voice_sample_values(s.project, tts_type)
+            if not voices:
+                if no_samples_label:
+                    return get_string_from(s, no_samples_label)
+                return VoiceMenuShared.make_resolved_voice_label(s)
+
+            first_label = VoiceMenuShared.make_voice_sample_display_label(voices[0], tts_type)
+            suffix = first_label
+            if len(voices) > 1:
+                suffix += f", +{len(voices) - 1} more"
+            currently = make_currently_string(suffix)
+            return f"Manage voice clone sample/s {currently}"
+
+        def on_item(s: State, __: MenuItem) -> None:
+            voices = VoiceMenuShared.get_voice_sample_values(s.project, tts_type)
+            if not voices:
+                if on_before_set_callback:
+                    on_before_set_callback()
+                VoiceMenuShared.ask_and_set_voice_file(s, tts_type)
+                if on_set_callback:
+                    on_set_callback()
+                return
+            VoiceMenuShared.manage_voice_samples_submenu(
+                s, tts_type, on_before_set_callback, on_set_callback, on_clear_callback
+            )
+
+        return MenuItem(make_label, on_item)
+
+    @staticmethod
+    def get_voice_sample_values(project: Project, tts_type: TtsModelType) -> list[str]:
+        attr = tts_type.value.voice_target_attr
+        if not attr:
+            return []
+        return ProjectVoiceUtil.voice_values(getattr(project, attr, ""))
+
+    @staticmethod
+    def make_voice_sample_display_label(value: str, tts_type: TtsModelType) -> str:
+        suffix = f"_{tts_type.value.file_tag}.flac"
+        return ellipsize_path_for_menu(value.removesuffix(suffix))
+
+    @staticmethod
+    def make_voice_samples_subheading(project: Project, tts_type: TtsModelType) -> str:
+        voices = VoiceMenuShared.get_voice_sample_values(project, tts_type)
+        if len(voices) > 1:
+            line = "Multiple samples cycle in order, one per generation."
+        else:
+            line = "When using multiple samples, they will cycle in order, one per generation."
+        lines = [line, ""]
+        for i, voice in enumerate(voices, start=1):
+            label = VoiceMenuShared.make_voice_sample_display_label(voice, tts_type)
+            lines.append(f"- {i}) {label}")
+        return "\n".join(lines) + ("\n" if lines else "")
+
+    @staticmethod
+    def manage_voice_samples_submenu(
+            state: State,
+            tts_type: TtsModelType,
+            on_before_set_callback: Callable | None=None,
+            on_set_callback: Callable | None=None,
+            on_clear_callback: Callable | None=None,
+    ) -> None:
+
+        def add_voice(s: State) -> None:
+            if on_before_set_callback:
+                on_before_set_callback()
+            VoiceMenuShared.ask_and_set_voice_file(s, tts_type, append=True)
+            if on_set_callback:
+                on_set_callback()
+
+        def remove_voice(s: State) -> bool:
+            is_empty = VoiceMenuShared.remove_voice_sample_from_menu(s, tts_type)
+            if is_empty and on_clear_callback:
+                on_clear_callback()
+            return is_empty
+
+        def make_items(_: State) -> list[MenuItem]:
+            return [
+                MenuItem(
+                    "Add another voice clone sample",
+                    lambda s, __: add_voice(s),
+                ),
+                MenuItem(
+                    "Remove voice clone sample",
+                    lambda s, __: remove_voice(s),
+                ),
+            ]
+
+        MenuUtil.menu(
+            state=state,
+            heading="Manage voice clone sample/s",
+            items=make_items,
+            subheading=lambda s: VoiceMenuShared.make_voice_samples_subheading(s.project, tts_type),
+            breadcrumb="Voice clone samples",
+        )
+
+    @staticmethod
+    def remove_voice_sample_from_menu(state: State, tts_type: TtsModelType) -> bool:
+        voices = VoiceMenuShared.get_voice_sample_values(state.project, tts_type)
+        if not voices:
+            return True
+
+        if len(voices) == 1:
+            index = 0
+        else:
+            inp = ask.ask("Which voice sample to remove? ")
+            if not inp:
+                return False
+            try:
+                index = int(inp) - 1
+            except ValueError:
+                print_feedback("Bad value", is_error=True)
+                return False
+            if index < 0 or index >= len(voices):
+                print_feedback("Bad value", is_error=True)
+                return False
+
+        removed = ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
+        label = VoiceMenuShared.make_voice_sample_display_label(removed, tts_type)
+        print_feedback(f"Removed {label}")
+        return not VoiceMenuShared.get_voice_sample_values(state.project, tts_type)
 
     @staticmethod
     def ask_voice_file(default_dir_path: str, tts_type: TtsModelType, message_override: str="") -> str:
@@ -277,6 +411,102 @@ class VoiceMenuShared:
 
         return MenuItem("Clear voice clone sample", on_clear_voice, data=info_item)
 
+    @staticmethod
+    def make_manual_voice_menu_items(
+        state: State, 
+        path_attribute: str, 
+        transcript_attribute: str,
+        is_required: bool=False
+    ) -> tuple[MenuItem, MenuItem]:
+        """
+        Creates pair of MenuItems for voice path and voice transcript for "SGL-Omni mode"
+        (specifically for cases where the server api for the given TTS model does NOT 
+        support handling data uri).
+        """
+
+        def make_path_label(_) -> str:
+            
+            prefix = "Enter voice clone sample filepath"
+            value = getattr(state.project, path_attribute)
+            value = ProjectVoiceUtil.voice_values(value)
+            value = value[0] if value else ""
+
+            if value:
+                value = ellipsize_path_for_menu(value)
+                value_prefix = "currently: "
+                color = COL_ACCENT
+            else:
+                if is_required:
+                    value = "required"
+                    value_prefix = ""
+                    color = COL_ERROR
+                else:
+                    value = "none"
+                    value_prefix = "currently: "
+                    color = COL_ERROR
+
+            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
+
+        def ask_path() -> None:
+            s = (
+                "Enter voice clone reference audio path:\n"
+                f"{COL_DIM}This must be either a file path accessible from the\n"
+                f"running server environment or a URL"
+            )    
+            ask.ask_string_and_save(state.project, s, path_attribute, "Voice clone sample path set:")
+
+        path_item = MenuItem(make_path_label, lambda _, __: ask_path())
+        
+        # ---
+
+        def make_transcript_label(_) -> str:
+
+            prefix = "Enter voice clone sample transcript"
+            value = getattr(state.project, transcript_attribute)
+            value = ProjectVoiceUtil.voice_values(value)
+            value = value[0] if value else ""
+            has_path = bool(ProjectVoiceUtil.primary_voice_value(state.project, path_attribute))
+
+            if value:
+                value = truncate_pretty(value, 40, content_color=COL_ACCENT)
+                value_prefix = "currently: "
+                color = COL_ACCENT
+            else:
+                if is_required or has_path:
+                    value = "required"
+                    value_prefix = ""
+                    color = COL_ERROR
+                else:
+                    value = "none"
+                    value_prefix = "currently: "
+                    color = COL_ERROR
+
+            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
+
+
+            # prefix = "Enter voice clone sample transcript"
+            # value = getattr(state.project, transcript_attribute)
+            # has_path = bool( getattr(state.project, path_attribute) )
+            
+            # if not value and has_path:
+            #     return f"{prefix} {COL_DIM}({COL_ERROR}required{COL_DIM})"
+
+            # label_value = truncate_pretty(value, 40) if value else "none"
+            # return make_menu_label(prefix, label_value)
+
+        def ask_transcript() -> None:
+            ask.ask_string_and_save(
+                state.project,
+                "Enter voice clone sample transcript:",
+                transcript_attribute,
+                "Voice clone sample transcript set:",
+            )
+
+        transcript_item = MenuItem(make_transcript_label, lambda _, __: ask_transcript())
+
+        return path_item, transcript_item
+
+    # ---
 
     @staticmethod
     def ask_temperature(
@@ -544,7 +774,6 @@ class VoiceMenuShared:
             val = f"disabled {COL_DIM}default"
         return "Rolling continuation " + make_currently_string(val)
 
-
     @staticmethod
     def ask_rolling_continuation(state: State, attribute_name: str, max_value: int, qualifier_line: str="") -> None:
         """
@@ -564,93 +793,3 @@ class VoiceMenuShared:
             min_value=0, max_value=max_value, default_value=0, 
             success_prefix="Rolling continuation num segments set to", is_int=True
         )
-
-    @staticmethod
-    def make_manual_voice_menu_items(
-        state: State, 
-        path_attribute: str, 
-        transcript_attribute: str,
-        is_required: bool=False
-    ) -> tuple[MenuItem, MenuItem]:
-        """
-        Creates pair of MenuItems for voice path and voice transcript for "SGL-Omni mode"
-        (specifically for cases where the server api for the given TTS model does NOT support handling data uri)
-        """
-
-        def make_path_label(_) -> str:
-            
-            prefix = "Enter voice clone sample filepath"
-            value = getattr(state.project, path_attribute)
-
-            if value:
-                value = ellipsize_path_for_menu(value)
-                value_prefix = "currently: "
-                color = COL_ACCENT
-            else:
-                if is_required:
-                    value = "required"
-                    value_prefix = ""
-                    color = COL_ERROR
-                else:
-                    value = "none"
-                    value_prefix = "currently: "
-                    color = COL_ERROR
-
-            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
-
-        def ask_path() -> None:
-            s = (
-                "Enter voice clone reference audio path:\n"
-                f"{COL_DIM}This must be either a file path accessible from the\n"
-                f"running server environment or a URL"
-            )    
-            ask.ask_string_and_save(state.project, s, path_attribute, "Voice clone sample path set:")
-
-        path_item = MenuItem(make_path_label, lambda _, __: ask_path())
-        
-        # ---
-
-        def make_transcript_label(_) -> str:
-
-            prefix = "Enter voice clone sample transcript"
-            value = getattr(state.project, transcript_attribute)
-            has_path = bool( getattr(state.project, path_attribute) )
-
-            if value:
-                value = truncate_pretty(value, 40, content_color=COL_ACCENT)
-                value_prefix = "currently: "
-                color = COL_ACCENT
-            else:
-                if is_required or has_path:
-                    value = "required"
-                    value_prefix = ""
-                    color = COL_ERROR
-                else:
-                    value = "none"
-                    value_prefix = "currently: "
-                    color = COL_ERROR
-
-            return make_menu_label(prefix, value, value_prefix=value_prefix, color_code=color)
-
-
-            # prefix = "Enter voice clone sample transcript"
-            # value = getattr(state.project, transcript_attribute)
-            # has_path = bool( getattr(state.project, path_attribute) )
-            
-            # if not value and has_path:
-            #     return f"{prefix} {COL_DIM}({COL_ERROR}required{COL_DIM})"
-
-            # label_value = truncate_pretty(value, 40) if value else "none"
-            # return make_menu_label(prefix, label_value)
-
-        def ask_transcript() -> None:
-            ask.ask_string_and_save(
-                state.project,
-                "Enter voice clone sample transcript:",
-                transcript_attribute,
-                "Voice clone sample transcript set:",
-            )
-
-        transcript_item = MenuItem(make_transcript_label, lambda _, __: ask_transcript())
-
-        return path_item, transcript_item

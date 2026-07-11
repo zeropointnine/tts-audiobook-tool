@@ -7,6 +7,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_server_base_model import FishS2ServerBaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class FishS2ServerModel(FishS2ServerBaseModel):
@@ -21,11 +22,13 @@ class FishS2ServerModel(FishS2ServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
 
-        voice_path = project.fish_s2_server_voice_target
-        voice_transcript = project.fish_s2_server_voice_transcript
+        voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "fish_s2_server_voice_target", "fish_s2_server_voice_transcript", voice_rotation_index
+        )
 
         temperature = project.fish_s2_temperature if project.fish_s2_temperature != -1 else FishS2BaseModel.TEMPERATURE_DEFAULT
         
@@ -33,6 +36,9 @@ class FishS2ServerModel(FishS2ServerBaseModel):
         top_p = min(top_p, FishS2ServerBaseModel.TOP_K_MAX) # upper limit of server version of fish s2 is lower than local version
         
         top_k = project.fish_s2_top_k if project.fish_s2_top_k != -1 else FishS2BaseModel.TOP_K_DEFAULT
+        if top_k > FishS2ServerBaseModel.TOP_K_MAX:
+            # Special case, where server version has different upper bound than local version
+            top_k = FishS2ServerBaseModel.TOP_K_MAX
         
         seed = -1 if force_random_seed else project.fish_s2_seed
         if seed == -1:

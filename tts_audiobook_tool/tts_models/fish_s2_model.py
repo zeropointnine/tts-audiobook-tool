@@ -12,6 +12,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class FishS2Model(FishS2BaseModel): 
@@ -233,17 +234,21 @@ class FishS2Model(FishS2BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        if project.fish_s2_voice_file_name:
-            source_path = os.path.join(project.dir_path, project.fish_s2_voice_file_name)
+        voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "fish_s2_voice_file_name", "fish_s2_voice_transcript", voice_rotation_index
+        )
+        if voice_file_name:
+            source_path = os.path.join(project.dir_path, voice_file_name)
             self.set_voice_clone_using(
                 source_path=source_path,
-                transcribed_text=project.fish_s2_voice_transcript
+                transcribed_text=voice_transcript
             )
         else:
             self.clear_voice_clone()

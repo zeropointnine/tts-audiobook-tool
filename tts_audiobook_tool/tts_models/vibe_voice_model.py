@@ -15,6 +15,7 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class CallbackAudioStreamer(AudioStreamer):
@@ -162,10 +163,12 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
         
-        if project.vibevoice_voice_file_name:
-            voice_path = os.path.join(project.dir_path, project.vibevoice_voice_file_name)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "vibevoice_voice_file_name", voice_rotation_index)
+        if voice_file_name:
+            voice_path = os.path.join(project.dir_path, voice_file_name)
         else:
             voice_path = ""
 

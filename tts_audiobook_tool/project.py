@@ -155,7 +155,7 @@ class Project(BaseModel):
     oute_temperature: float = -1
 
     chatterbox_type: ChatterboxType = list(ChatterboxType)[0]
-    chatterbox_voice_file_name: str = ""
+    chatterbox_voice_file_name: list[str] = Field(default_factory=list)
     chatterbox_temperature: float = -1
     chatterbox_cfg: float = -1
     chatterbox_exaggeration: float = -1
@@ -165,16 +165,16 @@ class Project(BaseModel):
     chatterbox_turbo_repetition_penalty: float = -1
     chatterbox_seed: int = -1
 
-    fish_s1_voice_file_name: str = ""
-    fish_s1_voice_transcript: str = Field(default="", alias="fish_s1_voice_text")
+    fish_s1_voice_file_name: list[str] = Field(default_factory=list)
+    fish_s1_voice_transcript: list[str] = Field(default_factory=list, alias="fish_s1_voice_text")
     fish_s1_compile_enabled: bool = FishS1BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s1_temperature: float = -1
     fish_s1_top_p: float = -1  # rem, s1 lib api has no top_k option (but s2 lib does)
     fish_s1_repetition_penalty: float = -1
     fish_s1_seed: int = -1
 
-    fish_s2_voice_file_name: str = ""
-    fish_s2_voice_transcript: str = ""
+    fish_s2_voice_file_name: list[str] = Field(default_factory=list)
+    fish_s2_voice_transcript: list[str] = Field(default_factory=list)
     fish_s2_rolling_cont: int = 0
     fish_s2_compile_enabled: bool = FishS2BaseModel.DEFAULT_COMPILE_ENABLED
     fish_s2_temperature: float = -1
@@ -182,26 +182,26 @@ class Project(BaseModel):
     fish_s2_top_k: int = -1
     fish_s2_seed: int = -1
 
-    fish_s2_server_voice_target: str = ""
-    fish_s2_server_voice_transcript: str = ""
+    fish_s2_server_voice_target: list[str] = Field(default_factory=list)
+    fish_s2_server_voice_transcript: list[str] = Field(default_factory=list)
     fish_s2_server_concurrent_requests: int = 1
 
-    higgs_voice_file_name: str = ""
-    higgs_voice_transcript: str = Field(default="", alias="higgs_voice_text")
+    higgs_voice_file_name: list[str] = Field(default_factory=list)
+    higgs_voice_transcript: list[str] = Field(default_factory=list, alias="higgs_voice_text")
     higgs_temperature: float = -1
     higgs_top_k: int = -1
     higgs_top_p: float = -1
     higgs_seed: int = -1
 
-    higgs_v3_voice_target: str = Field(default="", alias="higgs_v3_voice_file_path") # server file path or url
-    higgs_v3_voice_transcript: str = ""
+    higgs_v3_voice_target: list[str] = Field(default_factory=list, alias="higgs_v3_voice_file_path") # server file path or url
+    higgs_v3_voice_transcript: list[str] = Field(default_factory=list)
     higgs_v3_temperature: float = -1
     higgs_v3_top_p: float = -1
     higgs_v3_top_k: int = -1
     higgs_v3_batch_size: int = 1
     higgs_v3_seed: int = -1
 
-    vibevoice_voice_file_name: str = ""
+    vibevoice_voice_file_name: list[str] = Field(default_factory=list)
     vibevoice_target: str = ""
     vibevoice_lora_target: str = Field(default="", alias="vibevoice_lora_path")
     vibevoice_cfg: float = -1
@@ -211,7 +211,7 @@ class Project(BaseModel):
 
     indextts2_temperature: float = -1
     indextts2_use_fp16: bool = IndexTts2BaseModel.DEFAULT_USE_FP16
-    indextts2_voice_file_name: str = ""
+    indextts2_voice_file_name: list[str] = Field(default_factory=list)
     indextts2_emo_alpha: float = -1
     indextts2_emo_voice_file_name: str = ""
     indextts2_emo_vector: list[float] = Field(default_factory=list)
@@ -219,12 +219,12 @@ class Project(BaseModel):
     indextts2_top_k: int = -1
     indextts2_seed: int = -1
 
-    glm_voice_file_name: str = ""
-    glm_voice_transcript: str = Field(default="", alias="glm_voice_text")
+    glm_voice_file_name: list[str] = Field(default_factory=list)
+    glm_voice_transcript: list[str] = Field(default_factory=list, alias="glm_voice_text")
     glm_sr: int = GlmBaseModel.SAMPLE_RATES[0]
     glm_seed: int = -1
 
-    mira_voice_file_name: str = ""
+    mira_voice_file_name: list[str] = Field(default_factory=list)
     mira_temperature: float = -1
     mira_top_p: float = -1
     mira_top_k: int = -1
@@ -232,8 +232,8 @@ class Project(BaseModel):
     mira_batch_size: int = 1
     mira_seed: int = -1
 
-    moss_voice_file_name: str = ""
-    moss_voice_transcript: str = ""
+    moss_voice_file_name: list[str] = Field(default_factory=list)
+    moss_voice_transcript: list[str] = Field(default_factory=list)
     moss_target: str = ""
     moss_rolling_cont: int = 0
     moss_delay_temperature: float = -1
@@ -247,8 +247,8 @@ class Project(BaseModel):
 
     qwen3_target: str = ""
     qwen3_model_type: str = ""
-    qwen3_voice_file_name: str = ""
-    qwen3_voice_transcript: str = ""
+    qwen3_voice_file_name: list[str] = Field(default_factory=list)
+    qwen3_voice_transcript: list[str] = Field(default_factory=list)
     qwen3_rolling_cont: int = 0
     qwen3_speaker_id: str = ""
     qwen3_instructions: str = ""
@@ -261,14 +261,14 @@ class Project(BaseModel):
 
     qwen3_server_concurrent_requests: int = 1
 
-    pocket_voice_file_name: str = ""
+    pocket_voice_file_name: list[str] = Field(default_factory=list)
     pocket_predefined_voice: str = ""
     pocket_model_code: str = ""
     pocket_temperature: float = -1
     pocket_seed: int = -1
 
-    omnivoice_voice_file_name: str = ""
-    omnivoice_voice_transcript: str = ""
+    omnivoice_voice_file_name: list[str] = Field(default_factory=list)
+    omnivoice_voice_transcript: list[str] = Field(default_factory=list)
     omnivoice_target: str = ""
     omnivoice_instruct: str = ""
     omnivoice_cfg: float = -1

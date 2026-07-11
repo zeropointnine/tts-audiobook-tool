@@ -16,6 +16,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.util import printt
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 class GlmModel(GlmBaseModel):
     """
@@ -90,14 +91,17 @@ class GlmModel(GlmBaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        voice_path = os.path.join(project.dir_path, project.glm_voice_file_name)
-        voice_transcript = project.glm_voice_transcript
+        voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+            project, "glm_voice_file_name", "glm_voice_transcript", voice_rotation_index
+        )
+        voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
         seed = -1 if force_random_seed else project.glm_seed
 
         result = self.generate(

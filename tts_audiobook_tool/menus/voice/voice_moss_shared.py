@@ -11,13 +11,8 @@ class VoiceMossShared:
     @staticmethod
     def append_voice_items(items: list[MenuItem], state: State) -> None:
         items.append(
-            MenuItem(
-                VoiceMenuShared.make_resolved_voice_label,
-                lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.MOSS)
-            )
+            VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.MOSS)
         )
-        if state.project.moss_voice_file_name:
-            items.append(VoiceMenuShared.make_clear_voice_item(state, TtsModelType.MOSS))
 
     @staticmethod
     def get_temperature_attr(arch_type: MossConfigs) -> str:

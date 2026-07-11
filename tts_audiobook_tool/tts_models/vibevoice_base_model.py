@@ -67,7 +67,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
-        if not project.vibevoice_voice_file_name and not project.vibevoice_lora_target:
+        if not ProjectVoiceUtil.primary_voice_value(project, "vibevoice_voice_file_name") and not project.vibevoice_lora_target:
             warning = "Model may generate random voices because no voice sample or lora has been defined"
             warnings.append(warning) 
         return warnings
@@ -80,7 +80,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
             value = app_text.sanitize_for_filename(value[:30])
             return value
 
-        match (bool(project.vibevoice_voice_file_name), bool(project.vibevoice_lora_target)):
+        match (bool(ProjectVoiceUtil.primary_voice_value(project, "vibevoice_voice_file_name")), bool(project.vibevoice_lora_target)):
             case (False, False):
                 return "none"
             case (True, True):
@@ -96,7 +96,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> tuple[str, str]:
 
-        match (bool(project.vibevoice_voice_file_name), bool(project.vibevoice_lora_target)):
+        match (bool(ProjectVoiceUtil.primary_voice_value(project, "vibevoice_voice_file_name")), bool(project.vibevoice_lora_target)):
             case (False, False):
                 prefix = "current voice clone"
                 value = COL_ERROR + "none"

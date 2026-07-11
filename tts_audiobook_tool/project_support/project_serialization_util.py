@@ -32,6 +32,51 @@ if TYPE_CHECKING:
 
 
 class ProjectSerializationUtil:
+    VOICE_LIST_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+        "chatterbox_voice_file_name": (),
+        "fish_s1_voice_file_name": (),
+        "fish_s1_voice_transcript": ("fish_s1_voice_text",),
+        "fish_s2_voice_file_name": (),
+        "fish_s2_voice_transcript": (),
+        "fish_s2_server_voice_target": (),
+        "fish_s2_server_voice_transcript": (),
+        "glm_voice_file_name": (),
+        "glm_voice_transcript": ("glm_voice_text",),
+        "higgs_voice_file_name": (),
+        "higgs_voice_transcript": ("higgs_voice_text",),
+        "higgs_v3_voice_target": ("higgs_v3_voice_file_path",),
+        "higgs_v3_voice_transcript": (),
+        "indextts2_voice_file_name": (),
+        "mira_voice_file_name": (),
+        "moss_voice_file_name": (),
+        "moss_voice_transcript": (),
+        "omnivoice_voice_file_name": (),
+        "omnivoice_voice_transcript": (),
+        "pocket_voice_file_name": (),
+        "qwen3_voice_file_name": (),
+        "qwen3_voice_transcript": (),
+        "vibevoice_voice_file_name": (),
+    }
+
+    @staticmethod
+    def normalize_voice_list_value(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [value] if value else []
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, str) and item]
+        return []
+
+    @staticmethod
+    def serialize_voice_list_value(value: Any) -> str | list[str]:
+        items = ProjectSerializationUtil.normalize_voice_list_value(value)
+        # Backward compatibility: keep zero/one configured voice clone sample serialized
+        # with the legacy string shape, and only use a JSON list when multiple samples exist.
+        if len(items) == 0:
+            return ""
+        if len(items) == 1:
+            return items[0]
+        return items
+
     @staticmethod
     def normalize_loaded_project_dict(d: Any) -> Any:
 
@@ -140,6 +185,16 @@ class ProjectSerializationUtil:
 
         if 'markers' not in d and 'chapter_indices' in d:
             d['markers'] = d['chapter_indices']
+
+        for key, aliases in ProjectSerializationUtil.VOICE_LIST_FIELD_ALIASES.items():
+            raw_value = d.get(key, None)
+            for alias in aliases:
+                if raw_value is None and alias in d:
+                    raw_value = d[alias]
+            d[key] = ProjectSerializationUtil.normalize_voice_list_value(raw_value)
+            for alias in aliases:
+                if alias in d:
+                    d[alias] = d[key]
 
         value = d.get('version', 1)
         if not isinstance(value, int) or value < 1:
@@ -539,7 +594,7 @@ class ProjectSerializationUtil:
             "oute_temperature": project.oute_temperature,
 
             "chatterbox_type": project.chatterbox_type.id,
-            "chatterbox_voice_file_name": project.chatterbox_voice_file_name,
+            "chatterbox_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.chatterbox_voice_file_name),
             "chatterbox_temperature": project.chatterbox_temperature,
             "chatterbox_top_p": project.chatterbox_top_p,
             "chatterbox_turbo_top_k": project.chatterbox_turbo_top_k,
@@ -549,42 +604,42 @@ class ProjectSerializationUtil:
             "chatterbox_exaggeration": project.chatterbox_exaggeration,
             "chatterbox_seed": project.chatterbox_seed,
 
-            "fish_s1_voice_file_name": project.fish_s1_voice_file_name,
-            "fish_s1_voice_text": project.fish_s1_voice_transcript,
+            "fish_s1_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s1_voice_file_name),
+            "fish_s1_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s1_voice_transcript),
             "fish_s1_temperature": project.fish_s1_temperature,
             "fish_s1_top_p": project.fish_s1_top_p,
             "fish_s1_repetition_penalty": project.fish_s1_repetition_penalty,
             "fish_s1_seed": project.fish_s1_seed,
             "fish_s1_compile_enabled": project.fish_s1_compile_enabled,
 
-            "fish_s2_voice_file_name": project.fish_s2_voice_file_name,
-            "fish_s2_voice_transcript": project.fish_s2_voice_transcript,
+            "fish_s2_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_voice_file_name),
+            "fish_s2_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_voice_transcript),
             "fish_s2_rolling_cont": project.fish_s2_rolling_cont,
             "fish_s2_temperature": project.fish_s2_temperature,
             "fish_s2_top_p": project.fish_s2_top_p,
             "fish_s2_top_k": project.fish_s2_top_k,
             "fish_s2_seed": project.fish_s2_seed,
             "fish_s2_compile_enabled": project.fish_s2_compile_enabled,
-            "fish_s2_server_voice_target": project.fish_s2_server_voice_target,
-            "fish_s2_server_voice_transcript": project.fish_s2_server_voice_transcript,
+            "fish_s2_server_voice_target": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_server_voice_target),
+            "fish_s2_server_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_server_voice_transcript),
             "fish_s2_server_concurrent_requests": project.fish_s2_server_concurrent_requests,
 
-            "higgs_voice_file_name": project.higgs_voice_file_name,
-            "higgs_voice_text": project.higgs_voice_transcript,
+            "higgs_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_voice_file_name),
+            "higgs_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_voice_transcript),
             "higgs_temperature": project.higgs_temperature,
             "higgs_top_k": project.higgs_top_k,
             "higgs_top_p": project.higgs_top_p,
             "higgs_seed": project.higgs_seed,
 
-            "higgs_v3_voice_target": project.higgs_v3_voice_target,
-            "higgs_v3_voice_transcript": project.higgs_v3_voice_transcript,
+            "higgs_v3_voice_target": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_target),
+            "higgs_v3_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_transcript),
             "higgs_v3_temperature": project.higgs_v3_temperature,
             "higgs_v3_top_p": project.higgs_v3_top_p,
             "higgs_v3_top_k": project.higgs_v3_top_k,
             "higgs_v3_batch_size": project.higgs_v3_batch_size,
             "higgs_v3_seed": project.higgs_v3_seed,
 
-            "vibevoice_voice_file_name": project.vibevoice_voice_file_name,
+            "vibevoice_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.vibevoice_voice_file_name),
             "vibevoice_target": project.vibevoice_target,
             "vibevoice_lora_path": project.vibevoice_lora_target,
             "vibevoice_cfg": project.vibevoice_cfg,
@@ -592,7 +647,7 @@ class ProjectSerializationUtil:
             "vibevoice_batch_size": project.vibevoice_batch_size,
             "vibevoice_seed": project.vibevoice_seed,
 
-            "indextts2_voice_file_name": project.indextts2_voice_file_name,
+            "indextts2_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.indextts2_voice_file_name),
             "indextts2_temperature": project.indextts2_temperature,
             "indextts2_emo_voice_file_name": project.indextts2_emo_voice_file_name,
             "indextts2_emo_vector": project.indextts2_emo_vector,
@@ -602,12 +657,12 @@ class ProjectSerializationUtil:
             "indextts2_top_k": project.indextts2_top_k,
             "indextts2_seed": project.indextts2_seed,
 
-            "glm_voice_file_name": project.glm_voice_file_name,
-            "glm_voice_text": project.glm_voice_transcript,
+            "glm_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.glm_voice_file_name),
+            "glm_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.glm_voice_transcript),
             "glm_sr": project.glm_sr,
             "glm_seed": project.glm_seed,
 
-            "mira_voice_file_name": project.mira_voice_file_name,
+            "mira_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.mira_voice_file_name),
             "mira_temperature": project.mira_temperature,
             "mira_top_p": project.mira_top_p,
             "mira_top_k": project.mira_top_k,
@@ -615,8 +670,8 @@ class ProjectSerializationUtil:
             "mira_batch_size": project.mira_batch_size,
             "mira_seed": project.mira_seed,
 
-            "moss_voice_file_name": project.moss_voice_file_name,
-            "moss_voice_transcript": project.moss_voice_transcript,
+            "moss_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.moss_voice_file_name),
+            "moss_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.moss_voice_transcript),
             "moss_target": project.moss_target,
             "moss_rolling_cont": project.moss_rolling_cont,
             "moss_delay_temperature": project.moss_delay_temperature,
@@ -630,8 +685,8 @@ class ProjectSerializationUtil:
 
             "qwen3_target": project.qwen3_target,
             "qwen3_model_type": project.qwen3_model_type,
-            "qwen3_voice_file_name": project.qwen3_voice_file_name,
-            "qwen3_voice_transcript": project.qwen3_voice_transcript,
+            "qwen3_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.qwen3_voice_file_name),
+            "qwen3_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.qwen3_voice_transcript),
             "qwen3_rolling_cont": project.qwen3_rolling_cont,
             "qwen3_speaker_id": project.qwen3_speaker_id,
             "qwen3_instructions": project.qwen3_instructions,
@@ -643,14 +698,14 @@ class ProjectSerializationUtil:
             "qwen3_seed": project.qwen3_seed,
             "qwen3_server_concurrent_requests": project.qwen3_server_concurrent_requests,
 
-            "pocket_voice_file_name": project.pocket_voice_file_name,
+            "pocket_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.pocket_voice_file_name),
             "pocket_predefined_voice": project.pocket_predefined_voice,
             "pocket_model_code": project.pocket_model_code,
             "pocket_temperature": project.pocket_temperature,
             "pocket_seed": project.pocket_seed,
 
-            "omnivoice_voice_file_name": project.omnivoice_voice_file_name,
-            "omnivoice_voice_transcript": project.omnivoice_voice_transcript,
+            "omnivoice_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.omnivoice_voice_file_name),
+            "omnivoice_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.omnivoice_voice_transcript),
             "omnivoice_target": project.omnivoice_target,
             "omnivoice_instruct": project.omnivoice_instruct,
             "omnivoice_cfg": project.omnivoice_cfg,

@@ -49,16 +49,13 @@ class VoiceVibeVoiceMenu:
 
             # Voice
             items.append(
-                MenuItem(
-                    make_select_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.VIBEVOICE)
+                VoiceMenuShared.make_manage_voice_samples_item(
+                    state,
+                    TtsModelType.VIBEVOICE,
+                    no_samples_label=make_select_voice_label,
                 )
             )
-            if state.project.vibevoice_voice_file_name:
-                items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.VIBEVOICE) 
-                )
-            
+             
             # LoRA
             items.append(
                 MenuItem(make_lora_target_label, lambda _, __: ask_lora_target(state.project))

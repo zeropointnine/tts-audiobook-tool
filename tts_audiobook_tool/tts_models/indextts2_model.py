@@ -11,6 +11,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class IndexTts2Model(IndexTts2BaseModel):
@@ -53,14 +54,16 @@ class IndexTts2Model(IndexTts2BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        if project.indextts2_voice_file_name:
-            voice_path = os.path.join(project.dir_path, project.indextts2_voice_file_name)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "indextts2_voice_file_name", voice_rotation_index)
+        if voice_file_name:
+            voice_path = os.path.join(project.dir_path, voice_file_name)
         else:
             voice_path = ""
 

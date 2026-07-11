@@ -17,6 +17,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import make_error_string
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class ChatterboxModel(ChatterboxBaseModel):
@@ -55,16 +56,18 @@ class ChatterboxModel(ChatterboxBaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
 
         # Parameters common to both model types
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "chatterbox_voice_file_name", voice_rotation_index)
+
         dic = {
             "text": prompts[0],
-            "voice_path": os.path.join(project.dir_path, project.chatterbox_voice_file_name)
-                if project.chatterbox_voice_file_name else "",
+            "voice_path": os.path.join(project.dir_path, voice_file_name) if voice_file_name else "",
             "temperature": project.chatterbox_temperature
                 if project.chatterbox_temperature != -1 else ChatterboxBaseModel.DEFAULT_TEMPERATURE,
             "top_p": project.chatterbox_top_p

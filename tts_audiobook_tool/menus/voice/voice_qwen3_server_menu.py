@@ -16,16 +16,8 @@ class VoiceQwen3ServerMenu:
             items = []
 
             items.append(
-                MenuItem(
-                    VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.QWEN3TTS_SERVER)
-                )
+                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.QWEN3TTS_SERVER)
             )
-
-            if state.project.qwen3_voice_file_name or state.project.qwen3_voice_transcript:
-                items.append(
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.QWEN3TTS_SERVER)
-                )
 
             temperature_item = VoiceMenuShared.make_temperature_item(
                 state=state,

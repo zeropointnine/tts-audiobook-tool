@@ -8,6 +8,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 from typing import TYPE_CHECKING
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -218,11 +219,11 @@ class Qwen3BaseModel(TtsBaseModel):
                     value = truncate_pretty(project.qwen3_instructions, 30, middle=False)
             
             case "base " | _:
-                if not project.qwen3_voice_file_name:
+                if not ProjectVoiceUtil.primary_voice_value(project, "qwen3_voice_file_name"):
                     prefix, value = COL_ERROR + "required", ""
                 else:
                     prefix = "current voice clone"
-                    value = COL_ACCENT + ellipsize_path_for_menu(project.qwen3_voice_file_name)
+                    value = COL_ACCENT + ellipsize_path_for_menu(ProjectVoiceUtil.primary_voice_value(project, "qwen3_voice_file_name"))
 
         return prefix, value
 

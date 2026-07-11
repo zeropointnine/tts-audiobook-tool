@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import ReadinessIssue
-from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
+from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -25,6 +25,20 @@ class MossServerBaseModel(MossBaseModel):
     MAX_NEW_TOKENS = 1024 
 
     CONFIG = MossConfigs.DELAY
+
+    def get_loaded_arch_type(self) -> MossArchType:
+        """ 
+        Must infer architecture type using model id ("good-enough test") 
+        """
+        model_id = SglOmniUtil.get_model_id()
+        if not model_id:
+            SglOmniUtil.update_model_id()
+            model_id = SglOmniUtil.get_model_id()
+
+        if "local" in model_id.lower():
+            return MossArchType.LOCAL
+
+        return MossArchType.DELAY
 
     @classmethod
     def get_blocking_issues(

@@ -6,6 +6,7 @@ from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 from typing import TYPE_CHECKING
+from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -27,7 +28,7 @@ class HiggsV3ServerBaseModel(TtsBaseModel):
     ) -> list[ReadinessIssue]:
 
         # If has voice file path, must also have transcript
-        if project.higgs_v3_voice_target and not project.higgs_v3_voice_transcript:
+        if ProjectVoiceUtil.primary_voice_value(project, "higgs_v3_voice_target") and not ProjectVoiceUtil.primary_voice_transcript(project, "higgs_v3_voice_transcript"):
             return [
                 ReadinessIssue(
                     "voice clone transcript",

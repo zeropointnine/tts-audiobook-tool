@@ -110,13 +110,14 @@ class SoundSegmentUtil:
         tts_model_type: TtsModelSpec,
         validation_result: ValidationResult,
         is_real_time: bool,
+        voice_tag: str = "",
         suffix=".flac"
     ) -> str:
 
         idx = str(index + 1).zfill(5)
         model = tts_model_type.file_tag
         
-        voice = Tts.get_class().get_voice_tag(project)
+        voice = voice_tag or Tts.get_class().get_voice_tag(project)
         
         text = " " + app_text.sanitize_for_filename(phrase_group.presentable_text[:50])
         

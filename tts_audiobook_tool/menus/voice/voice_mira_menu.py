@@ -20,15 +20,12 @@ class VoiceMiraMenu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
             items.append(
-                MenuItem(
-                    VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.MIRA)
-                )                
+                VoiceMenuShared.make_manage_voice_samples_item(
+                    state,
+                    TtsModelType.MIRA,
+                    on_clear_callback=on_clear_voice,
+                )
             )
-            if state.project.mira_voice_file_name:
-                items.append( VoiceMenuShared.make_clear_voice_item(
-                    state, TtsModelType.MIRA, on_clear_voice
-                ))
 
             item = VoiceMenuShared.make_temperature_item(
                 state=state,

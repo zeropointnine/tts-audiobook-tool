@@ -16,15 +16,8 @@ class VoiceFishS2Menu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
             items.append(
-                MenuItem(
-                    VoiceMenuShared.make_resolved_voice_label,
-                    lambda _, __: VoiceMenuShared.ask_and_set_voice_file(state, TtsModelType.FISH_S2)
-                )
+                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.FISH_S2)
             )
-            if state.project.fish_s2_voice_file_name:
-                items.append( 
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.FISH_S2) 
-                )
 
             items.append(
                 MenuItem(

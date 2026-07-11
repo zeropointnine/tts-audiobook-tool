@@ -78,6 +78,7 @@ def start(
     # normally within one paragraph, there may be no phrase-level break reason to
     # clear rolling continuation state, so force a fresh context at run start.
     Tts.clear_continuation()
+    Tts.reset_voice_rotation_index()
 
     # Outer loop
 
@@ -343,7 +344,12 @@ def generate_full_flow(
         Tts.clear_continuation_if_reason(phrase_group.last_reason)
         if project.realtime_save:
             err, saved_path = GenerateUtil.save_sound_and_timing_json(
-                state, phrase_group, index, validation_result, is_real_time=True
+                state,
+                phrase_group,
+                index,
+                validation_result,
+                is_real_time=True,
+                voice_tag=getattr(validation_result, "voice_tag", ""),
             )
             if err:
                 printt(f"{COL_ERROR}Couldn't save file: {err} {saved_path}")

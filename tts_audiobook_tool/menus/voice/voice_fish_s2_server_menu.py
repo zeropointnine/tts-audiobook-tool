@@ -30,7 +30,7 @@ class VoiceFishS2ServerMenu:
                 )
 
             # Hyperparams
-            # Uses same project attributes as TtsModelType.FISH_S2
+            # Shares project attributes as local inference version, TtsModelType.FISH_S2
 
             temperature_item = VoiceMenuShared.make_temperature_item(
                 state=state,
