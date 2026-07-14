@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, Strictness
 from tts_audiobook_tool.app_types import ReadinessIssue
-from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *

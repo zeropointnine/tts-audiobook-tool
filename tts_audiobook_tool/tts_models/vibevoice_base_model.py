@@ -114,7 +114,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     @classmethod
     def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
 
-        WARNING = "Not recommended with VibeVoice 1.5B model (w/o use of lora)"
+        WARNING = "Not recommended with VibeVoice 1.5B model (when not using LoRA)"
 
         if strictness >= Strictness.HIGH:
             if not instance:

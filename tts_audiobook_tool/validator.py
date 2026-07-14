@@ -13,7 +13,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TrimmedResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, TrimmedResult, ValidationResult, WordErrorResult
 
 
 @dataclass(frozen=True)
@@ -76,6 +76,11 @@ class Validator:
             num_words=num_words,
             threshold=threshold
         )
+
+        if not word_error_result.is_fail:
+            # Transcription test has passed; now test for excessively/suspiciously long audio
+            if ExcessiveDurationResult.is_excessively_long(source, language_code, sound.duration):
+                return ExcessiveDurationResult(sound, transcript_words, sound.duration)
 
         trimmed_result = Validator.make_trimmed_result(word_error_result, source, transcript_words, language_code)
         

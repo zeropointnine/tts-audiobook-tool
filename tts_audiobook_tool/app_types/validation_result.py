@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types import Sound, Word
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
+from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 
 
 @dataclass
@@ -149,6 +151,35 @@ class MusicFailResult(TranscriptResult):
 
     def get_ui_message(self) -> str:
         return f"{COL_ERROR}Music detected"
+
+@dataclass
+class ExcessiveDurationResult(TranscriptResult):
+    """
+    Represents a excessively long sound generation for the number of words it contains.
+    (Presumably contains many spurious words or excess noise, etc)
+    """
+
+    duration: float
+
+    @staticmethod
+    def is_excessively_long(source_text: str, language_code: str, sound_duration: float) -> bool:
+        
+        normalized_source = TextNormalizer.normalize_source(source_text, language_code)
+        words = app_text.get_words(normalized_source, vocalizable_only=True)
+
+        # Outlier: Skip if any word has 3+ digits (prevent false positives)
+        if any(sum(char.isdigit() for char in word) >= 3 for word in words):
+            return False
+
+        threshold = 1.5 + len(words) * 0.75 
+        return sound_duration > threshold
+
+    @property
+    def is_fail(self) -> bool:
+        return True
+
+    def get_ui_message(self) -> str:
+        return f"{COL_ERROR}Sound duration is excessively long (duration: {self.duration:.2f}s, num words: {len(self.transcript_words)})"
 
 @dataclass
 class SkippedResult(ValidationResult):

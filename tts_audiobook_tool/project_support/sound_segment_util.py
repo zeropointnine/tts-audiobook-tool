@@ -9,7 +9,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, ValidationResult, WordErrorResult
 
 
 def get_segment_stt_info_path(sound_path: str | Path) -> Path:
@@ -123,7 +123,7 @@ class SoundSegmentUtil:
         
         if isinstance(validation_result, WordErrorResult):
             num_fails_tag = f" [{validation_result.num_errors}]" 
-        elif isinstance(validation_result, MusicFailResult):
+        elif isinstance(validation_result, (MusicFailResult, ExcessiveDurationResult)):
             num_fails_tag = f" [99]" # good enough for now
         else:
             num_fails_tag = ""

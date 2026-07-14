@@ -162,6 +162,8 @@ class Tts:
 
     @staticmethod
     def get_type() -> TtsModelType:
+        if not hasattr(Tts, "_type") or Tts._type is None:
+            raise Exception("TTS model type has not been set. Must first call init_local_model_type().`")
         return Tts._type
 
     @staticmethod

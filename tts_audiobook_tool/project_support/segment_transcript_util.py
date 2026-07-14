@@ -15,7 +15,7 @@ from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.validator import Validator
-from tts_audiobook_tool.app_types.validation_result import MusicFailResult, TranscriptResult, TrimmedResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, TranscriptResult, TrimmedResult, WordErrorResult
 from tts_audiobook_tool.transcriber import Transcriber
 from tts_audiobook_tool.util import *
 
@@ -24,7 +24,8 @@ class SegmentTranscriptUtil:
     VERSION = 1
     TYPE = "segment_stt_info"
     EXCEPTION_MUSIC_DETECTED = "music_detected"
-    MUSIC_DETECTED_WORD_ERROR_SENTINEL = 99
+    EXCEPTION_EXCESSIVE_DURATION = "excessive_sound_duration"
+    EXCEPTION_WORD_ERROR_SENTINEL = 99
 
     @staticmethod
     def from_validation_result(
@@ -40,9 +41,13 @@ class SegmentTranscriptUtil:
         normalized_source, normalized_transcript = TextNormalizer.normalize_source_and_transcript(
             source, transcript, project.language_code
         )
+        
         exception = None
         if isinstance(validation_result, MusicFailResult):
             exception = SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED
+        elif isinstance(validation_result, ExcessiveDurationResult):
+            exception = SegmentTranscriptUtil.EXCEPTION_EXCESSIVE_DURATION
+        
         generation_word_error_count = SegmentTranscriptUtil.make_generation_word_error_count(validation_result)
 
         return SegmentTranscriptData(
@@ -63,8 +68,8 @@ class SegmentTranscriptUtil:
 
     @staticmethod
     def make_generation_word_error_count(validation_result: TranscriptResult) -> int:
-        if isinstance(validation_result, MusicFailResult):
-            return SegmentTranscriptUtil.MUSIC_DETECTED_WORD_ERROR_SENTINEL
+        if isinstance(validation_result, (MusicFailResult, ExcessiveDurationResult)):
+            return SegmentTranscriptUtil.EXCEPTION_WORD_ERROR_SENTINEL
         if isinstance(validation_result, WordErrorResult):
             return validation_result.num_errors
         return 0
@@ -204,7 +209,7 @@ class SegmentTranscriptUtil:
     @staticmethod
     def get_word_error_count(info: SegmentTranscriptData) -> int:
         if info.exception == SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED:
-            return SegmentTranscriptUtil.MUSIC_DETECTED_WORD_ERROR_SENTINEL
+            return SegmentTranscriptUtil.EXCEPTION_WORD_ERROR_SENTINEL
         return len(SegmentTranscriptUtil.get_word_errors(info))
 
     @staticmethod
@@ -220,6 +225,10 @@ class SegmentTranscriptUtil:
 
     @staticmethod
     def print_info(sound_segment_index: int, project: Project) -> None:
+        """
+        Prints info for a transcribed sound segment using json sidecar file
+        """
+        
         best_item = project.sound_segments.get_best_item_for(sound_segment_index)
         index_string = str(sound_segment_index + 1)
 
@@ -257,7 +266,7 @@ class SegmentTranscriptUtil:
         printt(f"{COL_DEFAULT}Line: {COL_ACCENT}{info.index_1b}, {COL_DEFAULT}word errors detected: {COL_ACCENT}{num_word_errors}, {COL_DEFAULT}word error threshold: {COL_ACCENT}{threshold}")
         printt(filename_line)
         if info.exception is not None:
-            printt(f"{COL_DEFAULT}Exception: {COL_DIM}{info.exception}")
+            printt(f"{COL_DEFAULT}Exception: {COL_ERROR}{info.exception}")
         printt()
 
         SegmentTranscriptUtil.print_stt_details(info, should_show_diff=num_word_errors > 0)

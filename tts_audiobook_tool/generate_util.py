@@ -30,7 +30,7 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.validator import Validator
-from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import MusicFailResult, SkippedResult, ExcessiveDurationResult, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.transcriber import Transcriber
 
@@ -61,7 +61,7 @@ class GenerateUtil:
         """
 
         project = state.project
-        max_retries = project.max_retries
+        max_retries = 0 # xxx project.max_retries
         stt_variant = state.prefs.stt_variant
         stt_config = state.prefs.stt_config
         showed_vram_warning = False
@@ -284,7 +284,7 @@ class GenerateUtil:
                             validation_result=validation_result
                         )
                         should_show_viz = (
-                            isinstance(validation_result, MusicFailResult)
+                            isinstance(validation_result, (MusicFailResult, ExcessiveDurationResult))
                             or (isinstance(validation_result, WordErrorResult) and validation_result.num_errors > 0)
                         )
 
@@ -556,7 +556,7 @@ class GenerateUtil:
 
         sounds = [result] if isinstance(result, Sound) else result
         
-        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str | TtsModelError] = []
+        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str | TtsModelError] = [] # TODO: Revisit
 
         for i, sound in enumerate(sounds):
 
