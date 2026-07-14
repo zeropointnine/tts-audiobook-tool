@@ -61,7 +61,7 @@ class GenerateUtil:
         """
 
         project = state.project
-        max_retries = 0 # xxx project.max_retries
+        max_retries = 0
         stt_variant = state.prefs.stt_variant
         stt_config = state.prefs.stt_config
         showed_vram_warning = False

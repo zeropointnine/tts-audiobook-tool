@@ -5,6 +5,7 @@ import numpy as np
 from tts_audiobook_tool.app_types import ConcreteWord, Sound, Strictness, Word
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_findings import ValidationFindings, ValidationInvalidReason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
@@ -76,7 +77,7 @@ def test_validate_returns_word_error_result_when_duration_is_not_suspicious() ->
     assert not result.is_fail
 
 
-def test_validate_adds_one_error_and_warning_for_possible_truncation() -> None:
+def test_validate_counts_possible_truncation_without_mislabeling_it_as_a_transcript_error() -> None:
     words = make_words("hello", "world")
     sound = make_sound(1.0)
 
@@ -87,10 +88,12 @@ def test_validate_adds_one_error_and_warning_for_possible_truncation() -> None:
 
     assert isinstance(result, WordErrorResult)
     assert result.possible_truncation
-    assert result.errors == [Validator.POSSIBLE_TRUNCATION_ERROR]
+    assert result.findings.transcript_errors == []
+    assert result.findings.transcript_word_error_count == 0
+    assert result.findings.effective_word_error_count == 1
     assert result.num_errors == 1
     assert result.is_fail
-    assert "Possible truncation detected" in result.get_ui_message_with_extras()
+    assert "Audio ends abruptly, last word may be truncated" in result.get_ui_message_with_extras()
 
 
 def test_possible_truncation_obeys_the_existing_word_error_threshold() -> None:
@@ -122,8 +125,8 @@ def test_sus_duration_uses_all_or_nothing_word_error_sentinel_without_music_exce
         index=0,
         validation_result=result,
     )
-    assert info.generation_word_error_count == 99
-    assert info.exception == SegmentTranscriptUtil.EXCEPTION_EXCESSIVE_DURATION
+    assert info.findings is not None
+    assert info.findings.invalid_reason == ValidationInvalidReason.EXCESSIVE_DURATION
     assert SegmentTranscriptUtil.get_word_error_count(info) == 99
 
 
@@ -141,8 +144,8 @@ def test_music_exception_semantics_are_preserved() -> None:
         validation_result=result,
     )
 
-    assert info.generation_word_error_count == 99
-    assert info.exception == SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED
+    assert info.findings is not None
+    assert info.findings.invalid_reason == ValidationInvalidReason.MUSIC_DETECTED
 
 
 def test_sus_duration_file_name_uses_99_fail_tag() -> None:
@@ -163,3 +166,72 @@ def test_sus_duration_file_name_uses_99_fail_tag() -> None:
     )
 
     assert " [99] " in file_name
+
+
+def test_validation_findings_separates_facts_from_legacy_filename_score() -> None:
+    findings = ValidationFindings(
+        transcript_errors=["d:world"],
+        possible_truncation=True,
+    )
+
+    assert findings.transcript_word_error_count == 1
+    assert findings.effective_word_error_count == 2
+    assert findings.is_failed(1)
+    assert findings.legacy_filename_score == 2
+
+    findings.invalid_reason = ValidationInvalidReason.MUSIC_DETECTED
+    assert findings.is_failed(99)
+    assert findings.legacy_filename_score == 99
+
+
+def test_segment_sidecar_writes_v3_validation_and_loads_it_directly() -> None:
+    words = make_words("hello")
+    result = MusicFailResult(make_sound(1.0), words)
+    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+        project = Project.model_validate({"language_code": "en"})
+    phrase_group = PhraseGroup([Phrase("hello", Reason.SENTENCE)])
+
+    info = SegmentTranscriptUtil.from_validation_result(project, phrase_group, 0, result)
+    payload = SegmentTranscriptUtil.to_dict(info)
+    loaded = SegmentTranscriptUtil.from_dict(payload)
+
+    assert info.version == 3
+    assert "exception" not in payload
+    assert "generation_word_error_count" not in payload
+    assert "possible_truncation" not in payload
+    assert payload["findings"] == {
+        "transcript_errors": [],
+        "possible_truncation": False,
+        "invalid_reason": "music_detected",
+    }
+    assert not isinstance(loaded, str)
+    assert loaded.findings is not None
+    assert loaded.findings.invalid_reason == ValidationInvalidReason.MUSIC_DETECTED
+
+
+def test_segment_sidecar_loads_v2_validation_fields() -> None:
+    payload = {
+        "version": 2,
+        "type": SegmentTranscriptUtil.TYPE,
+        "language_code": "en",
+        "index_1b": 1,
+        "source": "hello",
+        "prompt": "hello",
+        "transcript": "hello",
+        "normalized_source": "hello",
+        "normalized_transcript": "hello",
+        "generation_word_error_count": 1,
+        "possible_truncation": True,
+        "timed_phrases": [],
+        "transcript_words": [],
+        "exception": None,
+    }
+
+    info = SegmentTranscriptUtil.from_dict(payload)
+
+    assert not isinstance(info, str)
+    assert info.findings is not None
+    findings = SegmentTranscriptUtil.get_findings(info)
+    assert findings.transcript_errors == []
+    assert findings.possible_truncation
+    assert findings.effective_word_error_count == 1

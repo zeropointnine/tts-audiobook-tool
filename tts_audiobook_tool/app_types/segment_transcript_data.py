@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
+from tts_audiobook_tool.app_types.validation_findings import ValidationFindings
 from tts_audiobook_tool.util import *
 
 
@@ -36,17 +37,12 @@ class SegmentTranscriptData:
     # Normalized STT transcript text used for word-error comparison.
     normalized_transcript: str
 
-    # Word error count detected at generation time, matching the saved filename tag.
-    generation_word_error_count: int
-
     # Phrase-level timings used to subdivide app metadata during concat.
     timed_phrases: list[TimedPhrase]
 
     # Word-level STT transcript data, including word text and timestamps.
     transcript_words: list[dict[str, Any]]
 
-    # Exceptional compromise reason for the whole segment, if any.
-    exception: str | None
-
-    # Whether the final audio window remained loud, suggesting truncation.
-    possible_truncation: bool = False
+    # Version 3 validation facts. Version 2 top-level validation fields are
+    # translated into this object while loading legacy sidecars.
+    findings: ValidationFindings

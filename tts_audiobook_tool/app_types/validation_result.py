@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types import Sound, Word
+from tts_audiobook_tool.app_types.validation_findings import ValidationFindings, ValidationInvalidReason
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
@@ -25,6 +26,7 @@ class ValidationResult(ABC):
     generated_trim_original_duration: float | None = field(default=None, kw_only=True)
     trailing_token_noise_trim_time: float | None = field(default=None, kw_only=True)
     voice_tag: str = field(default="", kw_only=True)
+    findings: ValidationFindings = field(default_factory=ValidationFindings, kw_only=True)
 
     @property
     @abstractmethod
@@ -100,27 +102,28 @@ class TranscriptResult(ValidationResult, ABC):
     (ie, anything other than SkippedResult)
     """
     transcript_words: list[Word]
-    possible_truncation: bool = field(default=False, kw_only=True)
+
+    @property
+    def possible_truncation(self) -> bool:
+        return self.findings.possible_truncation
 
 @dataclass
 class WordErrorResult(TranscriptResult):
-    """ A ValidationResult that has transcript data and has calculated word error list """
+    """A runtime validation outcome with a threshold for transcript findings."""
 
-    errors: list[str]
     num_words: int
     threshold: int
 
     @property
     def num_errors(self) -> int:
-        return len(self.errors)
+        return self.findings.effective_word_error_count
     
     @property
     def is_fail(self) -> bool:
-        return self.num_errors > self.threshold
+        return self.findings.is_failed(self.threshold)
 
     def get_ui_message(self) -> str:
-        base_message = f"{COL_ERROR}Word error fail" if self.is_fail else "Passed"
-        return f"{base_message} {COL_DIM}(words={COL_DEFAULT}{self.num_words}{COL_DIM}, word_errors={COL_DEFAULT}{self.num_errors}{COL_DIM}, threshold={COL_DEFAULT}{self.threshold}{COL_DIM})"
+        return self.findings.make_status_message(self.num_words, self.threshold)
 
 @dataclass
 class TrimmedResult(TranscriptResult):
@@ -155,9 +158,13 @@ class TrimmedResult(TranscriptResult):
 class MusicFailResult(TranscriptResult):
     """
     """
+    def __post_init__(self):
+        if self.findings.invalid_reason is None:
+            self.findings.invalid_reason = ValidationInvalidReason.MUSIC_DETECTED
+
     @property
     def is_fail(self) -> bool:
-        return True
+        return self.findings.is_hard_invalid
 
     def get_ui_message(self) -> str:
         return f"{COL_ERROR}Music detected"
@@ -170,6 +177,10 @@ class ExcessiveDurationResult(TranscriptResult):
     """
 
     duration: float
+
+    def __post_init__(self):
+        if self.findings.invalid_reason is None:
+            self.findings.invalid_reason = ValidationInvalidReason.EXCESSIVE_DURATION
 
     @staticmethod
     def is_excessively_long(source_text: str, language_code: str, sound_duration: float) -> bool:
@@ -186,7 +197,7 @@ class ExcessiveDurationResult(TranscriptResult):
 
     @property
     def is_fail(self) -> bool:
-        return True
+        return self.findings.is_hard_invalid
 
     def get_ui_message(self) -> str:
         return f"{COL_ERROR}Sound duration is excessively long (duration: {self.duration:.2f}s, num words: {len(self.transcript_words)})"

@@ -13,6 +13,7 @@ from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
+from tts_audiobook_tool.app_types.validation_findings import ValidationFindings, ValidationInvalidReason
 from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, TrimmedResult, ValidationResult, WordErrorResult
 
 
@@ -28,8 +29,6 @@ from tts_audiobook_tool.transcriber import Transcriber
 class Validator:
     """
     """
-
-    POSSIBLE_TRUNCATION_ERROR = "i:POSSIBLE_TRUNCATION"
 
     @staticmethod
     def format_source_with_uncommon_words(text: str, language_code: str="") -> str:
@@ -66,8 +65,10 @@ class Validator:
         _, word_errors, num_words, threshold = Validator.get_word_error_fail(
             source, transcript, language_code=language_code, strictness=strictness
         )
-        if possible_truncation:
-            word_errors.append(Validator.POSSIBLE_TRUNCATION_ERROR)
+        findings = ValidationFindings(
+            transcript_errors=word_errors,
+            possible_truncation=possible_truncation,
+        )
 
         # Always does music detect if instance exists
         if ModelManager.has_yamnet_detector():
@@ -75,16 +76,19 @@ class Validator:
                 return MusicFailResult(
                     sound,
                     transcript_words,
-                    possible_truncation=possible_truncation,
+                    findings=ValidationFindings(
+                        transcript_errors=word_errors,
+                        possible_truncation=possible_truncation,
+                        invalid_reason=ValidationInvalidReason.MUSIC_DETECTED,
+                    ),
                 )
 
         word_error_result = WordErrorResult(
             sound=sound,
             transcript_words=transcript_words,
-            errors=word_errors,
             num_words=num_words,
             threshold=threshold,
-            possible_truncation=possible_truncation,
+            findings=findings,
         )
 
         if not word_error_result.is_fail:
@@ -94,7 +98,11 @@ class Validator:
                     sound,
                     transcript_words,
                     sound.duration,
-                    possible_truncation=possible_truncation,
+                    findings=ValidationFindings(
+                        transcript_errors=word_errors,
+                        possible_truncation=possible_truncation,
+                        invalid_reason=ValidationInvalidReason.EXCESSIVE_DURATION,
+                    ),
                 )
 
         # A possible truncation is an audio-boundary diagnostic rather than an
@@ -193,7 +201,9 @@ class Validator:
                 start,
                 end,
                 original_duration=word_error_result.sound.duration,
-                possible_truncation=word_error_result.possible_truncation,
+                findings=ValidationFindings(
+                    possible_truncation=word_error_result.possible_truncation,
+                ),
             )
 
         return None

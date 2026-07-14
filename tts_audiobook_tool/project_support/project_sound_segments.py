@@ -11,6 +11,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.validator import Validator
+from tts_audiobook_tool.app_types.validation_findings import ValidationFindings
 
 class ProjectSoundSegments:
     """
@@ -142,14 +143,11 @@ class ProjectSoundSegments:
         if item.num_errors == -1:
             # Unknown error count — treat as not-failed
             return False
-        if item.num_errors == 99:
-            # Music-fail sentinel — always considered failed
-            return True
         phrase_group = self.project.phrase_groups[index]
         normalized_source = TextNormalizer.normalize_source(phrase_group.text, self.project.language_code)
         num_words = app_text.get_word_count(normalized_source, vocalizable_only=True)
         threshold = Validator.compute_threshold(num_words, self.project.strictness)
-        return item.num_errors > threshold
+        return ValidationFindings.is_legacy_filename_score_failed(item.num_errors, threshold)
 
     def get_failed_indices_in_generate_range(self) -> set[int]:
         """ 
@@ -247,4 +245,3 @@ class DirHandler(FileSystemEventHandler):
         # No need to call back here for our use case atm
         # FYI, just 'touching' file modifies file
         pass
-

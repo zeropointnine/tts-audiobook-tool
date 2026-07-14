@@ -151,23 +151,13 @@ Windows CUDA support (unlike the other models, we must use torch 2.6/cu124 here)
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s1":
 
-- Linux/Mac
-
-        python -m venv venv-fish-s1
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-fish-s1
+    python -m venv venv-fish-s1 # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-fish-s1 # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-fish-s1/bin/activate
-
-- Windows
-
-        venv-fish-s1\Scripts\activate.bat
+    source venv-fish-s1/bin/activate # linux/mac
+    venv-fish-s1\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -187,23 +177,13 @@ Authenticate the model on HuggingFace:
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s2":
 
-- Linux/Mac
-
-        python -m venv venv-fish-s2
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-fish-s2
+    python -m venv venv-fish-s2 # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-fish-s2 # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-fish-s2/bin/activate
-
-- Windows
-
-        venv-fish-s2\Scripts\activate.bat
+    source venv-fish-s2/bin/activate # linux/mac
+    venv-fish-s2\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -272,23 +252,13 @@ On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install porta
 
 Initialize a **Python v3.12** virtual environment named `venv-higgs-v2`:
 
-- Linux/Mac
-
-        python -m venv venv-higgs-v2
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-higgs-v2
+    python -m venv venv-higgs-v2 # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-higgs-v2 # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-higgs/bin/activate
-
-- Windows
-
-        venv-higgs\Scripts\activate.bat
+    source venv-higgs/bin/activate # linux/mac
+    venv-higgs\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -301,23 +271,13 @@ Note that the above `requirements` file draws from a personal fork of the `higgs
 
 Initialize a **Python v3.11** virtual environment named `venv-indextts2`:
 
-- Linux/Mac
-
-        python -m venv venv-indextts2
-
-- Windows
-
-        C:\path\to\python3.11\python.exe -m venv venv-indextts2
+    python -m venv venv-indextts2 # linux/mac
+    C:\path\to\python3.11\python.exe -m venv venv-indextts2 # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-indextts2/bin/activate
-
-- Windows
-
-        venv-indextts2\Scripts\activate.bat
+    source venv-indextts2/bin/activate # linux/mac
+    venv-indextts2\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -330,23 +290,13 @@ Install dependencies:
 
 Initialize a **Python v3.12** virtual environment named `venv-mira`:
 
-- Linux/Mac
-
-        python -m venv venv-mira
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-mira
+    python -m venv venv-mira # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-mira # windows
 
 Activate the virtual environment:
 
-- Linux
-
-        source venv-mira/bin/activate
-
-- Windows
-
-        venv-mira\Scripts\activate.bat
+    source venv-mira/bin/activate # linux/mac
+    venv-mira\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -360,23 +310,13 @@ Install dependencies:
 
 Initialize a **Python v3.12** virtual environment named `venv-moss`:
 
-- Linux/Mac
-
-        python -m venv venv-moss
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-moss
+    python -m venv venv-moss # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-moss # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-moss/bin/activate
-
-- Windows
-
-        venv-moss\Scripts\activate.bat
+    source venv-moss/bin/activate # linux/mac
+    venv-moss\Scripts\activate.bat # windows
 
 Update pip:
 
@@ -398,23 +338,13 @@ Finally, install [Flash Attention](#installing-flash-attention) (optional but re
 
 Initialize a **Python v3.12** virtual environment named `venv-omnivoice`:
 
-- Linux/Mac
-
-        python -m venv venv-omnivoice
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-omnivoice
+    python -m venv venv-omnivoice # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-omnivoice # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-omnivoice/bin/activate
-
-- Windows
-
-        venv-omnivoice\Scripts\activate.bat
+    source venv-omnivoice/bin/activate # linux/mac
+    venv-omnivoice\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -425,23 +355,13 @@ Install dependencies:
 
 Initialize a **Python v3.12** virtual environment named "venv-pocket":
 
-- Linux/Mac
-
-        python -m venv venv-pocket
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-pocket
+    python -m venv venv-pocket # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-pocket # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-pocket/bin/activate
-
-- Windows
-
-        venv-pocket\Scripts\activate.bat
+    source venv-pocket/bin/activate # linux/mac
+    venv-pocket\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -458,23 +378,13 @@ Authenticate the model on HuggingFace:
 
 Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`:
 
-- Linux/Mac
-
-        python -m venv venv-qwen3-tts
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-qwen3tts 
+    python -m venv venv-qwen3-tts # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-qwen3tts # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-qwent3tts/bin/activate
-
-- Windows
-
-        venv-qwen3tts\Scripts\activate.bat
+    source venv-qwent3tts/bin/activate # linux/mac
+    venv-qwen3tts\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -486,23 +396,13 @@ Install [Flash Attention](#installing-flash-attention) if using CUDA (optional b
 
 Initialize a **Python v3.11** virtual environment named `venv-vibevoice`:
 
-- Linux/Mac
-
-        python -m venv venv-vibevoice
-
-- Windows
-
-        C:\path\to\python3.11\python.exe -m venv venv-vibevoice
+    python -m venv venv-vibevoice # linux/mac
+    C:\path\to\python3.11\python.exe -m venv venv-vibevoice # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-vibevoice/bin/activate
-
-- Windows
-
-        venv-vibevoice\Scripts\activate.bat
+    source venv-vibevoice/bin/activate # linux/mac
+    venv-vibevoice\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -516,23 +416,13 @@ Note that because Microsoft famously removed the source code from their github r
 
 Initialize a **Python v3.12** virtual environment named "venv-oute":
 
-- Linux/Mac
-
-        python -m venv venv-oute
-
-- Windows
-
-        C:\path\to\python3.12\python.exe -m venv venv-oute
+    python -m venv venv-oute # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-oute # windows
 
 Activate the virtual environment:
 
-- Linux/Mac
-
-        source venv-oute/bin/activate
-
-- Windows
-
-        venv-oute\Scripts\activate.bat
+    source venv-oute/bin/activate # linux/mac
+    venv-oute\Scripts\activate.bat # windows
 
 Install dependencies:
 
@@ -583,19 +473,13 @@ Once SGL-Omni is set up, continue to creating the app's virtual environment on y
 
 Initialize a **Python v3.12** virtual environment named `venv-sgl-omni`:
 
-        # Linux/Mac
-        python -m venv venv-sgl-omni
-
-        # Windows
-        C:\path\to\python3.12\python.exe -m venv venv-sgl-omni
+    python -m venv venv-sgl-omni # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-sgl-omni # windows
 
 Activate the virtual environment:
 
-        # Linux/Mac
-        source venv-sgl-omni/bin/activate
-
-        # Windows
-        venv-sgl-omni\Scripts\activate.bat
+    source venv-sgl-omni/bin/activate # linux/mac
+    venv-sgl-omni\Scripts\activate.bat # windows
 
 Install the dependencies:
 
@@ -612,7 +496,7 @@ On Linux, enter:
 
     pip install flash-attn==2.8.3 --no-build-isolation
 
-On Windows, download a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version and torch version: 
+On Windows, download and install a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version and torch version: 
 
 - flash_attn-2.7.4+cu128torch2.8-cp311-cp311-win_amd64.whl
 - flash_attn-2.7.4+cu128torch2.8-cp312-cp312-win_amd64.whl
@@ -778,6 +662,11 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-07-15**
+
+- Added detection for potentially cut-off words at the end of generated audio
+- Added detection for pathologically long audio generations
 
 **2026-07-13**
 

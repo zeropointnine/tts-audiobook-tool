@@ -5,6 +5,7 @@ from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTr
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.app_types.segment_transcript_data import SegmentTranscriptData
+from tts_audiobook_tool.app_types.validation_findings import ValidationFindings
 
 class TestTranscribeGranular(unittest.TestCase):
 
@@ -103,10 +104,9 @@ class TestTranscribeGranular(unittest.TestCase):
             transcript="one blah three extra",
             normalized_source="one two three",
             normalized_transcript="one blah three extra",
-            generation_word_error_count=3,
             timed_phrases=[],
             transcript_words=[],
-            exception=None,
+            findings=ValidationFindings(),
         )
 
         visualization = text_util.strip_ansi_codes(SegmentTranscriptUtil.make_word_error_visualization(info))
@@ -126,10 +126,9 @@ class TestTranscribeGranular(unittest.TestCase):
             transcript="one three",
             normalized_source="one two three",
             normalized_transcript="one three",
-            generation_word_error_count=1,
             timed_phrases=[],
             transcript_words=[],
-            exception=None,
+            findings=ValidationFindings(),
         )
 
         visualization = text_util.strip_ansi_codes(SegmentTranscriptUtil.make_word_error_visualization(info))
@@ -149,11 +148,9 @@ class TestTranscribeGranular(unittest.TestCase):
             transcript="one two",
             normalized_source="one two",
             normalized_transcript="one two",
-            generation_word_error_count=1,
             timed_phrases=[],
             transcript_words=[],
-            exception=None,
-            possible_truncation=True,
+            findings=ValidationFindings(possible_truncation=True),
         )
 
         assert SegmentTranscriptUtil.get_word_error_count(info) == 1
