@@ -55,7 +55,7 @@ class SectionMarkersMenu:
                 value = f"{num} {make_noun('item', 'items', num)}"
                 items.append( 
                     MenuItem(
-                        f"Print {COL_DIM}({value})", lambda _, __: print_section_markers(state), 
+                        f"Print list {COL_DIM}({value})", lambda _, __: print_section_markers(state), 
                         superlabel=" ", superlabel_no_blank_line=True
                     ),
                 )
@@ -215,5 +215,6 @@ def mode_menu(state: State) -> None:
 SUBLABEL = \
 """Section markers are line numbers which define where new sections begin. 
 Depending on the selected mode, this is used to either split the audiobook 
-into separate files or to add web player bookmarks to a single audiobook file.
+into separate files or to add M4B chapters and web player bookmarks to a
+single audiobook file.
 """

@@ -9,10 +9,10 @@ from types import SimpleNamespace
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.concat_util import make_app_metadata_sections, save_abr_metadata_debug_json
+from tts_audiobook_tool.concat_util import ConcatUtil, make_app_metadata_sections, save_abr_metadata_debug_json
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.app_types import Book, BookSection
-from tts_audiobook_tool.app_types import ExportType, SectionMarkerMode
+from tts_audiobook_tool.app_types import ExportType, NormalizationType, SectionMarkerMode
 from tts_audiobook_tool.menus import concat_menu
 from tts_audiobook_tool.state import State
 
@@ -221,6 +221,66 @@ class TestAppMetadata(unittest.TestCase):
             file_cut_indices=[],
             bookmark_indices=[],
         )
+
+    def test_concat_make_file_writes_chapter_metadata_before_abr_metadata_for_marker_chapters(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Project.model_validate({
+                "dir_path": temp_dir,
+                "book": Book(sections=[BookSection(title="Only Section", phrase_groups=[
+                    self.make_phrase_group("Chapter One"),
+                    self.make_phrase_group("Text one."),
+                    self.make_phrase_group("Chapter Two"),
+                    self.make_phrase_group("Text two."),
+                ])]),
+                "markers": [2],
+                "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
+            })
+            project.export_type = ExportType.AAC
+            project.normalization_type = NormalizationType.DISABLED
+            project.use_break_sound_effect = False
+            project._sound_segments = SimpleNamespace(get_best_file_for=lambda _: "segment.flac")
+
+            state = SimpleNamespace(
+                project=project,
+                prefs=SimpleNamespace(aac_bitrate="128k", save_debug_files=False),
+            )
+
+            phrases_and_paths = [
+                (Phrase("Chapter One", Reason.SENTENCE), "/tmp/one.flac", True),
+                (Phrase("Text one.", Reason.SENTENCE), "/tmp/two.flac", False),
+                (Phrase("Chapter Two", Reason.SENTENCE), "/tmp/three.flac", True),
+                (Phrase("Text two.", Reason.SENTENCE), "/tmp/four.flac", False),
+            ]
+            sections = [AppMetadataSection(title="Only Section", start_index=0, end_index=4)]
+            stem_path = str(Path(temp_dir) / "book")
+
+            with patch("tts_audiobook_tool.concat_util.ProjectTextIOUtil.load_raw_text", return_value="raw"), \
+                 patch.object(ConcatUtil, "make_phrases_and_paths", return_value=phrases_and_paths), \
+                 patch.object(ConcatUtil, "concatenate_sound_segments", return_value=[1.0, 2.0, 3.0, 4.0]), \
+                 patch("tts_audiobook_tool.concat_util.make_app_metadata_sections", return_value=sections), \
+                 patch("tts_audiobook_tool.concat_util.m4b_chapter_util.make_metadata", return_value="meta") as make_metadata_mock, \
+                 patch("tts_audiobook_tool.concat_util.m4b_chapter_util.make_copy_with_metadata", return_value="") as make_copy_mock, \
+                 patch("tts_audiobook_tool.concat_util.AppMetadata.save_to_mp4", return_value="") as save_to_mp4_mock, \
+                 patch("tts_audiobook_tool.concat_util.delete_silently"):
+                result_path, err = ConcatUtil.make_file(
+                    state=cast(State, state),
+                    index_start=0,
+                    index_end=3,
+                    bookmark_indices=[2],
+                    stem_path=stem_path,
+                )
+
+            self.assertEqual(err, "")
+            self.assertEqual(result_path, stem_path + ".abr.m4b")
+            make_metadata_mock.assert_called_once()
+            make_copy_mock.assert_called_once_with(
+                source_path=stem_path + " [concat].m4b",
+                dest_path=stem_path + " [chaptermeta].m4b",
+                metadata="meta",
+            )
+            save_to_mp4_mock.assert_called_once()
+            self.assertEqual(save_to_mp4_mock.call_args.args[1], stem_path + " [chaptermeta].m4b")
+            self.assertEqual(save_to_mp4_mock.call_args.args[2], stem_path + ".abr.m4b")
 
 
 if __name__ == "__main__":

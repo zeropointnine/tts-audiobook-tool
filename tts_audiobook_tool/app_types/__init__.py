@@ -14,9 +14,12 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import cache
 import platform
-from typing import Callable, NamedTuple, Protocol, Sequence, TYPE_CHECKING
+from typing import Any, Callable, NamedTuple, Protocol, Sequence, TYPE_CHECKING
 
-from numpy import ndarray
+if TYPE_CHECKING:
+    from numpy import ndarray
+else:
+    ndarray = Any
 
 from tts_audiobook_tool.constants import *
 

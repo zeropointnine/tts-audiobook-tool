@@ -53,7 +53,7 @@ def has_multiple_chapters(project: Project, index_start: int, index_end: int) ->
     Returns whether this output range contains more than one Book section, which is
     the condition for writing M4B chapter metadata.
     """
-    return len(make_output_sections(project, index_start, index_end)) > 1
+    return len(make_output_chapter_sections(project, index_start, index_end)) > 1
 
 def make_output_sections(project: Project, index_start: int, index_end: int) -> list[tuple[int, int, str]]:
     """
@@ -74,13 +74,38 @@ def make_output_sections(project: Project, index_start: int, index_end: int) -> 
             result.append((section_start, section_end, section.title))
     return result
 
+def make_output_chapter_sections(project: Project, index_start: int, index_end: int) -> list[tuple[int, int, str]]:
+    """
+    Returns the effective chapter sections for M4B chapter metadata.
+
+    For structurally sectioned books (eg, EPUB), preserves Book-section titles.
+    For single-section books, falls back to user-configured section markers so
+    plain-text projects can emit chapter metadata in "Adds metadata" mode.
+    """
+    output_sections = make_output_sections(project, index_start, index_end)
+    if len(output_sections) > 1:
+        return output_sections
+
+    if not project.markers:
+        return []
+
+    result: list[tuple[int, int, str]] = []
+    for chapter_start, chapter_end in make_file_line_ranges(project.markers, len(project.phrase_groups)):
+        overlaps = chapter_start <= index_end and chapter_end >= index_start
+        if not overlaps:
+            continue
+
+        title = project.phrase_groups[chapter_start].presentable_text if project.phrase_groups else ""
+        result.append((chapter_start, chapter_end + 1, title))
+    return result
+
 def make_chapter_info(
         project: Project,
         duration_sums: list[float],
         index_start: int,
         index_end: int,
 ) -> list[tuple[float, float, str]]:
-    output_sections = make_output_sections(project, index_start, index_end)
+    output_sections = make_output_chapter_sections(project, index_start, index_end)
     if len(output_sections) <= 1:
         return []
 

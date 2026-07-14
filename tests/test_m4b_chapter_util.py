@@ -68,6 +68,59 @@ class TestM4bChapterUtil(unittest.TestCase):
         self.assertNotIn("title=A2.", metadata)
         self.assertNotIn("title=B2.", metadata)
 
+    def test_make_metadata_uses_markers_for_single_section_books(self):
+        project = Project.model_validate({
+            "book": Book(sections=[
+                BookSection(title="Only Section", phrase_groups=[
+                    self.make_phrase_group("Chapter One"),
+                    self.make_phrase_group("Alpha."),
+                    self.make_phrase_group("Chapter Two"),
+                    self.make_phrase_group("Beta."),
+                ]),
+            ]),
+            "markers": [2],
+            "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
+        })
+
+        self.assertTrue(m4b_chapter_util.has_multiple_chapters(project, 0, 3))
+
+        metadata = m4b_chapter_util.make_metadata(
+            project=project,
+            durations=[1.0, 2.0, 3.0, 4.0],
+            file_title="Test Book",
+        )
+
+        self.assertEqual(metadata.count("[CHAPTER]"), 2)
+        self.assertIn("START=0\nEND=3000\ntitle=Chapter One", metadata)
+        self.assertIn("START=3000\nEND=10000\ntitle=Chapter Two", metadata)
+
+    def test_make_metadata_uses_only_overlapping_marker_chapters_for_output_range(self):
+        project = Project.model_validate({
+            "book": Book(sections=[
+                BookSection(title="Only Section", phrase_groups=[
+                    self.make_phrase_group("One"),
+                    self.make_phrase_group("Two"),
+                    self.make_phrase_group("Three"),
+                    self.make_phrase_group("Four"),
+                    self.make_phrase_group("Five"),
+                ]),
+            ]),
+            "markers": [2, 4],
+            "chapter_mode": SectionMarkerMode.BOOKMARKS.id,
+        })
+
+        metadata = m4b_chapter_util.make_metadata(
+            project=project,
+            durations=[10.0, 20.0, 30.0],
+            file_title="Ranged",
+            index_start=2,
+            index_end=4,
+        )
+
+        self.assertEqual(metadata.count("[CHAPTER]"), 2)
+        self.assertIn("START=0\nEND=30000\ntitle=Three", metadata)
+        self.assertIn("START=30000\nEND=60000\ntitle=Five", metadata)
+
     def test_single_book_section_does_not_create_m4b_chapters(self):
         project = Project.model_validate({
             "book": Book(sections=[
