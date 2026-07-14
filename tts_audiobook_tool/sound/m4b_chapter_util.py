@@ -60,6 +60,23 @@ def make_output_sections(project: Project, index_start: int, index_end: int) -> 
     Returns Book sections overlapping the inclusive phrase-group output range as
     tuples of absolute start index, absolute end index (exclusive), and title.
     """
+    if project.markers:
+        # Use manual markers if they exist
+        starts = [0, *sorted(list(set(project.markers)))]
+        result: list[tuple[int, int, str]] = []
+        for i, start in enumerate(starts):
+            end = starts[i + 1] if i + 1 < len(starts) else len(project.book.phrase_groups)
+            
+            # Use the segment text as the chapter title
+            title = f"Chapter {i+1}"
+            if start < len(project.book.phrase_groups):
+                title = project.book.phrase_groups[start].text
+            
+            overlaps = start <= index_end and end > index_start
+            if overlaps:
+                result.append((start, end, title))
+        return result
+
     sections = project.book.sections
     if len(sections) <= 1:
         return []
