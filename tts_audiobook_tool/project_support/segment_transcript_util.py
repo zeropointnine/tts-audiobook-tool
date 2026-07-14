@@ -15,13 +15,13 @@ from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.validator import Validator
-from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, TranscriptResult, TrimmedResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import ExcessiveDurationResult, MusicFailResult, POSSIBLE_TRUNCATION_UI_MESSAGE, TranscriptResult, TrimmedResult, ValidationResult, WordErrorResult
 from tts_audiobook_tool.transcriber import Transcriber
 from tts_audiobook_tool.util import *
 
 class SegmentTranscriptUtil:
 
-    VERSION = 1
+    VERSION = 2
     TYPE = "segment_stt_info"
     EXCEPTION_MUSIC_DETECTED = "music_detected"
     EXCEPTION_EXCESSIVE_DURATION = "excessive_sound_duration"
@@ -61,17 +61,20 @@ class SegmentTranscriptUtil:
             normalized_source=normalized_source,
             normalized_transcript=normalized_transcript,
             generation_word_error_count=generation_word_error_count,
+            possible_truncation=validation_result.possible_truncation,
             timed_phrases=SegmentTranscriptUtil.make_timed_phrases(phrase_group, validation_result),
             transcript_words=Transcriber.words_to_json(validation_result.transcript_words),
             exception=exception
         )
 
     @staticmethod
-    def make_generation_word_error_count(validation_result: TranscriptResult) -> int:
+    def make_generation_word_error_count(validation_result: ValidationResult) -> int:
         if isinstance(validation_result, (MusicFailResult, ExcessiveDurationResult)):
             return SegmentTranscriptUtil.EXCEPTION_WORD_ERROR_SENTINEL
         if isinstance(validation_result, WordErrorResult):
             return validation_result.num_errors
+        if isinstance(validation_result, TranscriptResult):
+            return int(validation_result.possible_truncation)
         return 0
 
     @staticmethod
@@ -121,6 +124,7 @@ class SegmentTranscriptUtil:
             "normalized_source": info.normalized_source,
             "normalized_transcript": info.normalized_transcript,
             "generation_word_error_count": info.generation_word_error_count,
+            "possible_truncation": info.possible_truncation,
             "timed_phrases": TimedPhrase.timed_phrases_to_dicts(info.timed_phrases),
             "transcript_words": info.transcript_words,
             "exception": info.exception
@@ -154,6 +158,7 @@ class SegmentTranscriptUtil:
                 normalized_source=str(payload["normalized_source"]),
                 normalized_transcript=str(payload["normalized_transcript"]),
                 generation_word_error_count=int(payload.get("generation_word_error_count", 0)),
+                possible_truncation=bool(payload.get("possible_truncation", False)),
                 timed_phrases=timed_phrases,
                 transcript_words=transcript_words,
                 exception=payload.get("exception")
@@ -208,9 +213,12 @@ class SegmentTranscriptUtil:
 
     @staticmethod
     def get_word_error_count(info: SegmentTranscriptData) -> int:
-        if info.exception == SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED:
+        if info.exception in {
+            SegmentTranscriptUtil.EXCEPTION_MUSIC_DETECTED,
+            SegmentTranscriptUtil.EXCEPTION_EXCESSIVE_DURATION,
+        }:
             return SegmentTranscriptUtil.EXCEPTION_WORD_ERROR_SENTINEL
-        return len(SegmentTranscriptUtil.get_word_errors(info))
+        return len(SegmentTranscriptUtil.get_word_errors(info)) + int(info.possible_truncation)
 
     @staticmethod
     def get_threshold(info: SegmentTranscriptData, strictness: Strictness) -> int:
@@ -267,6 +275,8 @@ class SegmentTranscriptUtil:
         printt(filename_line)
         if info.exception is not None:
             printt(f"{COL_DEFAULT}Exception: {COL_ERROR}{info.exception}")
+        if info.possible_truncation:
+            printt(f"{COL_ERROR}{POSSIBLE_TRUNCATION_UI_MESSAGE}")
         printt()
 
         SegmentTranscriptUtil.print_stt_details(info, should_show_diff=num_word_errors > 0)
@@ -284,7 +294,7 @@ class SegmentTranscriptUtil:
 
         if should_show_diff:
             printt()
-            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], <word> = skipped uncommon word")
+            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], [!: diagnostic], <word> = skipped uncommon word")
             printt(SegmentTranscriptUtil.make_word_error_visualization(info))
 
     @staticmethod
@@ -335,4 +345,6 @@ class SegmentTranscriptUtil:
                 parts.append(f"{COL_DIM}[-: {COL_ERROR}{step.source_text}{COL_DIM}]{Ansi.RESET}")
             elif step.action == "skip_transcript":
                 parts.append(f"{COL_DIM}[+: {COL_ERROR}{step.transcript_text}{COL_DIM}]{Ansi.RESET}")
+        if info.possible_truncation:
+            parts.append(f"{COL_DIM}[!: {COL_ERROR}possible truncation{COL_DIM}]{Ansi.RESET}")
         return " ".join(parts)

@@ -14,6 +14,72 @@ def make_noise(sr: int, seconds: float, amplitude: float, seed: int = 0) -> np.n
     return rng.normal(0.0, amplitude, int(sr * seconds)).astype(np.float32)
 
 
+def test_is_sound_truncated_detects_loud_cut_off_ending() -> None:
+    sr = 48000
+    speech = make_tone(sr, 0.2, amplitude=0.05)
+    loud_tail = np.ones(int(sr * 0.01), dtype=np.float32) * 0.2
+    sound = Sound(np.concatenate([speech, loud_tail]), sr)
+
+    assert SoundExtraUtil.is_possible_truncation(sound)
+
+
+def test_is_sound_truncated_ignores_silent_ending() -> None:
+    sr = 48000
+    speech = make_tone(sr, 0.2, amplitude=0.3)
+    silence = np.zeros(int(sr * 0.03), dtype=np.float32)
+    sound = Sound(np.concatenate([speech, silence]), sr)
+
+    assert not SoundExtraUtil.is_possible_truncation(sound)
+
+
+def test_is_sound_truncated_uses_strict_threshold_boundary() -> None:
+    sr = 48000
+    threshold_amplitude = 10 ** (-20.0 / 20.0)
+    sound = Sound(np.ones(int(sr * 0.02), dtype=np.float32) * threshold_amplitude, sr)
+
+    assert not SoundExtraUtil.is_possible_truncation(sound)
+
+
+def test_is_sound_truncated_respects_configurable_threshold() -> None:
+    sr = 48000
+    sound = Sound(np.ones(int(sr * 0.02), dtype=np.float32) * 0.08, sr)
+
+    assert SoundExtraUtil.is_possible_truncation(sound, rms_threshold_dbfs=-24.0)
+    assert not SoundExtraUtil.is_possible_truncation(sound, rms_threshold_dbfs=-20.0)
+
+
+def test_is_sound_truncated_respects_configurable_end_window() -> None:
+    sr = 48000
+    quiet = np.zeros(int(sr * 0.015), dtype=np.float32)
+    loud_tail = np.ones(int(sr * 0.005), dtype=np.float32) * 0.16
+    sound = Sound(np.concatenate([quiet, loud_tail]), sr)
+
+    assert SoundExtraUtil.is_possible_truncation(sound, end_window_ms=5)
+    assert not SoundExtraUtil.is_possible_truncation(sound, end_window_ms=20)
+
+
+def test_is_sound_truncated_uses_entire_short_clip() -> None:
+    sr = 48000
+    sound = Sound(np.ones(int(sr * 0.005), dtype=np.float32) * 0.2, sr)
+
+    assert SoundExtraUtil.is_possible_truncation(sound, end_window_ms=10)
+
+
+def test_is_sound_truncated_ignores_empty_audio() -> None:
+    sound = Sound(np.array([], dtype=np.float32), 48000)
+
+    assert not SoundExtraUtil.is_possible_truncation(sound)
+
+
+def test_is_sound_truncated_uses_existing_mono_average_for_stereo_audio() -> None:
+    sr = 48000
+    left = np.ones(int(sr * 0.01), dtype=np.float32) * 0.2
+    right = np.ones(int(sr * 0.01), dtype=np.float32) * 0.2
+    sound = Sound(np.column_stack([left, right]), sr)
+
+    assert SoundExtraUtil.is_possible_truncation(sound)
+
+
 def test_trim_trailing_token_noise_trims_loud_isolated_terminal_artifact() -> None:
     sr = 48000
     speech = make_tone(sr, 0.8, amplitude=0.35)

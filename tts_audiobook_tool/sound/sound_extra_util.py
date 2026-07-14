@@ -9,6 +9,48 @@ from tts_audiobook_tool.util import *
 class SoundExtraUtil:
 
     @staticmethod
+    def is_possible_truncation(
+        sound: Sound,
+        end_window_ms: int = 10,
+        rms_threshold_dbfs: float = -20.0,
+    ) -> bool:
+        """
+        Detects whether a sound appears to be cut off while still loud.
+
+        The check is intentionally simple: convert the signal to mono, measure
+        RMS over the final `end_window_ms`, and compare it to an absolute dBFS
+        threshold. TTS utterances generally should end with falling amplitude;
+        if the very end remains loud, generation may have been truncated.
+
+        Returns False for empty sounds, invalid sample rates, silent tail audio,
+        or non-positive analysis windows.
+
+        Note, -20dB works fairly well for TTS output generally (assuming normalized audio).
+        Sibilants are actually more prone to false posivites compared to plosives, 
+        given the same threshold. Seems like.
+        """
+
+        if sound.data.size == 0 or sound.sr <= 0 or end_window_ms <= 0:
+            return False
+
+        data = sound.data.astype(np.float32, copy=False)
+        mono = SoundExtraUtil._to_mono_float(data)
+        if mono.size == 0:
+            return False
+
+        end_window_samples = int(sound.sr * end_window_ms / 1000)
+        if end_window_samples <= 0:
+            end_window_samples = 1
+
+        tail = mono[-min(mono.size, end_window_samples):]
+        tail_rms = SoundExtraUtil._rms(tail)
+        if tail_rms <= 0:
+            return False
+
+        threshold_rms = 10 ** (rms_threshold_dbfs / 20.0)
+        return bool(tail_rms > threshold_rms + 1e-8)
+
+    @staticmethod
     def trim_trailing_token_noise(
         sound: Sound,
         max_noise_ms: int = 65,

@@ -47,3 +47,6 @@ class SegmentTranscriptData:
 
     # Exceptional compromise reason for the whole segment, if any.
     exception: str | None
+
+    # Whether the final audio window remained loud, suggesting truncation.
+    possible_truncation: bool = False

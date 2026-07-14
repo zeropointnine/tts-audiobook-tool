@@ -257,7 +257,7 @@ class OptionsMenu:
             print_feedback(f"Set to:", str(state.prefs.menu_clears_screen))
 
         subheading = f"When enabled, clears screen between menus\n"
-        subheading += f"and shows persistent status info.\n"
+        subheading += f"and shows status info header.\n"
 
         MenuUtil.options_menu(
             state=state,

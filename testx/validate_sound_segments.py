@@ -24,10 +24,19 @@ STRICTNESS = Strictness.HIGH
 PRINT_ONLY_ERRORS = True
 
 
-def get_flac_paths(dir_path: str) -> list[Path]:
+def get_flac_paths(directory: Path, recursive: bool=False) -> list[Path]:
+    pattern = "**/*.flac" if recursive else "*.flac"
     return sorted(
-        path for path in Path(dir_path).iterdir()
-        if path.is_file() and path.suffix.lower() == ".flac" and path.stat().st_size > 0
+        (
+            path
+            for path in directory.glob(pattern)
+            if path.is_file()
+            and "[raw]" not in path.name
+            and "[trim]" not in path.name
+            and "[pre_gap_limit]" not in path.name
+            and "[post_gap_limit]" not in path.name
+        ),
+        key=lambda path: str(path).lower(),
     )
 
 
@@ -117,7 +126,7 @@ def print_result(path: Path, transcript_result: TranscriptResult | str) -> None:
         printt()
         return
 
-    printt(transcript_result.__class__.__name__ + ": " + transcript_result.get_ui_message_with_post_processing())
+    printt(transcript_result.__class__.__name__ + ": " + transcript_result.get_ui_message_with_extras())
     printt()
 
 
@@ -131,7 +140,7 @@ def main() -> None:
     print(f"{COL_DEFAULT}Strictness: {COL_DIM}{STRICTNESS.label}{COL_DEFAULT}")
     print()
 
-    paths = get_flac_paths(DIR)
+    paths = get_flac_paths(Path(DIR))
     if not paths:
         print(f"{COL_ERROR}No FLAC files found.{COL_DEFAULT}")
         return

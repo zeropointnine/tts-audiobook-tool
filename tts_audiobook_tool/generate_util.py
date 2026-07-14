@@ -225,7 +225,7 @@ class GenerateUtil:
                 elif validation_result:
                     consecutive_model_errors = 0
 
-                    val_line = f"{validation_result.get_ui_message_with_post_processing()}"
+                    val_line = f"{validation_result.get_ui_message_with_extras()}"
                     validation_word_error_count: int | None = None
                     if isinstance(validation_result, TranscriptResult):
                         validation_word_error_count = SegmentTranscriptUtil.make_generation_word_error_count(validation_result)

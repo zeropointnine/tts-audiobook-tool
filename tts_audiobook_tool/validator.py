@@ -29,6 +29,8 @@ class Validator:
     """
     """
 
+    POSSIBLE_TRUNCATION_ERROR = "i:POSSIBLE_TRUNCATION"
+
     @staticmethod
     def format_source_with_uncommon_words(text: str, language_code: str="") -> str:
         """
@@ -59,30 +61,51 @@ class Validator:
         Calculates word errors.
         Returns either WordErrorResult or TrimmedResult
         """
+        possible_truncation = SoundExtraUtil.is_possible_truncation(sound)
         transcript = Transcriber.get_flat_text_from_words(transcript_words)
         _, word_errors, num_words, threshold = Validator.get_word_error_fail(
             source, transcript, language_code=language_code, strictness=strictness
         )
+        if possible_truncation:
+            word_errors.append(Validator.POSSIBLE_TRUNCATION_ERROR)
 
         # Always does music detect if instance exists
         if ModelManager.has_yamnet_detector():
             if ModelManager.get_yamnet_detector().has_music(sound, threshold=0.1):
-                return MusicFailResult(sound, transcript_words)
+                return MusicFailResult(
+                    sound,
+                    transcript_words,
+                    possible_truncation=possible_truncation,
+                )
 
         word_error_result = WordErrorResult(
             sound=sound,
             transcript_words=transcript_words,
             errors=word_errors,
             num_words=num_words,
-            threshold=threshold
+            threshold=threshold,
+            possible_truncation=possible_truncation,
         )
 
         if not word_error_result.is_fail:
             # Transcription test has passed; now test for excessively/suspiciously long audio
             if ExcessiveDurationResult.is_excessively_long(source, language_code, sound.duration):
-                return ExcessiveDurationResult(sound, transcript_words, sound.duration)
+                return ExcessiveDurationResult(
+                    sound,
+                    transcript_words,
+                    sound.duration,
+                    possible_truncation=possible_truncation,
+                )
 
-        trimmed_result = Validator.make_trimmed_result(word_error_result, source, transcript_words, language_code)
+        # A possible truncation is an audio-boundary diagnostic rather than an
+        # extra transcript word. Do not let semantic trimming convert it into a
+        # passing TrimmedResult merely because the genuine words otherwise match.
+        trimmed_result = None if possible_truncation else Validator.make_trimmed_result(
+            word_error_result,
+            source,
+            transcript_words,
+            language_code,
+        )
         
         # TODO: Disabled. Too unreliable. No good workarounds.
         # if trimmed_result and Tts.get_type().value.semantic_trim_last:            
@@ -165,7 +188,12 @@ class Validator:
                 word.end -= start_offset            
 
             return TrimmedResult(
-                new_sound, sub_transcript_words, start, end, original_duration=word_error_result.sound.duration
+                new_sound,
+                sub_transcript_words,
+                start,
+                end,
+                original_duration=word_error_result.sound.duration,
+                possible_truncation=word_error_result.possible_truncation,
             )
 
         return None

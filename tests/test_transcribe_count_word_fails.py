@@ -138,6 +138,28 @@ class TestTranscribeGranular(unittest.TestCase):
         self.assertIn("[-: two]", visualization)
         self.assertIn("three", visualization)
 
+    def test_possible_truncation_is_counted_and_visualized_separately(self):
+        info = SegmentTranscriptData(
+            version=SegmentTranscriptUtil.VERSION,
+            type=SegmentTranscriptUtil.TYPE,
+            language_code="en",
+            index_1b=1,
+            source="one two",
+            prompt="one two",
+            transcript="one two",
+            normalized_source="one two",
+            normalized_transcript="one two",
+            generation_word_error_count=1,
+            timed_phrases=[],
+            transcript_words=[],
+            exception=None,
+            possible_truncation=True,
+        )
+
+        assert SegmentTranscriptUtil.get_word_error_count(info) == 1
+        visualization = text_util.strip_ansi_codes(SegmentTranscriptUtil.make_word_error_visualization(info))
+        assert "[!: possible truncation]" in visualization
+
 
 if __name__ == '__main__':
     unittest.main()

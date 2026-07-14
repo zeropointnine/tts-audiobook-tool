@@ -9,7 +9,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.app_types.validation_result import MusicFailResult, ExcessiveDurationResult, ValidationResult, WordErrorResult
+from tts_audiobook_tool.app_types.validation_result import ValidationResult
 
 
 def get_segment_stt_info_path(sound_path: str | Path) -> Path:
@@ -121,10 +121,14 @@ class SoundSegmentUtil:
         
         text = " " + app_text.sanitize_for_filename(phrase_group.presentable_text[:50])
         
-        if isinstance(validation_result, WordErrorResult):
-            num_fails_tag = f" [{validation_result.num_errors}]" 
-        elif isinstance(validation_result, (MusicFailResult, ExcessiveDurationResult)):
-            num_fails_tag = f" [99]" # good enough for now
+        # Import locally to avoid the project/support import cycle during
+        # application startup. This is the same authoritative count used when
+        # the transcript sidecar is created.
+        from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil as TranscriptUtil
+
+        num_errors = TranscriptUtil.make_generation_word_error_count(validation_result)
+        if num_errors:
+            num_fails_tag = f" [{num_errors}]"
         else:
             num_fails_tag = ""
         

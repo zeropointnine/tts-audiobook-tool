@@ -261,7 +261,7 @@ class Stt:
     @staticmethod
     def should_skip(state, is_real_time_buffer_too_short: bool=False) -> str:
         """
-        Given app `state`, returns UI-message reason why STT/validation should be skipped, or empty string        
+        Given app `state`, returns UI-message reason why STT/validation should be skipped, or empty string
         """
         from tts_audiobook_tool.state import State
         from tts_audiobook_tool.validator import Validator

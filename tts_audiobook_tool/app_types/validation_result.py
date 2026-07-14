@@ -8,6 +8,9 @@ from tts_audiobook_tool.sound.silence_util import SilenceGapTrim
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 
 
+POSSIBLE_TRUNCATION_UI_MESSAGE = f"Audio ends abruptly, last word may be truncated {COL_DIM}(+1 word error)"
+
+
 @dataclass
 class ValidationResult(ABC):
     """ 
@@ -69,9 +72,15 @@ class ValidationResult(ABC):
             return ""
         return f"{COL_DEFAULT}Trimmed trailing token noise: {COL_DIM}{trim_time:.2f}s"
 
-    def get_ui_message_with_post_processing(self) -> str:
+    def get_possible_truncation_ui_message(self) -> str:
+        if not getattr(self, "possible_truncation", False):
+            return ""
+        return POSSIBLE_TRUNCATION_UI_MESSAGE
+
+    def get_ui_message_with_extras(self) -> str:
         message = self.get_ui_message()
         extras = [
+            self.get_possible_truncation_ui_message(),
             self.get_generated_trim_ui_message(),
             self.get_trailing_token_noise_trim_ui_message(),
             self.get_intra_sample_silence_ui_message(),
@@ -86,11 +95,12 @@ class ValidationResult(ABC):
 
 @dataclass
 class TranscriptResult(ValidationResult, ABC):
-    """ 
+    """
     Base class for a ValidationResult that has transcript data 
     (ie, anything other than SkippedResult)
     """
     transcript_words: list[Word]
+    possible_truncation: bool = field(default=False, kw_only=True)
 
 @dataclass
 class WordErrorResult(TranscriptResult):

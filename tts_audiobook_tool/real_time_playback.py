@@ -320,7 +320,7 @@ def generate_full_flow(
             printt()
             Tts.clear_continuation()
         else:
-            printt(f"Transcript validation: {gen_result.get_ui_message_with_post_processing()}")
+            printt(f"Transcript validation: {gen_result.get_ui_message_with_extras()}")
 
         if Interrupts().did_interrupt:
             did_interrupt = True
