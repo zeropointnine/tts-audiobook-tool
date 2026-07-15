@@ -237,10 +237,16 @@ class GenerateMenu:
             high_desc = ""
             intolerant_desc = ""
         else:
-            low_desc = "Allows more word errors. Segments pass unless notably off."
-            medium_desc = "Balanced. Reasonable choice for most languages."
+            low_desc = (
+                "Allows for more word errors without triggering a regeneration.\n" 
+                "      Segments pass unless notably off.")
+            medium_desc = "Balanced. Reasonable choice for most TTS models and most languages."
             high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration."
-            intolerant_desc = "Zero tolerance. Segments with even one word error are flagged for regeneration.\n      Best net accuracy. For the time and compute unconstrained only."
+            intolerant_desc = (
+                "Segments with even one word error are flagged for regeneration.\n"
+                "      Will trigger frequent regenerations due to false positives, but yields best net accuracy.\n" 
+                "      For the time and compute unconstrained only."
+            )
 
         MenuUtil.options_menu(
             state=state,
@@ -339,6 +345,7 @@ def make_tolerance_label(state: State) -> str:
     )
     warning = Tts.get_class().get_strictness_warning(state.project.strictness, state.project, Tts.get_instance_if_exists())
     if warning:
+        # Add red asterisk
         label += f"{COL_ERROR}*"
     return label
 

@@ -114,16 +114,20 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     @classmethod
     def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
 
-        WARNING = "Not recommended with VibeVoice 1.5B model (when not using LoRA)"
-
-        if strictness >= Strictness.HIGH:
-            if not instance:
-                return WARNING
-            else:
-                if project.vibevoice_target or project.vibevoice_lora_target:
-                    # Custom model or lora means can't make the "not recommended" assumption
-                    return ""
-                else:
-                    return WARNING
-        else:
+        if strictness.level != Strictness.HIGH.level:
+            # Rationale for not showing warning for zero-tolerance setting is that
+            # it should be tacitly understood that this is out of the norm
             return ""
+
+        if project.vibevoice_lora_target:
+            # Assumption being made here that the LoRA is of decent quality
+            # and will therefore have much better accuracy than zero-shot
+            return ""
+        
+        if "7b" in project.vibevoice_target.lower():
+            # Assumption is that model is the 7B variety, which is much less flakey than 1.5B
+            return ""
+
+        WARNING = "Not recommended with VibeVoice 1.5B model (when not using LoRA)"
+        return WARNING
+
