@@ -1,8 +1,10 @@
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.state import State
 
 
 class StubValidationResult:
@@ -23,9 +25,12 @@ def test_generate_files_retries_validation_failures_up_to_project_limit() -> Non
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
     )
-    state = SimpleNamespace(
-        project=project,
-        prefs=SimpleNamespace(stt_variant=None, stt_config=None, save_debug_files=False),
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=SimpleNamespace(stt_variant=None, stt_config=None, save_debug_files=False),
+        ),
     )
     results = [StubValidationResult(True), StubValidationResult(True), StubValidationResult(False)]
     force_random_seed_values: list[bool] = []

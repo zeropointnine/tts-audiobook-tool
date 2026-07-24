@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import huggingface_hub
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support, target_util
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
@@ -324,7 +325,7 @@ class MossModel(MossBaseModel):
             voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "moss_voice_file_name", voice_rotation_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MOSS, voice_rotation_index)
         if voice_file_name:
             voice_path = os.path.join(project.dir_path, voice_file_name)
         else:

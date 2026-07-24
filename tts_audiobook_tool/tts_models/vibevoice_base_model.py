@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from tts_audiobook_tool.app_types import Strictness
+from tts_audiobook_tool.app_types import Strictness, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -67,7 +67,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
     def get_warning_issues(self, project: Project) -> list[str]:
         warnings = []
-        if not ProjectVoiceUtil.primary_voice_value(project, "vibevoice_voice_file_name") and not project.vibevoice_lora_target:
+        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE) and not project.vibevoice_lora_target:
             warning = "Model may generate random voices because no voice sample or lora has been defined"
             warnings.append(warning) 
         return warnings
@@ -80,7 +80,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
             value = app_text.sanitize_for_filename(value[:30])
             return value
 
-        match (bool(ProjectVoiceUtil.primary_voice_value(project, "vibevoice_voice_file_name")), bool(project.vibevoice_lora_target)):
+        match (bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE)), bool(project.vibevoice_lora_target)):
             case (False, False):
                 return "none"
             case (True, True):
@@ -94,22 +94,33 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> tuple[str, str]:
+    ) -> VoiceDisplayInfo:
 
-        match (bool(ProjectVoiceUtil.primary_voice_value(project, "vibevoice_voice_file_name")), bool(project.vibevoice_lora_target)):
+        has_voice_clone = bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE))
+        has_lora = bool(project.vibevoice_lora_target)
+        match (has_voice_clone, has_lora):
             case (False, False):
-                prefix = "current voice clone"
+                status_prefix = "Voice clone"
+                menu_prefix = "current voice clone"
                 value = COL_ERROR + "none"
             case (True, True):
-                prefix = "currently"
-                value = COL_ACCENT + "lora + voice clone"
+                status_prefix = "Voice"
+                menu_prefix = "currently"
+                value = COL_ACCENT + "voice clone + LoRA"
             case (True, False):
-                prefix = "current voice clone"
+                status_prefix = "Voice clone"
+                menu_prefix = "current voice clone"
                 value = COL_ACCENT + ProjectVoiceUtil.get_voice_label(project)
+                from tts_audiobook_tool.tts import Tts
+                num_items = len( ProjectVoiceUtil.get_voice_values(project, Tts.get_type()) )
+                if num_items > 1:
+                    value += f", +{num_items - 1} more"
             case (False, True):
-                prefix = "current lora"
+                status_prefix = "Voice LoRA"
+                menu_prefix = "current lora:"
                 value = COL_ACCENT + ellipsize_path_for_menu(project.vibevoice_lora_target)
-        return prefix, value
+
+        return VoiceDisplayInfo(status_prefix, menu_prefix, value)
 
     @classmethod
     def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:

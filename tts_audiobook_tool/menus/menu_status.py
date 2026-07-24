@@ -3,7 +3,6 @@ from __future__ import annotations
 from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -30,8 +29,10 @@ class MenuStatus:
             local_tts_text = _make_local_tts_text(state)        
             lines.append(("TTS model", local_tts_text))
 
-        voice_text = _make_voice_text(state)
-        lines.append(("Voice clone", voice_text))
+        voice_display_info = Tts.get_class().get_voice_display_info(
+            state.project, Tts.get_instance_if_exists()
+        )
+        lines.append((voice_display_info.status_prefix, voice_display_info.value))
         
         text_text = _make_text_text(state)
         lines.append(("Text", text_text))
@@ -117,25 +118,6 @@ def _make_server_tts_text(state: State) -> str:
                 qualifier = f"{COL_ERROR}(offline)"
     
     return f"{label}" + (f" {qualifier}" if qualifier else "")
-
-def _make_voice_text(state: State) -> str:
-    from tts_audiobook_tool.tts import Tts
-
-    voice_attr = Tts.get_type().value.voice_target_attr
-    if voice_attr:
-        voice_values = ProjectVoiceUtil.voice_values(getattr(state.project, voice_attr, ""))
-        if len(voice_values) > 1:
-            first_value = voice_values[0].removesuffix(f"_{Tts.get_type().value.file_tag}.flac")
-            first_value = ellipsize_path_for_menu(first_value)
-            return f"{first_value} {COL_DIM}(+{len(voice_values) - 1} more)"
-
-    voice_prefix, voice_value = Tts.get_class().get_voice_display_info(
-        state.project,
-        Tts.get_instance_if_exists()
-    )
-    voice_prefix = text_util.strip_ansi_codes(voice_prefix).strip().rstrip(":")
-    voice_value = text_util.strip_ansi_codes(voice_value).strip()
-    return voice_value or voice_prefix or "none"
 
 def _make_text_text(state: State) -> str:
     total_lines = len(state.project.phrase_groups)

@@ -1,5 +1,6 @@
 import random
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
@@ -32,7 +33,7 @@ class MossServerModel(MossServerBaseModel):
     ) -> list[Sound] | str:
        
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "moss_voice_file_name", "moss_voice_transcript", voice_rotation_index
+            project, TtsModelType.MOSS_SERVER, voice_rotation_index
         )
 
         temperature = project.moss_delay_temperature if project.moss_delay_temperature != -1 else MossServerBaseModel.CONFIG.value.temperature_default

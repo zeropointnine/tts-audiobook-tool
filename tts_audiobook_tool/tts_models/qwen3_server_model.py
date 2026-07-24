@@ -1,6 +1,7 @@
 import os
 import random
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
@@ -28,7 +29,7 @@ class Qwen3ServerModel(Qwen3ServerBaseModel):
     ) -> list[Sound] | str:
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "qwen3_voice_file_name", "qwen3_voice_transcript", voice_rotation_index
+            project, TtsModelType.QWEN3TTS_SERVER, voice_rotation_index
         )
 
         temperature = project.qwen3_temperature

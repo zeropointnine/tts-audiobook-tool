@@ -90,7 +90,7 @@ class Tts:
             return Tts.get_class().get_voice_tag(project)
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-        voice_value = ProjectVoiceUtil.current_voice_value(project, info.voice_target_attr, voice_rotation_index)
+        voice_value = ProjectVoiceUtil.current_voice_value(project, Tts.get_type(), voice_rotation_index)
         if not voice_value:
             return Tts.get_class().get_voice_tag(project)
         return Tts.get_class().get_voice_tag_for_value(voice_value)

@@ -6,6 +6,7 @@ import torch
 from qwen_tts import Qwen3TTSModel # type: ignore
 from qwen_tts.inference.qwen3_tts_model import VoiceClonePromptItem # type: ignore
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
@@ -162,7 +163,7 @@ class Qwen3Model(Qwen3BaseModel):
             case "base":
 
                 voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-                    project, "qwen3_voice_file_name", "qwen3_voice_transcript", voice_rotation_index
+                    project, TtsModelType.QWEN3TTS, voice_rotation_index
                 )
                 can = voice_file_name and voice_transcript
                 if can:

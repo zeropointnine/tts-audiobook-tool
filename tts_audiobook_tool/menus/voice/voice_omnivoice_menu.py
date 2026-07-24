@@ -19,7 +19,7 @@ class VoiceOmniVoiceMenu:
 
         def make_voice_label(_) -> str:
             if not state.project.omnivoice_voice_file_name:
-                currently = make_currently_string("none", value_prefix="", color_code=COL_DIM)
+                currently = make_currently_string("none", value_prefix="", color_code=COL_ERROR)
             else:
                 currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
             return f"Select voice clone sample {currently}"

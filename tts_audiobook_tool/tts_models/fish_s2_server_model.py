@@ -1,5 +1,6 @@
 import random
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
@@ -27,7 +28,7 @@ class FishS2ServerModel(FishS2ServerBaseModel):
     ) -> list[Sound] | str:
 
         voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "fish_s2_server_voice_target", "fish_s2_server_voice_transcript", voice_rotation_index
+            project, TtsModelType.FISH_S2_SERVER, voice_rotation_index
         )
 
         temperature = project.fish_s2_temperature if project.fish_s2_temperature != -1 else FishS2BaseModel.TEMPERATURE_DEFAULT

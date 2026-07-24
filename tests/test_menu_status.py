@@ -1,9 +1,10 @@
-from tts_audiobook_tool.menus.menu_status import _make_voice_text
+from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.util import COL_DIM, COL_MEDIUM
 
 
 def make_state() -> State:
@@ -27,7 +28,7 @@ def restore_tts_state(saved) -> None:
         delattr(Tts, "_type")
 
 
-def test_menu_status_voice_clone_summarizes_multiple_voice_samples():
+def test_menu_status_print_block_supports_voice_display_info(capsys):
     saved = preserve_tts_state()
     try:
         Tts._type = TtsModelType.OMNIVOICE
@@ -37,8 +38,9 @@ def test_menu_status_voice_clone_summarizes_multiple_voice_samples():
             "zzz belle 24b 20s_omnivoice.flac",
         ]
 
-        result = _make_voice_text(state)
+        MenuStatus.print_block(state)
 
-        assert result == "zzz belle 24a 19s, +1 more"
+        output = capsys.readouterr().out
+        assert f"{COL_DIM}Voice clone: {COL_MEDIUM}zzz belle 24a 19s, +1 more" in output
     finally:
         restore_tts_state(saved)

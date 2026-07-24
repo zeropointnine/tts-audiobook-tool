@@ -10,16 +10,18 @@
 `tts-audiobook-tool` is a generative-AI audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models:
 
 - [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
-- [Fish Speech (S2-Pro, S1-mini)](https://github.com/fishaudio/fish-speech)
+- [Fish Speech S2-Pro)](https://github.com/fishaudio/fish-speech) (either locally or via SGL-Omni)
+- [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
-- [Higgs Audio (V2, V3)](https://github.com/boson-ai/higgs-audio)
+- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
+- [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) (via SGL-Omni backend)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
-- [MOSS-TTS (v1.5 9B and Local-Transformer 1.7B)](https://github.com/OpenMOSS/MOSS-TTS)
+- [MOSS-TTS (v1.5 9B and Local-Transformer 1.7B)](https://github.com/OpenMOSS/MOSS-TTS) (either locally or via SGL-Omni)
 - [OmniVoice](https://github.com/k2-fsa/OmniVoice)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 - [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
-- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (either locally or via SGL-Omni)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
 
 The app employs various techniques to make the nondeterministic output of generative text-to-speech models reliable enough for bulk long-form speech synthesis. For example:
@@ -670,7 +672,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 **2026-07-13**
 
-- Added ability to add multiple voice clone samples, which get rotated after each generation (applies to most of the supported TTS models).
+- Added ability to add **multiple voice clone samples**, which get rotated after each generation.Applies to most of the supported TTS models.
 
 **2026-06-07+**
 

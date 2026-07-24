@@ -522,3 +522,21 @@ class DeviceType(Enum):
     CUDA = "cuda"
     MPS = "mps"
     CPU = "cpu"
+
+class VoiceDisplayInfo(NamedTuple):
+    """ 
+    Used to construct voice clone related info in menus 
+    Values may include color formatting
+    """
+
+    # Status text block - voice line prefix
+    # Eg, "Voice clone"
+    status_prefix: str
+
+    # Main menu (no clear-screen) - voice line prefix
+    # Eg, "current voice clone"
+    main_prefix: str
+    
+    # Is typically the abbreviated text of the voice reference filename
+    # Eg, "some_character_2a (+2 more)"
+    value: str

@@ -25,6 +25,11 @@ class ProjectMenu:
     @staticmethod
     def menu(state:State) -> None:
 
+        def make_heading(_: State) -> str:
+            value = text_util.make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
+            heading = make_menu_label("Project", value) if not state.prefs.menu_clears_screen else "Project"
+            return heading
+
         def on_new_project(_: State, __: MenuItem) -> None:
             ProjectNewMenu.menu(state)
 
@@ -88,11 +93,9 @@ class ProjectMenu:
 
             return items
 
-        value = text_util.make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
-        heading = make_menu_label("Project", value) if not state.prefs.menu_clears_screen else "Project"
         MenuUtil.menu(
             state, 
-            heading,
+            make_heading,
             items_maker,
             breadcrumb="Project",
         )

@@ -18,7 +18,7 @@ class VoiceFishS2ServerMenu:
 
             # server voice path and voice transcript
             path_item, transcript_item = VoiceMenuShared.make_manual_voice_menu_items(
-                state, "fish_s2_server_voice_target", "fish_s2_server_voice_transcript", is_required=False
+                state, TtsModelType.FISH_S2_SERVER, "fish_s2_server_voice_target", "fish_s2_server_voice_transcript", is_required=False
             )
             items.append(path_item)
             items.append(transcript_item)

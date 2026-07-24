@@ -2,9 +2,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, Strictness
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, Strictness, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -204,7 +204,7 @@ class TtsBaseModel(ABC):
         # Get voice filename
         if not cls.INFO.voice_target_attr:
             raise Exception("Logic error - must override this method")
-        voice_file_name = cls.get_voice_value(project)
+        voice_file_name = cls.get_primary_voice_value(project)
         if not voice_file_name:
             return "none"
         
@@ -218,51 +218,40 @@ class TtsBaseModel(ABC):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> tuple[str, str]:
-        """
-        Returns salient voice-related setting/s, with prefix label
-
-        Returns:
-            (1) Colorized prefix for the following value
-            (2) Colorized string with short voice-related label
-                (typically the voice clone reference filename)
-
-            Ex: "current voice clone", "sample1.wav"
-        """
+    ) -> VoiceDisplayInfo:
+       
+        # Default implementation is for model whose 'salient' voice values 
+        # consist of voice clone filenames only
         
-        # Default implementation is for model where 'salient info' consists of voice clone only
-        
-        info = cls.INFO
-        if not info.voice_target_attr:
+        tts_model_spec = cls.INFO
+        if not tts_model_spec.voice_target_attr:
             raise Exception("Logic error - must override this method")
 
-        voice_file_name = cls.get_voice_value(project)
-        voice_file_name = voice_file_name.removesuffix(f"_{info.file_tag}.flac")
-        voice_file_name = ellipsize_path_for_menu(voice_file_name)
+        status_prefix = "Voice clone"
+        menu_prefix = "current voice clone"
 
-        match (info.requires_voice, bool(voice_file_name)):
-            case (True, False):
-                prefix = COL_ERROR + "required"
-                value = ""
-            case (True, True):
-                prefix = COL_DIM + "current voice clone"
-                value = COL_ACCENT + voice_file_name
-            case (False, False):
-                prefix = COL_DIM + "current voice clone"
-                value = COL_ERROR + "none" # ie, not required, but rly should be set
-            case (False, True):
-                prefix = COL_DIM + "current voice clone"
-                value = COL_ACCENT + voice_file_name
+        voice_file_name = cls.get_primary_voice_value(project)
 
-        return prefix, value
+        if bool(voice_file_name):            
+            value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice_file_name, tts_model_spec)
+
+            from tts_audiobook_tool.tts import Tts
+            num_items = len( ProjectVoiceUtil.get_voice_values(project, Tts.get_type()) )
+            if num_items > 1:
+                value += f", +{num_items - 1} more"
+        else:
+            red_word = "required" if tts_model_spec.requires_voice else "none"
+            value = COL_ERROR + red_word
+
+        return VoiceDisplayInfo(status_prefix, menu_prefix, value)
 
     @classmethod
-    def get_voice_value(cls, project: Project) -> str:
+    def get_primary_voice_value(cls, project: Project) -> str:
         """
         Returns the active voice reference for this model and project (could be filename or other).
         Override for models that store voice across multiple fields.
         """
-        return ProjectVoiceUtil.primary_voice_value(project, cls.INFO.voice_target_attr)
+        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.get_by_id(cls.INFO.id))
 
     @classmethod
     def get_missing_voice_file_issue(
@@ -278,7 +267,7 @@ class TtsBaseModel(ABC):
         if not voice_file_name_attr:
             raise Exception("Logic error - must override this method")
 
-        voice_file_name = ProjectVoiceUtil.primary_voice_value(project, voice_file_name_attr)
+        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.get_by_id(cls.INFO.id))
         if not voice_file_name:
             return None
 
@@ -318,7 +307,7 @@ class TtsBaseModel(ABC):
         if not cls.INFO.voice_target_attr:
             raise Exception("Logic error - must override this method")
 
-        if cls.INFO.requires_voice and not cls.get_voice_value(project):
+        if cls.INFO.requires_voice and not cls.get_primary_voice_value(project):
             return ReadinessIssue("voice sample", "A voice clone sample is required")
 
         err = cls.get_missing_voice_file_issue(project)
@@ -334,7 +323,7 @@ class TtsBaseModel(ABC):
         if not self.INFO.voice_target_attr:
             return ""
 
-        if self.get_voice_value(project):
+        if self.get_primary_voice_value(project):
             return ""
 
         # Voice is not required, and no voice file specified

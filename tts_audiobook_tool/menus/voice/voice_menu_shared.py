@@ -242,13 +242,13 @@ class VoiceMenuShared:
     ) -> MenuItem:
 
         def make_label(s: State) -> str:
-            voices = VoiceMenuShared.get_voice_sample_values(s.project, tts_type)
+            voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
             if not voices:
                 if no_samples_label:
                     return get_string_from(s, no_samples_label)
                 return VoiceMenuShared.make_resolved_voice_label(s)
 
-            first_label = VoiceMenuShared.make_voice_sample_display_label(voices[0], tts_type)
+            first_label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, voices[0], tts_type.value)
             suffix = first_label
             if len(voices) > 1:
                 suffix += f", +{len(voices) - 1} more"
@@ -256,7 +256,7 @@ class VoiceMenuShared:
             return f"Manage voice clone sample/s {currently}"
 
         def on_item(s: State, __: MenuItem) -> None:
-            voices = VoiceMenuShared.get_voice_sample_values(s.project, tts_type)
+            voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
             if not voices:
                 if on_before_set_callback:
                     on_before_set_callback()
@@ -271,27 +271,15 @@ class VoiceMenuShared:
         return MenuItem(make_label, on_item)
 
     @staticmethod
-    def get_voice_sample_values(project: Project, tts_type: TtsModelType) -> list[str]:
-        attr = tts_type.value.voice_target_attr
-        if not attr:
-            return []
-        return ProjectVoiceUtil.voice_values(getattr(project, attr, ""))
-
-    @staticmethod
-    def make_voice_sample_display_label(value: str, tts_type: TtsModelType) -> str:
-        suffix = f"_{tts_type.value.file_tag}.flac"
-        return ellipsize_path_for_menu(value.removesuffix(suffix))
-
-    @staticmethod
     def make_voice_samples_subheading(project: Project, tts_type: TtsModelType) -> str:
-        voices = VoiceMenuShared.get_voice_sample_values(project, tts_type)
+        voices = ProjectVoiceUtil.get_voice_values(project, tts_type)
         if len(voices) > 1:
             line = "Multiple samples cycle in order, one per generation."
         else:
             line = "When using multiple samples, they will cycle in order, one per generation."
         lines = [line, ""]
         for i, voice in enumerate(voices, start=1):
-            label = VoiceMenuShared.make_voice_sample_display_label(voice, tts_type)
+            label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
             lines.append(f"- {i}) {label}")
         return "\n".join(lines) + ("\n" if lines else "")
 
@@ -339,7 +327,7 @@ class VoiceMenuShared:
 
     @staticmethod
     def remove_voice_sample_from_menu(state: State, tts_type: TtsModelType) -> bool:
-        voices = VoiceMenuShared.get_voice_sample_values(state.project, tts_type)
+        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
         if not voices:
             return True
 
@@ -359,9 +347,9 @@ class VoiceMenuShared:
                 return False
 
         removed = ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
-        label = VoiceMenuShared.make_voice_sample_display_label(removed, tts_type)
+        label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, removed, tts_type.value)
         print_feedback(f"Removed {label}")
-        return not VoiceMenuShared.get_voice_sample_values(state.project, tts_type)
+        return not ProjectVoiceUtil.get_voice_values(state.project, tts_type)
 
     @staticmethod
     def ask_voice_file(default_dir_path: str, tts_type: TtsModelType, message_override: str="") -> str:
@@ -414,21 +402,21 @@ class VoiceMenuShared:
     @staticmethod
     def make_manual_voice_menu_items(
         state: State, 
+        tts_type: TtsModelType,
         path_attribute: str, 
         transcript_attribute: str,
         is_required: bool=False
     ) -> tuple[MenuItem, MenuItem]:
         """
         Creates pair of MenuItems for voice path and voice transcript for "SGL-Omni mode"
-        (specifically for cases where the server api for the given TTS model does NOT 
-        support handling data uri).
+        (specifically for cases where the server API for the given TTS model does NOT 
+        support handling data URI).
         """
 
         def make_path_label(_) -> str:
             
             prefix = "Enter voice clone sample filepath"
-            value = getattr(state.project, path_attribute)
-            value = ProjectVoiceUtil.voice_values(value)
+            value = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
             value = value[0] if value else ""
 
             if value:
@@ -462,10 +450,9 @@ class VoiceMenuShared:
         def make_transcript_label(_) -> str:
 
             prefix = "Enter voice clone sample transcript"
-            value = getattr(state.project, transcript_attribute)
-            value = ProjectVoiceUtil.voice_values(value)
+            value = ProjectVoiceUtil.get_voice_transcript_values(state.project, tts_type)
             value = value[0] if value else ""
-            has_path = bool(ProjectVoiceUtil.primary_voice_value(state.project, path_attribute))
+            has_path = bool(ProjectVoiceUtil.get_primary_voice_value(state.project, tts_type))
 
             if value:
                 value = truncate_pretty(value, 40, content_color=COL_ACCENT)

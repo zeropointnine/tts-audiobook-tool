@@ -63,7 +63,7 @@ class ChatterboxModel(ChatterboxBaseModel):
             raise ValueError("Implementation does not support batching")
 
         # Parameters common to both model types
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "chatterbox_voice_file_name", voice_rotation_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.CHATTERBOX, voice_rotation_index)
 
         dic = {
             "text": prompts[0],

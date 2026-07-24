@@ -1,14 +1,13 @@
 from __future__ import annotations
 from enum import Enum
 
-from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.app_types import ReadinessIssue, VoiceDisplayInfo
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 from typing import TYPE_CHECKING
-from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
@@ -189,7 +188,7 @@ class Qwen3BaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> tuple[str, str]:
+    ) -> VoiceDisplayInfo:
 
         if instance:
             assert(isinstance(instance, Qwen3BaseModel))
@@ -202,30 +201,30 @@ class Qwen3BaseModel(TtsBaseModel):
                     if not resolved_speaker_id:
                         resolved_speaker_id = "required"
                     if is_valid and len(instance.supported_speakers) > 1:
-                        prefix = "current speaker"
+                        status_prefix = "Current speaker"
+                        main_prefix = "current speaker"
                     else:
-                        prefix = "speaker"
-                    value = (COL_ACCENT if is_valid else COL_ERROR) + resolved_speaker_id
+                        status_prefix = "Speaker"
+                        main_prefix = "speaker"
+                    value = ("" if is_valid else COL_ERROR) + resolved_speaker_id
                 else:
-                    prefix = "speaker"
+                    status_prefix = "speaker"
+                    main_prefix = "speaker"
                     # Instance doesn't yet exist, so settle for incomplete info
                     value = ""
             
             case "voice_design":
-                prefix = "instruction"
+                status_prefix = "Voice instruction"
+                main_prefix = "voice instruction"
                 if not project.qwen3_instructions:
                     value = COL_ERROR + "none"
                 else:
                     value = truncate_pretty(project.qwen3_instructions, 30, middle=False)
             
             case "base " | _:
-                if not ProjectVoiceUtil.primary_voice_value(project, "qwen3_voice_file_name"):
-                    prefix, value = COL_ERROR + "required", ""
-                else:
-                    prefix = "current voice clone"
-                    value = COL_ACCENT + ellipsize_path_for_menu(ProjectVoiceUtil.primary_voice_value(project, "qwen3_voice_file_name"))
+                status_prefix, main_prefix, value = super().get_voice_display_info(project, instance)
 
-        return prefix, value
+        return VoiceDisplayInfo(status_prefix, main_prefix, value)
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:

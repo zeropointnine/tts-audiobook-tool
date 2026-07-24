@@ -17,7 +17,7 @@ class VoiceHiggsV3Menu:
 
             # Server voice path and voice transcript
             path_item, transcript_item = VoiceMenuShared.make_manual_voice_menu_items(
-                state, "higgs_v3_voice_target", "higgs_v3_voice_transcript", is_required=False
+                state, TtsModelType.HIGGS_V3_SERVER, "higgs_v3_voice_target", "higgs_v3_voice_transcript", is_required=False
             )
             items.append(path_item)
             items.append(transcript_item)

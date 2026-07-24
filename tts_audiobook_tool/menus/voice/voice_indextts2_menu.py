@@ -34,7 +34,9 @@ class VoiceIndexTts2Menu:
 
         def make_emo_voice_label(_) -> str:
             if project.indextts2_emo_voice_file_name:
-                value = ellipsize_path_for_menu(project.indextts2_emo_voice_file_name)
+                value = ProjectVoiceUtil.make_voice_sample_display_label(
+                    project, project.indextts2_emo_voice_file_name, TtsModelType.INDEXTTS2.value
+                )
                 currently = make_currently_string(value)
             else:
                 currently = f"{COL_DIM}(optional){COL_DEFAULT}"

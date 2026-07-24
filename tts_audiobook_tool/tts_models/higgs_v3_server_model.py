@@ -1,5 +1,6 @@
 import random
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
@@ -26,7 +27,7 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
     ) -> list[Sound] | str:
        
         voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "higgs_v3_voice_target", "higgs_v3_voice_transcript", voice_rotation_index
+            project, TtsModelType.HIGGS_V3_SERVER, voice_rotation_index
         )
 
         temperature = project.higgs_v3_temperature if project.higgs_v3_temperature != -1 else HiggsV3ServerBaseModel.DEFAULT_TEMPERATURE

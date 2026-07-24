@@ -7,6 +7,7 @@ import torchaudio
 import huggingface_hub
 from huggingface_hub.errors import GatedRepoError
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
@@ -242,7 +243,7 @@ class FishS2Model(FishS2BaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "fish_s2_voice_file_name", "fish_s2_voice_transcript", voice_rotation_index
+            project, TtsModelType.FISH_S2, voice_rotation_index
         )
         if voice_file_name:
             source_path = os.path.join(project.dir_path, voice_file_name)

@@ -27,7 +27,7 @@ class VoicePocketMenu:
             if not state.project.pocket_voice_file_name and not state.project.pocket_predefined_voice:
                 label += f" {COL_DIM}({COL_ERROR}voice clone or predefined voice required{COL_DIM})"
             else:
-                value = ProjectVoiceUtil.primary_voice_value(state.project, "pocket_voice_file_name")
+                value = ProjectVoiceUtil.get_primary_voice_value(state.project, TtsModelType.POCKET)
                 if value:
                     currently = make_currently_string(ellipsize_path_for_menu(value.removesuffix("_pocket.flac")))
                     label += currently

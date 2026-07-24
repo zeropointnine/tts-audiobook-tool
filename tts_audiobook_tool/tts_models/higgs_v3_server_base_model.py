@@ -28,7 +28,7 @@ class HiggsV3ServerBaseModel(TtsBaseModel):
     ) -> list[ReadinessIssue]:
 
         # If has voice file path, must also have transcript
-        if ProjectVoiceUtil.primary_voice_value(project, "higgs_v3_voice_target") and not ProjectVoiceUtil.primary_voice_transcript(project, "higgs_v3_voice_transcript"):
+        if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.HIGGS_V3_SERVER) and not ProjectVoiceUtil.primary_voice_transcript(project, TtsModelType.HIGGS_V3_SERVER):
             return [
                 ReadinessIssue(
                     "voice clone transcript",

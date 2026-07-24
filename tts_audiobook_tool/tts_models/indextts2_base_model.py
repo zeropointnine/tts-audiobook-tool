@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.app_types import ReadinessIssue, VoiceDisplayInfo
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -47,12 +47,13 @@ class IndexTts2BaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> tuple[str, str]:
+    ) -> VoiceDisplayInfo:
 
-        prefix, value = super().get_voice_display_info(project, instance)
+        display_info = super().get_voice_display_info(project, instance)
+        value = display_info.value
 
-        if ProjectVoiceUtil.primary_voice_value(project, "indextts2_voice_file_name"):
+        if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.INDEXTTS2):
             if project.indextts2_emo_vector or project.indextts2_emo_voice_file_name:
                 value += " + emotion"
 
-        return prefix, value
+        return display_info._replace(value=value)

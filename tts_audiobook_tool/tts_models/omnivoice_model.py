@@ -7,6 +7,7 @@ from omnivoice import OmniVoice  # type: ignore
 from omnivoice.models.omnivoice import OmniVoiceGenerationConfig  # type: ignore
 from omnivoice.models.omnivoice import VoiceClonePrompt  # type: ignore
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.l import L
@@ -97,7 +98,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     ) -> list[Sound] | str:
 
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "omnivoice_voice_file_name", "omnivoice_voice_transcript", voice_rotation_index
+            project, TtsModelType.OMNIVOICE, voice_rotation_index
         )
         voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
         instruct = project.omnivoice_instruct

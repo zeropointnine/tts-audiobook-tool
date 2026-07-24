@@ -110,10 +110,16 @@ def get_heading_tts_text(state: State) -> str:
 # Project
 def make_project_label(state: State) -> str:
     if not state.prefs.menu_clears_screen:
+        if state.project.dir_path:
+            value = text_util.make_terminal_hyperlink(
+                state.project.dir_path, ellipsize_path_for_menu(state.project.dir_path), is_file=True
+            )
+        else:
+            value = ""
         currently = make_currently_string(
-            state.project.dir_path, 
-            required_predicate=lambda: not bool(state.project.dir_path),
-            required_label="required - set this first"
+            value, 
+            required_predicate=lambda: not bool(value),
+            required_label="required"
         )
     else:
         currently = ""
@@ -128,13 +134,11 @@ def make_voice_label(state: State) -> str:
     if state.prefs.menu_clears_screen:
         return base_label
     
-    prefix, value = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
-    if not value:
-        combined = prefix
-    else:
-        combined = f"{prefix}: {value}"
-    
-    return f"{base_label} {COL_DIM}({combined}{COL_DIM})"
+    voice_display_info = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
+    combined_string = voice_display_info.main_prefix
+    if voice_display_info.value:
+        combined_string += f": {COL_ACCENT}{voice_display_info.value}"
+    return f"{base_label} {COL_DIM}({combined_string}{COL_DIM})"
 
 def on_voice(state: State, __) -> None:
     Tts.update_tts_type()

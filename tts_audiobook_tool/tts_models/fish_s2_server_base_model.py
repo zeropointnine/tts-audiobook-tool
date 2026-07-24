@@ -25,7 +25,7 @@ class FishS2ServerBaseModel(TtsBaseModel):
     ) -> list[ReadinessIssue]:
 
         # If has voice file path, must also have transcript
-        if ProjectVoiceUtil.primary_voice_value(project, "fish_s2_server_voice_target") and not ProjectVoiceUtil.primary_voice_transcript(project, "fish_s2_server_voice_transcript"):
+        if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.FISH_S2_SERVER) and not ProjectVoiceUtil.primary_voice_transcript(project, TtsModelType.FISH_S2_SERVER):
             return [
                 ReadinessIssue(
                     "voice clone transcript",

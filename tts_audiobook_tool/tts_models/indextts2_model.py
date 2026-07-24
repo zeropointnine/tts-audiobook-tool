@@ -5,6 +5,7 @@ from indextts.infer_v2 import IndexTTS2 # type: ignore
 from numpy import ndarray
 import numpy
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
@@ -61,7 +62,7 @@ class IndexTts2Model(IndexTts2BaseModel):
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "indextts2_voice_file_name", voice_rotation_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.INDEXTTS2, voice_rotation_index)
         if voice_file_name:
             voice_path = os.path.join(project.dir_path, voice_file_name)
         else:

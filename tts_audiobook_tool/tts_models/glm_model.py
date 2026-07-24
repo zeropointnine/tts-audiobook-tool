@@ -11,6 +11,7 @@ from glm_tts.llm.glmtts import GLMTTS # type: ignore
 from glm_tts.utils.audio import mel_spectrogram # type: ignore
 from functools import partial
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
@@ -99,7 +100,7 @@ class GlmModel(GlmBaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, "glm_voice_file_name", "glm_voice_transcript", voice_rotation_index
+            project, TtsModelType.GLM, voice_rotation_index
         )
         voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
         seed = -1 if force_random_seed else project.glm_seed

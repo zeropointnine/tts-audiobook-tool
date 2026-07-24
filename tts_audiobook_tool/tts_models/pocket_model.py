@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
@@ -72,7 +73,7 @@ class PocketModel(PocketBaseModel):
             on_stream_end: StreamEndCallback | None = None,
             voice_rotation_index: int = 0,
     ) -> list[Sound] | str:
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "pocket_voice_file_name", voice_rotation_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.POCKET, voice_rotation_index)
         if voice_file_name:
             voice_path = os.path.join(project.dir_path, voice_file_name)
         else:

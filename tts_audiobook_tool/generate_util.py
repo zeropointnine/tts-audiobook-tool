@@ -536,6 +536,7 @@ class GenerateUtil:
 
         # Generate
         voice_rotation_index = -1
+        voice_tag = ""
         if Tts.get_type() == TtsModelType.NONE:
             result = "No active TTS model"
         else:

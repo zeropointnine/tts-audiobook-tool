@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tts_audiobook_tool.app_types import Strictness
+from tts_audiobook_tool.app_types import Strictness, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -27,7 +27,7 @@ class OuteBaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> tuple[str, str]:
+    ) -> VoiceDisplayInfo:
         """
         Override to use oute_voice_file_name (string path) instead of oute_voice_json (dict).
         """
@@ -48,7 +48,7 @@ class OuteBaseModel(TtsBaseModel):
                 prefix = COL_DIM + "current voice clone"
                 value = COL_ACCENT + voice_file_name
 
-        return prefix, value
+        return VoiceDisplayInfo(prefix, prefix, value)
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:

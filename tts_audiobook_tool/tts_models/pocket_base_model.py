@@ -59,8 +59,8 @@ class PocketBaseModel(TtsBaseModel):
     gated_error_message_cache: dict[str, str] = {}
 
     @classmethod
-    def get_voice_value(cls, project: Project) -> str:
-        return ProjectVoiceUtil.primary_voice_value(project, "pocket_voice_file_name") or project.pocket_predefined_voice
+    def get_primary_voice_value(cls, project: Project) -> str:
+        return ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) or project.pocket_predefined_voice
 
     @classmethod
     def get_menu_text(
@@ -80,7 +80,7 @@ class PocketBaseModel(TtsBaseModel):
                 errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
         
-        if not ProjectVoiceUtil.primary_voice_value(project, "pocket_voice_file_name") and not project.pocket_predefined_voice:
+        if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) and not project.pocket_predefined_voice:
             errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
 
         return errors
@@ -95,7 +95,7 @@ class PocketBaseModel(TtsBaseModel):
 
         Rem, use "make_gated_error_message_ui" for user-facing error message with remediation info
         """
-        voice_file_name = ProjectVoiceUtil.primary_voice_value(project, "pocket_voice_file_name")
+        voice_file_name = ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET)
         if not voice_file_name:
             return ""
 

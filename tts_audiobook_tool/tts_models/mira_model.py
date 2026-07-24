@@ -1,5 +1,6 @@
 import random
 from itertools import cycle
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
@@ -55,7 +56,7 @@ class MiraModel(MiraBaseModel):
             voice_rotation_index: int = 0,
         ) -> list[Sound] | str:
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, "mira_voice_file_name", voice_rotation_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MIRA, voice_rotation_index)
         voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
         self.set_voice_clone(voice_path)
 
