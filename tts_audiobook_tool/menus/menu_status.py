@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -131,8 +130,6 @@ def _make_stt_text(state: State) -> str:
     from tts_audiobook_tool.stt import Stt
 
     text = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
-    if state.prefs.stt_variant == SttVariant.DISABLED:
-        text += " - disabled" # not dim
 
     qualifiers = []
     if not Stt.should_use_mlx_whisper():

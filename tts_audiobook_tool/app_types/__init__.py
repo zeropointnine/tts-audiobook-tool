@@ -13,7 +13,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import cache
-import platform
 from typing import Any, Callable, NamedTuple, Protocol, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -226,14 +225,11 @@ class SttConfig(tuple[str, str, str], Enum):
 
     @staticmethod
     def get_default() -> SttConfig:
-        import torch
-        if torch.cuda.is_available():
-            if platform.system() == "Linux":
-                return SttConfig.CUDA_FLOAT16
-            else:
-                return SttConfig.CUDA_FLOAT16
-        else:
-            return SttConfig.CPU_INT8FLOAT32
+        from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
+
+        if GpuCapsUtil.has_ctranslate2_float16_gpu():
+            return SttConfig.CUDA_FLOAT16
+        return SttConfig.CPU_INT8FLOAT32
 
 class Strictness(tuple[str, int, str], Enum):
 

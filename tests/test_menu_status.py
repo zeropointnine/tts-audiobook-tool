@@ -1,7 +1,12 @@
+from types import SimpleNamespace
+
+from tts_audiobook_tool.app_types import SttConfig, SttVariant
+from tts_audiobook_tool.menus.menu_status import _make_stt_text
 from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_DIM, COL_MEDIUM
@@ -44,3 +49,19 @@ def test_menu_status_print_block_supports_voice_display_info(capsys):
         assert f"{COL_DIM}Voice clone: {COL_MEDIUM}zzz belle 24a 19s, +1 more" in output
     finally:
         restore_tts_state(saved)
+
+
+def test_stt_status_does_not_repeat_disabled(monkeypatch):
+    state = SimpleNamespace(
+        prefs=SimpleNamespace(
+            stt_variant=SttVariant.DISABLED,
+            stt_config=SttConfig.CPU_INT8FLOAT32,
+        ),
+    )
+    monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
+    monkeypatch.setattr(Stt, "get_variant", lambda: SttVariant.DISABLED)
+    monkeypatch.setattr(Stt, "has_instance", lambda: False)
+
+    text = _make_stt_text(state)
+
+    assert text == f"faster-whisper {COL_DIM}(disabled, cpu)"

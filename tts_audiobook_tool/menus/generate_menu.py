@@ -406,7 +406,12 @@ def ask_batch_size(state: State) -> None:
     )
 
 def make_regenerate_segments_with_errors_desc(state: State) -> str:
-    return REGENERATE_SEGMENTS_WITH_ERRORS_DESC.replace("%1", state.project.strictness.label)
+    tolerance_string = f"{COL_ACCENT}{state.project.strictness.label}{COL_DEFAULT}"
+    range_string = state.project.generate_range_string or "all"
+    range_string = f"{COL_ACCENT}{range_string}{COL_DEFAULT}"
+    result = REGENERATE_SEGMENTS_WITH_ERRORS_DESC.replace("%1", range_string)
+    result = result.replace("%2", tolerance_string)
+    return result
 
 def regenerate_menu(state: State) -> None:
 
@@ -538,9 +543,8 @@ Higher values have diminishing returns.
 """
 
 REGENERATE_SEGMENTS_WITH_ERRORS_DESC = \
-"""Retry only the segments currently flagged as having word errors.
-This uses your current line range and word error tolerance setting (%1)
-to decide which segments should be regenerated.
+"""Regenerate segments in the selected line range (%1)
+whose word error count exceeds the current word error tolerance setting (%2).
 """
 
 LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \

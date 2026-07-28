@@ -3,9 +3,9 @@ import threading
 from typing import Any, Protocol, Sequence, cast
 
 import numpy as np
-import torch
 
 from tts_audiobook_tool.app_types import ConcreteSegment, ConcreteWord, SttConfig, SttVariant
+from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.util import *
 
 
@@ -175,13 +175,15 @@ class Stt:
 
             model = Stt._variant.id
 
+            # MacOS uses MLX Whisper
             if Stt.should_use_mlx_whisper():
                 print_init(f"Initializing mlx-whisper model ({model})...")
                 Stt._whisper = MlxWhisperAdapter(model)
                 return cast(WhisperBackend, Stt._whisper)
 
+            # Linux/Windows uses Faster Whisper (either cuda or cpu)
             dq = Stt._config
-            if dq.device == "cuda" and not torch.cuda.is_available():
+            if dq.device == "cuda" and not GpuCapsUtil.has_ctranslate2_float16_gpu():
                 dq = SttConfig.CPU_INT8FLOAT32 # fallback
             device = dq.device
             compute_type = dq.compute_type
@@ -241,7 +243,7 @@ class Stt:
             return f"{Stt._variant.id}, mlx"
 
         config = Stt._config
-        if config.device == "cuda" and not torch.cuda.is_available():
+        if config.device == "cuda" and not GpuCapsUtil.has_ctranslate2_float16_gpu():
             config = SttConfig.CPU_INT8FLOAT32
         return f"{Stt._variant.id}, {config.device}"
 

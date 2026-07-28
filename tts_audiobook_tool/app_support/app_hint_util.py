@@ -9,6 +9,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -35,11 +36,10 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
         hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
         can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)
 
-    # CUDNN compatibility hint/warning
-    import torch
-    if platform.system() == "Linux" and torch.cuda.is_available():
+    # cuDNN compatibility hint/warning
+    if platform.system() == "Linux":
         if prefs.stt_variant != SttVariant.DISABLED and prefs.stt_config.device == "cuda":
-            version = torch.backends.cudnn.version()
+            version = GpuCapsUtil.cudnn_version()
             if version and version > CTRANSLATE_REQUIRED_CUDNN_VERSION:
                 hints.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
 
