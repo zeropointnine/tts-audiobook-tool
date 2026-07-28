@@ -10,8 +10,8 @@ class VoiceMossShared:
 
     @staticmethod
     def append_voice_items(items: list[MenuItem], state: State) -> None:
-        items.append(
-            VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.MOSS)
+        items.extend(
+            VoiceMenuShared.make_voice_sample_items(state, TtsModelType.MOSS)
         )
 
     @staticmethod

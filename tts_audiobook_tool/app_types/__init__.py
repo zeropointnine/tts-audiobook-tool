@@ -256,13 +256,62 @@ class Strictness(tuple[str, int, str], Enum):
             if id == item.id:
                 return item
         return None
-    
+
     @staticmethod
     def get_recommended_default(language_code: str) -> Strictness:
         if language_code == "en":
             return Strictness.MODERATE
         else:
             return Strictness.LOW
+
+# ---
+
+class VoiceSelectMode(tuple[str, str, str, str], Enum):
+    AUTO_ADVANCE = (
+        "auto_advance",
+        "auto-advance",
+        "Auto-advance",
+        "Cycles through voice samples in order, one per generation.",
+    )
+    CUSTOM = (
+        "custom",
+        "custom",
+        "Custom",
+        "Use the voice sample assigned to each phrase when generating it individually.",
+    )
+    DISABLED = (
+        "disabled",
+        "disabled",
+        "Disabled",
+        "Always use the first voice sample for every generation.",
+    )
+
+    @property
+    def id(self) -> str:
+        return self.value[0]
+
+    @property
+    def current_label(self) -> str:
+        return self.value[1]
+
+    @property
+    def label(self) -> str:
+        return self.value[2]
+
+    @property
+    def description(self) -> str:
+        return self.value[3]
+
+    @staticmethod
+    def get_default() -> VoiceSelectMode:
+        return VoiceSelectMode.AUTO_ADVANCE
+
+    @staticmethod
+    def get_by_id(id: str) -> VoiceSelectMode | None:
+        for item in VoiceSelectMode:
+            if id == item.id:
+                return item
+        return None
     
 # ---
 

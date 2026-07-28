@@ -15,8 +15,8 @@ class VoiceQwen3ServerMenu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
 
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.QWEN3TTS_SERVER)
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.QWEN3TTS_SERVER)
             )
 
             temperature_item = VoiceMenuShared.make_temperature_item(

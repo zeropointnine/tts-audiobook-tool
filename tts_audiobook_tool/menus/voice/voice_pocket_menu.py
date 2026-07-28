@@ -42,8 +42,8 @@ class VoicePocketMenu:
 
             items = []
 
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(
                     state,
                     TtsModelType.POCKET,
                     no_samples_label=make_voice_file_label,

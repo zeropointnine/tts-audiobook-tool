@@ -70,8 +70,8 @@ class VoiceIndexTts2Menu:
         # Menu
         def make_items(_: State) -> list[MenuItem]:
             items = []
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(
                     state,
                     TtsModelType.INDEXTTS2,
                     no_samples_label=voice_label,

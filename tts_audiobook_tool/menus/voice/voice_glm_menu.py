@@ -15,8 +15,8 @@ class VoiceGlmMenu:
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.GLM)
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.GLM)
             )
             items.append(
                 MenuItem(

@@ -473,21 +473,26 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
 
     # Print confirmation info, and confirm
     if not is_regen:
-        s = f"Will generate {len(indices)} lines in range {state.project.generate_range_string}"
+        s = f"- Will generate {len(indices)} lines in range {state.project.generate_range_string}"
         num = state.project.sound_segments.num_generated_in_current_range()
         if num:
             s += f" {COL_DIM}({num} already complete)"
         printt(s)
-        if state.project.gen_auto_concat:
-            printt("Will concatenate audio file/s when finished")
+        if CUSTOM_VOICE_ASSIGNMENT_FEATURE:
+            voice_values = ProjectVoiceUtil.get_voice_values(state.project, Tts.get_type())
+            if len(voice_values) > 1:
+                printt(f"- Voice sample selection mode: {state.project.voice_select_mode.label}")
         if show_stt_status:
             if not Stt.should_skip(state):
-                s = "Speech-to-text validation enabled"
+                s = "- Speech-to-text validation enabled"
                 s += f" {COL_DIM}({Stt.short_description()})"
             else:
-                s = "Speech-to-text validation disabled"
+                s = "- Speech-to-text validation disabled"
             printt(s)
-            printt()
+        if state.project.gen_auto_concat:
+            printt("- Will concatenate audio file/s when finished")
+
+        printt()
         b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
         if not b:
             return

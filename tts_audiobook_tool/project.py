@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness
+from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
@@ -146,6 +146,7 @@ class Project(BaseModel):
     
     max_retries: int = PROJECT_MAX_RETRIES_DEFAULT
     chapter_mode: SectionMarkerMode = list(SectionMarkerMode)[0]
+    voice_select_mode: VoiceSelectMode = VoiceSelectMode.get_default()
 
     # Placeholder attribute used when no TTS model exists
     none_voice_file_name: str = "" 

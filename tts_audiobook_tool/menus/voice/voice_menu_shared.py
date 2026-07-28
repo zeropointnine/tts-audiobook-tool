@@ -3,7 +3,7 @@ from typing import Callable
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import Hint, SttVariant
+from tts_audiobook_tool.app_types import Hint, SttVariant, VoiceSelectMode
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
 from tts_audiobook_tool.project import Project
@@ -253,7 +253,7 @@ class VoiceMenuShared:
             if len(voices) > 1:
                 suffix += f", +{len(voices) - 1} more"
             currently = make_currently_string(suffix)
-            return f"Manage voice clone sample/s {currently}"
+            return f"Manage voice sample/s {currently}"
 
         def on_item(s: State, __: MenuItem) -> None:
             voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
@@ -269,6 +269,66 @@ class VoiceMenuShared:
             )
 
         return MenuItem(make_label, on_item)
+
+    @staticmethod
+    def make_voice_sample_items(
+            state: State,
+            tts_type: TtsModelType,
+            no_samples_label: StringOrMaker | None = None,
+            on_before_set_callback: Callable | None = None,
+            on_set_callback: Callable | None = None,
+            on_clear_callback: Callable | None = None,
+    ) -> list[MenuItem]:
+        """
+        Makes the manage-samples item and, when applicable, its selection-mode item.
+        """
+        items = [
+            VoiceMenuShared.make_manage_voice_samples_item(
+                state,
+                tts_type,
+                no_samples_label,
+                on_before_set_callback,
+                on_set_callback,
+                on_clear_callback,
+            )
+        ]
+        voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+        if len(voices) > 1 and CUSTOM_VOICE_ASSIGNMENT_FEATURE:
+            items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
+        return items
+
+    @staticmethod
+    def make_voice_sample_selection_mode_item() -> MenuItem:
+        def make_label(state: State) -> str:
+            return make_menu_label(
+                "Voice sample selection mode",
+                state.project.voice_select_mode.current_label,
+            )
+
+        return MenuItem(
+            make_label,
+            lambda state, _: VoiceMenuShared.voice_sample_selection_mode_submenu(state),
+        )
+
+    @staticmethod
+    def voice_sample_selection_mode_submenu(state: State) -> None:
+        modes = list(VoiceSelectMode)
+
+        def on_select(value: VoiceSelectMode) -> None:
+            state.project.voice_select_mode = value
+            state.project.save()
+            print_feedback("Voice sample selection mode set to:", value.id)
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Voice sample selection mode",
+            labels=[mode.label for mode in modes],
+            values=modes,
+            current_value=state.project.voice_select_mode,
+            default_value=VoiceSelectMode.get_default(),
+            on_select=on_select,
+            sublabels=[mode.description for mode in modes],
+        )
 
     @staticmethod
     def make_voice_samples_subheading(project: Project, tts_type: TtsModelType) -> str:
@@ -319,7 +379,7 @@ class VoiceMenuShared:
 
         MenuUtil.menu(
             state=state,
-            heading="Manage voice clone sample/s",
+            heading="Manage voice sample/s",
             items=make_items,
             subheading=lambda s: VoiceMenuShared.make_voice_samples_subheading(s.project, tts_type),
             breadcrumb="Voice clone samples",

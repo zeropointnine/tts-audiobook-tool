@@ -83,8 +83,8 @@ class VoiceQwen3Menu:
             match Tts.get_qwen3().model_type:
                 case "base":
                     # Voice clone, clear voice clone
-                    items.append(
-                        VoiceMenuShared.make_manage_voice_samples_item(
+                    items.extend(
+                        VoiceMenuShared.make_voice_sample_items(
                             state,
                             TtsModelType.QWEN3TTS,
                             no_samples_label=make_voice_label,

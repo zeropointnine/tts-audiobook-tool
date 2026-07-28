@@ -64,8 +64,8 @@ class VoiceOmniVoiceMenu:
         def make_items(_: State) -> list[MenuItem]:
             items = []
 
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(
                     state,
                     TtsModelType.OMNIVOICE,
                     no_samples_label=make_voice_label,

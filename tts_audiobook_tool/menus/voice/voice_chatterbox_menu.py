@@ -17,8 +17,8 @@ class VoiceChatterboxMenu:
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.CHATTERBOX)
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.CHATTERBOX)
             )
 
             items.append( 

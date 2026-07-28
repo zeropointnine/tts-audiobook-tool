@@ -48,8 +48,8 @@ class VoiceVibeVoiceMenu:
             items = []
 
             # Voice
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(
                     state,
                     TtsModelType.VIBEVOICE,
                     no_samples_label=make_select_voice_label,

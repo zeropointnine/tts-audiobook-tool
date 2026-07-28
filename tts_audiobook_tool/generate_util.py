@@ -7,7 +7,7 @@ import numpy as np
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, VoiceSelectMode
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -540,7 +540,23 @@ class GenerateUtil:
         if Tts.get_type() == TtsModelType.NONE:
             result = "No active TTS model"
         else:
-            voice_rotation_index = Tts.get_next_voice_rotation_index()
+            voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
+            use_custom_voice_index = (
+                len(indices) == 1
+                and project.voice_select_mode == VoiceSelectMode.CUSTOM
+                and bool(voice_values)
+            )
+            if project.voice_select_mode == VoiceSelectMode.DISABLED:
+                voice_rotation_index = 0
+            elif use_custom_voice_index:
+                requested_voice_index = phrase_groups[indices[0]].voice_index
+                voice_rotation_index = (
+                    requested_voice_index
+                    if 0 <= requested_voice_index < len(voice_values)
+                    else 0
+                )
+            else:
+                voice_rotation_index = Tts.get_next_voice_rotation_index()
             voice_tag = Tts.get_voice_tag_for_rotation_index(project, voice_rotation_index)
             result = Tts.generate_using_project(
                 project,
@@ -557,7 +573,7 @@ class GenerateUtil:
 
         sounds = [result] if isinstance(result, Sound) else result
         
-        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None] | str | TtsModelError] = [] # TODO: Revisit
+        results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError] = [] # TODO: Revisit
 
         for i, sound in enumerate(sounds):
 

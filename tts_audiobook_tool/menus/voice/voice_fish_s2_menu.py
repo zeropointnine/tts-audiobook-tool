@@ -15,8 +15,8 @@ class VoiceFishS2Menu:
         """
         def make_items(_: State) -> list[MenuItem]:
             items = []
-            items.append(
-                VoiceMenuShared.make_manage_voice_samples_item(state, TtsModelType.FISH_S2)
+            items.extend(
+                VoiceMenuShared.make_voice_sample_items(state, TtsModelType.FISH_S2)
             )
 
             items.append(
