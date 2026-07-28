@@ -14,8 +14,16 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
 
 class TestBookSerialization(unittest.TestCase):
-    def make_phrase_group(self, text: str, reason: Reason = Reason.SENTENCE) -> PhraseGroup:
-        return PhraseGroup([Phrase(text, reason)])
+    def make_phrase_group(
+            self,
+            text: str,
+            reason: Reason = Reason.SENTENCE,
+            voice_index: int = -1,
+    ) -> PhraseGroup:
+        return PhraseGroup([Phrase(text, reason)], voice_index=voice_index)
+
+    def legacy_phrase_groups_json(self, phrase_groups: list[PhraseGroup]) -> list[list[dict]]:
+        return [group.to_json_dict_list() for group in phrase_groups]
 
     def test_book_round_trip_preserves_metadata_sections_and_phrase_groups(self):
         book = Book(
@@ -34,7 +42,7 @@ class TestBookSerialization(unittest.TestCase):
                 ),
                 BookSection(
                     title="Chapter 2",
-                    phrase_groups=[self.make_phrase_group("Next chapter.\n\n", Reason.PARAGRAPH)],
+                    phrase_groups=[self.make_phrase_group("Next chapter.\n\n", Reason.PARAGRAPH, voice_index=2)],
                 ),
             ],
         )
@@ -53,8 +61,57 @@ class TestBookSerialization(unittest.TestCase):
         self.assertEqual(result.segmentation_settings.strategy, SegmentationStrategy.MULTI_SENTENCE)
         self.assertEqual([section.title for section in result.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([group.text for group in result.phrase_groups], ["Opening prose.", "Next chapter.\n\n"])
+        self.assertEqual([group.voice_index for group in result.phrase_groups], [-1, 2])
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.section_start_indices(), [0, 1])
+
+    def test_phrase_group_voice_index_defaults_to_negative_one_and_has_setter(self):
+        group = self.make_phrase_group("One.")
+
+        self.assertEqual(group.voice_index, -1)
+        group.voice_index = 3
+        self.assertEqual(group.voice_index, 3)
+
+    def test_book_v2_serializes_phrase_groups_as_objects(self):
+        book = Book(sections=[BookSection(phrase_groups=[self.make_phrase_group("One.", voice_index=4)])])
+
+        payload = book_to_project_text_json_dict(book)
+
+        self.assertEqual(payload["format"], "book.v2")
+        group_payload = payload["book"]["sections"][0]["phrase_groups"][0]
+        self.assertEqual(group_payload["voice_index"], 4)
+        self.assertEqual(group_payload["phrases"][0]["text"], "One.")
+
+    def test_book_v1_deserializes_legacy_group_arrays_with_default_voice_index(self):
+        payload = {
+            "format": "book.v1",
+            "book": {
+                "sections": [{
+                    "phrase_groups": self.legacy_phrase_groups_json([self.make_phrase_group("Old.")]),
+                }],
+            },
+        }
+
+        result = book_from_project_text_json_dict(payload)
+
+        self.assertIsInstance(result, Book)
+        assert isinstance(result, Book)
+        self.assertEqual(result.phrase_groups[0].text, "Old.")
+        self.assertEqual(result.phrase_groups[0].voice_index, -1)
+
+    def test_invalid_or_missing_voice_index_defaults_to_negative_one(self):
+        values = [None, True, -2, 1.5, "2"]
+        group_payloads = [
+            {"phrases": [{"text": f"Value {index}.", "reason": "s"}], "voice_index": value}
+            for index, value in enumerate(values)
+        ]
+        group_payloads.append({"phrases": [{"text": "Missing.", "reason": "s"}]})
+
+        result = PhraseGroup.phrase_groups_from_json_list(group_payloads)
+
+        self.assertIsInstance(result, list)
+        assert isinstance(result, list)
+        self.assertEqual([group.voice_index for group in result], [-1] * len(group_payloads))
 
     def test_phrase_groups_v1_deserializes_to_legacy_flat_book(self):
         phrase_groups = [
@@ -63,7 +120,7 @@ class TestBookSerialization(unittest.TestCase):
         ]
         payload = {
             "format": "phrase_groups.v1",
-            "phrase_groups": PhraseGroup.phrase_groups_to_json_list(phrase_groups),
+            "phrase_groups": self.legacy_phrase_groups_json(phrase_groups),
         }
         settings = BookSegmentationSettings(
             language_code="en",
@@ -83,7 +140,7 @@ class TestBookSerialization(unittest.TestCase):
 
     def test_bare_phrase_group_list_deserializes_to_legacy_flat_book(self):
         phrase_groups = [self.make_phrase_group("Bare list.", Reason.SENTENCE)]
-        payload = PhraseGroup.phrase_groups_to_json_list(phrase_groups)
+        payload = self.legacy_phrase_groups_json(phrase_groups)
 
         result = book_from_project_text_json_dict(payload)
 

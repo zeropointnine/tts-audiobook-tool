@@ -22,9 +22,14 @@ The behavior described here is implemented primarily in:
 
 ---
 
-## Summary of the v2 change
+## Summary of the v2 changes
 
-The main project-spec change is a **storage split**.
+Project spec v2 introduced a **storage split**: project settings remain in
+`project.json`, while book text is stored in `project_text.json`.
+
+The current `project_text.json` format is `book.v2`. It adds a `voice_index`
+to each phrase group so different groups can be associated with different
+voices or voice-clone samples. The default voice index is `-1`.
 
 ### Version 1
 
@@ -73,7 +78,7 @@ The preferred current format is:
 
 ```json
 {
-    "format": "book.v1",
+    "format": "book.v2",
     "book": {
         "title": "...",
         "text_source_kind": "...",
@@ -86,7 +91,17 @@ The preferred current format is:
         "sections": [
             {
                 "title": "Chapter 1",
-                "phrase_groups": []
+                "phrase_groups": [
+                    {
+                        "voice_index": -1,
+                        "phrases": [
+                            {
+                                "text": "...",
+                                "reason": "s"
+                            }
+                        ]
+                    }
+                ]
             }
         ]
     }
@@ -100,24 +115,25 @@ This format is produced by `book_to_project_text_json_dict(...)` in
 
 ## Supported text payload formats
 
-Even though `book.v1` is the canonical saved format, the loader still accepts
+Even though `book.v2` is the canonical saved format, the loader still accepts
 older payloads for backward compatibility.
 
 ### Current canonical format
 
-- `book.v1`
+- `book.v2`
 
 Example shape:
 
 ```json
 {
-    "format": "book.v1",
+    "format": "book.v2",
     "book": { ... }
 }
 ```
 
 ### Older accepted formats
 
+- `book.v1`
 - `phrase_groups.v1`
 
 Example shape:
@@ -140,7 +156,8 @@ Example shape:
 ```
 
 When older payloads are loaded successfully, the app upgrades them to the
-canonical `book.v1` representation.
+canonical `book.v2` representation. Older phrase groups did not have a speaker
+index and therefore load with the default voice index of `-1`.
 
 ---
 
@@ -172,7 +189,7 @@ These older flat-text fields may still be present in legacy projects:
 
 These are still read for compatibility, especially when reconstructing a `Book`
 from legacy phrase-group data, but they are not part of the preferred canonical
-saved shape once `book.v1` text data is available.
+saved shape once `book.v2` text data is available.
 
 ### Some model keys are remapped on load
 
@@ -272,6 +289,7 @@ present in the loaded settings dict, the loader tries to read
 
 It accepts:
 
+- `book.v2`
 - `book.v1`
 - `phrase_groups.v1`
 - bare legacy lists
@@ -330,17 +348,18 @@ Effectively:
 
 ### 2. Legacy `project_text.json` payloads
 
-If `project_text.json` exists but is not already `book.v1`, the loader converts
-it and then saves it back as `book.v1`.
+If `project_text.json` exists but is not already `book.v2`, the loader converts
+it and then saves it back as `book.v2`.
 
 This covers:
 
+- `book.v1`
 - `phrase_groups.v1`
 - bare phrase-group lists
 
-### 3. Already using `book.v1`, but still carrying stale legacy fields
+### 3. Already using `book.v2`, but still carrying stale legacy fields
 
-If text is already stored as `book.v1` but `project.json` still contains old
+If text is already stored as `book.v2` but `project.json` still contains old
 `applied_*` fields, the loader rewrites `project.json` to remove those stale
 compatibility fields.
 
@@ -359,7 +378,7 @@ After migration, the expected steady-state layout is:
   - does not need stale legacy `applied_*` fields when the structured text file
     exists
 - `project_text.json`
-  - stored as `{"format": "book.v1", "book": ...}`
+  - stored as `{"format": "book.v2", "book": ...}`
 
 This split is the defining feature of project spec v2.
 
@@ -371,9 +390,9 @@ This split is the defining feature of project spec v2.
 
 ### Tested behaviors
 
-- legacy `phrase_groups.v1` `project_text.json` payloads are migrated to
-  `book.v1`
-- bare-list `project_text.json` payloads are migrated to `book.v1`
+- legacy `book.v1` and `phrase_groups.v1` `project_text.json` payloads are
+  migrated to `book.v2`
+- bare-list `project_text.json` payloads are migrated to `book.v2`
 - legacy `chapter_indices` is rewritten as `markers`
 - stale `applied_language_code`, `applied_strategy`, and `applied_max_words`
   are removed from canonical `project.json`
@@ -410,7 +429,7 @@ split format:
 Migration is automatic and load-driven:
 
 - legacy inline text is extracted out of `project.json`
-- old external text formats are upgraded to `book.v1`
+- old external text formats are upgraded to `book.v2`
 - legacy compatibility fields are folded into the structured book model and then
   removed from canonical saved output where appropriate
 

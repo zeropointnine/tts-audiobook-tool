@@ -7,6 +7,8 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 
+""" Phrase, PhraseGroup, and Reason classes"""
+
 class Phrase:
     def __init__(self, text: str, reason: Reason):
         self._text = text
@@ -74,6 +76,136 @@ class Phrase:
 
         return result
 
+class PhraseGroup:
+    """
+    Wraps a list of `Phrase` instances.
+    This is the app's atomic unit of TTS text inference.
+    
+    Reason for this higher-level wrapper is that after TTS+STT, 
+    we can force-align the transcript with the PhraseGroup's constituent phrases.
+    Ie, add 'phrase-level granularity' to the timing metadata.
+    """
+    
+    def __init__(self, phrases: list[Phrase] | None = None, voice_index: int = -1):
+        self.phrases: list[Phrase] = phrases or []
+        self.voice_index = voice_index
+
+    @property
+    def voice_index(self) -> int:
+        return self.voice_index_value
+
+    @voice_index.setter
+    def voice_index(self, value: int) -> None:
+        self.voice_index_value = value
+
+    @property
+    def num_words(self) -> int:
+        count = 0
+        for phrase in self.phrases:
+            count += phrase.num_words
+        return count
+
+    @property
+    def text(self) -> str:
+        """ 
+        Concatenated phrases text. Does not modify whitespace."""
+        s = ""
+        for phrase in self.phrases:
+            s += phrase.text
+        return s
+
+    @property
+    def presentable_text(self) -> str:
+        """ Text in 'presentable' format for UI-related purposes """
+        text = ""
+        for phrase in self.phrases:
+            text += phrase.text + " "
+        text = text.replace("\n", " ").replace("\r", " ")
+        text = app_text.massage_post_normalize(text)
+        return text
+    
+    @property
+    def last_reason(self) -> Reason:
+        return self.phrases[-1].reason if self.phrases else Reason.UNDEFINED
+
+    @staticmethod
+    def flatten_groups(groups: list[PhraseGroup]) -> list[Phrase]:
+        phrases = []
+        for group in groups:
+            if group:
+                phrases.extend(group.phrases)
+        return phrases
+
+    def as_flattened_phrase(self) -> Phrase:
+        reason = self.phrases[-1].reason if self.phrases else Reason.UNDEFINED
+        return Phrase(self.text, reason)
+
+    def to_json_dict_list(self) -> list[dict]:
+        return [phrase.to_json_dict() for phrase in self.phrases]
+
+    def to_json_dict(self) -> dict:
+        return {
+            "voice_index": self.voice_index,
+            "phrases": self.to_json_dict_list(),
+        }
+
+    @staticmethod
+    def phrase_groups_from_json_list(values: list[Any]) -> list[PhraseGroup] | str:
+        if not isinstance(values, list):
+            return f"Expected list of phrase groups. Value: {str(values)}"
+
+        text_groups = []
+
+        for value in values:
+            if isinstance(value, dict):
+                if "phrases" not in value:
+                    return f"Phrase group missing 'phrases': {value}"
+                phrase_dicts = value["phrases"]
+                raw_voice_index = value.get("voice_index", -1)
+                voice_index = (
+                    raw_voice_index
+                    if isinstance(raw_voice_index, int)
+                    and not isinstance(raw_voice_index, bool)
+                    and raw_voice_index >= -1
+                    else -1
+                )
+            else:
+                phrase_dicts = value
+                voice_index = -1
+
+            if not isinstance(phrase_dicts, list):
+                return f"Expected phrase list: {phrase_dicts}"
+
+            result = Phrase.phrases_from_json_dicts(phrase_dicts)
+            if isinstance(result, str):
+                err = result
+                return err
+
+            phrases = result
+            group = PhraseGroup(phrases, voice_index=voice_index)
+            text_groups.append(group)
+
+        return text_groups
+
+    @staticmethod
+    def phrase_groups_to_json_list(groups: list[PhraseGroup]) -> list[dict]:
+        if not groups:
+            return []
+        result = []
+        for group in groups:
+            if group:
+                result.append(group.to_json_dict())
+        return result
+
+    @staticmethod
+    def get_max_num_words(groups: list[PhraseGroup]) -> int:
+        value = 0
+        for group in groups:
+            for phrase in group.phrases:
+                value = max(value, phrase.num_words)
+        return value
+
+
 @total_ordering 
 class Reason(tuple[int, str, float], Enum):
     """
@@ -133,102 +265,3 @@ class Reason(tuple[int, str, float], Enum):
                 return member
         return Reason.UNDEFINED
 
-class PhraseGroup:
-    """
-    Wraps a list of `Phrase` instances.
-    This is the app's atomic unit of TTS text inference.
-    
-    Reason for this higher-level wrapper is that after TTS+STT, 
-    we can force-align the transcript with the PhraseGroup's constituent phrases.
-    Ie, add 'phrase-level granularity' to the timing metadata.
-    """
-    
-    def __init__(self, phrases: list[Phrase] | None = None):
-        self.phrases: list[Phrase] = phrases or []
-
-    @property
-    def num_words(self) -> int:
-        count = 0
-        for phrase in self.phrases:
-            count += phrase.num_words
-        return count
-
-    @property
-    def text(self) -> str:
-        """ 
-        Concatenated phrases text. Does not modify whitespace."""
-        s = ""
-        for phrase in self.phrases:
-            s += phrase.text
-        return s
-
-    @property
-    def presentable_text(self) -> str:
-        """ Text in 'presentable' format for UI-related purposes """
-        text = ""
-        for phrase in self.phrases:
-            text += phrase.text + " "
-        text = text.replace("\n", " ").replace("\r", " ")
-        text = app_text.massage_post_normalize(text)
-        return text
-    
-    @property
-    def last_reason(self) -> Reason:
-        return self.phrases[-1].reason if self.phrases else Reason.UNDEFINED
-
-    @staticmethod
-    def flatten_groups(groups: list[PhraseGroup]) -> list[Phrase]:
-        phrases = []
-        for group in groups:
-            if group:
-                phrases.extend(group.phrases)
-        return phrases
-
-    def as_flattened_phrase(self) -> Phrase:
-        reason = self.phrases[-1].reason if self.phrases else Reason.UNDEFINED
-        return Phrase(self.text, reason)
-
-    def to_json_dict_list(self) -> list[dict]:
-        return [phrase.to_json_dict() for phrase in self.phrases]
-
-    @staticmethod
-    def phrase_groups_from_json_list(list_of_lists: list[list[dict]]) -> list[PhraseGroup] | str:
-        if not isinstance(list_of_lists, list):
-            return f"Expected list of lists. Value: {str(list_of_lists)}"
-
-        text_groups = []
-
-        for lst in list_of_lists:
-
-            if not isinstance(lst, list):
-                return f"Expected list: {lst}"
-
-            result = Phrase.phrases_from_json_dicts(lst)
-            if isinstance(result, str):
-                err = result
-                return err
-
-            phrases = result
-            group = PhraseGroup(phrases)
-            text_groups.append(group)
-
-        return text_groups
-
-    @staticmethod
-    def phrase_groups_to_json_list(groups: list[PhraseGroup]) -> list[list[dict]]:
-        if not groups:
-            return []
-        result = []
-        for group in groups:
-            if group:
-                inner_list = group.to_json_dict_list()
-                result.append(inner_list)
-        return result
-
-    @staticmethod
-    def get_max_num_words(groups: list[PhraseGroup]) -> int:
-        value = 0
-        for group in groups:
-            for phrase in group.phrases:
-                value = max(value, phrase.num_words)
-        return value

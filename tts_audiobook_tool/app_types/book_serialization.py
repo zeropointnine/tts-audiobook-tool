@@ -8,7 +8,8 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.util import make_error_string
 
 
-BOOK_FORMAT = "book.v1"
+BOOK_FORMAT = "book.v2"
+LEGACY_BOOK_FORMAT = "book.v1"
 PHRASE_GROUPS_FORMAT = "phrase_groups.v1"
 LEGACY_LIST_FORMAT = "legacy_list"
 
@@ -17,8 +18,8 @@ def get_project_text_format(value: Any) -> str | None:
     if isinstance(value, list):
         return LEGACY_LIST_FORMAT
     if isinstance(value, dict):
-        if value.get("format") == BOOK_FORMAT:
-            return BOOK_FORMAT
+        if value.get("format") in (BOOK_FORMAT, LEGACY_BOOK_FORMAT):
+            return value["format"]
         if value.get("format") == PHRASE_GROUPS_FORMAT or "phrase_groups" in value:
             return PHRASE_GROUPS_FORMAT
     return None
@@ -80,7 +81,7 @@ def book_from_project_text_json_dict(
         return f"Project text file bad type: {type(value)}"
 
     format_value = value.get("format", PHRASE_GROUPS_FORMAT)
-    if format_value == BOOK_FORMAT:
+    if format_value in (BOOK_FORMAT, LEGACY_BOOK_FORMAT):
         if "book" not in value:
             return "Project text file missing 'book'"
         return book_from_json_dict(value["book"])

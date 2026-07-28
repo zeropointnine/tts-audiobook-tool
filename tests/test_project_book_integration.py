@@ -27,6 +27,9 @@ class TestProjectBookIntegration(unittest.TestCase):
     def make_phrase_group(self, text: str, reason: Reason = Reason.SENTENCE) -> PhraseGroup:
         return PhraseGroup([Phrase(text, reason)])
 
+    def legacy_phrase_groups_json(self, phrase_groups: list[PhraseGroup]) -> list[list[dict]]:
+        return [group.to_json_dict_list() for group in phrase_groups]
+
     def write_minimal_project_json(self, project_dir: str, extra: dict | None = None) -> None:
         payload = {
             "version": 2,
@@ -268,7 +271,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         phrase_groups = [self.make_phrase_group("One."), self.make_phrase_group("Two.")]
         text_payload = {
             "format": "phrase_groups.v1",
-            "phrase_groups": PhraseGroup.phrase_groups_to_json_list(phrase_groups),
+            "phrase_groups": self.legacy_phrase_groups_json(phrase_groups),
         }
 
         with tempfile.TemporaryDirectory() as project_dir:
@@ -287,11 +290,11 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(result.markers, [1])
         self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [2])
 
-    def test_project_load_migrates_phrase_groups_v1_project_text_to_book_v1(self):
+    def test_project_load_migrates_phrase_groups_v1_project_text_to_book_v2(self):
         phrase_groups = [self.make_phrase_group("One."), self.make_phrase_group("Two.")]
         text_payload = {
             "format": "phrase_groups.v1",
-            "phrase_groups": PhraseGroup.phrase_groups_to_json_list(phrase_groups),
+            "phrase_groups": self.legacy_phrase_groups_json(phrase_groups),
         }
 
         with tempfile.TemporaryDirectory() as project_dir:
@@ -310,7 +313,7 @@ class TestProjectBookIntegration(unittest.TestCase):
                 migrated_project_payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(migrated_payload["format"], "book.v1")
+        self.assertEqual(migrated_payload["format"], "book.v2")
         self.assertEqual(migrated_payload["book"]["text_source_kind"], "legacy_flat")
         self.assertEqual(len(migrated_payload["book"]["sections"]), 1)
         self.assertEqual(migrated_project_payload["markers"], [1])
@@ -319,7 +322,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertNotIn("applied_strategy", migrated_project_payload)
         self.assertNotIn("applied_max_words", migrated_project_payload)
 
-    def test_project_load_removes_stale_applied_fields_from_project_json_with_book_v1_text(self):
+    def test_project_load_removes_stale_applied_fields_from_project_json_with_book_v2_text(self):
         book = Book(
             title="Already Book",
             text_source_kind="epub",
@@ -348,16 +351,16 @@ class TestProjectBookIntegration(unittest.TestCase):
                 text_project_payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(text_project_payload["format"], "book.v1")
+        self.assertEqual(text_project_payload["format"], "book.v2")
         self.assertIn("markers", migrated_project_payload)
         self.assertNotIn("chapter_indices", migrated_project_payload)
         self.assertNotIn("applied_language_code", migrated_project_payload)
         self.assertNotIn("applied_strategy", migrated_project_payload)
         self.assertNotIn("applied_max_words", migrated_project_payload)
 
-    def test_project_load_migrates_bare_list_project_text_to_book_v1(self):
+    def test_project_load_migrates_bare_list_project_text_to_book_v2(self):
         phrase_groups = [self.make_phrase_group("Bare list.")]
-        text_payload = PhraseGroup.phrase_groups_to_json_list(phrase_groups)
+        text_payload = self.legacy_phrase_groups_json(phrase_groups)
 
         with tempfile.TemporaryDirectory() as project_dir:
             self.write_minimal_project_json(project_dir)
@@ -373,10 +376,12 @@ class TestProjectBookIntegration(unittest.TestCase):
                 migrated_payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(migrated_payload["format"], "book.v1")
-        self.assertEqual(migrated_payload["book"]["sections"][0]["phrase_groups"][0][0]["text"], "Bare list.")
+        self.assertEqual(migrated_payload["format"], "book.v2")
+        group_payload = migrated_payload["book"]["sections"][0]["phrase_groups"][0]
+        self.assertEqual(group_payload["voice_index"], -1)
+        self.assertEqual(group_payload["phrases"][0]["text"], "Bare list.")
 
-    def test_project_load_keeps_book_v1_project_text_as_book_v1(self):
+    def test_project_load_migrates_book_v1_project_text_to_book_v2(self):
         book = Book(
             title="Already Book",
             text_source_kind="epub",
@@ -387,8 +392,14 @@ class TestProjectBookIntegration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_dir:
             self.write_minimal_project_json(project_dir)
             text_path = os.path.join(project_dir, PROJECT_TEXT_FILE_NAME)
+            payload = book_to_project_text_json_dict(book)
+            payload["format"] = "book.v1"
+            for section in payload["book"]["sections"]:
+                section["phrase_groups"] = [
+                    group["phrases"] for group in section["phrase_groups"]
+                ]
             with open(text_path, "w", encoding="utf-8") as file:
-                json.dump(book_to_project_text_json_dict(book), file)
+                json.dump(payload, file)
 
             with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):
@@ -398,10 +409,11 @@ class TestProjectBookIntegration(unittest.TestCase):
                 payload = json.load(file)
 
         self.assertIsInstance(result, Project)
-        self.assertEqual(payload["format"], "book.v1")
+        self.assertEqual(payload["format"], "book.v2")
         self.assertEqual(payload["book"]["title"], "Already Book")
+        self.assertEqual(payload["book"]["sections"][0]["phrase_groups"][0]["voice_index"], -1)
 
-    def test_project_save_writes_book_v1_project_text(self):
+    def test_project_save_writes_book_v2_project_text(self):
         book = Book(
             title="Saved Book",
             text_source_kind="epub",
@@ -428,7 +440,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
                 project_payload = json.load(file)
 
-        self.assertEqual(payload["format"], "book.v1")
+        self.assertEqual(payload["format"], "book.v2")
         self.assertEqual(payload["book"]["title"], "Saved Book")
         self.assertEqual(payload["book"]["sections"][1]["title"], "Chapter 2")
         self.assertEqual(payload["book"]["segmentation_settings"]["language_code"], "en")
@@ -519,7 +531,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.audio_source_kind, "generated")
         self.assertEqual(project.applied_max_words, 50)
         self.assertEqual(project.markers, [])
-        self.assertEqual(payload["format"], "book.v1")
+        self.assertEqual(payload["format"], "book.v2")
         self.assertEqual(payload["book"]["title"], "Manual Title")
         self.assertEqual(payload["book"]["text_source_kind"], "manual")
 

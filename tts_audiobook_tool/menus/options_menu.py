@@ -1,4 +1,3 @@
-import torch
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
