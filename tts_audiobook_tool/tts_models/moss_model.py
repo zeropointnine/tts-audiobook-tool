@@ -322,10 +322,10 @@ class MossModel(MossBaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
     ) -> list[Sound] | str:
 
-        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MOSS, voice_rotation_index)
+        voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MOSS, voice_selection_index)
         if voice_file_name:
             voice_path = os.path.join(project.dir_path, voice_file_name)
         else:

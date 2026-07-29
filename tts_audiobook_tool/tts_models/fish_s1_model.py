@@ -128,7 +128,7 @@ class FishS1Model(FishS1BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -136,7 +136,7 @@ class FishS1Model(FishS1BaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.FISH_S1, voice_rotation_index
+            project, TtsModelType.FISH_S1, voice_selection_index
         )
         if voice_file_name:
             source_path = os.path.join(project.dir_path, voice_file_name)

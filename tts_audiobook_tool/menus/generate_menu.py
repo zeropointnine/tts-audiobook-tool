@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tts_audiobook_tool.app_types import Strictness, SttVariant
+from tts_audiobook_tool.app_types import Strictness, SttVariant, VoiceSelectMode
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_display, app_hint_util, hints
 from tts_audiobook_tool import ask, text_util
@@ -471,23 +471,41 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         if not should_continue:
             return
 
-    # Print confirmation info, and confirm
+    # Print germane pre-flight info, and confirm
     if not is_regen:
         s = f"- Will generate {len(indices)} lines in range {state.project.generate_range_string}"
         num = state.project.sound_segments.num_generated_in_current_range()
         if num:
             s += f" {COL_DIM}({num} already complete)"
         printt(s)
-        if CUSTOM_VOICE_ASSIGNMENT_FEATURE:
-            voice_values = ProjectVoiceUtil.get_voice_values(state.project, Tts.get_type())
-            if len(voice_values) > 1:
-                printt(f"- Voice sample selection mode: {state.project.voice_select_mode.label}")
         if show_stt_status:
             if not Stt.should_skip(state):
                 s = "- Speech-to-text validation enabled"
                 s += f" {COL_DIM}({Stt.short_description()})"
             else:
                 s = "- Speech-to-text validation disabled"
+            printt(s)
+        voice_values = ProjectVoiceUtil.get_voice_values(state.project, Tts.get_type())
+        if len(voice_values) > 1:
+            s = f"- Voice selection mode: "
+            if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED and ProjectVoiceUtil.get_batch_size(state.project) > 1:
+                s += f"{Ansi.STRIKETHROUGH}{state.project.voice_select_mode.label}{Ansi.RESET}"
+                s += f"\n  {COL_ERROR}Warning: User-defined voice selections are not supported in batch mode"
+                s += f"\n  {COL_ERROR}         Voice sample 1 will be used for all generations"
+            else:
+                s += f"{state.project.voice_select_mode.label}"
+                if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
+                    num_invalid_voice_indices = sum(
+                        not 0 <= state.project.phrase_groups[index].voice_index < len(voice_values)
+                        for index in indices
+                    )
+                    if num_invalid_voice_indices:
+                        selection_word = make_noun(
+                            "selection",
+                            "selections",
+                            num_invalid_voice_indices,
+                        )
+                        s +=f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
             printt(s)
         if state.project.gen_auto_concat:
             printt("- Will concatenate audio file/s when finished")

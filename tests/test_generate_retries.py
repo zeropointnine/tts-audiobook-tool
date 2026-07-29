@@ -43,7 +43,7 @@ def test_generate_files_retries_validation_failures_up_to_project_limit() -> Non
             patch("tts_audiobook_tool.generate_util.readiness.get_generate_blocker_text", return_value=""), \
             patch("tts_audiobook_tool.generate_util.Tts.get_instance", return_value=SimpleNamespace(get_warning_issues=lambda _: [])), \
             patch("tts_audiobook_tool.generate_util.Tts.clear_continuation"), \
-            patch("tts_audiobook_tool.generate_util.Tts.reset_voice_rotation_index"), \
+            patch("tts_audiobook_tool.generate_util.Tts.reset_voice_selection_index"), \
             patch("tts_audiobook_tool.generate_util.ProjectVoiceUtil.is_language_cjk", return_value=False), \
             patch("tts_audiobook_tool.generate_util.app_memory.show_vram_memory_warning_if_necessary", return_value=False), \
             patch("tts_audiobook_tool.generate_util.GenerateUtil.generate_and_validate_batch", side_effect=generate_and_validate_batch), \

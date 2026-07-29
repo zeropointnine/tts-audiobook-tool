@@ -40,14 +40,16 @@ def print_feedback(
         is_error=False,
         no_preformat=False,
         extra_line=True,
-        skip_pause=False
+        skip_pause=False,
+        long_pause=False
 ) -> None:
     """
     Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
     and submenu is about to be re-printed.
 
-    :param is_error: if True, prints message in red, and shows an enter prompt
-    :param no_pause: if True, doesn't do the typical slight pause
+    :param is_error: If True, prints message in red, and always shows an enter prompt
+    :param no_pause: If True, doesn't do the typical slight pause
+    :param long_pause: If True, pauses 2x longer  
     """
     if not no_preformat:
         message = Ansi.ITALICS + (COL_ERROR if is_error else COL_DIM) + message
@@ -63,8 +65,8 @@ def print_feedback(
             sleep_duration = 0.0
         else:        
             sleep_duration = PRINT_FEEDBACK_PAUSE_NO_CLEAR_SCREEN if _menu_clears_screen else PRINT_FEEDBACK_PAUSE_CLEAR_SCREEN
-            if is_error:
-                sleep_duration *= 2.0
+            if long_pause:
+                sleep_duration *= 2
         time.sleep(sleep_duration)
         
     if extra_line:

@@ -1,0 +1,35 @@
+$col-accent: #ffaa44;
+$col-error: #ff0000;
+$col-dim: #888888;
+$col-ok: #00ff00;
+$col-default: ansi_default;
+
+/* Used by the test suite to verify that this shared stylesheet was loaded. */
+#textual-shared-css-test {
+    color: #123456;
+}
+
+Screen {
+    layout: vertical;
+}
+
+Screen:ansi.-screen-suspended {
+    text-style: none !important;
+}
+
+#header {
+    overflow: hidden;
+}
+
+#header > .header-line {
+    height: 1;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#header-divider {
+    height: 1;
+    margin: 0;
+    color: $col-dim;
+}
+

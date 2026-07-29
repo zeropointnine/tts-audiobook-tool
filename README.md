@@ -665,6 +665,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
+**2026-07-29**
+
+- Added **voice selections editor**. When using multiple voice samples, voice samples can now be assigned on a line-by-line basis. `Voice > Edit voice selections`.
+
 **2026-07-15**
 
 - Added detection for potentially cut-off words at the end of generated audio

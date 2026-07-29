@@ -1,0 +1,25 @@
+#line-list {
+    height: 1fr;
+    max-height: 100%;
+    border: none;
+    padding: 0;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#line-list:focus {
+    border: none;
+    background-tint: transparent;
+}
+
+#line-list > .option-list--option-highlighted,
+#line-list:focus > .option-list--option-highlighted {
+    text-style: reverse;
+}
+
+#selection-status {
+    height: 1;
+    color: $col-dim;
+    text-style: italic;
+    content-align: right middle;
+}

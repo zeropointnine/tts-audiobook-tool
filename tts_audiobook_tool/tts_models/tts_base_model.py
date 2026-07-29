@@ -73,7 +73,7 @@ class TtsBaseModel(ABC):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
     ) -> list[Sound] | str:
         """
         Generates Sound/s using the relevant TTS model attributes in the `project` object.

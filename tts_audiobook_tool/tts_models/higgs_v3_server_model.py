@@ -22,12 +22,12 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        
         voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.HIGGS_V3_SERVER, voice_rotation_index
+            project, TtsModelType.HIGGS_V3_SERVER, voice_selection_index
         )
 
         temperature = project.higgs_v3_temperature if project.higgs_v3_temperature != -1 else HiggsV3ServerBaseModel.DEFAULT_TEMPERATURE

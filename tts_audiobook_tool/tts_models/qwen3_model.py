@@ -148,7 +148,7 @@ class Qwen3Model(Qwen3BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
@@ -163,7 +163,7 @@ class Qwen3Model(Qwen3BaseModel):
             case "base":
 
                 voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-                    project, TtsModelType.QWEN3TTS, voice_rotation_index
+                    project, TtsModelType.QWEN3TTS, voice_selection_index
                 )
                 can = voice_file_name and voice_transcript
                 if can:

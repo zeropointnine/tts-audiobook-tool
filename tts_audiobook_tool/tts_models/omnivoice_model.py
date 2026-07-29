@@ -94,11 +94,11 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
     ) -> list[Sound] | str:
 
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.OMNIVOICE, voice_rotation_index
+            project, TtsModelType.OMNIVOICE, voice_selection_index
         )
         voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
         instruct = project.omnivoice_instruct

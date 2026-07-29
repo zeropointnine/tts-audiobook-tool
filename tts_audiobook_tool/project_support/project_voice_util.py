@@ -64,11 +64,11 @@ class ProjectVoiceUtil:
         return values[0] if values else ""
 
     @staticmethod
-    def current_voice_value(project: Project, tts_model_type: TtsModelType, voice_rotation_index: int) -> str:
+    def current_voice_value(project: Project, tts_model_type: TtsModelType, voice_selection_index: int) -> str:
         values = ProjectVoiceUtil.get_voice_values(project, tts_model_type)
         if not values:
             return ""
-        return values[voice_rotation_index % len(values)]
+        return values[voice_selection_index % len(values)]
 
     @staticmethod
     def make_voice_sample_display_label(project: Project, file_name: str, tts_model_spec: TtsModelSpec) -> str:
@@ -100,13 +100,13 @@ class ProjectVoiceUtil:
     def current_voice_reference_pair(
             project: Project,
             tts_model_type: TtsModelType,
-            voice_rotation_index: int,
+            voice_selection_index: int,
     ) -> tuple[str, str]:
         voices = ProjectVoiceUtil.get_voice_values(project, tts_model_type)
         if not voices:
             return "", ""
 
-        index = voice_rotation_index % len(voices)
+        index = voice_selection_index % len(voices)
         transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_model_type)
         transcript = transcripts[index] if index < len(transcripts) else ""
         return voices[index], transcript

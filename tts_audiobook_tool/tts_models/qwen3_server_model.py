@@ -24,12 +24,12 @@ class Qwen3ServerModel(Qwen3ServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.QWEN3TTS_SERVER, voice_rotation_index
+            project, TtsModelType.QWEN3TTS_SERVER, voice_selection_index
         )
 
         temperature = project.qwen3_temperature

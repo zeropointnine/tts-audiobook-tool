@@ -23,12 +23,12 @@ class FishS2ServerModel(FishS2ServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
 
         voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.FISH_S2_SERVER, voice_rotation_index
+            project, TtsModelType.FISH_S2_SERVER, voice_selection_index
         )
 
         temperature = project.fish_s2_temperature if project.fish_s2_temperature != -1 else FishS2BaseModel.TEMPERATURE_DEFAULT

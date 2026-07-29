@@ -271,19 +271,19 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
         "auto_advance",
         "auto-advance",
         "Auto-advance",
-        "Cycles through voice samples in order, one per generation.",
+        "Cycles through voice samples in order, on each batch generation",
     )
-    CUSTOM = (
+    USER_DEFINED = (
         "custom",
-        "custom",
-        "Custom",
-        "Use the voice sample assigned to each phrase when generating it individually.",
+        "user-defined",
+        "User-defined",
+        "Uses user-defined voice sample selections for each text line",
     )
     DISABLED = (
         "disabled",
         "disabled",
         "Disabled",
-        "Always use the first voice sample for every generation.",
+        "Uses the first voice sample for every generation",
     )
 
     @property
@@ -303,16 +303,16 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
         return self.value[3]
 
     @staticmethod
-    def get_default() -> VoiceSelectMode:
-        return VoiceSelectMode.AUTO_ADVANCE
-
-    @staticmethod
     def get_by_id(id: str) -> VoiceSelectMode | None:
         for item in VoiceSelectMode:
             if id == item.id:
                 return item
         return None
     
+    @staticmethod
+    def get_default() -> VoiceSelectMode:
+        return VoiceSelectMode.AUTO_ADVANCE
+
 # ---
 
 @dataclass

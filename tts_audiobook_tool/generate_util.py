@@ -119,7 +119,7 @@ class GenerateUtil:
         # Audiobook generation is a top-level generation run. Start from a
         # fresh rolling-continuation context, independent of any prior run.
         Tts.clear_continuation()
-        Tts.reset_voice_rotation_index()
+        Tts.reset_voice_selection_index()
 
         # Loop through items in the batch
         while items:
@@ -535,34 +535,48 @@ class GenerateUtil:
             prompts.append(prompt)
 
         # Generate
-        voice_rotation_index = -1
+        voice_selection_index = -1
         voice_tag = ""
         if Tts.get_type() == TtsModelType.NONE:
             result = "No active TTS model"
         else:
             voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
+            has_voice_values = bool(voice_values)
+            is_user_defined_voice_mode = project.voice_select_mode == VoiceSelectMode.USER_DEFINED
+            is_multi_item_batch = len(indices) > 1
             use_custom_voice_index = (
                 len(indices) == 1
-                and project.voice_select_mode == VoiceSelectMode.CUSTOM
-                and bool(voice_values)
+                and is_user_defined_voice_mode
+                and has_voice_values
+            )
+            use_first_voice_for_unsupported_user_defined_batch = (
+                is_multi_item_batch
+                and is_user_defined_voice_mode
+                and has_voice_values
             )
             if project.voice_select_mode == VoiceSelectMode.DISABLED:
-                voice_rotation_index = 0
+                voice_selection_index = 0
+            elif use_first_voice_for_unsupported_user_defined_batch:
+                # User-defined voice selections are per line. A multi-line model
+                # batch can only receive one voice_selection_index, so use the
+                # documented fallback from the Generate menu warning: the first
+                # voice sample is used for every item in this batch.
+                voice_selection_index = 0
             elif use_custom_voice_index:
                 requested_voice_index = phrase_groups[indices[0]].voice_index
-                voice_rotation_index = (
-                    requested_voice_index
-                    if 0 <= requested_voice_index < len(voice_values)
-                    else 0
+                # Silently clamp invalid (presumably stale) index to the nearest valid voice index
+                voice_selection_index = min(
+                    max(requested_voice_index, 0),
+                    len(voice_values) - 1,
                 )
             else:
-                voice_rotation_index = Tts.get_next_voice_rotation_index()
-            voice_tag = Tts.get_voice_tag_for_rotation_index(project, voice_rotation_index)
+                voice_selection_index = Tts.get_next_voice_selection_index()
+            voice_tag = Tts.get_voice_tag_for_selection_index(project, voice_selection_index)
             result = Tts.generate_using_project(
                 project,
                 prompts,
                 force_random_seed,
-                voice_rotation_index=voice_rotation_index,
+                voice_selection_index=voice_selection_index,
                 print_generation_request=print_generation_request
             )
 

@@ -22,7 +22,11 @@ class VoiceChatterboxMenu:
             )
 
             items.append( 
-                MenuItem(make_type_label, lambda _, __: ask_type(state)) 
+                MenuItem(
+                    make_model_type_label, 
+                    lambda _, __: ask_type(state), 
+                    superlabel=VOICE_ADVANCED_SUPERLABEL
+                ) 
             )
 
             if state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
@@ -61,7 +65,6 @@ class VoiceChatterboxMenu:
                 default_value=ChatterboxBaseModel.DEFAULT_TEMPERATURE, 
                 min_value=0.01, max_value=2.0
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             items.append(
@@ -114,7 +117,7 @@ class VoiceChatterboxMenu:
         
         VoiceMenuShared.menu_wrapper(state, make_items)
 
-def make_type_label(state: State) -> str:
+def make_model_type_label(state: State) -> str:
     return make_menu_label("Select model", state.project.chatterbox_type.label)
 
 def ask_type(state: State) -> None:

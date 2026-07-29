@@ -125,7 +125,7 @@ class HiggsV2Model(HiggsV2BaseModel):
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
@@ -133,7 +133,7 @@ class HiggsV2Model(HiggsV2BaseModel):
         prompt = prompts[0]
 
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.HIGGS_V2, voice_rotation_index
+            project, TtsModelType.HIGGS_V2, voice_selection_index
         )
         if voice_file_name:
             voice_path = os.path.join(project.dir_path, voice_file_name)

@@ -41,6 +41,7 @@ pywin32; sys_platform == 'win32'
 requests
 sounddevice==0.5.2
 soundfile==0.13.1
+textual==8.2.8
 watchdog==6.0.0
 whisper_normalizer==0.1.12
 text2num==3.0.1

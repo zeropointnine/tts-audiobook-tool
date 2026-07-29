@@ -68,29 +68,29 @@ class Tts:
 
     _model_params: dict = {}
     _force_cpu: bool = False
-    _voice_rotation_counter: int = 0
-    _voice_rotation_lock = threading.Lock()
+    _voice_auto_advance_counter: int = 0
+    _voice_auto_advance_lock = threading.Lock()
 
     @staticmethod
-    def get_next_voice_rotation_index() -> int:
-        with Tts._voice_rotation_lock:
-            index = Tts._voice_rotation_counter
-            Tts._voice_rotation_counter += 1
+    def get_next_voice_selection_index() -> int:
+        with Tts._voice_auto_advance_lock:
+            index = Tts._voice_auto_advance_counter
+            Tts._voice_auto_advance_counter += 1
         return index
 
     @staticmethod
-    def reset_voice_rotation_index() -> None:
-        with Tts._voice_rotation_lock:
-            Tts._voice_rotation_counter = 0
+    def reset_voice_selection_index() -> None:
+        with Tts._voice_auto_advance_lock:
+            Tts._voice_auto_advance_counter = 0
 
     @staticmethod
-    def get_voice_tag_for_rotation_index(project, voice_rotation_index: int) -> str:
+    def get_voice_tag_for_selection_index(project, voice_selection_index: int) -> str:
         info = Tts.get_info()
         if not info.voice_target_attr:
             return Tts.get_class().get_voice_tag(project)
 
         from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-        voice_value = ProjectVoiceUtil.current_voice_value(project, Tts.get_type(), voice_rotation_index)
+        voice_value = ProjectVoiceUtil.current_voice_value(project, Tts.get_type(), voice_selection_index)
         if not voice_value:
             return Tts.get_class().get_voice_tag(project)
         return Tts.get_class().get_voice_tag_for_value(voice_value)
@@ -339,7 +339,7 @@ class Tts:
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             print_generation_request: bool = False,
-            voice_rotation_index: int | None = None,
+            voice_selection_index: int | None = None,
     ):
         """
         All app-level TTS generation goes through this function.
@@ -353,19 +353,19 @@ class Tts:
         transforms such as VibeVoice speaker tagging.
         """
         instance = Tts.get_instance()
-        if voice_rotation_index is None:
-            voice_rotation_index = Tts.get_next_voice_rotation_index()
+        if voice_selection_index is None:
+            voice_selection_index = Tts.get_next_voice_selection_index()
         L.i(
             f"Tts.generate_using_project dispatch: type={Tts._type.value.id} "
             f"instance={type(instance).__name__} prompts={len(prompts)} "
-            f"voice_rotation_index={voice_rotation_index} "
+            f"voice_selection_index={voice_selection_index} "
             f"has_on_stream_chunk={on_stream_chunk is not None} has_on_stream_end={on_stream_end is not None}"
         )
         prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
         kwargs = {
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
-            "voice_rotation_index": voice_rotation_index,
+            "voice_selection_index": voice_selection_index,
         }
         if Tts._type.value.is_sgl_omni: 
             kwargs["print_generation_request"] = print_generation_request

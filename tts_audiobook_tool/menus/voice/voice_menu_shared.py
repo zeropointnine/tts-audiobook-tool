@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint, SttVariant, VoiceSelectMode
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
+from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -114,7 +115,7 @@ class VoiceMenuShared:
             currently = make_currently_string("none", color_code=COL_ERROR)
         else:
             currently = make_currently_string(ProjectVoiceUtil.get_voice_label(state.project))
-        return f"Select voice clone sample {currently}"
+        return f"Add voice sample {currently}"
 
     @staticmethod
     def ask_and_set_voice_file(
@@ -253,7 +254,7 @@ class VoiceMenuShared:
             if len(voices) > 1:
                 suffix += f", +{len(voices) - 1} more"
             currently = make_currently_string(suffix)
-            return f"Manage voice sample/s {currently}"
+            return f"Add/remove voice samples {currently}"
 
         def on_item(s: State, __: MenuItem) -> None:
             voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
@@ -293,15 +294,16 @@ class VoiceMenuShared:
             )
         ]
         voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
-        if len(voices) > 1 and CUSTOM_VOICE_ASSIGNMENT_FEATURE:
+        if len(voices) > 1:
             items.append(VoiceMenuShared.make_voice_sample_selection_mode_item())
+        items.append(VoiceMenuShared.make_assign_voice_samples_to_text_lines_item(tts_type))
         return items
 
     @staticmethod
     def make_voice_sample_selection_mode_item() -> MenuItem:
         def make_label(state: State) -> str:
             return make_menu_label(
-                "Voice sample selection mode",
+                "Voice selection mode",
                 state.project.voice_select_mode.current_label,
             )
 
@@ -311,17 +313,44 @@ class VoiceMenuShared:
         )
 
     @staticmethod
+    def make_assign_voice_samples_to_text_lines_item(tts_type: TtsModelType) -> MenuItem:
+        def make_label(state: State) -> str:
+            label = "Edit voice selections"
+            voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+            if len(voices) < 2:
+                label += f" {COL_DIM}(optional; requires 2+ voice samples)"
+            elif state.project.voice_select_mode is not VoiceSelectMode.USER_DEFINED:
+                label += f" {COL_DIM}(optional; requires voice selection mode = user-defined)"
+            return label
+
+        def on_item(state: State, _: MenuItem) -> None:
+            voices = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+            if len(voices) < 2:
+                print_feedback("Requires 2+ voice samples")
+                return
+            VoiceMenuShared.assign_voice_samples_to_text_lines(state)
+
+        return MenuItem(
+            make_label,
+            on_item,
+        )
+
+    @staticmethod
+    def assign_voice_samples_to_text_lines(state: State) -> None:
+        VoiceLineEditorTextualApp.start(state.project)
+
+    @staticmethod
     def voice_sample_selection_mode_submenu(state: State) -> None:
         modes = list(VoiceSelectMode)
 
         def on_select(value: VoiceSelectMode) -> None:
             state.project.voice_select_mode = value
             state.project.save()
-            print_feedback("Voice sample selection mode set to:", value.id)
+            print_feedback("Voice selection mode set to:", value.id)
 
         MenuUtil.options_menu(
             state=state,
-            heading_text="Voice sample selection mode",
+            heading_text="Voice selection mode",
             labels=[mode.label for mode in modes],
             values=modes,
             current_value=state.project.voice_select_mode,
@@ -333,11 +362,7 @@ class VoiceMenuShared:
     @staticmethod
     def make_voice_samples_subheading(project: Project, tts_type: TtsModelType) -> str:
         voices = ProjectVoiceUtil.get_voice_values(project, tts_type)
-        if len(voices) > 1:
-            line = "Multiple samples cycle in order, one per generation."
-        else:
-            line = "When using multiple samples, they will cycle in order, one per generation."
-        lines = [line, ""]
+        lines = []
         for i, voice in enumerate(voices, start=1):
             label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
             lines.append(f"- {i}) {label}")
@@ -365,24 +390,26 @@ class VoiceMenuShared:
                 on_clear_callback()
             return is_empty
 
-        def make_items(_: State) -> list[MenuItem]:
-            return [
-                MenuItem(
-                    "Add another voice clone sample",
-                    lambda s, __: add_voice(s),
-                ),
-                MenuItem(
-                    "Remove voice clone sample",
-                    lambda s, __: remove_voice(s),
-                ),
-            ]
+        def make_items(s: State) -> list[MenuItem]:
+            items = []
+            voices = ProjectVoiceUtil.get_voice_values(s.project, tts_type)
+            if len(voices) < 9:
+                items.append(MenuItem(
+                    "Add voice sample",
+                    lambda state, __: add_voice(state),
+                ))
+            items.append(MenuItem(
+                "Remove voice sample",
+                lambda state, __: remove_voice(state),
+            ))
+            return items
 
         MenuUtil.menu(
             state=state,
-            heading="Manage voice sample/s",
+            heading="Add/remove voice sample",
             items=make_items,
             subheading=lambda s: VoiceMenuShared.make_voice_samples_subheading(s.project, tts_type),
-            breadcrumb="Voice clone samples",
+            breadcrumb="Voice samples",
         )
 
     @staticmethod
@@ -391,23 +418,31 @@ class VoiceMenuShared:
         if not voices:
             return True
 
-        if len(voices) == 1:
-            index = 0
-        else:
-            inp = ask.ask("Which voice sample to remove? ")
+        index = 0
+        clear_all = False
+        label = ""
+        if len(voices) > 1:
+            printt(f"Enter voice sample number to remove {COL_DIM}(or \"all\" to clear all)")
+            inp = ask.ask()
             if not inp:
                 return False
-            try:
-                index = int(inp) - 1
-            except ValueError:
-                print_feedback("Bad value", is_error=True)
-                return False
-            if index < 0 or index >= len(voices):
-                print_feedback("Bad value", is_error=True)
-                return False
+            if inp.lower() in {"a", "all"}:
+                ProjectVoiceUtil.clear_voice_and_save(state.project, tts_type)
+                label = "all"
+                clear_all = True
+            else:
+                try:
+                    index = int(inp) - 1
+                except ValueError:
+                    print_feedback("Bad value", is_error=True)
+                    return False
+                if index < 0 or index >= len(voices):
+                    print_feedback("Bad value", is_error=True)
+                    return False
 
-        removed = ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
-        label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, removed, tts_type.value)
+        if not clear_all:
+            removed = ProjectVoiceUtil.remove_voice_at_index_and_save(state.project, tts_type, index)
+            label = ProjectVoiceUtil.make_voice_sample_display_label(state.project, removed, tts_type.value)
         print_feedback(f"Removed {label}")
         return not ProjectVoiceUtil.get_voice_values(state.project, tts_type)
 

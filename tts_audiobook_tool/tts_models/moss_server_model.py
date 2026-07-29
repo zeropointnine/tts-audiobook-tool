@@ -28,12 +28,12 @@ class MossServerModel(MossServerBaseModel):
             force_random_seed: bool = False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
-            voice_rotation_index: int = 0,
+            voice_selection_index: int = 0,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.MOSS_SERVER, voice_rotation_index
+            project, TtsModelType.MOSS_SERVER, voice_selection_index
         )
 
         temperature = project.moss_delay_temperature if project.moss_delay_temperature != -1 else MossServerBaseModel.CONFIG.value.temperature_default
