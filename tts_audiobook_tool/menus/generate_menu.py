@@ -16,6 +16,9 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.textual.review_segments_editor import (
+    ReviewSegmentsEditorTextualApp,
+)
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -84,15 +87,23 @@ class GenerateMenu:
             items.append(
                 MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
             )
-            # Re-generate
-            items.append(
-                MenuItem(
-                    make_regen_label, 
-                    lambda _, __: regenerate_menu(state)
-                )
-            )
+
             if state.project.sound_segments.num_generated() > 0:
-                items.append(MenuItem(f"Delete segments", lambda _, __: ask_delete_segments(state)))
+                # Review/delete
+                items.append(
+                    MenuItem(
+                        "Review/delete segments",
+                        lambda _, __: ReviewSegmentsEditorTextualApp.start(state.project),
+                        superlabel=" ", superlabel_no_blank_line=True
+                    )
+                )
+                # Re-generate
+                items.append(
+                    MenuItem(
+                        make_regen_label, 
+                        lambda _, __: regenerate_menu(state)
+                    )
+                )
 
             show_batch_item = Tts.get_type().value.can_batch
 
@@ -577,7 +588,7 @@ a certain duration.
 Larger values can be used to prevent long pauses (eg, 1-2 seconds). 
 
 Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
-Best used with \"Text segmentation strategy: Normal.\" 
+Best used with \"Text segmentation strategy: Sentence.\" 
 
 This setting also applies to realtime playback, voice chat, stand-alone server.
 """

@@ -18,16 +18,18 @@ class VoiceGlmMenu:
             items.extend(
                 VoiceMenuShared.make_voice_sample_items(state, TtsModelType.GLM)
             )
+
             items.append(
                 MenuItem(
                     make_menu_label("Model samplerate", str(state.project.glm_sr) + "hz"),
-                    lambda _, __: samplerate_menu(state)
+                    lambda _, __: samplerate_menu(state),
+                    superlabel = VOICE_ADVANCED_SUPERLABEL
                 )
             )
             
-            item = VoiceMenuShared.make_seed_item(state, "glm_seed")
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
-            items.append(item)
+            items.append(
+                VoiceMenuShared.make_seed_item(state, "glm_seed")
+            )
             
             return items
 

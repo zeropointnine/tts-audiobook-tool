@@ -71,10 +71,10 @@ def set_seed(seed: int) -> None:
 
 
 def play_done_sound() -> None:
-    from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+    from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 
     done_wav_path = make_assets_file_path("done.wav")
-    SoundFileUtil.play_sound_file_async(done_wav_path)
+    PlaySoundUtil.play_sound_file_async(done_wav_path)
 
 
 def make_memory_string(base_color=COL_DIM) -> str:
@@ -190,4 +190,3 @@ def print_warm_up_result_stop(result: ModelWarmUpResult) -> None:
         print_feedback("\nCancelled")
     elif result.error:
         print_feedback(f"\n{COL_ERROR}Model initialization failed:\n\n{result.error}")
-

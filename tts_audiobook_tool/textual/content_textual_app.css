@@ -17,7 +17,21 @@
     text-style: reverse;
 }
 
+#status-bar {
+    height: 1;
+    layout: horizontal;
+}
+
+#playing-status {
+    width: 1fr;
+    height: 1;
+    color: $col-dim;
+    text-style: italic;
+    content-align: left middle;
+}
+
 #selection-status {
+    width: 1fr;
     height: 1;
     color: $col-dim;
     text-style: italic;

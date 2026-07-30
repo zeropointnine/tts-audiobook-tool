@@ -234,8 +234,8 @@ class OptionsMenu:
                 state.prefs.save_debug_files = value
             print_feedback(f"Set to:", str(state.prefs.save_debug_files))
 
-        subheading = f"Saves intermediate sound files alongside the \n"
-        subheading += f"final sound segment FLAC files.\n"
+        subheading = f"Saves intermediate sound files alongside finalized\n"
+        subheading += f"sound segment FLAC files in the project directory.\n"
 
         MenuUtil.options_menu(
             state=state,

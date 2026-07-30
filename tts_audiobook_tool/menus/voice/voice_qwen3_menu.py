@@ -114,7 +114,7 @@ class VoiceQwen3Menu:
 
             # Model, clear model
             items.append(
-                MenuItem(make_target_label, lambda _, __: target_submenu(state))
+                MenuItem(make_target_label, lambda _, __: target_submenu(state), superlabel = VOICE_ADVANCED_SUPERLABEL)
             )
             if state.project.qwen3_target:
                 items.append(
@@ -131,7 +131,6 @@ class VoiceQwen3Menu:
                     qualifier_line="Qwen3-TTS model must be of type \"base\", and batch size must be 1."
                 )
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             default_temp = Tts.get_qwen3().generate_defaults.get(

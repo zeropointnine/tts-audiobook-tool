@@ -73,7 +73,11 @@ class VoiceOmniVoiceMenu:
             )
 
             items.append(
-                MenuItem(make_instruct_label, lambda _, __: ask_instruct(state.project))
+                MenuItem(
+                    make_instruct_label, 
+                    lambda _, __: ask_instruct(state.project),
+                    superlabel = VOICE_ADVANCED_SUPERLABEL
+                )
             )
             if state.project.omnivoice_instruct:
                 items.append(MenuItem("Clear instructions", on_clear_instruct))
@@ -85,7 +89,6 @@ class VoiceOmniVoiceMenu:
                 items.append(MenuItem("Clear custom model", on_clear_model_target))
 
             steps_item = MenuItem(make_steps_label, lambda _, __: ask_steps(state.project))
-            steps_item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(steps_item)
 
             speed_item = MenuItem(make_speed_label, lambda _, __: ask_speed(state.project))

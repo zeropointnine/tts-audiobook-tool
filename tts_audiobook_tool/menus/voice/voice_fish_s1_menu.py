@@ -22,7 +22,8 @@ class VoiceFishS1Menu:
             items.append(
                 MenuItem(
                     make_menu_label("Torch compile", state.project.fish_s1_compile_enabled),
-                    lambda _, __: VoiceFishS1Menu.compile_menu(state)
+                    lambda _, __: VoiceFishS1Menu.compile_menu(state), 
+                    superlabel=VOICE_ADVANCED_SUPERLABEL
                 )
             )
 
@@ -33,7 +34,6 @@ class VoiceFishS1Menu:
                 min_value=0.01,
                 max_value=2.0
             )
-            temperature_item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(temperature_item)
 
             items.append(

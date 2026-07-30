@@ -66,7 +66,13 @@ class VoicePocketMenu:
                     )
                 )
 
-            items.append(MenuItem(make_language_label, lambda _, __: ask_language(state)))
+            items.append(
+                MenuItem(
+                    make_language_label, 
+                    lambda _, __: ask_language(state),
+                    superlabel = VOICE_ADVANCED_SUPERLABEL
+                )
+            )
 
             item = VoiceMenuShared.make_temperature_item(
                 state=state,
@@ -75,7 +81,6 @@ class VoicePocketMenu:
                 min_value=PocketBaseModel.TEMPERATURE_MIN,
                 max_value=PocketBaseModel.TEMPERATURE_MAX
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             items.append(

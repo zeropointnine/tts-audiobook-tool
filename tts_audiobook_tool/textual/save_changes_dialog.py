@@ -10,7 +10,7 @@ from textual.widgets import Button, Static
 
 
 class ExitDecision(Enum):
-    SAVE = "save"
+    CONFIRM = "save"
     DISCARD = "discard"
     CANCEL = "cancel"
 
@@ -19,11 +19,11 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
 
     STYLE_DIM = "#888888"
 
-    AUTO_FOCUS = "#save"
+    AUTO_FOCUS = "#yes"
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("s", "save", "Save", show=False),
-        Binding("d", "discard", "Discard", show=False),
+        Binding("y", "confirm", "Yes", show=False),
+        Binding("n", "discard", "No", show=False),
         Binding("escape", "cancel", "Cancel", show=False),
     ]
 
@@ -37,14 +37,14 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
 
     #save-changes-dialog {
         width: 62;
-        height: 9;
+        height: auto;
         padding: 1 2;
         border: round $dialog-dim;
         background: ansi_default;
     }
 
-    #save-changes-question {
-        height: 2;
+    .save-changes-copy {
+        height: 1;
         content-align: center middle;
     }
 
@@ -74,19 +74,38 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
     }
     """
 
+    def __init__(
+        self,
+        copy_line_1: str = "Save changes before exiting?",
+        copy_line_2: str = "",
+    ) -> None:
+        super().__init__()
+        self.copy_line_1 = copy_line_1
+        self.copy_line_2 = copy_line_2
+
     def compose(self) -> ComposeResult:
         yield Vertical(
             Static(
-                "Save changes before exiting?",
-                id="save-changes-question",
+                self.copy_line_1,
+                id="save-changes-copy-line-1",
+                classes="save-changes-copy",
                 markup=False,
             ),
+            *(
+                [
+                    Static(
+                        self.copy_line_2,
+                        id="save-changes-copy-line-2",
+                        classes="save-changes-copy",
+                        markup=False,
+                    )
+                ]
+                if self.copy_line_2
+                else []
+            ),
             Horizontal(
-                Button(Content.from_text("[S]ave", markup=False), id="save"),
-                Button(
-                    Content.from_text("[D]iscard", markup=False),
-                    id="discard",
-                ),
+                Button(Content.from_text("[Y]es", markup=False), id="yes"),
+                Button(Content.from_text("[N]o", markup=False), id="no"),
                 Button("Cancel", id="cancel"),
                 id="save-changes-buttons",
             ),
@@ -95,15 +114,15 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         decisions = {
-            "save": ExitDecision.SAVE,
-            "discard": ExitDecision.DISCARD,
+            "yes": ExitDecision.CONFIRM,
+            "no": ExitDecision.DISCARD,
             "cancel": ExitDecision.CANCEL,
         }
         if event.button.id in decisions:
             self.dismiss(decisions[event.button.id])
 
-    def action_save(self) -> None:
-        self.dismiss(ExitDecision.SAVE)
+    def action_confirm(self) -> None:
+        self.dismiss(ExitDecision.CONFIRM)
 
     def action_discard(self) -> None:
         self.dismiss(ExitDecision.DISCARD)

@@ -1,8 +1,5 @@
 import os
 import librosa
-import sounddevice as sd
-import numpy as np
-import threading
 import soundfile
 
 from tts_audiobook_tool.app_types import Sound
@@ -11,9 +8,6 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
 class SoundFileUtil:
-
-    _current_playback_thread = None
-    _stop_playback_event = threading.Event()
 
     @staticmethod
     def load(path: str, target_sr: int=0) -> Sound | str:
@@ -139,97 +133,3 @@ class SoundFileUtil:
             return "", err
 
         return dest_file_path, ""
-
-    @staticmethod
-    def stop_sound_async() -> bool:
-        """
-        Stops a sound that is playing using `play_sound_async()`.
-        Returns True if there was a sound to be stopped.
-        """
-
-        # Signal previous thread to stop if it exists and is alive
-        if SoundFileUtil._current_playback_thread and SoundFileUtil._current_playback_thread.is_alive():
-            SoundFileUtil._stop_playback_event.set() # Set the event to signal stopping
-            SoundFileUtil._current_playback_thread.join(timeout=0.5) # Wait a short time for it to stop
-            return True
-        else:
-            return False
-
-    @staticmethod
-    def play_sound_file_async(path: str) -> None:
-        """ Plays sound file. Returns error string on failure. """
-        try:
-            data, sr = soundfile.read(path, dtype='float32', always_2d=False) # type: ignore
-            sr = int(sr)
-            # Ensure mono
-            if data.ndim > 1:
-                data = data.mean(axis=1)
-            sound = Sound(data, sr)
-            # Resample to app sample rate so audio plays at the correct pitch/speed
-            if sr != APP_SAMPLE_RATE:
-                sound = Sound(librosa.resample(sound.data, orig_sr=sr, target_sr=APP_SAMPLE_RATE), APP_SAMPLE_RATE)
-            SoundFileUtil.play_sound_async(sound)
-        except Exception as e:
-            pass
-
-    @staticmethod
-    def play_sound_async(sound: Sound) -> None:
-        """
-        Plays in-memory sound data asynchronously.
-        A new playback will cancel the previous one.
-        Eats errors.
-        """
-        SoundFileUtil.stop_sound_async()
-
-        # Clear the event for the new playback
-        SoundFileUtil._stop_playback_event.clear()
-
-        def _play_stream_from_data(sound_data: np.ndarray, samplerate: int, channels: int, stop_event: threading.Event):
-            try:
-                stream_finished_event = threading.Event()
-                current_frame = 0
-
-                def callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags):
-                    nonlocal current_frame
-                    if stop_event.is_set():
-                        raise sd.CallbackStop
-
-                    # Calculate how many frames are left in the sound_data
-                    frames_to_read = min(frames, len(sound_data) - current_frame)
-
-                    if frames_to_read > 0:
-                        # Copy data from sound_data to outdata
-                        outdata[:frames_to_read] = sound_data[current_frame : current_frame + frames_to_read]
-                        # Fill remaining part of outdata with zeros if less data was read than requested
-                        if frames_to_read < frames:
-                            outdata[frames_to_read:] = 0
-                        current_frame += frames_to_read
-                    else:
-                        # No more data to play
-                        raise sd.CallbackStop
-
-                def set_event_on_finish():
-                    stream_finished_event.set()
-
-                with sd.OutputStream(
-                    samplerate=samplerate,
-                    channels=channels,
-                    callback=callback,
-                    dtype='float32',
-                    finished_callback=set_event_on_finish
-                ):
-                    stream_finished_event.wait() # Wait for playback to complete or be cancelled
-
-            except sd.CallbackStop:
-                pass # Normal exit from the stream
-            except Exception as e:
-                pass # Ignore other errors for now
-            
-        # Ensure sound_data is 2D for sounddevice (frames, channels)
-        # If it's 1D (mono), convert it to 2D
-        sound_data_2d = sound.data.reshape(-1, 1) if sound.data.ndim == 1 else sound.data
-        channels = sound_data_2d.shape[1]
-
-        new_thread = threading.Thread(target=_play_stream_from_data, args=(sound_data_2d, sound.sr, channels, SoundFileUtil._stop_playback_event,), daemon=True)
-        new_thread.start()
-        SoundFileUtil._current_playback_thread = new_thread

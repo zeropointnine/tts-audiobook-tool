@@ -267,17 +267,17 @@ class Strictness(tuple[str, int, str], Enum):
 # ---
 
 class VoiceSelectMode(tuple[str, str, str, str], Enum):
-    AUTO_ADVANCE = (
-        "auto_advance",
-        "auto-advance",
-        "Auto-advance",
-        "Cycles through voice samples in order, on each batch generation",
-    )
     USER_DEFINED = (
         "custom",
         "user-defined",
         "User-defined",
-        "Uses user-defined voice sample selections for each text line",
+        "On TTS inference, uses user-defined voice sample selections for each text line",
+    )
+    AUTO_ADVANCE = (
+        "auto_advance",
+        "auto-advance",
+        "Auto-advance",
+        "Cycles through voice samples in order on each inference batch",
     )
     DISABLED = (
         "disabled",

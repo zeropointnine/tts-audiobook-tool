@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import patch
-
 import pytest
 
 from tts_audiobook_tool.app_types import VoiceSelectMode

@@ -33,7 +33,11 @@ class VoiceMossMenu:
             VoiceMossShared.append_voice_items(items, state)
 
             items.append(
-                MenuItem(make_target_label, lambda _, __: target_submenu(state))
+                MenuItem(
+                    make_target_label, 
+                    lambda _, __: target_submenu(state), 
+                    superlabel=VOICE_ADVANCED_SUPERLABEL
+                )
             )
 
             item = MenuItem(
@@ -43,8 +47,7 @@ class VoiceMossMenu:
                     attribute_name="moss_rolling_cont",
                     max_value=MossBaseModel.ROLLING_CONTINUATION_MAX_LENGTH,
                     qualifier_line="MOSS-TTS rolling continuation requires batch size 1."
-                ),
-                superlabel=VOICE_ADVANCED_SUPERLABEL
+                )
             )
             items.append(item)
 

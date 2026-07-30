@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import cast
 
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
@@ -52,12 +53,12 @@ def test_menu_status_print_block_supports_voice_display_info(capsys):
 
 
 def test_stt_status_does_not_repeat_disabled(monkeypatch):
-    state = SimpleNamespace(
+    state = cast(State, SimpleNamespace(
         prefs=SimpleNamespace(
             stt_variant=SttVariant.DISABLED,
             stt_config=SttConfig.CPU_INT8FLOAT32,
         ),
-    )
+    ))
     monkeypatch.setattr(Stt, "should_use_mlx_whisper", lambda: False)
     monkeypatch.setattr(Stt, "get_variant", lambda: SttVariant.DISABLED)
     monkeypatch.setattr(Stt, "has_instance", lambda: False)

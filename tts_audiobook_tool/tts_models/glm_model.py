@@ -401,12 +401,12 @@ def generate_long(
         tts_text_token = frontend._extract_text_token(tts_text_tn)
 
         # Access cache references
-        cache_text = cache["cache_text"]
-        cache_text_token = cache["cache_text_token"]
-        cache_speech_token = cache["cache_speech_token"]
+        cache_text = cache["cache_text"] # type: ignore
+        cache_text_token = cache["cache_text_token"] # type: ignore
+        cache_speech_token = cache["cache_speech_token"] # type: ignore
 
         # Determine Prompts
-        if cache["use_cache"] and len(cache_text_token) > 1:
+        if cache["use_cache"] and len(cache_text_token) > 1: # type: ignore
             prompt_text_token, prompt_speech_token = get_cached_prompt(
                 cache, tts_text_token, device
             )

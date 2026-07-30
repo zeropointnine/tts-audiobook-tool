@@ -114,7 +114,8 @@ def print_regen_lines(state: State, indices: set[int]) -> None:
         return
 
     for index in sorted(indices):
-        SegmentTranscriptUtil.print_info(index, state.project)
+        lines = SegmentTranscriptUtil.make_info_text_lines(index, state.project)
+        printt(SegmentTranscriptUtil.combine_ansi_lines(lines))
 
     printt()
 

@@ -241,81 +241,125 @@ class SegmentTranscriptUtil:
         )
 
     @staticmethod
-    def print_info(sound_segment_index: int, project: Project) -> None:
+    def make_info_text_lines(
+        sound_segment_index: int,
+        project: Project,
+        is_for_dialog: bool = False,
+    ) -> list[str]:
         """
-        Prints info for a transcribed sound segment using json sidecar file
+        Builds ANSI-formatted lines with info about a transcribed sound segment instance.
         """
         
         best_item = project.sound_segments.get_best_item_for(sound_segment_index)
         index_string = str(sound_segment_index + 1)
 
         if best_item is None:
-            printt(f"{COL_DIM}{'-' * 60}")
-            printt(f"{COL_DEFAULT}Line: {index_string}")
-            printt(f"{COL_ERROR}No generated sound segment found.")
-            printt()
-            return
+            return [
+                f"{COL_DIM}{'-' * 60}",
+                f"{COL_DEFAULT}Line: {index_string}",
+                f"{COL_ERROR}No generated sound segment found.",
+                "",
+            ]
 
         sound_path = Path(os.path.join(project.sound_segments_path, best_item.file_name))
+
+        sound_filename_text = text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
+        sound_filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{sound_filename_text}"
+
         stt_info_path = get_segment_stt_info_path(sound_path)
-        info = SegmentTranscriptUtil.load(stt_info_path)
-        if isinstance(info, str):
+        stt_info = SegmentTranscriptUtil.load(stt_info_path)
+
+        if isinstance(stt_info, str):
+
             timed_phrases = SegmentTranscriptUtil.load_timed_phrases(stt_info_path)
             if not isinstance(timed_phrases, str):
-                SegmentTranscriptUtil.print_legacy_info(sound_segment_index, sound_path, best_item, project)
-                return
+                return SegmentTranscriptUtil.make_legacy_info_lines(
+                    sound_segment_index, sound_path, best_item, project
+                )
 
-            printt(f"{COL_DIM}{'-' * 60}")
-            printt(f"{COL_DEFAULT}Line: {index_string}")
-            printt(f"{COL_ERROR}Could not load segment STT info: {info}")
-            printt(f"Filename: {text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)}")
-            printt()
-            return
+            if is_for_dialog:
+                return [
+                    sound_filename_line,
+                    "",
+                    f"{COL_DIM}Sound segment has no speech-to-text validation info",
+                ]
+            else:
+                return [
+                    f"{COL_DIM}{'-' * 60}",
+                    f"{COL_DEFAULT}Line: {index_string}",
+                    f"{COL_ERROR}Could not load segment STT info: {stt_info}",
+                    sound_filename_line,
+                    "",
+                ]
 
-        filename = text_util.make_terminal_hyperlink(str(sound_path), best_item.file_name, is_file=True)
-        num_word_errors = SegmentTranscriptUtil.get_word_error_count(info)
-        threshold = SegmentTranscriptUtil.get_threshold(info, project.strictness)
-        findings = SegmentTranscriptUtil.get_findings(info)
+        num_word_errors = SegmentTranscriptUtil.get_word_error_count(stt_info)
+        threshold = SegmentTranscriptUtil.get_threshold(stt_info, project.strictness)
+        findings = SegmentTranscriptUtil.get_findings(stt_info)
 
-        filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"
-        stroke_width = min( len(text_util.strip_ansi_codes(filename_line)), terminal.get_terminal_width())
+        status_text = f"{findings.make_status_message(app_text.get_word_count(stt_info.normalized_source, vocalizable_only=True), threshold)}"
+        if is_for_dialog:
+            status_line = status_text
+        else:
+            status_line = f"{COL_DEFAULT}Line: {COL_ACCENT}{stt_info.index_1b}{COL_DEFAULT}, {status_text}"
+
+
+        stroke_width = min( len(text_util.strip_ansi_codes(sound_filename_line)), terminal.get_terminal_width())
         stroke = f"{COL_DIM}{stroke_width * '-'}"
-        printt(stroke)
-        printt(f"{COL_DEFAULT}Line: {COL_ACCENT}{info.index_1b}, {findings.make_status_message(app_text.get_word_count(info.normalized_source, vocalizable_only=True), threshold)}")
-        printt(filename_line)
+
+        if is_for_dialog:
+            lines = [ sound_filename_line, status_line ]
+        else:
+            lines = [ stroke, status_line, sound_filename_line ]
+
         if findings.invalid_reason is not None:
-            printt(f"{COL_DEFAULT}Invalid reason: {COL_ERROR}{findings.invalid_reason.value}")
+            lines.append(
+                f"{COL_DEFAULT}Invalid reason: {COL_ERROR}{findings.invalid_reason.value}"
+            )
         if findings.possible_truncation:
-            printt(f"{COL_ERROR}{POSSIBLE_TRUNCATION_UI_MESSAGE}")
-        printt()
+            lines.append(f"{COL_ERROR}{POSSIBLE_TRUNCATION_UI_MESSAGE}")
 
-        SegmentTranscriptUtil.print_stt_details(info, should_show_diff=num_word_errors > 0)
+        should_show_diff = (num_word_errors > 0)
+        lines.append("")
+        lines.extend(
+            SegmentTranscriptUtil.make_stt_details_lines(stt_info, should_show_diff)
+        )
+        lines.append("")
 
-        printt()
+        return lines
 
     @staticmethod
-    def print_stt_details(info: SegmentTranscriptData, should_show_diff: bool) -> None:
-        printt(f"{COL_DEFAULT}Source text               : {COL_DIM_ITALICS}{info.source.strip()}")
-        printt(f"{COL_DEFAULT}TTS prompt                : {COL_DIM_ITALICS}{info.prompt.strip()}")
-        printt(f"{COL_DEFAULT}STT transcript            : {COL_DIM_ITALICS}{info.transcript}")
-        printt()
-        printt(f"{COL_DEFAULT}Source text normalized    : {COL_DIM_ITALICS}{info.normalized_source}")
-        printt(f"{COL_DEFAULT}STT transcript normalized : {COL_DIM_ITALICS}{info.normalized_transcript}")
+    def make_stt_details_lines(
+        info: SegmentTranscriptData, should_show_diff: bool
+    ) -> list[str]:
+        """Build ANSI-formatted source and transcript detail lines."""
+        lines = [
+            f"{COL_DEFAULT}Source text               : {COL_DIM_ITALICS}{info.source.strip()}",
+            f"{COL_DEFAULT}TTS prompt                : {COL_DIM_ITALICS}{info.prompt.strip()}",
+            f"{COL_DEFAULT}STT transcript            : {COL_DIM_ITALICS}{info.transcript}",
+            "",
+            f"{COL_DEFAULT}Source text normalized    : {COL_DIM_ITALICS}{info.normalized_source}",
+            f"{COL_DEFAULT}STT transcript normalized : {COL_DIM_ITALICS}{info.normalized_transcript}",
+        ]
 
         if should_show_diff:
-            printt()
-            printt(f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], [!: diagnostic], <word> = skipped uncommon word")
-            printt(SegmentTranscriptUtil.make_word_error_visualization(info))
+            lines.extend(
+                [
+                    "",
+                    f"{COL_ACCENT}Word error visualization: {COL_DIM}[-: missing], [+: extra], [=/=: expected/heard], [!: diagnostic], <word> = skipped uncommon word",
+                    SegmentTranscriptUtil.make_word_error_visualization(info),
+                ]
+            )
+        return lines
 
     @staticmethod
-    def print_legacy_info(
+    def make_legacy_info_lines(
             sound_segment_index: int,
             sound_path: str | Path,
             sound_segment,
             project: Project,
-    ) -> None:
+    ) -> list[str]:
         """
-        Prints minimal info for legacy timing-only JSON sidecars.
+        Build minimal lines for legacy timing-only JSON sidecars.
 
         Legacy sidecars are lists of timed phrase data, not SegmentSttInfo
         payloads. They do not contain prompt/transcript/normalization data, so
@@ -331,10 +375,17 @@ class SegmentTranscriptUtil:
 
         filename_line = f"{COL_DEFAULT}Filename: {COL_DEFAULT}{filename}"
         stroke = f"{COL_DIM}{len(text_util.strip_ansi_codes(filename_line)) * '-'}"
-        printt(stroke)
-        printt(f"{COL_DEFAULT}Line: {COL_DEFAULT}{sound_segment_index + 1}, {COL_ACCENT}word errors detected: {COL_DEFAULT}{num_errors}, {COL_ACCENT}word error threshold: {COL_DEFAULT}{threshold}")
-        printt(filename_line)
-        printt(f"{COL_DIM_ITALICS}Legacy timing data; detailed STT info unavailable")
+        return [
+            stroke,
+            f"{COL_DEFAULT}Line: {COL_DEFAULT}{sound_segment_index + 1}, {COL_ACCENT}word errors detected: {COL_DEFAULT}{num_errors}, {COL_ACCENT}word error threshold: {COL_DEFAULT}{threshold}",
+            filename_line,
+            f"{COL_DIM_ITALICS}Legacy timing data; detailed STT info unavailable",
+        ]
+
+    @staticmethod
+    def combine_ansi_lines(lines: list[str]) -> str:
+        """Join display lines while resetting terminal styling after each line."""
+        return f"{Ansi.RESET}\n".join(lines) + Ansi.RESET
 
     @staticmethod
     def make_word_error_visualization(info: SegmentTranscriptData) -> str:

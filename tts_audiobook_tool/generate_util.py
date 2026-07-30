@@ -321,9 +321,13 @@ class GenerateUtil:
                 if validation_result: 
                     printt()
                     if stt_info is not None:
-                        SegmentTranscriptUtil.print_stt_details(
-                            stt_info,
-                            should_show_diff=should_show_viz
+                        printt(
+                            SegmentTranscriptUtil.combine_ansi_lines(
+                                SegmentTranscriptUtil.make_stt_details_lines(
+                                    stt_info,
+                                    should_show_diff=should_show_viz,
+                                )
+                            )
                         )
                     else:
                         # Just print source text, in a similar style

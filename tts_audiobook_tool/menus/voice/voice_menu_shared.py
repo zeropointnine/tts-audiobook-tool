@@ -9,6 +9,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, Me
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -103,7 +104,7 @@ class VoiceMenuShared:
             heading="Voice clone and model settings",
             items=items,
             subheading=subheading,
-            on_exit=lambda: SoundFileUtil.stop_sound_async(),
+            on_exit=lambda: PlaySoundUtil.stop_sound_async(),
             breadcrumb="Voice",
         )
 
@@ -166,7 +167,7 @@ class VoiceMenuShared:
         duration_s = len(sound.data) / sound.sr
         printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")
         printt()
-        SoundFileUtil.play_sound_async(sound)
+        PlaySoundUtil.play_sound_async(sound)
 
         force_enter_prompt = False
 
@@ -320,7 +321,7 @@ class VoiceMenuShared:
             if len(voices) < 2:
                 label += f" {COL_DIM}(optional; requires 2+ voice samples)"
             elif state.project.voice_select_mode is not VoiceSelectMode.USER_DEFINED:
-                label += f" {COL_DIM}(optional; requires voice selection mode = user-defined)"
+                label += f" {COL_DIM}(optional; for use with voice selection mode: user-defined)"
             return label
 
         def on_item(state: State, _: MenuItem) -> None:

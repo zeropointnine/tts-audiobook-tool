@@ -338,6 +338,6 @@ class TtsBaseModel(ABC):
         
     @staticmethod
     def default_strictness_warning_reason(strictness: Strictness, project: Project) -> str:
-        if strictness >= Strictness.HIGH and project.language_code != "en":
+        if strictness.level >= Strictness.HIGH.level and project.language_code != "en":
             return f"Not recommended when language code != en"
         return ""

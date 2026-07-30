@@ -65,7 +65,11 @@ class VoiceVibeVoiceMenu:
 
             # Model
             items.append(
-                MenuItem(make_model_target_label, lambda _, __: target_submenu(state))
+                MenuItem(
+                    make_model_target_label, 
+                    lambda _, __: target_submenu(state), 
+                    superlabel = VOICE_ADVANCED_SUPERLABEL
+                )
             )
             if state.project.vibevoice_target:
                 items.append(
@@ -84,7 +88,6 @@ class VoiceVibeVoiceMenu:
                 min_value=VibeVoiceBaseModel.CFG_MIN,
                 max_value=VibeVoiceBaseModel.CFG_MAX
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             items.append(

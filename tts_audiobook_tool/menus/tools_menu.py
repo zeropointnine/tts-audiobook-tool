@@ -5,6 +5,7 @@ from tts_audiobook_tool.enhance import enhance_flow
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil, EpubPromptMessages
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.sound.mp3_concat import SoundConcatTranscodeUtil
+from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
@@ -83,7 +84,7 @@ class ToolsMenu:
     def ask_save_speed_up_audio() -> None:
 
         def cleanup():
-            SoundFileUtil.stop_sound_async()
+            PlaySoundUtil.stop_sound_async()
 
         path = ask.ask_file_path("Enter sound clip:", "Select sound clip")
         if not path:
@@ -95,7 +96,7 @@ class ToolsMenu:
         sound = result
 
         printt("Playing audio...")
-        SoundFileUtil.play_sound_async(sound)
+        PlaySoundUtil.play_sound_async(sound)
 
         printt()
         s ="Enter new speed as a percentage (range: 50-200) (50 = half as fast, 200 = twice as fast)"
@@ -127,7 +128,7 @@ class ToolsMenu:
             return
 
         printt("Playing new version...")
-        SoundFileUtil.play_sound_async(new_sound)
+        PlaySoundUtil.play_sound_async(new_sound)
 
         printt()
         printt(f"Saved new file to: {new_path}")

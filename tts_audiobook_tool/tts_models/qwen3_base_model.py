@@ -22,7 +22,8 @@ class Qwen3BaseModel(TtsBaseModel):
         "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
         "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
         "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-        "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+        "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+        "zeropointnine/Darwin-TTS-1.7B-Cross-Qwen3Tokenizer"
     ]
     DEFAULT_REPO_ID = PRESET_REPO_IDS[0]
 

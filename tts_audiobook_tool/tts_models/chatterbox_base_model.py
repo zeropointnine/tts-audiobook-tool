@@ -44,7 +44,7 @@ class ChatterboxBaseModel(TtsBaseModel):
 
     @classmethod
     def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
-        if strictness >= Strictness.HIGH:
+        if strictness.level >= Strictness.HIGH.level:
             return "Not recommended with current TTS model"
         return ""
 

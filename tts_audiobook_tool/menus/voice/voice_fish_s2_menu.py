@@ -22,7 +22,8 @@ class VoiceFishS2Menu:
             items.append(
                 MenuItem(
                     make_menu_label("Torch compile", state.project.fish_s2_compile_enabled),
-                    lambda _, __: VoiceFishS2Menu.compile_menu(state)
+                    lambda _, __: VoiceFishS2Menu.compile_menu(state),
+                    superlabel=VOICE_ADVANCED_SUPERLABEL
                 )
             )
 
@@ -33,8 +34,7 @@ class VoiceFishS2Menu:
                     attribute_name="fish_s2_rolling_cont", 
                     max_value=FishS2BaseModel.ROLLING_CONTINUATION_MAX_LENGTH, 
                     qualifier_line="Qwen3-TTS model must be of type \"base\", and batch size must be 1."
-                ),
-                superlabel=VOICE_ADVANCED_SUPERLABEL
+                )
             )
             items.append(item)
 

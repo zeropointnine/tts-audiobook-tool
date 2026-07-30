@@ -219,8 +219,11 @@ class ProjectSoundSegments:
     
     def delete_by_indices(self, indices: Collection[int]) -> None:
         """ Returns num deleted and num failed """
+        # Use the refreshed public catalog and tolerate files removed since the
+        # caller selected its indices.
+        sound_segments_map = self.sound_segments_map
         for index in indices:
-            items = self._sound_segments_map[index]
+            items = sound_segments_map.get(index, [])
             for item in items:
                 sound_file_path = Path(self.project.sound_segments_path) / item.file_name
                 self.delete_sound_segment_and_sidecars(sound_file_path)

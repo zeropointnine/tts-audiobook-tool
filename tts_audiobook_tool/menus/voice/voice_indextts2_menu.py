@@ -79,7 +79,7 @@ class VoiceIndexTts2Menu:
                 )
             )
             items.append(
-                MenuItem(make_emo_voice_label, on_emo_voice)
+                MenuItem(make_emo_voice_label, on_emo_voice, superlabel=VOICE_ADVANCED_SUPERLABEL)
             )
             if state.project.indextts2_emo_voice_file_name:
                 items.append( 
@@ -112,7 +112,6 @@ class VoiceIndexTts2Menu:
                 min_value=0.01,
                 max_value=2.0
             )
-            item.superlabel = VOICE_ADVANCED_SUPERLABEL
             items.append(item)
 
             items.append(
