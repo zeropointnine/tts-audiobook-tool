@@ -23,3 +23,40 @@
     text-style: italic;
     content-align: right middle;
 }
+
+#find-bar {
+    display: none;
+    height: 1;
+    layout: horizontal;
+}
+
+#find-label {
+    width: auto;
+    height: 1;
+    color: $col-accent;
+    text-style: italic;
+}
+
+#find-input {
+    width: 1fr;
+    height: 1;
+    border: none;
+    padding: 0;
+    background: ansi_default;
+    background-tint: transparent;
+}
+
+#find-result {
+    width: 12;
+    height: 1;
+    color: $col-dim;
+    text-style: italic;
+    content-align: right middle;
+}
+
+#find-input:focus {
+    border: none;
+    color: $col-default;
+    background: ansi_default;
+    background-tint: transparent;
+}

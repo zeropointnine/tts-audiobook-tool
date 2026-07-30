@@ -5,9 +5,9 @@ from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.css.errors import StylesheetError
-from textual.widgets import OptionList, Rule, Static
+from textual.widgets import Input, OptionList, Rule, Static
 from textual.widgets.option_list import Option
 
 from tts_audiobook_tool.project import Project
@@ -127,6 +127,10 @@ class VoiceLineEditorTextualApp(App[None]):
         Binding("escape", "quit_editor", "Quit", show=False),
         Binding("ctrl+q", "ignore_ctrl_q", show=False, priority=True),
         Binding("ctrl+a", "select_all", show=False, priority=True),
+        Binding("ctrl+f", "open_find", show=False, priority=True),
+        # Many terminal emulators report Shift+Enter as plain Enter, so this
+        # binding only works where the terminal emits a distinct key sequence.
+        Binding("shift+enter", "find_previous", show=False, priority=True),
         *(
             Binding(str(number), f"assign_voice({number - 1})", show=False)
             for number in range(1, 10)
@@ -165,13 +169,19 @@ class VoiceLineEditorTextualApp(App[None]):
                 "- Select multiple lines by holding [SHIFT] + navigation keys",
                 style=STYLE_DIM,
             ),
-            Text("- Press [ESC] to finish", style=STYLE_DIM),
+            Text("- Press [ESC] to finish   - Press [CTRL-F] to find text", style=STYLE_DIM),
         ]
         self.selected_index = 0 if self.project.phrase_groups else None
         self.selection_anchor_index = self.selected_index
         self.selected_indices = (
             {self.selected_index} if self.selected_index is not None else set()
         )
+        # Typing only changes the query. Enter submits it and enables backward
+        # navigation; each submitted search starts from the currently selected row.
+        self.find_active = False
+        self.find_search_start_index: int | None = None
+        self.find_query_submitted = False
+        self.find_match_index: int | None = None
         self.configure()
 
     def configure(self) -> None:
@@ -209,6 +219,12 @@ class VoiceLineEditorTextualApp(App[None]):
             collapse_selection=self.collapse_current_selection,
         )
         yield Static(self.selection_status_text, id="selection-status", markup=False)
+        yield Horizontal(
+            Static("Find: ", id="find-label", markup=False),
+            Input(id="find-input", compact=True, select_on_focus=False),
+            Static("", id="find-result", markup=False),
+            id="find-bar",
+        )
 
     def on_mount(self) -> None:
         self.query_one("#line-list", OptionList).focus()
@@ -242,16 +258,16 @@ class VoiceLineEditorTextualApp(App[None]):
         voice_number = max(voice_index + 1, 1)
         voice_values = ProjectVoiceUtil.get_voice_values(self.project, Tts.get_type())
         # Keep showing the stored voice number, but flag stale selections after voices are removed.
-        voice_status = " *out of range*" if voice_index >= len(voice_values) else ""
+        voice_status = " *OUT OF RANGE*" if voice_index >= len(voice_values) else ""
         content = (
             f"[{index + 1:05d}] [Voice sample {voice_number}{voice_status}] "
             f"{phrase_group.presentable_text}"
         )
-        style = (
-            f"{STYLE_DIM} reverse"
-            if index in self.selected_indices and index != self.selected_index
-            else ""
+        is_find_match = index == self.find_match_index
+        is_inactive_selection = (
+            index in self.selected_indices and index != self.selected_index
         )
+        style = f"{STYLE_DIM} reverse" if is_find_match or is_inactive_selection else ""
         return Text(content, style=style, no_wrap=True, overflow="ellipsis")
 
     @staticmethod
@@ -304,7 +320,124 @@ class VoiceLineEditorTextualApp(App[None]):
         self.refresh_line(self.selected_index)
 
     def action_quit_editor(self) -> None:
+        if self.find_active:
+            self.close_find()
+            return
         self.request_exit()
+
+    def action_open_find(self) -> None:
+        """Open find at the current row, retaining and selecting its query."""
+        find_input = self.query_one("#find-input", Input)
+        if not self.find_active:
+            self.find_active = True
+            self.find_search_start_index = self.selected_index
+            self.find_query_submitted = False
+            self.query_one("#selection-status", Static).display = False
+            self.query_one("#find-bar", Horizontal).display = True
+            self.query_one("#find-result", Static).update("")
+        find_input.focus()
+        find_input.select_all()
+
+    def close_find(self) -> None:
+        """Hide the find bar and return keyboard control to the line list."""
+        if not self.find_active:
+            return
+        previous_match_index = self.find_match_index
+        self.find_match_index = None
+        self.find_active = False
+        self.query_one("#find-bar", Horizontal).display = False
+        self.query_one("#selection-status", Static).display = True
+        self.query_one("#line-list", OptionList).focus()
+        if previous_match_index is not None:
+            self.refresh_line(previous_match_index)
+
+    def find_relative_match(
+        self, match_indices: list[int], direction: int
+    ) -> int | None:
+        """Find a match in one direction from the current search start."""
+        if not match_indices:
+            return None
+        phrase_count = len(self.project.phrase_groups)
+        search_start = self.find_search_start_index
+        if search_start is None or not 0 <= search_start < phrase_count:
+            return match_indices[0]
+        match_index_set = set(match_indices)
+        indices = (
+            (search_start + (direction * offset)) % phrase_count
+            for offset in range(1, phrase_count + 1)
+        )
+        return next((index for index in indices if index in match_index_set), None)
+
+    def find_match_indices(self, query: str) -> list[int]:
+        """Return all phrase indices containing a case-insensitive literal query."""
+        if not query:
+            return []
+        folded_query = query.casefold()
+        return [
+            index
+            for index, phrase_group in enumerate(self.project.phrase_groups)
+            if folded_query in phrase_group.presentable_text.casefold()
+        ]
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Clear stale match feedback without moving the line selection."""
+        if event.input.id == "find-input" and self.find_active:
+            self.find_query_submitted = False
+            previous_match_index = self.find_match_index
+            self.find_match_index = None
+            self.query_one("#find-result", Static).update("")
+            if previous_match_index is not None:
+                self.refresh_line(previous_match_index)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Advance to the next match while retaining find focus."""
+        if event.input.id != "find-input" or not self.find_active:
+            return
+        self.find_query_submitted = True
+        self.advance_find(event.value, 1)
+
+    def action_find_previous(self) -> None:
+        """Move backward after the current query has been submitted."""
+        if not self.find_active or not self.find_query_submitted:
+            return
+        self.advance_find(self.query_one("#find-input", Input).value, -1)
+
+    def show_find_match(
+        self, match_index: int, match_number: int, match_count: int
+    ) -> None:
+        """Select and present one find result while retaining input focus."""
+        previous_match_index = self.find_match_index
+        self.find_match_index = match_index
+        self.query_one("#line-list", OptionList).highlighted = match_index
+        if previous_match_index is not None and previous_match_index != match_index:
+            self.refresh_line(previous_match_index)
+        self.refresh_line(match_index)
+        self.query_one("#find-result", Static).update(
+            f"{match_number} of {match_count}"
+        )
+
+    def advance_find(self, query: str, direction: int) -> None:
+        """Advance through matches and update right-aligned feedback."""
+        match_indices = self.find_match_indices(query)
+        if not match_indices:
+            self.query_one("#find-result", Static).update("No matches")
+            return
+        self.find_search_start_index = self.selected_index
+        match_index = self.find_relative_match(match_indices, direction)
+        if match_index is not None:
+            match_number = match_indices.index(match_index) + 1
+            self.show_find_match(match_index, match_number, len(match_indices))
+
+    def on_input_blurred(self, event: Input.Blurred) -> None:
+        if event.input.id == "find-input":
+            self.close_find()
+
+    def on_click(self, event: events.Click) -> None:
+        """Dismiss find mode for clicks anywhere outside its text input."""
+        if self.find_active and event.widget is not self.query_one(
+            "#find-input", Input
+        ):
+            self.close_find()
 
     def request_exit(self) -> None:
         """Exit immediately when clean, or ask what to do with staged edits."""
@@ -349,6 +482,9 @@ class VoiceLineEditorTextualApp(App[None]):
 
     def action_select_all(self) -> None:
         """Select every line while retaining the current line as the anchor."""
+        if self.find_active:
+            self.query_one("#find-input", Input).select_all()
+            return
         if self.selected_index is None:
             return
         new_selected_indices = set(range(len(self.project.phrase_groups)))
@@ -361,6 +497,8 @@ class VoiceLineEditorTextualApp(App[None]):
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""
+        if self.find_active:
+            return
         if not self.selected_indices:
             return
         voice_values = ProjectVoiceUtil.get_voice_values(self.project, Tts.get_type())

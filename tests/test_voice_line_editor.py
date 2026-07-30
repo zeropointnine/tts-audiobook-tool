@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
+import pytest
 from textual.css.errors import StylesheetError
 from tts_audiobook_tool.textual import voice_line_editor
 from tts_audiobook_tool.textual.save_changes_dialog import (
@@ -11,7 +12,8 @@ from tts_audiobook_tool.textual.voice_line_editor import (
     NonWrappingOptionList,
     VoiceLineEditorTextualApp,
 )
-from textual.widgets import Button, Static
+from textual.containers import Horizontal
+from textual.widgets import Button, Input, Static
 
 
 @dataclass
@@ -36,6 +38,17 @@ def make_app(
 
 def run(coroutine) -> None:
     asyncio.run(coroutine)
+
+
+@pytest.fixture(autouse=True)
+def stub_voice_values(monkeypatch) -> None:
+    """Keep editor rendering independent of application-wide TTS initialization."""
+    monkeypatch.setattr(
+        voice_line_editor.ProjectVoiceUtil,
+        "get_voice_values",
+        lambda *_: [f"voice-{index + 1}" for index in range(9)],
+    )
+    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
 
 
 def test_shift_navigation_extends_and_reversing_shrinks_selection() -> None:
@@ -92,6 +105,306 @@ def test_ctrl_a_selects_all_lines_and_retains_current_line_as_anchor() -> None:
             assert app.selected_indices == set(range(12))
             status = app.query_one("#selection-status", Static)
             assert str(status.render()) == "12 lines selected"
+
+    run(exercise())
+
+
+def test_ctrl_f_opens_find_bar_and_focuses_input() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            find_bar = app.query_one("#find-bar", Horizontal)
+            find_input = app.query_one("#find-input", Input)
+            status = app.query_one("#selection-status", Static)
+            assert find_bar.display is False
+            assert status.display is True
+
+            await pilot.press("ctrl+f")
+
+            assert app.find_active is True
+            assert app.find_search_start_index == 0
+            assert find_bar.display is True
+            assert status.display is False
+            assert find_input.has_focus is True
+            find_label = app.query_one("#find-label", Static)
+            assert find_label.styles.text_style.italic is True
+            assert find_label.styles.color.hex == "#FFAA44"
+            assert find_input.styles.text_style.italic is not True
+            assert find_input.styles.background.hex != "#888888"
+
+    run(exercise())
+
+
+def test_find_waits_for_enter_then_searches_from_stable_origin_and_wraps() -> None:
+    project = StubProject(
+        [
+            StubPhraseGroup("Needle before origin"),
+            StubPhraseGroup("unrelated"),
+            StubPhraseGroup("Needle first after origin"),
+            StubPhraseGroup("Needle second after origin"),
+        ]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=1)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "ctrl+f")
+            assert app.find_search_start_index == 1
+
+            await pilot.press(*"needle")
+            await pilot.pause()
+            assert app.selected_index == 1
+
+            await pilot.press(*" second")
+            await pilot.pause()
+            assert app.selected_index == 1
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 3
+
+            find_input = app.query_one("#find-input", Input)
+            find_input.value = "before"
+            await pilot.pause()
+            assert app.selected_index == 3
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 0
+
+    run(exercise())
+
+
+def test_empty_and_no_match_find_queries_leave_selection_unchanged() -> None:
+    project = StubProject(
+        [StubPhraseGroup("alpha"), StubPhraseGroup("beta"), StubPhraseGroup("gamma")]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=1)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "ctrl+f")
+            find_input = app.query_one("#find-input", Input)
+
+            find_input.value = "missing"
+            await pilot.pause()
+            assert app.selected_index == 1
+
+            find_input.value = ""
+            await pilot.pause()
+            assert app.selected_index == 1
+
+    run(exercise())
+
+
+def test_find_query_is_retained_selected_and_can_include_number_keys() -> None:
+    project = StubProject(
+        [StubPhraseGroup("start"), StubPhraseGroup("chapter 2"), StubPhraseGroup("end")]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=2)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("ctrl+f", *"chapter 2")
+            await pilot.pause()
+            assert app.selected_index == 0
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 1
+            assert app.staged_voice_indices == [-1, -1, -1]
+
+            await pilot.press("escape", "ctrl+f")
+            find_input = app.query_one("#find-input", Input)
+            assert find_input.value == "chapter 2"
+            assert find_input.selection.start == 0
+            assert find_input.selection.end == len("chapter 2")
+
+    run(exercise())
+
+
+def test_reopening_find_preserves_current_match_until_enter() -> None:
+    project = StubProject(
+        [
+            StubPhraseGroup("needle first"),
+            StubPhraseGroup("unrelated"),
+            StubPhraseGroup("needle second"),
+            StubPhraseGroup("needle third"),
+        ]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=1)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("ctrl+f", *"needle", "enter", "escape")
+            await pilot.pause()
+            assert app.selected_index == 2
+
+            await pilot.press("ctrl+f")
+            await pilot.pause()
+            assert app.selected_index == 2
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 3
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 0
+
+    run(exercise())
+
+
+def test_enter_advances_matches_without_blurring_find() -> None:
+    project = StubProject(
+        [
+            StubPhraseGroup("needle first"),
+            StubPhraseGroup("needle second"),
+            StubPhraseGroup("needle third"),
+        ]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=1)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            find_input = app.query_one("#find-input", Input)
+            find_result = app.query_one("#find-result", Static)
+            await pilot.press("ctrl+f", *"needle")
+            await pilot.pause()
+            assert app.selected_index == 0
+            assert str(find_result.render()) == ""
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 1
+            assert str(find_result.render()) == "2 of 3"
+            assert str(app.format_line(1).style) == "#888888 reverse"
+            assert app.find_active is True
+            assert find_input.has_focus is True
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 2
+            assert str(find_result.render()) == "3 of 3"
+            assert app.find_active is True
+            assert find_input.has_focus is True
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.selected_index == 0
+            assert str(find_result.render()) == "1 of 3"
+            assert app.find_active is True
+            assert find_input.has_focus is True
+
+    run(exercise())
+
+
+def test_find_match_highlight_is_removed_when_find_blurs() -> None:
+    project = StubProject(
+        [StubPhraseGroup("start"), StubPhraseGroup("needle"), StubPhraseGroup("end")]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=1)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("ctrl+f", *"needle", "enter")
+            await pilot.pause()
+            assert app.find_match_index == 1
+            assert str(app.format_line(1).style) == "#888888 reverse"
+
+            await pilot.press("escape")
+            assert app.find_match_index is None
+            assert str(app.format_line(1).style) == ""
+
+    run(exercise())
+
+
+def test_shift_enter_moves_backward_after_query_is_submitted() -> None:
+    project = StubProject(
+        [
+            StubPhraseGroup("needle first"),
+            StubPhraseGroup("needle second"),
+            StubPhraseGroup("needle third"),
+        ]
+    )
+    app = VoiceLineEditorTextualApp(project, voice_sample_count=1)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            find_input = app.query_one("#find-input", Input)
+            find_result = app.query_one("#find-result", Static)
+            await pilot.press("ctrl+f", *"needle", "shift+enter")
+            await pilot.pause()
+            assert app.selected_index == 0
+            assert str(find_result.render()) == ""
+
+            await pilot.press("enter", "shift+enter")
+            await pilot.pause()
+            assert app.selected_index == 0
+            assert str(find_result.render()) == "1 of 3"
+            assert find_input.has_focus is True
+
+            await pilot.press("shift+enter")
+            await pilot.pause()
+            assert app.selected_index == 2
+            assert str(find_result.render()) == "3 of 3"
+            assert find_input.has_focus is True
+
+    run(exercise())
+
+
+def test_find_reports_no_matches_and_clears_feedback_when_query_changes() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            find_result = app.query_one("#find-result", Static)
+            await pilot.press("ctrl+f", *"missing", "enter")
+            await pilot.pause()
+            assert app.selected_index == 0
+            assert str(find_result.render()) == "No matches"
+
+            await pilot.press("x")
+            await pilot.pause()
+            assert app.selected_index == 0
+            assert str(find_result.render()) == ""
+
+    run(exercise())
+
+
+def test_find_result_reserves_twelve_right_aligned_columns() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("ctrl+f")
+            find_result = app.query_one("#find-result", Static)
+            assert find_result.styles.width.value == 12
+            assert find_result.styles.content_align_horizontal == "right"
+
+    run(exercise())
+
+
+def test_escape_and_outside_click_dismiss_find_without_exiting() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            find_bar = app.query_one("#find-bar", Horizontal)
+
+            await pilot.press("ctrl+f", "escape")
+            assert app.find_active is False
+            assert find_bar.display is False
+            assert app.is_running is True
+
+            await pilot.press("ctrl+f")
+            await pilot.click(app.query_one("#line-list", NonWrappingOptionList))
+            assert app.find_active is False
+            assert app.is_running is True
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.is_running is False
 
     run(exercise())
 
