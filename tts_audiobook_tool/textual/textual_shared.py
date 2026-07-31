@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 import os
 import sys
 from typing import ClassVar
@@ -11,6 +11,7 @@ from rich.text import Text
 from textual import events
 from textual.binding import Binding, BindingType
 from textual.strip import Strip
+from textual.visual import VisualType
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
@@ -243,7 +244,34 @@ class NonWrappingOptionList(OptionList):
         self.collapse_selection = collapse_selection
         self.inactive_selection_indices: set[int] = set()
         self.inactive_selection_style = Style.parse(f"{STYLE_DIM} reverse")
+        self.defer_option_cache_clear = False
         super().__init__(*content, **kwargs)
+
+    def _clear_caches(self) -> None:
+        """Allow a prompt update batch to invalidate caches only once."""
+        if not self.defer_option_cache_clear:
+            super()._clear_caches()
+
+    def replace_option_prompts(
+        self,
+        prompts: Iterable[tuple[int, VisualType]],
+        *,
+        reflow: bool = True,
+    ) -> None:
+        """Replace several prompts with one redraw and optional layout reflow."""
+        prompt_list = list(prompts)
+        if not prompt_list:
+            return
+        self.defer_option_cache_clear = True
+        try:
+            for index, prompt in prompt_list:
+                self.replace_option_prompt_at_index(index, prompt)
+        finally:
+            self.defer_option_cache_clear = False
+        self._option_render_cache.clear()
+        if reflow:
+            self._line_cache.clear()
+        self.refresh()
 
     def set_inactive_selection_indices(self, indices: set[int]) -> None:
         """Update inactive selections without replacing prompts or layout caches."""

@@ -188,6 +188,14 @@ class ContentTextualApp(App[None]):
             self.option_id(index), self.format_line(index)
         )
 
+    def refresh_lines(self, indices: Iterable[int], *, reflow: bool = True) -> None:
+        """Refresh several options while invalidating list caches only once."""
+        option_list = self.query_one("#line-list", NonWrappingOptionList)
+        option_list.replace_option_prompts(
+            ((index, self.format_line(index)) for index in indices),
+            reflow=reflow,
+        )
+
     def update_inactive_selection_style(self) -> None:
         """Update list-level styling for selected rows other than the highlight."""
         inactive_indices = self.selected_indices - (
@@ -378,7 +386,12 @@ class ContentTextualApp(App[None]):
         self.update_inactive_selection_style()
         self.update_selection_status()
 
-    def mutate_selected_items(self, mutator: SelectedItemMutator) -> list[int]:
+    def mutate_selected_items(
+        self,
+        mutator: SelectedItemMutator,
+        *,
+        reflow: bool = True,
+    ) -> list[int]:
         """Mutate selected visible rows through their Project phrase indices."""
         if self.find_active or not self.selected_indices:
             return []
@@ -387,8 +400,7 @@ class ContentTextualApp(App[None]):
             for index in sorted(self.selected_indices)
             if mutator(index, self.phrase_indices[index])
         ]
-        for index in changed_indices:
-            self.refresh_line(index)
+        self.refresh_lines(changed_indices, reflow=reflow)
         self.collapse_current_selection()
         return changed_indices
 

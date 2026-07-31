@@ -26,6 +26,7 @@ class StubContentApp(ContentTextualApp):
     def __init__(self, project: StubProject) -> None:
         self.changed_phrase_indices: set[int] = set()
         self.refreshed_indices: list[int] = []
+        self.refresh_batches: list[list[int]] = []
         self.committed = False
         super().__init__(
             project,  # type: ignore[arg-type]
@@ -57,6 +58,11 @@ class StubContentApp(ContentTextualApp):
     def refresh_line(self, index: int) -> None:
         self.refreshed_indices.append(index)
         super().refresh_line(index)
+
+    def refresh_lines(self, indices, *, reflow: bool = True) -> None:
+        index_list = list(indices)
+        self.refresh_batches.append(index_list)
+        super().refresh_lines(index_list, reflow=reflow)
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
         return SaveChangesDialog("Apply content changes?")
@@ -188,6 +194,7 @@ def test_base_mutates_selected_mapped_items_and_confirms_before_commit() -> None
             app.action_mutate()
             assert app.changed_phrase_indices == {0, 2}
             assert app.selected_indices == {1}
+            assert app.refresh_batches == [[0, 1]]
 
             await pilot.press("escape")
             assert isinstance(app.screen, SaveChangesDialog)

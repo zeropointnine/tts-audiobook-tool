@@ -171,6 +171,42 @@ def test_number_hotkey_assigns_voice_to_every_selected_line(monkeypatch) -> None
     run(exercise())
 
 
+def test_voice_assignment_batches_prompt_updates_without_reflow(monkeypatch) -> None:
+    app, _ = make_app(6)
+    refresh_calls: list[tuple[list[int], bool]] = []
+    monkeypatch.setattr(
+        app,
+        "refresh_lines",
+        lambda indices, *, reflow=True: refresh_calls.append(
+            (list(indices), reflow)
+        ),
+    )
+    monkeypatch.setattr(app, "collapse_current_selection", lambda: None)
+
+    app.selected_indices = {0, 1, 2}
+    app.action_assign_voice(1)
+
+    assert refresh_calls == [([0, 1, 2], False)]
+
+
+def test_replacing_out_of_range_voice_requests_reflow(monkeypatch) -> None:
+    project = StubProject([StubPhraseGroup("Line 1", voice_index=8)])
+    app = make_editor(project, voice_sample_count=2)
+    refresh_calls: list[tuple[list[int], bool]] = []
+    monkeypatch.setattr(
+        app,
+        "refresh_lines",
+        lambda indices, *, reflow=True: refresh_calls.append(
+            (list(indices), reflow)
+        ),
+    )
+    monkeypatch.setattr(app, "collapse_current_selection", lambda: None)
+
+    app.action_assign_voice(1)
+
+    assert refresh_calls == [([0], True)]
+
+
 def test_reverting_staged_values_makes_editor_clean(monkeypatch) -> None:
     project = StubProject(
         [StubPhraseGroup("Line 1", voice_index=0), StubPhraseGroup("Line 2")]

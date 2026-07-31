@@ -36,11 +36,11 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
         self.staged_voice_indices = list(self.original_voice_indices)
         self.did_save_changes = False
         self.save_error = ""
+        self.voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
         if voice_sample_count is None:
-            voice_sample_count = len(
-                ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
-            )
-        highest_voice_key = min(max(voice_sample_count, 1), 9)
+            voice_sample_count = len(self.voice_values)
+        self.voice_sample_count = voice_sample_count
+        highest_voice_key = min(max(self.voice_sample_count, 1), 9)
         header_lines = [
             f"{COL_ACCENT}Edit voice selections",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
@@ -60,9 +60,10 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
         phrase_group = self.project.phrase_groups[phrase_index]
         voice_index = self.staged_voice_indices[phrase_index]
         voice_number = max(voice_index + 1, 1)
-        voice_values = ProjectVoiceUtil.get_voice_values(self.project, Tts.get_type())
         # Keep showing the stored number, but flag stale selections after voices change.
-        voice_status = " *OUT OF RANGE*" if voice_index >= len(voice_values) else ""
+        voice_status = (
+            " *OUT OF RANGE*" if voice_index >= self.voice_sample_count else ""
+        )
         prefix = (
             f"{phrase_index + 1:05d} [Voice sample {voice_number}{voice_status}] "
         )
@@ -77,8 +78,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""
-        voice_values = ProjectVoiceUtil.get_voice_values(self.project, Tts.get_type())
-        if voice_index >= len(voice_values):
+        if voice_index >= self.voice_sample_count:
             return
 
         def assign_voice(_visible_index: int, phrase_index: int) -> bool:
@@ -87,7 +87,15 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
             self.staged_voice_indices[phrase_index] = voice_index
             return True
 
-        self.mutate_selected_items(assign_voice)
+        selected_have_out_of_range_voice = any(
+            self.staged_voice_indices[self.phrase_indices[index]]
+            >= self.voice_sample_count
+            for index in self.selected_indices
+        )
+        self.mutate_selected_items(
+            assign_voice,
+            reflow=selected_have_out_of_range_voice,
+        )
 
     def commit_changes_and_exit(self) -> None:
         """Apply staged values and persist them, rolling memory back on failure."""
