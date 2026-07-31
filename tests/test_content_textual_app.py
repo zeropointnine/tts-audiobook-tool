@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
+from rich.console import Console
 from rich.text import Text
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
@@ -8,6 +9,7 @@ from textual.widgets import Static
 from tts_audiobook_tool.textual import content_textual_app
 from tts_audiobook_tool.textual.content_textual_app import ContentTextualApp
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
+from tts_audiobook_tool.textual.textual_shared import HangingIndentText
 
 
 @dataclass
@@ -23,6 +25,7 @@ class StubProject:
 class StubContentApp(ContentTextualApp):
     def __init__(self, project: StubProject) -> None:
         self.changed_phrase_indices: set[int] = set()
+        self.refreshed_indices: list[int] = []
         self.committed = False
         super().__init__(
             project,  # type: ignore[arg-type]
@@ -50,6 +53,10 @@ class StubContentApp(ContentTextualApp):
             return True
 
         self.mutate_selected_items(mutate)
+
+    def refresh_line(self, index: int) -> None:
+        self.refreshed_indices.append(index)
+        super().refresh_line(index)
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
         return SaveChangesDialog("Apply content changes?")
@@ -104,6 +111,25 @@ def test_base_retains_project_and_maps_options_to_phrase_groups() -> None:
     assert app.find_match_indices("hidden") == []
 
 
+def test_base_css_contains_shared_and_app_specific_rules() -> None:
+    assert "#textual-shared-css-test" in ContentTextualApp.CSS
+    assert "#line-list" in ContentTextualApp.CSS
+
+
+def test_hanging_indent_ignores_non_printing_ansi_prefix_characters() -> None:
+    prefix = "\x1b[31mLabel:\x1b[0m "
+    text = HangingIndentText.from_ansi(
+        prefix + "one two three four",
+        content_start=len(prefix),
+    )
+    console = Console(width=14, force_terminal=False, color_system=None)
+
+    rendered_lines = console.render_lines(text, console.options, pad=False)
+    rendered = ["".join(segment.text for segment in line) for line in rendered_lines]
+
+    assert rendered == ["Label: one two", "       three", "       four"]
+
+
 def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
     app, _ = make_app()
 
@@ -126,6 +152,27 @@ def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
             assert status_bar.display is True
             assert selection_status.display is True
             assert find_bar.display is False
+
+    run(exercise())
+
+
+def test_base_parses_ansi_header_strings_when_composing_and_updating() -> None:
+    app, _ = make_app()
+    app.header_lines = ["\x1b[31mInitial header\x1b[0m"]
+
+    async def exercise() -> None:
+        async with app.run_test():
+            header = app.query_one("#header-line-0", Static)
+            initial_renderable = header.content
+            assert isinstance(initial_renderable, Text)
+            assert initial_renderable.plain == "Initial header"
+            assert initial_renderable.spans
+
+            app.update_header(["\x1b[32mUpdated header\x1b[0m"])
+            updated_renderable = header.content
+            assert isinstance(updated_renderable, Text)
+            assert updated_renderable.plain == "Updated header"
+            assert updated_renderable.spans
 
     run(exercise())
 
@@ -154,6 +201,23 @@ def test_base_mutates_selected_mapped_items_and_confirms_before_commit() -> None
             await pilot.pause()
             assert app.committed is True
             assert app.is_running is False
+
+    run(exercise())
+
+
+def test_plain_navigation_does_not_replace_prompts() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            app.refreshed_indices.clear()
+            await pilot.press("down")
+            assert app.selected_indices == {1}
+            assert app.refreshed_indices == []
+
+            await pilot.press("shift+up")
+            assert app.selected_indices == {0, 1}
+            assert app.refreshed_indices == []
 
     run(exercise())
 

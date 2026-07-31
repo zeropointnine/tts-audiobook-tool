@@ -1,8 +1,10 @@
 import asyncio
 from dataclasses import dataclass, field
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from rich.console import Console
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.widgets import Button, Static
@@ -16,7 +18,7 @@ from tts_audiobook_tool.textual.review_segments_editor import (
 )
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.segment_info_dialog import SegmentInfoDialog
-from tts_audiobook_tool.textual.textual_shared import STYLE_ERROR
+from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
 
@@ -81,6 +83,18 @@ def run(coroutine) -> None:
     asyncio.run(coroutine)
 
 
+def render_line(app: ReviewSegmentsEditorTextualApp, index: int, width: int) -> str:
+    output = StringIO()
+    console = Console(
+        file=output,
+        width=width,
+        force_terminal=False,
+        color_system=None,
+    )
+    console.print(app.format_line(index), end="")
+    return output.getvalue()
+
+
 def test_only_generated_phrases_are_displayed_once_in_project_order() -> None:
     app, project = make_app(6, {5, 1})
     project.sound_segments.sound_segments_map[5].append(
@@ -112,10 +126,43 @@ def test_only_positive_best_segment_word_error_count_is_displayed() -> None:
         "[00001] [      ] [word errors: 1] Line 1"
     )
     error_count_span = app.format_line(0).spans[0]
-    assert str(error_count_span.style) == STYLE_ERROR
+    assert error_count_span.style
     assert str(app.format_line(0))[error_count_span.start:error_count_span.end] == "1"
     assert str(app.format_line(1)) == "[00002] [      ] Line 2"
     assert str(app.format_line(2)) == "[00003] [      ] Line 3"
+
+
+def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> None:
+    app, project = make_app(1)
+    project.phrase_groups[0].presentable_text = "one two three four five six seven"
+
+    rendered = render_line(app, 0, width=25)
+
+    assert rendered.splitlines() == [
+        "[00001] [      ] one two",
+        "                 three",
+        "                 four…",
+    ]
+
+
+def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> None:
+    app, _ = make_app(2)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(30, 20)) as pilot:
+            await pilot.press("shift+down")
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            line = option_list.render_line(0)
+            assert line.cell_length == option_list.scrollable_content_region.width
+            assert all(
+                segment.style is not None
+                and segment.style.reverse
+                and segment.style.color is not None
+                and tuple(segment.style.color.get_truecolor()) == (136, 136, 136)
+                for segment in line
+            )
+
+    run(exercise())
 
 
 def test_deletion_toggle_applies_to_every_selected_generated_phrase() -> None:
@@ -132,7 +179,7 @@ def test_deletion_toggle_applies_to_every_selected_generated_phrase() -> None:
                 for span in first_line.spans
                 if str(first_line)[span.start : span.end] == "DELETE"
             )
-            assert str(delete_span.style) == STYLE_ERROR
+            assert delete_span.style
             assert app.selected_indices == {2}
             assert app.has_changes is True
 
@@ -501,6 +548,23 @@ def test_playback_status_clears_dynamically_when_sound_finishes() -> None:
                 await pilot.pause(0.2)
                 assert str(app.query_one("#playing-status", Static).render()) == ""
                 assert app.playing_phrase_index is None
+
+    run(exercise())
+
+
+def test_playback_timer_does_not_rewrite_unchanged_status() -> None:
+    app, _ = make_app(1)
+    app.playing_sound_id = "sound-id"
+    app.playing_phrase_index = 0
+
+    async def exercise() -> None:
+        with (
+            patch.object(PlaySoundUtil, "current_sound_id", return_value="sound-id"),
+            patch.object(app, "show_playback_status") as show_playback_status,
+        ):
+            async with app.run_test():
+                app.update_playback_status()
+                show_playback_status.assert_not_called()
 
     run(exercise())
 

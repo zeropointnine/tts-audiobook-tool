@@ -1,17 +1,17 @@
 from typing import ClassVar
 
-from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.css.errors import StylesheetError
 
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.textual.content_textual_app import ContentTextualApp
 from tts_audiobook_tool.textual.textual_shared import (
-    NonWrappingOptionList as NonWrappingOptionList,
+    HangingIndentText,
+    STYLE_DIM,
 )
-from tts_audiobook_tool.textual.textual_shared import STYLE_ACCENT, STYLE_DIM
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import make_error_string, print_feedback
 
@@ -42,23 +42,11 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
             )
         highest_voice_key = min(max(voice_sample_count, 1), 9)
         header_lines = [
-            Text("Edit voice selections", style=STYLE_ACCENT),
-            Text(
-                f"- Use number keys [1] to [{highest_voice_key}] to set voice sample for selected text line/s",
-                style=STYLE_DIM,
-            ),
-            Text(
-                "- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
-                style=STYLE_DIM,
-            ),
-            Text(
-                "- Select multiple lines by holding [SHIFT] + navigation keys",
-                style=STYLE_DIM,
-            ),
-            Text(
-                "- Press [ESC] to finish   - Press [CTRL-F] to find text",
-                style=STYLE_DIM,
-            ),
+            f"{COL_ACCENT}Edit voice selections",
+            f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
+            f"{COL_DIM}- Select multiple lines by holding [SHIFT] + navigation keys",
+            f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",
+            f"{COL_DIM}- Press [ESC] to finish   - Press [CTRL-F] to find text",
         ]
         super().__init__(project, header_lines)
 
@@ -66,7 +54,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
     def has_changes(self) -> bool:
         return self.staged_voice_indices != self.original_voice_indices
 
-    def format_line(self, index: int) -> Text:
+    def format_line(self, index: int) -> HangingIndentText:
         """Format one row, styling selected rows except for the active row."""
         phrase_index = self.phrase_indices[index]
         phrase_group = self.project.phrase_groups[phrase_index]
@@ -75,16 +63,17 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
         voice_values = ProjectVoiceUtil.get_voice_values(self.project, Tts.get_type())
         # Keep showing the stored number, but flag stale selections after voices change.
         voice_status = " *OUT OF RANGE*" if voice_index >= len(voice_values) else ""
-        content = (
-            f"[{phrase_index + 1:05d}] [Voice sample {voice_number}{voice_status}] "
-            f"{phrase_group.presentable_text}"
+        prefix = (
+            f"{phrase_index + 1:05d} [Voice sample {voice_number}{voice_status}] "
         )
         is_find_match = index == self.find_match_index
-        is_inactive_selection = (
-            index in self.selected_indices and index != self.selected_index
+        style = f"{STYLE_DIM} reverse" if is_find_match else ""
+        return HangingIndentText.from_ansi(
+            prefix + phrase_group.presentable_text,
+            content_start=len(prefix),
+            max_lines=3,
+            style=style,
         )
-        style = f"{STYLE_DIM} reverse" if is_find_match or is_inactive_selection else ""
-        return Text(content, style=style, no_wrap=True, overflow="ellipsis")
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""

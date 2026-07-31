@@ -35,7 +35,7 @@ def make_project(sound_segment=None) -> Project:
 
 def strip_formatting(lines: list[str]) -> str:
     return text_util.strip_ansi_codes(
-        SegmentTranscriptUtil.combine_ansi_lines(lines)
+        text_util.combine_ansi_lines(lines)
     )
 
 
@@ -77,7 +77,7 @@ def test_make_info_text_formats_modern_sidecar_and_word_diff(capsys) -> None:
     ):
         lines = SegmentTranscriptUtil.make_info_text_lines(0, project)
 
-    text = SegmentTranscriptUtil.combine_ansi_lines(lines)
+    text = text_util.combine_ansi_lines(lines)
     plain_text = strip_formatting(lines)
     assert all("\n" not in line for line in lines)
     assert "Line: 1, Word error fail" in plain_text

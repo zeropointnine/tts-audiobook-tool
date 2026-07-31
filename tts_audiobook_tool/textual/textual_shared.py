@@ -1,11 +1,16 @@
 from collections.abc import Callable
 import os
-from pathlib import Path
 import sys
 from typing import ClassVar
 
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
+from rich.segment import Segment
+from rich.style import Style
+from rich.text import Text
 from textual import events
 from textual.binding import Binding, BindingType
+from textual.strip import Strip
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
@@ -15,6 +20,206 @@ STYLE_ERROR = "#ff0000"
 STYLE_DIM = "#888888"
 STYLE_OK = "#00ff00"
 STYLE_DEFAULT = "default"
+
+
+TEXTUAL_SHARED_CSS = """\
+$col-accent: #ffaa44;
+$col-error: #ff0000;
+$col-dim: #888888;
+$col-ok: #00ff00;
+$col-default: ansi_default;
+
+/* Used by the test suite to verify that this shared stylesheet was loaded. */
+#textual-shared-css-test {
+    color: #123456;
+}
+
+Screen {
+    layout: vertical;
+}
+
+Screen:ansi.-screen-suspended {
+    text-style: none !important;
+}
+
+#header {
+    overflow: hidden;
+}
+
+#header > .header-line {
+    height: 1;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#header-divider {
+    height: 1;
+    margin: 0;
+    color: $col-dim;
+}
+"""
+
+
+CONTENT_TEXTUAL_APP_CSS = """\
+#line-list {
+    height: 1fr;
+    max-height: 100%;
+    border: none;
+    padding: 0;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+#line-list:focus {
+    border: none;
+    background-tint: transparent;
+}
+
+#line-list > .option-list--option-highlighted,
+#line-list:focus > .option-list--option-highlighted {
+    text-style: reverse;
+}
+
+#status-bar {
+    height: 1;
+    layout: horizontal;
+}
+
+#playing-status {
+    width: 1fr;
+    height: 1;
+    color: $col-dim;
+    text-style: italic;
+    content-align: left middle;
+}
+
+#selection-status {
+    width: 1fr;
+    height: 1;
+    color: $col-dim;
+    text-style: italic;
+    content-align: right middle;
+}
+
+#find-bar {
+    display: none;
+    height: 1;
+    layout: horizontal;
+}
+
+#find-label {
+    width: auto;
+    height: 1;
+    color: $col-accent;
+    text-style: italic;
+}
+
+#find-input {
+    width: 1fr;
+    height: 1;
+    border: none;
+    padding: 0;
+    background: ansi_default;
+    background-tint: transparent;
+}
+
+#find-result {
+    width: 12;
+    height: 1;
+    color: $col-dim;
+    text-style: italic;
+    content-align: right middle;
+}
+
+#find-input:focus {
+    border: none;
+    color: $col-default;
+    background: ansi_default;
+    background-tint: transparent;
+}
+"""
+
+
+class HangingIndentText:
+    """Render ANSI-styled text with a fixed prefix and capped hanging indent."""
+
+    def __init__(
+        self,
+        text: Text,
+        content_start: int,
+        max_lines: int = 3,
+        style: str = "",
+    ) -> None:
+        self.text = text
+        self.content_start = content_start
+        self.max_lines = max(max_lines, 1)
+        self.style = style
+
+    @classmethod
+    def from_ansi(
+        cls,
+        ansi_text: str,
+        content_start: int,
+        max_lines: int = 3,
+        style: str = "",
+    ) -> "HangingIndentText":
+        """Create a renderable using an offset into the ANSI source string."""
+        plain_content_start = len(Text.from_ansi(ansi_text[:content_start]).plain)
+        return cls(
+            Text.from_ansi(ansi_text),
+            plain_content_start,
+            max_lines,
+            style,
+        )
+
+    @property
+    def spans(self):
+        """Expose source spans for callers that inspect the logical row styling."""
+        return self.text.spans
+
+    def __str__(self) -> str:
+        return self.text.plain
+
+    def __rich_measure__(
+        self, _console: Console, options: ConsoleOptions
+    ) -> Measurement:
+        maximum = min(self.text.cell_len, options.max_width)
+        return Measurement(min(maximum, 1), maximum)
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        prefix, content = self.text.divide([self.content_start])
+        prefix_width = prefix.cell_len
+        content_width = max(options.max_width - prefix_width, 1)
+        content_lines = content.wrap(
+            console,
+            content_width,
+            overflow="fold",
+            no_wrap=False,
+        ) or [Text()]
+        was_truncated = len(content_lines) > self.max_lines
+        visible_lines = content_lines[: self.max_lines]
+        for visible_line in visible_lines:
+            visible_line.rstrip()
+        if was_truncated:
+            last_line = visible_lines[-1]
+            last_line.truncate(max(content_width - 1, 0), overflow="crop")
+            last_line.append("…")
+
+        rendered = Text()
+        continuation_indent = " " * prefix_width
+        for line_index, content_line in enumerate(visible_lines):
+            if line_index:
+                rendered.append("\n")
+                line = Text(continuation_indent)
+            else:
+                line = prefix.copy()
+            line.append(content_line)
+            rendered.append(line)
+        if self.style:
+            rendered.stylize(self.style)
+        yield rendered
 
 
 class NonWrappingOptionList(OptionList):
@@ -36,7 +241,31 @@ class NonWrappingOptionList(OptionList):
     ) -> None:
         self.extend_selection = False
         self.collapse_selection = collapse_selection
+        self.inactive_selection_indices: set[int] = set()
+        self.inactive_selection_style = Style.parse(f"{STYLE_DIM} reverse")
         super().__init__(*content, **kwargs)
+
+    def set_inactive_selection_indices(self, indices: set[int]) -> None:
+        """Update inactive selections without replacing prompts or layout caches."""
+        if indices == self.inactive_selection_indices:
+            return
+        self.inactive_selection_indices = set(indices)
+        self.refresh()
+
+    def render_line(self, y: int) -> Strip:
+        """Apply full-width styling to inactive selected visual rows."""
+        line_number = self.scroll_offset.y + y
+        try:
+            option_index, _line_offset = self._lines[line_number]
+        except IndexError:
+            return super().render_line(y)
+        strip = super().render_line(y)
+        if option_index in self.inactive_selection_indices:
+            return Strip(
+                Segment.apply_style(strip, post_style=self.inactive_selection_style),
+                strip.cell_length,
+            )
+        return strip
 
     def prepare_navigation(self, extend_selection: bool) -> None:
         """Record navigation mode and collapse selection for unshifted movement."""
@@ -108,15 +337,6 @@ class NonWrappingOptionList(OptionList):
         """Extend from the selection anchor on Shift+click; otherwise collapse."""
         self.prepare_navigation(event.shift)
         await super()._on_click(event)
-
-
-def load_css(*filenames: str) -> str:
-    """Load multiple TCSS files into one variable-substitution scope."""
-    textual_dir = Path(__file__).parent
-    return "\n".join(
-        (textual_dir / filename).read_text(encoding="utf-8")
-        for filename in filenames
-    )
 
 def can_textual() -> bool:
     """Coarse test to see if terminal can support a full-screen interface."""

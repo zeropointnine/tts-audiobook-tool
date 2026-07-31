@@ -6,30 +6,34 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
+from textual.visual import VisualType
 from textual.widget import Widget
 from textual.widgets import Input, OptionList, Rule, Static
 from textual.widgets.option_list import Option
 
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.textual.save_changes_dialog import (
     ExitDecision,
     SaveChangesDialog,
 )
 from tts_audiobook_tool.textual.textual_shared import (
+    CONTENT_TEXTUAL_APP_CSS,
     NonWrappingOptionList,
+    TEXTUAL_SHARED_CSS,
     can_textual,
-    load_css,
 )
 from tts_audiobook_tool.util import print_feedback
 
-HeaderLine = str | Text
 SelectedItemMutator = Callable[[int, int], bool]
 
 
 class ContentTextualApp(App[None]):
-    """Base app for selecting and mutating phrase-group-backed content rows."""
+    """
+    Base app for selecting and mutating phrase-group-backed content rows.
+    """
 
-    CSS = load_css("textual_shared.css", "content_textual_app.css")
+    CSS = "\n".join((TEXTUAL_SHARED_CSS, CONTENT_TEXTUAL_APP_CSS))
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "quit_editor", "Quit", show=False),
         Binding("ctrl+q", "ignore_ctrl_q", show=False, priority=True),
@@ -43,7 +47,7 @@ class ContentTextualApp(App[None]):
     def __init__(
         self,
         project: Project,
-        header_lines: Iterable[HeaderLine],
+        header_lines: Iterable[str],
         phrase_indices: Iterable[int] | None = None,
     ) -> None:
         super().__init__()
@@ -88,7 +92,7 @@ class ContentTextualApp(App[None]):
         """Whether a concrete editor has staged a data mutation."""
         return False
 
-    def format_line(self, index: int) -> Text:
+    def format_line(self, index: int) -> VisualType:
         """Format a visible row; concrete editors must implement this hook."""
         raise NotImplementedError
 
@@ -112,7 +116,7 @@ class ContentTextualApp(App[None]):
         header = Vertical(
             *(
                 Static(
-                    line,
+                    Text.from_ansi(f"{Ansi.RESET}{line}"),
                     id=f"header-line-{index}",
                     classes="header-line",
                     markup=False,
@@ -148,8 +152,9 @@ class ContentTextualApp(App[None]):
 
     def on_mount(self) -> None:
         self.query_one("#line-list", OptionList).focus()
+        self.update_inactive_selection_style()
 
-    def update_header(self, lines: list[HeaderLine]) -> None:
+    def update_header(self, lines: list[str]) -> None:
         """Replace the fixed-height header contents."""
         assert len(lines) == len(self.header_lines), (
             f"Expected {len(self.header_lines)} header lines, got {len(lines)}"
@@ -157,7 +162,9 @@ class ContentTextualApp(App[None]):
         self.header_lines = list(lines)
         if self.is_mounted:
             for index, line in enumerate(self.header_lines):
-                self.query_one(f"#header-line-{index}", Static).update(line)
+                self.query_one(f"#header-line-{index}", Static).update(
+                    Text.from_ansi(f"{Ansi.RESET}{line}")
+                )
 
     @property
     def selection_status_text(self) -> str:
@@ -181,16 +188,29 @@ class ContentTextualApp(App[None]):
             self.option_id(index), self.format_line(index)
         )
 
-    def replace_selection(self, anchor_index: int, target_index: int) -> None:
+    def update_inactive_selection_style(self) -> None:
+        """Update list-level styling for selected rows other than the highlight."""
+        inactive_indices = self.selected_indices - (
+            {self.selected_index} if self.selected_index is not None else set()
+        )
+        option_lists = self.query("#line-list")
+        if option_lists:
+            option_lists.first(NonWrappingOptionList).set_inactive_selection_indices(
+                inactive_indices
+            )
+
+    def replace_selection(
+        self,
+        anchor_index: int,
+        target_index: int,
+    ) -> None:
         """Select the contiguous inclusive range between an anchor and target."""
         first_index = min(anchor_index, target_index)
         last_index = max(anchor_index, target_index)
         new_selected_indices = set(range(first_index, last_index + 1))
-        changed_indices = self.selected_indices ^ new_selected_indices
         self.selection_anchor_index = anchor_index
         self.selected_indices = new_selected_indices
-        for index in changed_indices:
-            self.refresh_line(index)
+        self.update_inactive_selection_style()
         self.update_selection_status()
 
     def collapse_selection(self, index: int) -> None:
@@ -206,19 +226,18 @@ class ContentTextualApp(App[None]):
         self, event: OptionList.OptionHighlighted
     ) -> None:
         """Move or extend selection to the newly highlighted row."""
-        previous_selected_index = self.selected_index
         self.selected_index = event.option_index
         option_list = self.query_one("#line-list", NonWrappingOptionList)
         if option_list.extend_selection and self.selection_anchor_index is not None:
-            self.replace_selection(self.selection_anchor_index, self.selected_index)
+            self.replace_selection(
+                self.selection_anchor_index,
+                self.selected_index,
+            )
         else:
-            self.collapse_selection(self.selected_index)
-        if (
-            previous_selected_index is not None
-            and previous_selected_index in self.selected_indices
-        ):
-            self.refresh_line(previous_selected_index)
-        self.refresh_line(self.selected_index)
+            self.replace_selection(
+                self.selected_index,
+                self.selected_index,
+            )
 
     def action_quit_editor(self) -> None:
         if self.find_active:
@@ -354,11 +373,9 @@ class ContentTextualApp(App[None]):
         if self.selected_index is None:
             return
         new_selected_indices = set(range(len(self.phrase_indices)))
-        changed_indices = self.selected_indices ^ new_selected_indices
         self.selection_anchor_index = self.selected_index
         self.selected_indices = new_selected_indices
-        for index in changed_indices:
-            self.refresh_line(index)
+        self.update_inactive_selection_style()
         self.update_selection_status()
 
     def mutate_selected_items(self, mutator: SelectedItemMutator) -> list[int]:
@@ -397,6 +414,7 @@ class ContentTextualApp(App[None]):
             for index in range(len(self.phrase_indices))
         )
         option_list.highlighted = self.selected_index
+        self.update_inactive_selection_style()
         self.update_selection_status()
 
     def request_exit(self) -> None:

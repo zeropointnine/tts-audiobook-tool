@@ -5,6 +5,13 @@ Generic text/string utility functions
 import re
 from urllib.parse import urlencode
 
+from tts_audiobook_tool.system_support.ansi import Ansi
+
+
+def combine_ansi_lines(lines: list[str]) -> str:
+    """Join display lines while resetting terminal styling after each line."""
+    return f"{Ansi.RESET}\n".join(lines) + Ansi.RESET
+
 
 def strip_ansi_codes(s: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')

@@ -383,11 +383,6 @@ class SegmentTranscriptUtil:
         ]
 
     @staticmethod
-    def combine_ansi_lines(lines: list[str]) -> str:
-        """Join display lines while resetting terminal styling after each line."""
-        return f"{Ansi.RESET}\n".join(lines) + Ansi.RESET
-
-    @staticmethod
     def make_word_error_visualization(info: SegmentTranscriptData) -> str:
         path = Validator.get_word_error_alignment(
             info.normalized_source,

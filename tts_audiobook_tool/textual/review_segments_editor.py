@@ -1,11 +1,12 @@
 from pathlib import Path
 from typing import ClassVar
 
-from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.css.errors import StylesheetError
 from textual.widgets import Static
 
+from tts_audiobook_tool import text_util
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.segment_transcript_util import (
     SegmentTranscriptUtil,
@@ -16,10 +17,10 @@ from tts_audiobook_tool.textual.content_textual_app import ContentTextualApp
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.segment_info_dialog import SegmentInfoDialog
 from tts_audiobook_tool.textual.textual_shared import (
-    STYLE_ACCENT,
+    HangingIndentText,
     STYLE_DIM,
-    STYLE_ERROR,
 )
+from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.util import make_error_string, print_feedback
 
 
@@ -54,24 +55,12 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
         self.playing_sound_path = ""
         self.playing_phrase_index: int | None = None
         header_lines = [
-            Text("Review/delete sound segments", style=STYLE_ACCENT),
-            Text(
-                "- Press [X] to mark/unmark selected line/s for deletion",
-                style=STYLE_DIM,
-            ),
-            Text(
-                "- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
-                style=STYLE_DIM,
-            ),
-            Text(
-                "- Select multiple lines by holding [SHIFT] + navigation keys",
-                style=STYLE_DIM,
-            ),
-            Text(
-                "- Press [P] Play  [I] Info  [E] Show only word errors  [CTRL-F] Find text",
-                style=STYLE_DIM,
-            ),
-            Text("- Press [ESC] to finish", style=STYLE_DIM),
+            f"{COL_ACCENT}Review/delete sound segments",
+            f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
+            f"{COL_DIM}- Select multiple lines by holding [SHIFT] + navigation keys",
+            f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to mark/unmark selected line/s for deletion",
+            f"{COL_DIM}- Press [{COL_ACCENT}P{COL_DIM}] to play  [I] Info  [E] Show only word errors  [CTRL-F] Find text",
+            f"{COL_DIM}- Press [ESC] to finish",
         ]
         super().__init__(project, header_lines, self.all_phrase_indices)
 
@@ -110,13 +99,11 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
             status_widgets.first(Static).update("")
 
     def update_playback_status(self) -> None:
-        """Refresh playback status and clear it when playback has finished."""
+        """Clear playback status once the tracked sound has finished."""
         if not self.playing_sound_id:
             return
         if PlaySoundUtil.current_sound_id() != self.playing_sound_id:
             self.clear_playback_status()
-            return
-        self.show_playback_status()
 
     def show_playback_status(self) -> None:
         """Show the currently tracked phrase without querying playback state."""
@@ -126,35 +113,34 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
                 f"Playing line {self.playing_phrase_index + 1}"
             )
 
-    def format_line(self, index: int) -> Text:
-        """Format one row, styling selected rows except for the active row."""
+    def format_line(self, index: int) -> HangingIndentText:
+        """Format one ANSI-styled row with a three-line hanging text column."""
         phrase_index = self.phrase_indices[index]
         phrase_group = self.project.phrase_groups[phrase_index]
         best_sound_segment = self.project.sound_segments.get_best_item_for(phrase_index)
         deletion_flag_index = self.deletion_flag_indices[phrase_index]
         should_delete = self.staged_deletion_flags[deletion_flag_index]
         is_find_match = index == self.find_match_index
-        is_inactive_selection = (
-            index in self.selected_indices and index != self.selected_index
+        style = f"{STYLE_DIM} reverse" if is_find_match else ""
+        deletion_text = "X" if should_delete else " "
+        deletion_color = COL_ERROR if should_delete else ""
+        prefix_ansi = (
+            f"{phrase_index + 1:05d} "
+            f"{COL_DIM}[{deletion_color}{deletion_text}{COL_DIM}] "
         )
-        style = f"{STYLE_DIM} reverse" if is_find_match or is_inactive_selection else ""
-        line = Text(
-            f"[{phrase_index + 1:05d}] [",
-            style=style,
-            no_wrap=True,
-            overflow="ellipsis",
-        )
-        line.append(
-            "DELETE" if should_delete else "      ",
-            style=STYLE_ERROR if should_delete else "",
-        )
-        line.append("] ")
+        content_ansi = Ansi.RESET
         if best_sound_segment is not None and best_sound_segment.num_errors > 0:
-            line.append("[word errors: ")
-            line.append(str(best_sound_segment.num_errors), style=STYLE_ERROR)
-            line.append("] ")
-        line.append(phrase_group.presentable_text)
-        return line
+            content_ansi += (
+                "[word errors: "
+                f"{COL_ERROR}{best_sound_segment.num_errors}{Ansi.RESET}] "
+            )
+        content_ansi += phrase_group.presentable_text
+        return HangingIndentText.from_ansi(
+            prefix_ansi + content_ansi,
+            content_start=len(prefix_ansi),
+            max_lines=3,
+            style=style,
+        )
 
     def set_selected_deletion_flag(self, should_delete: bool) -> None:
         """Set the deletion flag for all selected generated phrase groups."""
@@ -258,7 +244,7 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
                 
         self.push_screen(
             SegmentInfoDialog(
-                SegmentTranscriptUtil.combine_ansi_lines(lines)
+                text_util.combine_ansi_lines(lines)
             )
         )
 

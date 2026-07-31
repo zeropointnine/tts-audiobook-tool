@@ -322,7 +322,7 @@ class GenerateUtil:
                     printt()
                     if stt_info is not None:
                         printt(
-                            SegmentTranscriptUtil.combine_ansi_lines(
+                            text_util.combine_ansi_lines(
                                 SegmentTranscriptUtil.make_stt_details_lines(
                                     stt_info,
                                     should_show_diff=should_show_viz,

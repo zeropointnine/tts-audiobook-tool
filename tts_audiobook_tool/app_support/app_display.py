@@ -115,7 +115,7 @@ def print_regen_lines(state: State, indices: set[int]) -> None:
 
     for index in sorted(indices):
         lines = SegmentTranscriptUtil.make_info_text_lines(index, state.project)
-        printt(SegmentTranscriptUtil.combine_ansi_lines(lines))
+        printt(text_util.combine_ansi_lines(lines))
 
     printt()
 

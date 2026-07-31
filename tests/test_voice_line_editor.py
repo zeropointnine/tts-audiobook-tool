@@ -3,9 +3,13 @@ from dataclasses import dataclass
 from typing import cast
 
 import pytest
+from rich.console import Console
+from rich.text import Text
 from textual.css.errors import StylesheetError
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.textual import voice_line_editor
+from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from textual.widgets import Button
 
@@ -54,9 +58,75 @@ def stub_voice_values(monkeypatch) -> None:
 def test_header_limits_voice_key_range_to_available_samples() -> None:
     app, _ = make_app(voice_sample_count=2)
 
-    assert str(app.header_lines[1]) == (
+    assert all(isinstance(line, str) for line in app.header_lines)
+    assert all(not line.endswith(Ansi.RESET) for line in app.header_lines)
+    assert Text.from_ansi(app.header_lines[1]).plain == (
         "- Use number keys [1] to [2] to set voice sample for selected text line/s"
     )
+
+
+def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> None:
+    app, _ = make_app(2)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(50, 20)) as pilot:
+            await pilot.press("shift+down")
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            line = option_list.render_line(0)
+            assert line.cell_length == option_list.scrollable_content_region.width
+            assert all(
+                segment.style is not None
+                and segment.style.reverse
+                and segment.style.color is not None
+                and tuple(segment.style.color.get_truecolor()) == (136, 136, 136)
+                for segment in line
+            )
+
+    run(exercise())
+
+
+def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> None:
+    app, project = make_app(1)
+    project.phrase_groups[0].presentable_text = (
+        "one two three four five six seven eight nine"
+    )
+    console = Console(width=36, force_terminal=False, color_system=None)
+
+    rendered_lines = console.render_lines(
+        app.format_line(0), console.options, pad=False
+    )
+    rendered = ["".join(segment.text for segment in line) for line in rendered_lines]
+
+    assert rendered == [
+        "[00001] [Voice sample 1] one two",
+        "                         three four",
+        "                         five six…",
+    ]
+
+
+def test_inactive_selected_wrapped_line_dim_background_extends_each_row() -> None:
+    app, project = make_app(2)
+    project.phrase_groups[0].presentable_text = "one two three four five"
+
+    async def exercise() -> None:
+        async with app.run_test(size=(36, 20)) as pilot:
+            await pilot.press("shift+down")
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            rendered_lines = [option_list.render_line(y) for y in range(3)]
+            assert all(
+                line.cell_length == option_list.scrollable_content_region.width
+                for line in rendered_lines
+            )
+            assert all(
+                segment.style is not None
+                and segment.style.reverse
+                and segment.style.color is not None
+                and tuple(segment.style.color.get_truecolor()) == (136, 136, 136)
+                for line in rendered_lines
+                for segment in line
+            )
+
+    run(exercise())
 
 
 def test_number_hotkey_assigns_voice_to_every_selected_line(monkeypatch) -> None:
