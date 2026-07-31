@@ -119,16 +119,11 @@ def load_css(*filenames: str) -> str:
     )
 
 def can_textual() -> bool:
-    """ Coarse test to see if terminal can support a full-screen interface. """
-
-    from tts_audiobook_tool.ask import can_hotkey
-
-    if not can_hotkey:
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return False
 
-    term = os.environ.get("TERM", "")
-    return (
-        sys.stdin.isatty()
-        and sys.stdout.isatty()
-        and term not in {"", "dumb"}
-    )
+    if os.name != "nt":
+        term = os.environ.get("TERM", "")
+        return term not in {"", "dumb"}
+
+    return True
