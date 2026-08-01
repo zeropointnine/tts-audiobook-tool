@@ -81,7 +81,7 @@ class ProjectMenu:
 
                 items.append(
                     MenuItem(
-                        "Show directory in system file explorer", on_view,
+                        "Open project directory in system file explorer", on_view,
                         superlabel=" ", superlabel_no_blank_line=True
                     )
                 )

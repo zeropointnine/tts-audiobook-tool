@@ -6,12 +6,18 @@ import pytest
 from rich.console import Console
 from rich.text import Text
 from textual.css.errors import StylesheetError
+from textual.widgets import Button, Input, Static
+from tts_audiobook_tool.app_types import Book, BookSection
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.textual import voice_line_editor
 from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
-from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
-from textual.widgets import Button
+from tts_audiobook_tool.textual.voice_line_editor import (
+    VoiceLineEditorTextualApp,
+    VoiceLinePhraseGroupItem,
+    VoiceLineSectionItem,
+)
 
 
 @dataclass
@@ -40,6 +46,22 @@ def make_app(
         [StubPhraseGroup(f"Line {index + 1}") for index in range(num_lines)]
     )
     return make_editor(project, voice_sample_count), project
+
+
+def make_phrase_group(text: str, voice_index: int = -1) -> PhraseGroup:
+    return PhraseGroup(
+        phrases=[Phrase(text, Reason.SENTENCE)],
+        voice_index=voice_index,
+    )
+
+
+def make_sectioned_editor(
+    sections: list[BookSection], voice_sample_count: int = 2
+) -> VoiceLineEditorTextualApp:
+    project = Project.model_validate({"book": Book(sections=sections)})
+    app = VoiceLineEditorTextualApp(project, voice_sample_count)
+    app.load_content()
+    return app
 
 
 def run(coroutine) -> None:
@@ -103,6 +125,110 @@ def test_header_limits_voice_key_range_to_available_samples() -> None:
     )
 
 
+def test_single_section_lists_only_phrase_group_rows() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Only section",
+                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
+            )
+        ]
+    )
+
+    assert all(isinstance(item, VoiceLinePhraseGroupItem) for item in app.list_items)
+    assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
+        "[00001] [Voice sample 1] One.",
+        "[00002] [Voice sample 1] Two.",
+    ]
+    assert app.find_match_indices("only section") == []
+
+
+def test_multiple_sections_insert_generated_section_rows() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
+            ),
+            BookSection(
+                title="Middle",
+                phrase_groups=[make_phrase_group("Three.")],
+            ),
+        ]
+    )
+
+    assert [type(item) for item in app.list_items] == [
+        VoiceLineSectionItem,
+        VoiceLinePhraseGroupItem,
+        VoiceLinePhraseGroupItem,
+        VoiceLineSectionItem,
+        VoiceLinePhraseGroupItem,
+    ]
+    assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
+        "\nSection 1/2: Opening (2 lines)\n",
+        "[00001] [Voice sample 1] One.",
+        "[00002] [Voice sample 1] Two.",
+        "\nSection 2/2: Middle (1 line)\n",
+        "[00003] [Voice sample 1] Three.",
+    ]
+
+
+def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Empty", phrase_groups=[]),
+            BookSection(title="Text", phrase_groups=[make_phrase_group("One.")]),
+        ]
+    )
+    empty_app = make_sectioned_editor(
+        [
+            BookSection(title="Empty one", phrase_groups=[]),
+            BookSection(title="Empty two", phrase_groups=[]),
+        ]
+    )
+
+    assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
+        "\nSection 2/2: Text (1 line)\n",
+        "[00001] [Voice sample 1] One.",
+    ]
+    assert empty_app.list_items == []
+
+    async def exercise() -> None:
+        async with empty_app.run_test():
+            assert empty_app.query_one("#line-list", NonWrappingOptionList).display is False
+            assert empty_app.query_one("#empty-state", Static).display is True
+
+    run(exercise())
+
+
+def test_find_searches_generated_section_text_and_phrase_text() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(
+                title="Needle Chapter",
+                phrase_groups=[make_phrase_group("Haystack.")],
+            ),
+            BookSection(title="Ending", phrase_groups=[make_phrase_group("Three.")]),
+        ]
+    )
+
+    assert app.find_match_indices("section 2/3") == [2]
+    assert app.find_match_indices("needle chapter (1 line)") == [2]
+    assert app.find_match_indices("haystack") == [3]
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("ctrl+f")
+            find_input = app.query_one("#find-input", Input)
+            find_input.value = "Section 2/3"
+            await pilot.press("enter")
+            assert app.find_match_index == 2
+            assert app.selected_index == 2
+
+    run(exercise())
+
+
 def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> None:
     app, _ = make_app(2)
 
@@ -163,6 +289,73 @@ def test_inactive_selected_wrapped_line_dim_background_extends_each_row() -> Non
                 for line in rendered_lines
                 for segment in line
             )
+
+    run(exercise())
+
+
+def test_multiline_selection_leaves_section_rows_visually_unchanged_and_uncounted() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ]
+    )
+
+    async def exercise() -> None:
+        async with app.run_test(size=(60, 24)) as pilot:
+            # Move to the first phrase, then extend through the next heading and phrase.
+            await pilot.press("down", "shift+down", "shift+down")
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            assert app.selected_indices == {1, 2, 3}
+            assert app.selection_status_text == "2 lines selected"
+            assert option_list.inactive_selection_indices == {1}
+
+            section_row_y = next(
+                y
+                for y, (option_index, _line_offset) in enumerate(option_list._lines)
+                if option_index == 2
+            )
+            section_line = option_list.render_line(section_row_y + 1)
+            assert not any(
+                segment.style is not None and segment.style.reverse
+                for segment in section_line
+            )
+
+    run(exercise())
+
+
+def test_number_hotkey_ignores_highlighted_section_row() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ]
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            assert app.selected_index == 0
+            await pilot.press("2")
+            assert app.staged_voice_indices == [-1, -1]
+            assert app.selected_indices == {0}
+
+    run(exercise())
+
+
+def test_number_hotkey_assigns_only_phrase_rows_when_selection_crosses_section() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ]
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "shift+down", "shift+down", "2")
+            assert app.staged_voice_indices == [1, 1]
+            assert app.selected_indices == {3}
+            assert app.selection_anchor_index == 3
 
     run(exercise())
 

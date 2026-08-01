@@ -78,7 +78,7 @@ HINT_SPEED_UP = Hint(
     "speed_up",
     "Note",
 """Use this feature to create a sped-up (or slowed-down) copy of a voice clone sample.
-This can be (potentially) useful for modulating the speed of narration of the generated audio."""
+This can be potentially useful for modulating the speed of narration of the generated audio."""
 )
 
 HINT_INDEX_SAMPLE_LEN = Hint(

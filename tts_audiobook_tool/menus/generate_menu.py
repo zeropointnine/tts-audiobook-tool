@@ -139,7 +139,7 @@ class GenerateMenu:
             if has_sound_segments:
                 items.append(
                     MenuItem(
-                        "Review/delete segments",
+                        "Review/delete generated segments",
                         lambda _, __: SoundSegmentsEditorTextualApp.start(state.project),
                         superlabel=" ", superlabel_no_blank_line=True
                     )

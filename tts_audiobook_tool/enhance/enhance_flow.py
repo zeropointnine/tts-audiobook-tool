@@ -37,7 +37,7 @@ class EnhanceSourceText:
 
 def ask_and_make(state: State) -> None:
 
-    MenuUtil.print_screen_heading(state, "Enhance existing audiobook", "Enhance audiobook")
+    MenuUtil.print_screen_heading(state, "Enhance existing audiobook", breadcrumb="Enhance audiobook")
 
     hints.show_hint_if_necessary(state.prefs, HINT_STT_ENHANCE)
 
