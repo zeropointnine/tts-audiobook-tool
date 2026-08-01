@@ -474,7 +474,7 @@ def test_save_button_commits_staged_values_and_persists_once(monkeypatch) -> Non
     monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
     monkeypatch.setattr(
         voice_line_editor.ProjectTextIOUtil,
-        "save_phrase_groups",
+        "save_book",
         lambda saved_project: saves.append(saved_project) or "",
     )
 
@@ -513,7 +513,7 @@ def test_save_failure_rolls_back_project_and_records_error(monkeypatch) -> None:
     monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
     monkeypatch.setattr(
         voice_line_editor.ProjectTextIOUtil,
-        "save_phrase_groups",
+        "save_book",
         lambda *_: "disk full",
     )
 
@@ -545,7 +545,7 @@ def test_unexpected_save_exception_rolls_back_project_and_records_error(
 
     monkeypatch.setattr(
         voice_line_editor.ProjectTextIOUtil,
-        "save_phrase_groups",
+        "save_book",
         fail_save,
     )
 

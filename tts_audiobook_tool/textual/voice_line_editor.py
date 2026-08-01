@@ -261,7 +261,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
             phrase_group.voice_index = voice_index
 
         try:
-            error = ProjectTextIOUtil.save_phrase_groups(self.project)
+            error = ProjectTextIOUtil.save_book(self.project)
         except Exception as exception:
             error = make_error_string(exception)
         if error:

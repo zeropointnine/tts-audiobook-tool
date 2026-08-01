@@ -58,9 +58,8 @@ class ProjectTransferUtil:
 
     @staticmethod
     def apply_project_settings(dest_project: Project, source_project: Project) -> None:
-        with dest_project.batch():
-            for field_name in ProjectTransferUtil.get_project_settings_transfer_field_names(source_project):
-                setattr(dest_project, field_name, getattr(source_project, field_name))
+        for field_name in ProjectTransferUtil.get_project_settings_transfer_field_names(source_project):
+            setattr(dest_project, field_name, getattr(source_project, field_name))
 
     @staticmethod
     def get_project_settings_transfer_field_names(project: Project | type[Project]) -> list[str]:

@@ -197,22 +197,18 @@ class Qwen3BaseModel(TtsBaseModel):
         match project.qwen3_model_type:
             
             case "custom_voice":
+                status_prefix = "Speaker"
+                main_prefix = "speaker"
                 if instance:
                     resolved_speaker_id, is_valid = instance.get_resolved_speaker_info(project)
                     if not resolved_speaker_id:
                         resolved_speaker_id = "required"
-                    if is_valid and len(instance.supported_speakers) > 1:
-                        status_prefix = "Current speaker"
-                        main_prefix = "current speaker"
-                    else:
-                        status_prefix = "Speaker"
-                        main_prefix = "speaker"
                     value = ("" if is_valid else COL_ERROR) + resolved_speaker_id
                 else:
-                    status_prefix = "speaker"
-                    main_prefix = "speaker"
-                    # Instance doesn't yet exist, so settle for incomplete info
-                    value = ""
+                    is_valid = bool(project.qwen3_speaker_id)
+                    value = project.qwen3_speaker_id or (COL_ERROR + "required")
+                if is_valid and project.qwen3_instructions:
+                    value += f"{COL_DIM} + instructions"
             
             case "voice_design":
                 status_prefix = "Voice instruction"

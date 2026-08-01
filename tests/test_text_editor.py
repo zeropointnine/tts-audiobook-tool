@@ -173,7 +173,7 @@ def test_book_with_only_empty_sections_uses_empty_state_instead_of_headers() -> 
     run(exercise())
 
 
-def test_find_searches_section_titles_and_phrase_group_text() -> None:
+def test_find_searches_complete_section_headings_and_phrase_group_text() -> None:
     project = make_project(
         [
             BookSection(title="Prologue", phrase_groups=[make_phrase_group("Opening.")]),
@@ -185,7 +185,8 @@ def test_find_searches_section_titles_and_phrase_group_text() -> None:
 
     assert app.find_match_indices("needle") == [2]
     assert app.find_match_indices("haystack") == [3]
-    assert app.find_match_indices("section 2") == []
+    assert app.find_match_indices("section 2/2: needle chapter") == [2]
+    assert app.find_match_indices("needle chapter (1 line)") == [2]
 
 
 def test_staged_hierarchy_is_detached_from_project_book() -> None:

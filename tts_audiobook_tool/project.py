@@ -1,11 +1,10 @@
 from __future__ import annotations
 import os
-import threading
-from contextlib import contextmanager
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, model_validator
 
+from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
@@ -16,7 +15,6 @@ from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
-from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.util import *
 
 import tts_audiobook_tool.app_types as app_types_module
@@ -24,16 +22,9 @@ import tts_audiobook_tool.app_types as app_types_module
 app_types_module.PhraseGroup = PhraseGroup
 BookSection.__annotations__['phrase_groups'] = list[PhraseGroup]
 
-# Thread-local warning sink used during project load/normalization by
-# project_load_util and project_serialization_util.
-_tl = threading.local()
-
-
 class Project(BaseModel):
     """
-    Project settings. Assigning any field automatically saves to disk once `_autosave`
-    is enabled (after loading). Use `with project.batch():` to make several assignments
-    and save exactly once at the end.
+    Project settings. Changes remain in memory until ``save()`` is called explicitly.
 
     Project spec versions:
     - version 1: project text stored inline in `project.json`
@@ -48,9 +39,6 @@ class Project(BaseModel):
         populate_by_name=True,
     )
 
-    _autosave: bool = PrivateAttr(default=False)
-    _phrase_groups_dirty: bool = PrivateAttr(default=False)
-    _phrase_groups_inline_source: str = PrivateAttr(default="")
     _sound_segments: Any = PrivateAttr(default=None)
     _on_stream_end: StreamEndCallback | None = PrivateAttr(default=None)
 
@@ -277,24 +265,6 @@ class Project(BaseModel):
     omnivoice_num_step: int = -1
     omnivoice_seed: int = -1
 
-    def __setattr__(self, name: str, value) -> None:
-        super().__setattr__(name, value)
-        if name == 'book' and not name.startswith('_'):
-            self._phrase_groups_dirty = True
-        if name != '_autosave' and getattr(self, '_autosave', False):
-            self.save()
-
-    @contextmanager
-    def batch(self):
-        """Suppress per-assignment saves; save exactly once when the block exits."""
-        prev = getattr(self, '_autosave', False)
-        self._autosave = False
-        try:
-            yield
-        finally:
-            self._autosave = prev
-            self.save()
-
     def model_post_init(self, __context: Any) -> None:
         if self.dir_path:
             ss_path = os.path.join(self.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
@@ -312,8 +282,13 @@ class Project(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def _normalize_loaded_project_dict(cls, d: Any) -> Any:
-        return ProjectSerializationUtil.normalize_loaded_project_dict(d)
+    def _normalize_loaded_project_dict(cls, d: Any, info: ValidationInfo) -> Any:
+        warnings: list[str] | None = None
+        if isinstance(info.context, dict):
+            candidate = info.context.get('warnings')
+            if isinstance(candidate, list):
+                warnings = candidate
+        return ProjectSerializationUtil.normalize_loaded_project_dict(d, warnings=warnings)
 
     @property
     def project_text_path(self) -> str:
@@ -321,28 +296,26 @@ class Project(BaseModel):
             return ""
         return os.path.join(self.dir_path, PROJECT_TEXT_FILE_NAME)
 
-    def save(self, force_phrase_groups: bool=False) -> str:
+    def save(self) -> str:
         
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
-        
-        try:
-            # Ensure project version is up-to-date
-            super().__setattr__('version', PROJECT_SPEC_VERSION)
-            self.normalize_chapter_mode()
-            
-            with open(file_path, "w", encoding="utf-8") as file:
-                import json
-                json.dump(ProjectSerializationUtil.to_project_json_dict(self), file, indent=4)
-            L.d(f"Saved {PROJECT_JSON_FILE_NAME}: {file_path}")
 
-        except Exception as e:
-            err = make_error_string(e)
+        def make_payload() -> dict:
+            # Ensure project version is up-to-date while holding the project save lock.
+            super(Project, self).__setattr__('version', PROJECT_SPEC_VERSION)
+            self.normalize_chapter_mode()
+            return ProjectSerializationUtil.to_project_json_dict(self)
+
+        err = JsonSaveUtil.save(
+            JsonArtifactType.PROJECT,
+            file_path,
+            make_payload,
+        )
+        if err:
             printt(f"\n{COL_ERROR}{err}\n")
             return err
 
-        if force_phrase_groups or self._phrase_groups_dirty:
-            return ProjectTextIOUtil.save_phrase_groups(self)
-        
+        L.d(f"Saved {PROJECT_JSON_FILE_NAME}: {file_path}")
         return ""
 
     def set_oute_voice_and_save(self, voice_dict: dict, dest_file_stem: str) -> None:
@@ -352,9 +325,9 @@ class Project(BaseModel):
             from tts_audiobook_tool import ask
             ask.ask_error(err)
             return
-        with self.batch():
-            self.oute_voice_file_name = file_name
-            self.oute_voice_json = voice_dict
+        self.oute_voice_file_name = file_name
+        self.oute_voice_json = voice_dict
+        self.save()
 
     @property
     def sound_segments_path(self) -> str:

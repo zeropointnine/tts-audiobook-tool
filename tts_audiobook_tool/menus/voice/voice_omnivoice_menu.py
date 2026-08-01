@@ -52,10 +52,12 @@ class VoiceOmniVoiceMenu:
 
         def on_clear_instruct(s: State, __: MenuItem) -> None:
             s.project.omnivoice_instruct = ""
+            s.project.save()
             print_feedback("Instructions cleared")
 
         def on_clear_model_target(s: State, __: MenuItem) -> None:
             s.project.omnivoice_target = ""
+            s.project.save()
             Tts.set_model_params_using_project(s.project)
             Tts.clear_tts_model()
             print_feedback("Cleared, will use default model")
@@ -133,6 +135,7 @@ def ask_instruct(project: Project) -> None:
         return
 
     project.omnivoice_instruct = normalized
+    project.save()
     print_feedback("Set instructions:", truncate_pretty(normalized, 60))
 
 
@@ -183,7 +186,6 @@ def apply_target(project: Project, target: str) -> None:
 
     def revert() -> None:
         project.omnivoice_target = previous_target
-        project.save()
         Tts.set_model_params_using_project(project)
         Tts.clear_tts_model()
 
@@ -216,6 +218,7 @@ def ask_speed(project: Project) -> None:
         print_feedback("Value must be between 0.5 and 2.0", is_error=True)
         return
     project.omnivoice_speed = value
+    project.save()
     print_feedback("Speed set:", str(value) if value != -1 else "default (1.0)")
 
 
@@ -242,4 +245,5 @@ def ask_steps(project: Project) -> None:
         )
         return
     project.omnivoice_num_step = value
+    project.save()
     print_feedback("Inference steps set:", str(value) if value != -1 else f"default ({OmniVoiceBaseModel.DEFAULT_STEPS})")

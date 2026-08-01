@@ -1,9 +1,6 @@
 from copy import deepcopy
-import json
-import os
-from pathlib import Path
-import tempfile
 
+from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Book
 from tts_audiobook_tool.app_types.book_serialization import (
     book_to_project_text_json_dict,
@@ -41,19 +38,13 @@ class ProjectTextEditUtil:
         if error:
             return error
 
-        autosave = project._autosave
         try:
-            project._autosave = False
             project.book = new_book
-            project._phrase_groups_dirty = False
-            project._phrase_groups_inline_source = ""
         except Exception as exception:
             return (
                 "Project text was saved, but the in-memory project update failed: "
                 f"{make_error_string(exception)}"
             )
-        finally:
-            project._autosave = autosave
 
         try:
             project.sound_segments.delete_path_snapshot(cleanup_paths)
@@ -67,30 +58,9 @@ class ProjectTextEditUtil:
 
     @staticmethod
     def atomic_save_book(path: str, book: Book) -> str:
-        """Write and fsync a temporary sibling before atomically replacing path."""
-        destination = Path(path)
-        temporary_path = ""
-        try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=destination.parent,
-                prefix=f".{destination.name}.",
-                suffix=".tmp",
-                delete=False,
-            ) as file:
-                temporary_path = file.name
-                json.dump(book_to_project_text_json_dict(book), file, indent=4)
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temporary_path, destination)
-            return ""
-        except Exception as exception:
-            return make_error_string(exception)
-        finally:
-            if temporary_path:
-                try:
-                    Path(temporary_path).unlink(missing_ok=True)
-                except OSError:
-                    pass
+        """Compatibility wrapper around the shared atomic project-text saver."""
+        return JsonSaveUtil.save(
+            JsonArtifactType.PROJECT_TEXT,
+            path,
+            lambda: book_to_project_text_json_dict(book),
+        )

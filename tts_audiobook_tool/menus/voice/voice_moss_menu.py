@@ -100,7 +100,6 @@ def apply_model_and_validate(project: Project, target: str) -> None:
 
     def revert() -> None:
         project.moss_target = previous_target
-        project.save()
         Tts.set_model_params_using_project(project)
         Tts.clear_tts_model()
 

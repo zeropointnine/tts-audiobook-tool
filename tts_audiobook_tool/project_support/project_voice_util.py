@@ -156,29 +156,28 @@ class ProjectVoiceUtil:
         voice_file_name_attr = info.voice_target_attr
         voice_transcript_attr = info.voice_transcript_attr
 
-        with project.batch():
-            if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
-                project.indextts2_emo_voice_file_name = dest_file_name
+        if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
+            project.indextts2_emo_voice_file_name = dest_file_name
+        else:
+            if not voice_file_name_attr:
+                raise Exception(f"Unsupported tts type {tts_type}")
+            if append:
+                values = ProjectVoiceUtil.get_voice_values(project, tts_type)
+                setattr(project, voice_file_name_attr, values + [dest_file_name])
             else:
-                if not voice_file_name_attr:
-                    raise Exception(f"Unsupported tts type {tts_type}")
-                if append:
-                    values = ProjectVoiceUtil.get_voice_values(project, tts_type)
-                    setattr(project, voice_file_name_attr, values + [dest_file_name])
-                else:
-                    setattr(project, voice_file_name_attr, [dest_file_name])
+                setattr(project, voice_file_name_attr, [dest_file_name])
 
-            if voice_transcript_attr:
-                if append:
-                    transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
-                    setattr(project, voice_transcript_attr, transcripts + [transcript])
-                else:
-                    setattr(project, voice_transcript_attr, [transcript] if transcript else [])
+        if voice_transcript_attr:
+            if append:
+                transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
+                setattr(project, voice_transcript_attr, transcripts + [transcript])
+            else:
+                setattr(project, voice_transcript_attr, [transcript] if transcript else [])
 
-            if tts_type == TtsModelType.POCKET:
-                project.pocket_predefined_voice = ""
+        if tts_type == TtsModelType.POCKET:
+            project.pocket_predefined_voice = ""
 
-        return ""
+        return project.save()
 
     @staticmethod
     def remove_voice_at_index_and_save(project: Project, tts_type: TtsModelType, index: int) -> str:
@@ -193,18 +192,18 @@ class ProjectVoiceUtil:
             raise IndexError(f"Voice sample index out of range: {index}")
 
         removed = voices.pop(index)
-        with project.batch():
-            setattr(project, voice_file_name_attr, voices)
+        setattr(project, voice_file_name_attr, voices)
 
-            if voice_transcript_attr:
-                transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
-                if index < len(transcripts):
-                    transcripts.pop(index)
-                setattr(project, voice_transcript_attr, transcripts)
+        if voice_transcript_attr:
+            transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_type)
+            if index < len(transcripts):
+                transcripts.pop(index)
+            setattr(project, voice_transcript_attr, transcripts)
 
-            if tts_type == TtsModelType.POCKET and not voices:
-                project.pocket_predefined_voice = ""
+        if tts_type == TtsModelType.POCKET and not voices:
+            project.pocket_predefined_voice = ""
 
+        project.save()
         return removed
 
     @staticmethod
@@ -213,19 +212,20 @@ class ProjectVoiceUtil:
         voice_file_name_attr = info.voice_target_attr
         voice_transcript_attr = info.voice_transcript_attr
 
-        with project.batch():
-            if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
-                project.indextts2_emo_voice_file_name = ""
-            else:
-                if not voice_file_name_attr:
-                    raise ValueError(f"Unsupported tts_type: {tts_type}")
-                setattr(project, voice_file_name_attr, [])
+        if tts_type == TtsModelType.INDEXTTS2 and is_secondary:
+            project.indextts2_emo_voice_file_name = ""
+        else:
+            if not voice_file_name_attr:
+                raise ValueError(f"Unsupported tts_type: {tts_type}")
+            setattr(project, voice_file_name_attr, [])
 
-            if voice_transcript_attr:
-                setattr(project, voice_transcript_attr, [])
+        if voice_transcript_attr:
+            setattr(project, voice_transcript_attr, [])
 
-            if tts_type == TtsModelType.POCKET:
-                project.pocket_predefined_voice = ""
+        if tts_type == TtsModelType.POCKET:
+            project.pocket_predefined_voice = ""
+
+        project.save()
 
     @staticmethod
     def get_voice_label(project: Project) -> str:
@@ -334,6 +334,7 @@ class ProjectVoiceUtil:
         if value > PROJECT_BATCH_SIZE_MAX:
             value = PROJECT_BATCH_SIZE_MAX
         setattr(project, field, value)
+        project.save()
 
     @staticmethod
     def is_language_cjk(project: Project) -> bool:

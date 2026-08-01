@@ -111,6 +111,7 @@ class ChatMenu:
 
         def on_select(value: bool) -> None:
             state.project.streaming_chat = value
+            state.project.save()
             print_feedback("Streaming set to:", state.project.streaming_chat)
 
         subheading = (

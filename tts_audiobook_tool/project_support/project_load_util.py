@@ -11,6 +11,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import printt
 
@@ -32,7 +33,6 @@ class ProjectLoadUtil:
     @staticmethod
     def load_using_dir_path(dir_path: str) -> Project | str:
         from tts_audiobook_tool import ask
-        from tts_audiobook_tool import project as project_module
         from tts_audiobook_tool.project import Project
 
         if not os.path.exists(dir_path):
@@ -72,18 +72,16 @@ class ProjectLoadUtil:
                 d['book'] = result.book
                 external_text_source = result.format
 
-        thread_local = project_module._tl
-        thread_local.warnings = []
+        pending_warnings: list[str] = []
         try:
-            project = Project.model_validate(d)
+            project = Project.model_validate(d, context={'warnings': pending_warnings})
         except Exception as e:
             return f"Failed to parse project: {e}"
 
-        project._phrase_groups_dirty = False
-        project._phrase_groups_inline_source = inline_text_source
-
         if inline_text_source:
-            err = project.save(force_phrase_groups=True)
+            err = ProjectTextIOUtil.save_book(project)
+            if not err:
+                err = project.save()
             if err:
                 return err
             L.i(
@@ -92,7 +90,9 @@ class ProjectLoadUtil:
             )
 
         if external_text_source and external_text_source != BOOK_FORMAT:
-            err = project.save(force_phrase_groups=True)
+            err = ProjectTextIOUtil.save_book(project)
+            if not err:
+                err = project.save()
             if err:
                 return err
             L.i(
@@ -113,15 +113,12 @@ class ProjectLoadUtil:
 
         did_clear_invalid_voice_files = ProjectVoiceUtil.verify_voice_files_exist(project)
 
-        pending = getattr(thread_local, 'warnings', [])
-        thread_local.warnings = []
-        if pending or did_clear_invalid_voice_files:
+        if pending_warnings or did_clear_invalid_voice_files:
             project.save()
-            for warning in pending:
+            for warning in pending_warnings:
                 printt(warning)
             ask.ask_enter_to_continue()
 
-        project._autosave = True
         return project
 
     @staticmethod

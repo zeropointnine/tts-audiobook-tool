@@ -125,6 +125,38 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.moss_voice_file_name, ["one.flac", "two.flac"])
         self.assertEqual(project.moss_voice_transcript, ["one", "two"])
 
+    def test_project_model_validate_collects_warnings_only_with_explicit_context(self):
+        warnings: list[str] = []
+
+        Project.model_validate(
+            {"streaming_chat": "invalid"},
+            context={"warnings": warnings},
+        )
+
+        self.assertTrue(any("streaming_chat" in warning for warning in warnings))
+        warning_count = len(warnings)
+
+        Project.model_validate({"streaming_chat": "invalid"})
+
+        self.assertEqual(len(warnings), warning_count)
+
+    def test_project_load_reports_normalization_warnings(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            self.write_minimal_project_json(project_dir, {"streaming_chat": "invalid"})
+
+            with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
+                    patch("tts_audiobook_tool.project_support.project_load_util.printt") as print_mock, \
+                    patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
+                result = ProjectUtil.load_using_dir_path(project_dir)
+
+        self.assertIsInstance(result, Project)
+        self.assertTrue(any(
+            "streaming_chat" in str(call.args[0])
+            for call in print_mock.call_args_list
+            if call.args
+        ))
+        continue_mock.assert_called_once_with()
+
     def test_project_to_dict_serializes_single_voice_item_as_string_and_multiple_as_list(self):
         project = Project.model_validate({
             "qwen3_voice_file_name": ["one.flac"],
@@ -432,7 +464,9 @@ class TestProjectBookIntegration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir, book=book)
             ProjectBookUtil.sync_flat_text_from_book(project)
-            err = project.save(force_phrase_groups=True)
+            err = ProjectTextIOUtil.save_book(project)
+            if not err:
+                err = project.save()
             self.assertEqual(err, "")
 
             with open(os.path.join(project_dir, PROJECT_TEXT_FILE_NAME), "r", encoding="utf-8") as file:
@@ -482,7 +516,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             project = Project(dir_path=project_dir, book=book, chapter_mode=SectionMarkerMode.BOOKMARKS)
             ProjectBookUtil.sync_flat_text_from_book(project)
 
-            err = project.save(force_phrase_groups=True)
+            err = project.save()
             self.assertEqual(err, "")
 
             with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
@@ -631,7 +665,7 @@ class TestProjectBookIntegration(unittest.TestCase):
                 section_titles=["Chapter 1", "Chapter 2"],
             )
             project.markers = [1]
-            project.save(force_phrase_groups=True)
+            project.save()
 
             with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue"):

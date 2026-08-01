@@ -85,6 +85,7 @@ class RealTimePlaybackMenu:
         else:
             state.real_time.project_text_line_range = result
             state.project.realtime_line_range = result
+            state.project.save()
 
         # Print feedback
         is_all = result is None or (result[0] == 1 and result[1] == len(text_groups))
@@ -107,6 +108,7 @@ class RealTimePlaybackMenu:
                 state.real_time.custom_text_line_range = None
                 state.real_time.project_text_line_range = None
                 state.project.realtime_line_range = None
+                state.project.save()
             print_feedback("Text source set to", "project")
             return True
 
@@ -220,4 +222,3 @@ REAL_TIME_SUBHEADING = (
     'Uninterrupted playback requires faster-than-realtime inference.\n'
     'Validation/retry logic activates when buffered audio exceeds 60 seconds.\n'
 )
-

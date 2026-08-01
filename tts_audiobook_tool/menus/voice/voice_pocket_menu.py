@@ -99,9 +99,9 @@ def select_predefined_voice(state: State) -> None:
     current = state.project.pocket_predefined_voice or None
 
     def on_select(voice: str) -> None:
-        with state.project.batch():
-            state.project.pocket_predefined_voice = voice
-            state.project.pocket_voice_file_name = []
+        state.project.pocket_predefined_voice = voice
+        state.project.pocket_voice_file_name = []
+        state.project.save()
 
     MenuUtil.options_menu(
         state=state,

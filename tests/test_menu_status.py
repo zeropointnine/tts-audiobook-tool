@@ -9,8 +9,9 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.util import COL_DIM, COL_MEDIUM
+from tts_audiobook_tool.util import COL_DIM, COL_ERROR, COL_MEDIUM
 
 
 def make_state() -> State:
@@ -50,6 +51,40 @@ def test_menu_status_print_block_supports_voice_display_info(capsys):
         assert f"{COL_DIM}Voice clone: {COL_MEDIUM}zzz belle 24a 19s, +1 more" in output
     finally:
         restore_tts_state(saved)
+
+
+def test_qwen_custom_voice_status_uses_project_speaker_without_instance():
+    project = Project(dir_path="")
+    project.qwen3_model_type = "custom_voice"
+    project.qwen3_speaker_id = "Ryan"
+
+    display_info = Qwen3BaseModel.get_voice_display_info(project, None)
+
+    assert display_info.status_prefix == "Speaker"
+    assert display_info.main_prefix == "speaker"
+    assert display_info.value == "Ryan"
+
+
+def test_qwen_custom_voice_status_includes_instructions_with_valid_speaker():
+    project = Project(dir_path="")
+    project.qwen3_model_type = "custom_voice"
+    project.qwen3_speaker_id = "Ryan"
+    project.qwen3_instructions = "Speak warmly"
+
+    display_info = Qwen3BaseModel.get_voice_display_info(project, None)
+
+    assert display_info.value == f"Ryan{COL_DIM} + instructions"
+
+
+def test_qwen_custom_voice_status_requires_speaker_without_instance():
+    project = Project(dir_path="")
+    project.qwen3_model_type = "custom_voice"
+
+    display_info = Qwen3BaseModel.get_voice_display_info(project, None)
+
+    assert display_info.status_prefix == "Speaker"
+    assert display_info.main_prefix == "speaker"
+    assert display_info.value == COL_ERROR + "required"
 
 
 def test_stt_status_does_not_repeat_disabled(monkeypatch):

@@ -76,6 +76,11 @@ class VoiceQwen3Menu:
             state.project.save()
             print_feedback("Instructions cleared")
 
+        def on_clear_speaker(_: State, __: MenuItem) -> None:
+            state.project.qwen3_speaker_id = ""
+            state.project.save()
+            print_feedback("Speaker cleared")
+
         def make_items(_: State) -> list[MenuItem]:
             
             items = []
@@ -95,6 +100,10 @@ class VoiceQwen3Menu:
                     items.append(
                         MenuItem(make_speaker_label, lambda _, __: ask_speaker_id(state.project))
                     )
+                    if state.project.qwen3_speaker_id:
+                        items.append(
+                            MenuItem("Clear speaker", on_clear_speaker)
+                        )
                     items.append(
                         MenuItem(make_instructions_cv_label, lambda _, __: ask_instructions(state.project))
                     )
@@ -222,10 +231,14 @@ def ask_target(project: Project) -> None:
     
 def apply_model_and_validate(project: Project, target: str) -> None: 
 
+    previous_target = project.qwen3_target
+    previous_model_type = project.qwen3_model_type
+    previous_speaker_id = project.qwen3_speaker_id
+
     def revert() -> None:
-        project.qwen3_target = ""
-        project.qwen3_model_type = ""
-        project.save()
+        project.qwen3_target = previous_target
+        project.qwen3_model_type = previous_model_type
+        project.qwen3_speaker_id = previous_speaker_id
         Tts.set_model_params_using_project(project)
         Tts.clear_tts_model()
 

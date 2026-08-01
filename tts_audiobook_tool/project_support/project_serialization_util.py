@@ -79,15 +79,10 @@ class ProjectSerializationUtil:
         return items
 
     @staticmethod
-    def normalize_loaded_project_dict(d: Any) -> Any:
+    def normalize_loaded_project_dict(d: Any, *, warnings: list[str] | None = None) -> Any:
 
         if not isinstance(d, dict):
             return d
-
-        from tts_audiobook_tool import project as project_module
-
-        tl = project_module._tl
-        use_tl_warnings = getattr(tl, 'warnings', None) is not None
 
         def add_warning(attr_name: str, defaulting_to: Any) -> None:
             s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Missing or invalid value for {COL_ACCENT}{attr_name}{COL_DEFAULT}\n"
@@ -95,8 +90,8 @@ class ProjectSerializationUtil:
             s += "added to the app since the last time you opened this project.\n"
             s += f"Setting to default: {defaulting_to}"
             s += "\n"
-            if use_tl_warnings:
-                tl.warnings.append(s)
+            if warnings is not None:
+                warnings.append(s)
 
         def normalize_bool(key: str, default: bool, *, warn: bool=False) -> bool:
             value = d.get(key, None)

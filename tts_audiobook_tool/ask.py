@@ -243,8 +243,7 @@ def ask_number(
         return
 
     setattr(saveable, attr, value)
-    if not isinstance(saveable, Project):
-        saveable.save()
+    saveable.save()
 
     print_feedback(success_prefix, str(value))
 
@@ -258,8 +257,6 @@ def ask_number_and_save(
     success_prefix: str,
     is_int: bool=False
 ) -> None:
-    from tts_audiobook_tool.project import Project
-
     if not hasattr(saveable, project_attr_name):
         raise ValueError(f"No such attribute {project_attr_name}")
 
@@ -282,8 +279,7 @@ def ask_number_and_save(
         return
 
     setattr(saveable, project_attr_name, value)
-    if not isinstance(saveable, Project):
-        saveable.save()
+    saveable.save()
     print_feedback(success_prefix, str(value))
 
 
@@ -299,8 +295,6 @@ def ask_string_and_save(
     Helper to ask for a string value and save it to the project.
     :param validator: Takes in the user input string and returns error string if invalid (optional)
     """
-    from tts_audiobook_tool.project import Project
-
     if not hasattr(saveable, project_attr_name):
         raise ValueError(f"No such attribute {project_attr_name}")
 
@@ -319,8 +313,7 @@ def ask_string_and_save(
         break
 
     setattr(saveable, project_attr_name, value)
-    if not isinstance(saveable, Project):
-        saveable.save()
+    saveable.save()
     print_feedback(success_prefix, value)
 
 # ---

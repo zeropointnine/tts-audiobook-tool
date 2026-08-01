@@ -63,7 +63,7 @@ class TextEditorSectionItem:
 
     @property
     def searchable_text(self) -> str:
-        return self.title
+        return self.display_text
 
 
 TextEditorListItem = TextEditorSectionItem | TextEditorPhraseGroupItem

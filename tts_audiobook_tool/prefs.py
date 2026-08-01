@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-
+from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -559,39 +558,41 @@ class Prefs(Saveable):
         return (self._stt_variant == SttVariant.DISABLED)
 
     def save(self) -> str:
-        dic = {
-            "project_dir": self._project_dir,
-            "hints": self._hints,
-            "stt_variant": self._stt_variant.id,
-            "stt_config": self._stt_config.id,
-            "tts_force_cpu": self._tts_force_cpu,
-            "sgl_omni_type": "" if self._sgl_omni_type is None else self._sgl_omni_type.value.id,
-            "sgl_omni_url": self._sgl_omni_url,
-            "aac_bitrate": self._aac_bitrate,
-            "llm_url": self._llm_url,
-            "llm_api_key": self._llm_api_key,
-            "llm_model": self._llm_model,
-            "llm_system_prompt": self._llm_system_prompt,
-            "system_prompt_preset": self._system_prompt_preset,
-            "llm_extra_params": self._llm_extra_params,
-            "last_voice_dir": self._last_voice_dir,
-            "last_project_dir": self._last_project_dir,
-            "last_text_dir": self._last_text_dir,
-            "chat_input_mode": self._chat_input_mode,
-            "chat_save": self._chat_save,
-            "chat_save_mic": self._chat_save_mic,
-            "save_debug_files": self._save_debug_files,
-            "play_on_generate": self._play_on_generate,
-            "menu_clears_screen": self._menu_clears_screen
-        }
-        try:
-            with open(Prefs.get_file_path(), 'w', encoding='utf-8') as f:
-                json.dump(dic, f, indent=4)
-            return ""
-        except Exception as e:
-            err = make_error_string(e)
+        def make_payload() -> dict:
+            return {
+                "project_dir": self._project_dir,
+                "hints": self._hints,
+                "stt_variant": self._stt_variant.id,
+                "stt_config": self._stt_config.id,
+                "tts_force_cpu": self._tts_force_cpu,
+                "sgl_omni_type": "" if self._sgl_omni_type is None else self._sgl_omni_type.value.id,
+                "sgl_omni_url": self._sgl_omni_url,
+                "aac_bitrate": self._aac_bitrate,
+                "llm_url": self._llm_url,
+                "llm_api_key": self._llm_api_key,
+                "llm_model": self._llm_model,
+                "llm_system_prompt": self._llm_system_prompt,
+                "system_prompt_preset": self._system_prompt_preset,
+                "llm_extra_params": self._llm_extra_params,
+                "last_voice_dir": self._last_voice_dir,
+                "last_project_dir": self._last_project_dir,
+                "last_text_dir": self._last_text_dir,
+                "chat_input_mode": self._chat_input_mode,
+                "chat_save": self._chat_save,
+                "chat_save_mic": self._chat_save_mic,
+                "save_debug_files": self._save_debug_files,
+                "play_on_generate": self._play_on_generate,
+                "menu_clears_screen": self._menu_clears_screen,
+            }
+
+        err = JsonSaveUtil.save(
+            JsonArtifactType.PREFS,
+            Prefs.get_file_path(),
+            make_payload,
+        )
+        if err:
             printt(f"\n{COL_ERROR}{err}\n")
-            return err
+        return err
 
     @staticmethod
     def get_file_path() -> str:

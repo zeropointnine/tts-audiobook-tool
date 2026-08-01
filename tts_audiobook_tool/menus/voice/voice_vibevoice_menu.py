@@ -141,8 +141,8 @@ def ask_model_target(project: Project) -> None:
 
 def apply_model_and_validate(project: Project, target: str) -> None: 
 
+    previous_target = project.vibevoice_target
     project.vibevoice_target = target
-    project.save()
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model() # for good measure
 
@@ -153,12 +153,12 @@ def apply_model_and_validate(project: Project, target: str) -> None:
         _ = Tts.get_vibevoice()
     except (OSError, Exception) as e:
         # Revert
-        project.vibevoice_target = ""
-        project.save()
+        project.vibevoice_target = previous_target
         Tts.set_model_params_using_project(project)
         ask.ask_error(f"\n{make_error_string(e)}")
         return
 
+    project.save()
     print_feedback("\nCustom model set:", target)
 
 def clear_custom_model(project: Project) -> None:
@@ -184,13 +184,13 @@ def ask_lora_target(project: Project) -> None:
 
 def apply_lora_and_validate(project: Project, target: str) -> None: 
 
+    previous_target = project.vibevoice_lora_target
+
     def revert() -> None:
-        project.vibevoice_lora_target = ""
-        project.save()
+        project.vibevoice_lora_target = previous_target
         Tts.set_model_params_using_project(project)
 
     project.vibevoice_lora_target = target
-    project.save()
     Tts.set_model_params_using_project(project)
     Tts.clear_tts_model() # for good measure
 
@@ -205,6 +205,7 @@ def apply_lora_and_validate(project: Project, target: str) -> None:
         return
 
     if instance.has_lora:
+        project.save()
         print_feedback("\nLoRA set:", target)
         ask.ask_enter_to_continue()
     else:

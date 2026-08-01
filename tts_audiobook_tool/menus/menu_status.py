@@ -57,7 +57,7 @@ def _make_project_text(state: State) -> str:
     if state.project.dir_path:
         text = text_util.make_terminal_hyperlink(state.project.dir_path)
     else:
-        text = "none"
+        text = COL_ERROR + "required"
 
     language_code = state.project.language_code.strip()
     if state.project.dir_path and language_code:
@@ -119,12 +119,13 @@ def _make_server_tts_text(state: State) -> str:
     return f"{label}" + (f" {qualifier}" if qualifier else "")
 
 def _make_text_text(state: State) -> str:
-    total_lines = len(state.project.phrase_groups)
     num_complete = state.project.sound_segments.num_generated()
+    if num_complete == 0:
+        return COL_ERROR + "required"
+    total_lines = len(state.project.phrase_groups)
     text = f"{total_lines} lines"
     text += f" {COL_DIM}({num_complete} generated)"
     return text
-
 
 def _make_stt_text(state: State) -> str:
     from tts_audiobook_tool.stt import Stt
