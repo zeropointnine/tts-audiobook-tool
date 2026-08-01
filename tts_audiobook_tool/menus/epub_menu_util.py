@@ -76,7 +76,7 @@ class EpubMenuUtil:
     @staticmethod
     def print_import_info(epub_import_result: EpubImportResult) -> None:
         printt()
-        printt(f"{COL_ACCENT}Import info:{COL_DEFAULT}")
+        printt(f"{COL_ACCENT}EPUB import info:{COL_DEFAULT}")
         for warning in epub_import_result.significant_warnings:
             printt(f"- {warning}")
         num_sections = len(epub_import_result.chapters)

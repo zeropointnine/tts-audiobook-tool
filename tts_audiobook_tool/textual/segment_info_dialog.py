@@ -37,7 +37,7 @@ class SegmentInfoDialog(ModalScreen[None]):
         height: auto;
         max-height: 1fr;
         scrollbar-size-vertical: 1;
-        scrollbar-size-horizontal: 0;
+        scrollbar-size-horizontal: 1;
     }
 
     #segment-info-content {

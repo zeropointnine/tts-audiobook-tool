@@ -30,10 +30,8 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
         project: Project,
         voice_sample_count: int | None = None,
     ) -> None:
-        self.original_voice_indices = [
-            phrase_group.voice_index for phrase_group in project.phrase_groups
-        ]
-        self.staged_voice_indices = list(self.original_voice_indices)
+        self.original_voice_indices: list[int] = []
+        self.staged_voice_indices: list[int] = []
         self.did_save_changes = False
         self.save_error = ""
         self.voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
@@ -46,13 +44,29 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
             f"{COL_DIM}- Select multiple lines by holding [SHIFT] + navigation keys",
             f"{COL_DIM}- Use number keys [{COL_ACCENT}1{COL_DIM}] to [{COL_ACCENT}{highest_voice_key}{COL_DIM}] to set voice sample for selected text line/s",
-            f"{COL_DIM}- Press [ESC] to finish   - Press [CTRL-F] to find text",
+            f"{COL_DIM}- Press [ESC] to finish  - [CTRL-F] Find text"
         ]
-        super().__init__(project, header_lines)
+        super().__init__(
+            project,
+            header_lines,
+            empty_state_text="No text lines",
+            loading_state_text="...",
+        )
+
+    def initialize_content(self) -> range:
+        """Snapshot voice assignments before installing their formatted rows."""
+        self.original_voice_indices = [
+            phrase_group.voice_index for phrase_group in self.project.phrase_groups
+        ]
+        self.staged_voice_indices = list(self.original_voice_indices)
+        return range(len(self.staged_voice_indices))
 
     @property
     def has_changes(self) -> bool:
-        return self.staged_voice_indices != self.original_voice_indices
+        return (
+            self.content_initialized
+            and self.staged_voice_indices != self.original_voice_indices
+        )
 
     def format_line(self, index: int) -> HangingIndentText:
         """Format one row, styling selected rows except for the active row."""
@@ -64,21 +78,23 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
         voice_status = (
             " *OUT OF RANGE*" if voice_index >= self.voice_sample_count else ""
         )
-        prefix = (
-            f"{phrase_index + 1:05d} [Voice sample {voice_number}{voice_status}] "
+        prefix_text = (
+            f"[{phrase_index + 1:05d}] "
+            f"[Voice sample {voice_number}{voice_status}] "
         )
+        prefix_ansi = f"{COL_DIM}{prefix_text}{COL_DEFAULT}"
         is_find_match = index == self.find_match_index
         style = f"{STYLE_DIM} reverse" if is_find_match else ""
         return HangingIndentText.from_ansi(
-            prefix + phrase_group.presentable_text,
-            content_start=len(prefix),
+            ansi_text=f"{prefix_ansi}{phrase_group.presentable_text}",
+            content_start=len(prefix_ansi),
             max_lines=3,
             style=style,
         )
 
     def action_assign_voice(self, voice_index: int) -> None:
         """Assign an available voice sample to all selected phrase groups."""
-        if voice_index >= self.voice_sample_count:
+        if not self.content_initialized or voice_index >= self.voice_sample_count:
             return
 
         def assign_voice(_visible_index: int, phrase_index: int) -> bool:
@@ -99,6 +115,9 @@ class VoiceLineEditorTextualApp(ContentTextualApp):
 
     def commit_changes_and_exit(self) -> None:
         """Apply staged values and persist them, rolling memory back on failure."""
+        if not self.content_initialized:
+            self.exit()
+            return
         phrase_groups = self.project.phrase_groups
         if len(phrase_groups) != len(self.staged_voice_indices):
             self.save_error = "Save failed: project text changed while editing"

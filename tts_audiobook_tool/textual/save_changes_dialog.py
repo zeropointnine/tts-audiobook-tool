@@ -1,12 +1,15 @@
 from enum import Enum
 from typing import ClassVar
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.content import Content
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
+
+from tts_audiobook_tool.constants import COL_ERROR
 
 
 class ExitDecision(Enum):
@@ -48,6 +51,11 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
         content-align: center middle;
     }
 
+    .save-changes-warning {
+        height: auto;
+        text-align: center;
+    }
+
     #save-changes-buttons {
         height: 3;
         align-horizontal: center;
@@ -78,10 +86,12 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
         self,
         copy_line_1: str = "Save changes before exiting?",
         copy_line_2: str = "",
+        warning_text: str = "",
     ) -> None:
         super().__init__()
         self.copy_line_1 = copy_line_1
         self.copy_line_2 = copy_line_2
+        self.warning_text = warning_text
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -101,6 +111,24 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
                     )
                 ]
                 if self.copy_line_2
+                else []
+            ),
+            *(
+                [
+                    Static(
+                        "",
+                        id="save-changes-warning-separator",
+                        classes="save-changes-copy",
+                        markup=False,
+                    ),
+                    Static(
+                        Text.from_ansi(f"{COL_ERROR}{self.warning_text}"),
+                        id="save-changes-warning",
+                        classes="save-changes-warning",
+                        markup=False,
+                    ),
+                ]
+                if self.warning_text
                 else []
             ),
             Horizontal(

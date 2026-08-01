@@ -24,7 +24,7 @@ from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.util import make_error_string, print_feedback
 
 
-class ReviewSegmentsEditorTextualApp(ContentTextualApp):
+class SoundSegmentsEditorTextualApp(ContentTextualApp):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         *ContentTextualApp.BINDINGS,
@@ -35,18 +35,10 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
     ]
 
     def __init__(self, project: Project) -> None:
-        phrase_group_count = len(project.phrase_groups)
-        self.all_phrase_indices = [
-            index
-            for index in sorted(project.sound_segments.get_existing_indices())
-            if 0 <= index < phrase_group_count
-        ]
-        self.deletion_flag_indices = {
-            phrase_index: index
-            for index, phrase_index in enumerate(self.all_phrase_indices)
-        }
-        self.original_deletion_flags = [False] * len(self.all_phrase_indices)
-        self.staged_deletion_flags = list(self.original_deletion_flags)
+        self.all_phrase_indices: list[int] = []
+        self.deletion_flag_indices: dict[int, int] = {}
+        self.original_deletion_flags: list[bool] = []
+        self.staged_deletion_flags: list[bool] = []
         self.word_errors_filter_active = False
         self.did_save_changes = False
         self.deleted_sound_segment_count = 0
@@ -59,10 +51,31 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
             f"{COL_DIM}- Select multiple lines by holding [SHIFT] + navigation keys",
             f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to mark/unmark selected line/s for deletion",
-            f"{COL_DIM}- Press [{COL_ACCENT}P{COL_DIM}] to play  [I] Info  [E] Show only word errors  [CTRL-F] Find text",
-            f"{COL_DIM}- Press [ESC] to finish",
+            f"{COL_DIM}- Press [{COL_ACCENT}P{COL_DIM}] to play  [I] Info  [E] Show only word errors",
+            f"{COL_DIM}- Press [ESC] to finish  - [CTRL-F] Find text",
         ]
-        super().__init__(project, header_lines, self.all_phrase_indices)
+        super().__init__(
+            project,
+            header_lines,
+            empty_state_text="No sound segments",
+            loading_state_text="...",
+        )
+
+    def initialize_content(self) -> list[int]:
+        """Discover generated segments and stage deletion flags for their rows."""
+        phrase_group_count = len(self.project.phrase_groups)
+        self.all_phrase_indices = [
+            index
+            for index in sorted(self.project.sound_segments.get_existing_indices())
+            if 0 <= index < phrase_group_count
+        ]
+        self.deletion_flag_indices = {
+            phrase_index: index
+            for index, phrase_index in enumerate(self.all_phrase_indices)
+        }
+        self.original_deletion_flags = [False] * len(self.all_phrase_indices)
+        self.staged_deletion_flags = list(self.original_deletion_flags)
+        return self.all_phrase_indices
 
     @property
     def find_label_text(self) -> str:
@@ -70,7 +83,10 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
 
     @property
     def has_changes(self) -> bool:
-        return self.staged_deletion_flags != self.original_deletion_flags
+        return (
+            self.content_initialized
+            and self.staged_deletion_flags != self.original_deletion_flags
+        )
 
     def compose_status_widgets(self):
         yield Static("", id="playing-status", markup=False)
@@ -114,7 +130,6 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
             )
 
     def format_line(self, index: int) -> HangingIndentText:
-        """Format one ANSI-styled row with a three-line hanging text column."""
         phrase_index = self.phrase_indices[index]
         phrase_group = self.project.phrase_groups[phrase_index]
         best_sound_segment = self.project.sound_segments.get_best_item_for(phrase_index)
@@ -122,10 +137,10 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
         should_delete = self.staged_deletion_flags[deletion_flag_index]
         is_find_match = index == self.find_match_index
         style = f"{STYLE_DIM} reverse" if is_find_match else ""
-        deletion_text = "X" if should_delete else " "
+        deletion_text = "DELETE" if should_delete else " " * 6
         deletion_color = COL_ERROR if should_delete else ""
         prefix_ansi = (
-            f"{phrase_index + 1:05d} "
+            f"{COL_DIM}[{phrase_index + 1:05d}] "
             f"{COL_DIM}[{deletion_color}{deletion_text}{COL_DIM}] "
         )
         content_ansi = Ansi.RESET
@@ -156,7 +171,11 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
 
     def action_toggle_deletion(self) -> None:
         """Toggle deletion off when all selected rows are marked, or on otherwise."""
-        if self.find_active or not self.selected_indices:
+        if (
+            not self.content_initialized
+            or self.find_active
+            or not self.selected_indices
+        ):
             return
         all_selected_are_marked = all(
             self.staged_deletion_flags[
@@ -168,7 +187,7 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
 
     def action_toggle_word_errors_filter(self) -> None:
         """Toggle between all generated lines and only lines with word errors."""
-        if self.find_active:
+        if not self.content_initialized or self.find_active:
             return
         selected_phrase_index = (
             self.phrase_indices[self.selected_index]
@@ -194,7 +213,11 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
 
     def action_play_sound(self) -> None:
         """Play the highlighted segment, or stop it when already playing."""
-        if self.find_active or self.selected_index is None:
+        if (
+            not self.content_initialized
+            or self.find_active
+            or self.selected_index is None
+        ):
             return
         phrase_index = self.phrase_indices[self.selected_index]
         sound_segment = self.project.sound_segments.get_best_item_for(phrase_index)
@@ -223,7 +246,11 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
 
     def action_show_info(self) -> None:
         """Show dialog with info for the highlighted segment."""
-        if self.find_active or self.selected_index is None:
+        if (
+            not self.content_initialized
+            or self.find_active
+            or self.selected_index is None
+        ):
             return
         phrase_index = self.phrase_indices[self.selected_index]
         lines = SegmentTranscriptUtil.make_info_text_lines(
@@ -249,6 +276,8 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
         )
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
+        if not self.content_initialized:
+            return SaveChangesDialog()
         sound_segment_file_count = sum(
             len(self.project.sound_segments.sound_segments_map.get(phrase_index, []))
             for phrase_index, should_delete in zip(
@@ -263,6 +292,9 @@ class ReviewSegmentsEditorTextualApp(ContentTextualApp):
 
     def commit_changes_and_exit(self) -> None:
         """Apply the staged deletion flags and exit."""
+        if not self.content_initialized:
+            self.exit()
+            return
         deleted_sound_segment_count = 0
         try:
             indices_to_delete = [

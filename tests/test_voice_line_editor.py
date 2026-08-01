@@ -28,7 +28,9 @@ class StubProject:
 def make_editor(
     project: StubProject, voice_sample_count: int
 ) -> VoiceLineEditorTextualApp:
-    return VoiceLineEditorTextualApp(cast(Project, project), voice_sample_count)
+    app = VoiceLineEditorTextualApp(cast(Project, project), voice_sample_count)
+    app.load_content()
+    return app
 
 
 def make_app(
@@ -55,12 +57,48 @@ def stub_voice_values(monkeypatch) -> None:
     monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
 
 
+def test_rows_are_deferred_but_voice_header_data_is_loaded_synchronously() -> None:
+    project = StubProject([StubPhraseGroup("Line 1")])
+    app = VoiceLineEditorTextualApp(cast(Project, project), voice_sample_count=2)
+
+    assert Text.from_ansi(app.header_lines[3]).plain == (
+        "- Use number keys [1] to [2] to set voice sample for selected text line/s"
+    )
+    assert app.content_initialized is False
+    assert app.phrase_indices == []
+    assert app.original_voice_indices == []
+    assert app.staged_voice_indices == []
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app.content_initialized is True
+            assert app.phrase_indices == [0]
+            assert app.original_voice_indices == [-1]
+            assert app.staged_voice_indices == [-1]
+
+    run(exercise())
+
+
+def test_voice_actions_are_ignored_before_deferred_content_loads() -> None:
+    project = StubProject([StubPhraseGroup("Line 1")])
+    app = VoiceLineEditorTextualApp(cast(Project, project), voice_sample_count=2)
+
+    app.action_assign_voice(1)
+    app.commit_changes_and_exit()
+
+    assert project.phrase_groups[0].voice_index == -1
+    assert app.original_voice_indices == []
+    assert app.staged_voice_indices == []
+    assert app.has_changes is False
+
+
 def test_header_limits_voice_key_range_to_available_samples() -> None:
     app, _ = make_app(voice_sample_count=2)
 
     assert all(isinstance(line, str) for line in app.header_lines)
     assert all(not line.endswith(Ansi.RESET) for line in app.header_lines)
-    assert Text.from_ansi(app.header_lines[1]).plain == (
+    assert Text.from_ansi(app.header_lines[3]).plain == (
         "- Use number keys [1] to [2] to set voice sample for selected text line/s"
     )
 

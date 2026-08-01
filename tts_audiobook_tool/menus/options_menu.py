@@ -42,7 +42,7 @@ class OptionsMenu:
             state.prefs.reset_hints()
             s = "One-time contextual hints have been reset.\n"
             s += "They will now appear again when relevant."
-            print_feedback(s)
+            print_feedback(s, long_pause=True)
 
         def item_maker(_: State) -> list[MenuItem]:
 

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Callable, Collection
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -8,8 +9,9 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
-from tts_audiobook_tool.util import *
-from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants import COL_DIM_ITALICS, PROJECT_SOUND_SEGMENTS_SUBDIR
+from tts_audiobook_tool.system_support.ansi import Ansi
+from tts_audiobook_tool.util import delete_silently, printt
 from tts_audiobook_tool.validator import Validator
 from tts_audiobook_tool.app_types.validation_findings import ValidationFindings
 
@@ -227,6 +229,28 @@ class ProjectSoundSegments:
             for item in items:
                 sound_file_path = Path(self.project.sound_segments_path) / item.file_name
                 self.delete_sound_segment_and_sidecars(sound_file_path)
+
+    def snapshot_paths_from_index(self, first_index: int) -> list[Path]:
+        """Snapshot recognizable generated sound paths at or after an index."""
+        segments_path = Path(self.project.sound_segments_path)
+        if first_index < 0 or not segments_path.is_dir():
+            return []
+        result: list[Path] = []
+        for path in segments_path.iterdir():
+            if not path.is_file() or path.suffix.lower() != ".flac":
+                continue
+            sound_segment = SoundSegmentUtil.make_from_file_name(path.name)
+            if sound_segment is not None and sound_segment.idx >= first_index:
+                result.append(path)
+        return result
+
+    def delete_path_snapshot(self, paths: Collection[Path]) -> None:
+        """Delete a pre-mutation path snapshot and invalidate the cached catalog."""
+        try:
+            for path in paths:
+                self.delete_sound_segment_and_sidecars(path)
+        finally:
+            self.force_invalidate()
 
 # ---
 

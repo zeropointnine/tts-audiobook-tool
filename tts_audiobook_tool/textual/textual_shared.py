@@ -76,6 +76,15 @@ CONTENT_TEXTUAL_APP_CSS = """\
     background-tint: transparent;
 }
 
+#empty-state {
+    display: none;
+    height: 1fr;
+    color: $col-dim;
+    text-style: italic;
+    padding: 1 1;
+    content-align: left top;
+}
+
 #line-list > .option-list--option-highlighted,
 #line-list:focus > .option-list--option-highlighted {
     text-style: reverse;

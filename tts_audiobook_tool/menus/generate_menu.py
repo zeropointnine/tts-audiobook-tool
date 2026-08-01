@@ -16,9 +16,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.textual.review_segments_editor import (
-    ReviewSegmentsEditorTextualApp,
-)
+from tts_audiobook_tool.textual.sound_segments_editor import SoundSegmentsEditorTextualApp
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -61,7 +59,7 @@ class GenerateMenu:
             num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
             failed_items_label = f"{num_fails} {make_noun('item', 'items', num_fails)}"
             currently = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM})"
-            return f"Regenerate segments with errors {currently}"
+            return f"Regenerate segments with excess errors {currently}"
 
         def make_batch_size_label(state: State) -> str:
             value = ProjectVoiceUtil.get_batch_size(state.project)
@@ -78,6 +76,9 @@ class GenerateMenu:
             return f"Generate audio segments {num_complete_label}"
 
         def items_maker(_: State) -> list[MenuItem]:
+
+            has_sound_segments = state.project.sound_segments.num_generated() > 0
+
             items = []
             # Start
             items.append(
@@ -88,15 +89,7 @@ class GenerateMenu:
                 MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
             )
 
-            if state.project.sound_segments.num_generated() > 0:
-                # Review/delete
-                items.append(
-                    MenuItem(
-                        "Review/delete segments",
-                        lambda _, __: ReviewSegmentsEditorTextualApp.start(state.project),
-                        superlabel=" ", superlabel_no_blank_line=True
-                    )
-                )
+            if has_sound_segments:
                 # Re-generate
                 items.append(
                     MenuItem(
@@ -141,6 +134,16 @@ class GenerateMenu:
                     superlabel="Post-processing"
                 )
             )
+
+            # Review/delete
+            if has_sound_segments:
+                items.append(
+                    MenuItem(
+                        "Review/delete segments",
+                        lambda _, __: SoundSegmentsEditorTextualApp.start(state.project),
+                        superlabel=" ", superlabel_no_blank_line=True
+                    )
+                )
 
             return items
         

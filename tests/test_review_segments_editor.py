@@ -13,8 +13,8 @@ from tts_audiobook_tool.project_support.segment_transcript_util import (
     SegmentTranscriptUtil,
 )
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.textual.review_segments_editor import (
-    ReviewSegmentsEditorTextualApp,
+from tts_audiobook_tool.textual.sound_segments_editor import (
+    SoundSegmentsEditorTextualApp,
 )
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.segment_info_dialog import SegmentInfoDialog
@@ -64,7 +64,7 @@ class StubProject:
 def make_app(
     num_lines: int = 12,
     generated_indices: set[int] | None = None,
-) -> tuple[ReviewSegmentsEditorTextualApp, StubProject]:
+) -> tuple[SoundSegmentsEditorTextualApp, StubProject]:
     if generated_indices is None:
         generated_indices = set(range(num_lines))
     project = StubProject(
@@ -76,14 +76,16 @@ def make_app(
             }
         ),
     )
-    return ReviewSegmentsEditorTextualApp(project), project  # type: ignore[arg-type]
+    app = SoundSegmentsEditorTextualApp(project)  # type: ignore[arg-type]
+    app.load_content()
+    return app, project
 
 
 def run(coroutine) -> None:
     asyncio.run(coroutine)
 
 
-def render_line(app: ReviewSegmentsEditorTextualApp, index: int, width: int) -> str:
+def render_line(app: SoundSegmentsEditorTextualApp, index: int, width: int) -> str:
     output = StringIO()
     console = Console(
         file=output,
@@ -95,6 +97,49 @@ def render_line(app: ReviewSegmentsEditorTextualApp, index: int, width: int) -> 
     return output.getvalue()
 
 
+def test_segment_discovery_and_rows_are_deferred_until_after_first_draw() -> None:
+    project = StubProject(
+        [StubPhraseGroup("Line 1")],
+        StubSoundSegments({0: [StubSoundSegment("segment-0.flac")]}),
+    )
+    app = SoundSegmentsEditorTextualApp(project)  # type: ignore[arg-type]
+
+    assert app.content_initialized is False
+    assert app.phrase_indices == []
+    assert app.all_phrase_indices == []
+    assert app.staged_deletion_flags == []
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app.content_initialized is True
+            assert app.phrase_indices == [0]
+            assert app.all_phrase_indices == [0]
+            assert app.staged_deletion_flags == [False]
+
+    run(exercise())
+
+
+def test_segment_actions_are_ignored_before_deferred_content_loads() -> None:
+    project = StubProject(
+        [StubPhraseGroup("Line 1")],
+        StubSoundSegments({0: [StubSoundSegment("segment-0.flac")]}),
+    )
+    app = SoundSegmentsEditorTextualApp(project)  # type: ignore[arg-type]
+
+    app.action_toggle_deletion()
+    app.action_toggle_word_errors_filter()
+    app.action_play_sound()
+    app.action_show_info()
+    app.commit_changes_and_exit()
+
+    assert app.all_phrase_indices == []
+    assert app.staged_deletion_flags == []
+    assert app.word_errors_filter_active is False
+    assert project.sound_segments.deletion_calls == []
+    assert app.has_changes is False
+
+
 def test_only_generated_phrases_are_displayed_once_in_project_order() -> None:
     app, project = make_app(6, {5, 1})
     project.sound_segments.sound_segments_map[5].append(
@@ -103,7 +148,8 @@ def test_only_generated_phrases_are_displayed_once_in_project_order() -> None:
     project.sound_segments.sound_segments_map[-1] = [StubSoundSegment("invalid.flac")]
     project.sound_segments.sound_segments_map[12] = [StubSoundSegment("stale.flac")]
 
-    app = ReviewSegmentsEditorTextualApp(project)  # type: ignore[arg-type]
+    app = SoundSegmentsEditorTextualApp(project)  # type: ignore[arg-type]
+    app.load_content()
 
     assert app.phrase_indices == [1, 5]
     assert app.staged_deletion_flags == [False, False]
@@ -125,9 +171,14 @@ def test_only_positive_best_segment_word_error_count_is_displayed() -> None:
     assert str(app.format_line(0)) == (
         "[00001] [      ] [word errors: 1] Line 1"
     )
-    error_count_span = app.format_line(0).spans[0]
+    formatted_line = app.format_line(0)
+    error_count_span = next(
+        span
+        for span in formatted_line.spans
+        if str(formatted_line)[span.start : span.end] == "1"
+    )
     assert error_count_span.style
-    assert str(app.format_line(0))[error_count_span.start:error_count_span.end] == "1"
+    assert str(formatted_line)[error_count_span.start:error_count_span.end] == "1"
     assert str(app.format_line(1)) == "[00002] [      ] Line 2"
     assert str(app.format_line(2)) == "[00003] [      ] Line 3"
 

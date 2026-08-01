@@ -46,10 +46,10 @@ class MainMenu:
                 )
             )
             items.append(
-                MenuItem(make_voice_label, on_voice, hotkey="v")
+                MenuItem(make_text_label, on_text, hotkey="t")
             )
             items.append(
-                MenuItem(make_text_label, on_text, hotkey="t")
+                MenuItem(make_voice_label, on_voice, hotkey="v")
             )
             items.append(
                 MenuItem(

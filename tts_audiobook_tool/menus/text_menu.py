@@ -1,14 +1,13 @@
-from tts_audiobook_tool.app_types import BookSegmentationSettings, SegmentationStrategy
-from tts_audiobook_tool.app_support import app_display
+from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual.text_editor import TextEditor
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -93,31 +92,12 @@ class TextMenu:
 
             if state.project.phrase_groups:
                 
-                num_sections = len(state.project.book.sections)
-                if num_sections > 2:
-                    items.append(
-                        MenuItem(
-                            f"Print sections {COL_DIM}({num_sections})", on_print_sections, 
-                            superlabel=" ", superlabel_no_blank_line=True
-                        )
-                    )
-                
-                superlabel = "" if num_sections > 2 else " "
-                superlabel_nbl = False if num_sections > 2 else True
-
-                items.append(                    
+                items.append(
                     MenuItem(
-                        f"Print text segments {COL_DIM}({len(state.project.phrase_groups)})", on_print_segments,
-                        superlabel=superlabel, superlabel_no_blank_line=superlabel_nbl
-                    )
-                )
-
-                # items.append(
-                #     MenuItem(
-                #         "Print text", lambda _, __: TextMenu.print_menu(state),
-                #         superlabel=" ", superlabel_no_blank_line=True
-                #     ),
-                # )       
+                        "View/edit text", lambda _, __: TextEditor.start(state.project),
+                        superlabel=" ", superlabel_no_blank_line=True                      
+                    ),
+                )       
 
             return items
 
@@ -206,28 +186,9 @@ def on_set_text(state: State, item: MenuItem) -> bool:
             # Print info/warnings
             EpubMenuUtil.print_import_info(epub_import_result)
 
-            ask.ask_enter_to_continue("Press enter to review text segmentation info: ", is_replacement=True)
-
         case _:
             raise ValueError(f"Bad value: {item.data!r}")
     
-    # Preview text segments
-    app_display.print_book_text_lines(
-        state,
-        phrase_groups=phrase_groups,
-        extant_indices=None,
-        segmentation_settings=BookSegmentationSettings(
-            language_code=state.project.language_code,
-            max_words_per_segment=state.project.max_words,
-            strategy=state.project.segmentation_strategy,
-        ),
-    )
-
-    # Confirm
-    if not ask.ask_confirm():
-        print_feedback("Cancelled")
-        return False
-
     # Delete now-outdated gens
     state.project.sound_segments.delete_all()
 
@@ -265,20 +226,24 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     if not state.real_time.custom_phrase_groups:
         state.real_time.project_text_line_range = None
 
+    num_text_lines = len(phrase_groups)
     if epub_import_result:
-        printt("Project text has been set")
-        printt()
-        
         raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)
         raw_text_link = text_util.make_terminal_hyperlink(raw_text_path, raw_text_path, is_file=True)
         printt(f"{COL_ACCENT}A plain-text conversion{COL_DEFAULT} of the EPUB file was also saved here:")
         printt(f"{raw_text_link}")
         printt()
-        ask.ask_enter_to_continue()
-    else:
-        print_feedback("Project text has been set")
 
-    return True
+    printt(f"{COL_ACCENT}Segmented {num_text_lines} text lines{COL_DEFAULT} using the following settings:")
+    segmentation_settings = state.project.book.segmentation_settings
+    printt(f"- Text segmenter language code: {COL_ACCENT}{segmentation_settings.language_code or 'none'}")
+    if segmentation_settings.max_words_per_segment:
+        printt(f"- Text segmenter max_words_per_segment: {COL_ACCENT}{segmentation_settings.max_words_per_segment}")
+    printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
+    printt()
+    ask.ask_enter_to_continue()
+
+    return False
 
 def on_ask_max_size(state: State, _) -> None:
 
@@ -297,19 +262,6 @@ def on_ask_max_size(state: State, _) -> None:
         success_prefix="Max words per segment set to:",
         is_int=True
     )
-
-def on_print_sections(state: State, __: MenuItem) -> None:
-    app_display.print_book_sections(state)
-    ask.ask_enter_to_continue()
-
-def on_print_segments(state: State, __: MenuItem) -> None:
-    app_display.print_book_text_lines(
-        state,
-        phrase_groups=state.project.phrase_groups,
-        extant_indices = set( state.project.sound_segments.sound_segments_map.keys() ),
-        segmentation_settings=ProjectBookUtil.get_book_segmentation_settings(state.project),
-    )
-    ask.ask_enter_to_continue()
 
 SUBHEADING = \
 """On import, text will be segmented into sentences and phrases using the settings 

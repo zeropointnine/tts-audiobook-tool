@@ -10,6 +10,7 @@ from textual.visual import VisualType
 from textual.widget import Widget
 from textual.widgets import Input, OptionList, Rule, Static
 from textual.widgets.option_list import Option
+from textual.timer import Timer
 
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.ansi import Ansi
@@ -49,14 +50,23 @@ class ContentTextualApp(App[None]):
         project: Project,
         header_lines: Iterable[str],
         phrase_indices: Iterable[int] | None = None,
+        empty_state_text: str = "No items",
+        loading_state_text: str | None = None,
     ) -> None:
         super().__init__()
         self.project = project
         self.header_lines = list(header_lines)
+        self.empty_state_text = empty_state_text
+        self.loading_state_text = loading_state_text
+        self.content_initialized = loading_state_text is None
         self.phrase_indices = (
-            list(range(len(project.phrase_groups)))
-            if phrase_indices is None
-            else list(phrase_indices)
+            []
+            if loading_state_text is not None
+            else (
+                list(range(len(project.phrase_groups)))
+                if phrase_indices is None
+                else list(phrase_indices)
+            )
         )
         self.selected_index = 0 if self.phrase_indices else None
         self.selection_anchor_index = self.selected_index
@@ -69,6 +79,8 @@ class ContentTextualApp(App[None]):
         self.find_search_start_index: int | None = None
         self.find_query_submitted = False
         self.find_match_index: int | None = None
+        self.transient_status_text = ""
+        self.transient_status_timer: Timer | None = None
         self.configure()
 
     def configure(self) -> None:
@@ -95,6 +107,19 @@ class ContentTextualApp(App[None]):
     def format_line(self, index: int) -> VisualType:
         """Format a visible row; concrete editors must implement this hook."""
         raise NotImplementedError
+
+    def initialize_content(self) -> Iterable[int]:
+        """Prepare deferred backing state and return the final visible indices."""
+        raise NotImplementedError
+
+    def load_content(self) -> None:
+        """Initialize deferred content once and install every visible row."""
+        if self.content_initialized:
+            return
+        phrase_indices = list(self.initialize_content())
+        self.content_initialized = True
+        self.update_empty_state_text(self.empty_state_text)
+        self.replace_phrase_indices(phrase_indices)
 
     def find_text(self, phrase_index: int) -> str:
         """Return the searchable text for a Project phrase group."""
@@ -138,6 +163,15 @@ class ContentTextualApp(App[None]):
             compact=True,
             collapse_selection=self.collapse_current_selection,
         )
+        yield Static(
+            (
+                self.empty_state_text
+                if self.content_initialized
+                else self.loading_state_text or self.empty_state_text
+            ),
+            id="empty-state",
+            markup=False,
+        )
         yield Horizontal(*self.compose_status_widgets(), id="status-bar")
         yield Horizontal(
             Static(self.find_label_text, id="find-label", markup=False),
@@ -148,11 +182,31 @@ class ContentTextualApp(App[None]):
 
     @property
     def find_label_text(self) -> str:
-        return "Find: "
+        return "Search text: "
 
     def on_mount(self) -> None:
-        self.query_one("#line-list", OptionList).focus()
+        self.sync_empty_state()
         self.update_inactive_selection_style()
+        if not self.content_initialized:
+            self.call_after_refresh(self.load_content)
+
+    def sync_empty_state(self) -> None:
+        """Show either the selectable list or its non-selectable empty state."""
+        option_list = self.query_one("#line-list", OptionList)
+        empty_state = self.query_one("#empty-state", Static)
+        has_items = bool(self.phrase_indices)
+        option_list.display = has_items
+        empty_state.display = not has_items
+        if has_items:
+            option_list.focus()
+        elif option_list.has_focus:
+            self.set_focus(None)
+
+    def update_empty_state_text(self, text: str) -> None:
+        """Replace the fallback copy, including in an already-mounted view."""
+        self.empty_state_text = text
+        if self.is_running:
+            self.query_one("#empty-state", Static).update(text)
 
     def update_header(self, lines: list[str]) -> None:
         """Replace the fixed-height header contents."""
@@ -176,7 +230,27 @@ class ContentTextualApp(App[None]):
         """Refresh the selection status within the bottom status row."""
         status_widgets = self.query("#selection-status")
         if status_widgets:
-            status_widgets.first(Static).update(self.selection_status_text)
+            status_widgets.first(Static).update(
+                self.transient_status_text or self.selection_status_text
+            )
+
+    def show_transient_status(self, text: str, duration: float = 1.0) -> None:
+        """Temporarily override selection status without blocking the editor."""
+        if self.transient_status_timer is not None:
+            self.transient_status_timer.stop()
+        self.transient_status_text = text
+        self.update_selection_status()
+        self.transient_status_timer = self.set_timer(
+            duration,
+            self.clear_transient_status,
+            name="clear-transient-status",
+        )
+
+    def clear_transient_status(self) -> None:
+        """Clear transient feedback and restore the current selection status."""
+        self.transient_status_text = ""
+        self.transient_status_timer = None
+        self.update_selection_status()
 
     @staticmethod
     def option_id(index: int) -> str:
@@ -419,6 +493,9 @@ class ContentTextualApp(App[None]):
         )
         self.find_match_index = None
 
+        if not self.is_running:
+            return
+
         option_list = self.query_one("#line-list", OptionList)
         option_list.clear_options()
         option_list.add_options(
@@ -426,6 +503,7 @@ class ContentTextualApp(App[None]):
             for index in range(len(self.phrase_indices))
         )
         option_list.highlighted = self.selected_index
+        self.sync_empty_state()
         self.update_inactive_selection_style()
         self.update_selection_status()
 

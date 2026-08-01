@@ -228,7 +228,7 @@ class VoiceMenuShared:
 
         print_feedback("Voice file saved")
 
-        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME)
+        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME, and_prompt=True)
 
         if force_enter_prompt:
             ask.ask_enter_to_continue()
@@ -366,7 +366,7 @@ class VoiceMenuShared:
         lines = []
         for i, voice in enumerate(voices, start=1):
             label = ProjectVoiceUtil.make_voice_sample_display_label(project, voice, tts_type.value)
-            lines.append(f"- {i}) {label}")
+            lines.append(f"{COL_DIM}- Voice sample {i}: {COL_DEFAULT}{label}")
         return "\n".join(lines) + ("\n" if lines else "")
 
     @staticmethod

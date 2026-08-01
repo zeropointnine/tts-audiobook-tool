@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from rich.console import Console
 from rich.text import Text
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Static
+from textual.widgets import OptionList, Static
 
 from tts_audiobook_tool.textual import content_textual_app
 from tts_audiobook_tool.textual.content_textual_app import ContentTextualApp
@@ -23,7 +23,13 @@ class StubProject:
 
 
 class StubContentApp(ContentTextualApp):
-    def __init__(self, project: StubProject) -> None:
+    def __init__(
+        self,
+        project: StubProject,
+        phrase_indices: list[int] | None = None,
+        empty_state_text: str = "No items",
+        loading_state_text: str | None = None,
+    ) -> None:
         self.changed_phrase_indices: set[int] = set()
         self.refreshed_indices: list[int] = []
         self.refresh_batches: list[list[int]] = []
@@ -31,7 +37,9 @@ class StubContentApp(ContentTextualApp):
         super().__init__(
             project,  # type: ignore[arg-type]
             ["Content editor"],
-            phrase_indices=[2, 0],
+            phrase_indices=[2, 0] if phrase_indices is None else phrase_indices,
+            empty_state_text=empty_state_text,
+            loading_state_text=loading_state_text,
         )
 
     @property
@@ -70,6 +78,26 @@ class StubContentApp(ContentTextualApp):
     def commit_changes_and_exit(self) -> None:
         self.committed = True
         self.exit()
+
+
+class DeferredStubContentApp(StubContentApp):
+    def __init__(self, project: StubProject, final_indices: list[int]) -> None:
+        self.final_indices = final_indices
+        self.initialize_calls = 0
+        self.state_seen_during_initialize: tuple[str, int] | None = None
+        super().__init__(
+            project,
+            empty_state_text="No content",
+            loading_state_text="Loading content",
+        )
+
+    def initialize_content(self) -> list[int]:
+        self.initialize_calls += 1
+        self.state_seen_during_initialize = (
+            str(self.query_one("#empty-state", Static).render()),
+            self.query_one("#line-list", OptionList).option_count,
+        )
+        return self.final_indices
 
 
 def make_app() -> tuple[StubContentApp, StubProject]:
@@ -162,6 +190,84 @@ def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
     run(exercise())
 
 
+def test_base_shows_custom_non_selectable_empty_state_and_restores_list() -> None:
+    project = StubProject([StubPhraseGroup("first")])
+    app = StubContentApp(
+        project,
+        phrase_indices=[],
+        empty_state_text="Nothing available",
+    )
+    app.update_empty_state_text("Loading items")
+
+    async def exercise() -> None:
+        async with app.run_test():
+            option_list = app.query_one("#line-list", OptionList)
+            empty_state = app.query_one("#empty-state", Static)
+
+            assert option_list.display is False
+            assert empty_state.display is True
+            assert str(empty_state.render()) == "Loading items"
+            assert app.selected_index is None
+            assert app.selected_indices == set()
+
+            app.update_empty_state_text("Nothing available")
+            assert app.empty_state_text == "Nothing available"
+            assert str(empty_state.render()) == "Nothing available"
+            assert option_list.display is False
+            assert empty_state.display is True
+
+            app.replace_phrase_indices([0])
+
+            assert option_list.display is True
+            assert empty_state.display is False
+            assert option_list.has_focus is True
+            assert app.selected_index == 0
+            assert option_list.option_count == 1
+
+    run(exercise())
+
+
+def test_base_loads_opt_in_deferred_content_after_loading_view_draws() -> None:
+    project = StubProject([StubPhraseGroup("first"), StubPhraseGroup("second")])
+    app = DeferredStubContentApp(project, [1, 0])
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            option_list = app.query_one("#line-list", OptionList)
+            empty_state = app.query_one("#empty-state", Static)
+
+            assert app.state_seen_during_initialize == ("Loading content", 0)
+            assert app.initialize_calls == 1
+            assert app.content_initialized is True
+            assert app.phrase_indices == [1, 0]
+            assert option_list.option_count == 2
+            assert option_list.display is True
+            assert empty_state.display is False
+
+            app.load_content()
+            assert app.initialize_calls == 1
+
+    run(exercise())
+
+
+def test_base_deferred_empty_result_switches_to_final_empty_copy() -> None:
+    app = DeferredStubContentApp(StubProject([]), [])
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            option_list = app.query_one("#line-list", OptionList)
+            empty_state = app.query_one("#empty-state", Static)
+
+            assert app.state_seen_during_initialize == ("Loading content", 0)
+            assert option_list.display is False
+            assert empty_state.display is True
+            assert str(empty_state.render()) == "No content"
+
+    run(exercise())
+
+
 def test_base_parses_ansi_header_strings_when_composing_and_updating() -> None:
     app, _ = make_app()
     app.header_lines = ["\x1b[31mInitial header\x1b[0m"]
@@ -179,6 +285,43 @@ def test_base_parses_ansi_header_strings_when_composing_and_updating() -> None:
             assert isinstance(updated_renderable, Text)
             assert updated_renderable.plain == "Updated header"
             assert updated_renderable.spans
+
+    run(exercise())
+
+
+def test_transient_status_temporarily_overrides_then_restores_current_selection() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("shift+down")
+            selection_status = app.query_one("#selection-status", Static)
+            assert str(selection_status.render()) == "2 lines selected"
+
+            app.show_transient_status("2 lines deleted", duration=0.05)
+            app.collapse_selection(0)
+            assert str(selection_status.render()) == "2 lines deleted"
+
+            await pilot.pause(0.1)
+            assert str(selection_status.render()) == ""
+
+    run(exercise())
+
+
+def test_new_transient_status_restarts_expiry_window() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            selection_status = app.query_one("#selection-status", Static)
+            app.show_transient_status("First", duration=0.05)
+            await pilot.pause(0.03)
+            app.show_transient_status("Second", duration=0.08)
+            await pilot.pause(0.04)
+            assert str(selection_status.render()) == "Second"
+
+            await pilot.pause(0.06)
+            assert str(selection_status.render()) == ""
 
     run(exercise())
 
@@ -208,6 +351,48 @@ def test_base_mutates_selected_mapped_items_and_confirms_before_commit() -> None
             await pilot.pause()
             assert app.committed is True
             assert app.is_running is False
+
+    run(exercise())
+
+
+def test_confirmation_dialog_renders_optional_red_warning_after_blank_line() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            app.push_screen(
+                SaveChangesDialog(
+                    warning_text="Generated sound segments will be deleted."
+                )
+            )
+            await pilot.pause()
+            warning_separator = app.screen.query_one(
+                "#save-changes-warning-separator", Static
+            )
+            warning = app.screen.query_one("#save-changes-warning", Static)
+            warning_renderable = warning.content
+
+            assert str(warning_separator.render()) == ""
+            assert isinstance(warning_renderable, Text)
+            assert warning_renderable.plain == (
+                "Generated sound segments will be deleted."
+            )
+            assert warning_renderable.spans
+            assert str(warning_renderable.spans[0].style) == "color(196)"
+
+    run(exercise())
+
+
+def test_confirmation_dialog_omits_warning_widgets_by_default() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            app.push_screen(SaveChangesDialog())
+            await pilot.pause()
+
+            assert not app.screen.query("#save-changes-warning-separator")
+            assert not app.screen.query("#save-changes-warning")
 
     run(exercise())
 
