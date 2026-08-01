@@ -9,8 +9,6 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
-from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
@@ -83,12 +81,9 @@ class ProjectMenu:
 
                 items.append(
                     MenuItem(
-                        make_subst_label, lambda _, __: ProjectMenu.word_substitutions_menu(state)
+                        "Show directory in system file explorer", on_view,
+                        superlabel=" ", superlabel_no_blank_line=True
                     )
-                )
-
-                items.append(
-                    MenuItem("Show directory in system file explorer", on_view)
                 )
 
             return items
@@ -132,101 +127,7 @@ class ProjectMenu:
 
         return True
 
-    @staticmethod
-    def word_substitutions_menu(state: State) -> None:
-
-        def on_enter(_, __) -> None:
-            inp = ask.ask(SUBSTITUTIONS_ASK_DESC, lower=False)
-            if not inp:
-                return 
-            # Add curlies
-            if not inp.startswith("{"):
-                inp = "{" + inp
-            if not inp.endswith("}"):
-                inp = inp + "}"
-            result = ProjectUtil.parse_word_substitutions_json_string(inp)
-            if isinstance(result, str):
-                print_feedback(result, is_error=True)
-                return 
-            state.project.word_substitutions = result
-            state.project.save()
-            print_feedback("Word substitutions set")
-            return 
-
-        def on_clear(_, __) -> None:
-            state.project.word_substitutions = {}
-            state.project.save()
-            print_feedback("Cleared")
-
-        def on_print(_, __) -> None:
-            MenuUtil.print_screen_heading(state, "Print")
-            s = str(state.project.word_substitutions)
-            printt(s)
-            printt()
-            ask.ask_enter_to_continue()
-            return 
-        
-        def on_inspect(_, __) -> None:
-            MenuUtil.print_screen_heading(state, "Uncommon words", subheading=UNCOMMON_WORDS_DESC)
-            
-            # Make list of project text words (unfiltered, still including whitespace)
-            all_words_raw = [] 
-            for group in state.project.phrase_groups:
-                for phrase in group.phrases:
-                    all_words_raw.extend(phrase.words)
-
-            items = app_text.get_uncommon_words(all_words_raw)
-            if not items:
-                printt("None found")
-            else:
-                for i in range(0, min(len(items), 25)):
-                    item = items[i]
-                    word_str = f"{COL_DEFAULT}{item[0]}"
-                    num_str = f"{COL_DIM}{str(item[1]).rjust(3)}"
-                    instances_str = f"{COL_DEFAULT}{', '.join(item[2])}"
-                    print(f"{num_str}  {instances_str}")
-            printt()
-            ask.ask_enter_to_continue()
-
-        def items_maker(_) -> list[MenuItem]:
-            items = []
-            # Enter items
-            verb = "Replace" if state.project.word_substitutions else "Enter"
-            items.append( MenuItem(f"{verb} word substitutions", on_enter) )
-            # Clear items
-            if state.project.word_substitutions:
-                items.append(MenuItem("Clear", on_clear))
-            # Print uncommon words
-            if Whitelist.supports_language(state.project.language_code) and state.project.phrase_groups:
-                items.append(MenuItem("Inspect project text for uncommon words", on_inspect))
-            # Print items
-            if state.project.word_substitutions:
-                num_subst = len(state.project.word_substitutions)
-                value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
-                label = f"Print {make_currently_string(value)}"
-                items.append( 
-                    MenuItem(label, on_print, superlabel=" ", superlabel_no_blank_line=True) 
-                )
-            return items
-
-        MenuUtil.menu(
-            state, 
-            heading=make_subst_label,
-            items=items_maker,
-            subheading=SUBSTITUTIONS_DESC,
-            breadcrumb="Word substitutions",
-        )
-
 # ---
-
-def make_subst_label(state: State) -> str:
-    num_subst = len(state.project.word_substitutions)
-    if num_subst > 0:
-        value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
-        label = f"Word substitutions {make_currently_string(value)}"
-    else:
-        label = f"Word substitutions {COL_DIM}(optional)"
-    return label
 
 def on_language(state: State, __: MenuItem) -> None:
 
@@ -290,19 +191,3 @@ LANGUAGE_CODE_DESC = "" + \
 - Whisper transcription
 - TTS inference (Chatterbox, MOSS)"""
 
-SUBSTITUTIONS_DESC = \
-f"""List of words to be replaced in the TTS prompt at inference-time.
-Useful for helping the model pronounce proper names, neologisms, etc. 
-more accurately. {COL_DIM}(Requires some trial and error){COL_DEFAULT}
-"""
-
-SUBSTITUTIONS_ASK_DESC = \
-f"""Enter substitutions list. Use this format: 
-{COL_DIM_ITALICS}{{"Ariekei": "AriaKay", "kilohour": "kilo hour"}}
- 
-"""
-
-UNCOMMON_WORDS_DESC = \
-f"""Words in the project text not found in the app's 
-English \"common words\" dictionary, sorted by frequency.
-"""

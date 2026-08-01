@@ -1,12 +1,15 @@
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.textual.text_editor import TextEditor
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -36,32 +39,6 @@ class TextMenu:
             )
             return make_menu_label("Text segmentation max words per segment", value)
 
-        def on_clear(_: State, __: MenuItem) -> None:
-            num_files = state.project.sound_segments.num_generated()
-            if num_files > 0:
-                s = f"Clearing project text will cause all {num_files} previously generated sound segment files to be deleted.\n"
-                s += "Are you sure? "
-            else:
-                s = "Clear project text? "
-            if not ask.ask_confirm(s):
-                return
-
-            state.project.sound_segments.delete_all()
-            ProjectTextIOUtil.set_phrase_groups_and_save(
-                state.project,
-                phrase_groups=[],
-                strategy=state.project.segmentation_strategy,
-                max_words=state.project.max_words,
-                language_code=state.project.language_code,
-                raw_text="",
-                text_source_kind="manual",
-            )
-
-            if not state.real_time.custom_phrase_groups:
-                state.real_time.project_text_line_range = None
-
-            print_feedback("Project text cleared")
-
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
@@ -69,14 +46,11 @@ class TextMenu:
                 MenuItem("Import from EPUB file", on_set_text, data="epub"),
             )
             items.append(
-                MenuItem("Import from plain text file", on_set_text, data="import"),
+                MenuItem("Import from text file", on_set_text, data="import"),
             )
             items.append(
-                MenuItem("Import plain text manually (input or paste text)", on_set_text, data="manual"),
+                MenuItem("Manually enter text", on_set_text, data="manual"),
             )
-            if state.project.phrase_groups:
-                items.append(MenuItem("Clear text", on_clear))
-
             items.append(
                 MenuItem(
                     make_max_size_label, on_ask_max_size, 
@@ -92,6 +66,13 @@ class TextMenu:
 
             if state.project.phrase_groups:
                 
+                items.append(
+                    MenuItem(
+                        make_subst_label, lambda _, __: TextMenu.word_substitutions_menu(state),
+                        superlabel=" ", superlabel_no_blank_line=True                      
+                    )
+                )
+
                 items.append(
                     MenuItem(
                         "View/edit text", lambda _, __: TextEditor.start(state.project),
@@ -125,6 +106,93 @@ class TextMenu:
             on_select=on_select,
             breadcrumb="Text segmentation strategy",
         )
+
+    @staticmethod
+    def word_substitutions_menu(state: State) -> None:
+
+        def on_enter(_, __) -> None:
+            inp = ask.ask(SUBSTITUTIONS_ASK_DESC, lower=False)
+            if not inp:
+                return 
+            # Add curlies
+            if not inp.startswith("{"):
+                inp = "{" + inp
+            if not inp.endswith("}"):
+                inp = inp + "}"
+            result = ProjectUtil.parse_word_substitutions_json_string(inp)
+            if isinstance(result, str):
+                print_feedback(result, is_error=True)
+                return 
+            state.project.word_substitutions = result
+            state.project.save()
+            print_feedback("Word substitutions set")
+            return 
+
+        def on_clear(_, __) -> None:
+            state.project.word_substitutions = {}
+            state.project.save()
+            print_feedback("Cleared")
+
+        def on_print(_, __) -> None:
+            MenuUtil.print_screen_heading(state, "Print")
+            s = str(state.project.word_substitutions)
+            printt(s)
+            printt()
+            ask.ask_enter_to_continue()
+            return 
+        
+        def on_inspect(_, __) -> None:
+            MenuUtil.print_screen_heading(state, "Uncommon words", subheading=UNCOMMON_WORDS_DESC)
+            
+            # Make list of project text words (unfiltered, still including whitespace)
+            all_words_raw = [] 
+            for group in state.project.phrase_groups:
+                for phrase in group.phrases:
+                    all_words_raw.extend(phrase.words)
+
+            items = app_text.get_uncommon_words(all_words_raw)
+            if not items:
+                printt("None found")
+            else:
+                for i in range(0, min(len(items), 25)):
+                    item = items[i]
+                    word_str = f"{COL_DEFAULT}{item[0]}"
+                    num_str = f"{COL_DIM}{str(item[1]).rjust(3)}"
+                    instances_str = f"{COL_DEFAULT}{', '.join(item[2])}"
+                    print(f"{num_str}  {instances_str}")
+            printt()
+            ask.ask_enter_to_continue()
+
+        def items_maker(_) -> list[MenuItem]:
+            items = []
+            # Enter items
+            verb = "Replace" if state.project.word_substitutions else "Enter"
+            items.append( MenuItem(f"{verb} word substitutions", on_enter) )
+            # Clear items
+            if state.project.word_substitutions:
+                items.append(MenuItem("Clear", on_clear))
+            # Print uncommon words
+            if Whitelist.supports_language(state.project.language_code) and state.project.phrase_groups:
+                items.append(MenuItem("Inspect project text for uncommon words", on_inspect))
+            # Print items
+            if state.project.word_substitutions:
+                num_subst = len(state.project.word_substitutions)
+                value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
+                label = f"Print {make_currently_string(value)}"
+                items.append( 
+                    MenuItem(label, on_print, superlabel=" ", superlabel_no_blank_line=True) 
+                )
+            return items
+
+        MenuUtil.menu(
+            state, 
+            heading=make_subst_label,
+            items=items_maker,
+            subheading=SUBSTITUTIONS_DESC,
+            breadcrumb="Word substitutions",
+        )
+
+
 
 # ---
 
@@ -263,7 +331,34 @@ def on_ask_max_size(state: State, _) -> None:
         is_int=True
     )
 
+def make_subst_label(state: State) -> str:
+    num_subst = len(state.project.word_substitutions)
+    if num_subst > 0:
+        value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
+        label = f"Word substitutions {make_currently_string(value)}"
+    else:
+        label = f"Word substitutions {COL_DIM}(optional)"
+    return label
+
+
 SUBHEADING = \
 """On import, text will be segmented into sentences and phrases using the settings 
 shown below. Project language code can also affect how the text is segmented.
+"""
+
+SUBSTITUTIONS_DESC = \
+f"""List of words to be replaced in the TTS prompt at inference-time.
+Useful for helping the model pronounce proper names, neologisms, etc. 
+more accurately. {COL_DIM}(Requires some trial and error){COL_DEFAULT}
+"""
+
+SUBSTITUTIONS_ASK_DESC = \
+f"""Enter substitutions list. Use this format: 
+{COL_DIM_ITALICS}{{"Ariekei": "AriaKay", "kilohour": "kilo hour"}}
+ 
+"""
+
+UNCOMMON_WORDS_DESC = \
+f"""Words in the project text not found in the app's 
+English \"common words\" dictionary, sorted by frequency.
 """
