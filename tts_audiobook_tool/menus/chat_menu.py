@@ -82,6 +82,7 @@ class ChatMenu:
 
         def on_select(value: str) -> None:
             state.prefs.chat_input_mode = value
+            state.prefs.save()
             print_feedback(
                 "Input mode set to:",
                 ChatMenu.get_chat_input_mode_label_value(state),
@@ -137,6 +138,7 @@ class ChatMenu:
 
         def on_select(value: bool) -> None:
             state.prefs.chat_save = value
+            state.prefs.save()
             print_feedback("Set to:", state.prefs.chat_save)
 
         dir_path = os.path.join(state.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
@@ -162,6 +164,7 @@ class ChatMenu:
 
         def on_select(value: bool) -> None:
             state.prefs.chat_save_mic = value
+            state.prefs.save()
             print_feedback("Set to:", state.prefs.chat_save_mic)
 
         MenuUtil.options_menu(
@@ -195,6 +198,7 @@ class ChatMenu:
             return
         state.prefs.llm_system_prompt = value
         state.prefs.system_prompt_preset = ""
+        state.prefs.save()
         print_feedback("Set LLM system prompt to:", value)
 
     @staticmethod
@@ -249,6 +253,7 @@ class ChatMenu:
 
         def on_select(value: str) -> None:
             state.prefs.system_prompt_preset = value
+            state.prefs.save()
             print_feedback("Set LLM system prompt preset to:", ChatMenu.get_system_prompt_preset_label_value(state))
 
         labels = ["None"] + [label for _, label in CHAT_SYSTEM_PROMPTS]
@@ -269,6 +274,7 @@ class ChatMenu:
     def clear_system_prompt(state: State) -> None:
         state.prefs.llm_system_prompt = ""
         state.prefs.system_prompt_preset = ""
+        state.prefs.save()
         print_feedback("Cleared LLM system prompt")
 
     @staticmethod

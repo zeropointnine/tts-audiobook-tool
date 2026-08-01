@@ -107,11 +107,13 @@ class LlmSettingsMenu:
     @staticmethod
     def clear_llm_url(state: State) -> None:
         state.prefs.llm_url = ""
+        state.prefs.save()
         print_feedback("Cleared LLM endpoint URL")
 
     @staticmethod
     def clear_api_key(state: State) -> None:
         state.prefs.llm_api_key = ""
+        state.prefs.save()
         print_feedback("Cleared LLM token")
 
     @staticmethod
@@ -133,6 +135,7 @@ class LlmSettingsMenu:
     @staticmethod
     def clear_llm_model(state: State) -> None:
         state.prefs.llm_model = ""
+        state.prefs.save()
         print_feedback("Cleared LLM model name")
 
     @staticmethod
@@ -157,9 +160,11 @@ class LlmSettingsMenu:
             return
 
         state.prefs.llm_extra_params = parsed
+        state.prefs.save()
         print_feedback("Set LLM extra params to:", json.dumps(parsed, ensure_ascii=False))
 
     @staticmethod
     def clear_llm_extra_params(state: State) -> None:
         state.prefs.llm_extra_params = {}
+        state.prefs.save()
         print_feedback("Cleared LLM extra params")

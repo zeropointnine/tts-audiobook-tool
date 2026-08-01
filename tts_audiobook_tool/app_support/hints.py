@@ -19,6 +19,7 @@ def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, an
     should_continue = show_hint(hint, and_confirm=and_confirm, and_prompt=and_prompt)
     if should_continue:
         prefs.set_hint_true(hint.key)
+        prefs.save()
     return should_continue
 
 

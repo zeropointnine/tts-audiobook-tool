@@ -58,6 +58,7 @@ def ask_and_make(state: State) -> None:
         return
     source_text_path = Path(inp)
     state.prefs.last_text_dir = str(source_text_path.parent)
+    state.prefs.save()
 
     source_text = load_source_text_for_enhance(state, str(source_text_path))
     if source_text is None:

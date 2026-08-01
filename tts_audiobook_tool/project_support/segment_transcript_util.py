@@ -333,12 +333,12 @@ class SegmentTranscriptUtil:
     ) -> list[str]:
         """Build ANSI-formatted source and transcript detail lines."""
         lines = [
-            f"{COL_DEFAULT}Source text               : {COL_DIM_ITALICS}{info.source.strip()}",
-            f"{COL_DEFAULT}TTS prompt                : {COL_DIM_ITALICS}{info.prompt.strip()}",
-            f"{COL_DEFAULT}STT transcript            : {COL_DIM_ITALICS}{info.transcript}",
+            f"{COL_DEFAULT}Source text              : {COL_DIM_ITALICS}{info.source.strip()}",
+            f"{COL_DEFAULT}TTS prompt               : {COL_DIM_ITALICS}{info.prompt.strip()}",
+            f"{COL_DEFAULT}STT transcript           : {COL_DIM_ITALICS}{info.transcript}",
             "",
-            f"{COL_DEFAULT}Source text normalized    : {COL_DIM_ITALICS}{info.normalized_source}",
-            f"{COL_DEFAULT}STT transcript normalized : {COL_DIM_ITALICS}{info.normalized_transcript}",
+            f"{COL_DEFAULT}Normalized source text   : {COL_DIM_ITALICS}{info.normalized_source}",
+            f"{COL_DEFAULT}Normalized STT transcript: {COL_DIM_ITALICS}{info.normalized_transcript}",
         ]
 
         if should_show_diff:

@@ -24,7 +24,7 @@ from tts_audiobook_tool.app_types.validation_result import ValidationResult
 
 """
 Coordinates and drives TTS playback in "real time".
-Manages output buffer growth, validate-and-retry handling
+Manages output buffer growth, validate-and-retry handling,
 intra-segment pauses, interruption/shutdown behavior.
 
 Similar to `GenerateUtil.generate_files()` but outputs to sound device instead of to files.
@@ -71,7 +71,7 @@ def start(
     if state.prefs.stt_variant == SttVariant.DISABLED:
         s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
     MenuUtil.print_heading(None, s, dont_clear=True, non_menu=True)
-    printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
+    printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
     printt()
 
     # Realtime playback is a top-level generation run. If the previous run ended

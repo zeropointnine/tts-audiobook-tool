@@ -45,6 +45,7 @@ def get_from_text_file(
         return [], "", ""
 
     prefs.last_text_dir = str(Path(path).parent)
+    prefs.save()
 
     print(f"{COL_DIM_ITALICS}Segmenting text... ", end="", flush=True)
     phrase_groups = PhraseGrouper.text_to_groups(
@@ -95,4 +96,3 @@ def get_from_std_in(
         return [], raw_text
 
     return phrase_groups, raw_text
-

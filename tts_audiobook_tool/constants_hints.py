@@ -70,7 +70,7 @@ HINT_TEST_REAL_TIME = Hint(
     "test_real_time",
     "Tip",
 f"""After setting voice clone or changing other model properties,
-consider using \"{COL_ACCENT}Menu > Generate audio in realtime{COL_DEFAULT}\" to quickly test audio
+consider using \"{COL_ACCENT}Menu > Realtime playback{COL_DEFAULT}\" to quickly test audio
 generation quality before committing to generating audiobook."""
 )
 

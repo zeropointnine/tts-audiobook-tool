@@ -665,11 +665,13 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
-**2026-07-30**
+**2026-08-01**
 
 - Added **voice selections editor**. When using multiple voice samples, voice samples can now be assigned on a line-by-line basis. `Voice > Edit voice selections`.
 
-- Added **review-and-delete sound segments editor**. `Generate > Review/delete segments`.
+- Added **review-and-delete sound segments editor**. Useful for reviewing and selectively deleting unwanted sound generations (bad takes, etc). `Generate > Review/delete segments`.
+
+- Added **text lines editor**. Allows for manually deleting unwanted lines from imported text (eg, table of contents, publisher info, etc) as well as splitting lines at inner phrase boundaries. The latter can be useful when manually assigning voice samples for direct quotes/dialog. `Text > View/edit text`
 
 **2026-07-15**
 

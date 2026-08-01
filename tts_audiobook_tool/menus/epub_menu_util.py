@@ -47,6 +47,7 @@ class EpubMenuUtil:
             ask.ask_error("Must select an .epub file")
             return ""
         prefs.last_text_dir = str(Path(path).parent)
+        prefs.save()
         return path
 
     @staticmethod

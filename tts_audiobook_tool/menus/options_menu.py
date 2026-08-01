@@ -40,6 +40,7 @@ class OptionsMenu:
 
         def on_hints(_: State, __: MenuItem) -> None:
             state.prefs.reset_hints()
+            state.prefs.save()
             s = "One-time contextual hints have been reset.\n"
             s += "They will now appear again when relevant."
             print_feedback(s, long_pause=True)
@@ -164,6 +165,7 @@ class OptionsMenu:
 
         def on_select(value: SttVariant) -> None:
             state.prefs.stt_variant = value
+            state.prefs.save()
             print_feedback(f"Set to:", state.prefs.stt_variant.id)
 
         MenuUtil.options_menu(
@@ -185,6 +187,7 @@ class OptionsMenu:
         def on_select(value: SttConfig) -> None:
             if state.prefs.stt_config != value:
                 state.prefs.stt_config= value
+                state.prefs.save()
             print_feedback(f"Set whisper device to:", str(state.prefs.stt_config.description))
 
         labels = []
@@ -211,6 +214,7 @@ class OptionsMenu:
         def on_select(value: bool) -> None:
             if state.prefs.tts_force_cpu != value:
                 state.prefs.tts_force_cpu = value
+                state.prefs.save()
             print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))        
 
         subheading = f"Forces TTS model to use CPU as its torch device even when GPU is available.\n"
@@ -232,6 +236,7 @@ class OptionsMenu:
         def on_select(value: bool) -> None:
             if state.prefs.save_debug_files != value:
                 state.prefs.save_debug_files = value
+                state.prefs.save()
             print_feedback(f"Set to:", str(state.prefs.save_debug_files))
 
         subheading = f"Saves intermediate sound files alongside finalized\n"
@@ -254,6 +259,7 @@ class OptionsMenu:
         def on_select(value: bool) -> None:
             if state.prefs.menu_clears_screen != value:
                 state.prefs.menu_clears_screen = value
+                state.prefs.save()
             print_feedback(f"Set to:", str(state.prefs.menu_clears_screen))
 
         subheading = f"When enabled, clears screen between menus\n"
@@ -276,6 +282,7 @@ class OptionsMenu:
         def on_select(value: str) -> None:
             if state.prefs.aac_bitrate != value:
                 state.prefs.aac_bitrate = value
+                state.prefs.save()
             print_feedback(f"Set AAC/M4B bitrate to:", state.prefs.aac_bitrate)
 
         MenuUtil.options_menu(
@@ -301,6 +308,7 @@ class OptionsMenu:
         def on_select(value: TtsModelType | None) -> None:
             if state.prefs.sgl_omni_type != value:
                 state.prefs.sgl_omni_type = value
+                state.prefs.save()
             print_feedback("Set SGL-Omni TTS model type to:", OptionsMenu.make_sgl_omni_type_label(state))
 
         values: list[TtsModelType | None] = [None] + TtsModelType.get_sgl_omni_items()
@@ -332,6 +340,7 @@ class OptionsMenu:
             value = f"http://{value}"
         
         state.prefs.sgl_omni_url = value
+        state.prefs.save()
         SglOmniUtil.set_base_url(state.prefs.sgl_omni_url)
         Tts.update_tts_type()
 

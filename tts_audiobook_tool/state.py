@@ -38,6 +38,7 @@ class State:
             if isinstance(result, str):
                 ask.ask_error(result)
                 self.prefs.project_dir = ""
+                self.prefs.save()
                 self.project = Project(dir_path="")
             else:
                 self.project = result
@@ -112,6 +113,7 @@ class State:
 
         # Make project 
         self.prefs.project_dir = str(project_dir_path)
+        self.prefs.save()
         self.project = Project( dir_path=str(project_dir_path) )
 
         if Tts.get_type() == TtsModelType.OUTE:
@@ -127,6 +129,7 @@ class State:
 
     def set_existing_project(self, path: str) -> None:
         self.prefs.project_dir = path
+        self.prefs.save()
         result = ProjectLoadUtil.load_using_dir_path(path)
         if isinstance(result, str):
             ask.ask_error(result)
@@ -136,5 +139,6 @@ class State:
 
     def reset(self):
         self.prefs.project_dir = ""
+        self.prefs.save()
         self.project = Project(dir_path="")
         self.real_time = RealTimeMenuState()

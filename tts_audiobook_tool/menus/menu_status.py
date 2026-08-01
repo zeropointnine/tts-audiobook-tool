@@ -119,12 +119,12 @@ def _make_server_tts_text(state: State) -> str:
     return f"{label}" + (f" {qualifier}" if qualifier else "")
 
 def _make_text_text(state: State) -> str:
-    num_complete = state.project.sound_segments.num_generated()
-    if num_complete == 0:
-        return COL_ERROR + "required"
     total_lines = len(state.project.phrase_groups)
+    if total_lines == 0:
+        return COL_ERROR + "required"
+    num_generated = state.project.sound_segments.num_generated()
     text = f"{total_lines} lines"
-    text += f" {COL_DIM}({num_complete} generated)"
+    text += f" {COL_DIM}({num_generated} generated)"
     return text
 
 def _make_stt_text(state: State) -> str:

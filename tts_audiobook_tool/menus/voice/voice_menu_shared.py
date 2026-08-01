@@ -142,6 +142,7 @@ class VoiceMenuShared:
 
         if state.prefs.last_voice_dir and not os.path.exists(state.prefs.last_voice_dir):
             state.prefs.last_voice_dir = ""
+            state.prefs.save()
         path = VoiceMenuShared.ask_voice_file(state.prefs.last_voice_dir, tts_type, message_override)
         if not path:
             return
@@ -151,6 +152,7 @@ class VoiceMenuShared:
             return
         
         state.prefs.last_voice_dir = str(Path(path).parent)
+        state.prefs.save()
 
         # Load sound
         sound_result = SoundFileUtil.load(path)
@@ -228,7 +230,7 @@ class VoiceMenuShared:
 
         print_feedback("Voice file saved")
 
-        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME, and_prompt=True)
+        hints.show_hint_if_necessary(state.prefs, HINT_TEST_REAL_TIME, and_prompt=not force_enter_prompt)
 
         if force_enter_prompt:
             ask.ask_enter_to_continue()

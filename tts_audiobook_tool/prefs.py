@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
@@ -9,7 +12,9 @@ from tts_audiobook_tool.constants_config import *
 
 class Prefs(Saveable):
     """
-    User-configurable app settings that persist to file
+    User-configurable app settings.
+
+    Changes remain in memory until ``save()`` is called explicitly.
     """
 
     def __init__(
@@ -84,6 +89,56 @@ class Prefs(Saveable):
         return prefs
 
     @staticmethod
+    def quarantine_file(file_path: str) -> str:
+        """Atomically move an unusable prefs file to a unique, preserved path."""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        base_path = f"{file_path}.{timestamp}"
+        quarantine_path = f"{base_path}.corrupt"
+        collision_index = 1
+
+        while os.path.exists(quarantine_path):
+            quarantine_path = f"{base_path}-{collision_index}.corrupt"
+            collision_index += 1
+
+        os.replace(file_path, quarantine_path)
+        return quarantine_path
+
+    @staticmethod
+    def recover_from_malformed_file(file_path: str, reason: str) -> Prefs:
+        """Preserve malformed input, replace it with defaults, and continue startup."""
+        try:
+            quarantine_path = Prefs.quarantine_file(file_path)
+        except OSError as exception:
+            message = (
+                f"Preferences file is malformed, but it could not be preserved before "
+                f"recovery: {make_error_string(exception)}\n"
+                f"Preferences file: {file_path}"
+            )
+            if hasattr(L, "logger"):
+                L.e(message)
+            printt(f"\n{COL_ERROR}{message}\n")
+            raise RuntimeError(message) from exception
+
+        prefs = Prefs()
+        save_error = prefs.save()
+        message = (
+            "Preferences recovery warning:\n"
+            f"Could not load preferences: {reason}\n"
+            f"The original file was preserved at: {quarantine_path}\n"
+        )
+        if save_error:
+            message += (
+                "The app is continuing with in-memory defaults, but a new preferences "
+                f"file could not be saved at: {file_path}"
+            )
+        else:
+            message += f"Defaults were saved to: {file_path}"
+        if hasattr(L, "logger"):
+            L.e(message)
+        printt(f"\n{COL_ERROR}{message}\n")
+        return prefs
+
+    @staticmethod
     def load(save_if_dirty: bool=True) -> Prefs:
         """
         Loads and parses prefs file, and returns Prefs instance
@@ -93,19 +148,29 @@ class Prefs(Saveable):
             saves updated prefs file.
         """
         from tts_audiobook_tool.app_support import hints
-        
-        if not os.path.exists(Prefs.get_file_path()):
+
+        file_path = Prefs.get_file_path()
+        if not os.path.exists(file_path):
             return Prefs.new_and_save()
 
         try:
-            with open(Prefs.get_file_path(), 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 prefs_dict = json.load(f)
-                if not isinstance(prefs_dict, dict):
-                    printt(f"Bad type for prefs: {type(prefs_dict)}")
-                    return Prefs.new_and_save()
-        except Exception as e:
-            printt(f"Prefs file error: {e}")
-            return Prefs.new_and_save()
+        except (json.JSONDecodeError, UnicodeError, RecursionError) as exception:
+            return Prefs.recover_from_malformed_file(file_path, make_error_string(exception))
+        except OSError as exception:
+            message = (
+                f"Error reading preferences file: {make_error_string(exception)}\n"
+                f"Preferences file: {file_path}"
+            )
+            if hasattr(L, "logger"):
+                L.e(message)
+            printt(f"\n{COL_ERROR}{message}\n")
+            raise RuntimeError(message) from exception
+
+        if not isinstance(prefs_dict, dict):
+            reason = f"expected a JSON object, found {type(prefs_dict).__name__}"
+            return Prefs.recover_from_malformed_file(file_path, reason)
 
         dirty = False
 
@@ -126,6 +191,12 @@ class Prefs(Saveable):
 
         # Hints
         hint_prefs = prefs_dict.get("hints", None) or {}
+        if not isinstance(hint_prefs, dict) or not all(
+            isinstance(key, str) and isinstance(value, bool)
+            for key, value in hint_prefs.items()
+        ):
+            hint_prefs = {}
+            dirty = True
 
         # Speech-to-text variant
         s = prefs_dict.get("stt_variant", "")
@@ -327,7 +398,6 @@ class Prefs(Saveable):
     @project_dir.setter
     def project_dir(self, value: str):
         self._project_dir = value
-        self.save()
 
     @property
     def save_debug_files(self) -> bool:
@@ -336,7 +406,6 @@ class Prefs(Saveable):
     @save_debug_files.setter
     def save_debug_files(self, value: bool):
         self._save_debug_files = value
-        self.save()
 
     @property
     def play_on_generate(self) -> bool:
@@ -345,7 +414,6 @@ class Prefs(Saveable):
     @play_on_generate.setter
     def play_on_generate(self, value: bool):
         self._play_on_generate = value
-        self.save()
 
     @property
     def menu_clears_screen(self) -> bool:
@@ -354,7 +422,6 @@ class Prefs(Saveable):
     @menu_clears_screen.setter
     def menu_clears_screen(self, value: bool) -> None:
         self._menu_clears_screen = value
-        self.save()
         from tts_audiobook_tool.util import set_menu_clears_screen
         set_menu_clears_screen(value)
 
@@ -363,11 +430,9 @@ class Prefs(Saveable):
 
     def set_hint_true(self, key: str) -> None:
         self._hints[key] = True
-        self.save()
 
     def reset_hints(self) -> None:
         self._hints = {}
-        self.save()
 
     @property
     def stt_variant(self) -> SttVariant:
@@ -376,7 +441,6 @@ class Prefs(Saveable):
     @stt_variant.setter
     def stt_variant(self, value: SttVariant) -> None:        
         self._stt_variant = value
-        self.save()
         # Sync static value
         from tts_audiobook_tool.stt import Stt
         Stt.set_variant(value)
@@ -388,7 +452,6 @@ class Prefs(Saveable):
     @stt_config.setter
     def stt_config(self, value: SttConfig) -> None:
         self._stt_config = value
-        self.save()
         # Sync static value
         from tts_audiobook_tool.stt import Stt
         Stt.set_config(value)
@@ -400,7 +463,6 @@ class Prefs(Saveable):
     @tts_force_cpu.setter
     def tts_force_cpu(self, value: bool) -> None:
         self._tts_force_cpu = value
-        self.save()
         # Sync static value
         from tts_audiobook_tool.tts import Tts
         Tts.set_force_cpu(value)
@@ -414,7 +476,6 @@ class Prefs(Saveable):
         if value is not None and (value == TtsModelType.NONE or not value.value.is_sgl_omni):
             value = None
         self._sgl_omni_type = value
-        self.save()
         from tts_audiobook_tool.tts import Tts
         Tts.set_sgl_omni_type(value)
 
@@ -425,7 +486,6 @@ class Prefs(Saveable):
     @sgl_omni_url.setter
     def sgl_omni_url(self, value: str) -> None:
         self._sgl_omni_url = value.strip() or SGL_OMNI_URL_DEFAULT
-        self.save()
 
     @property
     def aac_bitrate(self) -> str:
@@ -436,7 +496,6 @@ class Prefs(Saveable):
         if value not in AAC_BITRATES:
             value = AAC_BITRATE_DEFAULT
         self._aac_bitrate = value
-        self.save()
 
     @property
     def llm_url(self) -> str:
@@ -445,7 +504,6 @@ class Prefs(Saveable):
     @llm_url.setter
     def llm_url(self, value: str) -> None:
         self._llm_url = value
-        self.save()
 
     @property
     def llm_api_key(self) -> str:
@@ -454,7 +512,6 @@ class Prefs(Saveable):
     @llm_api_key.setter
     def llm_api_key(self, value: str) -> None:
         self._llm_api_key = value
-        self.save()
 
     @property
     def llm_model(self) -> str:
@@ -463,7 +520,6 @@ class Prefs(Saveable):
     @llm_model.setter
     def llm_model(self, value: str) -> None:
         self._llm_model = value
-        self.save()
 
     @property
     def llm_system_prompt(self) -> str:
@@ -472,7 +528,6 @@ class Prefs(Saveable):
     @llm_system_prompt.setter
     def llm_system_prompt(self, value: str) -> None:
         self._llm_system_prompt = value
-        self.save()
 
     @property
     def system_prompt_preset(self) -> str:
@@ -483,7 +538,6 @@ class Prefs(Saveable):
         if not isinstance(value, str):
             value = ""
         self._system_prompt_preset = value
-        self.save()
 
     @property
     def llm_extra_params(self) -> dict:
@@ -494,7 +548,6 @@ class Prefs(Saveable):
         if not isinstance(value, dict):
             value = {}
         self._llm_extra_params = value
-        self.save()
 
     @property
     def last_voice_dir(self) -> str:
@@ -503,7 +556,6 @@ class Prefs(Saveable):
     @last_voice_dir.setter
     def last_voice_dir(self, value: str) -> None:
         self._last_voice_dir = value
-        self.save()
 
     @property
     def last_project_dir(self) -> str:
@@ -512,7 +564,6 @@ class Prefs(Saveable):
     @last_project_dir.setter
     def last_project_dir(self, value: str) -> None:
         self._last_project_dir = value
-        self.save()
 
     @property
     def last_text_dir(self) -> str:
@@ -521,7 +572,6 @@ class Prefs(Saveable):
     @last_text_dir.setter
     def last_text_dir(self, value: str) -> None:
         self._last_text_dir = value
-        self.save()
 
     @property
     def chat_input_mode(self) -> str:
@@ -532,7 +582,6 @@ class Prefs(Saveable):
         if value not in CHAT_INPUT_MODES:
             value = PREFS_DEFAULT_CHAT_INPUT_MODE
         self._chat_input_mode = value
-        self.save()
 
     @property
     def chat_save(self) -> bool:
@@ -541,7 +590,6 @@ class Prefs(Saveable):
     @chat_save.setter
     def chat_save(self, value: bool) -> None:
         self._chat_save = value
-        self.save()
 
     @property
     def chat_save_mic(self) -> bool:
@@ -550,7 +598,6 @@ class Prefs(Saveable):
     @chat_save_mic.setter
     def chat_save_mic(self, value: bool) -> None:
         self._chat_save_mic = value
-        self.save()
 
     @property
     def is_validation_disabled(self) -> bool:
@@ -591,7 +638,12 @@ class Prefs(Saveable):
             make_payload,
         )
         if err:
+            if hasattr(L, "logger"):
+                L.e(err)
             printt(f"\n{COL_ERROR}{err}\n")
+        else:
+            if hasattr(L, "logger"):
+                L.d("saved")
         return err
 
     @staticmethod

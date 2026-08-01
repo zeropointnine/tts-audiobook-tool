@@ -535,7 +535,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
     if state.prefs.stt_variant == SttVariant.DISABLED:
         message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
     MenuUtil.print_heading(state, message, dont_clear=True)
-    printt(f"{COL_DIM}Press {COL_ACCENT}[control-c]{COL_DIM} to interrupt")
+    printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
     printt()
 
     # Generate
