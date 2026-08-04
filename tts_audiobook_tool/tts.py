@@ -30,6 +30,7 @@ from tts_audiobook_tool.tts_models.qwen3_server_base_model import Qwen3ServerBas
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
+from tts_audiobook_tool.tts_models.zonos2_server_base_model import Zonos2ServerBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
@@ -63,6 +64,7 @@ class Tts:
     _qwen3: Qwen3BaseModel | None = None
     _qwen3tts_server: Qwen3ServerBaseModel | None = None
     _vibevoice: VibeVoiceBaseModel | None = None
+    _zonos2_server: Zonos2ServerBaseModel | None = None
 
     _sgl_omni_type: TtsModelType | None = None
 
@@ -266,7 +268,8 @@ class Tts:
             TtsModelType.POCKET: PocketBaseModel,
             TtsModelType.QWEN3TTS: Qwen3BaseModel,
             TtsModelType.QWEN3TTS_SERVER: Qwen3ServerBaseModel,
-            TtsModelType.VIBEVOICE: VibeVoiceBaseModel,            
+            TtsModelType.VIBEVOICE: VibeVoiceBaseModel,
+            TtsModelType.ZONOS2_SERVER: Zonos2ServerBaseModel,
         }
         cls = MAP.get(Tts._type, None)
         if cls is None:
@@ -297,6 +300,7 @@ class Tts:
             Tts._qwen3,
             Tts._qwen3tts_server,
             Tts._vibevoice,
+            Tts._zonos2_server,
         ]
         for item in items:
             if item is not None:
@@ -323,7 +327,8 @@ class Tts:
             TtsModelType.POCKET: Tts.get_pocket,
             TtsModelType.QWEN3TTS: Tts.get_qwen3,
             TtsModelType.QWEN3TTS_SERVER: Tts.get_qwen3tts_server,
-            TtsModelType.VIBEVOICE: Tts.get_vibevoice
+            TtsModelType.VIBEVOICE: Tts.get_vibevoice,
+            TtsModelType.ZONOS2_SERVER: Tts.get_zonos2_server,
         }
         factory_function = MAP.get(Tts._type, None)
         if not factory_function:
@@ -409,6 +414,7 @@ class Tts:
             TtsModelType.QWEN3TTS_SERVER: Tts._qwen3tts_server,
             TtsModelType.POCKET: Tts._pocket,
             TtsModelType.OMNIVOICE: Tts._omnivoice,
+            TtsModelType.ZONOS2_SERVER: Tts._zonos2_server,
         }
         return MAP.get(Tts._type, None)
 
@@ -603,6 +609,14 @@ class Tts:
         return Tts._qwen3tts_server
 
     @staticmethod
+    def get_zonos2_server() -> Zonos2ServerBaseModel:
+        if not Tts._zonos2_server:
+            from tts_audiobook_tool.tts_models.zonos2_server_model import Zonos2ServerModel
+            Tts._zonos2_server = Zonos2ServerModel()
+            printt()
+        return Tts._zonos2_server
+
+    @staticmethod
     def get_vibevoice() -> VibeVoiceBaseModel:
 
         if not Tts._vibevoice:
@@ -642,6 +656,7 @@ class Tts:
             Tts._qwen3tts_server = None
             Tts._pocket = None
             Tts._omnivoice = None
+            Tts._zonos2_server = None
         app_memory.gc_ram_vram()
 
     @staticmethod

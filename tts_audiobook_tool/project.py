@@ -250,6 +250,12 @@ class Project(BaseModel):
 
     qwen3_server_concurrent_requests: int = 1
 
+    zonos2_server_voice_file_name: list[str] = Field(default_factory=list)
+    zonos2_server_concurrent_requests: int = 1
+    zonos2_top_k: int = -1
+    zonos2_temperature: float = -1
+    zonos2_repetition_penalty: float = -1
+
     pocket_voice_file_name: list[str] = Field(default_factory=list)
     pocket_predefined_voice: str = ""
     pocket_model_code: str = ""

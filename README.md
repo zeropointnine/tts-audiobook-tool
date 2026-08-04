@@ -23,6 +23,7 @@
 - [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (either locally or via SGL-Omni)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
+- [ZONOS2](https://github.com/Zyphra/ZONOS2) (via SGL-Omni)
 
 The app employs various techniques to make the nondeterministic output of generative text-to-speech models reliable enough for bulk long-form speech synthesis. For example:
 
@@ -78,7 +79,8 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a)
 - [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a)
 - [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett))
-- [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) 
+- [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a)
+- [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a)
 
 ### Enhance existing audiobooks
 
@@ -449,27 +451,30 @@ Alternatively, `Backend.HF` is also hardware accelerated but slower. Flash Atten
 
 Use `Backend.LLAMACPP`.
 
+
 ## Virtual environment for SGL-Omni server
 
 > **ℹ️ Note!**
 > SGL-Omni is under active development. Should be treated as experimental for the time being.
 
-
 The app supports server-based TTS inference using SGL-Omni. Install instructions can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially for Windows). You may also need to perform additional per-model install steps as described in the docs.
 
 The following models served through SGL-Omni are supported:
+- [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
 - [**Higgs Audio V3**](https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html) (24GB VRAM recommended)
 - [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (> 24GB VRAM required)
-- [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
 - [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html) 
+- [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) 
 
 
 Launch SGL-Omni server, specifying one of the supported TTS model as described in their docs. Eg:
+- `sgl-omni serve --model-path fishaudio/s2-pro --config examples/configs/s2pro_tts.yaml --port 8000`
 - `sgl-omni serve --model-path bosonai/higgs-audio-v3-tts-4b --port 8000`
 - `sgl-omni serve --model-path OpenMOSS-Team/MOSS-TTS-v1.5 --port 8000`
-- `sgl-omni serve --model-path fishaudio/s2-pro --config examples/configs/s2pro_tts.yaml --port 8000`
 - `sgl-omni serve --model-path Qwen/Qwen3-TTS-12Hz-1.7B-Base --config examples/configs/qwen3_tts_1_7b.yaml --port 8000`
 - `sgl-omni serve --model-path Qwen/Qwen3-TTS-12Hz-0.6B-Base --config examples/configs/qwen3_tts_0_6b.yaml --port 8000`
+- `sgl-omni serve --model-path Zyphra/zonos2 --port 8000`
+
 
 Once SGL-Omni is set up, continue to creating the app's virtual environment on your "client" computer:
 
@@ -622,6 +627,11 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Music detection/rejection
 - CFG, steps, seed
 
+**ZONOS2** (via SGL-Omni)
+
+- Concurrent requests
+- Streaming
+- Temperature, top_k, repetition_penalty
 
 ### Inference speeds, expectations
 
@@ -661,9 +671,15 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | Macbook Pro M1       | ~40% realtime   |
+| ZONOS2                  | GTX 4090, Windows    | 200% realtime   | SGL-Omni- concurrent requests=1
+| ZONOS2                  | GTX 4090, Windows    | 500% realtime   | SGL-Omni- concurrent requests=5
 
 
 # Update highlights
+
+**2026-08-05**
+
+- Added support for [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) using SGL-Omni.
 
 **2026-08-01**
 

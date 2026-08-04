@@ -16,6 +16,7 @@ from .voice_qwen3_menu import VoiceQwen3Menu
 from .voice_qwen3_server_menu import VoiceQwen3ServerMenu
 from .voice_pocket_menu import VoicePocketMenu
 from .voice_omnivoice_menu import VoiceOmniVoiceMenu
+from .voice_zonos2_server_menu import VoiceZonos2ServerMenu
 
 __all__ = [
     "VoiceMenuShared",
@@ -36,4 +37,5 @@ __all__ = [
     "VoiceQwen3ServerMenu",
     "VoicePocketMenu",
     "VoiceOmniVoiceMenu",
+    "VoiceZonos2ServerMenu",
 ]

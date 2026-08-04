@@ -327,7 +327,7 @@ class TtsBaseModel(ABC):
             return ""
 
         # Voice is not required, and no voice file specified
-        return "Model may generate random voices because no voice clone reference has been specified"
+        return "Note: Generated voices may vary because no voice reference has been configured."
 
     @classmethod
     def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:

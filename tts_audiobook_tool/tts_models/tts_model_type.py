@@ -217,7 +217,7 @@ class TtsModelType(Enum):
         semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
-        requirements_file_name="requirements-fish-s2.txt",
+        requirements_file_name="requirements-sgl-omni.txt",
         ui = {
             "proper_name": "Fish S2-Pro",
             "short_name": "S2-Pro",
@@ -451,7 +451,7 @@ class TtsModelType(Enum):
         batch_size_attr="moss_batch_size",
         can_stream=False,
         semantic_trim_last=False,
-        requires_ffmpeg_libs=True,
+        requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
         ui={
@@ -663,6 +663,46 @@ class TtsModelType(Enum):
             ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
             ("\u2019", "'"), # fancy apostrophe causes rest of word to not be spoken
             ("…", ","), ("...", ",") # ellipsis can wreck gen badly
+        ]
+    )
+
+    ZONOS2_SERVER = TtsModelSpec(
+        id="server_zonos2",
+        is_sgl_omni=True,
+        server_model_id_substring="zonos2",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="zonos2",
+        sample_rate=44_100,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+
+        # Must disambiguate against (future) zonos2_voice_file_name attribute
+        # due to server lack of support for transcript
+        voice_target_attr="zonos2_server_voice_file_name", 
+
+        requires_voice=False,
+        voice_transcript_attr="",
+        extra_file_attrs=[],
+        batch_size_attr="zonos2_server_concurrent_requests",
+        can_stream=True,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui={
+            "proper_name": "ZONOS2",
+            "short_name": "ZONOS2",
+            "voice_path_console": "Enter voice clone audio clip file path (~10-20 seconds recommended): ",
+            "voice_path_requestor": "Select voice clone audio clip (~10-20 seconds recommended)",
+            "project_links": [
+                "https://github.com/Zyphra/ZONOS2",
+                "https://huggingface.co/Zyphra/ZONOS2",
+                "https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html"
+            ]
+        },
+        substitutions=[
+            # Behaves well 
         ]
     )
 

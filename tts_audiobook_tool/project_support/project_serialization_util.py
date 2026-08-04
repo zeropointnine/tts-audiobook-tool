@@ -26,6 +26,7 @@ from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.zonos2_server_base_model import Zonos2ServerBaseModel
 from tts_audiobook_tool.util import printt
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ class ProjectSerializationUtil:
         "qwen3_voice_file_name": (),
         "qwen3_voice_transcript": (),
         "vibevoice_voice_file_name": (),
+        "zonos2_server_voice_file_name": (),
     }
 
     @staticmethod
@@ -339,6 +341,29 @@ class ProjectSerializationUtil:
         normalize_int('fish_s2_rolling_cont', 0, min_value=0, max_value=3, warn=True)
         normalize_int('fish_s2_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
         normalize_int('qwen3_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
+        normalize_int('zonos2_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
+
+        value = d.get('zonos2_top_k', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (Zonos2ServerBaseModel.TOP_K_MIN <= value <= Zonos2ServerBaseModel.TOP_K_MAX):
+                value = -1
+                add_warning('zonos2_top_k', value)
+            value = int(value)
+        d['zonos2_top_k'] = value
+
+        value = d.get('zonos2_temperature', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (Zonos2ServerBaseModel.TEMPERATURE_MIN <= value <= Zonos2ServerBaseModel.TEMPERATURE_MAX):
+                value = -1
+                add_warning('zonos2_temperature', value)
+        d['zonos2_temperature'] = value
+
+        value = d.get('zonos2_repetition_penalty', -1)
+        if value != -1:
+            if not isinstance(value, (float, int)) or not (Zonos2ServerBaseModel.REPETITION_PENALTY_MIN <= value <= Zonos2ServerBaseModel.REPETITION_PENALTY_MAX):
+                value = -1
+                add_warning('zonos2_repetition_penalty', value)
+        d['zonos2_repetition_penalty'] = value
 
         seed = d.get('fish_s2_seed', -1)
         if not (-1 <= seed <= SEED_MAX):
@@ -696,6 +721,12 @@ class ProjectSerializationUtil:
             "qwen3_repetition_penalty": project.qwen3_repetition_penalty,
             "qwen3_seed": project.qwen3_seed,
             "qwen3_server_concurrent_requests": project.qwen3_server_concurrent_requests,
+
+            "zonos2_server_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.zonos2_server_voice_file_name),
+            "zonos2_server_concurrent_requests": project.zonos2_server_concurrent_requests,
+            "zonos2_top_k": project.zonos2_top_k,
+            "zonos2_temperature": project.zonos2_temperature,
+            "zonos2_repetition_penalty": project.zonos2_repetition_penalty,
 
             "pocket_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.pocket_voice_file_name),
             "pocket_predefined_voice": project.pocket_predefined_voice,

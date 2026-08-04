@@ -87,6 +87,9 @@ class VoiceMenuShared:
             case TtsModelType.VIBEVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceVibeVoiceMenu
                 VoiceVibeVoiceMenu.menu(state)
+            case TtsModelType.ZONOS2_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceZonos2ServerMenu
+                VoiceZonos2ServerMenu.menu(state)
             case _:
                 raise NotImplementedError(f"value: {Tts.get_type()}")
 

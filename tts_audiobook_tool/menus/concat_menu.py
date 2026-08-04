@@ -442,7 +442,7 @@ to enable opening local audio files without user input:
 
 HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
-Some TTS models may benefit more from this than others.
+May be useful for lower-fidelity TTS models.
 
 This setting also applies to: 
 Realtime playback, LLM voice chat, and stand-alone server

@@ -277,7 +277,7 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
         "auto_advance",
         "auto-advance",
         "Auto-advance",
-        "Cycles through voice samples in order on each inference batch",
+        "Cycles through voice samples in order, on each batch generation",
     )
     DISABLED = (
         "disabled",
