@@ -19,6 +19,7 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
+from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
@@ -254,6 +255,11 @@ class ProjectSerializationUtil:
 
         normalize_by_id('export_type', ExportType.get_by_id, list(ExportType)[0])
         normalize_by_id('normalization_type', NormalizationType.from_id, list(NormalizationType)[0])
+
+        reason_pause_type = ReasonPauseTypes.get_by_id(d.get('reason_pauses', ''))
+        if reason_pause_type is None:
+            reason_pause_type = ReasonPauseTypes.default()
+        d['reason_pauses'] = reason_pause_type.value
 
         s = d.get('high_shelf', HighShelfEq.DISABLED.id)
         value = HighShelfEq.get_by_id(s)
@@ -600,6 +606,7 @@ class ProjectSerializationUtil:
             "use_break_sound_effect": project.use_break_sound_effect,
             "normalization_type": project.normalization_type.value.id,
             "high_shelf": project.high_shelf,
+            "reason_pauses": project.reason_pauses.id,
             "use_upsampler": project.use_upsampler,
             "realtime_save": project.realtime_save,
             "realtime_line_range": project.realtime_line_range,

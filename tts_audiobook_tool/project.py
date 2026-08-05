@@ -15,6 +15,7 @@ from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.reason_pauses import ReasonPauses, ReasonPauseTypes
 from tts_audiobook_tool.util import *
 
 import tts_audiobook_tool.app_types as app_types_module
@@ -121,6 +122,7 @@ class Project(BaseModel):
     use_break_sound_effect: bool = Field(default=PROJECT_DEFAULT_BREAK_EFFECT, alias="use_section_sound_effect")
     normalization_type: NormalizationType = list(NormalizationType)[0]
     high_shelf: str = HighShelfEq.DISABLED.id
+    reason_pauses: ReasonPauses = ReasonPauseTypes.default().value
     use_upsampler: bool = False
     realtime_save: bool = PROJECT_DEFAULT_REALTIME_SAVE
     realtime_line_range: tuple[int, int] | None = None

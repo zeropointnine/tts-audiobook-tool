@@ -178,7 +178,7 @@ def start(
                 else:
                     appended_sound = result.data
             else:
-                silence_duration = phrase.reason.pause_duration
+                silence_duration = state.project.reason_pauses.get_pause_for(phrase.reason)
                 appended_sound = np.zeros(int(sound.sr * silence_duration), dtype=sound.data.dtype)
 
         # Start stream lazy

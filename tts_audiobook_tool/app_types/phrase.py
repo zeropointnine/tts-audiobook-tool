@@ -5,7 +5,6 @@ from functools import total_ordering
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.constants_config import *
 
 """ Phrase, PhraseGroup, and Reason classes"""
 
@@ -207,33 +206,33 @@ class PhraseGroup:
 
 
 @total_ordering 
-class Reason(tuple[int, str, float], Enum):
+class Reason(tuple[int, str], Enum):
     """
     Describes the "semantic reason" why a piece of text has been segmented (at the end of the text).
     
     Value comparisons can be made between members directly or using the level property
     (eg, "reason1 < reason2" or "reason1.level < reason2.level")
 
-    We map a pause duration to each reason. 
-    We may effect other configurable side-effects related to Reason as well (namely, display-related).
+    Configurable side effects associated with reasons, such as pause durations,
+    are defined separately.
     """
     
     # For back-compat and as fallback
-    UNDEFINED = 0, "undefined", PAUSE_DURATION_SENTENCE
+    UNDEFINED = 0, "undefined"
     # The string has been split after an arbitrary word
-    WORD = 1, "w", PAUSE_DURATION_WORD
+    WORD = 1, "w"
     # The string has been split at a phrase (not to be confused with the class named "Phrase")
-    PHRASE = 2, "is", PAUSE_DURATION_PHRASE # "is" - think "intra-sentence"
+    PHRASE = 2, "is" # "is" - think "intra-sentence"
     # The string has been split at a sentence (which does not end in a paragraph break)
-    SENTENCE = 3, "s", PAUSE_DURATION_SENTENCE
+    SENTENCE = 3, "s"
     # The string has been split at a paragraph break (line feed)
-    PARAGRAPH = 4, "p", PAUSE_DURATION_PARAGRAPH
+    PARAGRAPH = 4, "p"
     # The string has been split at a paragraph break *plus* one or more blank lines.
     # Related publishing/typography terms for what this represents: "space break"; "scene break"; "dinkus"
-    SPACE_BREAK = 5, "x", PAUSE_DURATION_SPACE_BREAK
+    SPACE_BREAK = 5, "x"
     # The segment was the last text at the end of a section (eg, the end of an html section of an epub). 
     # Think "page break" almost.
-    SECTION_BREAK = 6, "xx", PAUSE_DURATION_SECTION
+    SECTION_BREAK = 6, "xx"
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:
@@ -248,14 +247,6 @@ class Reason(tuple[int, str, float], Enum):
     def json_value(self) -> str:
         return self.value[1]
 
-    @property
-    def pause_duration(self) -> float:
-        """
-        Duration of silence that should be inserted
-        between the given text segment and the one succeeding it
-        """
-        return self.value[2]
-
     @classmethod
     def from_json_value(cls, value: str | None) -> Reason:
         if value is None:
@@ -264,4 +255,3 @@ class Reason(tuple[int, str, float], Enum):
             if member.json_value == value:
                 return member
         return Reason.UNDEFINED
-

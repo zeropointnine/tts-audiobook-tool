@@ -14,6 +14,7 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.browser import (
@@ -92,7 +93,17 @@ class ConcatMenu:
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("Reader phrase subdivision", state.project.subdivide_phrases), 
+                    lambda _: make_menu_label(
+                        "Pauses between segments",
+                        state.project.reason_pauses.menu_label,
+                    ),
+                    lambda _, __: ConcatMenu.reason_pauses_menu(state),
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label("Reader uses phrase subdivisions", state.project.subdivide_phrases),
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 )
             )
@@ -172,6 +183,28 @@ class ConcatMenu:
         )
 
     @staticmethod
+    def reason_pauses_menu(state: State) -> None:
+
+        def on_select(value: ReasonPauseTypes) -> None:
+            state.project.reason_pauses = value.value
+            state.project.save()
+            print_feedback(f"Pauses between segments set to: {value.value.label}")
+
+        current_value = ReasonPauseTypes.get_by_id(state.project.reason_pauses.id)
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Pauses between segments",
+            labels=[item.value.label for item in ReasonPauseTypes],
+            values=list(ReasonPauseTypes),
+            current_value=current_value,
+            default_value=ReasonPauseTypes.default(),
+            on_select=on_select,
+            sublabels=[item.value.description for item in ReasonPauseTypes],
+            subheading=REASON_PAUSES_SUBHEADING,
+        )
+
+    @staticmethod
     def normalization_menu(state: State) -> None:
 
         def on_select(value: NormalizationType) -> None:
@@ -244,7 +277,7 @@ class ConcatMenu:
         def on_select(value: bool) -> None:
             state.project.subdivide_phrases = value
             state.project.save()
-            print_feedback(f"Reader phrase subdivision set to: {state.project.subdivide_phrases}")
+            print_feedback(f"Reader phrase subdivisions set to: {state.project.subdivide_phrases}")
 
         MenuUtil.options_menu(
             state=state,
@@ -446,6 +479,11 @@ May be useful for lower-fidelity TTS models.
 
 This setting also applies to: 
 Realtime playback, LLM voice chat, and stand-alone server
+"""
+
+REASON_PAUSES_SUBHEADING = \
+"""Controls the silence inserted between generated segments.
+Applies to audiobook export, realtime playback, voice chat, and the standalone server.
 """
 
 UPSAMPLE_SUBHEADING = \

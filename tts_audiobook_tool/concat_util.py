@@ -21,6 +21,7 @@ from tts_audiobook_tool.sound.loudness_normalization_util import LoudnessNormali
 from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.reason_pauses import ReasonPauses
 from tts_audiobook_tool.sound.sidon_util import SidonUtil
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -232,6 +233,7 @@ class ConcatUtil:
             print_progress=True,
             use_break_sound_effect=state.project.use_break_sound_effect,
             high_shelf=high_shelf,
+            reason_pauses=state.project.reason_pauses,
             aac_bitrate=state.prefs.aac_bitrate,
             use_upsampler=state.project.use_upsampler
         )
@@ -380,6 +382,7 @@ class ConcatUtil:
         phrases_and_paths: list[ tuple[Phrase, str, bool] ],
         use_break_sound_effect: bool,
         high_shelf: HighShelfEq,
+        reason_pauses: ReasonPauses,
         print_progress: bool,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
         use_upsampler: bool = False
@@ -451,7 +454,7 @@ class ConcatUtil:
                     max_seconds=ConcatUtil.PSEUDO_SILENCE_MAX_SECONDS,
                     threshold_db_relative_to_peak=ConcatUtil.PSEUDO_SILENCE_THRESHOLD_DB,
                 ) or 0.0
-                base = phrase.reason.pause_duration
+                base = reason_pauses.get_pause_for(phrase.reason)
                 override = max(0.0, base - end_pseudo - start_pseudo)
                 
                 if override < base:
@@ -460,6 +463,7 @@ class ConcatUtil:
             sound = SoundPipeline.append_pause_or_section_effect(
                 sound,
                 reason=phrase.reason,
+                reason_pauses=reason_pauses,
                 use_break_sound_effect=use_break_sound_effect,
                 is_first_in_section=is_first,
                 pause_duration_override=override,
@@ -486,6 +490,7 @@ class ConcatUtil:
 
             result = SoundPipeline.make_concat_rendered_sound_segment(
                 phrase, path, use_break_sound_effect, high_shelf,
+                reason_pauses=reason_pauses,
                 is_first_in_section=is_first_in_section,
                 use_upsampler=use_upsampler,
                 add_pause=False,

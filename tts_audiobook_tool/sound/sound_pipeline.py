@@ -10,6 +10,7 @@ from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
+from tts_audiobook_tool.reason_pauses import ReasonPauses
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -77,6 +78,7 @@ class SoundPipeline:
         path: str,
         use_break_sound_effect: bool,
         high_shelf: HighShelfEq,
+        reason_pauses: ReasonPauses,
         is_first_in_section: bool = False,
         use_upsampler: bool = False,
         add_pause: bool = True,
@@ -116,6 +118,7 @@ class SoundPipeline:
             sound = SoundPipeline.append_pause_or_section_effect(
                 sound,
                 reason=phrase.reason,
+                reason_pauses=reason_pauses,
                 use_break_sound_effect=use_break_sound_effect,
                 is_first_in_section=is_first_in_section,
             )
@@ -148,6 +151,7 @@ class SoundPipeline:
     def append_pause_or_section_effect(
         sound: Sound,
         reason: Reason,
+        reason_pauses: ReasonPauses,
         use_break_sound_effect: bool,
         is_first_in_section: bool = False,
         pause_duration_override: float | None = None,
@@ -157,10 +161,9 @@ class SoundPipeline:
 
         :param pause_duration_override:
             When not None, uses this duration (in seconds) instead of
-            `reason.pause_duration` for the inserted silence. Only affects the
-            pure-silence branch; break sound effects ignore it. Used by the
-            concat flow to compensate for pseudo-silence already present at
-            segment boundaries.
+            the configured pause for ``reason``. Only affects the pure-silence
+            branch; break sound effects ignore it. Used by the concat flow to
+            compensate for pseudo-silence already present at segment boundaries.
         """
 
         b = SoundPipeline.should_append_break_sound_effect(
@@ -177,7 +180,7 @@ class SoundPipeline:
         pause_duration = (
             pause_duration_override
             if pause_duration_override is not None
-            else reason.pause_duration
+            else reason_pauses.get_pause_for(reason)
         )
         if pause_duration > 0:
             return SoundUtil.add_silence(sound, pause_duration)

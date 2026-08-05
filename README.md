@@ -680,6 +680,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 **2026-08-05**
 
 - Added support for [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) using SGL-Omni.
+- Added submenu `Create > Pauses between segments` with options for `Normal` and `Shorter`.
 
 **2026-08-01**
 

@@ -479,11 +479,12 @@ class ConversationStreamingTts:
             # Streaming path intentionally appends only silence here. We do not
             # support the normal full-sound post-processing/effect path, and we
             # intentionally do not play section sound effects on this branch.
-            if reason.pause_duration <= 0:
+            pause_duration = project.reason_pauses.get_pause_for(reason)
+            if pause_duration <= 0:
                 return
 
             silence_sound = SoundUtil.make_silence_sound(
-                seconds=reason.pause_duration,
+                seconds=pause_duration,
                 sr=sound_stream.sample_rate,
                 dtype=np.dtype(np.float32),
             )
@@ -773,7 +774,10 @@ class ResponseSession:
                     limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
                 )
                 sound = SoundPipeline.append_pause_or_section_effect(
-                    sound, reason=reason, use_break_sound_effect=False,
+                    sound,
+                    reason=reason,
+                    reason_pauses=self.project.reason_pauses,
+                    use_break_sound_effect=False,
                 )
                 self.saved_turn_sounds.append(sound)
 

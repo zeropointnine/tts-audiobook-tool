@@ -342,9 +342,10 @@ class Server:
             nonlocal streamed_audio_sample_count
             if self._generation_id != generation_id:
                 return
-            if phrase_group.last_reason.pause_duration <= 0:
+            pause_duration = self._project.reason_pauses.get_pause_for(phrase_group.last_reason)
+            if pause_duration <= 0:
                 return
-            silence_sample_count = int(round(phrase_group.last_reason.pause_duration * info.sample_rate))
+            silence_sample_count = int(round(pause_duration * info.sample_rate))
             if silence_sample_count <= 0:
                 return
             silence = np.zeros(silence_sample_count, dtype=np.float32)
@@ -415,7 +416,10 @@ class Server:
 
         if phrase_group.last_reason != Reason.UNDEFINED:
             sound = SoundPipeline.append_pause_or_section_effect(
-                sound, reason=phrase_group.last_reason, use_break_sound_effect=False
+                sound,
+                reason=phrase_group.last_reason,
+                reason_pauses=self._project.reason_pauses,
+                use_break_sound_effect=False,
             )
 
         if self._generation_id != generation_id:
