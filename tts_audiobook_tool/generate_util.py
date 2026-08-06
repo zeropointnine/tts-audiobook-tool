@@ -104,6 +104,7 @@ class GenerateUtil:
         num_failed_music = 0
         num_improved = 0
         num_passed = 0
+        num_retries = 0
         word_counts: dict[int, int] = {}
         preexisting_word_error_counts = project.sound_segments.get_word_error_counts_in_generate_range()
         best_word_error_counts = dict(preexisting_word_error_counts)
@@ -144,6 +145,7 @@ class GenerateUtil:
             # Make parallel arrays from 'batch'
             indices = [item[0] for item in batch]
             retry_counts = [item[1] for item in batch]
+            num_retries += sum(retry_count > 0 for retry_count in retry_counts)
 
             # Print item info
             GenerateUtil.print_batch_heading(
@@ -368,6 +370,7 @@ class GenerateUtil:
         warnings_string += f"Lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         if Stt.has_instance() and ModelManager.has_yamnet_detector():
             warnings_string += f"Num retries triggered due to detected music: {num_failed_music}\n"
+        warnings_string += f"Num retries: {num_retries}\n"
         if num_improved:
             warnings_string += f"Lines improved on retry: {COL_OK}{num_improved}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""

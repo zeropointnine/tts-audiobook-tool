@@ -91,7 +91,7 @@ class TtsModelType(Enum):
         semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
-        requirements_file_name="",
+        requirements_file_name="requirements-sgl-omni.txt", # TODO: address entangled abstractions
         ui = {
             "proper_name": "None",
             "short_name": "None",

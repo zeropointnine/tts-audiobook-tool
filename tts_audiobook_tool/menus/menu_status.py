@@ -124,7 +124,8 @@ def _make_text_text(state: State) -> str:
         return COL_ERROR + "required"
     num_generated = state.project.sound_segments.num_generated()
     text = f"{total_lines} lines"
-    text += f" {COL_DIM}({num_generated} generated)"
+    qual_color = COL_DIM if num_generated > 0 else COL_ERROR
+    text += f" {qual_color}({num_generated} generated)"
     return text
 
 def _make_stt_text(state: State) -> str:
