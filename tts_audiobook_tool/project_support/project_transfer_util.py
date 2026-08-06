@@ -6,10 +6,16 @@ from typing import TYPE_CHECKING
 
 from pydantic.fields import FieldInfo
 
-from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.constants import (
+    APP_META_FLAC_FIELD,
+    APP_META_MP4_MEAN,
+    APP_META_MP4_TAG,
+    PROJECT_TEXT_EPUB_FILE_NAME,
+    PROJECT_TEXT_FILE_NAME,
+    PROJECT_TEXT_RAW_FILE_NAME,
+)
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
-from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -105,19 +111,27 @@ class ProjectTransferUtil:
 
     @staticmethod
     def make_supporting_project_file_names(project: Project) -> list[str]:
-
-        file_names = [
+        file_names: list[object] = [
             PROJECT_TEXT_FILE_NAME,
             PROJECT_TEXT_RAW_FILE_NAME,
             PROJECT_TEXT_EPUB_FILE_NAME,
         ]
 
+        file_attrs = ['oute_voice_file_name']
         for model_info in TtsModelType:
-            attrs = [model_info.value.voice_target_attr, *model_info.value.extra_file_attrs]
-            for attr in attrs:
-                if not attr:
-                    continue
-                file_names.append(getattr(project, attr, ""))
+            voice_target_attr = model_info.value.voice_target_attr
+            if voice_target_attr.endswith('_voice_file_name') and voice_target_attr not in file_attrs:
+                file_attrs.append(voice_target_attr)
+            for attr in model_info.value.extra_file_attrs:
+                if attr and attr not in file_attrs:
+                    file_attrs.append(attr)
+
+        for attr in file_attrs:
+            value = getattr(project, attr, "")
+            if isinstance(value, list):
+                file_names.extend(value)
+            else:
+                file_names.append(value)
 
         filtered_file_names: list[str] = []
         for file_name in file_names:
@@ -154,8 +168,6 @@ class ProjectTransferUtil:
 
     @staticmethod
     def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> str:
-        from tts_audiobook_tool.constants import PROJECT_TEXT_RAW_FILE_NAME
-
         candidate_names = [file_name]
         if file_name == PROJECT_TEXT_RAW_FILE_NAME:
             candidate_names.append("text_raw.txt")

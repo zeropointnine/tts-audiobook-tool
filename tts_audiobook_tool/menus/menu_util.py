@@ -183,9 +183,9 @@ class MenuUtil:
                     hotkey = ask.ask_hotkey()
 
                     if ask.can_hotkey:
-                        # enter (windows), enter (mac/linux), backspace, escape
+                        # Enter, Backspace (BS or DEL), or Escape.
                         # Some terminals/readchar combos can return double-escape for Esc.
-                        should_return = hotkey in ["\r", "\n", "\x08", "\x1b", "\x1b\x1b"] and is_submenu
+                        should_return = hotkey in ["\r", "\n", "\x08", "\x7f", "\x1b", "\x1b\x1b"] and is_submenu
                     else: # can't readchar
                         should_return = not hotkey
                     if should_return:
