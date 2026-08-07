@@ -45,6 +45,13 @@ class SectionMarkersMenu:
                 ) 
             )
             
+            items.append(
+                MenuItem(
+                    "Generate from blank lines",
+                    lambda _, __: SectionMarkersMenu.ask_generate_blank_lines_markers(state),
+                )
+            )
+            
             if state.project.markers:
                 items.append( MenuItem("Clear", on_clear) )
             
@@ -159,6 +166,81 @@ class SectionMarkersMenu:
 
         s = ", ".join( [str(item + 1) for item in zero_indexed_items] )
         print_feedback(f"Section markers set:", s)
+
+    @staticmethod
+    def ask_generate_blank_lines_markers(state: State) -> None:
+        """
+        Generates section markers from all phrase_groups containing phrases with Reason.SPACE_BREAK.
+        """
+        from tts_audiobook_tool.app_types.phrase import Reason
+        
+        # Show description
+        printt()
+        printt("Generate from blank lines")
+        printt(f"{COL_DIM}This feature automatically detects 2+ consecutive blank lines")
+        printt(f"{COL_DIM}(\\n\\n\\n) in the source text and creates section markers.")
+        printt()
+        printt(f"{COL_DIM}These markers will be added to existing markers and sorted.")
+        printt()
+        
+        # Ask for confirmation
+        if not ask.ask_confirm("Do you wish to generate markers from blank lines? (Y/N):"):
+            print_feedback("Cancelled")
+            return
+        
+        # Collect indices of phrase_groups with SPACE_BREAK
+        new_marker_indices: list[int] = []
+        for idx, phrase_group in enumerate(state.project.phrase_groups):
+            for phrase in phrase_group.phrases:
+                if phrase.reason == Reason.SPACE_BREAK:
+                    new_marker_indices.append(idx)
+                    break
+        
+        if not new_marker_indices:
+            print_feedback("No blank-line markers found", is_error=True)
+            return
+        
+        # Merge with existing markers
+        current_markers = state.project.markers.copy()
+        all_markers = current_markers + new_marker_indices
+        
+        # Deduplicate and sort
+        all_markers = sorted(set(all_markers))
+        
+        # Remove first index (0) if present (implicit)
+        if all_markers and all_markers[0] == 0:
+            all_markers.pop(0)
+        
+        # Validate range
+        max_valid_index = len(state.project.phrase_groups) - 1
+        invalid_markers = [m for m in all_markers if m < 0 or m > max_valid_index]
+        if invalid_markers:
+            print_feedback(f"Invalid marker indices: {invalid_markers}", is_error=True)
+            return
+        
+        # Update and save
+        state.project.markers = all_markers
+        err = state.project.save()
+        if err:
+            ask.ask_error(err)
+            return
+        
+        # Print confirmation
+        if not current_markers:
+            s = "Generated"
+        else:
+            s = "Added to existing"
+        
+        num_new = len(new_marker_indices)
+        if num_new == 1:
+            noun = "marker"
+        else:
+            noun = "markers"
+        
+        print_feedback(f"{s} {num_new} {noun} from blank lines")
+        printt()
+        printt(f"Current section markers: {', '.join([str(m + 1) for m in all_markers])}")
+        ask.ask_enter_to_continue()
 
 def print_markers(markers: list[int], label: str) -> None:
     
