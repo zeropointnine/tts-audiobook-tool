@@ -18,7 +18,6 @@ class OmniVoiceBaseModel(TtsBaseModel):
     INFO = TtsModelType.OMNIVOICE.value
 
     DEFAULT_REPO_ID = "k2-fsa/OmniVoice"
-    SAMPLE_RATE     = 24_000   # OmniVoice's default generation frequency
     DEFAULT_SPEED   = 1.0
     CFG_DEFAULT     = 2.0
     CFG_MIN         = 0.0
