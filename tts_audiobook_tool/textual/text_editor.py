@@ -4,6 +4,7 @@ from typing import ClassVar
 from textual.binding import Binding, BindingType
 from textual.css.errors import StylesheetError
 
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
 from tts_audiobook_tool.project import Project
@@ -26,6 +27,9 @@ from tts_audiobook_tool.textual.textual_shared import (
     STYLE_DIM,
 )
 from tts_audiobook_tool.util import print_feedback
+
+
+SHOW_NEWLINE_CHARS = True
 
 
 @dataclass
@@ -189,6 +193,17 @@ class TextEditor(ContentTextualApp):
             list_items.extend(section_item.phrase_group_items)
         return list_items
 
+    @staticmethod
+    def presentable_phrase_group_ansi(phrase_group: PhraseGroup) -> str:
+        """Return presentable text with line feeds shown as dim literal tokens."""
+        text = "".join(f"{phrase.text} " for phrase in phrase_group.phrases)
+        text = text.replace("\r", " ")
+        presentable_lines = [
+            app_text.massage_post_normalize(line) for line in text.split("\n")
+        ]
+        newline_token = f"{COL_DIM}↵\N{NO-BREAK SPACE}{COL_DEFAULT}"
+        return newline_token.join(presentable_lines)
+
     def format_line(self, index: int) -> HangingIndentText:
         """Format one row, styling selected rows except for the active row."""
         item_index = self.phrase_indices[index]
@@ -205,15 +220,20 @@ class TextEditor(ContentTextualApp):
                 max_lines=3,
                 style=style,
             )
-
-        prefix_text = f"{list_item.ordinal:05d}  "
-        ansi_text = f"{COL_DIM}{prefix_text}{COL_DEFAULT}{list_item.phrase_group.presentable_text}"
-        return HangingIndentText.from_ansi(
-            ansi_text=ansi_text,
-            content_start=len(prefix_text),
-            max_lines=3,
-            style=style,
-        )
+        else:
+            prefix_text = f"{list_item.ordinal:05d}  "
+            presentable_text = (
+                self.presentable_phrase_group_ansi(list_item.phrase_group)
+                if SHOW_NEWLINE_CHARS
+                else list_item.phrase_group.presentable_text
+            )
+            ansi_text = f"{COL_DIM}{prefix_text}{COL_DEFAULT}{presentable_text}"
+            return HangingIndentText.from_ansi(
+                ansi_text=ansi_text,
+                content_start=len(prefix_text),
+                max_lines=3,
+                style=style,
+            )
 
     def update_inactive_selection_style(self) -> None:
         """Style selected phrase rows while leaving section headings unchanged."""

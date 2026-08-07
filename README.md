@@ -462,9 +462,9 @@ The app supports server-based TTS inference using SGL-Omni. Install instructions
 The following models served through SGL-Omni are supported:
 - [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
 - [**Higgs Audio V3**](https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html) (24GB VRAM recommended)
-- [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (> 24GB VRAM required)
+- [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (>24GB VRAM required)
 - [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html) 
-- [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) 
+- [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) (16+GB VRAM recommended)
 
 
 Launch SGL-Omni server, specifying one of the supported TTS model as described in their docs. Eg:
