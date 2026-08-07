@@ -428,11 +428,13 @@ class ConcatUtil:
             nonlocal duration_sum
             assert pending is not None
             sound, phrase, is_first, idx, path = pending
+            is_final_segment = next_sound is None
+            append_break_sound_effect = use_break_sound_effect and not is_final_segment
 
             override: float | None = None
             use_effect = SoundPipeline.should_append_break_sound_effect(
                 phrase.reason,
-                use_break_sound_effect=use_break_sound_effect,
+                use_break_sound_effect=append_break_sound_effect,
                 is_first_in_section=is_first,
             )
             if (not use_effect
@@ -464,7 +466,7 @@ class ConcatUtil:
                 sound,
                 reason=phrase.reason,
                 reason_pauses=reason_pauses,
-                use_break_sound_effect=use_break_sound_effect,
+                use_break_sound_effect=append_break_sound_effect,
                 is_first_in_section=is_first,
                 pause_duration_override=override,
             )
@@ -515,8 +517,9 @@ class ConcatUtil:
             pending = (curr_sound, phrase, is_first_in_section, i, path)
 
         # Flush the final held segment. No following segment exists, so no
-        # pseudo-silence compensation is applied (hardcoded pause is used),
-        # preserving the original trailing-pause behavior.
+        # pseudo-silence compensation is applied (hardcoded pause is used).
+        # Break effects are suppressed because they should only separate audio
+        # segments, never trail the output file.
         if pending is not None:
             flush_pending(None)
 

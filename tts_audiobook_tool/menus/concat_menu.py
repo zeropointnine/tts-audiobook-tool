@@ -453,13 +453,13 @@ for mobile devices.
 
 SUBDIVIDE_SUBHEADING = \
 """Affects how text is highlighted in the player/reader app.
-When False, text segments map directly to the TTS prompts used to generate the audio segments.
-When True, text is further sub-segmented by phrase  (Requires \"speech-to-text validation\" 
+When False, highlighted text maps directly to the TTS prompts used to generate the audio segments.
+When True, highlighted text is further sub-segmented by phrase (Requires \"speech-to-text validation\" 
 to be enabled during TTS sound generation).
 """
 
 SECTION_BREAK_SUBHEADING = \
-"""In the concatenation step, inserts a 'page turn' sound effect when 
+"""In the concatenation step, inserts a subtle \"page turn\" sound effect when 
 two or more consecutive blank lines are encountered in the text. 
 This can be a useful audible cue, so long as the text is formatted for it.
 """
