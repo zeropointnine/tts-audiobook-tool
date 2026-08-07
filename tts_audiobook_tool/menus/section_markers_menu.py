@@ -1,4 +1,5 @@
-from tts_audiobook_tool.app_types import SectionMarkerMode
+from tts_audiobook_tool.app_types import PhraseGroup, SectionMarkerMode
+from tts_audiobook_tool.app_types.phrase import Reason
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
@@ -51,7 +52,7 @@ class SectionMarkersMenu:
                     lambda _, __: SectionMarkersMenu.ask_generate_blank_lines_markers(state),
                 )
             )
-            
+
             if state.project.markers:
                 items.append( MenuItem("Clear", on_clear) )
             
@@ -169,11 +170,8 @@ class SectionMarkersMenu:
 
     @staticmethod
     def ask_generate_blank_lines_markers(state: State) -> None:
-        """
-        Generates section markers from all phrase_groups containing phrases with Reason.SPACE_BREAK.
-        """
-        from tts_audiobook_tool.app_types.phrase import Reason
-        
+        """Add section markers after phrase groups ending at blank-line breaks."""
+
         # Show description
         printt()
         printt("Generate from blank lines")
@@ -182,65 +180,60 @@ class SectionMarkersMenu:
         printt()
         printt(f"{COL_DIM}These markers will be added to existing markers and sorted.")
         printt()
-        
+
         # Ask for confirmation
         if not ask.ask_confirm("Do you wish to generate markers from blank lines? (Y/N):"):
             print_feedback("Cancelled")
             return
-        
-        # Collect indices of phrase_groups with SPACE_BREAK
-        new_marker_indices: list[int] = []
-        for idx, phrase_group in enumerate(state.project.phrase_groups):
-            for phrase in phrase_group.phrases:
-                if phrase.reason == Reason.SPACE_BREAK:
-                    new_marker_indices.append(idx)
-                    break
-        
+
+        new_marker_indices = make_blank_line_marker_indices(state.project.phrase_groups)
+
         if not new_marker_indices:
             print_feedback("No blank-line markers found", is_error=True)
             return
-        
-        # Merge with existing markers
+
         current_markers = state.project.markers.copy()
-        all_markers = current_markers + new_marker_indices
-        
-        # Deduplicate and sort
-        all_markers = sorted(set(all_markers))
-        
-        # Remove first index (0) if present (implicit)
-        if all_markers and all_markers[0] == 0:
-            all_markers.pop(0)
-        
+        all_markers = sorted(set(current_markers + new_marker_indices) - {0})
+
         # Validate range
-        max_valid_index = len(state.project.phrase_groups) - 1
-        invalid_markers = [m for m in all_markers if m < 0 or m > max_valid_index]
+        invalid_markers = [
+            marker
+            for marker in all_markers
+            if marker < 0 or marker >= len(state.project.phrase_groups)
+        ]
         if invalid_markers:
             print_feedback(f"Invalid marker indices: {invalid_markers}", is_error=True)
             return
-        
+
         # Update and save
         state.project.markers = all_markers
         err = state.project.save()
         if err:
+            state.project.markers = current_markers
             ask.ask_error(err)
             return
-        
+
         # Print confirmation
         if not current_markers:
             s = "Generated"
         else:
             s = "Added to existing"
-        
-        num_new = len(new_marker_indices)
-        if num_new == 1:
-            noun = "marker"
-        else:
-            noun = "markers"
-        
+
+        num_new = len(set(new_marker_indices) - set(current_markers))
+        noun = make_noun("marker", "markers", num_new)
+
         print_feedback(f"{s} {num_new} {noun} from blank lines")
         printt()
         printt(f"Current section markers: {', '.join([str(m + 1) for m in all_markers])}")
         ask.ask_enter_to_continue()
+
+def make_blank_line_marker_indices(phrase_groups: list[PhraseGroup]) -> list[int]:
+    """Return indices of groups that begin after a detected blank-line break."""
+    return [
+        index + 1
+        for index, phrase_group in enumerate(phrase_groups[:-1])
+        if any(phrase.reason == Reason.SPACE_BREAK for phrase in phrase_group.phrases)
+    ]
 
 def print_markers(markers: list[int], label: str) -> None:
     
