@@ -1,3 +1,5 @@
+import re
+
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
@@ -21,6 +23,11 @@ class PhraseGrouper:
         This is the app's main, high-level function for chunking text.
         One PhraseGroup gets transformed into one TTS prompt.
         """
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        # This guarantees that imported text has no blank lines containing
+        # whitespace, and that no other line ends with spaces or tabs.
+        text = re.sub(r"[ \t]+\n", "\n", text)
+
         phrases = PhraseSegmenter.text_to_phrases(text, max_words=max_words, pysbd_lang=pysbd_lang)
 
         # First group by either complete sentence or paragraph

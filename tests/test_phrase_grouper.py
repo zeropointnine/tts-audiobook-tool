@@ -34,6 +34,26 @@ class TestPhraseGrouper(unittest.TestCase):
 
         self.assertEqual([group.text for group in groups], ["One two. Three four.\n", "Next part here."])
 
+    def test_text_ingestion_normalizes_line_endings_and_trailing_whitespace(self):
+        text = (
+            "One. \n \t\n"
+            "Two. \r\n\t \r\n"
+            "Three. \r  \r"
+            "Four."
+        )
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            20,
+            SegmentationStrategy.SENTENCE,
+            "en",
+        )
+
+        self.assertEqual(
+            "".join(group.text for group in groups),
+            "One.\n\nTwo.\n\nThree.\n\nFour.",
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
