@@ -27,7 +27,7 @@ class OuteBaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo:
+    ) -> VoiceDisplayInfo | None:
         """
         Override to use oute_voice_file_name (string path) instead of oute_voice_json (dict).
         """

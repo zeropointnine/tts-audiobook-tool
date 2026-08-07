@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
+from tts_audiobook_tool.menus.main_menu import make_voice_label
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
 from tts_audiobook_tool.menus.menu_status import MenuStatus
 from tts_audiobook_tool.prefs import Prefs
@@ -9,7 +10,9 @@ from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import COL_DIM, COL_ERROR, COL_MEDIUM
 
@@ -53,6 +56,40 @@ def test_menu_status_print_block_supports_voice_display_info(capsys):
         restore_tts_state(saved)
 
 
+def test_menus_omit_absent_voice_display_info(monkeypatch, capsys):
+    saved = preserve_tts_state()
+    try:
+        Tts._type = TtsModelType.OMNIVOICE
+        state = make_state()
+        state.prefs.menu_clears_screen = False
+        tts_class = Tts.get_class()
+        monkeypatch.setattr(
+            tts_class,
+            "get_voice_display_info",
+            classmethod(lambda cls, project, instance=None: None),
+        )
+
+        MenuStatus.print_block(state)
+
+        output = capsys.readouterr().out
+        assert "Voice clone:" not in output
+        assert make_voice_label(state) == "Voice clone and model settings"
+    finally:
+        restore_tts_state(saved)
+
+
+def test_dependent_voice_display_info_overrides_propagate_none(monkeypatch):
+    project = Project(dir_path="")
+    monkeypatch.setattr(
+        TtsBaseModel,
+        "get_voice_display_info",
+        classmethod(lambda cls, project, instance=None: None),
+    )
+
+    assert Qwen3BaseModel.get_voice_display_info(project) is None
+    assert IndexTts2BaseModel.get_voice_display_info(project) is None
+
+
 def test_qwen_custom_voice_status_uses_project_speaker_without_instance():
     project = Project(dir_path="")
     project.qwen3_model_type = "custom_voice"
@@ -60,6 +97,7 @@ def test_qwen_custom_voice_status_uses_project_speaker_without_instance():
 
     display_info = Qwen3BaseModel.get_voice_display_info(project, None)
 
+    assert display_info is not None
     assert display_info.status_prefix == "Speaker"
     assert display_info.main_prefix == "speaker"
     assert display_info.value == "Ryan"
@@ -73,6 +111,7 @@ def test_qwen_custom_voice_status_includes_instructions_with_valid_speaker():
 
     display_info = Qwen3BaseModel.get_voice_display_info(project, None)
 
+    assert display_info is not None
     assert display_info.value == f"Ryan{COL_DIM} + instructions"
 
 
@@ -82,6 +121,7 @@ def test_qwen_custom_voice_status_requires_speaker_without_instance():
 
     display_info = Qwen3BaseModel.get_voice_display_info(project, None)
 
+    assert display_info is not None
     assert display_info.status_prefix == "Speaker"
     assert display_info.main_prefix == "speaker"
     assert display_info.value == COL_ERROR + "required"

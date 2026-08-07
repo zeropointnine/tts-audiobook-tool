@@ -31,7 +31,8 @@ class MenuStatus:
         voice_display_info = Tts.get_class().get_voice_display_info(
             state.project, Tts.get_instance_if_exists()
         )
-        lines.append((voice_display_info.status_prefix, voice_display_info.value))
+        if voice_display_info is not None:
+            lines.append((voice_display_info.status_prefix, voice_display_info.value))
         
         text_text = _make_text_text(state)
         lines.append(("Text", text_text))

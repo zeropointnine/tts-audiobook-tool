@@ -218,7 +218,7 @@ class TtsBaseModel(ABC):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo:
+    ) -> VoiceDisplayInfo | None:
        
         # Default implementation is for model whose 'salient' voice values 
         # consist of voice clone filenames only

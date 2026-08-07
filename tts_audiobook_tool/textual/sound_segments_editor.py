@@ -145,9 +145,14 @@ class SoundSegmentsEditorTextualApp(ContentTextualApp):
         )
         content_ansi = Ansi.RESET
         if best_sound_segment is not None and best_sound_segment.num_errors > 0:
+            failed_marker = ""
+            if self.project.sound_segments.is_segment_failed(
+                phrase_index, best_sound_segment
+            ):
+                failed_marker = f" {COL_ERROR}*{COL_ORANGE}"
             content_ansi += (
-                "[word errors: "
-                f"{COL_ERROR}{best_sound_segment.num_errors}{Ansi.RESET}] "
+                f"{COL_ORANGE}[word errors: {best_sound_segment.num_errors}"
+                f"{failed_marker}]{Ansi.RESET} "
             )
         content_ansi += phrase_group.presentable_text
         return HangingIndentText.from_ansi(

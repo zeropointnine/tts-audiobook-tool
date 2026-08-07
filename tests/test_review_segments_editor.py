@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from rich.console import Console
+from rich.style import Style
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.widgets import Button, Static
@@ -38,6 +39,7 @@ class StubSoundSegment:
 class StubSoundSegments:
     sound_segments_map: dict[int, list[StubSoundSegment]]
     deletion_calls: list[list[int]] = field(default_factory=list)
+    failed_segment_files: set[str] = field(default_factory=set)
 
     def get_existing_indices(self) -> set[int]:
         return set(self.sound_segments_map)
@@ -49,6 +51,9 @@ class StubSoundSegments:
             key=lambda item: item.num_errors if item.num_errors != -1 else 10_000,
             default=None,
         )
+
+    def is_segment_failed(self, index: int, item: StubSoundSegment) -> bool:
+        return item.file_name in self.failed_segment_files
 
     def delete_by_indices(self, indices: list[int]) -> None:
         self.deletion_calls.append(indices)
@@ -172,15 +177,35 @@ def test_only_positive_best_segment_word_error_count_is_displayed() -> None:
         "[00001] [      ] [word errors: 1] Line 1"
     )
     formatted_line = app.format_line(0)
-    error_count_span = next(
+    word_errors_span = next(
         span
         for span in formatted_line.spans
-        if str(formatted_line)[span.start : span.end] == "1"
+        if str(formatted_line)[span.start : span.end] == "[word errors: 1]"
     )
-    assert error_count_span.style
-    assert str(formatted_line)[error_count_span.start:error_count_span.end] == "1"
+    assert isinstance(word_errors_span.style, Style)
+    assert word_errors_span.style.color
+    assert word_errors_span.style.color.get_truecolor() == (255, 175, 0)
     assert str(app.format_line(1)) == "[00002] [      ] Line 2"
     assert str(app.format_line(2)) == "[00003] [      ] Line 3"
+
+
+def test_failed_word_error_count_has_error_colored_asterisk() -> None:
+    app, project = make_app(1)
+    failed_segment = StubSoundSegment("failed.flac", num_errors=2)
+    project.sound_segments.sound_segments_map[0] = [failed_segment]
+    project.sound_segments.failed_segment_files.add(failed_segment.file_name)
+
+    formatted_line = app.format_line(0)
+
+    assert str(formatted_line) == "[00001] [      ] [word errors: 2 *] Line 1"
+    asterisk_span = next(
+        span
+        for span in formatted_line.spans
+        if str(formatted_line)[span.start : span.end] == "*"
+    )
+    assert isinstance(asterisk_span.style, Style)
+    assert asterisk_span.style.color
+    assert asterisk_span.style.color.get_truecolor() == (255, 0, 0)
 
 
 def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> None:

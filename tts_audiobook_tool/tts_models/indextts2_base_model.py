@@ -47,9 +47,11 @@ class IndexTts2BaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo:
+    ) -> VoiceDisplayInfo | None:
 
         display_info = super().get_voice_display_info(project, instance)
+        if display_info is None:
+            return None
         value = display_info.value
 
         if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.INDEXTTS2):

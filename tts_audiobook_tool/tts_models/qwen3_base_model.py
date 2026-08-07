@@ -189,7 +189,7 @@ class Qwen3BaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo:
+    ) -> VoiceDisplayInfo | None:
 
         if instance:
             assert(isinstance(instance, Qwen3BaseModel))
@@ -219,7 +219,10 @@ class Qwen3BaseModel(TtsBaseModel):
                     value = truncate_pretty(project.qwen3_instructions, 30, middle=False)
             
             case "base " | _:
-                status_prefix, main_prefix, value = super().get_voice_display_info(project, instance)
+                display_info = super().get_voice_display_info(project, instance)
+                if display_info is None:
+                    return None
+                status_prefix, main_prefix, value = display_info
 
         return VoiceDisplayInfo(status_prefix, main_prefix, value)
 

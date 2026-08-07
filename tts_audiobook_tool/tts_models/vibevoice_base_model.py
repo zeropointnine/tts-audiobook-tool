@@ -94,7 +94,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo:
+    ) -> VoiceDisplayInfo | None:
 
         has_voice_clone = bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE))
         has_lora = bool(project.vibevoice_lora_target)
@@ -141,4 +141,3 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
         WARNING = "Not recommended with VibeVoice 1.5B model (when not using LoRA)"
         return WARNING
-

@@ -1,5 +1,6 @@
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
@@ -27,8 +28,8 @@ class NoneBaseModel(TtsBaseModel):
     @classmethod
     def get_voice_display_info(
             cls, project: Project, instance: TtsBaseModel | None = None
-    ) -> VoiceDisplayInfo:
-        return VoiceDisplayInfo("N/A", "N/A", "")
+    ) -> VoiceDisplayInfo | None:
+        return VoiceDisplayInfo("Voice clone", "current voice clone", "N/A")
 
     @classmethod
     def get_blocking_issues(

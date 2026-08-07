@@ -135,6 +135,8 @@ def make_voice_label(state: State) -> str:
         return base_label
     
     voice_display_info = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
+    if voice_display_info is None:
+        return base_label
     combined_string = voice_display_info.main_prefix
     if voice_display_info.value:
         combined_string += f": {COL_ACCENT}{voice_display_info.value}"
