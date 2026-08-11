@@ -1,37 +1,116 @@
 from collections.abc import Callable, Iterable
-from typing import ClassVar
+from dataclasses import dataclass
+from typing import ClassVar, Generic, TypeVar
 
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
+from textual.css.errors import StylesheetError
 from textual.visual import VisualType
-from textual.widget import Widget
 from textual.widgets import Input, OptionList, Rule, Static
 from textual.widgets.option_list import Option
 from textual.timer import Timer
 
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.ansi import Ansi
+from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
 from tts_audiobook_tool.textual.save_changes_dialog import (
     ExitDecision,
     SaveChangesDialog,
 )
 from tts_audiobook_tool.textual.textual_shared import (
     CONTENT_TEXTUAL_APP_CSS,
+    HangingIndentText,
     NonWrappingOptionList,
+    STYLE_DIM,
     TEXTUAL_SHARED_CSS,
     can_textual,
 )
-from tts_audiobook_tool.util import print_feedback
 
 SelectedItemMutator = Callable[[int, int], bool]
+TOAST_DURATION_SECONDS = 1.5
+EditorResultT = TypeVar("EditorResultT")
 
 
-class ContentTextualApp(App[None]):
-    """
-    Base app for selecting and mutating phrase-group-backed content rows.
+@dataclass(frozen=True)
+class EditorClosed:
+    """The editor closed without committing a change."""
+
+
+@dataclass(frozen=True)
+class EditorSaved:
+    """The editor committed and persisted its staged changes."""
+
+
+@dataclass(frozen=True)
+class EditorSaveFailed:
+    """The editor could not persist its staged changes."""
+
+    error: str
+
+
+@dataclass(frozen=True)
+class ContentAppCompleted(Generic[EditorResultT]):
+    """A Textual editor completed with its domain result."""
+
+    result: EditorResultT
+
+
+@dataclass(frozen=True)
+class ContentAppUnavailable:
+    """The terminal environment cannot host the Textual editor."""
+
+    message: str
+
+
+@dataclass(frozen=True)
+class ContentAppStylesheetFailed:
+    """Textual could not load the editor stylesheet."""
+
+    message: str
+
+
+@dataclass(frozen=True)
+class ContentAppFailed:
+    """The Textual app stopped because of an unexpected exception."""
+
+    message: str
+
+
+@dataclass(frozen=True)
+class ContentAppMissingResult:
+    """The Textual app stopped without returning its required domain result."""
+
+    message: str
+
+
+ContentAppRunResult = (
+    ContentAppCompleted[EditorResultT]
+    | ContentAppUnavailable
+    | ContentAppStylesheetFailed
+    | ContentAppFailed
+    | ContentAppMissingResult
+)
+
+
+class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT]):
+    """Base app for phrase-group-backed, full-screen content editors.
+
+    The app owns the shared Textual shell: header and status presentation,
+    visible-row composition, single/range selection, find navigation, and the
+    save/discard exit workflow. Visible list positions are intentionally kept
+    separate from ``Project.phrase_groups`` indices through ``phrase_indices``;
+    this lets concrete editors filter or reorder rows without changing the
+    project's domain ordering.
+
+    Subclasses provide domain behavior through hooks such as ``format_line``,
+    ``initialize_content``, ``has_changes``, and ``commit_changes_and_exit``.
+    Content may be installed immediately or deferred until after mounting, so
+    expensive editor-specific snapshots do not delay construction of the UI.
+    Mutations remain staged by the subclass while this base coordinates row
+    refreshes, selection state, confirmation dialogs, and typed exit results.
     """
 
     CSS = "\n".join((TEXTUAL_SHARED_CSS, CONTENT_TEXTUAL_APP_CSS))
@@ -40,6 +119,7 @@ class ContentTextualApp(App[None]):
         Binding("ctrl+q", "ignore_ctrl_q", show=False, priority=True),
         Binding("ctrl+a", "select_all", show=False, priority=True),
         Binding("ctrl+f", "open_find", show=False, priority=True),
+        Binding("m", "show_manual_selection", show=False),
         # Many terminal emulators report Shift+Enter as plain Enter, so this
         # binding only works where the terminal emits a distinct key sequence.
         Binding("shift+enter", "find_previous", show=False, priority=True),
@@ -79,25 +159,15 @@ class ContentTextualApp(App[None]):
         self.find_search_start_index: int | None = None
         self.find_query_submitted = False
         self.find_match_index: int | None = None
-        self.transient_status_text = ""
-        self.transient_status_timer: Timer | None = None
+        self.pinned_text = ""
+        self.selected_text = self.selection_status_text
+        self.toast_text = ""
+        self.toast_timer: Timer | None = None
         self.configure()
 
     def configure(self) -> None:
         """Configure Textual before the full-screen interface starts."""
         self.theme = "ansi-dark"
-
-    @staticmethod
-    def check_terminal_support() -> bool:
-        """Report when the terminal cannot run a full-screen editor."""
-        if not can_textual():
-            print_feedback(
-                "The current terminal environment does not support full-screen editor",
-                is_error=True,
-            )
-            return False
-        else:
-            return True
 
     @property
     def has_changes(self) -> bool:
@@ -108,9 +178,28 @@ class ContentTextualApp(App[None]):
         """Format a visible row; concrete editors must implement this hook."""
         raise NotImplementedError
 
+    def format_section_list_item(self, text: str, index: int) -> HangingIndentText:
+        """Format a structural section row using the shared list presentation."""
+        style = f"{STYLE_DIM} reverse" if index == self.find_match_index else ""
+        # Rich's line-height measurement doesn't count a final empty line, so
+        # two trailing newlines are needed to render one.
+        return HangingIndentText.from_ansi(
+            f"\n{Ansi.RESET}{text}\n\n",
+            content_start=0,
+            max_lines=3,
+            style=style,
+        )
+
     def initialize_content(self) -> Iterable[int]:
         """Prepare deferred backing state and return the final visible indices."""
         raise NotImplementedError
+
+    def initial_selected_phrase_index(self) -> int | None:
+        """Return the phrase to select when deferred content is first installed."""
+        return None
+
+    def on_content_loaded(self) -> None:
+        """Run subclass work after deferred content has been installed."""
 
     def load_content(self) -> None:
         """Initialize deferred content once and install every visible row."""
@@ -119,15 +208,43 @@ class ContentTextualApp(App[None]):
         phrase_indices = list(self.initialize_content())
         self.content_initialized = True
         self.update_empty_state_text(self.empty_state_text)
-        self.replace_phrase_indices(phrase_indices)
+        self.replace_phrase_indices(
+            phrase_indices,
+            self.initial_selected_phrase_index(),
+        )
+        self.on_content_loaded()
 
     def find_text(self, phrase_index: int) -> str:
         """Return the searchable text for a Project phrase group."""
         return self.project.phrase_groups[phrase_index].presentable_text
 
-    def compose_status_widgets(self) -> Iterable[Widget]:
-        """Provide widgets for the status row replaced by the find bar."""
-        yield Static(self.selection_status_text, id="selection-status", markup=False)
+    def content_line_index(self, item_index: int) -> int | None:
+        """Map a backing item to its actionable Project line, if it has one.
+
+        Structural rows such as section headings override this hook to return
+        ``None``. The base then excludes those rows from line counts, inactive
+        selection styling, manual selection, and content mutations.
+        """
+        return item_index
+
+    def highlighted_content_line_index(self) -> int | None:
+        """Return the highlighted actionable Project line, if any."""
+        if self.selected_index is None:
+            return None
+        return self.content_line_index(self.phrase_indices[self.selected_index])
+
+    def selected_content_line_indices(self) -> set[int]:
+        """Return actionable Project lines represented by the current selection."""
+        return {
+            content_line_index
+            for visible_index in self.selected_indices
+            if (
+                content_line_index := self.content_line_index(
+                    self.phrase_indices[visible_index]
+                )
+            )
+            is not None
+        }
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
         """Build the dialog shown before concrete staged changes are committed."""
@@ -172,7 +289,15 @@ class ContentTextualApp(App[None]):
             id="empty-state",
             markup=False,
         )
-        yield Horizontal(*self.compose_status_widgets(), id="status-bar")
+        yield Horizontal(
+            Static(
+                self.status_text,
+                id="status-line",
+                classes=f"status-{self.status_mode}",
+                markup=False,
+            ),
+            id="status-bar",
+        )
         yield Horizontal(
             Static(self.find_label_text, id="find-label", markup=False),
             Input(id="find-input", compact=True, select_on_focus=False),
@@ -209,11 +334,12 @@ class ContentTextualApp(App[None]):
             self.query_one("#empty-state", Static).update(text)
 
     def update_header(self, lines: list[str]) -> None:
-        """Replace the fixed-height header contents."""
-        assert len(lines) == len(self.header_lines), (
-            f"Expected {len(self.header_lines)} header lines, got {len(lines)}"
-        )
-        self.header_lines = list(lines)
+        """Replace the fixed-height header, truncating overflow and clearing gaps."""
+        header_height = len(self.header_lines)
+        self.header_lines = [
+            *lines[:header_height],
+            *("" for _ in range(header_height - len(lines))),
+        ]
         if self.is_mounted:
             for index, line in enumerate(self.header_lines):
                 self.query_one(f"#header-line-{index}", Static).update(
@@ -222,35 +348,71 @@ class ContentTextualApp(App[None]):
 
     @property
     def selection_status_text(self) -> str:
-        """Describe a multi-line selection, or remain blank for one line."""
-        selection_count = len(self.selected_indices)
-        return f"{selection_count} lines selected" if selection_count >= 2 else ""
+        """Describe selected content lines, excluding structural rows."""
+        selection_count = sum(
+            self.content_line_index(self.phrase_indices[index]) is not None
+            for index in self.selected_indices
+        )
+        if selection_count < 2:
+            return ""
+        return f"{selection_count} lines selected"
+
+    @property
+    def status_mode(self) -> str:
+        """Return the highest-priority active status layer."""
+        if self.toast_timer is not None:
+            return "toast"
+        if self.selected_text:
+            return "selected"
+        return "pinned"
+
+    @property
+    def status_text(self) -> str:
+        """Return the text from the highest-priority active status layer."""
+        if self.toast_timer is not None:
+            return self.toast_text
+        return self.selected_text or self.pinned_text
+
+    def update_status_line(self) -> None:
+        """Render the current status layer when the status widget is mounted."""
+        status_widgets = self.query("#status-line")
+        if not status_widgets:
+            return
+        status_line = status_widgets.first(Static)
+        status_line.update(self.status_text)
+        status_line.set_classes(f"status-{self.status_mode}")
+
+    def set_pinned_text(self, text: str) -> None:
+        """Set the dim, left-aligned pinned (lowest-priority) status text."""
+        self.pinned_text = text
+        self.update_status_line()
+
+    def set_selected_text(self, text: str) -> None:
+        """Set right-aligned status text which overrides pinned text when non-empty."""
+        self.selected_text = text
+        self.update_status_line()
 
     def update_selection_status(self) -> None:
-        """Refresh the selection status within the bottom status row."""
-        status_widgets = self.query("#selection-status")
-        if status_widgets:
-            status_widgets.first(Static).update(
-                self.transient_status_text or self.selection_status_text
-            )
+        """Format the current selection into the selected-text status layer."""
+        self.set_selected_text(self.selection_status_text)
 
-    def show_transient_status(self, text: str, duration: float = 1.0) -> None:
-        """Temporarily override selection status without blocking the editor."""
-        if self.transient_status_timer is not None:
-            self.transient_status_timer.stop()
-        self.transient_status_text = text
-        self.update_selection_status()
-        self.transient_status_timer = self.set_timer(
-            duration,
-            self.clear_transient_status,
-            name="clear-transient-status",
+    def set_toast_text(self, text: str) -> None:
+        """Show left-aligned status text for 1.5 seconds, restarting on each call."""
+        if self.toast_timer is not None:
+            self.toast_timer.stop()
+        self.toast_text = text
+        self.toast_timer = self.set_timer(
+            TOAST_DURATION_SECONDS,
+            self.clear_toast_text,
+            name="clear-toast-text",
         )
+        self.update_status_line()
 
-    def clear_transient_status(self) -> None:
-        """Clear transient feedback and restore the current selection status."""
-        self.transient_status_text = ""
-        self.transient_status_timer = None
-        self.update_selection_status()
+    def clear_toast_text(self) -> None:
+        """Clear toast feedback and reveal the selected or pinned status layer."""
+        self.toast_text = ""
+        self.toast_timer = None
+        self.update_status_line()
 
     @staticmethod
     def option_id(index: int) -> str:
@@ -271,14 +433,19 @@ class ContentTextualApp(App[None]):
         )
 
     def update_inactive_selection_style(self) -> None:
-        """Update list-level styling for selected rows other than the highlight."""
+        """Style inactive content lines while leaving structural rows unchanged."""
         inactive_indices = self.selected_indices - (
             {self.selected_index} if self.selected_index is not None else set()
         )
+        selectable_inactive_indices = {
+            index
+            for index in inactive_indices
+            if self.content_line_index(self.phrase_indices[index]) is not None
+        }
         option_lists = self.query("#line-list")
         if option_lists:
             option_lists.first(NonWrappingOptionList).set_inactive_selection_indices(
-                inactive_indices
+                selectable_inactive_indices
             )
 
     def replace_selection(
@@ -460,20 +627,68 @@ class ContentTextualApp(App[None]):
         self.update_inactive_selection_style()
         self.update_selection_status()
 
+    def manual_selection_line_count(self) -> int:
+        """Return the number of one-based lines accepted by manual selection."""
+        return len(self.project.phrase_groups)
+
+    def manual_selection_line_index(self, item_index: int) -> int | None:
+        """Map one backing item to its zero-based manual line, if selectable."""
+        return self.content_line_index(item_index)
+
+    def action_show_manual_selection(self) -> None:
+        """Show the manual line-selection dialog for the concrete editor."""
+        if not self.content_initialized or self.find_active:
+            return
+        line_count = self.manual_selection_line_count()
+        if line_count <= 0:
+            return
+        self.push_screen(
+            ManualSelectionDialog(line_count),
+            self.handle_manual_selection,
+        )
+
+    def handle_manual_selection(self, line_indices: set[int] | None) -> None:
+        """Select visible rows mapped to the entered editor line numbers."""
+        if line_indices is None:
+            return
+        matching_rows = [
+            (visible_index, manual_line_index)
+            for visible_index, item_index in enumerate(self.phrase_indices)
+            if (manual_line_index := self.manual_selection_line_index(item_index))
+            is not None
+            and manual_line_index in line_indices
+        ]
+        if not matching_rows:
+            return
+
+        highest_visible_index = max(matching_rows, key=lambda row: row[1])[0]
+        option_list = self.query_one("#line-list", OptionList)
+        with option_list.prevent(OptionList.OptionHighlighted):
+            option_list.highlighted = highest_visible_index
+        self.selected_index = highest_visible_index
+        self.selection_anchor_index = highest_visible_index
+        self.selected_indices = {visible_index for visible_index, _ in matching_rows}
+        self.update_inactive_selection_style()
+        self.update_selection_status()
+
     def mutate_selected_items(
         self,
         mutator: SelectedItemMutator,
         *,
         reflow: bool = True,
     ) -> list[int]:
-        """Mutate selected visible rows through their Project phrase indices."""
-        if self.find_active or not self.selected_indices:
+        """Mutate selected content lines, excluding all structural rows."""
+        if (
+            self.find_active
+            or not self.selected_indices
+            or self.highlighted_content_line_index() is None
+        ):
             return []
-        changed_indices = [
-            index
-            for index in sorted(self.selected_indices)
-            if mutator(index, self.phrase_indices[index])
-        ]
+        changed_indices: list[int] = []
+        for index in sorted(self.selected_indices):
+            content_line_index = self.content_line_index(self.phrase_indices[index])
+            if content_line_index is not None and mutator(index, content_line_index):
+                changed_indices.append(index)
         self.refresh_lines(changed_indices, reflow=reflow)
         self.collapse_current_selection()
         return changed_indices
@@ -497,8 +712,7 @@ class ContentTextualApp(App[None]):
             return
 
         option_list = self.query_one("#line-list", OptionList)
-        option_list.clear_options()
-        option_list.add_options(
+        option_list.set_options(
             Option(self.format_line(index), id=self.option_id(index))
             for index in range(len(self.phrase_indices))
         )
@@ -507,19 +721,66 @@ class ContentTextualApp(App[None]):
         self.update_inactive_selection_style()
         self.update_selection_status()
 
+    def should_confirm_exit(self) -> bool:
+        """Whether exiting requires a decision from the confirmation dialog."""
+        return self.has_changes
+
+    def exit_without_confirmation(self) -> None:
+        """Complete an exit which does not require a confirmation dialog."""
+        self.exit(EditorClosed())
+
+    def confirm_exit(self) -> None:
+        """Complete an exit explicitly confirmed by the user."""
+        self.commit_changes_and_exit()
+
+    def discard_exit(self) -> None:
+        """Complete an exit after the user declines to commit changes."""
+        self.exit(EditorClosed())
+
+    def cancel_exit(self) -> None:
+        """Handle cancellation of the exit dialog while keeping the editor open."""
+
     def request_exit(self) -> None:
-        """Exit immediately when clean, or confirm concrete staged changes."""
-        if not self.has_changes:
-            self.exit()
+        """Apply concrete exit policy, prompting for a decision when required."""
+        if not self.should_confirm_exit():
+            self.exit_without_confirmation()
             return
         self.push_screen(self.make_confirmation_dialog(), self.handle_exit_decision)
 
     def handle_exit_decision(self, decision: ExitDecision | None) -> None:
-        """Commit, discard, or retain staged changes based on dialog result."""
+        """Dispatch a dialog result through the concrete editor's exit policy."""
         if decision == ExitDecision.CONFIRM:
-            self.commit_changes_and_exit()
+            self.confirm_exit()
         elif decision == ExitDecision.DISCARD:
-            self.exit()
+            self.discard_exit()
+        elif decision == ExitDecision.CANCEL:
+            self.cancel_exit()
 
     def action_ignore_ctrl_q(self) -> None:
         """Override Textual's built-in Ctrl+Q quit binding."""
+
+
+def run_content_textual_app(
+    app: ContentTextualApp[EditorResultT],
+) -> ContentAppRunResult[EditorClosed | EditorResultT]:
+    """Run one editor and translate Textual infrastructure into a typed result."""
+    if not can_textual():
+        return ContentAppUnavailable(
+            "The current terminal environment does not support full-screen editor"
+        )
+
+    try:
+        result = app.run(inline=False)
+    except Exception as exception:
+        return ContentAppFailed(f"{type(exception).__name__}: {exception}")
+
+    exception = app._exception
+    if isinstance(exception, StylesheetError):
+        return ContentAppStylesheetFailed("Couldn't load textual css")
+    if exception is not None:
+        return ContentAppFailed(f"{type(exception).__name__}: {exception}")
+    if result is None:
+        return ContentAppMissingResult(
+            "Textual editor closed without returning a result"
+        )
+    return ContentAppCompleted(result)

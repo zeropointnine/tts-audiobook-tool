@@ -95,20 +95,25 @@ CONTENT_TEXTUAL_APP_CSS = """\
     layout: horizontal;
 }
 
-#playing-status {
+#status-line {
     width: 1fr;
     height: 1;
-    color: $col-dim;
     text-style: italic;
-    content-align: left middle;
 }
 
-#selection-status {
-    width: 1fr;
-    height: 1;
+#status-line.status-pinned {
     color: $col-dim;
-    text-style: italic;
     content-align: right middle;
+}
+
+#status-line.status-selected {
+    color: $col-default;
+    content-align: right middle;
+}
+
+#status-line.status-toast {
+    color: $col-default;
+    content-align: left middle;
 }
 
 #find-bar {
@@ -181,6 +186,20 @@ class HangingIndentText:
             max_lines,
             style,
         )
+
+    @classmethod
+    def from_ansi_prefix(
+        cls,
+        prefix_ansi: str,
+        content: str,
+        max_lines: int = 3,
+        style: str = "",
+    ) -> "HangingIndentText":
+        """Create a renderable without parsing plain row content as ANSI."""
+        text = Text.from_ansi(prefix_ansi)
+        content_start = len(text.plain)
+        text.append(content)
+        return cls(text, content_start, max_lines, style)
 
     @property
     def spans(self):
@@ -271,13 +290,16 @@ class NonWrappingOptionList(OptionList):
         prompt_list = list(prompts)
         if not prompt_list:
             return
+        changed_options = {self.options[index] for index, _prompt in prompt_list}
         self.defer_option_cache_clear = True
         try:
             for index, prompt in prompt_list:
                 self.replace_option_prompt_at_index(index, prompt)
         finally:
             self.defer_option_cache_clear = False
-        self._option_render_cache.clear()
+        for cache_key in list(self._option_render_cache.keys()):
+            if cache_key[0] in changed_options:
+                self._option_render_cache.discard(cache_key)
         if reflow:
             self._line_cache.clear()
         self.refresh()

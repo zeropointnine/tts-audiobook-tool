@@ -289,11 +289,14 @@ def ask_string_and_save(
     project_attr_name: str,
     success_prefix: str,
     loop_on_error: bool=False,
-    validator: Callable[[str], str] | None = None
-) -> None:
+    validator: Callable[[str], str] | None = None,
+    normalizer: Callable[[str], str] | None = None,
+) -> bool:
     """
     Helper to ask for a string value and save it to the project.
     :param validator: Takes in the user input string and returns error string if invalid (optional)
+    :param normalizer: Normalizes the user input before validation and saving (optional)
+    :return: Whether a value was successfully saved
     """
     if not hasattr(saveable, project_attr_name):
         raise ValueError(f"No such attribute {project_attr_name}")
@@ -302,19 +305,22 @@ def ask_string_and_save(
         printt(prompt_line)
         value = ask(lower=False)
         if not value:
-            return
+            return False
+        if normalizer:
+            value = normalizer(value)
         if validator:
             err = validator(value)
             if err:
                 print_feedback(err, is_error=True)
                 if loop_on_error:
                     continue
-                return
+                return False
         break
 
     setattr(saveable, project_attr_name, value)
     saveable.save()
     print_feedback(success_prefix, value)
+    return True
 
 # ---
 

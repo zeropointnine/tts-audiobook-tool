@@ -2,11 +2,10 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from textual.binding import Binding, BindingType
-from textual.css.errors import StylesheetError
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_edit_util import (
     ProjectTextEditUtil,
@@ -16,17 +15,19 @@ from tts_audiobook_tool.text_ops.text_edit_session import (
     TextEditMutationResult,
     TextEditSession,
 )
-from tts_audiobook_tool.textual.content_textual_app import ContentTextualApp
+from tts_audiobook_tool.textual.content_textual_app import (
+    ContentTextualApp,
+    EditorSaveFailed,
+    EditorSaved,
+)
 from tts_audiobook_tool.textual.phrase_group_split_dialog import (
     PhraseGroupSplitDialog,
 )
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
-    NonWrappingOptionList,
     STYLE_DIM,
 )
-from tts_audiobook_tool.util import print_feedback
 
 
 SHOW_NEWLINE_CHARS = True
@@ -73,30 +74,24 @@ class TextEditorSectionItem:
 TextEditorListItem = TextEditorSectionItem | TextEditorPhraseGroupItem
 
 
-class TextEditor(ContentTextualApp):
-
+class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
     BINDINGS: ClassVar[list[BindingType]] = [
         *ContentTextualApp.BINDINGS,
         Binding("x", "delete_phrase_groups", show=False),
         Binding("s", "split_phrase_group", show=False),
     ]
 
-    def __init__(
-        self,
-        project: Project
-    ) -> None:
+    def __init__(self, project: Project) -> None:
         self.project = project
-        self.save_error = ""
-        self.did_save_changes = False
         self.edit_session_or_none: TextEditSession | None = None
         self.section_items: list[TextEditorSectionItem] = []
         self.list_items: list[TextEditorListItem] = []
         header_lines = [
             f"{COL_ACCENT}View/edit text",
-            f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]",
-            f"{COL_DIM}- Select multiple lines by holding [SHIFT] + navigation keys",
+            f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
+            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
             f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to delete selected lines   [S] Split line",
-            f"{COL_DIM}- Press [ESC] to finish   - [CTRL-F] Find text"
+            f"{COL_DIM}- Press [ESC] to finish",
         ]
         super().__init__(
             project,
@@ -130,18 +125,6 @@ class TextEditor(ContentTextualApp):
     def has_changes(self) -> bool:
         edit_session = self.edit_session_or_none
         return edit_session is not None and edit_session.has_changes
-
-    @property
-    def selection_status_text(self) -> str:
-        """Count only selected phrase rows, excluding section headings."""
-        selection_count = sum(
-            isinstance(
-                self.list_items[self.phrase_indices[index]],
-                TextEditorPhraseGroupItem,
-            )
-            for index in self.selected_indices
-        )
-        return f"{selection_count} lines selected" if selection_count >= 2 else ""
 
     @staticmethod
     def make_section_items(project: Project) -> list[TextEditorSectionItem]:
@@ -208,19 +191,12 @@ class TextEditor(ContentTextualApp):
         """Format one row, styling selected rows except for the active row."""
         item_index = self.phrase_indices[index]
         list_item = self.list_items[item_index]
-        is_find_match = index == self.find_match_index
-        style = f"{STYLE_DIM} reverse" if is_find_match else ""
 
         if isinstance(list_item, TextEditorSectionItem):
-            return HangingIndentText.from_ansi(
-                # Rich's line-height measurement doesn't count a final empty
-                # line, so two trailing newlines are needed to render one.
-                f"\n{COL_ACCENT}{list_item.display_text}\n\n",
-                content_start=0,
-                max_lines=3,
-                style=style,
-            )
+            return self.format_section_list_item(list_item.display_text, index)
         else:
+            is_find_match = index == self.find_match_index
+            style = f"{STYLE_DIM} reverse" if is_find_match else ""
             prefix_text = f"{list_item.ordinal:05d}  "
             presentable_text = (
                 self.presentable_phrase_group_ansi(list_item.phrase_group)
@@ -235,25 +211,22 @@ class TextEditor(ContentTextualApp):
                 style=style,
             )
 
-    def update_inactive_selection_style(self) -> None:
-        """Style selected phrase rows while leaving section headings unchanged."""
-        inactive_indices = self.selected_indices - (
-            {self.selected_index} if self.selected_index is not None else set()
-        )
-        selectable_inactive_indices = {
-            index
-            for index in inactive_indices
-            if isinstance(self.list_items[index], TextEditorPhraseGroupItem)
-        }
-        option_lists = self.query("#line-list")
-        if option_lists:
-            option_lists.first(NonWrappingOptionList).set_inactive_selection_indices(
-                selectable_inactive_indices
-            )
-
     def find_text(self, phrase_index: int) -> str:
         """Return searchable text from the staged row rather than the Project."""
         return self.list_items[phrase_index].searchable_text
+
+    def content_line_index(self, item_index: int) -> int | None:
+        """Map staged phrase rows by current ordinal, excluding section rows."""
+        item = self.list_items[item_index]
+        if isinstance(item, TextEditorSectionItem):
+            return None
+        return item.ordinal - 1
+
+    def manual_selection_line_count(self) -> int:
+        """Return the number of currently staged phrase-group lines."""
+        return sum(
+            isinstance(item, TextEditorPhraseGroupItem) for item in self.list_items
+        )
 
     def apply_mutation_result(self, result: TextEditMutationResult) -> None:
         """Rebuild all derived rows and focus the mutation's surviving target."""
@@ -301,9 +274,7 @@ class TextEditor(ContentTextualApp):
         self.apply_mutation_result(result)
         if result.deleted_count:
             line_noun = "line" if result.deleted_count == 1 else "lines"
-            self.show_transient_status(
-                f"{result.deleted_count} {line_noun} deleted"
-            )
+            self.set_toast_text(f"{result.deleted_count} {line_noun} deleted")
 
     def action_split_phrase_group(self) -> None:
         """Open a boundary chooser for exactly one selected phrase-group row."""
@@ -358,13 +329,19 @@ class TextEditor(ContentTextualApp):
             f"Saving these changes requires deleting {segment_count} generated sound "
             f"{segment_word} from line {first_index + 1} onward."
         )
-        return SaveChangesDialog(warning_text=warning_text)
+        return SaveChangesDialog(
+            [
+                "Save changes before exiting?",
+                "",
+                f"{COL_ERROR}{warning_text}",
+            ]
+        )
 
     def commit_changes_and_exit(self) -> None:
         """Commit the detached Book and remove generated audio invalidated by it."""
         edit_session = self.edit_session_or_none
         if edit_session is None:
-            self.exit()
+            self.exit(EditorSaveFailed("Text editor was not initialized"))
             return
         error = ProjectTextEditUtil.commit(
             project=self.project,
@@ -375,25 +352,11 @@ class TextEditor(ContentTextualApp):
             ),
         )
         if error:
-            self.save_error = f"Save failed: {error}"
+            result = EditorSaveFailed(f"Save failed: {error}")
         else:
-            self.did_save_changes = True
-        self.exit()
+            result = EditorSaved()
+        self.exit(result)
 
     def save_changes_and_exit(self) -> None:
         """Backward-compatible name for committing the staged voice values."""
         self.commit_changes_and_exit()
-
-    @classmethod
-    def start(cls, project: Project) -> None:
-        """Run an editor for a project and report its save result."""
-        if not cls.check_terminal_support():
-            return
-        app = cls(project)
-        app.run(inline=False)
-        if isinstance(app._exception, StylesheetError):
-            print_feedback("Couldn't load textual css", is_error=True)
-        elif app.save_error:
-            print_feedback(app.save_error, is_error=True)
-        elif app.did_save_changes:
-            print_feedback("Saved changes", long_pause=True)

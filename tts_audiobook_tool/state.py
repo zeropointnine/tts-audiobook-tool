@@ -102,7 +102,7 @@ class State:
 
         # Make subdirs
         try:
-            # Make audio segments subdir
+            # Make sound segments subdir
             audio_segments_path = project_dir_path / PROJECT_SOUND_SEGMENTS_SUBDIR
             os.makedirs(audio_segments_path, exist_ok=True)
             # Make concat subdir

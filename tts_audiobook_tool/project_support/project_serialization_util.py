@@ -218,8 +218,12 @@ class ProjectSerializationUtil:
         d['applied_max_words'] = i
 
         s = d.get('generate_range', '')
-        if s in ('all', 'a'):
-            d['generate_range'] = ''
+        if isinstance(s, str):
+            normalized_range = s.strip().lower()
+            if normalized_range in ('all', 'a'):
+                d['generate_range'] = ''
+            elif normalized_range == 'none':
+                d['generate_range'] = 'none'
 
         if 'markers' in d:
             phrase_groups = d.get('phrase_groups', [])

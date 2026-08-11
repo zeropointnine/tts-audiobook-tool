@@ -115,7 +115,11 @@ class Project(BaseModel):
     # The language code used to create the PhraseGroups from the source text (ie, for pysbd)
     applied_language_code: str = ""
 
+    # Generation-range sentinels:
+    # - empty string means "all items" for compatibility reasons
+    # - string literal "none" means no selection
     generate_range_string: str = Field(default="", alias="generate_range")
+    
     markers: list[int] = Field(default_factory=list, alias="markers")
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]

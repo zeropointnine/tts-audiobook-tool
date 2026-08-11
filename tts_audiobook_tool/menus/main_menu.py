@@ -53,7 +53,7 @@ class MainMenu:
             )
             items.append(
                 MenuItem(
-                    "Generate audio segments", on_generate, hotkey="g"
+                    "Generate sound segments", on_generate, hotkey="g"
                 )
             )
             items.append(

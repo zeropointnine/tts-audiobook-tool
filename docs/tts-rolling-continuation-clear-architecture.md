@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the current rolling-continuation API and the four application flows that incorporate it. Here, "rolling continuation" means continuation that draws from previous generated segments. The broader term "continuation" can also describe other model behaviors, such as continuing from a fixed reference clip, so this document uses "rolling continuation" for the previous-generation case whenever possible. The canonical use case is audiobook creation, where generated text segments are processed in project order, validated, retried when needed, and saved as accepted audio segments.
+This document describes the current rolling-continuation API and the four application flows that incorporate it. Here, "rolling continuation" means continuation that draws from previous generated segments. The broader term "continuation" can also describe other model behaviors, such as continuing from a fixed reference clip, so this document uses "rolling continuation" for the previous-generation case whenever possible. The canonical use case is audiobook creation, where generated text segments are processed in project order, validated, retried when needed, and saved as accepted sound segments.
 
 The document has three main parts:
 

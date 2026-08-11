@@ -9,9 +9,6 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
-from tts_audiobook_tool.constants import COL_ERROR
-
-
 class ExitDecision(Enum):
     CONFIRM = "save"
     DISCARD = "discard"
@@ -84,57 +81,33 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
 
     def __init__(
         self,
-        copy_line_1: str = "Save changes before exiting?",
-        copy_line_2: str = "",
-        warning_text: str = "",
+        copy_lines: list[str] | None = None,
+        confirmation_enabled: bool = True,
     ) -> None:
         super().__init__()
-        self.copy_line_1 = copy_line_1
-        self.copy_line_2 = copy_line_2
-        self.warning_text = warning_text
+        self.copy_lines = (
+            ["Save changes before exiting?"] if copy_lines is None else copy_lines
+        )
+        self.confirmation_enabled = confirmation_enabled
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Static(
-                self.copy_line_1,
-                id="save-changes-copy-line-1",
-                classes="save-changes-copy",
-                markup=False,
-            ),
             *(
-                [
-                    Static(
-                        self.copy_line_2,
-                        id="save-changes-copy-line-2",
-                        classes="save-changes-copy",
-                        markup=False,
-                    )
-                ]
-                if self.copy_line_2
-                else []
-            ),
-            *(
-                [
-                    Static(
-                        "",
-                        id="save-changes-warning-separator",
-                        classes="save-changes-copy",
-                        markup=False,
-                    ),
-                    Static(
-                        Text.from_ansi(f"{COL_ERROR}{self.warning_text}"),
-                        id="save-changes-warning",
-                        classes="save-changes-warning",
-                        markup=False,
-                    ),
-                ]
-                if self.warning_text
-                else []
+                Static(
+                    Text.from_ansi(copy_line),
+                    id=f"save-changes-copy-line-{index + 1}",
+                    classes="save-changes-copy",
+                    markup=False,
+                )
+                for index, copy_line in enumerate(self.copy_lines)
             ),
             Horizontal(
-                Button(Content.from_text("[Y]es", markup=False), id="yes"),
+                Button(
+                    Content.from_text("[Y]es", markup=False),
+                    id="yes",
+                    disabled=not self.confirmation_enabled,
+                ),
                 Button(Content.from_text("[N]o", markup=False), id="no"),
-                Button("Cancel", id="cancel"),
                 id="save-changes-buttons",
             ),
             id="save-changes-dialog",
@@ -144,13 +117,15 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
         decisions = {
             "yes": ExitDecision.CONFIRM,
             "no": ExitDecision.DISCARD,
-            "cancel": ExitDecision.CANCEL,
         }
+        if event.button.id == "yes" and not self.confirmation_enabled:
+            return
         if event.button.id in decisions:
             self.dismiss(decisions[event.button.id])
 
     def action_confirm(self) -> None:
-        self.dismiss(ExitDecision.CONFIRM)
+        if self.confirmation_enabled:
+            self.dismiss(ExitDecision.CONFIRM)
 
     def action_discard(self) -> None:
         self.dismiss(ExitDecision.DISCARD)

@@ -43,7 +43,7 @@ The app uses a plain-text, hotkey-based console interface.
 2. Select a short reference audio clip for the voice clone, and adjust related model parameters if desired.
 3. Select the source EPUB or text file, and optionally define file split points.
 4. Generate
-5. Concatenate the generated audio segments to create the finished audiobook file/s.
+5. Concatenate the generated sound segments to create the finished audiobook file/s.
 6. Use the optional web browser player to play and read your audiobook.
 
 <video src="https://github.com/user-attachments/assets/5516ce38-ef61-4126-91f5-71861e63eba5" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-full" style="max-height:640px;" autoplay="autoplay" loop="loop">
@@ -517,7 +517,7 @@ The app saves its state between sessions, so you can interrupt the program at an
 
 Additionally, setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
 
-Note too that it's possible to utilize different voices and even different models over the course of generating the audio segments for a given project for whatever reason.
+Note too that it's possible to utilize different voices and even different models over the course of generating the sound segments for a given project for whatever reason.
 
 ### Voice cloning
 
@@ -630,7 +630,7 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **ZONOS2** (via SGL-Omni)
 
 - Concurrent requests
-- Streaming
+- Streaming support (for the stand-alone server and LLM chat mode)
 - Temperature, top_k, repetition_penalty
 
 ### Inference speeds, expectations
@@ -676,6 +676,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-08-11**
+
+- `Generate > Select lines / review sound segments`: Full-screen interface for selecting lines to be queued for generation and for reviewing already-generated sound segments for deletion/quick-regeneration.
 
 **2026-08-05**
 
@@ -920,7 +924,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 - Added support for **Fish OpenAudio S1-mini**
 
-- Logic to detect dropped phrases at end of generated audio segments (common occurrence with the Fish model)
+- Logic to detect dropped phrases at end of generated sound segments (common occurrence with the Fish model)
 
 - Added utility to transcode and concatenate directory of MP3 chapter files to M4A (meant for use with the "Enhance existing audiobook" tool)
 
@@ -932,7 +936,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 **2025-06-28** (many)
 
-- Generated audio segments now have silence trimmed off the ends, and in the concatenation step, stitched-together lines have pauses of varying lengths inserted at paragraph, sentence, and phrase boundaries, resulting in much improved prosody / flow.
+- Generated sound segments now have silence trimmed off the ends, and in the concatenation step, stitched-together lines have pauses of varying lengths inserted at paragraph, sentence, and phrase boundaries, resulting in much improved prosody / flow.
 
 - Loudness normalization is now being applied correctly (on the final audio file instead of per audio segment)
 

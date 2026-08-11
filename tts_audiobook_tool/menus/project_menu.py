@@ -175,14 +175,21 @@ def on_language(state: State, __: MenuItem) -> None:
         return ""
 
     prompt = f"Enter two-letter language code {COL_DIM}(Eg, \"en\", \"es\", \"zh\", \"pt\", etc){COL_DEFAULT}:"
-    ask.ask_string_and_save(
+    did_save = ask.ask_string_and_save(
         state.project,
         prompt,
         "language_code",
         "Project language code set to:",
-        validator=validator
+        validator=validator,
+        normalizer=lambda value: value.strip().lower(),
     )
     Whitelist().set_language_code(state.project.language_code)
+    if did_save and state.project.language_code in ("en", "es"):
+        hints.show_hint_if_necessary(
+            state.prefs,
+            HINT_TOLERANCE_FIRST_CLASS,
+            and_prompt=True,
+        )
 
 LANGUAGE_CODE_DESC = "" + \
 """Language code is used by the app at various stages of the pipeline as a \"hint\" for:
@@ -190,4 +197,3 @@ LANGUAGE_CODE_DESC = "" + \
 - Prompt pre-processing 
 - Whisper transcription
 - TTS inference (Chatterbox, MOSS)"""
-

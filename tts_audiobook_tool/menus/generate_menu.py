@@ -1,22 +1,30 @@
 from __future__ import annotations
 
-from tts_audiobook_tool.app_types import Strictness, SttVariant, VoiceSelectMode
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_support import app_display, app_hint_util, hints
-from tts_audiobook_tool import ask, text_util
-from tts_audiobook_tool.menus.concat_menu import ConcatMenu
+from tts_audiobook_tool.app_types import Strictness, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_support import app_hint_util, hints
+from tts_audiobook_tool import ask
+from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.generate_util import GenerateUtil
+from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
-from tts_audiobook_tool.textual.sound_segments_editor import SoundSegmentsEditorTextualApp
+from tts_audiobook_tool.textual.content_textual_app import (
+    ContentAppCompleted,
+    EditorClosed,
+    EditorSaveFailed,
+    run_content_textual_app,
+)
+from tts_audiobook_tool.textual.generate_editor import (
+    GenerateEditor,
+    QuickGenerationRequested,
+)
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -27,39 +35,38 @@ class GenerateMenu:
     def menu(state: State) -> None:
 
         def make_start_label(_: State) -> str:
-            blocker = readiness.get_generate_blocker_text(state, verbose=False)
+
             label = "Start"
+
+            ungenerated_indices = {
+                phrase_index
+                for phrase_index in range(len(state.project.phrase_groups))
+                if state.project.sound_segments.get_best_item_for(phrase_index) is None
+            }
+            queued_count = len(
+                ProjectUtil.get_indices_to_generate(state.project)
+                & ungenerated_indices
+            )
+            if ungenerated_indices and queued_count == len(ungenerated_indices):
+                generated_count = state.project.sound_segments.num_generated()
+                if generated_count:
+                    remaining_count = len(ungenerated_indices)
+                    noun = make_noun("segment", "segments", remaining_count)
+                    queued_label = (
+                        f"all {remaining_count} remaining {noun} queued"
+                    )
+                else:
+                    queued_label = "all"
+            else:
+                noun = make_noun("line", "lines", queued_count)
+                queued_label = f"{queued_count} {noun} queued"
+            label += f" {COL_DIM}({queued_label})"
+
+            blocker = readiness.get_generate_blocker_text(state, verbose=False)
             if blocker:
                 label += f" {COL_DIM}({COL_ERROR}{blocker}{COL_DIM})"
+
             return label
-
-        def make_range_label(_: State) -> str:
-            if not state.project.generate_range_string:
-                range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}all{COL_DIM})"
-            else:
-                line_word = make_noun("line", "lines", len(ProjectUtil.get_indices_to_generate(state.project)))
-                range_label = f"{COL_DIM}(currently set to: {COL_ACCENT}{line_word} {state.project.generate_range_string}{COL_DIM})"
-
-            if not state.project.generate_range_string:
-                complete_label = ""
-            else:
-                selected_indices = ProjectUtil.get_indices_to_generate(state.project)
-                all_generated_indices = state.project.sound_segments.sound_segments_map.keys()
-                selected_indices_not_generated = selected_indices - all_generated_indices
-                num_selected_indices_generated = len(selected_indices) - len(selected_indices_not_generated)
-                complete_label = f"({COL_ACCENT}{num_selected_indices_generated}{COL_DIM} of {COL_ACCENT}{len(selected_indices)}{COL_DIM} complete)"
-
-            if not state.project.generate_range_string:
-                label = "Specify line range"
-            else:
-                label = "Line range"
-            return f"{label} {range_label} {complete_label}"
-
-        def make_regen_label(_: State) -> str:
-            num_fails = len( state.project.sound_segments.get_failed_indices_in_generate_range() )
-            failed_items_label = f"{num_fails} {make_noun('item', 'items', num_fails)}"
-            currently = f"{COL_DIM}(currently: {COL_ACCENT}{failed_items_label}{COL_DIM})"
-            return f"Regenerate segments with excess errors {currently}"
 
         def make_batch_size_label(state: State) -> str:
             value = ProjectVoiceUtil.get_batch_size(state.project)
@@ -71,32 +78,24 @@ class GenerateMenu:
 
         # Menu
         def heading_maker(_: State) -> str:
-            total_segments_generated = state.project.sound_segments.num_generated()
-            num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
-            return f"Generate audio segments {num_complete_label}"
+            s = "Generate sound segments"
+            if not state.prefs.menu_clears_screen:
+                total_segments_generated = state.project.sound_segments.num_generated()
+                num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
+                s += " " + num_complete_label
+            return s
 
         def items_maker(_: State) -> list[MenuItem]:
 
-            has_sound_segments = state.project.sound_segments.num_generated() > 0
-
             items = []
-            # Start
-            items.append(
-                MenuItem(make_start_label, lambda _, __: do_generate(state, is_regen=False)),
-            )
-            # Range
-            items.append(
-                MenuItem(make_range_label, lambda _, __: ask_item_range(state)),
-            )
+            # Generate
+            items.append(MenuItem(make_start_label,lambda _, __: do_generate(state)))
 
-            if has_sound_segments:
-                # Re-generate
-                items.append(
-                    MenuItem(
-                        make_regen_label, 
-                        lambda _, __: regenerate_menu(state)
-                    )
-                )
+            items.append(
+                MenuItem(
+                    "Select lines / review sound segments", 
+                    lambda _, __: GenerateMenu.run_editor(state),
+            ))
 
             show_batch_item = Tts.get_type().value.can_batch
 
@@ -135,19 +134,47 @@ class GenerateMenu:
                 )
             )
 
-            # Review/delete
-            if has_sound_segments:
-                items.append(
-                    MenuItem(
-                        "Review/delete generated segments",
-                        lambda _, __: SoundSegmentsEditorTextualApp.start(state.project),
-                        superlabel=" ", superlabel_no_blank_line=True
-                    )
-                )
-
             return items
         
         MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
+
+    @staticmethod
+    def run_editor(state: State) -> None:
+        """ Run generate editor """
+
+        range_save_error = ProjectUtil.persist_range_without_generated_items(
+            state.project
+        )
+        if range_save_error:
+            print_feedback(range_save_error, is_error=True)
+
+        # Loop is required to re-run editor after "quick-gen"
+        quick_gen_index: int | None = None
+        while True:
+            run_result = run_content_textual_app(
+                GenerateEditor(
+                    state,
+                    quick_gen_index=quick_gen_index,
+                )
+            )
+            if not isinstance(run_result, ContentAppCompleted):
+                print_feedback(run_result.message, is_error=True)
+                return
+
+            editor_result = run_result.result
+            if isinstance(editor_result, EditorSaveFailed):
+                print_feedback(editor_result.error, is_error=True)
+                return
+            if isinstance(editor_result, QuickGenerationRequested):
+                if editor_result.save_error:
+                    print_feedback(editor_result.save_error, is_error=True)
+                quick_gen_index = editor_result.phrase_index
+                GenerateUtil.do_quick_generate(
+                    state, quick_gen_index
+                )
+                continue
+            if isinstance(editor_result, EditorClosed):
+                return
 
     @staticmethod
     def limit_silence_gaps_menu(state: State) -> None:
@@ -275,83 +302,6 @@ class GenerateMenu:
             breadcrumb="Word error tolerance",
         )
 
-# ---
-
-def ask_item_range(state: State) -> None:
-
-    num_items = len(state.project.phrase_groups)
-
-    s = state.project.generate_range_string if state.project.generate_range_string else "all"
-    printt(f"Enter line numbers to generate {COL_DIM}(currently: {s}):") 
-    printt(f"{COL_DIM}For example, \"1-100\" or \"201-210, 215\", or just \"all\"") 
-
-    inp = ask.ask()
-    if inp == "all" or inp == "a":
-        indices = set( [item for item in range(0, num_items)] )
-    else:
-        indices, warnings = RangeStringUtil.parse_ranges_string(inp, num_items)
-        if not indices:
-            return
-        if warnings:
-            print_feedback("\n".join(warnings))
-            return
-
-    s = RangeStringUtil.make_ranges_string(indices, len(state.project.phrase_groups))
-    state.project.generate_range_string = "" if s == "all" else s
-    state.project.save()
-
-    print_feedback(f"Range set to: {s}")
-
-def ask_delete_segments(state: State) -> None:
-
-    if state.project.sound_segments.num_generated() == 0:
-        print_feedback("Nothing to delete")
-        return
-    
-    MenuUtil.print_screen_heading(state, "Delete segments", breadcrumb="Delete segments")
-
-    path = os.path.join(state.project.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
-    hint = Hint.make_using(HINT_DELETE_SEGMENTS, text_util.make_terminal_hyperlink(path, is_file=True))
-    hints.show_hint_if_necessary(state.prefs, hint)
-
-    printt(f"Enter line numbers to delete:") 
-    printt(f"{COL_DIM}For example, \"3, 5, 21\" or \"201-350, 215\", or just \"all\"") 
-    inp = ask.ask()
-    if not inp:
-        return
-
-    # Make selected indices from input
-    total_num_items = len(state.project.phrase_groups)
-    if inp == "all" or inp == "a":
-        selected_indices = set( [item for item in range(0, total_num_items)] )
-    else:
-        selected_indices, _ = RangeStringUtil.parse_ranges_string(inp, total_num_items)
-        if not selected_indices:
-            print_feedback("No valid line numbers entered")
-            return
-        
-    existing_indices = state.project.sound_segments.get_existing_indices()
-    indices_to_delete = selected_indices & existing_indices
-    if not indices_to_delete:
-        print_feedback("No valid line numbers entered")
-        return
-
-    if len(indices_to_delete) == len(existing_indices):
-        noun = make_noun("segment", "segments", len(indices_to_delete))
-        s = f"All {len(indices_to_delete)} generated {noun} will be deleted"
-    else:
-        segment_word = make_noun("segment", "segments", len(indices_to_delete))
-        s = f"The following {len(indices_to_delete)} {segment_word} will be deleted: \n"
-        s += RangeStringUtil.make_ranges_string(indices_to_delete, total_num_items)
-    printt(s)
-    if not ask.ask_confirm():
-        return
-    
-    state.project.sound_segments.delete_by_indices(indices_to_delete)
-
-    # NB, without this delay, directory watcher may not update in time for next menu printout
-    print_feedback(f"Deleted {len(indices_to_delete)} segments")
-
 def make_tolerance_label(state: State) -> str:
     label = make_menu_label(
         label="Word error tolerance",
@@ -419,42 +369,7 @@ def ask_batch_size(state: State) -> None:
         "Set batch size:", is_int=True
     )
 
-def make_regenerate_segments_with_errors_desc(state: State) -> str:
-    tolerance_string = f"{COL_ACCENT}{state.project.strictness.label}{COL_DEFAULT}"
-    range_string = state.project.generate_range_string or "all"
-    range_string = f"{COL_ACCENT}{range_string}{COL_DEFAULT}"
-    result = REGENERATE_SEGMENTS_WITH_ERRORS_DESC.replace("%1", range_string)
-    result = result.replace("%2", tolerance_string)
-    return result
-
-def regenerate_menu(state: State) -> None:
-
-    def make_print_label(_: State) -> str:
-        num_fails = len(state.project.sound_segments.get_failed_indices_in_generate_range())
-        return f"Review lines to be regenerated {COL_DIM}({COL_ACCENT}{num_fails}{COL_DIM})"
-
-    def on_start(_: State, __: MenuItem) -> None:
-        do_generate(state, is_regen=True, show_stt_status=False)
-
-    def on_print(_: State, __: MenuItem) -> None:
-        indices = state.project.sound_segments.get_failed_indices_in_generate_range()
-        app_display.print_regen_lines(state, indices)
-        ask.ask_enter_to_continue()
-
-    items = [
-        MenuItem("Start", on_start),
-        MenuItem(make_print_label, on_print),
-    ]
-
-    MenuUtil.menu(
-        state,
-        "Regenerate segments with errors",
-        items,
-        subheading=make_regenerate_segments_with_errors_desc,
-        breadcrumb="Regenerate segments",
-    )
-
-def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> None:
+def do_generate(state: State) -> None:
 
     # Check blockers
     error = readiness.get_generate_blocker_text(state, verbose=True)
@@ -463,75 +378,90 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         return
 
     # Get indices to generate, and check if already generated
-    if is_regen:
-        indices = state.project.sound_segments.get_failed_indices_in_generate_range()
-    else:
-        indices = ProjectUtil.get_selected_indices_not_generated(state.project)
+    indices = ProjectUtil.get_selected_indices_not_generated(state.project)
     
     if not indices:
-        qualifier = " in currently selected range" if state.project.generate_range_string else ""
-        if is_regen:
-            message = f"No segments with errors to regenerate{qualifier}."
-        else:
-            message = f"All items{qualifier} already generated."            
+        all_lines_generated = (
+            state.project.sound_segments.num_generated()
+            == len(state.project.phrase_groups)
+        )
+        message = (
+            "All lines already generated"
+            if all_lines_generated
+            else "No lines queued to be generated"
+        )
         print_feedback(message)
         return
 
     # Show pre-inference hint/warning if necessary
-    if is_regen:
-        hints.show_hint_if_necessary(state.prefs, HINT_REGEN)
-    else:
-        should_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
-        if not should_continue:
-            return
+    should_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
+    if not should_continue:
+        return
 
-    # Print germane pre-flight info, and confirm
-    if not is_regen:
-        s = f"- Will generate {len(indices)} lines in range {state.project.generate_range_string}"
-        num = state.project.sound_segments.num_generated_in_current_range()
-        if num:
-            s += f" {COL_DIM}({num} already complete)"
+    # Print pseudo-menu heading
+    MenuUtil.print_screen_heading(state, "Start")
+
+    # Print queue info
+    range_string = ProjectUtil.generate_range_string_display(state.project)
+    line_word = "line" if len(indices) == 1 else "lines"
+    s = f"- Will generate {len(indices)} {line_word} {COL_DIM}({range_string})"
+    num = state.project.sound_segments.num_generated_in_current_range()
+    if num:
+        s += f" {COL_DIM}({num} already complete)"
+    printt(s)
+    # Print batching setting
+    tts_type = Tts.get_type()
+    if tts_type.value.can_batch:
+        batch_size = ProjectVoiceUtil.get_batch_size(state.project)
+        if tts_type.value.is_sgl_omni:
+            s = f"- Concurrent requests: {batch_size}"
+        else:
+            if batch_size > 1:
+                s = f"- Batch size: {batch_size}"
+            else:
+                s = "- Batching: disabled"
         printt(s)
-        if show_stt_status:
-            if not Stt.should_skip(state):
-                s = "- Speech-to-text validation enabled"
-                s += f" {COL_DIM}({Stt.short_description()})"
-            else:
-                s = "- Speech-to-text validation disabled"
-            printt(s)
-        voice_values = ProjectVoiceUtil.get_voice_values(state.project, Tts.get_type())
-        if len(voice_values) > 1:
-            s = f"- Voice selection mode: "
-            if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED and ProjectVoiceUtil.get_batch_size(state.project) > 1:
-                s += f"{Ansi.STRIKETHROUGH}{state.project.voice_select_mode.label}{Ansi.RESET}"
-                s += f"\n  {COL_ERROR}Warning: User-defined voice selections are not supported in batch mode"
-                s += f"\n  {COL_ERROR}         Voice sample 1 will be used for all generations"
-            else:
-                s += f"{state.project.voice_select_mode.label}"
-                if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
-                    num_invalid_voice_indices = sum(
-                        not 0 <= state.project.phrase_groups[index].voice_index < len(voice_values)
-                        for index in indices
+    # Print stt setting
+    if not Stt.should_skip(state):
+        s = "- Speech-to-text validation: enabled"
+        s += f" {COL_DIM}({Stt.short_description()})"
+    else:
+        s = "- Speech-to-text validation: disabled"
+        printt(s)
+    # Print voice selection mode info
+    voice_values = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
+    if len(voice_values) > 1:
+        s = f"- Voice selection mode: "
+        if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED and ProjectVoiceUtil.get_batch_size(state.project) > 1:
+            s += f"{Ansi.STRIKETHROUGH}{state.project.voice_select_mode.label}{Ansi.RESET}"
+            s += f"\n- Warning: User-defined voice selections are not supported in batch mode"
+            s += f"\n           Voice sample 1 will be used for all generations"
+        else:
+            s += f"{state.project.voice_select_mode.label}"
+            if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
+                num_invalid_voice_indices = sum(
+                    not 0 <= state.project.phrase_groups[index].voice_index < len(voice_values)
+                    for index in indices
+                )
+                if num_invalid_voice_indices:
+                    selection_word = make_noun(
+                        "selection",
+                        "selections",
+                        num_invalid_voice_indices,
                     )
-                    if num_invalid_voice_indices:
-                        selection_word = make_noun(
-                            "selection",
-                            "selections",
-                            num_invalid_voice_indices,
-                        )
-                        s +=f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
-            printt(s)
-        if state.project.gen_auto_concat:
-            printt("- Will concatenate audio file/s when finished")
-
-        printt()
-        b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
-        if not b:
-            return
+                    s +=f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
+        printt(s)
+    # Print auto-concat setting
+    if state.project.gen_auto_concat:
+        printt("- Will concatenate audio file/s when finished")
+    # Confirm
+    printt()
+    b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
+    if not b:
+        return
 
     # Print heading
-    word = "Regenerating" if is_regen else "Generating"
-    message = f"{word} {len(indices)} audio segment/s..."
+    message = f"Generating {len(indices)} audio segment/s..."
     if state.prefs.stt_variant == SttVariant.DISABLED:
         message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
     MenuUtil.print_heading(state, message, dont_clear=True)
@@ -543,7 +473,7 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         state=state,
         indices_set=indices,
         batch_size=ProjectVoiceUtil.get_batch_size(state.project),
-        is_regen=is_regen
+        is_regen=False
     )
 
     if did_interrupt:
@@ -551,10 +481,6 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
         return
 
     app_support.play_done_sound()
-
-    if is_regen:
-        ask.ask_enter_to_continue()
-        return
 
     if state.project.gen_auto_concat:
         printt()
@@ -567,6 +493,8 @@ def do_generate(state: State, is_regen: bool, show_stt_status: bool = True) -> N
     if hotkey == "c":
         ConcatMenu.menu(state)
 
+# ---
+
 STRICTNESS_DESC = \
 """Controls how many word errors are acceptable per segment.
 Applies during generation (auto-retry) and when identifying
@@ -577,11 +505,6 @@ RETRIES_DESC = \
 """This is the max number of retries an audio generation will be attempted 
 when speech-to-text validation fails due to too many word errors.
 Higher values have diminishing returns.
-"""
-
-REGENERATE_SEGMENTS_WITH_ERRORS_DESC = \
-"""Regenerate segments in the selected line range (%1)
-whose word error count exceeds the current word error tolerance setting (%2).
 """
 
 LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \

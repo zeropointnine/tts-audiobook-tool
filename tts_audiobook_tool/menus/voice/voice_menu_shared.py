@@ -6,6 +6,12 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint, SttVariant, VoiceSelectMode
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
+from tts_audiobook_tool.textual.content_textual_app import (
+    ContentAppCompleted,
+    EditorSaveFailed,
+    EditorSaved,
+    run_content_textual_app,
+)
 from tts_audiobook_tool.textual.voice_line_editor import VoiceLineEditorTextualApp
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -326,7 +332,7 @@ class VoiceMenuShared:
             if len(voices) < 2:
                 label += f" {COL_DIM}(optional; requires 2+ voice samples)"
             elif state.project.voice_select_mode is not VoiceSelectMode.USER_DEFINED:
-                label += f" {COL_DIM}(optional; for use with voice selection mode: user-defined)"
+                label += f" {COL_DIM}(optional; requires \"voice selection mode: user-defined\")"
             return label
 
         def on_item(state: State, _: MenuItem) -> None:
@@ -343,7 +349,16 @@ class VoiceMenuShared:
 
     @staticmethod
     def assign_voice_samples_to_text_lines(state: State) -> None:
-        VoiceLineEditorTextualApp.start(state.project)
+        run_result = run_content_textual_app(
+            VoiceLineEditorTextualApp(state.project)
+        )
+        if not isinstance(run_result, ContentAppCompleted):
+            print_feedback(run_result.message, is_error=True)
+            return
+        if isinstance(run_result.result, EditorSaveFailed):
+            print_feedback(run_result.result.error, is_error=True)
+        elif isinstance(run_result.result, EditorSaved):
+            print_feedback("Saved changes", long_pause=True)
 
     @staticmethod
     def voice_sample_selection_mode_submenu(state: State) -> None:

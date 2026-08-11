@@ -3,16 +3,21 @@ class RangeStringUtil:
     @staticmethod
     def parse_ranges_string(string: str, num_items: int) -> tuple[set[int], list[str]]:
         """
-        Expects a comma-delimited list of one-indexed ints and/or int ranges. Eg, "1, 3, 6-8"
+        Expects a comma-delimited list of one-indexed ints and/or int ranges. Eg, "1, 3, 6-8".
+        An empty string, "all", or "a" selects every item; "none" selects no items.
         Returns tuple of zero-indexed index values and warning strings (eg, 1,3,6,7,8)
         """
 
         ints = []
         warnings: list[str] = []
 
+        normalized_string = string.strip().lower()
+        if not normalized_string or normalized_string in ("all", "a"):
+            return set(range(num_items)), []
+        if normalized_string == "none":
+            return set(), []
+
         tokens = _split_and_strip(string, ",")
-        if not tokens:
-            return (set(), [])
 
         for token in tokens:
             if token.isdigit():
@@ -35,10 +40,11 @@ class RangeStringUtil:
     @staticmethod
     def make_ranges_string(zero_indexed_ints: set[int], max_one_indexed: int) -> str:
         """
-        Returns a string of one-indexed values in this format: "1, 3-5, 7-10". Or just "all".
+        Returns a string of one-indexed values in this format: "1, 3-5, 7-10".
+        Returns "all" for every item and "none" for no items.
         """
         if not zero_indexed_ints:
-            return "None"
+            return "none"
 
         ints_list = sorted(list(set(zero_indexed_ints)))
         one_indexed_parts: list[int | tuple[int, int]] = []

@@ -59,7 +59,7 @@ The static method `SidonUtil.has_sidon()` returns `True` if the `sidon` Python p
 
 ## App Integration
 
-Sidon is used as an optional generative upsampler in the audio post-processing pipeline. It is not part of the core TTS generation flow, but rather a quality improvement step applied to generated audio segments.
+Sidon is used as an optional generative upsampler in the audio post-processing pipeline. It is not part of the core TTS generation flow, but rather a quality improvement step applied to generated sound segments.
 
 ### User-Facing Toggle
 
@@ -86,7 +86,7 @@ If either condition is false, the menu item shows a subheading explaining why it
 
 **File:** [sound_app_util.py](../tts_audiobook_tool/sound_app_util.py)
 
-`SoundAppUtil.apply_segment_post_processing()` is the central pipeline for generated audio segments, used by the concat, realtime playback, and voice chat flows. Sidon is step 2 in the chain:
+`SoundAppUtil.apply_segment_post_processing()` is the central pipeline for generated sound segments, used by the concat, realtime playback, and voice chat flows. Sidon is step 2 in the chain:
 
 1. Optional silence-gap limiting (`SilenceUtil.limit_silence_gaps`)
 2. **Optional generative upsampler (Sidon)** — called via `ModelsUtil.get_sidon_upsampler().process(sound)`

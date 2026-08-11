@@ -5,11 +5,14 @@ import time
 
 import numpy as np
 
-from tts_audiobook_tool import text_util
-from tts_audiobook_tool import app_support
+from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, VoiceSelectMode
-from tts_audiobook_tool.app_support import app_memory
+from tts_audiobook_tool.app_support import app_hint_util, app_memory
+from tts_audiobook_tool.concat_util import ConcatUtil
+from tts_audiobook_tool.menus.concat_menu import ConcatMenu
+from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -24,6 +27,7 @@ from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUt
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -105,6 +109,7 @@ class GenerateUtil:
         num_improved = 0
         num_passed = 0
         num_retries = 0
+        saved_indices: set[int] = set()
         word_counts: dict[int, int] = {}
         preexisting_word_error_counts = project.sound_segments.get_word_error_counts_in_generate_range()
         best_word_error_counts = dict(preexisting_word_error_counts)
@@ -309,6 +314,7 @@ class GenerateUtil:
                     if err:
                         save_line = f"{COL_ERROR}Couldn't save file: {err} {saved_path}"
                     else:
+                        saved_indices.add(index)
                         project.sound_segments.delete_redundants_for(index)
 
                         url = saved_path
@@ -357,6 +363,24 @@ class GenerateUtil:
             if re_adds:
                 # Insert "re_adds" at the head of the list (not bothering with deque fyi)
                 items[:0] = re_adds
+
+        # Update the persisted queue once per generation run, based only on files
+        # that were actually saved successfully.
+        if saved_indices:
+            selected_indices = ProjectUtil.get_indices_to_generate(project)
+            remaining_indices = selected_indices - saved_indices
+            updated_range_string = RangeStringUtil.make_ranges_string(
+                remaining_indices,
+                len(project.phrase_groups),
+            )
+            if updated_range_string != project.generate_range_string:
+                project.generate_range_string = updated_range_string
+                save_error = project.save()
+                if save_error:
+                    print_feedback(
+                        f"Couldn't save updated generation range: {save_error}",
+                        is_error=True,
+                    )
 
         # Print summary, metrics
         warnings_string = ""
@@ -772,6 +796,69 @@ class GenerateUtil:
             file_name = f"[{index_string}] [{timestamp}] [{label}].flac"
         path = os.path.join(dir_path, file_name)
         _ = SoundFileUtil.save_flac(sound, path)
+
+    @staticmethod
+    def do_quick_generate(state: State, phrase_index: int) -> None:
+        """Regenerate exactly one project item."""
+        MenuUtil.print_heading(
+            state,
+            f"Generating audio segment for line {phrase_index + 1}...",
+            dont_clear=True,
+        )
+        printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
+        printt()
+        GenerateUtil.generate_files(
+            state=state,
+            indices_set={phrase_index},
+            batch_size=ProjectVoiceUtil.get_batch_size(state.project),
+            is_regen=True,
+        )
+
+    @staticmethod
+    def do_generate_using_project_and_state(state: State) -> None:
+        """ Generate queued project items and run configured completion actions. """
+
+        indices = ProjectUtil.get_selected_indices_not_generated(state.project)
+        if not indices:
+            return
+
+        # Show pre-inference hint/warning if necessary
+        should_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
+        if not should_continue:
+            return
+
+        message = f"Generating {len(indices)} audio segment/s..."
+        if state.prefs.stt_variant == SttVariant.DISABLED:
+            message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
+        MenuUtil.print_heading(state, message, dont_clear=True)
+        printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
+        printt()
+
+        did_interrupt = GenerateUtil.generate_files(
+            state=state,
+            indices_set=indices,
+            batch_size=ProjectVoiceUtil.get_batch_size(state.project),
+            is_regen=False,
+        )
+        if did_interrupt:
+            ask.ask_enter_to_continue()
+            return
+
+        app_support.play_done_sound()
+
+        if state.project.gen_auto_concat:
+            printt()
+            ConcatUtil.auto_concat_after_generation(state)
+            return
+
+        prompt = (
+            f"Press {make_hotkey_string('Enter')}, or press "
+            f"{make_hotkey_string('C')} to create audiobook file now: \a"
+        )
+        hotkey = ask.ask_hotkey(prompt)
+        printt()  # TODO revisit
+        if hotkey == "c":
+            ConcatMenu.menu(state)
 
 # ---
 

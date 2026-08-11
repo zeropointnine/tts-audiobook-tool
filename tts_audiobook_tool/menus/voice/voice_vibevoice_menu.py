@@ -206,7 +206,7 @@ def apply_lora_and_validate(project: Project, target: str) -> None:
 
     if instance.has_lora:
         project.save()
-        print_feedback("\nLoRA set:", target)
+        print_feedback("LoRA set:", target)
         ask.ask_enter_to_continue()
     else:
         revert()

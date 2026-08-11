@@ -214,9 +214,14 @@ class TtsBaseModel(ABC):
     def get_voice_tag_for_value(cls, voice_value: str) -> str:
         return ProjectVoiceUtil.make_voice_file_name_tag(voice_value, cls.INFO.file_tag)
 
-
     @classmethod
     def get_voice_display_info(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> VoiceDisplayInfo | None:
+        return cls.get_voice_display_info_default(project, instance)
+
+    @classmethod
+    def get_voice_display_info_default(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> VoiceDisplayInfo | None:
        

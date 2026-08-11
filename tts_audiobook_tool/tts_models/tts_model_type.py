@@ -38,8 +38,7 @@ class TtsModelSpec(NamedTuple):
     voice_transcript_attr: str
     # Additional project attributes for model-specific saved files
     extra_file_attrs: list[str]
-    # Project field name for "batch size" (must be implemented in Project; empty = no batch support)
-    
+    # Project field name for int value for "batch size" (or concurrent requests for sgl-omni mode) (empty = no support)
     batch_size_attr: str
     # Whether the model supports streaming chunk callbacks
     can_stream: bool

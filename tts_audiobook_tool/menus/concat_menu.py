@@ -453,7 +453,7 @@ for mobile devices.
 
 SUBDIVIDE_SUBHEADING = \
 """Affects how text is highlighted in the player/reader app.
-When False, highlighted text maps directly to the TTS prompts used to generate the audio segments.
+When False, highlighted text maps directly to the TTS prompts used to generate the sound segments.
 When True, highlighted text is further sub-segmented by phrase (Requires \"speech-to-text validation\" 
 to be enabled during TTS sound generation).
 """

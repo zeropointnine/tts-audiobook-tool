@@ -24,6 +24,8 @@ def test_generate_files_retries_validation_failures_up_to_project_limit() -> Non
         max_retries=2,
         phrase_groups=[phrase_group],
         sound_segments=sound_segments,
+        generate_range_string="all",
+        save=MagicMock(return_value=""),
     )
     state = cast(
         State,
@@ -54,3 +56,5 @@ def test_generate_files_retries_validation_failures_up_to_project_limit() -> Non
     assert not did_interrupt
     assert force_random_seed_values == [False, True, True]
     assert results == []
+    assert project.generate_range_string == "none"
+    project.save.assert_called_once_with()

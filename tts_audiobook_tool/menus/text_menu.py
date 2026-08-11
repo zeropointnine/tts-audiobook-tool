@@ -1,4 +1,4 @@
-from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.app_support import app_text, hints
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
@@ -10,6 +10,12 @@ from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextI
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
+from tts_audiobook_tool.textual.content_textual_app import (
+    ContentAppCompleted,
+    EditorSaveFailed,
+    EditorSaved,
+    run_content_textual_app,
+)
 from tts_audiobook_tool.textual.text_editor import TextEditor
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -75,7 +81,7 @@ class TextMenu:
 
                 items.append(
                     MenuItem(
-                        "View/edit text", lambda _, __: TextEditor.start(state.project),
+                        "View/edit text lines", lambda _, __: TextMenu.edit_text(state),
                         superlabel=" ", superlabel_no_blank_line=True                      
                     ),
                 )       
@@ -86,6 +92,18 @@ class TextMenu:
             state, make_heading, make_items, 
             subheading=SUBHEADING, hint=HINT_LINE_BREAKS, breadcrumb="Text"
         )
+
+    @staticmethod
+    def edit_text(state: State) -> None:
+        """Run one text editor and present its result in the surrounding menu."""
+        run_result = run_content_textual_app(TextEditor(state.project))
+        if not isinstance(run_result, ContentAppCompleted):
+            print_feedback(run_result.message, is_error=True)
+            return
+        if isinstance(run_result.result, EditorSaveFailed):
+            print_feedback(run_result.result.error, is_error=True)
+        elif isinstance(run_result.result, EditorSaved):
+            print_feedback("Saved changes", long_pause=True)
 
     @staticmethod
     def strategy_menu(state: State) -> None:
@@ -310,6 +328,13 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     printt(f"- Text segmenter strategy: {COL_ACCENT}{segmentation_settings.strategy.label}")
     printt()
     ask.ask_enter_to_continue()
+
+    if state.project.language_code in ("en", "es"):
+        hints.show_hint_if_necessary(
+            state.prefs,
+            HINT_TOLERANCE_FIRST_CLASS,
+            and_prompt=True,
+        )
 
     return False
 

@@ -1,3 +1,5 @@
+from collections.abc import Callable
+from enum import Enum
 from typing import ClassVar
 
 from rich.text import Text
@@ -9,11 +11,19 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 
-class SegmentInfoDialog(ModalScreen[None]):
+class SegmentInfoAction(Enum):
+    DELETE_GENERATED = "delete_generated"
+    QUICK_GENERATE = "quick_generate"
+
+
+class SegmentInfoDialog(ModalScreen[SegmentInfoAction | None]):
     """ Displays formatted validation info of a generated segment. """
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "close", "Close", show=False),
+        Binding("p", "play_sound", show=False),
+        Binding("x", "delete_generated", show=False),
+        Binding("q", "quick_generate", show=False),
     ]
 
     CSS = """
@@ -26,10 +36,9 @@ class SegmentInfoDialog(ModalScreen[None]):
         width: 100%;
         height: auto;
         max-height: 100%;
-        margin: 2 0;
+        margin: 2 2;
         padding: 1 2;
-        border-top: round #888888;
-        border-bottom: round #888888;
+        border: round #888888;
         background: ansi_default;
     }
 
@@ -45,9 +54,10 @@ class SegmentInfoDialog(ModalScreen[None]):
     }
     """
 
-    def __init__(self, info_text: str) -> None:
+    def __init__(self, info_text: str, play_sound: Callable[[], None]) -> None:
         super().__init__()
         self.info_text = Text.from_ansi(info_text)
+        self.play_sound = play_sound
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -60,6 +70,18 @@ class SegmentInfoDialog(ModalScreen[None]):
 
     def action_close(self) -> None:
         self.dismiss()
+
+    def action_play_sound(self) -> None:
+        """Toggle playback without closing the segment-info dialog."""
+        self.play_sound()
+
+    def action_delete_generated(self) -> None:
+        """Close the dialog and request deletion of its displayed segment."""
+        self.dismiss(SegmentInfoAction.DELETE_GENERATED)
+
+    def action_quick_generate(self) -> None:
+        """Close the dialog and request regeneration of its displayed segment."""
+        self.dismiss(SegmentInfoAction.QUICK_GENERATE)
 
     def on_click(self, event: events.Click) -> None:
         """Close only when the modal backdrop, rather than the dialog, is clicked."""

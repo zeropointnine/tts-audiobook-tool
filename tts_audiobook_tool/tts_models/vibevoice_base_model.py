@@ -4,6 +4,7 @@ from tts_audiobook_tool.app_types import Strictness, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -99,26 +100,20 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         has_voice_clone = bool(ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE))
         has_lora = bool(project.vibevoice_lora_target)
         match (has_voice_clone, has_lora):
+            case (True, False):
+                return super().get_voice_display_info_default(project, instance)
             case (False, False):
-                status_prefix = "Voice clone"
-                menu_prefix = "current voice clone"
-                value = COL_ERROR + "none"
+                return super().get_voice_display_info_default(project, instance)
             case (True, True):
                 status_prefix = "Voice"
                 menu_prefix = "currently"
-                value = COL_ACCENT + "voice clone + LoRA"
-            case (True, False):
-                status_prefix = "Voice clone"
-                menu_prefix = "current voice clone"
-                value = COL_ACCENT + ProjectVoiceUtil.get_voice_label(project)
-                from tts_audiobook_tool.tts import Tts
-                num_items = len( ProjectVoiceUtil.get_voice_values(project, Tts.get_type()) )
-                if num_items > 1:
-                    value += f", +{num_items - 1} more"
+                value = "voice clone + LoRA"
             case (False, True):
                 status_prefix = "Voice LoRA"
                 menu_prefix = "current lora:"
-                value = COL_ACCENT + ellipsize_path_for_menu(project.vibevoice_lora_target)
+                value = ellipsize_path_for_menu(project.vibevoice_lora_target)
+                value = text_util.make_terminal_hyperlink(project.vibevoice_lora_target, value, is_file=True)
+                value = value
 
         return VoiceDisplayInfo(status_prefix, menu_prefix, value)
 

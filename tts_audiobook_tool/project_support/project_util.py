@@ -16,7 +16,7 @@ __all__ = ["ProjectUtil", "Tts"]
 
 class ProjectUtil:
     """
-    Small grab-bag of project-related helpers.
+    Project-related helpers.
     """
 
     @staticmethod
@@ -117,11 +117,9 @@ class ProjectUtil:
         derived from the (human readable) "generate_range_string"
         """
         range_string = project.generate_range_string
-        is_all = not range_string or range_string == "all" or range_string == "a"
-        if is_all:
-            result = set(range(len(project.phrase_groups)))
-        else:
-            result, _ = RangeStringUtil.parse_ranges_string(range_string, len(project.phrase_groups))
+        result, _ = RangeStringUtil.parse_ranges_string(
+            range_string, len(project.phrase_groups)
+        )
         return result
 
     @staticmethod
@@ -134,6 +132,20 @@ class ProjectUtil:
         selected_indices_generated = set(project.sound_segments.sound_segments_map.keys())
         selected_indices_not_generated = selected_indices_all - selected_indices_generated
         return selected_indices_not_generated
+
+    @staticmethod
+    def persist_range_without_generated_items(project: Project) -> str:
+        """Remove generated items from the generation range and save when changed."""
+        selected_indices = ProjectUtil.get_indices_to_generate(project)
+        generated_indices = set(project.sound_segments.sound_segments_map)
+        if not selected_indices & generated_indices:
+            return ""
+        project.generate_range_string = RangeStringUtil.make_ranges_string(
+            selected_indices - generated_indices,
+            len(project.phrase_groups),
+        )
+        error = project.save()
+        return f"Save failed: {error}" if error else ""
     
     @staticmethod
     def get_latest_concat_files(project: Project, limit=10) -> list[tuple[str, str]]:
@@ -209,4 +221,14 @@ class ProjectUtil:
             floats.append(flt)
         return floats
 
-
+    @staticmethod
+    def generate_range_string_display(project: Project) -> str:
+        s = project.generate_range_string
+        if not s:
+            return "all"
+        tokens = s.split(",")
+        tokens = [item.strip() for item in tokens]
+        if len(tokens) > 4:
+            tokens = tokens[:4]
+            tokens[3] = "..."
+        return ", ".join(tokens)

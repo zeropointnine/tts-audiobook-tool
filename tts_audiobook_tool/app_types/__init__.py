@@ -271,7 +271,7 @@ class VoiceSelectMode(tuple[str, str, str, str], Enum):
         "custom",
         "user-defined",
         "User-defined",
-        "On TTS inference, uses user-defined voice sample selections for each text line",
+        "On TTS inference, uses user-defined line-by-line selections",
     )
     AUTO_ADVANCE = (
         "auto_advance",

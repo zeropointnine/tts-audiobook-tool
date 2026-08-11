@@ -1,17 +1,27 @@
 import asyncio
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
 from rich.console import Console
 from rich.text import Text
-from textual.css.errors import StylesheetError
 from textual.widgets import Button, Input, Static
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.ansi import Ansi
+from tts_audiobook_tool.menus.voice import voice_menu_shared
+from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.textual import voice_line_editor
+from tts_audiobook_tool.textual.content_textual_app import (
+    ContentAppCompleted,
+    ContentAppStylesheetFailed,
+    EditorSaveFailed,
+    EditorSaved,
+)
+from tts_audiobook_tool.textual.manual_selection_dialog import ManualSelectionDialog
 from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
 from tts_audiobook_tool.textual.voice_line_editor import (
     VoiceLineEditorTextualApp,
@@ -171,6 +181,7 @@ def test_multiple_sections_insert_generated_section_rows() -> None:
         "\nSection 2/2: Middle (1 line)\n",
         "[00003] [Voice sample 1] Three.",
     ]
+    assert app.format_line(0).spans == []
 
 
 def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> None:
@@ -195,7 +206,10 @@ def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> 
 
     async def exercise() -> None:
         async with empty_app.run_test():
-            assert empty_app.query_one("#line-list", NonWrappingOptionList).display is False
+            assert (
+                empty_app.query_one("#line-list", NonWrappingOptionList).display
+                is False
+            )
             assert empty_app.query_one("#empty-state", Static).display is True
 
     run(exercise())
@@ -251,9 +265,9 @@ def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> No
 
 def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> None:
     app, project = make_app(1)
-    project.phrase_groups[0].presentable_text = (
-        "one two three four five six seven eight nine"
-    )
+    project.phrase_groups[
+        0
+    ].presentable_text = "one two three four five six seven eight nine"
     console = Console(width=36, force_terminal=False, color_system=None)
 
     rendered_lines = console.render_lines(
@@ -293,7 +307,9 @@ def test_inactive_selected_wrapped_line_dim_background_extends_each_row() -> Non
     run(exercise())
 
 
-def test_multiline_selection_leaves_section_rows_visually_unchanged_and_uncounted() -> None:
+def test_multiline_selection_leaves_section_rows_visually_unchanged_and_uncounted() -> (
+    None
+):
     app = make_sectioned_editor(
         [
             BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
@@ -324,6 +340,37 @@ def test_multiline_selection_leaves_section_rows_visually_unchanged_and_uncounte
     run(exercise())
 
 
+def test_manual_selection_uses_project_line_numbers_and_excludes_section_rows() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
+            ),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Three.")]),
+        ]
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            assert isinstance(app.screen, ManualSelectionDialog)
+            app.screen.query_one("#manual-selection-input", Input).value = "1, 3"
+            await pilot.press("enter")
+
+            assert not isinstance(app.screen, ManualSelectionDialog)
+            assert app.selected_indices == {1, 4}
+            assert app.selected_index == 4
+            assert app.selection_anchor_index == 4
+            assert app.query_one("#line-list", NonWrappingOptionList).highlighted == 4
+            assert all(
+                isinstance(app.list_items[index], VoiceLinePhraseGroupItem)
+                for index in app.selected_indices
+            )
+
+    run(exercise())
+
+
 def test_number_hotkey_ignores_highlighted_section_row() -> None:
     app = make_sectioned_editor(
         [
@@ -342,7 +389,9 @@ def test_number_hotkey_ignores_highlighted_section_row() -> None:
     run(exercise())
 
 
-def test_number_hotkey_assigns_only_phrase_rows_when_selection_crosses_section() -> None:
+def test_number_hotkey_assigns_only_phrase_rows_when_selection_crosses_section() -> (
+    None
+):
     app = make_sectioned_editor(
         [
             BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
@@ -408,9 +457,7 @@ def test_voice_assignment_batches_prompt_updates_without_reflow(monkeypatch) -> 
     monkeypatch.setattr(
         app,
         "refresh_lines",
-        lambda indices, *, reflow=True: refresh_calls.append(
-            (list(indices), reflow)
-        ),
+        lambda indices, *, reflow=True: refresh_calls.append((list(indices), reflow)),
     )
     monkeypatch.setattr(app, "collapse_current_selection", lambda: None)
 
@@ -427,9 +474,7 @@ def test_replacing_out_of_range_voice_requests_reflow(monkeypatch) -> None:
     monkeypatch.setattr(
         app,
         "refresh_lines",
-        lambda indices, *, reflow=True: refresh_calls.append(
-            (list(indices), reflow)
-        ),
+        lambda indices, *, reflow=True: refresh_calls.append((list(indices), reflow)),
     )
     monkeypatch.setattr(app, "collapse_current_selection", lambda: None)
 
@@ -494,8 +539,7 @@ def test_save_button_commits_staged_values_and_persists_once(monkeypatch) -> Non
 
         assert [group.voice_index for group in project.phrase_groups] == [1, 1, -1]
         assert saves == [project]
-        assert app.did_save_changes is True
-        assert app.save_error == ""
+        assert app.return_value == EditorSaved()
 
     run(exercise())
 
@@ -523,8 +567,7 @@ def test_save_failure_rolls_back_project_and_records_error(monkeypatch) -> None:
             await pilot.pause()
 
         assert [group.voice_index for group in project.phrase_groups] == [0, -1]
-        assert app.did_save_changes is False
-        assert app.save_error == "Save failed: disk full"
+        assert app.return_value == EditorSaveFailed("Save failed: disk full")
 
     run(exercise())
 
@@ -555,67 +598,62 @@ def test_unexpected_save_exception_rolls_back_project_and_records_error(
             await pilot.pause()
 
         assert project.phrase_groups[0].voice_index == -1
-        assert app.did_save_changes is False
-        assert app.save_error == "Save failed: RuntimeError: unexpected failure"
+        assert app.return_value == EditorSaveFailed(
+            "Save failed: RuntimeError: unexpected failure"
+        )
 
     run(exercise())
 
 
-def test_start_reports_save_failure_as_error_feedback(monkeypatch) -> None:
+def test_voice_menu_reports_save_failure_as_error_feedback(monkeypatch) -> None:
     project = StubProject([StubPhraseGroup("Line 1")])
+    state = cast(State, SimpleNamespace(project=project))
     feedback_calls: list[tuple[str, bool]] = []
-
-    def run_with_save_error(app: VoiceLineEditorTextualApp, **_) -> None:
-        app.save_error = "Save failed: disk full"
-
-    monkeypatch.setattr(VoiceLineEditorTextualApp, "run", run_with_save_error)
     monkeypatch.setattr(
-        VoiceLineEditorTextualApp, "check_terminal_support", lambda: True
-    )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
-    monkeypatch.setattr(
-        voice_line_editor.ProjectVoiceUtil,
-        "get_voice_values",
-        lambda *_: ["voice-1"],
+        voice_menu_shared,
+        "VoiceLineEditorTextualApp",
+        lambda _: object(),
     )
     monkeypatch.setattr(
-        voice_line_editor,
+        voice_menu_shared,
+        "run_content_textual_app",
+        lambda _: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
+    )
+    monkeypatch.setattr(
+        voice_menu_shared,
         "print_feedback",
         lambda message, **kwargs: feedback_calls.append(
             (message, kwargs.get("is_error", False))
         ),
     )
 
-    VoiceLineEditorTextualApp.start(project)  # type: ignore[arg-type]
+    VoiceMenuShared.assign_voice_samples_to_text_lines(state)
 
     assert feedback_calls == [("Save failed: disk full", True)]
 
 
-def test_start_reports_css_load_failure_as_error_feedback(monkeypatch) -> None:
+def test_voice_menu_reports_css_load_failure_as_error_feedback(monkeypatch) -> None:
     project = StubProject([StubPhraseGroup("Line 1")])
+    state = cast(State, SimpleNamespace(project=project))
     feedback_calls: list[tuple[str, bool]] = []
-
-    def run_with_css_error(app: VoiceLineEditorTextualApp, **_) -> None:
-        app._exception = StylesheetError("unable to read CSS file")
-
-    monkeypatch.setattr(VoiceLineEditorTextualApp, "run", run_with_css_error)
     monkeypatch.setattr(
-        VoiceLineEditorTextualApp, "check_terminal_support", lambda: True
-    )
-    monkeypatch.setattr(voice_line_editor.Tts, "get_type", lambda: object())
-    monkeypatch.setattr(
-        voice_line_editor.ProjectVoiceUtil,
-        "get_voice_values",
-        lambda *_: ["voice-1"],
+        voice_menu_shared,
+        "VoiceLineEditorTextualApp",
+        lambda _: object(),
     )
     monkeypatch.setattr(
-        voice_line_editor,
+        voice_menu_shared,
+        "run_content_textual_app",
+        lambda _: ContentAppStylesheetFailed("Couldn't load textual css"),
+    )
+    monkeypatch.setattr(
+        voice_menu_shared,
         "print_feedback",
         lambda message, **kwargs: feedback_calls.append(
             (message, kwargs.get("is_error", False))
         ),
     )
 
-    VoiceLineEditorTextualApp.start(project)  # type: ignore[arg-type]
+    VoiceMenuShared.assign_voice_samples_to_text_lines(state)
 
     assert feedback_calls == [("Couldn't load textual css", True)]
