@@ -184,7 +184,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         """Assign an available voice sample to all selected phrase groups."""
         if not self.content_initialized or voice_index >= self.voice_sample_count:
             return
-        if self.highlighted_content_line_index() is None:
+        if not self.selected_content_line_indices():
             return
 
         def assign_voice(_visible_index: int, phrase_index: int) -> bool:

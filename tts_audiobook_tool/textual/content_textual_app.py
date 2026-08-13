@@ -678,16 +678,23 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         reflow: bool = True,
     ) -> list[int]:
         """Mutate selected content lines, excluding all structural rows."""
-        if (
-            self.find_active
-            or not self.selected_indices
-            or self.highlighted_content_line_index() is None
-        ):
+        if self.find_active or not self.selected_indices:
+            return []
+        selected_content_items = [
+            (index, content_line_index)
+            for index in sorted(self.selected_indices)
+            if (
+                content_line_index := self.content_line_index(
+                    self.phrase_indices[index]
+                )
+            )
+            is not None
+        ]
+        if not selected_content_items:
             return []
         changed_indices: list[int] = []
-        for index in sorted(self.selected_indices):
-            content_line_index = self.content_line_index(self.phrase_indices[index])
-            if content_line_index is not None and mutator(index, content_line_index):
+        for index, content_line_index in selected_content_items:
+            if mutator(index, content_line_index):
                 changed_indices.append(index)
         self.refresh_lines(changed_indices, reflow=reflow)
         self.collapse_current_selection()

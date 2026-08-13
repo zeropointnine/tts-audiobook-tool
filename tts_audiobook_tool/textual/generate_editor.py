@@ -450,10 +450,11 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             not self.content_initialized
             or self.find_active
             or not self.selected_indices
-            or self.highlighted_content_line_index() is None
         ):
             return
         selected_phrase_indices = self.selected_content_line_indices()
+        if not selected_phrase_indices:
+            return
         all_selected_ungenerated_are_marked = all(
             phrase_index in self.staged_queued_indices
             for phrase_index in selected_phrase_indices
@@ -663,7 +664,6 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             not self.content_initialized
             or self.find_active
             or not self.selected_indices
-            or self.highlighted_content_line_index() is None
         ):
             return
         phrase_indices = {

@@ -184,6 +184,31 @@ def test_multiple_sections_insert_generated_section_rows() -> None:
     assert app.format_line(0).spans == []
 
 
+def test_voice_assignment_uses_selected_phrase_when_section_is_highlighted() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ]
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("2")
+            assert app.staged_voice_indices == [-1, -1]
+
+            await pilot.press("down", "shift+up")
+            assert app.selected_index == 0
+            assert app.selected_indices == {0, 1}
+            assert app.highlighted_content_line_index() is None
+
+            await pilot.press("2")
+            assert app.staged_voice_indices == [1, -1]
+            assert app.selected_indices == {0}
+
+    run(exercise())
+
+
 def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> None:
     app = make_sectioned_editor(
         [

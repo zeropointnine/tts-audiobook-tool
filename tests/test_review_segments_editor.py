@@ -271,6 +271,51 @@ def test_generate_section_rows_are_searchable_but_non_actionable() -> None:
     run(exercise())
 
 
+def test_queue_applies_to_selected_phrase_when_section_is_highlighted() -> None:
+    app, _ = make_sectioned_app(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ],
+        generated_indices=set(),
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "shift+up")
+            assert app.selected_index == 0
+            assert app.selected_indices == {0, 1}
+            assert app.highlighted_content_line_index() is None
+
+            await pilot.press("space")
+            assert app.staged_queued_indices == {0}
+            assert app.selected_indices == {0}
+
+    run(exercise())
+
+
+def test_delete_with_section_highlight_applies_to_selected_generated_phrase() -> None:
+    app, project = make_sectioned_app(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ],
+        generated_indices={0},
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "shift+up", "x")
+            assert isinstance(app.screen, SaveChangesDialog)
+            assert app.screen.copy_lines == ["Delete 1 generated sound segment?"]
+
+            await pilot.press("y")
+            await pilot.pause()
+            assert project.sound_segments.deleted_index_batches == [{0}]
+
+    run(exercise())
+
+
 def run(coroutine) -> None:
     asyncio.run(coroutine)
 
