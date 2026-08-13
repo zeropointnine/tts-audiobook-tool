@@ -219,7 +219,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
     num_files = state.project.sound_segments.num_generated()
     if num_files > 0:
         # First confirm
-        s = f"Replacing project text will cause all {num_files} previously generated sound segment files to be deleted.\n"
+        s = f"Replacing project text will cause all {COL_ERROR}{num_files} {COL_DEFAULT}previously generated sound segment files to be deleted.\n"
         s += "Are you sure? "
         if not ask.ask_confirm(s):
             return False

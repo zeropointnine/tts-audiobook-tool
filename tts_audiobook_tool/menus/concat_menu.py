@@ -220,6 +220,7 @@ class ConcatMenu:
             current_value=state.project.normalization_type,
             default_value=list(NormalizationType)[0],
             on_select=on_select,
+            sublabels=[item.value.description for item in NormalizationType],
             subheading=LOUDNORM_SUBHEADING,
             hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelType.OUTE else None
         )
@@ -446,13 +447,13 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
 chromium_info = get_chromium_info()
 
 LOUDNORM_SUBHEADING = \
-"""Performs an extra pass after concatenation to minimize volume disparities between
-TTS generations. The \"Stronger\" profile is a more aggressive setting, suitable 
-for mobile devices.
+"""Applies a final pass after concatenation to standardize overall loudness and
+control peaks. Choose Stronger for a louder, more consistent presentation on
+mobile devices or in noisy environments.
 """
 
 SUBDIVIDE_SUBHEADING = \
-"""Affects how text is highlighted in the player/reader app.
+"""Affects text highlighting in the player/reader app.
 When False, highlighted text maps directly to the TTS prompts used to generate the sound segments.
 When True, highlighted text is further sub-segmented by phrase (Requires \"speech-to-text validation\" 
 to be enabled during TTS sound generation).

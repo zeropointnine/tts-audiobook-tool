@@ -97,13 +97,35 @@ class ConcreteSegment(Segment):
 class NormalizationSpecs(NamedTuple):
     id: str
     label: str
+    description: str
     i: float
     lra: float
     tp: float
 
-NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(id="default", label="ACX standard", i=-19.0, lra=9.0, tp=-3.0) # Values approximate 'ACX standard'
-NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(id="stronger", label="Stronger", i=-17.0, lra=7.0, tp=-2.5)
-NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(id="none", label="Disabled", i=0, lra=0, tp=0)
+NORMALIZATION_SPECS_DEFAULT = NormalizationSpecs(
+    id="default",
+    label="ACX standard",
+    description="Approximates ACX loudness and peak requirements for conventional audiobook delivery",
+    i=-19.0,
+    lra=9.0,
+    tp=-3.0,
+)
+NORMALIZATION_SPECS_STRONGER = NormalizationSpecs(
+    id="stronger",
+    label="Stronger",
+    description="Produces louder, more tightly controlled audio for mobile and noisy environments",
+    i=-16.0,
+    lra=6.0,
+    tp=-2.5,
+)
+NORMALIZATION_SPECS_DISABLED = NormalizationSpecs(
+    id="none",
+    label="Disabled",
+    description="Skips final loudness normalization",
+    i=0,
+    lra=0,
+    tp=0,
+)
 
 class NormalizationType(Enum):
     DEFAULT = NORMALIZATION_SPECS_DEFAULT
