@@ -147,12 +147,9 @@ class Start:
         
         new_packages = [
             "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", 
-            "pydantic", "requests", "text_to_num", "ebooklib", "bs4", "httpx", "textual"
+            "pydantic", "requests", "text_to_num", "ebooklib", "bs4", "httpx", "textual",
+            "LavaSR"
         ]
-
-        # win32 + linux
-        if sys.platform in ("win32", "linux"):
-            new_packages.append("sidon")
 
         # apple silicon vs not
         is_apple_silicon = ("darwin" and platform.machine() == "arm64")

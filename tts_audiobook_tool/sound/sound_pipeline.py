@@ -11,6 +11,7 @@ from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.reason_pauses import ReasonPauses
+from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
@@ -105,7 +106,7 @@ class SoundPipeline:
         sound = result
 
         if use_upsampler:
-            result = SoundPipeline.apply_sidon_upsampling(sound)
+            result = SoundPipeline.apply_lava_sr_upsampling(sound)
             if isinstance(result, str):
                 return result
             sound = result
@@ -214,12 +215,13 @@ class SoundPipeline:
         return sound
 
     @staticmethod
-    def apply_sidon_upsampling(sound: Sound) -> Sound | str:
+    def apply_lava_sr_upsampling(sound: Sound) -> Sound | str:
         from tts_audiobook_tool.model_manager import ModelManager
 
-        upsampler = ModelManager.get_sidon_upsampler()
-        assert upsampler
-        result = upsampler.process(sound)
+        upsampler = ModelManager.get_lava_sr_upsampler()
+        if upsampler is None:
+            return "LavaSR v2 upsampler is not installed"
+        result = upsampler.process(sound, denoise=False)
         if isinstance(result, str):
             return result
         return result

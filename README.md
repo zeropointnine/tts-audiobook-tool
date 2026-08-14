@@ -30,7 +30,7 @@ The app employs various techniques to make the nondeterministic output of genera
 - Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
 - Segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
-- EBU R128 loudness normalization plus optional 48 khz [Sidon](https://huggingface.co/spaces/sarulab-speech/sidon_demo_beta) upsampling
+- EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
 It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use. 
 
@@ -74,7 +74,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 - [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a)
 - [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
-- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upsampled to 48khz with Sidon)
+- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upsampled to 48 kHz with LavaSR v2)
 - [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell)
 - [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a)
 - [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a)
@@ -680,6 +680,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 **2026-08-11**
 
+- Replaced Sidon with **[LavaSR v2](https://github.com/ysharma3501/LavaSR)** upscaler, which is better suited to TTS and produces more tonally faithful, consistent output.
+
+**2026-08-11**
+
 - `Generate > Select lines / review sound segments`: Full-screen interface for selecting lines to be queued for generation and for reviewing already-generated sound segments for deletion/quick-regeneration.
 
 **2026-08-05**
@@ -787,19 +791,19 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 - Fish S1-mini and S2-Pro - Added torch compile toggle
 
-**2025-01-26**
+**2026-01-26**
 
 - Added support for [**Qwen3-TTS**](https://github.com/QwenLM/Qwen3-TTS) (Base, CustomVoice, and VoiceDesign models)
 
-**2025-01-23**
+**2026-01-23**
 
 - Added new text segmentation method **"multiple sentences"** (`Text` > `Text segmentation strategy`). Probably the ideal way to chunk text in combination with `max_words_per_segment = 80` when the TTS model can handle long prompts with high accuracy and without speeding up.
 
-**2025-01-21**
+**2026-01-21**
 
 - Added support for **VibeVoice LoRAs** [(recommended trainer)](https://github.com/voicepowered-ai/VibeVoice-finetuning)
 
-**2025-01-18, circa**
+**2026-01-18~**
 
 - **Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).
 
@@ -811,23 +815,23 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 - Added submenu: `Concat` > `Open audiobook file in the player app`
 
-**2025-01-12**
+**2026-01-12**
 
 - Improved per-phrase text segmentation (ie, `Concat` > `Subdivide into phrases`). For pre-existing projects, requires reimporting the source text.
 
 - Prevent some TTS models from mangling the output of prompts starting with **all-caps phrases** (relevant for MiraTTS in particular, plus some others).
 
-**2025-01-10**
+**2026-01-10**
 
 - "Section markers" can now be used for creating **M4B chapters** and player bookmarks (`Concatenate` > `Section markers` > `Mode`)
 
 - Note, app now saves AAC files using `.m4b` suffix instead of `.m4a`.
 
-**2025-01-05**
+**2026-01-05**
 
 - Added option to **add section markers using regular expressions** (thanks @AntitrustEnthusiast).
 
-**2025-01-04**
+**2026-01-04**
 
 - Added support for **Chatterbox-Turbo**.
 

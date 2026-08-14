@@ -1,9 +1,7 @@
-import torch
-
 from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.sound.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.sound.yamnet_detector import YamnetDetector
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
@@ -15,10 +13,10 @@ class ModelManager:
     """
     Multiple-model management utils.
 
-    Including YamnetDetector and SidonModel (which it holds as static instance)
+    Including YamnetDetector and LavaSR v2 (which it holds static instances of)
     """
 
-    sidon_upsampler: SidonUtil | None = None
+    lava_sr_upsampler: LavaSrUtil | None = None
     yamnet_detector: YamnetDetector | None = None
 
 
@@ -125,13 +123,13 @@ class ModelManager:
         return ModelWarmUpResult()
 
     @staticmethod
-    def clear_all_models(except_sidon: bool = False) -> None:
+    def clear_all_models(except_lava_sr: bool = False) -> None:
 
         Stt.clear_stt_model()
         Tts.clear_tts_model()
         ModelManager.clear_yamnet_detector()
-        if not except_sidon:
-            ModelManager.clear_sidon_upsampler()
+        if not except_lava_sr:
+            ModelManager.clear_lava_sr_upsampler()
 
         # For good measure
         app_memory.gc_ram_vram()
@@ -141,7 +139,7 @@ class ModelManager:
         return Stt.has_instance() or \
             Tts.instance_exists() or \
             ModelManager.has_yamnet_detector() or \
-            ModelManager.sidon_upsampler is not None
+            ModelManager.lava_sr_upsampler is not None
 
     @staticmethod
     def get_yamnet_detector() -> YamnetDetector:
@@ -162,19 +160,17 @@ class ModelManager:
             app_memory.gc_ram_vram()
 
     @staticmethod
-    def get_sidon_upsampler() -> SidonUtil | None:
-        if not torch.cuda.is_available():
+    def get_lava_sr_upsampler() -> LavaSrUtil | None:
+        if not LavaSrUtil.has_lava_sr():
             return None
-        if not SidonUtil.has_sidon():
-            return None
-        if ModelManager.sidon_upsampler is None:
-            print_init("Initializing Sidon upsampler (CUDA)...")
-            ModelManager.sidon_upsampler = SidonUtil()
-        return ModelManager.sidon_upsampler
+        if ModelManager.lava_sr_upsampler is None:
+            print_init("Initializing LavaSR v2 upsampler...")
+            ModelManager.lava_sr_upsampler = LavaSrUtil()
+        return ModelManager.lava_sr_upsampler
 
     @staticmethod
-    def clear_sidon_upsampler() -> None:
-        if ModelManager.sidon_upsampler is not None:
-            ModelManager.sidon_upsampler.kill()
-            ModelManager.sidon_upsampler = None
-            app_memory.gc_ram_vram()
+    def clear_lava_sr_upsampler() -> None:
+        upsampler = ModelManager.lava_sr_upsampler
+        ModelManager.lava_sr_upsampler = None
+        if upsampler is not None:
+            upsampler.kill()

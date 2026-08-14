@@ -1,5 +1,3 @@
-import torch
-
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType
 from tts_audiobook_tool import ask
@@ -15,7 +13,7 @@ from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
-from tts_audiobook_tool.sound.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.browser import (
     get_chromium_info,
@@ -127,17 +125,16 @@ class ConcatMenu:
                 )
             )
 
-            if torch.cuda.is_available() and SidonUtil.has_sidon():
-                items.append(
-                    MenuItem(
-                        lambda _: make_menu_label(
-                            label="Generative upsampling", 
-                            value=state.project.use_upsampler, 
-                            default=PROJECT_DEFAULT_GENERATIVE_UPSAMPLING
-                        ),
-                        lambda _, __: ConcatMenu.upsample_menu(state)
-                    )
+            items.append(
+                MenuItem(
+                    lambda _: make_menu_label(
+                        label="Generative upsampling",
+                        value=state.project.use_upsampler,
+                        default=PROJECT_DEFAULT_GENERATIVE_UPSAMPLING
+                    ),
+                    lambda _, __: ConcatMenu.upsample_menu(state)
                 )
+            )
 
             items.append(
                 MenuItem(
@@ -250,14 +247,18 @@ class ConcatMenu:
     def upsample_menu(state: State) -> None:
         
         def on_select(value: bool) -> None:
+            if value and not LavaSrUtil.has_lava_sr():
+                print_feedback(
+                    "LavaSR v2 is not installed; generative upsampling cannot be enabled",
+                    is_error=True,
+                )
+                return
             state.project.use_upsampler = value
             state.project.save()
             print_feedback(f"Generative upsampling set to: {value}")
 
-        if not torch.cuda.is_available():
-            subheading = "Requires CUDA, which is not available on this system.\n"
-        elif not SidonUtil.has_sidon():
-            subheading = f"{Ansi.ITALICS}Sidon upsampler not installed\n"
+        if not LavaSrUtil.has_lava_sr():
+            subheading = f"{Ansi.ITALICS}LavaSR v2 upsampler not installed\n"
         else: 
             subheading = UPSAMPLE_SUBHEADING
 
@@ -419,6 +420,9 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
     printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
     inp = ask.ask()
 
+    if not inp:
+        return None
+
     if inp == "all" or inp == "a":
         indices = [info.output_index for info in infos if info.num_files_exist > 0]
         if not indices:
@@ -488,6 +492,8 @@ Applies to audiobook export, realtime playback, voice chat, and the standalone s
 """
 
 UPSAMPLE_SUBHEADING = \
-"""Uses Sidon generative model to upsample audio to 48kHz.
-Enhances audio quality and clarity; affects timbre and tonality.
+"""Uses LavaSR v2 to enhance speech and generate higher-frequency detail, 
+producing 48 kHz audio.
+
+FLAC output is recommended to preserve the generated detail.
 """

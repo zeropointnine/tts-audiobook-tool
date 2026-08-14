@@ -22,7 +22,7 @@ from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
-from tts_audiobook_tool.sound.sidon_util import SidonUtil
+from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
@@ -66,24 +66,26 @@ class ConcatUtil:
         `file_cut_indices` and `bookmark_indices` are mutually exclusive.
         """
 
+        app_support.log_unload_memory_snapshot("right before concatenation")
+
         if file_cut_indices and bookmark_indices:
             raise ValueError(f"file_cut_indices and bookmark_indices are mutually exclusive: {file_cut_indices} vs {bookmark_indices}")
 
         start_time = time.time()
         
         # Preflight checks
-        if state.project.use_upsampler:
-            import torch
-            if not torch.cuda.is_available():
-                printt(f"{COL_DIM_ITALICS}Warning: Sidon enabled but CUDA not available")
-                printt()
-            if not SidonUtil.has_sidon():
-                printt(f"{COL_DIM_ITALICS}Warning: Sidon enabled but Sidon library not installed")
-                printt()
-        if state.project.use_upsampler and ModelManager.is_any_model_loaded():
+        lava_sr_available = LavaSrUtil.has_lava_sr()
+        use_upsampler = state.project.use_upsampler and lava_sr_available
+        if state.project.use_upsampler and not lava_sr_available:
+            printt(
+                f"{COL_DIM_ITALICS}Warning: LavaSR v2 upsampling is enabled, "
+                "but LavaSR is not installed. Continuing without upsampling."
+            )
+            printt()
+        if use_upsampler and ModelManager.is_any_model_loaded():
             printt(f"{COL_DIM_ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
             printt()
-            ModelManager.clear_all_models(except_sidon=True)
+            ModelManager.clear_all_models(except_lava_sr=True)
 
         # Make subdir
         subdir = datetime.now().strftime("%y%m%d_%H%M%S") # eg, 260518_120811
@@ -128,9 +130,11 @@ class ConcatUtil:
                 index_start=index_start,
                 index_end=index_end,
                 bookmark_indices=bookmark_indices,
-                stem_path=dest_stem_path
+                stem_path=dest_stem_path,
+                use_upsampler=use_upsampler,
             )
             if err:
+                ModelManager.clear_lava_sr_upsampler()
                 printt()
                 ask.ask_error(err)
                 return
@@ -145,7 +149,9 @@ class ConcatUtil:
         printt(f"Finished{COL_DIM} (elapsed: {elapsed})")
         printt()
 
-        ModelManager.clear_sidon_upsampler()
+        app_support.log_unload_memory_snapshot("upscale operation finished")
+        ModelManager.clear_lava_sr_upsampler()
+        app_support.log_unload_memory_snapshot("clear_lava_sr_upsampler finished")
 
         app_hint_util.show_player_hint(state.prefs)
 
@@ -162,7 +168,8 @@ class ConcatUtil:
         index_start: int,
         index_end: int,
         bookmark_indices: list[int],
-        stem_path: str
+        stem_path: str,
+        use_upsampler: bool | None = None,
     ) -> tuple[str, str]:
         """
         Creates final output file, full feature flow.
@@ -170,6 +177,9 @@ class ConcatUtil:
         Params:
             index_end: Inclusive
             stem_path: Destination file path w/o file suffix
+            use_upsampler: Whether to upsample concatenated segments. None uses
+                the project's setting; an explicit bool overrides it (for
+                example, after make_files resolves upsampler availability).
         
         Prints to console along the way
         Returns successful file path, error message if any
@@ -227,6 +237,11 @@ class ConcatUtil:
                     
         # [1] Concatenated audio file
 
+        use_upsampler = (
+            state.project.use_upsampler
+            if use_upsampler is None
+            else use_upsampler
+        )
         result = ConcatUtil.concatenate_sound_segments(
             concat_path,
             phrases_and_paths,
@@ -235,7 +250,7 @@ class ConcatUtil:
             high_shelf=high_shelf,
             reason_pauses=state.project.reason_pauses,
             aac_bitrate=state.prefs.aac_bitrate,
-            use_upsampler=state.project.use_upsampler
+            use_upsampler=use_upsampler
         )
         if isinstance(result, str): # is error
             delete_intermediate_files()
