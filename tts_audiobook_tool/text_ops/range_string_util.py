@@ -27,7 +27,7 @@ class RangeStringUtil:
                 else:
                     ints.append(value - 1)
             else:
-                items = RangeStringUtil.parse_range_token(token, num_items)
+                items = RangeStringUtil.parse_range_token(token, num_items, warnings)
                 if not items:
                     warnings.append(f"Bad value: {token}")
                 else:
@@ -78,11 +78,13 @@ class RangeStringUtil:
         return ", ".join(strings)
 
     @staticmethod
-    def parse_range_token(string: str, max_one_indexed: int) -> list[int]:
+    def parse_range_token(string: str, max_one_indexed: int, warnings: list[str] | None = None) -> list[int]:
         """
         Expects a string like "5-10" of one-indexed values. Or, "-5" or "5-".
         Returns zero-indexed list of expanded ints.
         Or empty string on parse error.
+        Range ends above max_one_indexed are clamped and reported as a warning
+        (when `warnings` is provided).
         """
         if not string:
             return []
@@ -97,6 +99,8 @@ class RangeStringUtil:
                 return []
             if value > max_one_indexed:
                 value = max_one_indexed
+                if warnings is not None:
+                    warnings.append(f"Clamped range end to {max_one_indexed}")
             return [i for i in range(0, value)]
 
         # All ints from n to max (eg, "5-")
@@ -127,6 +131,8 @@ class RangeStringUtil:
             return []
         if b > max_one_indexed:
             b = max_one_indexed
+            if warnings is not None:
+                warnings.append(f"Clamped range end to {max_one_indexed}")
         a -= 1
         b -= 1
         return [i for i in range(a, b + 1)]

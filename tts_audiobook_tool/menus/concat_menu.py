@@ -11,6 +11,7 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
@@ -51,7 +52,7 @@ class ConcatMenu:
             num_markers = len(state.project.markers)
             if num_markers > 0:
                 items_noun = make_noun('item', 'items', num_markers)
-                num_files = num_markers + 1
+                num_files = len(make_file_line_ranges(state.project.markers, len(state.project.phrase_groups)))
                 files_noun = make_noun('file', 'files', num_files)
                 value = make_currently_string(f"{num_markers} {items_noun} = {num_files} {files_noun}")
             else:
@@ -116,9 +117,8 @@ class ConcatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
-                        label="Loudness normalization", 
+                        label="Loudness normalization",
                         value=state.project.normalization_type.value.label,
-                        default=NormalizationType.DEFAULT.value.label
                     ),
                     lambda _, __: ConcatMenu.normalization_menu(state),
                     superlabel="Post-processing options"
@@ -130,7 +130,6 @@ class ConcatMenu:
                     lambda _: make_menu_label(
                         label="Generative upsampling",
                         value=state.project.use_upsampler,
-                        default=PROJECT_DEFAULT_GENERATIVE_UPSAMPLING
                     ),
                     lambda _, __: ConcatMenu.upsample_menu(state)
                 )
@@ -139,9 +138,8 @@ class ConcatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label(
-                        label="Treble lift", 
+                        label="Treble lift",
                         value=state.project.get_high_shelf().id,
-                        default=PROJECT_DEFAULT_HIGH_SHELF_EQ.id
                     ),
                     lambda _, __: ConcatMenu.high_shelf_menu(state)
                 )
@@ -261,6 +259,8 @@ class ConcatMenu:
             subheading = f"{Ansi.ITALICS}LavaSR v2 upsampler not installed\n"
         else: 
             subheading = UPSAMPLE_SUBHEADING
+            link = text_util.make_terminal_hyperlink(LAVA_SR_PROJECT_URL, "LavaSR")
+            subheading = subheading.replace("%1", link)
 
         MenuUtil.options_menu(
             state=state,
@@ -299,7 +299,7 @@ class ConcatMenu:
         def on_select(value: bool) -> None:
             state.project.use_break_sound_effect = value
             state.project.save()
-            print_feedback(f"Set to:", value)
+            print_feedback(f"Set to: {value}")
 
         MenuUtil.options_menu(
             state=state,
@@ -492,7 +492,7 @@ Applies to audiobook export, realtime playback, voice chat, and the standalone s
 """
 
 UPSAMPLE_SUBHEADING = \
-"""Uses LavaSR v2 to enhance speech and generate higher-frequency detail, 
+"""Uses %1 to enhance speech and generate higher-frequency detail, 
 producing 48 kHz audio.
 
 FLAC output is recommended to preserve the generated detail.

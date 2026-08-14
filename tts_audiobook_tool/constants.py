@@ -149,6 +149,8 @@ VOICE_ADVANCED_SUPERLABEL = "Advanced:"
 
 SGL_OMNI_URL_DEFAULT = "http://localhost:8000"
 
+LAVA_SR_PROJECT_URL = "https://github.com/ysharma3501/LavaSR"
+
 OPT_IN_INSTRUCTIONS = (
     "[1] Visit %1\n"
     "    and authorize access using a logged-in Hugging Face account.\n"

@@ -1,5 +1,7 @@
 # Project Spec v2
 
+Last updated: 2026-08-14
+
 ## Purpose
 
 This document describes:
@@ -15,10 +17,29 @@ PROJECT_SPEC_VERSION = 2
 
 The behavior described here is implemented primarily in:
 
-- `tts_audiobook_tool/project.py`
-- `tts_audiobook_tool/project_support/project_util.py`
+- `tts_audiobook_tool/project.py` — `Project` model and in-memory normalization
+- `tts_audiobook_tool/project_support/project_load_util.py` — load/migration
+  orchestration (`ProjectLoadUtil.load_using_dir_path`, `remap_legacy_keys`)
+- `tts_audiobook_tool/project_support/project_serialization_util.py` — loaded-dict
+  normalization (`normalize_loaded_project_dict`) and canonical settings
+  serialization (`to_project_json_dict`)
+- `tts_audiobook_tool/project_support/project_text_io_util.py` —
+  `project_text.json` persistence (`ProjectTextIOUtil.save_book`)
+- `tts_audiobook_tool/project_support/project_book_util.py` — book ↔ flat
+  compatibility bridging (`ProjectBookUtil`)
 - `tts_audiobook_tool/app_types/book_serialization.py`
+- `tts_audiobook_tool/app_types/__init__.py` — `Book`, `BookSection`,
+  `BookSegmentationSettings`, `VoiceSelectMode`, and other shared structural
+  types
+- `tts_audiobook_tool/app_support/JsonSaveUtil.py` — atomic, locked persistence
+  of the JSON artifacts
+- `tts_audiobook_tool/project_support/project_transfer_util.py` — supporting
+  project files (raw text, imported EPUB) during clone/transfer
 - `tests/test_project_book_integration.py`
+
+`ProjectUtil` (`tts_audiobook_tool/project_support/project_util.py`) remains the
+public entry point, but its load/migration methods now delegate to
+`ProjectLoadUtil`.
 
 ---
 
@@ -29,7 +50,14 @@ Project spec v2 introduced a **storage split**: project settings remain in
 
 The current `project_text.json` format is `book.v2`. It adds a `voice_index`
 to each phrase group so different groups can be associated with different
-voices or voice-clone samples. The default voice index is `-1`.
+entries of a model's voice-clone sample list. The default voice index is `-1`.
+
+This field is the storage-side counterpart of the `voice_select_mode` project
+setting (`VoiceSelectMode` in `tts_audiobook_tool/app_types/__init__.py`):
+
+- `user_defined` — each phrase group's `voice_index` selects its voice sample
+- `auto_advance` — the sample cycles in order on each batch generation
+- `disabled` — the first sample is used for every generation
 
 ### Version 1
 
@@ -60,13 +88,16 @@ This is stated directly in `Project`:
 
 Under v2, `project.json` is the settings file. It stores values such as:
 
+- `dir_path`
 - `version`
 - `language_code`
 - segmentation options such as `segmentation_strategy` and `max_words`
 - generation options such as `generate_range`
 - section markers in `markers`
 - export and post-processing settings
-- model-specific settings for the active TTS backends
+- `voice_select_mode`
+- model-specific settings for **every** supported TTS backend (not just the
+  active one); `to_project_json_dict` always serializes all model blocks
 
 It does **not** canonically store the full phrase-group text payload anymore.
 
@@ -110,6 +141,20 @@ The preferred current format is:
 
 This format is produced by `book_to_project_text_json_dict(...)` in
 `tts_audiobook_tool/app_types/book_serialization.py`.
+
+### Optional sidecar text files
+
+Projects may also carry additional text-related files in the project
+directory. They are not part of the canonical two-file split, but they are
+persisted alongside it and are treated as "supporting project files" by
+`ProjectTransferUtil` when a project is cloned or transferred:
+
+- `project_text_raw.txt` — the raw source text before segmentation. Written by
+  `ProjectTextIOUtil.set_phrase_groups_and_save` /
+  `set_phrase_groups_chapters_and_save`, readable via
+  `ProjectTextIOUtil.load_raw_text`
+- `project_text.epub` — a copy of the imported EPUB, written by
+  `EpubExtractor.copy_epub_to_project`
 
 ---
 
@@ -191,18 +236,49 @@ These are still read for compatibility, especially when reconstructing a `Book`
 from legacy phrase-group data, but they are not part of the preferred canonical
 saved shape once `book.v2` text data is available.
 
+### Voice-clone fields use hybrid string/list serialization
+
+Multi-voice-sample support changed how voice-clone fields are stored in
+`project.json`. In memory every voice-clone field is a `list[str]`, but on save
+the fields serialize to the legacy string shape when zero or one sample is
+configured, and to a JSON list only when multiple samples exist:
+
+- 0 samples → `""`
+- 1 sample → `"sample.flac"` (string, legacy shape)
+- 2+ samples → `["one.flac", "two.flac"]`
+
+This is implemented in
+`ProjectSerializationUtil.serialize_voice_list_value(...)`, with the
+applicable fields listed in `ProjectSerializationUtil.VOICE_LIST_FIELD_ALIASES`.
+On load, `normalize_voice_list_value(...)` coerces either shape back to a list,
+and legacy alias keys (e.g. `fish_s1_voice_text` for
+`fish_s1_voice_transcript`) are normalized in the same pass.
+
+The hybrid shape keeps old projects compatible while allowing new projects to
+store multiple voice-clone samples per model.
+
 ### Some model keys are remapped on load
 
-`ProjectUtil.remap_legacy_keys(...)` normalizes some older field names, for
+`ProjectUtil.remap_legacy_keys(...)` (implemented in
+`ProjectLoadUtil.remap_legacy_keys`) normalizes some older field names, for
 example:
 
 - `fish_voice_file_name` → `fish_s1_voice_file_name`
 - `fish_voice_text` → `fish_s1_voice_text`
 - `fish_temperature` → `fish_s1_temperature`
 - `fish_seed` → `fish_s1_seed`
+- `higgs_v3_voice_text` → `higgs_v3_voice_transcript`
 - `vibevoice_model_path` → `vibevoice_target`
 - `qwen3_path_or_id` → `qwen3_target`
 - `indextts2_emo_voice_alpha` → `indextts2_emo_alpha` when applicable
+
+MOSS flat sampling fields are also split during normalization (in
+`ProjectSerializationUtil.normalize_loaded_project_dict` rather than
+`remap_legacy_keys`):
+
+- `moss_temperature` → `moss_delay_temperature`
+- `moss_top_p` → `moss_delay_top_p`
+- `moss_top_k` → `moss_delay_top_k`
 
 These are part of compatibility handling rather than the central v2 storage
 change, but they are part of how older projects are normalized.
@@ -233,15 +309,36 @@ book model.
 
 ### Flat compatibility is still preserved
 
-The `Project` model still keeps compatibility access to flat phrase-group data,
-for example through:
+Flat phrase-group access is still preserved for older flows:
 
-- `phrase_groups`
-- `get_flat_phrase_groups()`
-- `get_section_start_indices()`
+- `phrase_groups` is a `Project` property backed by the book's phrase groups
+- `ProjectBookUtil.get_flat_phrase_groups(project)` returns the flat
+  phrase-group list
+- `ProjectBookUtil.get_section_start_indices(project)` returns the section
+  start indices (from `book` when present, falling back to `markers`)
 
 This allows older flows to remain functional while the canonical persisted shape
 uses structured book text.
+
+---
+
+## Save mechanics: explicit save via JsonSaveUtil
+
+Project changes remain in memory until `save()` is called explicitly; there is
+no auto-save. `project.save()` and `ProjectTextIOUtil.save_book` both persist
+through `JsonSaveUtil.save(...)` in
+`tts_audiobook_tool/app_support/JsonSaveUtil.py`, which:
+
+- serializes the full payload in memory before touching disk, so a failed
+  payload build can never truncate a valid file
+- writes to a uniquely named temp sibling, flushes, and `fsync`s before
+  atomically replacing the destination via `os.replace`
+- holds a reentrant, artifact-specific lock (`JsonArtifactType.PROJECT` vs
+  `PROJECT_TEXT`) so concurrent saves of the same artifact cannot interleave
+
+`Project.save()` also normalizes `version` to the current
+`PROJECT_SPEC_VERSION` and coerces an invalid `chapter_mode` while holding the
+save lock, so every rewrite produces a canonical `project.json`.
 
 ---
 
@@ -255,7 +352,10 @@ The main entry point is:
 ProjectUtil.load_using_dir_path(dir_path)
 ```
 
-That method, together with `Project.model_validate(...)`, performs detection,
+`ProjectUtil.load_using_dir_path` delegates to
+`ProjectLoadUtil.load_using_dir_path` in
+`tts_audiobook_tool/project_support/project_load_util.py`. That method,
+together with `Project.model_validate(...)`, performs detection,
 normalization, and rewrite-to-canonical-format when needed.
 
 ### Step 1: load `project.json`
@@ -334,11 +434,13 @@ This is what actually performs migration on disk.
 
 ### 1. Inline text in `project.json`
 
-If legacy text was found inline in `project.json`, the app saves the project with
-`force_phrase_groups=True`.
+If legacy text was found inline in `project.json`,
+`ProjectLoadUtil.load_using_dir_path` calls `ProjectTextIOUtil.save_book(project)`
+followed by `project.save()`.
 
-That causes the text payload to be written out to `project_text.json`, and the
-project becomes normalized to the split-file v2 layout.
+That writes the text payload out to `project_text.json` and re-saves
+`project.json` without the inline text, normalizing the project to the
+split-file v2 layout.
 
 Effectively:
 
@@ -360,8 +462,10 @@ This covers:
 ### 3. Already using `book.v2`, but still carrying stale legacy fields
 
 If text is already stored as `book.v2` but `project.json` still contains old
-`applied_*` fields, the loader rewrites `project.json` to remove those stale
-compatibility fields.
+`applied_*` fields, the loader re-saves the project. The fields are not removed
+by any explicit deletion: `ProjectSerializationUtil.to_project_json_dict`
+simply never serializes them, so the rewritten `project.json` no longer
+contains them.
 
 This keeps the persisted project shape canonical even if the project had already
 partly migrated in an earlier app version.
@@ -398,6 +502,10 @@ This split is the defining feature of project spec v2.
   are removed from canonical `project.json`
 - projects loaded from legacy flat phrase groups still preserve flat
   compatibility behavior in memory
+- legacy single-string voice values load as lists and round-trip back to the
+  string shape, while multi-sample voice lists serialize as JSON lists
+- `voice_select_mode` and per-model voice-clone settings normalize on load and
+  serialize on save
 
 These tests are the best executable reference for expected migration behavior.
 
@@ -412,6 +520,8 @@ For example, the EPUB architecture documentation notes that:
 - segmented text is serialized as `project_text.json`
 - chapter boundaries are serialized as `markers` in `project.json`
 - the structured text model remains separate from the general settings model
+- the raw source text (`project_text_raw.txt`) and the imported EPUB itself
+  (`project_text.epub`) are kept in the project directory as sidecar files
 
 This separation is part of why the v2 spec is useful: text/book structure can
 evolve independently from the rest of the project settings payload.
@@ -423,8 +533,11 @@ evolve independently from the rest of the project settings payload.
 Project spec v2 changes the project from a mostly single-file format into a
 split format:
 
-- `project.json` for settings and metadata
-- `project_text.json` for text/book content
+- `project.json` for settings and metadata (including multi-sample voice-clone
+  lists and `voice_select_mode`)
+- `project_text.json` for text/book content (with per-phrase-group
+  `voice_index`)
+- optional sidecars: `project_text_raw.txt` and `project_text.epub`
 
 Migration is automatic and load-driven:
 

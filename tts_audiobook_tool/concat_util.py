@@ -455,10 +455,7 @@ class ConcatUtil:
             if (not use_effect
                     and ConcatUtil.PSEUDO_SILENCE_COMPENSATION_ENABLED
                     and next_sound is not None):
-                # get_end_silence returns the *start timestamp* of the trailing
-                # silence (sound.duration - silence_duration), so convert it to a
-                # duration. get_start_silence returns the end time of the initial
-                # silence, which (starting at 0) is already a duration.
+                # FYI, start/end silence measurements not idempotent wrt upsampling vs not
                 end_silence_start = SilenceUtil.get_end_silence(
                     sound,
                     max_seconds=ConcatUtil.PSEUDO_SILENCE_MAX_SECONDS,

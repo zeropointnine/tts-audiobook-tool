@@ -677,6 +677,55 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual([section.title for section in reloaded.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in reloaded.book.sections], [2, 1])
 
+    def test_project_model_validate_drops_markers_when_any_equal_phrase_group_count(self):
+        phrase_groups = [
+            self.make_phrase_group("One."),
+            self.make_phrase_group("Two."),
+            self.make_phrase_group("Three."),
+        ]
+
+        project = Project.model_validate({
+            "phrase_groups": phrase_groups,
+            "markers": [2, 3],
+            "applied_language_code": "en",
+            "applied_strategy": "multi",
+            "applied_max_words": 80,
+        })
+
+        self.assertEqual(project.markers, [])
+
+    def test_project_model_validate_deduplicates_and_sorts_markers(self):
+        phrase_groups = [
+            self.make_phrase_group(f"Line {i}.")
+            for i in range(1, 6)
+        ]
+
+        project = Project.model_validate({
+            "phrase_groups": phrase_groups,
+            "markers": [3, 1, 3],
+            "applied_language_code": "en",
+            "applied_strategy": "multi",
+            "applied_max_words": 80,
+        })
+
+        self.assertEqual(project.markers, [1, 3])
+
+    def test_project_model_validate_accepts_marker_zero(self):
+        phrase_groups = [
+            self.make_phrase_group("One."),
+            self.make_phrase_group("Two."),
+        ]
+
+        project = Project.model_validate({
+            "phrase_groups": phrase_groups,
+            "markers": [0, 1],
+            "applied_language_code": "en",
+            "applied_strategy": "multi",
+            "applied_max_words": 80,
+        })
+
+        self.assertEqual(project.markers, [0, 1])
+
 
 if __name__ == "__main__":
     unittest.main()

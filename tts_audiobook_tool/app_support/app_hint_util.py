@@ -57,7 +57,7 @@ def show_player_hint(prefs: Prefs) -> None:
     else:
         browser_path = "browser_player" + os.path.sep + "index.html"
     s += browser_path + "\n"
-    s += "or on the web here:" + "\n"
+    s += "or on the web:" + "\n"
     s += PLAYER_URL
 
     hint = Hint(key="player", heading="Reminder", text=s)

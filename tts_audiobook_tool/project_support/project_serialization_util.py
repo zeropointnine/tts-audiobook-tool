@@ -232,12 +232,15 @@ class ProjectSerializationUtil:
             lst = d['markers']
             if isinstance(lst, list):
                 is_valid = all(
-                    isinstance(idx, int) and 0 <= idx <= len(phrase_groups)
+                    isinstance(idx, int) and not isinstance(idx, bool)
+                    and 0 <= idx < len(phrase_groups)
                     for idx in lst
                 )
                 if not is_valid:
                     printt(f"File cut points invalid: {lst}")
                     d['markers'] = []
+                else:
+                    d['markers'] = sorted(set(lst))
             else:
                 d['markers'] = []
 

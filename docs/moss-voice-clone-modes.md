@@ -2,7 +2,7 @@
 
 This note analyzes the MOSS voice clone modes used by the audiobook tool, especially whether `MossVoiceCloneMode.CONTINUATION` is a forced adaptation for single-speaker audiobook generation or a justifiably interesting experiment.
 
-These experiments are based on the `OpenMOSS-Team/MOSS-TTS-v1.5` model. A separate round of experimentation may be useful later with `OpenMOSS-Team/MOSS-TTS-Local-Transformer`, but the observations in this note should not be assumed to apply unchanged to that checkpoint.
+These experiments are based on the `OpenMOSS-Team/MOSS-TTS-v1.5` model. A separate round of experimentation may be useful later with `OpenMOSS-Team/MOSS-TTS-Local-Transformer`.
 
 ## Summary
 
