@@ -55,10 +55,10 @@ def book_from_json_dict(value: Any) -> Book | str:
         return "Book missing or invalid 'sections'"
 
     sections: list[BookSection] = []
-    for raw_section in raw_sections:
+    for section_index, raw_section in enumerate(raw_sections):
         section = section_from_json_dict(raw_section)
         if isinstance(section, str):
-            return section
+            return f"Book section {section_index + 1}: {section}"
         sections.append(section)
 
     return Book(

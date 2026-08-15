@@ -63,14 +63,14 @@ class PhraseGrouper:
     def group_to_groups_by_max_words(group: PhraseGroup, max_words: int) -> list[PhraseGroup]:
         """
         Breaks up a PhraseGroup into multiple groups if its num_words > max_words.
-        Assumes all phrases' num_words <= max_words
+        A phrase which already exceeds max_words remains in its own non-empty group.
         """
         result = []
         temp_group = PhraseGroup()
 
         for phrase in group.phrases:
 
-            if temp_group.num_words + phrase.num_words > max_words:
+            if temp_group.phrases and temp_group.num_words + phrase.num_words > max_words:
                 result.append(temp_group)
                 temp_group = PhraseGroup()
 

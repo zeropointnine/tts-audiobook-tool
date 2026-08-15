@@ -1,6 +1,7 @@
 import unittest
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 
 
@@ -33,6 +34,18 @@ class TestPhraseGrouper(unittest.TestCase):
         groups = PhraseGrouper.text_to_groups(text, 20, SegmentationStrategy.MAX_LEN, "en")
 
         self.assertEqual([group.text for group in groups], ["One two. Three four.\n", "Next part here."])
+
+    def test_oversized_first_phrase_does_not_create_empty_group(self):
+        oversized_phrase = Phrase("one two three four five", Reason.SENTENCE)
+
+        groups = PhraseGrouper.group_to_groups_by_max_words(
+            PhraseGroup([oversized_phrase]),
+            max_words=4,
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].phrases, [oversized_phrase])
+        self.assertEqual(groups[0].text, oversized_phrase.text)
 
     def test_text_ingestion_normalizes_line_endings_and_trailing_whitespace(self):
         text = (

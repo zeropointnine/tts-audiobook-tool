@@ -157,6 +157,23 @@ class TestBookSerialization(unittest.TestCase):
         assert isinstance(result, str)
         self.assertIn("missing 'book'", result)
 
+    def test_book_v2_rejects_empty_phrase_group_with_specific_error(self):
+        payload = {
+            "format": "book.v2",
+            "book": {
+                "sections": [{
+                    "phrase_groups": [{"voice_index": -1, "phrases": []}],
+                }],
+            },
+        }
+
+        result = book_from_project_text_json_dict(payload)
+
+        self.assertEqual(
+            result,
+            "Book section 1: Phrase group 1 contains no phrases",
+        )
+
     def test_save_and_load_book_project_text_file(self):
         book = Book(
             title="File Round Trip",

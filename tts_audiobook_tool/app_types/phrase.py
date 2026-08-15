@@ -57,8 +57,10 @@ class Phrase:
     @staticmethod
     def phrases_from_json_dicts(list_of_dicts: list[dict]) -> list[Phrase] | str:
 
-        if not list_of_dicts or not isinstance(list_of_dicts, list):
-            return f"bad type: {list_of_dicts}"
+        if not isinstance(list_of_dicts, list):
+            return f"Expected phrase list. Value: {list_of_dicts}"
+        if not list_of_dicts:
+            return "Phrase list contains no phrases"
 
         result = []
 
@@ -155,7 +157,7 @@ class PhraseGroup:
 
         text_groups = []
 
-        for value in values:
+        for group_index, value in enumerate(values):
             if isinstance(value, dict):
                 if "phrases" not in value:
                     return f"Phrase group missing 'phrases': {value}"
@@ -174,6 +176,17 @@ class PhraseGroup:
 
             if not isinstance(phrase_dicts, list):
                 return f"Expected phrase list: {phrase_dicts}"
+            if not phrase_dicts:
+                # INTERNAL:
+                # From November 2025 through August 2026, the phrase grouper could
+                # emit an empty group when its first phrase already exceeded max_words.
+                # One trigger was post-split merging of ornamental/non-vocalizable
+                # lines, which could grow a phrase beyond the limit after splitting.
+                #
+                # An empty phrase group is fatal because project line indices are tied to
+                # generated audio and metadata. Do not drop, merge, or synthesize content
+                # here; those remediations can silently alter index identity or book text.
+                return f"Phrase group {group_index + 1} contains no phrases"
 
             result = Phrase.phrases_from_json_dicts(phrase_dicts)
             if isinstance(result, str):
