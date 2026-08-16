@@ -1,14 +1,26 @@
+"""
+Coordinates and drives TTS playback in "real time".
+Manages output buffer growth, validate-and-retry handling,
+intra-segment pauses, interruption/shutdown behavior.
+
+Similar to `GenerateUtil.generate_files()` but outputs to sound device instead of to files.
+
+Is blocking.
+"""
+
 import time
 
 import numpy as np
-from tts_audiobook_tool import app_support, text_util
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Sound, SttVariant
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
+from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool import readiness
+from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -21,16 +33,6 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import ValidationResult
-
-"""
-Coordinates and drives TTS playback in "real time".
-Manages output buffer growth, validate-and-retry handling,
-intra-segment pauses, interruption/shutdown behavior.
-
-Similar to `GenerateUtil.generate_files()` but outputs to sound device instead of to files.
-
-Is blocking.
-"""
 
 def start(
         state: State,
@@ -85,18 +87,28 @@ def start(
     Interrupts().set("generating")
     did_interrupt = False
     stream = None
-    count = 0
     consecutive_model_errors = 0
     max_consecutive_model_errors = 5
 
     start_index, end_index = line_range
     start_index -= 1
     end_index -= 1
+    # line_range is one-indexed; defensively clamp a 0 start so we don't
+    # wrap to the last group via negative indexing
+    start_index = max(start_index, 0)
     start_time = time.time()
 
-    for one_second in range(start_index, end_index + 1):
+    section_start_indices = set(ProjectBookUtil.get_section_start_indices(state.project))
 
+    for index in range(start_index, end_index + 1):
+
+        # Pick up any Ctrl-C pressed during the previous iteration's
+        # inter-segment gap (sound prep, buffer print, throttle sleep);
+        # generate_full_flow()'s set("generating") would otherwise reset the
+        # pending flag and silently swallow the interrupt.
+        did_interrupt = did_interrupt or Interrupts().did_interrupt
         if did_interrupt:
+            Tts.clear_continuation()
             break
 
         if not showed_vram_warning:
@@ -105,14 +117,14 @@ def start(
                 print("\a", end="")
                 showed_vram_warning = True
 
-        phrase_group = phrase_groups[one_second]
+        phrase_group = phrase_groups[index]
         phrase = phrase_group.as_flattened_phrase()
 
         printt()
         GenerateUtil.print_batch_heading(
-            indices=[one_second],
-            num_complete=one_second - start_index,
-            num_remaining=end_index + 1 - one_second,
+            indices=[index],
+            num_complete=index - start_index,
+            num_remaining=end_index + 1 - index,
             num_total=end_index + 1 - start_index,
             start_time=start_time
         )
@@ -125,7 +137,7 @@ def start(
         sound_opt, did_interrupt, consecutive_model_errors = generate_full_flow(
             state,
             phrase_groups,
-            one_second,
+            index,
             has_runway=has_runway,
             consecutive_model_errors=consecutive_model_errors,
             max_consecutive_model_errors=max_consecutive_model_errors,
@@ -134,11 +146,15 @@ def start(
             # generate_full_flow() clears Interrupts at the end, so re-arm
             # Ctrl-C handling for the outer realtime loop and buffer-throttle sleep.
             Interrupts().set("generating")
+        if did_interrupt:
+            # Interrupt during generation takes priority even if this segment
+            # still produced a sound; break before the throttle sleep so the
+            # flag cannot be clobbered (generate_full_flow() already cleared
+            # the Interrupts state).
+            Tts.clear_continuation()
+            break
         if not sound_opt:
-            if did_interrupt:
-                Tts.clear_continuation()
-                break
-            printt(f"{COL_ERROR}Coun't generate sound{COL_DIM}, continuing to next segment")
+            printt(f"{COL_ERROR}Couldn't generate sound{COL_DIM}, continuing to next segment")
             printt()
             continue
         else:
@@ -157,10 +173,10 @@ def start(
             L.d(f"Trimmed: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (trimmed {trimmed_ms:.0f}ms)")
 
         # Add appended sound
-        if one_second == end_index:
+        if index == end_index:
             appended_sound = None
         else:
-            is_first_in_section = one_second == 0 or one_second in state.project.markers
+            is_first_in_section = index in section_start_indices
             use_sound_effect = SoundPipeline.should_append_break_sound_effect(
                 phrase.reason,
                 use_break_sound_effect=state.project.use_break_sound_effect,
@@ -184,7 +200,14 @@ def start(
         # Start stream lazy
         if not stream:
             stream = SoundDeviceStream()
-            stream.start()
+            if not stream.start():
+                # Abort. Stream is in a not-started state, so no shut_down() is needed; 
+                # skip the buffer-drain prompt.
+                Tts.clear_continuation()
+                Interrupts().clear()
+                s = "Aborting real-time playback: sound output stream failed to start"
+                print_feedback(s, is_error=True)
+                return
 
         # Add sound to the stream
         stream.add_data(sound.data)
@@ -204,19 +227,19 @@ def start(
         s += f"{duration_string(value, include_tenth=True)}"
         printt(f"Buffer duration: {s}")
 
-        # Sleep if necessary to prevent growing buffer beyond threshold
-        if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS:
-            sleep_duration = int(full_duration)
-            printt(f"{COL_DIM_ITALICS}Sleeping for {sleep_duration}s ...")
-            did_interrupt = sleep_interruptibly(sleep_duration)
-            if did_interrupt:
-                break
-
-        count += 1
-
+        # Pick up an interrupt pressed during sound prep or the buffer print
+        # so we stop before throttling playback further.
+        did_interrupt = did_interrupt or Interrupts().did_interrupt
         if did_interrupt:
             Tts.clear_continuation()
             break
+
+        # Sleep if necessary to prevent growing buffer beyond threshold
+        if stream.buffer_duration > REAL_TIME_BUFFER_MAX_SECONDS and full_duration > 0.0:
+            printt(f"{COL_DIM_ITALICS}Sleeping for {full_duration:.1f}s ...")
+            did_interrupt = did_interrupt or sleep_interruptibly(full_duration)
+            if did_interrupt:
+                break
 
     # Finished
     Interrupts().clear()

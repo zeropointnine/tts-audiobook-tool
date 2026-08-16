@@ -177,16 +177,20 @@ class SoundDeviceStream:
             end = self.total_samples_added
         return start, end
 
-    def start(self) -> None:
+    def start(self) -> bool:
         """
         Starts the audio stream.
 
         If there is no data in the buffer, the stream will start and play silence
         until data is added.
+
+        Returns True if the stream is running afterwards (including if it was
+        already running), False if it failed to start (self.stream stays None;
+        the caller is responsible for shut_down() on failure).
         """
         if self.stream and self.stream.active:
             print("Stream is already running.")
-            return
+            return True
 
         # Create and start the output stream. We assume a mono output (channels=1).
         # Note big block size and latency=high
@@ -205,7 +209,8 @@ class SoundDeviceStream:
                 )
                 self.stream.start()
         except Exception as e:
-            printt(f"{COL_ERROR}Couldn't open sounddevice output stream: {e}")
+            return False
+        return True
 
     def clear_buffer(self) -> None:
         """

@@ -50,7 +50,7 @@ def test_reason_pause_types_have_distinct_ids() -> None:
     assert ReasonPauseTypes.SHORTER.value.label == "Shorter"
     assert ReasonPauseTypes.SHORTER.value.menu_label == "shorter"
     assert ReasonPauseTypes.SHORTER.value.description == (
-        'When using this setting, consider also enabling "Generate > Limit silence gaps"'
+        'Enabling "Generate > Limit silence gaps" works well with this setting'
     )
 
 
