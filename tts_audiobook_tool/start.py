@@ -9,15 +9,12 @@ Application entry-point
 Imports must be staged carefully due to dependency checks, etc.
 """
 
-# --------------------------------------------------------------------------------------------------
-# Must be imported as early as possible or else HF_HUB_CACHE can result in returning a relative path
-# due to unknown import side-effect (possibly from a specific model library?, not sure)
-import os
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
-from huggingface_hub import constants # type: ignore
-# --------------------------------------------------------------------------------------------------
+# Must be imported as early as possible (see that module's docstring)
+# The import is for side effects only (see hf_bootstrap.py)
+import tts_audiobook_tool.hf_bootstrap  # pyright: ignore[reportUnusedImport]
 
 import sys
+from typing import Callable
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import hints
@@ -39,11 +36,60 @@ class Start:
         _parser.add_argument("--server", action="store_true")
         _parser.add_argument("--host", type=str, default="127.0.0.1")
         _parser.add_argument("--port", type=int, default=5001)
+        _parser.add_argument("--project", type=str, default="")
         _args = _parser.parse_args()
 
         self.is_server: bool = _args.server
         self.server_host: str = _args.host
         self.server_port: int = _args.port
+        self.project_path: str = _args.project
+
+    def apply_project_override(self) -> None:
+        """
+        If a `--project` path was given on the command line, validates and applies it.
+
+        Server mode: a valid path is used for this run only (prefs are not updated,
+        and no confirmation prompt is shown); an invalid path prints an error and
+        exits with a non-zero code.
+
+        App mode: a valid path is persisted to prefs (so `State`, which re-loads
+        prefs from disk, picks it up). On an invalid path, prints "Bad project
+        path."; if prefs has a stored project_dir the user is asked whether to keep
+        it (yes keeps the stored path; no exits). If there is no stored path, the
+        user is prompted to press enter, and startup continues with no project.
+        """
+        if not self.project_path:
+            return
+
+        err_message = COL_ERROR + f"{self.project_path} does not appear to be a project directory"
+
+        from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+
+        if self.is_server:
+            if ProjectLoadUtil.is_valid_project_dir(self.project_path):
+                printt(err_message)
+                exit(1)
+            return
+
+        from tts_audiobook_tool import ask
+        from tts_audiobook_tool.prefs import Prefs
+
+        prefs = Prefs.load()
+        resolved, should_continue = resolve_project_override(
+            self.project_path,
+            prefs.project_dir,
+            ProjectLoadUtil.is_valid_project_dir,
+            lambda: printt(err_message),
+            ask.ask_confirm,
+            ask.ask_enter_to_continue,
+        )
+
+        if not should_continue:
+            exit(1)
+
+        if resolved != prefs.project_dir:
+            prefs.project_dir = resolved
+            prefs.save()
 
     def start(self) -> None:
         """ App entrypoint """
@@ -58,6 +104,7 @@ class Start:
         self.exit_on_missing_new_packages()
         
         self.show_startup_hints()
+        self.apply_project_override()
         self.init_logging()
         self.start_app_or_server()
 
@@ -214,7 +261,7 @@ class Start:
         printt()
         if self.is_server:
             from tts_audiobook_tool.server.server import Server
-            Server().run(host=self.server_host, port=self.server_port)
+            Server(project_dir=self.project_path).run(host=self.server_host, port=self.server_port)
         else:
             from tts_audiobook_tool.app import App
             _ = App()
@@ -222,6 +269,45 @@ class Start:
 
 def main() -> None:
     Start().start()
+
+# ---
+
+def resolve_project_override(
+    override_path: str,
+    current_prefs_project_dir: str,
+    is_valid_project_dir: Callable[[str], str],
+    report_invalid: Callable[[], None],
+    confirm: Callable[[str], bool],
+    enter_to_continue: Callable[[], None],
+) -> tuple[str, bool]:
+    """
+    Pure resolution logic for the `--project` CLI override (app mode only;
+    server mode validates directly and exits on failure).
+
+    :param override_path: Path given via `--project`
+    :param current_prefs_project_dir: The `project_dir` currently stored in prefs
+    :param is_valid_project_dir: Validator that returns an error string ("" if valid)
+    :param report_invalid: Called once if the override path is invalid, before any
+                           further user interaction (e.g. to print an error line)
+    :param confirm: Confirmation prompt used to ask whether to keep a stored path
+    :param enter_to_continue: Called when the path is invalid and no stored path
+                              exists, so the user is aware before continuing
+                              without a project
+    :return: `(project_dir_to_persist, should_continue)` — `should_continue` is
+             False when the caller should abort (stored path was declined)
+    """
+    if not is_valid_project_dir(override_path):
+        return (override_path, True)
+
+    report_invalid()
+
+    if not current_prefs_project_dir:
+        enter_to_continue()
+        return ("", True)
+
+    if confirm(f"Do you want to load last used project path ({current_prefs_project_dir})?"):
+        return (current_prefs_project_dir, True)
+    return ("", False)
 
 # ---
 

@@ -67,7 +67,7 @@ class PocketBaseModel(TtsBaseModel):
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
         model_code = project.pocket_model_code or PocketBaseModel.DEFAULT_LANGUAGE
-        return f"{cls.INFO.ui['proper_name']} {COL_DIM}({project.pocket_model_code})"
+        return f"{cls.INFO.ui['proper_name']} {COL_DIM}({model_code})"
 
     @classmethod
     def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:

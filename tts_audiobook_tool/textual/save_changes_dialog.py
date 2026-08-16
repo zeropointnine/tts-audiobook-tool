@@ -44,13 +44,9 @@ class SaveChangesDialog(ModalScreen[ExitDecision]):
     }
 
     .save-changes-copy {
-        height: 1;
-        content-align: center middle;
-    }
-
-    .save-changes-warning {
         height: auto;
-        text-align: center;
+        min-height: 1;
+        content-align: center middle;
     }
 
     #save-changes-buttons {

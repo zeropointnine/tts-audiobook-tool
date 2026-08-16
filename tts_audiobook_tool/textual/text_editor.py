@@ -26,6 +26,7 @@ from tts_audiobook_tool.textual.phrase_group_split_dialog import (
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
+    OptionReconcileItem,
     STYLE_DIM,
 )
 
@@ -215,6 +216,10 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         """Return searchable text from the staged row rather than the Project."""
         return self.list_items[phrase_index].searchable_text
 
+    def option_id(self, index: int) -> str:
+        """Use staged identities so options can survive structural mutations."""
+        return self.stable_option_id(self.list_items[self.phrase_indices[index]])
+
     def content_line_index(self, item_index: int) -> int | None:
         """Map staged phrase rows by current ordinal, excluding section rows."""
         item = self.list_items[item_index]
@@ -233,6 +238,9 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         edit_session = self.edit_session_or_none
         if not result.changed or edit_session is None:
             return
+        old_items_by_id = {
+            self.stable_option_id(item): item for item in self.list_items
+        }
         self.section_items = self.make_section_items_from_session(edit_session)
         self.list_items = self.make_list_items(self.section_items)
         selected_visible_index = next(
@@ -246,10 +254,59 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             ),
             0 if self.list_items else None,
         )
+        # Reconciliation formats against the new projection before the shared
+        # replacement helper installs its final selection state.
+        self.phrase_indices = list(range(len(self.list_items)))
         self.replace_phrase_indices(
-            range(len(self.list_items)),
+            self.phrase_indices,
             selected_visible_index,
+            self.make_mutation_reconcile_items(old_items_by_id),
         )
+
+    @staticmethod
+    def stable_option_id(item: TextEditorListItem) -> str:
+        """Return an option identity which survives ordinal and position changes."""
+        item_kind = (
+            "section" if isinstance(item, TextEditorSectionItem) else "phrase"
+        )
+        return f"text-{item_kind}-{item.item_id}"
+
+    def make_mutation_reconcile_items(
+        self,
+        old_items_by_id: dict[str, TextEditorListItem],
+    ) -> list[OptionReconcileItem]:
+        """Describe changed prompts without reformatting unaffected editor rows."""
+        items: list[OptionReconcileItem] = []
+        for index, item in enumerate(self.list_items):
+            option_id = self.stable_option_id(item)
+            old_item = old_items_by_id.get(option_id)
+            prompt_changed = old_item is None
+            reflow = old_item is None
+            if isinstance(item, TextEditorSectionItem):
+                if not isinstance(old_item, TextEditorSectionItem):
+                    prompt_changed = True
+                    reflow = True
+                elif item.display_text != old_item.display_text:
+                    prompt_changed = True
+                    reflow = True
+            elif not isinstance(old_item, TextEditorPhraseGroupItem):
+                prompt_changed = True
+                reflow = True
+            else:
+                if item.phrase_group is not old_item.phrase_group:
+                    prompt_changed = True
+                    reflow = True
+                elif item.ordinal != old_item.ordinal:
+                    prompt_changed = True
+
+            items.append(
+                (
+                    option_id,
+                    self.format_line(index) if prompt_changed else None,
+                    reflow,
+                )
+            )
+        return items
 
     def action_delete_phrase_groups(self) -> None:
         """Delete phrase rows, or one section when it is the sole selected row."""
@@ -312,7 +369,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         )
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
-        """Warn about generated audio invalidated by the staged text edit."""
+        """Warn about generated audio and markers invalidated by the staged edit."""
         edit_session = self.edit_session_or_none
         if edit_session is None:
             return SaveChangesDialog()
@@ -322,12 +379,28 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         segment_count = len(
             self.project.sound_segments.snapshot_paths_from_index(first_index)
         )
-        if segment_count == 0:
+        marker_count = len(
+            [marker for marker in self.project.markers if marker >= first_index]
+        )
+        if segment_count == 0 and marker_count == 0:
             return SaveChangesDialog()
-        segment_word = "segment" if segment_count == 1 else "segments"
+        deletion_parts: list[str] = []
+        if segment_count > 0:
+            segment_word = "segment" if segment_count == 1 else "segments"
+            deletion_parts.append(
+                f"{segment_count} generated sound {segment_word}"
+            )
+        if marker_count > 0:
+            marker_label = app_text.get_section_marker_label(
+                self.project,
+                is_title_case=False,
+                is_singular=marker_count == 1,
+            )
+            deletion_parts.append(f"{marker_count} {marker_label}")
         warning_text = (
-            f"Saving these changes requires deleting {segment_count} generated sound "
-            f"{segment_word} from line {first_index + 1} onward."
+            f"Saving these changes requires deleting "
+            f"{' and '.join(deletion_parts)} "
+            f"from line {first_index + 1} onward."
         )
         return SaveChangesDialog(
             [

@@ -44,16 +44,19 @@ class PromptItem:
 
 class Server:
 
-    def __init__(self):
+    def __init__(self, project_dir: str = ""):
         
         # Load current project
+        # (project_dir, if non-empty, is a --project CLI override validated at startup)
         prefs = Prefs.load()
         SglOmniUtil.set_base_url(prefs.sgl_omni_url)
-        if not prefs.project_dir:
+        if not project_dir:
+            project_dir = prefs.project_dir
+        if not project_dir:
             printt(f"{COL_ERROR}Active project required")
             printt("Run tts-audiobook-tool and set up a new project. Then re-start the server.")
             exit(0)
-        result = ProjectLoadUtil.load_using_dir_path(prefs.project_dir)
+        result = ProjectLoadUtil.load_using_dir_path(project_dir)
         if isinstance(result, str):
             printt(f"{COL_ERROR}Error: {result}")
             exit(0)

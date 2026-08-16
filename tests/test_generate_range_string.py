@@ -62,18 +62,18 @@ def test_loaded_all_generation_range_uses_legacy_empty_string(value: str) -> Non
     assert project.generate_range_string == ""
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("9-99", set(range(8, 50))),
-        ("-99", set(range(0, 50))),
-    ],
-)
-def test_parse_ranges_string_clamps_range_end_with_warning(value: str, expected: set[int]) -> None:
-    indices, warnings = RangeStringUtil.parse_ranges_string(value, 50)
+def test_parse_ranges_string_clamps_range_end_with_warning() -> None:
+    indices, warnings = RangeStringUtil.parse_ranges_string("9-99", 50)
 
-    assert indices == expected
+    assert indices == set(range(8, 50))
     assert warnings == ["Clamped range end to 50"]
+
+
+def test_parse_ranges_string_rejects_prefix_dash_form() -> None:
+    indices, warnings = RangeStringUtil.parse_ranges_string("-99", 50)
+
+    assert indices == set()
+    assert warnings == ["Bad value: -99"]
 
 
 def test_parse_ranges_string_no_warning_when_range_within_bounds() -> None:

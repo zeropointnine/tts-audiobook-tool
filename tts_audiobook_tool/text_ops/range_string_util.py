@@ -1,15 +1,28 @@
+import re
+
+
+_RANGE_SHAPE_RE = re.compile(r"^(\d+-|\d+-\d+)$")
+
+
 class RangeStringUtil:
 
     @staticmethod
-    def parse_ranges_string(string: str, num_items: int) -> tuple[set[int], list[str]]:
+    def parse_ranges_string(
+        string: str, num_items: int, strict: bool = True
+    ) -> tuple[set[int], list[str]]:
         """
         Expects a comma-delimited list of one-indexed ints and/or int ranges. Eg, "1, 3, 6-8".
         An empty string, "all", or "a" selects every item; "none" selects no items.
-        Returns tuple of zero-indexed index values and warning strings (eg, 1,3,6,7,8)
+        Returns tuple of zero-indexed index values and warning strings (eg, 1,3,6,7,8).
+        In strict mode (the default), out-of-range values are reported as errors,
+        and range ends past num_items are clamped and reported.
+        In lenient mode, out-of-range values are silently clamped or discarded.
+        Syntax errors (eg, "bad") are always reported.
         """
 
         ints = []
         warnings: list[str] = []
+        clamping_sink: list[str] | None = warnings if strict else None
 
         normalized_string = string.strip().lower()
         if not normalized_string or normalized_string in ("all", "a"):
@@ -23,13 +36,21 @@ class RangeStringUtil:
             if token.isdigit():
                 value = int(token)
                 if value < 1 or value > num_items:
-                    warnings.append(f"Out of range: {value}")
+                    if strict:
+                        warnings.append(f"Out of range: {value}")
                 else:
                     ints.append(value - 1)
+            elif token[0] == "-" and not strict:
+                # Lenient mode: negative values are out of range, so discard
+                continue
+            elif _RANGE_SHAPE_RE.fullmatch(token) is None:
+                # Syntactically invalid tokens are always reported
+                warnings.append(f"Bad value: {token}")
             else:
-                items = RangeStringUtil.parse_range_token(token, num_items, warnings)
+                items = RangeStringUtil.parse_range_token(token, num_items, clamping_sink)
                 if not items:
-                    warnings.append(f"Bad value: {token}")
+                    if strict:
+                        warnings.append(f"Bad value: {token}")
                 else:
                     ints.extend(items)
 
@@ -80,7 +101,7 @@ class RangeStringUtil:
     @staticmethod
     def parse_range_token(string: str, max_one_indexed: int, warnings: list[str] | None = None) -> list[int]:
         """
-        Expects a string like "5-10" of one-indexed values. Or, "-5" or "5-".
+        Expects a string like "5-10" of one-indexed values. Or, "5-" for 5 to the end.
         Returns zero-indexed list of expanded ints.
         Or empty string on parse error.
         Range ends above max_one_indexed are clamped and reported as a warning
@@ -88,20 +109,6 @@ class RangeStringUtil:
         """
         if not string:
             return []
-
-        # All ints up to n (eg, "-5")
-        if string[0] == "-":
-            string = string[1:]
-            if not string.isdigit():
-                return []
-            value = int(string)
-            if value < 1:
-                return []
-            if value > max_one_indexed:
-                value = max_one_indexed
-                if warnings is not None:
-                    warnings.append(f"Clamped range end to {max_one_indexed}")
-            return [i for i in range(0, value)]
 
         # All ints from n to max (eg, "5-")
         if string[-1] == "-":
@@ -141,7 +148,7 @@ class RangeStringUtil:
     def parse_range_string_normal(string: str, max_one_indexed) -> tuple[int, int] | str:
         """
         Parses a string which represents a range of one-indexed ints.
-        Expects one of the following formats: x-y; x-; -y; z; "all"/"a"
+        Expects one of the following formats: x-y; x-; z; "all"/"a"
         Returns returns tuple of ints, or parse error message; (0,0) signifies "all"
         """
 
@@ -165,8 +172,6 @@ class RangeStringUtil:
             str_b = str(max_one_indexed)
         else:  # len == 2
             str_a, str_b = strings
-            if not str_a:  # eg, "-10", meaning 1-10
-                str_a = str(1)
             if not str_b:  # eg, "5-", meaning 5 to the end
                 str_b = str(max_one_indexed)
 

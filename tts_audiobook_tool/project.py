@@ -120,7 +120,7 @@ class Project(BaseModel):
     # - string literal "none" means no selection
     generate_range_string: str = Field(default="", alias="generate_range")
     
-    markers: list[int] = Field(default_factory=list, alias="markers")
+    marker_indices: set[int] = Field(default_factory=set, alias="markers")
     subdivide_phrases: bool = False
     export_type: ExportType = list(ExportType)[0]
     use_break_sound_effect: bool = Field(default=PROJECT_DEFAULT_BREAK_EFFECT, alias="use_section_sound_effect")
@@ -291,6 +291,16 @@ class Project(BaseModel):
 
         if self.pocket_voice_file_name and self.pocket_predefined_voice:
             self.pocket_predefined_voice = ""
+
+    @property
+    def markers(self) -> set[int]:
+        """Return a copy of the positive section-marker indices."""
+        return set(self.marker_indices)
+
+    @markers.setter
+    def markers(self, value: set[int]) -> None:
+        """Store positive marker indices, silently discarding non-positive values."""
+        self.marker_indices = {marker for marker in value if marker > 0}
 
     @model_validator(mode='before')
     @classmethod

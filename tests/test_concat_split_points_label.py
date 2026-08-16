@@ -19,8 +19,7 @@ def make_group(text: str) -> PhraseGroup:
 def make_state() -> State:
     project = Project.model_validate({
         "book": Book(sections=[
-            BookSection(phrase_groups=[make_group(f"Line {i}.") for i in range(6)]),
-            BookSection(phrase_groups=[make_group(f"Line {i}.") for i in range(6, 9)]),
+            BookSection(phrase_groups=[make_group(f"Line {i}.") for i in range(9)]),
         ]),
     })
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))
@@ -39,38 +38,36 @@ def get_split_points_label(state: State) -> str:
         items = make_items(state)
 
     labels = [get_string_from(state, item.label) for item in items]
-    index = next(index for index, label in enumerate(labels) if label.startswith("File split points"))
+    index = next(index for index, label in enumerate(labels) if label.startswith("Split points"))
     return strip_ansi_codes(labels[index])
 
 
 def test_split_points_label_file_count_matches_make_file_line_ranges() -> None:
     state = make_state()
-    state.project.markers = [3]
+    state.project.markers = {3}
 
     label = get_split_points_label(state)
 
     num_files = len(make_file_line_ranges(state.project.markers, len(state.project.phrase_groups)))
     assert num_files == 2
-    assert label == "File split points (currently: 1 item = 2 files)"
+    assert label == "Split points (currently: 1 item = 2 files)"
 
 
-def test_split_points_label_counts_marker_zero_like_make_file_line_ranges() -> None:
+def test_split_points_label_ignores_marker_zero() -> None:
     state = make_state()
-    # Marker 0 is dropped by make_file_line_ranges, so 2 markers yield 2 files,
-    # not the 3 implied by the old `num_markers + 1` assumption.
-    state.project.markers = [0, 3]
+    state.project.markers = {0, 3}
 
     label = get_split_points_label(state)
 
     num_files = len(make_file_line_ranges(state.project.markers, len(state.project.phrase_groups)))
     assert num_files == 2
-    assert label == "File split points (currently: 2 items = 2 files)"
+    assert label == "Split points (currently: 1 item = 2 files)"
 
 
 def test_split_points_label_optional_when_no_markers() -> None:
     state = make_state()
-    state.project.markers = []
+    state.project.markers = set()
 
     label = get_split_points_label(state)
 
-    assert label == "File split points (optional)"
+    assert label == "Split points (optional)"

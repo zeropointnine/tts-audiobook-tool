@@ -38,6 +38,7 @@ from tts_audiobook_tool.textual.segment_info_dialog import (
 )
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
+    OptionReconcileItem,
     STYLE_DIM,
 )
 from tts_audiobook_tool.system_support.ansi import Ansi
@@ -396,6 +397,75 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             style=style,
         )
 
+    def option_id(self, index: int) -> str:
+        """Use project identities so options survive filter and status changes."""
+        return self.stable_option_id(self.list_items[self.phrase_indices[index]])
+
+    @staticmethod
+    def stable_option_id(item: GenerateListItem) -> str:
+        """Return a stable identity for one phrase or structural section row."""
+        if isinstance(item, GenerateSectionItem):
+            return f"generate-section-{item.ordinal}"
+        return f"generate-phrase-{item.phrase_index}"
+
+    def make_reconcile_items(
+        self,
+        old_items_by_id: dict[str, GenerateListItem],
+        changed_phrase_indices: set[int] | None = None,
+    ) -> list[OptionReconcileItem]:
+        """Format only new rows and rows whose visible generation state changed."""
+        changed_phrase_indices = changed_phrase_indices or set()
+        items: list[OptionReconcileItem] = []
+        for visible_index, item_index in enumerate(self.phrase_indices):
+            item = self.list_items[item_index]
+            option_id = self.stable_option_id(item)
+            old_item = old_items_by_id.get(option_id)
+            prompt_changed = old_item is None
+            reflow = old_item is None
+            if isinstance(item, GenerateSectionItem):
+                if not isinstance(old_item, GenerateSectionItem):
+                    prompt_changed = True
+                    reflow = True
+                elif item.display_text != old_item.display_text:
+                    prompt_changed = True
+                    reflow = True
+            elif item.phrase_index in changed_phrase_indices:
+                prompt_changed = True
+                reflow = True
+
+            items.append(
+                (
+                    option_id,
+                    self.format_line(visible_index) if prompt_changed else None,
+                    reflow,
+                )
+            )
+        return items
+
+    def visible_items_by_id(self) -> dict[str, GenerateListItem]:
+        """Snapshot only rows which currently have mounted list options."""
+        return {
+            self.stable_option_id(self.list_items[item_index]): self.list_items[
+                item_index
+            ]
+            for item_index in self.phrase_indices
+        }
+
+    def replace_filtered_phrase_indices(
+        self,
+        phrase_indices: list[int],
+        selected_item_index: int | None,
+        old_items_by_id: dict[str, GenerateListItem],
+        changed_phrase_indices: set[int] | None = None,
+    ) -> None:
+        """Install rebuilt filter rows while retaining unchanged option content."""
+        self.phrase_indices = phrase_indices
+        self.replace_phrase_indices(
+            phrase_indices,
+            selected_item_index,
+            self.make_reconcile_items(old_items_by_id, changed_phrase_indices),
+        )
+
     def find_text(self, phrase_index: int) -> str:
         """Search visible phrase text and complete section heading text."""
         item = self.list_items[phrase_index]
@@ -486,13 +556,15 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         if filter_type is None:
             return
         selected_phrase_index = self.highlighted_content_line_index()
+        old_items_by_id = self.visible_items_by_id()
         self.filter_type = filter_type
         self.update_header(self.make_editor_header_lines())
         phrase_indices = self.get_filtered_phrase_indices()
         selected_item_index = self.item_index_for_phrase(selected_phrase_index)
-        self.replace_phrase_indices(
+        self.replace_filtered_phrase_indices(
             phrase_indices,
             selected_item_index if selected_item_index in phrase_indices else None,
+            old_items_by_id,
         )
         self.phrase_segment_statuses.clear()
 
@@ -714,6 +786,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.project.sound_segments.force_invalidate()
         self.mark_phrases_ungenerated(phrase_indices)
 
+        old_items_by_id = self.visible_items_by_id()
         visible_phrase_indices = self.get_filtered_phrase_indices()
         selected_item_index = self.item_index_for_phrase(selected_phrase_index)
         if selected_item_index not in visible_phrase_indices:
@@ -734,7 +807,12 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
                 if phrase_rows
                 else None
             )
-        self.replace_phrase_indices(visible_phrase_indices, selected_item_index)
+        self.replace_filtered_phrase_indices(
+            visible_phrase_indices,
+            selected_item_index,
+            old_items_by_id,
+            phrase_indices,
+        )
         self.update_queued_status()
 
     def apply_staged_queue_to_project(self) -> None:

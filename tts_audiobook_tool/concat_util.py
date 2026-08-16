@@ -384,11 +384,10 @@ class ConcatUtil:
         for group_index in range(len(project.phrase_groups)):
             out_of_range = (group_index < index_start or group_index > index_end)
             if out_of_range:
+                continue
+            file_name = project.sound_segments.get_best_file_for(group_index)
+            if not file_name:
                 num_missing += 1
-            else:
-                file_name = project.sound_segments.get_best_file_for(group_index)
-                if not file_name:
-                    num_missing += 1        
         return num_missing
 
     @staticmethod
@@ -616,7 +615,7 @@ class ConcatUtil:
             return
 
         if state.project.can_use_bookmark_section_markers():
-            bookmark_indices = state.project.markers
+            bookmark_indices = sorted(state.project.markers)
         else:
             bookmark_indices = []
 
@@ -653,7 +652,7 @@ def make_stem(
             else:
                 file_path = ""
         phrases_and_paths.append((phrase, file_path, is_first_in_section))
-        if file_path == "":
+        if file_path == "" and not out_of_range:
             num_missing += 1
 
     # Make Filename

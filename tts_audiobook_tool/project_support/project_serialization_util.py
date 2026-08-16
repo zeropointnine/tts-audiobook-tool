@@ -233,16 +233,19 @@ class ProjectSerializationUtil:
             if isinstance(lst, list):
                 is_valid = all(
                     isinstance(idx, int) and not isinstance(idx, bool)
-                    and 0 <= idx < len(phrase_groups)
+                    and idx < len(phrase_groups)
                     for idx in lst
                 )
                 if not is_valid:
                     printt(f"File cut points invalid: {lst}")
                     d['markers'] = []
                 else:
-                    d['markers'] = sorted(set(lst))
+                    d['markers'] = [idx for idx in lst if idx > 0]
             else:
                 d['markers'] = []
+
+        if 'markers' in d:
+            d['marker_indices'] = d.pop('markers')
 
         legacy_settings = BookSegmentationSettings(
             language_code=d.get('applied_language_code', ''),
@@ -607,7 +610,7 @@ class ProjectSerializationUtil:
             "word_substitutions_json_string": json.dumps(project.word_substitutions),
 
             "generate_range": project.generate_range_string,
-            "markers": project.markers,
+            "markers": sorted(project.markers),
             "subdivide_phrases": project.subdivide_phrases,
             "export_type": project.export_type.id,
             "use_break_sound_effect": project.use_break_sound_effect,

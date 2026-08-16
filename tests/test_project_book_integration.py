@@ -63,7 +63,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.segmentation_settings.strategy, SegmentationStrategy.MULTI_SENTENCE)
         self.assertEqual(project.book.segmentation_settings.max_words_per_segment, 80)
         self.assertEqual(project.phrase_groups, phrase_groups)
-        self.assertEqual(project.markers, [2])
+        self.assertEqual(project.markers, {2})
         self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [3])
 
     def test_project_to_dict_excludes_legacy_applied_fields(self):
@@ -319,7 +319,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         assert isinstance(result, Project)
         self.assertEqual(result.book.text_source_kind, "legacy_flat")
         self.assertEqual([group.text for group in result.phrase_groups], ["One.", "Two."])
-        self.assertEqual(result.markers, [1])
+        self.assertEqual(result.markers, {1})
         self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [2])
 
     def test_project_load_migrates_phrase_groups_v1_project_text_to_book_v2(self):
@@ -541,7 +541,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             "applied_max_words": 80,
         })
 
-        self.assertEqual(project.markers, [2])
+        self.assertEqual(project.markers, {2})
 
     def test_set_phrase_groups_and_save_creates_plain_text_book(self):
         with tempfile.TemporaryDirectory() as project_dir:
@@ -564,7 +564,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.title, "Manual Title")
         self.assertEqual(project.book.audio_source_kind, "generated")
         self.assertEqual(project.applied_max_words, 50)
-        self.assertEqual(project.markers, [])
+        self.assertEqual(project.markers, set())
         self.assertEqual(payload["format"], "book.v2")
         self.assertEqual(payload["book"]["title"], "Manual Title")
         self.assertEqual(payload["book"]["text_source_kind"], "manual")
@@ -585,7 +585,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertEqual(project.book.text_source_kind, "plain_text")
         self.assertEqual(project.book.title, "source-file")
-        self.assertEqual(project.markers, [])
+        self.assertEqual(project.markers, set())
 
     def test_set_phrase_groups_chapters_and_save_creates_epub_book_sections(self):
         phrase_groups = [
@@ -610,7 +610,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertEqual(project.book.title, "Example Book")
         self.assertEqual(project.book.text_source_kind, "epub")
-        self.assertEqual(project.markers, [])
+        self.assertEqual(project.markers, set())
         self.assertEqual([section.title for section in project.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [2, 1])
 
@@ -642,7 +642,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertIsInstance(result, Project)
         assert isinstance(result, Project)
-        self.assertEqual(result.markers, [])
+        self.assertEqual(result.markers, set())
         self.assertEqual([section.title for section in result.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in result.book.sections], [2, 1])
 
@@ -664,7 +664,7 @@ class TestProjectBookIntegration(unittest.TestCase):
                 title="Example Book",
                 section_titles=["Chapter 1", "Chapter 2"],
             )
-            project.markers = [1]
+            project.markers = {1}
             project.save()
 
             with patch("tts_audiobook_tool.project_support.project_util.Tts.get_type", return_value=TtsModelType.NONE), \
@@ -673,7 +673,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertIsInstance(reloaded, Project)
         assert isinstance(reloaded, Project)
-        self.assertEqual(reloaded.markers, [1])
+        self.assertEqual(reloaded.markers, {1})
         self.assertEqual([section.title for section in reloaded.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in reloaded.book.sections], [2, 1])
 
@@ -692,7 +692,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             "applied_max_words": 80,
         })
 
-        self.assertEqual(project.markers, [])
+        self.assertEqual(project.markers, set())
 
     def test_project_model_validate_deduplicates_and_sorts_markers(self):
         phrase_groups = [
@@ -708,9 +708,9 @@ class TestProjectBookIntegration(unittest.TestCase):
             "applied_max_words": 80,
         })
 
-        self.assertEqual(project.markers, [1, 3])
+        self.assertEqual(project.markers, {1, 3})
 
-    def test_project_model_validate_accepts_marker_zero(self):
+    def test_project_model_validate_discards_marker_zero(self):
         phrase_groups = [
             self.make_phrase_group("One."),
             self.make_phrase_group("Two."),
@@ -724,7 +724,41 @@ class TestProjectBookIntegration(unittest.TestCase):
             "applied_max_words": 80,
         })
 
-        self.assertEqual(project.markers, [0, 1])
+        self.assertEqual(project.markers, {1})
+
+    def test_project_model_validate_discards_non_positive_markers(self):
+        phrase_groups = [
+            self.make_phrase_group("One."),
+            self.make_phrase_group("Two."),
+        ]
+
+        project = Project.model_validate({
+            "phrase_groups": phrase_groups,
+            "markers": [-2, -1, 0, 1],
+            "applied_language_code": "en",
+            "applied_strategy": "multi",
+            "applied_max_words": 80,
+        })
+
+        self.assertEqual(project.markers, {1})
+
+    def test_markers_setter_filters_non_positive_values_and_returns_copy(self):
+        project = Project()
+        project.markers = {-1, 0, 1, 3}
+
+        markers = project.markers
+        markers.add(5)
+
+        self.assertEqual(project.markers, {1, 3})
+        self.assertEqual(markers, {1, 3, 5})
+
+    def test_markers_serialize_as_a_sorted_json_array(self):
+        project = Project()
+        project.markers = {3, 1, 2}
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(payload["markers"], [1, 2, 3])
 
 
 if __name__ == "__main__":

@@ -678,6 +678,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
+**2026-08-17**
+
+- `Create > Section markers > Edit`: Full-screen interface for defining section markers / file split points.
+
 **2026-08-11**
 
 - Replaced Sidon with **[LavaSR v2](https://github.com/ysharma3501/LavaSR)** upscaler, which is better suited to TTS and produces more tonally faithful, consistent output.

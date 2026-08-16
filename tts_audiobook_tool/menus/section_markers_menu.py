@@ -1,243 +1,75 @@
-from tts_audiobook_tool.app_types import PhraseGroup, SectionMarkerMode
-from tts_audiobook_tool.app_types.phrase import Reason
+from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.app_types import SectionMarkerMode
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual.content_textual_app import (
+    ContentAppCompleted,
+    EditorSaveFailed,
+    run_content_textual_app,
+)
+from tts_audiobook_tool.textual.section_markers_editor import SectionMarkersEditor
 from tts_audiobook_tool.util import *
 
 class SectionMarkersMenu:
     """
-    Menu for adjusting Project properties: chapter_mode and markers
+    Menu for editing Project.markers.
 
-    Is shown only when book text source is text file (not epub).
+    App UI nomenclature is "split points" when project text has multiple sections
+    (ie, derived from epub), else "section markers".
     """
 
     @staticmethod
     def menu(state: State) -> None:
 
-        def make_section_markers_label(_: State) -> str:
-            return "Section markers"
-            
+        is_limited = state.project.has_multiple_book_sections()
+           
         def make_mode_label(_: State) -> str:
             return make_menu_label("Mode", state.project.chapter_mode.label, list(SectionMarkerMode)[0])
         
-        def on_clear(_: State, __: MenuItem) -> None:
-            state.project.markers = []
-            state.project.save()
-            print_feedback("Cleared section markers")
-
         def make_items(_: State) -> list[MenuItem]:
 
             items = []
 
+            label = f"Edit {app_text.get_section_marker_label(state.project, is_title_case=False)}"
+            num_markers = len(state.project.markers)
+            item_noun = make_noun("item", "items", num_markers)
+            currently = make_currently_string(f"{num_markers} {item_noun}")
+            label = f"{label} {currently}"
+
             items.append( 
                 MenuItem(
-                    "Enter list", 
-                    lambda _, __: SectionMarkersMenu.ask_section_markers(state, "section markers")
+                    label,
+                    lambda _, __: SectionMarkersMenu.edit_section_markers(state)
                 ) 
             )
-            
-            items.append( 
-                MenuItem(
-                    "Enter regular expression", 
-                    lambda _, __: SectionMarkersMenu.ask_section_markers_regex(state)
-                ) 
-            )
-            
-            items.append(
-                MenuItem(
-                    "Generate from blank lines",
-                    lambda _, __: SectionMarkersMenu.ask_generate_blank_lines_markers(state),
-                )
-            )
 
-            if state.project.markers:
-                items.append( MenuItem("Clear", on_clear) )
+            if not is_limited:
+                items.append( MenuItem(make_mode_label, lambda _, __: mode_menu(state)) )
             
-            items.append( MenuItem(make_mode_label, lambda _, __: mode_menu(state)) )
-            
-            if state.project.markers:
-                num = len(state.project.markers)
-                value = f"{num} {make_noun('item', 'items', num)}"
-                items.append( 
-                    MenuItem(
-                        f"Print list {COL_DIM}({value})", lambda _, __: print_section_markers(state), 
-                        superlabel=" ", superlabel_no_blank_line=True
-                    ),
-                )
-
             return items
 
+        label = app_text.get_section_marker_label(state.project)
         MenuUtil.menu(
-            state, make_section_markers_label, make_items, subheading=SUBLABEL,
+            state, label, make_items,
+            subheading=LIMITED_SUBLABEL if is_limited else SUBLABEL
         )
 
     @staticmethod
-    def ask_section_markers(state: State, label: str) -> None:
-
-        section_markers = state.project.markers
-        if section_markers:
-            print_markers(section_markers, label)
-
-        printt("Enter line numbers:")
-        printt(f"{COL_DIM}(Eg: 48, 101, 545)")
-        inp = ask.ask()
-        if not inp:
+    def edit_section_markers(state: State) -> None:
+        """Run the section-markers editor and report launch failures or saves."""
+        run_result = run_content_textual_app(SectionMarkersEditor(state.project))
+        if not isinstance(run_result, ContentAppCompleted):
+            print_feedback(run_result.message, is_error=True)
             return
+        if isinstance(run_result.result, EditorSaveFailed):
+            print_feedback(run_result.result.error, is_error=True)
 
-        string_items = inp.split(",")
-        one_indexed_items = []
-        for string_item in string_items:
-            try:
-                index = int(string_item)
-                one_indexed_items.append(index)
-            except:
-                ask.ask_error(f"Parse error: {string_item}")
-                return
-        one_indexed_items = list(set(one_indexed_items))
-        one_indexed_items.sort()
-        for item in one_indexed_items:
-            if item < 1 or item > len(state.project.phrase_groups):
-                print_feedback(f"Index out of range: {item}", is_error=True)
-                return
-        zero_indexed_items = [item - 1 for item in one_indexed_items]
-        if 0 in zero_indexed_items:
-            del zero_indexed_items[0]
-        state.project.markers = zero_indexed_items
-        state.project.save()
-
-        if not zero_indexed_items:
-            s = "none"
-        else:
-            s = ", ".join( [str(item + 1) for item in zero_indexed_items] )
-        print_feedback(f"Set {label}: ", s)
-
-    @staticmethod
-    def ask_section_markers_regex(state: State) -> None:
-
-        markers = state.project.markers
-        if markers:
-            print_markers(markers, "section markers")
-
-        printt("Enter a regex pattern to define section markers:")
-        printt(f"{COL_DIM}For example, if the source text has chapters that start with, eg, \"Chapter 241: Chapter Name\", you could enter \"Chapter \\d+\",")
-        printt(f"{COL_DIM}which will insert a section marker for each line matching that pattern.")
-        printt()
-        inp = ask.ask(lower=False)
-        if not inp:
-            return
-
-        zero_indexed_items = []
-        pattern = re.compile(inp, flags=re.IGNORECASE)
-        for index, phrase_group in enumerate(state.project.phrase_groups):
-            if re.match(pattern, phrase_group.text):
-                zero_indexed_items.append(index)
-
-        # Ignore first section marker if it's 0 since these are dividers
-        first_item_implicit = zero_indexed_items and zero_indexed_items[0] == 0
-        if first_item_implicit:
-            del zero_indexed_items[0]
-
-        if not zero_indexed_items and not first_item_implicit:
-            print_feedback("No matches found", is_error=True)
-            return
-
-        def print_line(i: int):
-            s = f"{COL_DEFAULT}Line {i + 1}: {COL_DIM}{state.project.phrase_groups[i].presentable_text}"
-            if i == 0:
-                s += f" {Ansi.ITALICS}(implicit)"
-            print(s)
-
-        MenuUtil.print_heading(None, "Matched section markers:", non_menu=True)
-        printt()
-        if first_item_implicit:
-            print_line(0)
-        for index in zero_indexed_items:
-            print_line(index)
-        printt()
-
-        if not ask.ask_confirm():
-            print_feedback("Cancelled")
-            return
-
-        state.project.markers = zero_indexed_items
-        state.project.save()
-
-        s = ", ".join( [str(item + 1) for item in zero_indexed_items] )
-        print_feedback(f"Section markers set:", s)
-
-    @staticmethod
-    def ask_generate_blank_lines_markers(state: State) -> None:
-        """Add section markers after phrase groups ending at blank-line breaks."""
-
-        # Show description
-        printt()
-        printt("Generate from blank lines")
-        printt(f"{COL_DIM}This feature automatically detects 2+ consecutive blank lines")
-        printt(f"{COL_DIM}(\\n\\n\\n) in the source text and creates section markers.")
-        printt()
-        printt(f"{COL_DIM}These markers will be added to existing markers and sorted.")
-        printt()
-
-        # Ask for confirmation
-        if not ask.ask_confirm("Do you wish to generate markers from blank lines? (Y/N):"):
-            print_feedback("Cancelled")
-            return
-
-        new_marker_indices = make_blank_line_marker_indices(state.project.phrase_groups)
-
-        if not new_marker_indices:
-            print_feedback("No blank-line markers found", is_error=True)
-            return
-
-        current_markers = state.project.markers.copy()
-        all_markers = sorted(set(current_markers + new_marker_indices) - {0})
-
-        # Validate range
-        invalid_markers = [
-            marker
-            for marker in all_markers
-            if marker < 0 or marker >= len(state.project.phrase_groups)
-        ]
-        if invalid_markers:
-            print_feedback(f"Invalid marker indices: {invalid_markers}", is_error=True)
-            return
-
-        # Update and save
-        state.project.markers = all_markers
-        err = state.project.save()
-        if err:
-            state.project.markers = current_markers
-            ask.ask_error(err)
-            return
-
-        # Print confirmation
-        if not current_markers:
-            s = "Generated"
-        else:
-            s = "Added to existing"
-
-        num_new = len(set(new_marker_indices) - set(current_markers))
-        noun = make_noun("marker", "markers", num_new)
-
-        print_feedback(f"{s} {num_new} {noun} from blank lines")
-        printt()
-        printt(f"Current section markers: {', '.join([str(m + 1) for m in all_markers])}")
-        ask.ask_enter_to_continue()
-
-def make_blank_line_marker_indices(phrase_groups: list[PhraseGroup]) -> list[int]:
-    """Return indices of groups that begin after a detected blank-line break."""
-    return [
-        index + 1
-        for index, phrase_group in enumerate(phrase_groups[:-1])
-        if any(phrase.reason == Reason.SPACE_BREAK for phrase in phrase_group.phrases)
-    ]
-
-def print_markers(markers: list[int], label: str) -> None:
+def print_markers(markers: set[int], label: str) -> None:
     
-    section_index_strings = [str(index+1) for index in markers]
+    section_index_strings = [str(index+1) for index in sorted(markers)]
     section_indices_string = ", ".join(section_index_strings)
     printt(f"Current {label}: {COL_DIM}{section_indices_string}")    
     printt()
@@ -250,13 +82,15 @@ def print_section_markers(state: State) -> None:
         printt("None")
         printt()
     else:
-        for index in state.project.markers:
+        for index in sorted(state.project.markers):
             text = ellipsize(state.project.phrase_groups[index].presentable_text, 60)
             s = f"Line {index+1}: {COL_DIM_ITALICS}{text}"
             printt(s)
 
         printt()
-        s = "Items: " + ", ".join( [ str(index+1) for index in state.project.markers ] )
+        s = "Items: " + ", ".join(
+            str(index + 1) for index in sorted(state.project.markers)
+        )
         printt(s)
 
     if state.prefs.menu_clears_screen:
@@ -292,4 +126,9 @@ SUBLABEL = \
 Depending on the selected mode, this is used to either split the audiobook 
 into separate files or to add M4B chapters and web player bookmarks to a
 single audiobook file.
+"""
+
+LIMITED_SUBLABEL = \
+"""File split points are line numbers that define where new audio 
+files will be created.
 """

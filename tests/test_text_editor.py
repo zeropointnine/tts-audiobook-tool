@@ -320,6 +320,51 @@ def test_delete_ignores_section_rows_rebuilds_ordinals_and_focuses_survivor() ->
     run(exercise())
 
 
+def test_delete_reconciles_options_without_formatting_unchanged_rows(
+    monkeypatch,
+) -> None:
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("One."),
+                    make_phrase_group("Two."),
+                    make_phrase_group("Three."),
+                    make_phrase_group("Four."),
+                    make_phrase_group("Five."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            option_list = app.query_one("#line-list", OptionList)
+            retained_option = option_list.get_option_at_index(0)
+            formatted_indices: list[int] = []
+            original_format_line = app.format_line
+
+            def record_format_line(index: int):
+                formatted_indices.append(index)
+                return original_format_line(index)
+
+            monkeypatch.setattr(app, "format_line", record_format_line)
+            await pilot.press("down", "down", "down", "x")
+            await pilot.pause()
+
+            assert formatted_indices == [3]
+            assert option_list.get_option_at_index(0) is retained_option
+            assert [str(option.prompt) for option in option_list.options] == [
+                "00001  One.",
+                "00002  Two.",
+                "00003  Three.",
+                "00004  Five.",
+            ]
+
+    run(exercise())
+
+
 def test_selection_status_excludes_selected_section_rows() -> None:
     project = make_project(
         [
@@ -521,6 +566,52 @@ def test_split_dialog_partitions_one_group_and_rebuilds_rows() -> None:
     run(exercise())
 
 
+def test_split_reconciles_options_without_formatting_unchanged_rows(
+    monkeypatch,
+) -> None:
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("One."),
+                    PhraseGroup(
+                        [
+                            Phrase("First. ", Reason.SENTENCE),
+                            Phrase("Second.", Reason.SENTENCE),
+                        ]
+                    ),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            option_list = app.query_one("#line-list", OptionList)
+            retained_option = option_list.get_option_at_index(0)
+            formatted_indices: list[int] = []
+            original_format_line = app.format_line
+
+            def record_format_line(index: int):
+                formatted_indices.append(index)
+                return original_format_line(index)
+
+            monkeypatch.setattr(app, "format_line", record_format_line)
+            await pilot.press("down", "s", "1", "enter")
+            await pilot.pause()
+
+            assert formatted_indices == [1, 2]
+            assert option_list.get_option_at_index(0) is retained_option
+            assert [str(option.prompt) for option in option_list.options] == [
+                "00001  One.",
+                "00002  First.",
+                "00003  Second.",
+            ]
+
+    run(exercise())
+
+
 def test_split_is_ignored_for_a_single_phrase_group() -> None:
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
     app = make_loaded_editor(project)
@@ -641,6 +732,98 @@ def test_confirmation_omits_warning_when_no_generated_segments_exist(
 
     assert isinstance(dialog, SaveChangesDialog)
     assert dialog.copy_lines == ["Save changes before exiting?"]
+
+
+def test_confirmation_warns_about_markers_only_when_no_segments_exist(
+    monkeypatch,
+) -> None:
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("One."),
+                    make_phrase_group("Two."),
+                    make_phrase_group("Three."),
+                ]
+            )
+        ]
+    )
+    project.markers = {1, 2}
+    app = make_loaded_editor(project)
+    monkeypatch.setattr(
+        project.sound_segments,
+        "snapshot_paths_from_index",
+        lambda _first_index: [],
+    )
+    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[1].item_id})
+
+    dialog = app.make_confirmation_dialog()
+
+    assert dialog.copy_lines[2].endswith(
+        "Saving these changes requires deleting 2 section markers "
+        "from line 2 onward."
+    )
+
+
+def test_confirmation_warns_about_segments_and_singular_marker(monkeypatch) -> None:
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("One."),
+                    make_phrase_group("Two."),
+                    make_phrase_group("Three."),
+                ]
+            )
+        ]
+    )
+    project.markers = {2}
+    app = make_loaded_editor(project)
+    monkeypatch.setattr(
+        project.sound_segments,
+        "snapshot_paths_from_index",
+        lambda _first_index: [Path("segment-1.flac"), Path("segment-2.flac")],
+    )
+    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[1].item_id})
+
+    dialog = app.make_confirmation_dialog()
+
+    assert dialog.copy_lines[2].endswith(
+        "Saving these changes requires deleting 2 generated sound segments "
+        "and 1 section marker from line 2 onward."
+    )
+
+
+def test_confirmation_uses_split_point_label_for_multi_section_books(
+    monkeypatch,
+) -> None:
+    project = make_project(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
+            ),
+            BookSection(
+                title="Middle",
+                phrase_groups=[make_phrase_group("Three."), make_phrase_group("Four.")],
+            ),
+        ]
+    )
+    project.markers = {2, 3}
+    app = make_loaded_editor(project)
+    monkeypatch.setattr(
+        project.sound_segments,
+        "snapshot_paths_from_index",
+        lambda _first_index: [Path("segment.flac")],
+    )
+    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[2].item_id})
+
+    dialog = app.make_confirmation_dialog()
+
+    assert dialog.copy_lines[2].endswith(
+        "Saving these changes requires deleting 1 generated sound segment "
+        "and 2 split points from line 3 onward."
+    )
 
 
 def test_finish_confirm_calls_commit_with_staged_book(monkeypatch) -> None:

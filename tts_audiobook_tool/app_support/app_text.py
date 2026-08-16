@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import re
 import string
 import unicodedata
+from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.project import Project
 
 
 ws_punc_chars: set[str] = set(
@@ -228,3 +234,19 @@ def get_uncommon_words_en(raw_words: list[str]) -> list[tuple[str, int, list[str
 
 def get_uncommon_words(raw_words: list[str]) -> list[tuple[str, int, list[str]]]:
     return get_uncommon_words_en(raw_words)
+
+def get_section_marker_label(project: Project, is_title_case: bool=True, is_singular: bool=False) -> str:
+    """
+    Gets UI string describing the section marker feature.
+    It is called different things depending on the source text type.
+    """
+    is_limited = project.has_multiple_book_sections()
+    match (is_title_case, is_singular):
+        case (True, False):
+            return "Split points" if is_limited else "Section markers"
+        case (True, True):
+            return "Split point" if is_limited else "Section marker"
+        case (False, False):
+            return "split points" if is_limited else "section markers"
+        case (False, True):
+            return "split point" if is_limited else "section marker"

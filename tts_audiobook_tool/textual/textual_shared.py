@@ -1,7 +1,7 @@
 from collections.abc import Callable, Iterable
 import os
 import sys
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
@@ -10,6 +10,7 @@ from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.binding import Binding, BindingType
+from textual.css.styles import RulesMap
 from textual.strip import Strip
 from textual.visual import VisualType
 from textual.widgets import OptionList
@@ -21,6 +22,10 @@ STYLE_ERROR = "#ff0000"
 STYLE_DIM = "#888888"
 STYLE_OK = "#00ff00"
 STYLE_DEFAULT = "default"
+
+
+OptionReconcileItem = tuple[str, Any, bool]
+"""An option ID, optional replacement prompt, and whether its height may change."""
 
 
 TEXTUAL_SHARED_CSS = """\
@@ -62,6 +67,16 @@ Screen:ansi.-screen-suspended {
 
 
 CONTENT_TEXTUAL_APP_CSS = """\
+#content-shell {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#content-main {
+    width: 1fr;
+    height: 100%;
+}
+
 #line-list {
     height: 1fr;
     max-height: 100%;
@@ -83,6 +98,21 @@ CONTENT_TEXTUAL_APP_CSS = """\
     text-style: italic;
     padding: 1 1;
     content-align: left top;
+}
+
+#side-panel-divider {
+    width: 1;
+    height: 100%;
+    margin: 0;
+    color: $col-dim;
+}
+
+#side-panel {
+    width: 35%;
+    min-width: 20;
+    max-width: 40;
+    height: 100%;
+    overflow: hidden;
 }
 
 #line-list > .option-list--option-highlighted,
@@ -112,7 +142,7 @@ CONTENT_TEXTUAL_APP_CSS = """\
 }
 
 #status-line.status-toast {
-    color: $col-default;
+    color: $col-accent;
     content-align: left middle;
 }
 
@@ -227,8 +257,13 @@ class HangingIndentText:
             overflow="fold",
             no_wrap=False,
         ) or [Text()]
-        was_truncated = len(content_lines) > self.max_lines
         visible_lines = content_lines[: self.max_lines]
+        # Trailing blank lines produced by final newlines do not count as
+        # truncated content, so skip the ellipsis when every hidden line is
+        # empty (e.g., structural rows rendered with a blank spacer line).
+        was_truncated = any(
+            line.plain.strip() for line in content_lines[self.max_lines :]
+        )
         for visible_line in visible_lines:
             visible_line.rstrip()
         if was_truncated:
@@ -266,10 +301,12 @@ class NonWrappingOptionList(OptionList):
         self,
         *content: Option,
         collapse_selection: Callable[[], None] | None = None,
+        multi_select_enabled: bool = True,
         **kwargs,
     ) -> None:
         self.extend_selection = False
         self.collapse_selection = collapse_selection
+        self.multi_select_enabled = multi_select_enabled
         self.inactive_selection_indices: set[int] = set()
         self.inactive_selection_style = Style.parse(f"{STYLE_DIM} reverse")
         self.defer_option_cache_clear = False
@@ -304,6 +341,96 @@ class NonWrappingOptionList(OptionList):
             self._line_cache.clear()
         self.refresh()
 
+    def reconcile_options(self, items: Iterable[OptionReconcileItem]) -> None:
+        """Reconcile options by stable ID while retaining unaffected render caches.
+
+        A ``None`` prompt retains the existing option unchanged. A non-``None``
+        prompt replaces that option's content, or creates it when the ID is new.
+        The final flag marks prompts whose wrapped height may have changed.
+        """
+        item_list = list(items)
+        item_ids = [item_id for item_id, _prompt, _reflow in item_list]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("Reconciled option IDs must be unique")
+
+        old_options_by_id = {
+            option.id: option for option in self.options if option.id is not None
+        }
+        old_indices = {
+            option: index for index, option in enumerate(self.options)
+        }
+        old_heights = {
+            option: self._line_cache.heights[index]
+            for index, option in enumerate(self.options)
+            if index in self._line_cache.heights
+        }
+        changed_options: set[Option] = set()
+        reflow_options: set[Option] = set()
+        reconciled_options: list[Option] = []
+
+        for item_id, prompt, reflow in item_list:
+            option = old_options_by_id.get(item_id)
+            if option is None:
+                if prompt is None:
+                    raise ValueError(f"New option {item_id!r} requires a prompt")
+                option = Option(prompt, id=item_id)
+                changed_options.add(option)
+                reflow = True
+            elif prompt is not None:
+                option._set_prompt(prompt)
+                changed_options.add(option)
+            if reflow:
+                reflow_options.add(option)
+            reconciled_options.append(option)
+
+        retained_options = set(reconciled_options)
+        new_indices = {
+            option: index for index, option in enumerate(reconciled_options)
+        }
+        for cache_key in list(self._option_render_cache.keys()):
+            cached_option = cache_key[0]
+            if (
+                cached_option not in retained_options
+                or cached_option in changed_options
+                or new_indices.get(cached_option) != old_indices.get(cached_option)
+            ):
+                self._option_render_cache.discard(cache_key)
+
+        self._options[:] = reconciled_options
+        self._id_to_option = {
+            option.id: option
+            for option in reconciled_options
+            if option.id is not None
+        }
+        self._option_to_index = new_indices
+        self._mouse_hovering_over = None
+
+        line_cache = self._line_cache
+        line_cache.clear()
+        if self.scrollable_content_region:
+            padding = self.get_component_styles("option-list--option").padding
+            rules = cast(RulesMap, self.styles)
+            width = (
+                self.scrollable_content_region.width - self._get_left_gutter_width()
+            )
+            for index, option in enumerate(reconciled_options):
+                line_cache.index_to_line[index] = len(line_cache.lines)
+                line_count = old_heights.get(option)
+                if line_count is None or option in reflow_options:
+                    line_count = (
+                        self._get_visual(option).get_height(
+                            rules, width - padding.width
+                        )
+                        + option._divider
+                    )
+                line_cache.heights[index] = line_count
+                line_cache.lines.extend(
+                    (index, line_offset) for line_offset in range(line_count)
+                )
+
+        self._update_lines()
+        self.refresh(layout=self.styles.auto_dimensions)
+
     def set_inactive_selection_indices(self, indices: set[int]) -> None:
         """Update inactive selections without replacing prompts or layout caches."""
         if indices == self.inactive_selection_indices:
@@ -328,8 +455,8 @@ class NonWrappingOptionList(OptionList):
 
     def prepare_navigation(self, extend_selection: bool) -> None:
         """Record navigation mode and collapse selection for unshifted movement."""
-        self.extend_selection = extend_selection
-        if not extend_selection and self.collapse_selection is not None:
+        self.extend_selection = extend_selection and self.multi_select_enabled
+        if not self.extend_selection and self.collapse_selection is not None:
             self.collapse_selection()
 
     def move_cursor(self, direction: int) -> None:

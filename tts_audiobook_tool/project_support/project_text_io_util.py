@@ -62,7 +62,7 @@ class ProjectTextIOUtil:
 
         project.book = book
         ProjectBookUtil.sync_flat_text_from_book(project)
-        project.markers = []
+        project.markers = set()
         project.generate_range_string = ""
         project.realtime_line_range = None
         ProjectTextIOUtil.save_book(project)
@@ -100,7 +100,7 @@ class ProjectTextIOUtil:
 
         project.book = book
         ProjectBookUtil.sync_flat_text_from_book(project)
-        project.markers = []
+        project.markers = set()
         project.generate_range_string = ""
         project.realtime_line_range = None
         ProjectTextIOUtil.save_book(project)

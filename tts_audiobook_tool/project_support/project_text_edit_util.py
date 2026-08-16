@@ -46,6 +46,21 @@ class ProjectTextEditUtil:
                 f"{make_error_string(exception)}"
             )
 
+        if earliest_affected_original_index is not None:
+            new_markers = {
+                marker
+                for marker in project.markers
+                if marker < earliest_affected_original_index
+            }
+            if new_markers != project.markers:
+                project.markers = new_markers
+                err = project.save()
+                if err:
+                    return (
+                        "Project text was saved, but section markers could not "
+                        f"be saved: {err}"
+                    )
+
         try:
             project.sound_segments.delete_path_snapshot(cleanup_paths)
         except Exception as exception:

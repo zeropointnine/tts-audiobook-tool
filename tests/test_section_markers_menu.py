@@ -1,6 +1,8 @@
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.menus.section_markers_menu import make_blank_line_marker_indices
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.textual.section_markers_dialog import (
+    make_blank_line_marker_indices,
+)
 
 
 def make_group(text: str, reason: Reason) -> PhraseGroup:

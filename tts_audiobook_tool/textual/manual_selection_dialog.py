@@ -65,7 +65,7 @@ class ManualSelectionDialog(ModalScreen[set[int] | None]):
         if event.input.id != "manual-selection-input":
             return
         line_indices, errors = RangeStringUtil.parse_ranges_string(
-            event.value, self.line_count
+            event.value, self.line_count, strict=False
         )
         if errors:
             self.query_one("#manual-selection-error", Static).update(

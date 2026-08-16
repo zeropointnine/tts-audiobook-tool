@@ -3,6 +3,7 @@ import json
 import math
 import re
 import os
+from collections.abc import Collection
 import importlib
 from pathlib import Path
 import platform
@@ -288,10 +289,10 @@ def lerp_clamped(
     clamped_normalized = max(0.0, min(1.0, normalized))
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
-def make_file_line_ranges(markers: list[int], num_items: int) -> list[tuple[int, int]]:
+def make_file_line_ranges(markers: Collection[int], num_items: int) -> list[tuple[int, int]]:
     """ 
     Returns ranges with length of markers + 1 (always starts with item with start index 0)
-    Assumes `markers` is sorted 
+    Accepts markers in any order.
     """
 
     # TODO: this should be a property in Project
@@ -299,9 +300,9 @@ def make_file_line_ranges(markers: list[int], num_items: int) -> list[tuple[int,
     if not markers:
         return [ (0, num_items - 1) ]
 
-    markers = sorted(markers) # for good measure
+    sorted_markers = sorted(markers)
 
-    indices = list(markers)
+    indices = list(sorted_markers)
     if indices[0] == 0:
         del indices[0]
 

@@ -113,6 +113,7 @@ AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 COL_ACCENT = Ansi.hex("ffaa44")
 COL_ORANGE = Ansi.hex("ff8800")
 COL_ERROR = Ansi.hex("ff0000")
+COL_GRAY = Ansi.hex("808080")
 COL_DIM = Ansi.hex("888888")
 COL_MEDIUM = Ansi.hex("cccccc")
 COL_INPUT = Ansi.hex("aaaaaa")

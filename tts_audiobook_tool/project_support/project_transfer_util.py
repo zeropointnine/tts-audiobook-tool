@@ -65,13 +65,16 @@ class ProjectTransferUtil:
     @staticmethod
     def apply_project_settings(dest_project: Project, source_project: Project) -> None:
         for field_name in ProjectTransferUtil.get_project_settings_transfer_field_names(source_project):
+            if field_name == 'markers':
+                dest_project.markers = source_project.markers
+                continue
             setattr(dest_project, field_name, getattr(source_project, field_name))
 
     @staticmethod
     def get_project_settings_transfer_field_names(project: Project | type[Project]) -> list[str]:
         model_fields = project.model_fields if isinstance(project, type) else type(project).model_fields
         return [
-            field_name
+            'markers' if field_name == 'marker_indices' else field_name
             for field_name in model_fields
             if field_name not in ProjectTransferUtil.PROJECT_SETTINGS_TRANSFER_SKIP
         ]
@@ -92,7 +95,10 @@ class ProjectTransferUtil:
 
         payload = ProjectSerializationUtil.to_project_json_dict(project())
         alias_to_field_name = ProjectTransferUtil.make_project_alias_to_field_name_map(project)
-        return {alias_to_field_name[key] if key in alias_to_field_name else key for key in payload}
+        return {
+            'markers' if key == 'markers' else alias_to_field_name[key] if key in alias_to_field_name else key
+            for key in payload
+        }
 
     @staticmethod
     def make_project_alias_to_field_name_map(project: type[Project]) -> dict[str, str]:

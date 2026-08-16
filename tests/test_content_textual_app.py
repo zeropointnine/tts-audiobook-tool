@@ -79,10 +79,6 @@ class StubContentApp(ContentTextualApp[EditorSaved]):
 
         self.mutate_selected_items(mutate)
 
-    def refresh_line(self, index: int) -> None:
-        self.refreshed_indices.append(index)
-        super().refresh_line(index)
-
     def refresh_lines(self, indices, *, reflow: bool = True) -> None:
         index_list = list(indices)
         self.refresh_batches.append(index_list)
@@ -142,6 +138,27 @@ class StructuralRowStubContentApp(StubContentApp):
 
     def content_line_index(self, item_index: int) -> int | None:
         return None if item_index == 1 else item_index
+
+
+class SingleSelectionPanelStubContentApp(StubContentApp):
+    """A fixture exercising the base's opt-in shell capabilities."""
+
+    def __init__(self, project: StubProject) -> None:
+        self.changed_phrase_indices = set()
+        self.refreshed_indices = []
+        self.refresh_batches = []
+        self.committed = False
+        ContentTextualApp.__init__(
+            self,
+            project,  # type: ignore[arg-type]
+            ["Single selection panel editor"],
+            phrase_indices=[0, 1, 2],
+            multi_select_enabled=False,
+            side_panel_enabled=True,
+        )
+
+    def compose_side_panel(self):
+        yield Static("Panel contents", id="test-panel-content")
 
 
 def make_app() -> tuple[StubContentApp, StubProject]:
@@ -256,6 +273,42 @@ def test_base_manual_selection_replaces_selection_and_highlights_highest_line() 
             assert app.selected_index == 0
             assert app.selection_anchor_index == 0
             assert app.query_one("#line-list", OptionList).highlighted == 0
+            assert app.toast_text == "Selected 2 lines"
+
+    run(exercise())
+
+
+def test_base_manual_selection_single_line_shows_singular_toast() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            assert isinstance(app.screen, ManualSelectionDialog)
+            app.screen.query_one("#manual-selection-input", Input).value = "1"
+            await pilot.press("enter")
+
+            assert not isinstance(app.screen, ManualSelectionDialog)
+            assert app.selected_indices == {1}
+            assert app.toast_text == "Selected 1 line"
+
+    run(exercise())
+
+
+def test_base_manual_selection_silently_clamps_out_of_range_end() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            assert isinstance(app.screen, ManualSelectionDialog)
+            app.screen.query_one("#manual-selection-input", Input).value = "1-99"
+            await pilot.press("enter")
+
+            # The dialog dismissed without surfacing a clamp warning
+            assert not isinstance(app.screen, ManualSelectionDialog)
+            assert app.selected_indices == {0, 1}
+            assert app.toast_text == "Selected 2 lines"
 
     run(exercise())
 
@@ -333,6 +386,78 @@ def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
             assert status_bar.display is True
             assert status_line.display is True
             assert find_bar.display is False
+
+    run(exercise())
+
+
+def test_base_omits_side_panel_unless_editor_opts_in() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test():
+            assert app.query("#content-shell")
+            assert app.query("#content-main")
+            assert not app.query("#side-panel")
+            assert not app.query("#side-panel-divider")
+
+    run(exercise())
+
+
+def test_base_composes_widget_agnostic_side_panel_when_enabled() -> None:
+    project = StubProject(
+        [StubPhraseGroup("first"), StubPhraseGroup("second"), StubPhraseGroup("third")]
+    )
+    app = SingleSelectionPanelStubContentApp(project)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)):
+            panel = app.query_one("#side-panel", Vertical)
+            assert app.query_one("#side-panel-divider")
+            assert str(app.query_one("#test-panel-content", Static).render()) == (
+                "Panel contents"
+            )
+            assert panel.size.width == 35
+
+    run(exercise())
+
+
+def test_base_side_panel_width_is_constrained_to_twenty_through_forty_columns() -> None:
+    project = StubProject(
+        [StubPhraseGroup("first"), StubPhraseGroup("second"), StubPhraseGroup("third")]
+    )
+
+    async def panel_width_at(terminal_width: int) -> int:
+        app = SingleSelectionPanelStubContentApp(project)
+        async with app.run_test(size=(terminal_width, 30)):
+            return app.query_one("#side-panel", Vertical).size.width
+
+    assert asyncio.run(panel_width_at(50)) == 20
+    assert asyncio.run(panel_width_at(140)) == 40
+
+
+def test_base_single_selection_disables_every_row_multi_selection_entry_path() -> None:
+    project = StubProject(
+        [StubPhraseGroup("first"), StubPhraseGroup("second"), StubPhraseGroup("third")]
+    )
+    app = SingleSelectionPanelStubContentApp(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("shift+down")
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            assert app.selected_index == 1
+            assert app.selected_indices == {1}
+            assert option_list.extend_selection is False
+
+            await pilot.press("ctrl+a")
+            assert app.selected_indices == {1}
+
+            await pilot.press("m")
+            assert not isinstance(app.screen, ManualSelectionDialog)
+
+            await pilot.press("ctrl+f", "t", "h", "i", "r", "d", "enter")
+            assert app.selected_index == 2
+            assert app.selected_indices == {2}
 
     run(exercise())
 
@@ -593,6 +718,34 @@ def test_confirmation_dialog_uses_one_default_copy_line() -> None:
                 == "Save changes before exiting?"
             )
             assert not app.screen.query("#save-changes-copy-line-2")
+
+    run(exercise())
+
+
+def test_confirmation_dialog_warning_wraps_and_dialog_grows_to_fit() -> None:
+    app, _ = make_app()
+    long_warning = (
+        f"{COL_ERROR}Saving these changes requires deleting 12 generated sound "
+        "segments and 3 section markers from line 2 onward."
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            app.push_screen(SaveChangesDialog(["Apply changes?", ""]))
+            await pilot.pause()
+            baseline_height = app.screen.query_one(
+                "#save-changes-dialog", Vertical
+            ).size.height
+            await pilot.press("escape")
+            await pilot.pause()
+
+            app.push_screen(SaveChangesDialog(["Apply changes?", "", long_warning]))
+            await pilot.pause()
+            warning = app.screen.query_one("#save-changes-copy-line-3", Static)
+            dialog_box = app.screen.query_one("#save-changes-dialog", Vertical)
+
+            assert warning.region.height > 1
+            assert dialog_box.size.height > baseline_height
 
     run(exercise())
 

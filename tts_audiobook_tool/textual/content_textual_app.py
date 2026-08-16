@@ -9,6 +9,7 @@ from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
 from textual.css.errors import StylesheetError
 from textual.visual import VisualType
+from textual.widget import Widget
 from textual.widgets import Input, OptionList, Rule, Static
 from textual.widgets.option_list import Option
 from textual.timer import Timer
@@ -24,6 +25,7 @@ from tts_audiobook_tool.textual.textual_shared import (
     CONTENT_TEXTUAL_APP_CSS,
     HangingIndentText,
     NonWrappingOptionList,
+    OptionReconcileItem,
     STYLE_DIM,
     TEXTUAL_SHARED_CSS,
     can_textual,
@@ -132,12 +134,16 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         phrase_indices: Iterable[int] | None = None,
         empty_state_text: str = "No items",
         loading_state_text: str | None = None,
+        multi_select_enabled: bool = True,
+        side_panel_enabled: bool = False,
     ) -> None:
         super().__init__()
         self.project = project
         self.header_lines = list(header_lines)
         self.empty_state_text = empty_state_text
         self.loading_state_text = loading_state_text
+        self.multi_select_enabled = multi_select_enabled
+        self.side_panel_enabled = side_panel_enabled
         self.content_initialized = loading_state_text is None
         self.phrase_indices = (
             []
@@ -254,6 +260,36 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         """Commit concrete staged changes; concrete editors must implement this."""
         raise NotImplementedError
 
+    def compose_side_panel(self) -> ComposeResult:
+        """Yield optional panel widgets without coupling the shell to their types."""
+        yield from ()
+
+    def compose_content_main(self) -> Vertical:
+        """Build the shared list and empty-state pane."""
+        return Vertical(
+            NonWrappingOptionList(
+                *(
+                    Option(self.format_line(index), id=self.option_id(index))
+                    for index in range(len(self.phrase_indices))
+                ),
+                id="line-list",
+                markup=False,
+                compact=True,
+                collapse_selection=self.collapse_current_selection,
+                multi_select_enabled=self.multi_select_enabled,
+            ),
+            Static(
+                (
+                    self.empty_state_text
+                    if self.content_initialized
+                    else self.loading_state_text or self.empty_state_text
+                ),
+                id="empty-state",
+                markup=False,
+            ),
+            id="content-main",
+        )
+
     def compose(self) -> ComposeResult:
         header = Vertical(
             *(
@@ -270,25 +306,15 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         header.styles.height = len(self.header_lines)
         yield header
         yield Rule(id="header-divider")
-        yield NonWrappingOptionList(
-            *(
-                Option(self.format_line(index), id=self.option_id(index))
-                for index in range(len(self.phrase_indices))
-            ),
-            id="line-list",
-            markup=False,
-            compact=True,
-            collapse_selection=self.collapse_current_selection,
-        )
-        yield Static(
-            (
-                self.empty_state_text
-                if self.content_initialized
-                else self.loading_state_text or self.empty_state_text
-            ),
-            id="empty-state",
-            markup=False,
-        )
+        content_children: list[Widget] = [self.compose_content_main()]
+        if self.side_panel_enabled:
+            content_children.extend(
+                (
+                    Rule(orientation="vertical", id="side-panel-divider"),
+                    Vertical(*self.compose_side_panel(), id="side-panel"),
+                )
+            )
+        yield Horizontal(*content_children, id="content-shell")
         yield Horizontal(
             Static(
                 self.status_text,
@@ -414,15 +440,16 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         self.toast_timer = None
         self.update_status_line()
 
-    @staticmethod
-    def option_id(index: int) -> str:
+    def option_id(self, index: int) -> str:
         return f"line-{index}"
 
-    def refresh_line(self, index: int) -> None:
-        """Refresh one visible option from its backing data."""
-        self.query_one("#line-list", OptionList).replace_option_prompt(
-            self.option_id(index), self.format_line(index)
-        )
+    def refresh_line(self, index: int, *, reflow: bool = True) -> None:
+        """Refresh one visible option from its backing data.
+
+        Pass reflow=False when the change is style-only and cannot alter row
+        heights, to avoid rebuilding geometry for the full option list.
+        """
+        self.refresh_lines([index], reflow=reflow)
 
     def refresh_lines(self, indices: Iterable[int], *, reflow: bool = True) -> None:
         """Refresh several options while invalidating list caches only once."""
@@ -477,7 +504,11 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         """Move or extend selection to the newly highlighted row."""
         self.selected_index = event.option_index
         option_list = self.query_one("#line-list", NonWrappingOptionList)
-        if option_list.extend_selection and self.selection_anchor_index is not None:
+        if (
+            self.multi_select_enabled
+            and option_list.extend_selection
+            and self.selection_anchor_index is not None
+        ):
             self.replace_selection(
                 self.selection_anchor_index,
                 self.selected_index,
@@ -524,7 +555,7 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
             child.display = True
         self.query_one("#line-list", OptionList).focus()
         if previous_match_index is not None:
-            self.refresh_line(previous_match_index)
+            self.refresh_line(previous_match_index, reflow=False)
 
     def find_relative_match(
         self, match_indices: list[int], direction: int
@@ -562,7 +593,7 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
             self.find_match_index = None
             self.query_one("#find-result", Static).update("")
             if previous_match_index is not None:
-                self.refresh_line(previous_match_index)
+                self.refresh_line(previous_match_index, reflow=False)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Advance to the next match while retaining find focus."""
@@ -585,8 +616,11 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         self.find_match_index = match_index
         self.query_one("#line-list", OptionList).highlighted = match_index
         if previous_match_index is not None and previous_match_index != match_index:
-            self.refresh_line(previous_match_index)
-        self.refresh_line(match_index)
+            self.refresh_lines(
+                [previous_match_index, match_index], reflow=False
+            )
+        else:
+            self.refresh_line(match_index, reflow=False)
         self.query_one("#find-result", Static).update(
             f"{match_number} of {match_count}"
         )
@@ -619,6 +653,8 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         if self.find_active:
             self.query_one("#find-input", Input).select_all()
             return
+        if not self.multi_select_enabled:
+            return
         if self.selected_index is None:
             return
         new_selected_indices = set(range(len(self.phrase_indices)))
@@ -637,7 +673,11 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
 
     def action_show_manual_selection(self) -> None:
         """Show the manual line-selection dialog for the concrete editor."""
-        if not self.content_initialized or self.find_active:
+        if (
+            not self.multi_select_enabled
+            or not self.content_initialized
+            or self.find_active
+        ):
             return
         line_count = self.manual_selection_line_count()
         if line_count <= 0:
@@ -670,6 +710,9 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         self.selected_indices = {visible_index for visible_index, _ in matching_rows}
         self.update_inactive_selection_style()
         self.update_selection_status()
+        count = len(matching_rows)
+        line_noun = "line" if count == 1 else "lines"
+        self.set_toast_text(f"Selected {count} {line_noun}")
 
     def mutate_selected_items(
         self,
@@ -701,7 +744,10 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         return changed_indices
 
     def replace_phrase_indices(
-        self, phrase_indices: Iterable[int], selected_phrase_index: int | None = None
+        self,
+        phrase_indices: Iterable[int],
+        selected_phrase_index: int | None = None,
+        reconcile_items: Iterable[OptionReconcileItem] | None = None,
     ) -> None:
         """Replace the visible Project mapping and rebuild the option list."""
         self.phrase_indices = list(phrase_indices)
@@ -718,11 +764,14 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         if not self.is_running:
             return
 
-        option_list = self.query_one("#line-list", OptionList)
-        option_list.set_options(
-            Option(self.format_line(index), id=self.option_id(index))
-            for index in range(len(self.phrase_indices))
-        )
+        option_list = self.query_one("#line-list", NonWrappingOptionList)
+        if reconcile_items is None:
+            option_list.set_options(
+                Option(self.format_line(index), id=self.option_id(index))
+                for index in range(len(self.phrase_indices))
+            )
+        else:
+            option_list.reconcile_options(reconcile_items)
         option_list.highlighted = self.selected_index
         self.sync_empty_state()
         self.update_inactive_selection_style()

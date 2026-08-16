@@ -584,6 +584,30 @@ def test_x_confirm_deletes_all_files_for_generated_rows_and_refreshes_state() ->
     run(exercise())
 
 
+def test_x_confirm_reformats_only_deleted_generated_rows(monkeypatch) -> None:
+    app, _ = make_app(3, {0, 2})
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            retained_option = option_list.get_option("generate-phrase-1")
+            formatted_indices: list[int] = []
+            original_format_line = app.format_line
+
+            def record_format_line(index: int):
+                formatted_indices.append(index)
+                return original_format_line(index)
+
+            monkeypatch.setattr(app, "format_line", record_format_line)
+            await pilot.press("x", "y")
+            await pilot.pause()
+
+            assert formatted_indices == [0]
+            assert option_list.get_option("generate-phrase-1") is retained_option
+
+    run(exercise())
+
+
 def test_x_escape_cancels_deletion() -> None:
     app, project = make_app(1)
 
@@ -884,7 +908,7 @@ def test_m_opens_focused_manual_selection_dialog_and_escape_cancels() -> None:
     run(exercise())
 
 
-def test_manual_selection_dialog_shows_parser_errors_and_stays_open() -> None:
+def test_manual_selection_dialog_shows_syntax_errors_and_stays_open() -> None:
     app, _ = make_app(8)
 
     async def exercise() -> None:
@@ -893,10 +917,31 @@ def test_manual_selection_dialog_shows_parser_errors_and_stays_open() -> None:
             app.screen.query_one("#manual-selection-input", Input).value = "0, bad, 20"
             await pilot.press("enter")
 
+            # Out-of-range values (0, 20) are silently discarded; only the
+            # syntax error "bad" is reported
             assert isinstance(app.screen, ManualSelectionDialog)
             assert str(
                 app.screen.query_one("#manual-selection-error", Static).render()
-            ) == "Out of range: 0; Bad value: bad; Out of range: 20"
+            ) == "Bad value: bad"
+
+    run(exercise())
+
+
+def test_manual_selection_dialog_silently_clamps_and_discards_out_of_range() -> None:
+    app, _ = make_app(8)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            # 6-120 clamps to 6-8; 20, 100-120, and -20 are discarded; 2-5 as-is
+            app.screen.query_one("#manual-selection-input", Input).value = (
+                "6-120, 20, 100-120, -20, 2-5"
+            )
+            await pilot.press("enter")
+
+            assert not isinstance(app.screen, ManualSelectionDialog)
+            assert app.selected_indices == {1, 2, 3, 4, 5, 6, 7}
+            assert app.toast_text == "Selected 7 lines"
 
     run(exercise())
 
@@ -1011,6 +1056,40 @@ def test_number_selection_applies_each_filter_and_updates_header() -> None:
                     assert rendered_header.endswith(
                         f"[F] Filter lines (currently: {filter_type.value_label})"
                     )
+
+    run(exercise())
+
+
+def test_filter_reuses_retained_options_without_reformatting(monkeypatch) -> None:
+    app, _ = make_app(6, {1, 2, 3, 4})
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            option_list = app.query_one("#line-list", NonWrappingOptionList)
+            retained_options = {
+                phrase_index: option_list.get_option(
+                    f"generate-phrase-{phrase_index}"
+                )
+                for phrase_index in (1, 2, 3, 4)
+            }
+            formatted_indices: list[int] = []
+            original_format_line = app.format_line
+
+            def record_format_line(index: int):
+                formatted_indices.append(index)
+                return original_format_line(index)
+
+            monkeypatch.setattr(app, "format_line", record_format_line)
+            await pilot.press("f", "3")
+            await pilot.pause()
+
+            assert formatted_indices == []
+            assert app.filter_type == FilterType.GENERATED
+            for phrase_index, retained_option in retained_options.items():
+                assert (
+                    option_list.get_option(f"generate-phrase-{phrase_index}")
+                    is retained_option
+                )
 
     run(exercise())
 

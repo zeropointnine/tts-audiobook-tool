@@ -3,7 +3,6 @@ from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShel
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
-from tts_audiobook_tool.menus.section_markers_limited_menu import SectionMarkersLimitedMenu
 from tts_audiobook_tool.menus.section_markers_menu import SectionMarkersMenu
 from tts_audiobook_tool.menus.menu_shared import make_output_files_subheading, make_output_range_info_strings
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -57,7 +56,7 @@ class ConcatMenu:
                 value = make_currently_string(f"{num_markers} {items_noun} = {num_files} {files_noun}")
             else:
                 value = f"{COL_DIM}(optional)"
-            label = f"File split points {value}"
+            label = f"Split points {value}"
             return label
 
         def make_items(_: State) -> list[MenuItem]:
@@ -73,14 +72,10 @@ class ConcatMenu:
             )
 
             is_limited = state.project.has_multiple_book_sections()
-            if is_limited:    
-                items.append( 
-                    MenuItem(make_split_points_label, lambda _, __: SectionMarkersLimitedMenu.menu(state)) 
-                )
-            else:
-                items.append( 
-                    MenuItem(make_section_markers_label, lambda _, __: SectionMarkersMenu.menu(state)) 
-                )
+            label_function = make_split_points_label if is_limited else make_section_markers_label
+            items.append( 
+                MenuItem(label_function, lambda _, __: SectionMarkersMenu.menu(state)) 
+            )
 
             items.append(
                 MenuItem(
@@ -392,7 +387,7 @@ def ask_output_indices_and_make(state: State) -> None:
 
         output_indices = []
         if state.project.can_use_bookmark_section_markers():
-            bookmark_indices = state.project.markers
+            bookmark_indices = sorted(state.project.markers)
         else:
             bookmark_indices = []
 

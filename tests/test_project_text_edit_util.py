@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from tts_audiobook_tool.app_types import Book, BookSection
@@ -5,6 +6,8 @@ from tts_audiobook_tool.app_types.book_serialization import (
     load_book_from_project_text_file,
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_edit_util import (
     ProjectTextEditUtil,
@@ -113,6 +116,8 @@ def test_commit_rejects_stale_project_before_writing_or_deleting(
         assert error == "Project text changed while editing"
         assert not Path(project.project_text_path).exists()
         assert all(path.exists() for pair in generated_files for path in pair)
+        assert project.markers == set()
+        assert not Path(project.dir_path, PROJECT_JSON_FILE_NAME).exists()
     finally:
         stop_project(project)
 
@@ -146,5 +151,91 @@ def test_commit_save_failure_leaves_project_and_audio_untouched(
             "C.",
         ]
         assert all(path.exists() for pair in generated_files for path in pair)
+    finally:
+        stop_project(project)
+
+
+def test_commit_prunes_stale_section_markers_and_saves_project_json(
+    tmp_path: Path,
+) -> None:
+    L.init("test-project-text-edit-util")
+    project = make_project(tmp_path)
+    try:
+        # The markers setter discards non-positive values, so 0 never survives.
+        project.markers = {0, 1, 2, 3}
+        assert project.markers == {1, 2, 3}
+        session = TextEditSession(project.book)
+        session.delete_phrase_groups({session.phrase_groups[2].item_id})
+
+        error = ProjectTextEditUtil.commit(
+            project,
+            session.to_book(),
+            session.original_snapshot,
+            session.earliest_affected_original_index,
+        )
+
+        assert error == ""
+        assert project.markers == {1}
+        on_disk = json.loads(
+            (tmp_path / PROJECT_JSON_FILE_NAME).read_text(encoding="utf-8")
+        )
+        assert on_disk["markers"] == [1]
+    finally:
+        stop_project(project)
+
+
+def test_commit_skips_project_save_when_no_markers_are_stale(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project = make_project(tmp_path)
+    save_calls = 0
+
+    def record_save(self) -> str:
+        nonlocal save_calls
+        save_calls += 1
+        return ""
+
+    monkeypatch.setattr(Project, "save", record_save)
+    try:
+        project.markers = {1}
+        session = TextEditSession(project.book)
+        session.delete_phrase_groups({session.phrase_groups[2].item_id})
+
+        error = ProjectTextEditUtil.commit(
+            project,
+            session.to_book(),
+            session.original_snapshot,
+            session.earliest_affected_original_index,
+        )
+
+        assert error == ""
+        assert project.markers == {1}
+        assert save_calls == 0
+        assert not (tmp_path / PROJECT_JSON_FILE_NAME).exists()
+    finally:
+        stop_project(project)
+
+
+def test_commit_reports_marker_save_failure(tmp_path: Path, monkeypatch) -> None:
+    project = make_project(tmp_path)
+    try:
+        project.markers = {1, 2, 3}
+        session = TextEditSession(project.book)
+        session.delete_phrase_groups({session.phrase_groups[2].item_id})
+        monkeypatch.setattr(Project, "save", lambda self: "markers disk full")
+
+        error = ProjectTextEditUtil.commit(
+            project,
+            session.to_book(),
+            session.original_snapshot,
+            session.earliest_affected_original_index,
+        )
+
+        assert error == (
+            "Project text was saved, but section markers could not "
+            "be saved: markers disk full"
+        )
+        assert project.markers == {1}
     finally:
         stop_project(project)

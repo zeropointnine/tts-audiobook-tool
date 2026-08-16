@@ -361,7 +361,7 @@ class ReadinessIssue:
 
 # ---
 
-FILES_DESC = "Each section marker defines the start of a new, separate audio file."
+FILES_DESC = "Section markers define the start of new files."
 METADATA_DESC = (
     "Section markers are used for M4B chapter metadata and player bookmark metadata.\n"
     "      Always outputs to a single file."
@@ -369,8 +369,8 @@ METADATA_DESC = (
 
 class SectionMarkerMode(tuple[str, str, str], Enum):
 
-    FILES = ("files", "Splits into files", FILES_DESC)
-    BOOKMARKS = ("metadata", "Adds metadata", METADATA_DESC)
+    FILES = ("files", "Split into files", FILES_DESC)
+    BOOKMARKS = ("metadata", "Add metadata", METADATA_DESC)
 
     @property
     def id(self) -> str:
