@@ -675,7 +675,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 **2026-08-19**
 
-- Added optional **dialog segmentation** at `Text > Segmentation settings > Dialog segmentation`. Detected dialog is separated from surrounding narration and preassigned to voice sample 2, simplifying multi-voice narration. [Short sample](xxx)
+- Added optional **dialog segmentation** at `Text > Segmentation settings > Dialog segmentation`. Detected dialog is separated from surrounding narration and preassigned to voice sample 2, simplifying multi-voice narration. [Short sample](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/two-voices-dialog-qwen3.abr.m4a)
 
 **2026-08-17**
 
