@@ -269,7 +269,9 @@ def test_process_resamples_and_forwards_bandwidth_only_defaults(
     assert len(result.data) == 9
     assert resample_calls == [(48_000, 16_000)]
     call = FakeLavaModel.instances[0].calls[0]
-    assert call["wav"].shape == (1, 3)
+    # 9 samples at 48 kHz become 3 at 16 kHz and are padded up to the BWE
+    # minimum before the model sees them.
+    assert call["wav"].shape == (1, lava_sr_util.MIN_ENHANCE_SAMPLES)
     assert call["wav"].dtype == torch.float32
     assert call["enhance"] is True
     assert call["denoise"] is False
@@ -327,6 +329,7 @@ def test_long_audio_is_chunked_crossfaded_and_keeps_exact_duration(
     set_accelerators(monkeypatch)
     monkeypatch.setattr(lava_sr_util, "CHUNK_SAMPLES", 6)
     monkeypatch.setattr(lava_sr_util, "OVERLAP_SAMPLES", 2)
+    monkeypatch.setattr(lava_sr_util, "MIN_ENHANCE_SAMPLES", 2)
     util = LavaSrUtil(device="cpu")
     call_index = 0
 
@@ -361,6 +364,43 @@ def test_short_model_output_is_extended_to_preserve_duration(
     assert not isinstance(result, str)
     assert len(result.data) == 12
     np.testing.assert_allclose(result.data, 0.5)
+
+
+@pytest.mark.parametrize("input_length", [100, 256])
+def test_short_clips_are_padded_to_the_bwe_minimum(
+    fake_lava_module,
+    monkeypatch,
+    input_length,
+):
+    # The v2 BWE feature extractor reflect-pads 768 samples on each side of
+    # the 48 kHz waveform and fails when the chunk is that short (the
+    # "padding (768, 768) at dimension 1 of input [1, 480]" crash). Emulate
+    # that constraint: 16 kHz input resamples 3x, so clips of at most
+    # 256 samples at 16 kHz would crash an unpatched model.
+    set_accelerators(monkeypatch)
+    util = LavaSrUtil(device="cpu")
+    model = FakeLavaModel.instances[0]
+    seen = []
+
+    def strict_enhance(wav, enhance=True, denoise=False, batch=False):
+        seen.append(wav.clone())
+        wav_48k = wav.repeat_interleave(3, dim=-1)
+        if wav_48k.shape[-1] <= 768:
+            raise RuntimeError(
+                "Argument #4: Padding size should be less than the "
+                f"corresponding input dimension, but got: padding (768, 768) "
+                f"at dimension 1 of input {tuple(wav_48k.shape)}"
+            )
+        return wav_48k
+
+    model.enhance = strict_enhance
+
+    result = util.process(Sound(np.ones(input_length, dtype=np.float32), 16_000))
+
+    assert not isinstance(result, str), result
+    assert len(result.data) == input_length * 3
+    assert len(seen) == 1
+    assert seen[0].shape == (1, lava_sr_util.MIN_ENHANCE_SAMPLES)
 
 
 def test_process_rejects_non_mono_audio(fake_lava_module, monkeypatch):

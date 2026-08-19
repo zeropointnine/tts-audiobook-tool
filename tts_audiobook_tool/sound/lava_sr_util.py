@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 import importlib
 import multiprocessing
+import warnings
 from multiprocessing.connection import Connection
 from typing import Any, Protocol
 
@@ -23,6 +24,26 @@ CHUNK_SAMPLES = int(CHUNK_DURATION * INPUT_SR)
 OVERLAP_SAMPLES = int(OVERLAP_DURATION * INPUT_SR)
 SR_RATIO = OUTPUT_SR // INPUT_SR
 WORKER_SHUTDOWN_TIMEOUT_SECONDS = 10.0
+
+# The v2 BWE model's feature extractor (Vocos MelSpectrogramFeatures,
+# n_fft=2048 / hop=512 / padding="same") reflect-pads 768 samples on each side
+# of the 48 kHz waveform, and PyTorch rejects padding that is not smaller than
+# the dimension. 16 kHz audio resamples exactly 3x, so any single-chunk clip
+# of at most 256 samples (16 ms) crashes with "padding (768, 768) at dimension
+# 1 of input [1, 480]". Multi-chunk (> 120 s) audio never hits this: its last
+# chunk is at least OVERLAP_SAMPLES + 1 samples long. This guard (16 kHz
+# domain) covers very short clips with comfortable margin over the strict
+# 257-sample minimum.
+MIN_ENHANCE_SAMPLES = 512
+
+# LavaSR's BWE enhancer still builds the deprecated torch.cuda.amp.autocast
+# context; suppress that one FutureWarning so it does not pollute app logs.
+# (The message starts with a backtick; the match is anchored.)
+warnings.filterwarnings(
+    "ignore",
+    message=r"`?torch\.cuda\.amp\.autocast",
+    category=FutureWarning,
+)
 
 
 class WorkerProcess(Protocol):
@@ -297,10 +318,7 @@ class LavaSrUtil:
 
         self.configure_refiner(sound.sr)
         sound_16k = SoundUtil.resample_if_necessary(sound, INPUT_SR)
-        waveform = torch.as_tensor(
-            np.asarray(sound_16k.data, dtype=np.float32),
-            dtype=torch.float32,
-        )
+        waveform = np.asarray(sound_16k.data, dtype=np.float32)
         sample_count = waveform.shape[-1]
         output = np.empty(sample_count * SR_RATIO, dtype=np.float32)
 
@@ -310,9 +328,25 @@ class LavaSrUtil:
 
         while start < sample_count:
             end = min(start + CHUNK_SAMPLES, sample_count)
-            chunk = waveform[start:end].unsqueeze(0)
+            chunk = waveform[start:end]
             expected_chunk_length = (end - start) * SR_RATIO
-            processed = self.process_chunk(chunk, denoise, expected_chunk_length)
+            if chunk.shape[-1] < MIN_ENHANCE_SAMPLES:
+                # Only very short single-chunk clips reach this branch (see
+                # MIN_ENHANCE_SAMPLES). Extend them with the final sample so
+                # the BWE feature extractor's reflect padding fits;
+                # process_chunk trims the output back to the true length.
+                # (NumPy padding, since older torch builds reject 1D
+                # non-constant F.pad.)
+                chunk = np.pad(
+                    chunk,
+                    (0, MIN_ENHANCE_SAMPLES - chunk.shape[-1]),
+                    mode="edge",
+                )
+            processed = self.process_chunk(
+                torch.as_tensor(chunk, dtype=torch.float32).unsqueeze(0),
+                denoise,
+                expected_chunk_length,
+            )
 
             start_out = start * SR_RATIO
             end_out = end * SR_RATIO
