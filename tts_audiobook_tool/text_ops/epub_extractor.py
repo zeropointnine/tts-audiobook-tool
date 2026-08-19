@@ -364,6 +364,7 @@ class EpubExtractor:
             max_words: int,
             segmentation_strategy: SegmentationStrategy,
             language_code: str,
+            dialog_segmentation: bool = False,
             extractor: EpubChapterTextExtractor | None = None
     ) -> EpubImportResult:
         source_chapters, book_title, warnings, significant_warnings = EpubExtractor.load_source_chapters(epub_path)
@@ -408,6 +409,7 @@ class EpubExtractor:
                 max_words=max_words,
                 strategy=segmentation_strategy,
                 pysbd_lang=language_code,
+                dialog_segmentation=dialog_segmentation,
             )
             if phrase_groups and DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY:
                 EpubExtractor.downgrade_leading_section_groups(chapter_phrase_groups)

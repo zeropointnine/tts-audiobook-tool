@@ -100,8 +100,8 @@ class PhraseSegmenter:
         # pysbd treats everything enclosed in quotes as a single sentence, so split those up, too
         new_sentences = []
         for string in sentences:
-            if is_sentence_quotation(string):
-                inner_sentences = segment_quote_sentence(string, segmenter)
+            if is_quoted_sentence(string):
+                inner_sentences = segment_quoted_sentence(string, segmenter)
                 inner_sentences = merge_danging_punc_word(inner_sentences) # type: ignore
                 new_sentences.extend(inner_sentences)
             else:
@@ -233,9 +233,9 @@ class PhraseSegmenter:
 
 # ---
 
-def is_sentence_quotation(pysbd_segmented_string: str) -> bool:
+def is_quoted_sentence(pysbd_segmented_string: str) -> bool:
     """
-    Given a pysbd-segmented string, does it appear to be a "quotation sentence"
+    Given a pysbd-segmented string, does it appear to be a quoted sentence
     (ie, a candidate for further segmentation).
     Tested on english only for now.
     """
@@ -255,7 +255,7 @@ def is_sentence_quotation(pysbd_segmented_string: str) -> bool:
     start, _, end = split_string_parts(pysbd_segmented_string)
     return has_start_quote_char(start) and has_end_quote_char(end)
 
-def segment_quote_sentence(sentence: str, segmenter) -> list[str]:
+def segment_quoted_sentence(sentence: str, segmenter) -> list[str]:
     """
     Given a quote which may consist of multiple sentences and may have whitespace before and/or after the quote,
     segment the inside of the quote by sentence, preserving whitespace.

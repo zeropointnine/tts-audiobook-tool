@@ -147,8 +147,8 @@ def test_single_section_lists_only_phrase_group_rows() -> None:
 
     assert all(isinstance(item, VoiceLinePhraseGroupItem) for item in app.list_items)
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "[00001] [Voice sample 1] One.",
-        "[00002] [Voice sample 1] Two.",
+        "[00001] [Voice 1] One.",
+        "[00002] [Voice 1] Two.",
     ]
     assert app.find_match_indices("only section") == []
 
@@ -175,11 +175,11 @@ def test_multiple_sections_insert_generated_section_rows() -> None:
         VoiceLinePhraseGroupItem,
     ]
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "\nSection 1/2: Opening (2 lines)\n",
-        "[00001] [Voice sample 1] One.",
-        "[00002] [Voice sample 1] Two.",
-        "\nSection 2/2: Middle (1 line)\n",
-        "[00003] [Voice sample 1] Three.",
+        "\nSection 1/2: Opening (2 lines)\n\n",
+        "[00001] [Voice 1] One.",
+        "[00002] [Voice 1] Two.",
+        "\nSection 2/2: Middle (1 line)\n\n",
+        "[00003] [Voice 1] Three.",
     ]
     assert app.format_line(0).spans == []
 
@@ -224,8 +224,8 @@ def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> 
     )
 
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "\nSection 2/2: Text (1 line)\n",
-        "[00001] [Voice sample 1] One.",
+        "\nSection 2/2: Text (1 line)\n\n",
+        "[00001] [Voice 1] One.",
     ]
     assert empty_app.list_items == []
 
@@ -301,7 +301,7 @@ def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> 
     rendered = ["".join(segment.text for segment in line) for line in rendered_lines]
 
     assert rendered == [
-        "[00001] [Voice sample 1] one two",
+        "[00001] [Voice 1] one two",
         "                         three four",
         "                         five six…",
     ]

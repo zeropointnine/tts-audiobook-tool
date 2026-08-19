@@ -4,7 +4,7 @@ from typing import cast
 import pytest
 
 import tts_audiobook_tool.menus.text_menu as text_menu_module
-from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
 from tts_audiobook_tool.constants_hints import HINT_TOLERANCE_FIRST_CLASS
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.text_menu import TextMenu, on_set_text
@@ -103,12 +103,14 @@ def test_text_import_shows_tolerance_hint_for_first_class_language(
         language_code="en",
         max_words_per_segment=40,
         strategy=SegmentationStrategy.SENTENCE,
+        dialog_segmentation=False,
     )
     project = SimpleNamespace(
         sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
         max_words=40,
         segmentation_strategy=SegmentationStrategy.SENTENCE,
         language_code="en",
+        dialog_segmentation=False,
         dir_path="/tmp/project",
         book=SimpleNamespace(segmentation_settings=segmentation_settings),
     )
@@ -188,11 +190,13 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
         max_words=40,
         segmentation_strategy=SegmentationStrategy.SENTENCE,
         language_code="fr",
+        dialog_segmentation=False,
         book=SimpleNamespace(
             segmentation_settings=SimpleNamespace(
                 language_code="fr",
                 max_words_per_segment=40,
                 strategy=SegmentationStrategy.SENTENCE,
+                dialog_segmentation=False,
             )
         ),
     )
@@ -225,3 +229,102 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
     on_set_text(state, MenuItem("Import", lambda *_: None, data="manual"))
 
     assert hint_calls == []
+
+
+@pytest.mark.parametrize(
+    (
+        "dialog_segmentation",
+        "voice_select_mode",
+        "dialog_segment_count",
+        "expect_inactive_note",
+    ),
+    [
+        (False, VoiceSelectMode.AUTO_ADVANCE, 0, False),
+        (True, VoiceSelectMode.AUTO_ADVANCE, 1, True),
+        (True, VoiceSelectMode.USER_DEFINED, 1, False),
+        (True, VoiceSelectMode.AUTO_ADVANCE, 0, False),
+    ],
+)
+def test_import_summary_reports_dialog_preassignments_without_changing_mode(
+    monkeypatch,
+    dialog_segmentation: bool,
+    voice_select_mode: VoiceSelectMode,
+    dialog_segment_count: int,
+    expect_inactive_note: bool,
+) -> None:
+    from tts_audiobook_tool.constants import COL_ACCENT
+
+    phrase_groups = [
+        SimpleNamespace(voice_index=-1),
+        *[
+            SimpleNamespace(voice_index=1)
+            for _ in range(dialog_segment_count)
+        ],
+    ]
+    segmentation_settings = SimpleNamespace(
+        language_code="en",
+        max_words_per_segment=80,
+        strategy=SegmentationStrategy.MULTI_SENTENCE,
+        dialog_segmentation=dialog_segmentation,
+    )
+    project = SimpleNamespace(
+        sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
+        max_words=80,
+        segmentation_strategy=SegmentationStrategy.MULTI_SENTENCE,
+        language_code="en",
+        dialog_segmentation=dialog_segmentation,
+        voice_select_mode=voice_select_mode,
+        dir_path="/tmp/project",
+        book=SimpleNamespace(segmentation_settings=segmentation_settings),
+    )
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=object(),
+            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=None),
+        ),
+    )
+
+    printed: list[str] = []
+    monkeypatch.setattr(text_menu_module, "printt", lambda *args: printed.extend(str(a) for a in args))
+    monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        text_menu_module.hints,
+        "show_hint_if_necessary",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        text_menu_module.ProjectTextIOUtil,
+        "set_phrase_groups_and_save",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        text_menu_module.ask_phrase_groups,
+        "get_from_std_in",
+        lambda *args, **kwargs: (phrase_groups, "Raw text"),
+    )
+
+    on_set_text(state, MenuItem("Import", lambda *_: None, data="manual"))
+
+    expected = f"- Dialog segmentation: {COL_ACCENT}{dialog_segmentation}"
+    assert expected in printed
+    assert printed.index(expected) > printed.index(
+        f"- Text segmenter strategy: {COL_ACCENT}Multiple sentences"
+    )
+
+    assignment_lines = [
+        line
+        for line in printed
+        if line.startswith("  Text segments preassigned to voice sample 2:")
+    ]
+    assert assignment_lines == (
+        [
+            f"  Text segments preassigned to voice sample 2: "
+            f"{COL_ACCENT}{dialog_segment_count}"
+        ]
+        if dialog_segmentation
+        else []
+    )
+    assert any("Voice selection mode must be set" in line for line in printed) is expect_inactive_note
+    assert project.voice_select_mode is voice_select_mode

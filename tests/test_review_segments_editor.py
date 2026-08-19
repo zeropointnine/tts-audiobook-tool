@@ -205,8 +205,8 @@ def test_generate_editor_projects_sections_and_suppresses_single_section() -> No
         GenerateSectionItem,
         GeneratePhraseGroupItem,
     ]
-    assert str(app.format_line(0)) == "\nSection 1/2: Opening (2 lines)\n"
-    assert str(app.format_line(3)) == "\nSection 2/2: Middle (1 line)\n"
+    assert str(app.format_line(0)) == "\nSection 1/2: Opening (2 lines)\n\n"
+    assert str(app.format_line(3)) == "\nSection 2/2: Middle (1 line)\n\n"
     assert app.format_line(0).spans == []
 
 
@@ -230,7 +230,7 @@ def test_generate_filter_omits_empty_sections_and_counts_visible_matches() -> No
         GenerateSectionItem,
         GeneratePhraseGroupItem,
     ]
-    assert str(app.format_line(0)) == "\nSection 1/3: Opening (1 line)\n"
+    assert str(app.format_line(0)) == "\nSection 1/3: Opening (1 line)\n\n"
     assert app.content_line_index(app.phrase_indices[1]) == 1
     assert project.phrase_groups[1].presentable_text == "Two."
 
@@ -699,7 +699,7 @@ def test_best_segment_word_error_count_replaces_queue_status() -> None:
         and span.end > word_errors_start
         and isinstance(span.style, Style)
         and span.style.color is not None
-        and span.style.color.get_truecolor() == (128, 128, 128)
+        and span.style.color.get_truecolor() == (136, 136, 136)
         for span in formatted_line.spans
     )
     assert str(app.format_line(1)) == "00002 [generated] [word errors: 0] Line 2"

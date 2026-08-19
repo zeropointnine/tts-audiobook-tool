@@ -34,6 +34,7 @@ class TestBookSerialization(unittest.TestCase):
                 language_code="en",
                 max_words_per_segment=120,
                 strategy=SegmentationStrategy.MULTI_SENTENCE,
+                dialog_segmentation=True,
             ),
             sections=[
                 BookSection(
@@ -59,6 +60,7 @@ class TestBookSerialization(unittest.TestCase):
         self.assertEqual(result.segmentation_settings.language_code, "en")
         self.assertEqual(result.segmentation_settings.max_words_per_segment, 120)
         self.assertEqual(result.segmentation_settings.strategy, SegmentationStrategy.MULTI_SENTENCE)
+        self.assertEqual(result.segmentation_settings.dialog_segmentation, True)
         self.assertEqual([section.title for section in result.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([group.text for group in result.phrase_groups], ["Opening prose.", "Next chapter.\n\n"])
         self.assertEqual([group.voice_index for group in result.phrase_groups], [-1, 2])

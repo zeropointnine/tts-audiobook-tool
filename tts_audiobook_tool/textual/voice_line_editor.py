@@ -157,7 +157,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             voice_status = ""
         prefix_ansi = (
             f"{COL_DIM}[{phrase_index + 1:05d}] "
-            f"{COL_ACCENT}[Voice sample {voice_number}{voice_status}]{COL_DIM} "
+            f"{COL_ACCENT}[Voice {voice_number}{voice_status}]{COL_DIM} "
         )
         return HangingIndentText.from_ansi(
             ansi_text=f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text}",

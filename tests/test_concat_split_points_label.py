@@ -20,6 +20,7 @@ def make_state() -> State:
     project = Project.model_validate({
         "book": Book(sections=[
             BookSection(phrase_groups=[make_group(f"Line {i}.") for i in range(9)]),
+            BookSection(phrase_groups=[]),
         ]),
     })
     state = cast(State, SimpleNamespace(project=project, prefs=SimpleNamespace(aac_bitrate="128k")))

@@ -209,6 +209,8 @@ class ProjectSerializationUtil:
             max_value=MAX_WORDS_PER_SEGMENT_MAX,
         )
 
+        normalize_bool('dialog_segmentation', False)
+
         s = d.get('applied_strategy', '')
         d['applied_strategy'] = SegmentationStrategy.from_id(s)
 
@@ -216,6 +218,8 @@ class ProjectSerializationUtil:
         if not (i >= 0):
             i = 0
         d['applied_max_words'] = i
+
+        normalize_bool('applied_dialog_segmentation', False)
 
         s = d.get('generate_range', '')
         if isinstance(s, str):
@@ -251,6 +255,7 @@ class ProjectSerializationUtil:
             language_code=d.get('applied_language_code', ''),
             max_words_per_segment=d.get('applied_max_words', 0),
             strategy=d.get('applied_strategy') or BookSegmentationSettings().strategy,
+            dialog_segmentation=d.get('applied_dialog_segmentation', False),
         )
         book = d.get('book')
         if isinstance(book, Book):
@@ -607,6 +612,7 @@ class ProjectSerializationUtil:
 
             "segmentation_strategy": project.segmentation_strategy.id,
             "max_words": project.max_words,
+            "dialog_segmentation": project.dialog_segmentation,
             "word_substitutions_json_string": json.dumps(project.word_substitutions),
 
             "generate_range": project.generate_range_string,

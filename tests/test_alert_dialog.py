@@ -30,8 +30,8 @@ def test_alert_dialog_renders_optional_error_colored_title_and_copy() -> None:
             assert isinstance(copy, Text)
             assert title.plain == "Cannot generate audio"
             assert copy.plain == "Choose a voice\nConfigure the model"
-            assert title.spans and str(title.spans[0].style) == "color(196)"
-            assert copy.spans and str(copy.spans[0].style) == "color(196)"
+            assert title.spans and str(title.spans[0].style) == "#ff0000"
+            assert copy.spans and str(copy.spans[0].style) == "#ff0000"
             assert app.screen.focused is app.screen.query_one("#ok", Button)
 
     run(exercise())

@@ -3,6 +3,10 @@ import re
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
+from tts_audiobook_tool.text_ops.dialog_segmenter import (
+    DIALOG_VOICE_INDEX,
+    DialogSegmenter,
+)
 from tts_audiobook_tool.util import printt
 
 class PhraseGrouper:
@@ -15,13 +19,19 @@ class PhraseGrouper:
             text: str,
             max_words: int,
             strategy: SegmentationStrategy=SegmentationStrategy.SENTENCE_PLUS,
-            pysbd_lang: str="en"
+            pysbd_lang: str="en",
+            dialog_segmentation: bool=False,
     ) -> list[PhraseGroup]:
         """
         Creates PhraseGroups using the passed-in raw source text.
         
         This is the app's main, high-level function for chunking text.
         One PhraseGroup gets transformed into one TTS prompt.
+
+        When dialog_segmentation is enabled, a final pass subdivides groups so
+        accepted dialog and narration do not share a group, and preassigns dialog
+        to voice sample 2. It does not recombine
+        groups created by the normal segmentation passes.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         # This guarantees that imported text has no blank lines containing
@@ -56,6 +66,12 @@ class PhraseGrouper:
             groups = PhraseGrouper.group_to_groups_by_max_words(group, max_words)
             results.extend(groups)
         groups = results
+
+        if dialog_segmentation:
+            groups = DialogSegmenter.segment_groups(
+                groups,
+                dialog_voice_index=DIALOG_VOICE_INDEX,
+            )
 
         return groups
 

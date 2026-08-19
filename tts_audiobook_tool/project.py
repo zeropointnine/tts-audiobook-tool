@@ -57,6 +57,7 @@ class Project(BaseModel):
             language_code=self.applied_language_code,
             max_words_per_segment=self.applied_max_words,
             strategy=self.applied_strategy or BookSegmentationSettings().strategy,
+            dialog_segmentation=self.applied_dialog_segmentation,
         )
         self.book = Book(
             sections=[BookSection(phrase_groups=value)],
@@ -106,6 +107,7 @@ class Project(BaseModel):
     book: Book = Field(default_factory=lambda: Book(sections=[]))
     segmentation_strategy: SegmentationStrategy = PROJECT_DEFAULT_SEGMENTATION_STRATEGY
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
+    dialog_segmentation: bool = False
     word_substitutions: dict[str, str] = Field(default_factory=dict)
 
     # The segmentation strategy used to create the PhraseGroups from the source text
@@ -114,6 +116,8 @@ class Project(BaseModel):
     applied_max_words: int = 0
     # The language code used to create the PhraseGroups from the source text (ie, for pysbd)
     applied_language_code: str = ""
+    # The dialog segmentation setting used to create the PhraseGroups from the source text
+    applied_dialog_segmentation: bool = False
 
     # Generation-range sentinels:
     # - empty string means "all items" for compatibility reasons

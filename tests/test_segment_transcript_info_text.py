@@ -82,9 +82,9 @@ def test_make_info_text_formats_modern_sidecar_and_word_diff(capsys) -> None:
     assert all("\n" not in line for line in lines)
     assert "Line: 1, Word error fail" in plain_text
     assert "Filename: line-1.flac" in plain_text
-    assert "Source text               : the cat" in plain_text
-    assert "TTS prompt                : Read the cat" in plain_text
-    assert "STT transcript            : a dog" in plain_text
+    assert "Source text              : the cat" in plain_text
+    assert "TTS prompt               : Read the cat" in plain_text
+    assert "STT transcript           : a dog" in plain_text
     assert "Word error visualization:" in plain_text
     assert "[=/=: the/a]" in plain_text
     assert "[=/=: cat/dog]" in plain_text

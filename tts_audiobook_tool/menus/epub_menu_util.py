@@ -56,6 +56,7 @@ class EpubMenuUtil:
             max_words: int,
             segmentation_strategy: SegmentationStrategy,
             language_code: str,
+            dialog_segmentation: bool = False,
     ) -> EpubImportResult | None:
         try:
             printt(f"{COL_DIM_ITALICS}Importing epub file... ")
@@ -64,6 +65,7 @@ class EpubMenuUtil:
                 max_words=max_words,
                 segmentation_strategy=segmentation_strategy,
                 language_code=language_code,
+                dialog_segmentation=dialog_segmentation,
             )
         except ImportError as e:
             printt()

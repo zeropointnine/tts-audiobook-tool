@@ -56,7 +56,7 @@ class MenuStatus:
 
 def _make_project_text(state: State) -> str:
     if state.project.dir_path:
-        text = text_util.make_terminal_hyperlink(state.project.dir_path)
+        text = text_util.make_terminal_hyperlink(state.project.dir_path, is_file=True)
     else:
         text = COL_ERROR + "required"
 

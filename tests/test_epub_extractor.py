@@ -92,6 +92,39 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertTrue(result.phrase_groups[0].phrases[-1].text.endswith("one."))
         self.assertTrue(result.phrase_groups[1].phrases[-1].text.endswith("two."))
 
+    def test_import_epub_preassigns_detected_dialog_to_voice_sample_two(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "Chapter 1",
+                "chapter1.xhtml",
+                "application/xhtml+xml",
+                'He said "Hello." Then left.',
+            ),
+        ]
+
+        with patch.object(
+            EpubExtractor,
+            "load_source_chapters",
+            return_value=(source_chapters, "", [], []),
+        ):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=100,
+                segmentation_strategy=SegmentationStrategy.MAX_LEN,
+                language_code="en",
+                dialog_segmentation=True,
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(
+            [group.text for group in result.phrase_groups],
+            ["He said ", '"Hello." ', "Then left."],
+        )
+        self.assertEqual(
+            [group.voice_index for group in result.phrase_groups],
+            [-1, 1, -1],
+        )
+
     def test_import_epub_downgrades_leading_section_after_previous_spine_boundary(self):
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose."),

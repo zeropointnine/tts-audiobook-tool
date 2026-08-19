@@ -124,6 +124,7 @@ def segmentation_settings_to_json_dict(settings: BookSegmentationSettings) -> di
         "language_code": settings.language_code,
         "max_words_per_segment": settings.max_words_per_segment,
         "strategy": settings.strategy.id,
+        "dialog_segmentation": settings.dialog_segmentation,
     }
 
 
@@ -146,10 +147,15 @@ def segmentation_settings_from_json_dict(value: Any) -> BookSegmentationSettings
     if strategy is None:
         strategy = BookSegmentationSettings().strategy
 
+    dialog_segmentation = value.get("dialog_segmentation", False)
+    if not isinstance(dialog_segmentation, bool):
+        dialog_segmentation = False
+
     return BookSegmentationSettings(
         language_code=language_code,
         max_words_per_segment=max_words,
         strategy=strategy,
+        dialog_segmentation=dialog_segmentation,
     )
 
 

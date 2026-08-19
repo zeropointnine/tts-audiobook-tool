@@ -122,11 +122,13 @@ class RealTimePlaybackMenu:
                     state.project.max_words, 
                     state.project.segmentation_strategy, 
                     pysbd_language=state.project.language_code,
-                    prefs=state.prefs
+                    prefs=state.prefs,
+                    dialog_segmentation=state.project.dialog_segmentation
                 )
             else:
                 phrase_groups, __ = ask_phrase_groups.get_from_std_in(
-                    state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code)
+                    state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code,
+                    dialog_segmentation=state.project.dialog_segmentation)
             if phrase_groups:
                 state.real_time.custom_phrase_groups = phrase_groups
                 state.real_time.custom_text_line_range = None

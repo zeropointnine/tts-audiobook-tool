@@ -44,7 +44,7 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
 
         result = get_heading_tts_text(make_state())
 
-        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni model id: bosonai/higgs-audio-v3"
+        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 server model id: bosonai/higgs-audio-v3"
     finally:
         restore_tts_and_sgl_state(saved)
 
@@ -58,7 +58,7 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
 
         result = get_heading_tts_text(make_state())
 
-        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 offline"
+        assert text_util.strip_ansi_codes(result) == "Higgs Audio V3 SGL-Omni offline"
         assert COL_ERROR in result
     finally:
         restore_tts_and_sgl_state(saved)
@@ -93,7 +93,7 @@ def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch)
         result = get_heading_tts_text(make_state())
 
         stripped = text_util.strip_ansi_codes(result)
-        assert stripped == "MOSS-TTS offline"
+        assert stripped == "MOSS-TTS-v1.5 SGL-Omni offline"
         assert "bosonai/higgs-audio-v3-tts-4b" not in stripped
         assert COL_ERROR in result
     finally:

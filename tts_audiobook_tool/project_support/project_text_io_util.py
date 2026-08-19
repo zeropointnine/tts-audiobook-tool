@@ -43,6 +43,7 @@ class ProjectTextIOUtil:
             max_words: int,
             language_code: str,
             raw_text: str,
+            dialog_segmentation: bool = False,
             title: str="",
             text_source_kind: str="plain_text",
     ) -> None:
@@ -51,6 +52,7 @@ class ProjectTextIOUtil:
             language_code=language_code,
             max_words_per_segment=max_words,
             strategy=strategy,
+            dialog_segmentation=dialog_segmentation,
         )
         book = Book(
             title=title,
@@ -79,6 +81,7 @@ class ProjectTextIOUtil:
             max_words: int,
             language_code: str,
             raw_text: str,
+            dialog_segmentation: bool = False,
             title: str="",
             section_titles: list[str] | None=None,
     ) -> None:
@@ -87,6 +90,7 @@ class ProjectTextIOUtil:
             language_code=language_code,
             max_words_per_segment=max_words,
             strategy=strategy,
+            dialog_segmentation=dialog_segmentation,
         )
         book = ProjectBookUtil.make_book_from_flat_compatibility_fields(
             phrase_groups=phrase_groups,

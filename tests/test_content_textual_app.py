@@ -247,7 +247,7 @@ def test_base_formats_section_list_items_with_shared_style() -> None:
 
     section_item = app.format_section_list_item("Section 1/2: Opening", 0)
 
-    assert str(section_item) == "\nSection 1/2: Opening\n"
+    assert str(section_item) == "\nSection 1/2: Opening\n\n"
     assert section_item.spans == []
     assert section_item.style == ""
 
@@ -699,7 +699,7 @@ def test_confirmation_dialog_renders_ansi_lines_and_only_yes_no_buttons() -> Non
                 "Generated sound segments will be deleted."
             )
             assert warning_renderable.spans
-            assert str(warning_renderable.spans[0].style) == "color(196)"
+            assert str(warning_renderable.spans[0].style) == "#ff0000"
             assert {button.id for button in app.screen.query(Button)} == {"yes", "no"}
 
     run(exercise())

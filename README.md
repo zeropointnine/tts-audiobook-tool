@@ -32,6 +32,8 @@ The app employs various techniques to make the nondeterministic output of genera
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 
+The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
+
 It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use. 
 
 The app uses a plain-text, hotkey-based console interface. 
@@ -59,28 +61,20 @@ The player is a static HTML page — no web server or install required. Open `br
 
 All examples use the same source text and the same 15-second voice clone sample using each model's default settings, unless noted:
 
-- [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a)
-- [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a)
-- [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a)
-- [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a)
-- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a)
-- [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (using a different voice clone sample, at high temperature)
-- [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a)
-- [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a)
-- [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (with added emotional guidance voice sample)
-- [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a)
-- [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a)
-- [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a)
-- [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a)
-- [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a)
-- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a)
-- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (upsampled to 48 kHz with LavaSR v2)
-- [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell)
-- [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a)
-- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a)
-- [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett))
-- [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a)
-- [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a)
+| | |
+| --- | --- |
+| [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) | [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a) |
+| [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a) | [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a) |
+| [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (different voice, high temp.) |
+| [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a) |
+| [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (w/ add'l emotional guidance sample) | [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a) |
+| [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) | [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a) |
+| [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) | [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a) |
+| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) |
+| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell) | [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) |
+| [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) |
+| [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) | [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a) |
+| [Dialog example (two voices, auto-assigned lines)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/two-voices-dialog-qwen3.abr.m4a) | |
 
 ### Enhance existing audiobooks
 
@@ -518,7 +512,8 @@ The app saves its state between sessions, so you can interrupt the program at an
 
 Additionally, setting "chapter cut points" can be useful to generate and export a long work in manageable chunks over time, allowing you to to use early chapter files before the full text is completed.
 
-Note too that it's possible to utilize different voices and even different models over the course of generating the sound segments for a given project for whatever reason.
+Note, too, that audio generation can be resumed using a different TTS model from the one initially selected by switching to the corresponding virtual environment for whatever reason.
+
 
 ### Voice cloning
 
@@ -677,6 +672,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-08-19**
+
+- Added optional **dialog segmentation** at `Text > Segmentation settings > Dialog segmentation`. Detected dialog is separated from surrounding narration and preassigned to voice sample 2, simplifying multi-voice narration. [Short sample](xxx)
 
 **2026-08-17**
 

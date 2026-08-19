@@ -108,7 +108,7 @@ def test_invalid_no_stored_prompts_enter_and_continues_with_empty_path(tmp_path:
     start.apply_project_override()
 
     assert _stored_project_dir(tmp_path) == ""
-    assert "Bad project path." in capsys.readouterr().out
+    assert "/p/bad does not appear to be a project directory" in capsys.readouterr().out
     assert enter_calls == ["enter"]
 
 def test_invalid_stored_confirm_yes_keeps_stored(tmp_path: Path, monkeypatch, capsys):
@@ -121,8 +121,8 @@ def test_invalid_stored_confirm_yes_keeps_stored(tmp_path: Path, monkeypatch, ca
 
     assert _stored_project_dir(tmp_path) == "/p/stored"
     out = capsys.readouterr().out
-    assert "Bad project path." in out
-    assert confirm_messages == ["Do you want to load the last used project path (/p/stored)?"]
+    assert "/p/bad does not appear to be a project directory" in out
+    assert confirm_messages == ["Do you want to load last used project path (/p/stored)?"]
 
 def test_invalid_stored_confirm_no_exits(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(ProjectLoadUtil, "is_valid_project_dir", staticmethod(_invalid))

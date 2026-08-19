@@ -170,10 +170,10 @@ def test_multiple_sections_add_ordered_headers_and_global_phrase_ordinals() -> N
     app = make_loaded_editor(project)
 
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "\nSection 1/2: Opening (2 lines)\n",
+        "\nSection 1/2: Opening (2 lines)\n\n",
         "00001  One.",
         "00002  Two.",
-        "\nSection 2/2: Middle (1 line)\n",
+        "\nSection 2/2: Middle (1 line)\n\n",
         "00003  Three.",
     ]
     assert app.format_line(0).spans == []
@@ -197,9 +197,9 @@ def test_empty_untitled_section_omits_title_separator_and_shows_zero_lines() -> 
     app = make_loaded_editor(project)
 
     assert [str(app.format_line(index)) for index in range(len(app.list_items))] == [
-        "\nSection 1/2: Named (1 line)\n",
+        "\nSection 1/2: Named (1 line)\n\n",
         "00001  One.",
-        "\nSection 2/2 (0 lines)\n",
+        "\nSection 2/2 (0 lines)\n\n",
     ]
 
 

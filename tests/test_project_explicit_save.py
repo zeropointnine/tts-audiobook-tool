@@ -101,6 +101,7 @@ def test_text_import_commits_each_json_artifact_once(
         strategy=project.segmentation_strategy,
         max_words=project.max_words,
         language_code=project.language_code,
+        dialog_segmentation=project.dialog_segmentation,
         raw_text="",
     )
 

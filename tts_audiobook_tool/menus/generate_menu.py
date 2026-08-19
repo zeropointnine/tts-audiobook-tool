@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import Iterable
+
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import Strictness, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_hint_util, hints
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -313,6 +316,20 @@ def make_tolerance_label(state: State) -> str:
         label += f"{COL_ERROR}*"
     return label
 
+def count_out_of_range_voice_indices(
+        phrase_groups: list[PhraseGroup],
+        indices: Iterable[int],
+        num_voice_values: int,
+) -> int:
+    """
+    Count user-defined voice selections that are stale (past the end of the voice sample list) and will be clamped.
+    `voice_index == -1` is the "no explicit assignment" default (the first voice sample), not an out-of-range selection.
+    """
+    return sum(
+        1 for index in indices
+        if phrase_groups[index].voice_index >= num_voice_values
+    )
+
 def make_retries_label(state: State) -> str:
     return make_menu_label(
         label="Max retries",
@@ -434,14 +451,13 @@ def do_generate(state: State) -> None:
         s = f"- Voice selection mode: "
         if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED and ProjectVoiceUtil.get_batch_size(state.project) > 1:
             s += f"{Ansi.STRIKETHROUGH}{state.project.voice_select_mode.label}{Ansi.RESET}"
-            s += f"\n- Warning: User-defined voice selections are not supported in batch mode"
+            s += f"\n- {COL_ERROR}Warning:{COL_DEFAULT} User-defined voice selections are not supported in batch mode"
             s += f"\n           Voice sample 1 will be used for all generations"
         else:
             s += f"{state.project.voice_select_mode.label}"
             if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
-                num_invalid_voice_indices = sum(
-                    not 0 <= state.project.phrase_groups[index].voice_index < len(voice_values)
-                    for index in indices
+                num_invalid_voice_indices = count_out_of_range_voice_indices(
+                    state.project.phrase_groups, indices, len(voice_values)
                 )
                 if num_invalid_voice_indices:
                     selection_word = make_noun(

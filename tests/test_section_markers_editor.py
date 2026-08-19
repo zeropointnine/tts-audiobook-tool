@@ -93,7 +93,7 @@ def test_editor_projects_multiple_sections_and_phrase_rows_in_book_order() -> No
         SectionMarkersSectionItem,
         SectionMarkersPhraseGroupItem,
     ]
-    assert str(app.format_line(0)) == "\nSection 1/2: Opening (2 lines)\n"
+    assert str(app.format_line(0)) == "\nSection 1/2: Opening (2 lines)\n\n"
     assert str(app.format_line(1)) == "00001  One."
     assert str(app.format_line(4)) == "00003  Three."
     assert app.content_line_index(0) is None
@@ -200,7 +200,7 @@ def test_markers_panel_reserves_its_last_line_for_overflow_count() -> None:
             assert text.plain == (
                 "Current section markers (8 items)\n\n"
                 "00002  Line 1.\n"
-                "                      +7 more items"
+                "                    +7 more items"
             )
             assert style_at(text, text.plain.index("+7 more items")).color == (
                 style_at(Text.from_ansi(f"{COL_GRAY}x"), 0).color
@@ -238,7 +238,7 @@ def test_space_toggles_marker_on_highlighted_line_and_updates_panel() -> None:
     )
 
     assert str(app.format_line(0)) == "00001  One."
-    assert str(app.format_line(2)) == "00003  Three."
+    assert str(app.format_line(2)) == "00003* Three."
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
@@ -248,7 +248,7 @@ def test_space_toggles_marker_on_highlighted_line_and_updates_panel() -> None:
             await pilot.press("space")
             assert app.staged_markers == {1, 2}
             assert app.has_changes is True
-            assert str(app.format_line(1)) == "00002  Two."
+            assert str(app.format_line(1)) == "00002* Two."
 
             panel = app.query_one("#markers-panel", Static)
             assert cast(Text, panel.content).plain == (
@@ -299,7 +299,7 @@ def test_header_documents_the_space_toggle_and_escape_finish_keys() -> None:
 
     assert Text.from_ansi(app.header_lines[1]).plain == (
         "- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END], "
-        "[BRACKETS] previous/next marker  - [CTRL-F] Find text"
+        "[L/R BRACKET] previous/next item  - [CTRL-F] Find text"
     )
     assert Text.from_ansi(app.header_lines[2]).plain == (
         "- Press [SPACE] to toggle a section marker on the highlighted line"
@@ -546,7 +546,7 @@ def test_section_markers_dialog_width_tracks_terminal_with_limits() -> None:
         # reaches its maximum width, and remains centered after that point.
         assert await get_dialog_region(44) == (2, 40)
         assert await get_dialog_region(80) == (2, 76)
-        assert await get_dialog_region(120) == (10, 100)
+        assert await get_dialog_region(120) == (20, 80)
 
     asyncio.run(exercise())
 

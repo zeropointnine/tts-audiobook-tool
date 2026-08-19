@@ -20,11 +20,11 @@ class TestPromptNormalizer(unittest.TestCase):
             # ellipsis
             (
                 "Ellipsis character… So.", 
-                "Ellipsis character… So."
+                "Ellipsis character... So."
             ),
             (
                 "Ellipsis character with space before … So.", 
-                "Ellipsis character with space before … So."
+                "Ellipsis character with space before ... So."
             ),
             (
                 "Triple-dot... So.", 
@@ -40,7 +40,7 @@ class TestPromptNormalizer(unittest.TestCase):
             ),
             (
                 "Fancy apost: I think it’s . . . unseemly.", 
-                "Fancy apost: I think it’s ... unseemly." # remains unchanged atm
+                "Fancy apost: I think it's ... unseemly."
             ),
             (
                 "Multiple dots...........", 
@@ -52,15 +52,15 @@ class TestPromptNormalizer(unittest.TestCase):
             ),
             (
                 "Multiple ellipsis characters…………", 
-                "Multiple ellipsis characters…"
+                "Multiple ellipsis characters..."
             ),
             (
                 "Multiple ellipsis characters with space …………", 
-                "Multiple ellipsis characters with space …"
+                "Multiple ellipsis characters with space ..."
             ),
             (
                 "This is a pause...... and another one…… and a mixed one…...", 
-                "This is a pause... and another one… and a mixed one…..." # weird, but leave it for now
+                "This is a pause... and another one... and a mixed one..."
             ),
 
             # dashes

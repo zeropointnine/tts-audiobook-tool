@@ -459,6 +459,7 @@ class BookSegmentationSettings(NamedTuple):
     language_code: str = ""
     max_words_per_segment: int = 0
     strategy: SegmentationStrategy = SegmentationStrategy.SENTENCE_PLUS
+    dialog_segmentation: bool = False
 
 
 @dataclass

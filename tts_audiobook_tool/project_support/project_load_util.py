@@ -53,6 +53,7 @@ class ProjectLoadUtil:
                 "applied_language_code",
                 "applied_strategy",
                 "applied_max_words",
+                "applied_dialog_segmentation",
             )
         )
 
@@ -174,6 +175,7 @@ class ProjectLoadUtil:
             language_code=project_settings.get('applied_language_code', ''),
             max_words_per_segment=project_settings.get('applied_max_words', 0),
             strategy=strategy or BookSegmentationSettings().strategy,
+            dialog_segmentation=bool(project_settings.get('applied_dialog_segmentation', False)),
         )
         result = book_from_project_text_json_dict(payload, legacy_settings)
         if isinstance(result, str):

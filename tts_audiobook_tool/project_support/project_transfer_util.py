@@ -42,6 +42,7 @@ class ProjectTransferUtil:
         'applied_strategy',
         'applied_max_words',
         'applied_language_code',
+        'applied_dialog_segmentation',
     }
 
     @staticmethod

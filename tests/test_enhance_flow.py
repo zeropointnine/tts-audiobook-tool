@@ -76,6 +76,7 @@ class TestEnhanceFlow(unittest.TestCase):
             max_words=55,
             segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
             language_code="en",
+            dialog_segmentation=False,
         )
         self.assertEqual(source_text.source_kind, "epub")
         self.assertEqual(source_text.title, "Book Title")
@@ -111,6 +112,7 @@ class _StubProject:
     max_words = 55
     segmentation_strategy = SegmentationStrategy.SENTENCE_PLUS
     language_code = "en"
+    dialog_segmentation = False
 
 
 class _StubState:

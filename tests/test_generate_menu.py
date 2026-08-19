@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import tts_audiobook_tool.menus.generate_menu as generate_menu_module
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
@@ -59,10 +60,8 @@ def test_generate_menu_replaces_legacy_generation_entries(monkeypatch):
 
     first_label = items[0].label
     assert callable(first_label)
-    assert strip_ansi_codes(first_label(state)) == (
-        "Generate sound segments (0 lines queued)"
-    )
-    assert len(items) == 5
+    assert strip_ansi_codes(first_label(state)) == "Start (0 lines queued)"
+    assert len(items) == 6
 
 
 def test_generate_menu_shows_blocker_but_delegates_launch_validation(monkeypatch):
@@ -80,8 +79,8 @@ def test_generate_menu_shows_blocker_but_delegates_launch_validation(monkeypatch
         get_blocker,
     )
     monkeypatch.setattr(
-        GenerateMenu,
-        "edit_generation_queue",
+        generate_menu_module,
+        "do_generate",
         lambda passed_state: editor_calls.append(passed_state),
     )
     state, items = capture_generate_menu(monkeypatch)
@@ -132,8 +131,8 @@ def test_generation_workflow_quick_generates_and_reopens(monkeypatch) -> None:
         ]
     )
 
-    def make_editor(_state: State, quick_gen_restore_phrase_index=None):
-        restored_indices.append(quick_gen_restore_phrase_index)
+    def make_editor(_state: State, quick_gen_index=None):
+        restored_indices.append(quick_gen_index)
         return object()
 
     monkeypatch.setattr(
@@ -263,3 +262,19 @@ def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) ->
         ("Save failed: cleanup failed", True),
         ("Couldn't load textual css", True),
     ]
+
+
+def make_phrase_group(voice_index: int) -> PhraseGroup:
+    return PhraseGroup([Phrase("Hello.", Reason.SENTENCE)], voice_index=voice_index)
+
+
+def test_out_of_range_voice_count_ignores_unassigned_default() -> None:
+    # voice_index == -1 is the "no explicit assignment" default (first voice sample).
+    # Only indices past the end of the voice sample list are stale.
+    groups = [make_phrase_group(voice_index) for voice_index in (-1, 0, 1, 2, 5)]
+
+    assert generate_menu_module.count_out_of_range_voice_indices(groups, {0, 1, 2, 3, 4}, 2) == 2
+    assert generate_menu_module.count_out_of_range_voice_indices(groups, [0], 2) == 0
+    assert generate_menu_module.count_out_of_range_voice_indices(groups, range(5), 3) == 1
+    assert generate_menu_module.count_out_of_range_voice_indices(groups, [], 2) == 0
+    assert generate_menu_module.count_out_of_range_voice_indices(groups, range(1), 0) == 0
