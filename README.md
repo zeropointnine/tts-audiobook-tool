@@ -654,7 +654,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | OmniVoice TTS           | GTX 3080 Ti, Linux   | 300% realtime   | default steps
 | OmniVoice TTS           | Macbook Pro M1 (MPS) | 20% realtime    | default steps
 | Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
-| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU (CUDA disabled)
+| Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU mode
 | Pocket TTS              | Macbook Pro M1       | 350% realtime   | 
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 300% realtime   | batch size=5
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
@@ -667,8 +667,8 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | Macbook Pro M1       | ~40% realtime   |
-| ZONOS2                  | GTX 4090, Windows    | 200% realtime   | SGL-Omni- concurrent requests=1
-| ZONOS2                  | GTX 4090, Windows    | 500% realtime   | SGL-Omni- concurrent requests=5
+| ZONOS2                  | GTX 4090, Windows    | 200% realtime   | SGL-Omni; concurrent requests=1
+| ZONOS2                  | GTX 4090, Windows    | 500% realtime   | SGL-Omni; concurrent requests=5
 
 
 # Update highlights

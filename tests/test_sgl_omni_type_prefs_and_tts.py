@@ -3,7 +3,7 @@ import json
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.prefs import PREFS_FILE_NAME, Prefs
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 
 def restore_tts_type(had_original_type, original_type):
@@ -60,8 +60,8 @@ def test_sgl_omni_type_ids_are_unique():
 def test_qwen3tts_server_is_sgl_omni_and_non_streaming():
     info = TtsModelType.QWEN3TTS_SERVER.value
 
-    assert info.is_sgl_omni
-    assert info.server_model_id_substring == "qwen"
+    assert info.backend_kind == TtsBackendKind.SGL_OMNI
+    assert info.sgl_omni_model_id_substring == "qwen"
     assert info.voice_target_attr == "qwen3_voice_file_name"
     assert info.voice_transcript_attr == "qwen3_voice_transcript"
     assert info.batch_size_attr == "qwen3_server_concurrent_requests"
@@ -82,6 +82,7 @@ def test_update_tts_type_uses_explicit_sgl_omni_type_without_model_id_probe(monk
     try:
         Tts._type = TtsModelType.NONE
         Tts._sgl_omni_type = explicit_type
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
         SglOmniUtil._base_url = "http://example.test"
 
         def fail_update_model_id():
@@ -110,11 +111,12 @@ def test_update_tts_type_auto_detects_when_sgl_omni_type_is_none(monkeypatch):
     try:
         Tts._type = TtsModelType.NONE
         Tts._sgl_omni_type = None
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
         SglOmniUtil._base_url = "http://example.test"
 
         def update_model_id():
             calls.append(True)
-            SglOmniUtil._model_id = sgl_omni_type.value.server_model_id_substring
+            SglOmniUtil._model_id = sgl_omni_type.value.sgl_omni_model_id_substring
 
         monkeypatch.setattr(SglOmniUtil, "update_model_id", update_model_id)
 

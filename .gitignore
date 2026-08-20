@@ -9,6 +9,7 @@ venv*/
 package-lock.json
 
 plans/
-.clinerules
+AGENTS.md
+.agents/
 
 config_oute_dev.py

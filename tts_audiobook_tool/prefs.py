@@ -236,7 +236,7 @@ class Prefs(Saveable):
             sgl_omni_type = None
         elif isinstance(s, str):
             sgl_omni_type = TtsModelType.get_by_id(s)
-            if sgl_omni_type == TtsModelType.NONE or not sgl_omni_type.value.is_sgl_omni:
+            if not TtsModelType.is_valid_sgl_omni_type(sgl_omni_type):
                 sgl_omni_type = None
                 dirty = True
         else:
@@ -473,11 +473,11 @@ class Prefs(Saveable):
 
     @sgl_omni_type.setter
     def sgl_omni_type(self, value: TtsModelType | None) -> None:
-        if value is not None and (value == TtsModelType.NONE or not value.value.is_sgl_omni):
-            value = None
-        self._sgl_omni_type = value
         from tts_audiobook_tool.tts import Tts
         Tts.set_sgl_omni_type(value)
+        # Mirror the normalized runtime value so prefs persists it
+        # (Tts.set_sgl_omni_type() is the single source of validation)
+        self._sgl_omni_type = Tts._sgl_omni_type
 
     @property
     def sgl_omni_url(self) -> str:

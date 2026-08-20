@@ -28,7 +28,7 @@ from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.qwen3_server_base_model import Qwen3ServerBaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelSpec, TtsModelType
 from tts_audiobook_tool.tts_models.vibevoice_base_model import VibeVoiceBaseModel
 from tts_audiobook_tool.tts_models.zonos2_server_base_model import Zonos2ServerBaseModel
 from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseModel
@@ -41,8 +41,14 @@ class Tts:
     """
     Static class for accessing the TTS model.
 
-    The model type is derived from the state of the virtual environment 
-    and remains unchanged during the app's runtime.
+    The process-level backend mode (LOCAL or SGL_OMNI) is determined once
+    at startup from the presence of the SGL-Omni sentinel package and is
+    immutable for the life of the process.
+
+    In local mode, the model type is derived from the state of the virtual
+    environment and remains unchanged during the app's runtime. In
+    SGL-Omni mode, the selected type can change at runtime (an explicit
+    selection, or auto-detection from the server).
     """
 
     _type: TtsModelType
@@ -67,6 +73,11 @@ class Tts:
     _zonos2_server: Zonos2ServerBaseModel | None = None
 
     _sgl_omni_type: TtsModelType | None = None
+
+    # Process-level backend mode (LOCAL or SGL_OMNI), probed once at
+    # startup from the SGL-Omni sentinel package and immutable for the
+    # life of the process
+    _backend_mode: TtsBackendKind | None = None
 
     _model_params: dict = {}
     _force_cpu: bool = False
@@ -115,12 +126,27 @@ class Tts:
     @staticmethod
     def init_local_model_type() -> tuple[TtsModelType, int]:
         """
-        Sets the tts model type by checking the installed modules in the python environment.
+        Sets the tts model type by checking the state of the current virtual environment.
         Does not instantiate the TtsModel as such.
         Must be run on startup.
 
-        Returns the model type that was set, and num matches (should be either 1 or 0).
+        First probes the SGL-Omni sentinel package to fix the process-level
+        backend mode (immutable for the life of the process):
+
+        - SGL-Omni mode: the local model probe is skipped entirely, even in
+          a dual-capable venv that also holds a local model library
+          (SGL-Omni wins; such a venv is user error). The type starts as
+          NONE and is resolved by prefs / update_tts_type().
+        - Local mode: local model libraries are probed as before.
+
+        Returns the model type that was set, and num matches (always 0 in
+        SGL-Omni mode, 0 or 1 in local mode).
         """
+        Tts._backend_mode = Tts._probe_backend_mode()
+
+        if Tts._backend_mode == TtsBackendKind.SGL_OMNI:
+            Tts._type = TtsModelType.NONE
+            return Tts._type, 0
 
         def get_matches() -> list[TtsModelType]:
             model_infos = []
@@ -128,7 +154,7 @@ class Tts:
                 exists = False
                 try:
                     module_test = model_info.value.local_module_test
-                    if model_info.value.is_sgl_omni or not module_test:
+                    if not module_test:
                         continue
                     if module_test.startswith("dist:"):
                         dist_test = module_test.removeprefix("dist:").strip()
@@ -169,6 +195,36 @@ class Tts:
         return Tts._type
 
     @staticmethod
+    def get_backend_mode() -> TtsBackendKind:
+        """
+        Returns the process-level backend mode: LOCAL (TTS is run by
+        model libraries inside the current venv) or SGL_OMNI (TTS is
+        served by an external SGL-Omni server).
+
+        The mode is determined once, from the presence of the SGL-Omni
+        sentinel package, and is immutable for the life of the process.
+        `init_local_model_type()` probes it eagerly at startup; this
+        getter probes lazily if that has not happened yet.
+        """
+        if Tts._backend_mode is None:
+            Tts._backend_mode = Tts._probe_backend_mode()
+        return Tts._backend_mode
+
+    @staticmethod
+    def _probe_backend_mode() -> TtsBackendKind:
+        """
+        Probes the SGL-Omni sentinel package
+        (`tts_audiobook_tool_sgl_omni_marker`, installed only by
+        requirements-sgl-omni.txt) to determine the backend mode.
+        A missing (or unreadable) sentinel means local mode.
+        """
+        try:
+            present = util.find_spec("tts_audiobook_tool_sgl_omni_marker") is not None
+        except Exception:
+            present = False
+        return TtsBackendKind.SGL_OMNI if present else TtsBackendKind.LOCAL
+
+    @staticmethod
     def set_type(value: TtsModelType) -> None:
         if Tts._type != value:
             Tts.clear_tts_model()
@@ -176,22 +232,37 @@ class Tts:
 
     @staticmethod
     def set_sgl_omni_type(value: TtsModelType | None) -> None:
-        if value is not None and (value == TtsModelType.NONE or not value.value.is_sgl_omni):
+        """
+        Sets the explicitly selected SGL-Omni TTS type (None = auto-detect).
+
+        In local backend mode the stored value is inert: SGL-Omni is not
+        active there, so no type resolution happens. The value still
+        persists in prefs, so a later switch to a SGL-Omni venv picks it
+        up.
+        """
+        if value is not None and not TtsModelType.is_valid_sgl_omni_type(value):
             value = None
         Tts._sgl_omni_type = value
+        if Tts.get_backend_mode() == TtsBackendKind.LOCAL:
+            return
         Tts.update_tts_type()
-   
+
     @staticmethod
     def is_local_model() -> bool:
-        return Tts._type != TtsModelType.NONE and not Tts._type.value.is_sgl_omni
+        return Tts._type != TtsModelType.NONE and Tts._type.value.backend_kind == TtsBackendKind.LOCAL
 
     @staticmethod
     def is_sgl_mode() -> bool:
         """
-        Internal nomenclature
-        TODO: Ideally, this should be reflected by a formal construction of some kind, but yea
+        Whether the process is running in SGL-Omni backend mode, i.e.
+        whether the SGL-Omni sentinel package is present in the current
+        venv.
+
+        The mode is fixed at startup (see init_local_model_type()) and is
+        immutable for the life of the process; it does not depend on
+        which catalog member is currently selected.
         """
-        return not Tts.is_local_model()
+        return Tts.get_backend_mode() == TtsBackendKind.SGL_OMNI
 
     @staticmethod
     def set_model_params_using_project(project) -> None:
@@ -250,31 +321,10 @@ class Tts:
         """
         Gets the current tts model's class, used for accessing static methods.
         """
-        MAP = {
-            TtsModelType.NONE: NoneBaseModel,
-            TtsModelType.CHATTERBOX: ChatterboxBaseModel,
-            TtsModelType.FISH_S1: FishS1BaseModel,
-            TtsModelType.FISH_S2: FishS2BaseModel,
-            TtsModelType.FISH_S2_SERVER: FishS2ServerBaseModel,
-            TtsModelType.GLM: GlmBaseModel,
-            TtsModelType.HIGGS_V2: HiggsV2BaseModel,
-            TtsModelType.HIGGS_V3_SERVER: HiggsV3ServerBaseModel,
-            TtsModelType.INDEXTTS2: IndexTts2BaseModel,
-            TtsModelType.MIRA: MiraBaseModel,
-            TtsModelType.MOSS: MossBaseModel,
-            TtsModelType.MOSS_SERVER: MossServerModel,
-            TtsModelType.OMNIVOICE: OmniVoiceBaseModel,
-            TtsModelType.OUTE: OuteBaseModel,
-            TtsModelType.POCKET: PocketBaseModel,
-            TtsModelType.QWEN3TTS: Qwen3BaseModel,
-            TtsModelType.QWEN3TTS_SERVER: Qwen3ServerBaseModel,
-            TtsModelType.VIBEVOICE: VibeVoiceBaseModel,
-            TtsModelType.ZONOS2_SERVER: Zonos2ServerBaseModel,
-        }
-        cls = MAP.get(Tts._type, None)
-        if cls is None:
+        entry = Tts._model_registry_entry(Tts._type)
+        if entry is None or entry[0] is None:
             raise Exception(f"Not implemented: {Tts._type}")
-        return cls
+        return entry[0]
     
     @staticmethod
     def get_info() -> TtsModelSpec:
@@ -310,31 +360,10 @@ class Tts:
     @staticmethod
     def get_instance() -> TtsBaseModel:
         # Returns existing or newly instantiated instance
-        MAP: dict[TtsModelType, Callable] = {
-            TtsModelType.CHATTERBOX: Tts.get_chatterbox,
-            TtsModelType.FISH_S1: Tts.get_fish_s1,
-            TtsModelType.FISH_S2: Tts.get_fish_s2,
-            TtsModelType.FISH_S2_SERVER: Tts.get_fish_s2_server,
-            TtsModelType.GLM: Tts.get_glm,
-            TtsModelType.HIGGS_V2: Tts.get_higgs,
-            TtsModelType.HIGGS_V3_SERVER: Tts.get_higgs_v3,
-            TtsModelType.INDEXTTS2: Tts.get_indextts2,
-            TtsModelType.MIRA: Tts.get_mira,
-            TtsModelType.MOSS: Tts.get_moss,
-            TtsModelType.MOSS_SERVER: Tts.get_moss_server,
-            TtsModelType.OMNIVOICE: Tts.get_omnivoice,
-            TtsModelType.OUTE: Tts.get_oute,
-            TtsModelType.POCKET: Tts.get_pocket,
-            TtsModelType.QWEN3TTS: Tts.get_qwen3,
-            TtsModelType.QWEN3TTS_SERVER: Tts.get_qwen3tts_server,
-            TtsModelType.VIBEVOICE: Tts.get_vibevoice,
-            TtsModelType.ZONOS2_SERVER: Tts.get_zonos2_server,
-        }
-        factory_function = MAP.get(Tts._type, None)
-        if not factory_function:
+        entry = Tts._model_registry_entry(Tts._type)
+        if entry is None or entry[1] is None:
             raise Exception(f"Lookup failed for {Tts._type}")
-        instance = factory_function()
-        return instance
+        return entry[1]()
 
     @staticmethod
     def generate_using_project(
@@ -372,7 +401,7 @@ class Tts:
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
             "voice_selection_index": voice_selection_index,
         }
-        if Tts._type.value.is_sgl_omni: 
+        if Tts._type.value.backend_kind == TtsBackendKind.SGL_OMNI:
             kwargs["print_generation_request"] = print_generation_request
 
         return instance.generate_using_project(
@@ -394,29 +423,24 @@ class Tts:
             Tts.clear_continuation()
 
     @staticmethod
+    def _model_registry_entry(tts_type: TtsModelType) -> tuple[type[TtsBaseModel], Callable[[], TtsBaseModel] | None, str] | None:
+        """
+        Shared lookup backing get_class() / get_instance() /
+        get_instance_if_exists(). The NONE placeholder maps to
+        (NoneBaseModel, no factory, no instance attribute); an unknown
+        value (impossible for catalog members) maps to nothing at all.
+        """
+        if tts_type == TtsModelType.NONE:
+            return NoneBaseModel, None, ""
+        return Tts._MODEL_REGISTRY.get(tts_type)
+
+    @staticmethod
     def get_instance_if_exists() -> TtsBaseModel | None:
         # Returns instance only if it already exists, else none
-        MAP = {
-            TtsModelType.OUTE: Tts._oute,
-            TtsModelType.CHATTERBOX: Tts._chatterbox,
-            TtsModelType.FISH_S1: Tts._fish_s1,
-            TtsModelType.FISH_S2: Tts._fish_s2,
-            TtsModelType.FISH_S2_SERVER: Tts._fish_s2,
-            TtsModelType.HIGGS_V2: Tts._higgs_v2,
-            TtsModelType.HIGGS_V3_SERVER: Tts._higgs_v3,
-            TtsModelType.VIBEVOICE: Tts._vibevoice,
-            TtsModelType.INDEXTTS2: Tts._indextts2,
-            TtsModelType.GLM: Tts._glm,
-            TtsModelType.MIRA: Tts._mira,
-            TtsModelType.MOSS: Tts._moss,
-            TtsModelType.MOSS_SERVER: Tts._moss_server,
-            TtsModelType.QWEN3TTS: Tts._qwen3,
-            TtsModelType.QWEN3TTS_SERVER: Tts._qwen3tts_server,
-            TtsModelType.POCKET: Tts._pocket,
-            TtsModelType.OMNIVOICE: Tts._omnivoice,
-            TtsModelType.ZONOS2_SERVER: Tts._zonos2_server,
-        }
-        return MAP.get(Tts._type, None)
+        entry = Tts._model_registry_entry(Tts._type)
+        if entry is None or not entry[2]:
+            return None
+        return getattr(Tts, entry[2])
 
     @staticmethod
     def get_chatterbox() -> ChatterboxBaseModel:
@@ -641,22 +665,10 @@ class Tts:
         model = Tts.get_instance_if_exists()
         if model:
             model.kill()
-            Tts._oute = None
-            Tts._chatterbox = None
-            Tts._fish_s1 = None
-            Tts._fish_s2 = None
-            Tts._higgs_v2 = None
-            Tts._higgs_v3 = None
-            Tts._vibevoice = None
-            Tts._indextts2 = None
-            Tts._glm = None
-            Tts._mira = None
-            Tts._moss = None
-            Tts._qwen3 = None
-            Tts._qwen3tts_server = None
-            Tts._pocket = None
-            Tts._omnivoice = None
-            Tts._zonos2_server = None
+            # Null out all instance attributes, not just the current
+            # type's (there must be at most one live instance)
+            for entry in Tts._MODEL_REGISTRY.values():
+                setattr(Tts, entry[2], None)
         app_memory.gc_ram_vram()
 
     @staticmethod
@@ -673,22 +685,27 @@ class Tts:
 
     @staticmethod
     def update_tts_type() -> None:
-        """ 
-        Applies only when tts type is NONE or is_sgl_omni
+        """
+        Applies only in SGL-Omni backend mode, and within that only when
+        the current selection is the NONE placeholder or an SGL-Omni
+        variant (i.e. not a local model).
 
         Dynamically updates tts type based on SGL Omni model name,
-        and also updates _sgl_model_id.
+        and also updates the SGL-Omni model id state.
         """
+
+        if Tts.get_backend_mode() == TtsBackendKind.LOCAL:
+            return
 
         if Tts.is_local_model():
             return
-        
+
         original_type = Tts.get_type()
 
         if not SglOmniUtil.get_base_url() and Tts.get_type() != TtsModelType.NONE:
             Tts.set_type(TtsModelType.NONE)
             return
-        
+
         if Tts._sgl_omni_type is None:
             # Auto-detect
             SglOmniUtil.update_model_id()
@@ -699,8 +716,25 @@ class Tts:
         else:
             new_type = Tts._sgl_omni_type
         if new_type == original_type:
-            return        
+            return
         Tts.set_type(new_type)
+
+    @staticmethod
+    def get_requirements_file_name() -> str:
+        """
+        The requirements file a user should install for the current TTS
+        selection.
+
+        Mode-aware for the NONE placeholder: in SGL-Omni mode it means
+        "server not configured", so the placeholder's own (sgl-omni)
+        requirements file applies; in local mode it means "no TTS model
+        library in the venv", which corresponds to the base venv.
+        """
+        if Tts._type == TtsModelType.NONE:
+            if Tts.get_backend_mode() == TtsBackendKind.SGL_OMNI:
+                return TtsModelType.NONE.value.requirements_file_name
+            return "requirements-base.txt"
+        return Tts._type.value.requirements_file_name
 
 # ---
 
@@ -717,3 +751,31 @@ class InstanceDisplayInfo:
 
     # Extra info (eg, "fp16: True", etc)
     extra: str = ""
+
+# ---
+
+# One entry per TTS variant, shared by Tts.get_class() / Tts.get_instance() /
+# Tts.get_instance_if_exists() and used to clear instances:
+#   (model class, factory returning the existing-or-new instance,
+#    name of the Tts class attribute holding the live instance)
+# Built after the class body so the factory static methods are available.
+Tts._MODEL_REGISTRY: dict[TtsModelType, tuple[type[TtsBaseModel], Callable[[], TtsBaseModel], str]] = {
+    TtsModelType.CHATTERBOX: (ChatterboxBaseModel, Tts.get_chatterbox, "_chatterbox"),
+    TtsModelType.FISH_S1: (FishS1BaseModel, Tts.get_fish_s1, "_fish_s1"),
+    TtsModelType.FISH_S2: (FishS2BaseModel, Tts.get_fish_s2, "_fish_s2"),
+    TtsModelType.FISH_S2_SERVER: (FishS2ServerBaseModel, Tts.get_fish_s2_server, "_fish_s2_server"),
+    TtsModelType.GLM: (GlmBaseModel, Tts.get_glm, "_glm"),
+    TtsModelType.HIGGS_V2: (HiggsV2BaseModel, Tts.get_higgs, "_higgs_v2"),
+    TtsModelType.HIGGS_V3_SERVER: (HiggsV3ServerBaseModel, Tts.get_higgs_v3, "_higgs_v3"),
+    TtsModelType.INDEXTTS2: (IndexTts2BaseModel, Tts.get_indextts2, "_indextts2"),
+    TtsModelType.MIRA: (MiraBaseModel, Tts.get_mira, "_mira"),
+    TtsModelType.MOSS: (MossBaseModel, Tts.get_moss, "_moss"),
+    TtsModelType.MOSS_SERVER: (MossServerModel, Tts.get_moss_server, "_moss_server"),
+    TtsModelType.OMNIVOICE: (OmniVoiceBaseModel, Tts.get_omnivoice, "_omnivoice"),
+    TtsModelType.OUTE: (OuteBaseModel, Tts.get_oute, "_oute"),
+    TtsModelType.POCKET: (PocketBaseModel, Tts.get_pocket, "_pocket"),
+    TtsModelType.QWEN3TTS: (Qwen3BaseModel, Tts.get_qwen3, "_qwen3"),
+    TtsModelType.QWEN3TTS_SERVER: (Qwen3ServerBaseModel, Tts.get_qwen3tts_server, "_qwen3tts_server"),
+    TtsModelType.VIBEVOICE: (VibeVoiceBaseModel, Tts.get_vibevoice, "_vibevoice"),
+    TtsModelType.ZONOS2_SERVER: (Zonos2ServerBaseModel, Tts.get_zonos2_server, "_zonos2_server"),
+}

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from typing import cast
 
+from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.menus.main_menu import make_voice_label
 from tts_audiobook_tool.menus.menu_status import _make_stt_text
@@ -9,11 +10,12 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.util import COL_DIM, COL_ERROR, COL_MEDIUM
 
 
@@ -76,6 +78,51 @@ def test_menus_omit_absent_voice_display_info(monkeypatch, capsys):
         assert make_voice_label(state) == "Voice clone and model settings"
     finally:
         restore_tts_state(saved)
+
+
+def test_status_block_local_mode_none_shows_tts_model_line(capsys):
+    # (local mode, NONE) is the "no model" state: it has no SGL-Omni surface
+    saved = preserve_tts_state()
+    try:
+        Tts._type = TtsModelType.NONE
+        Tts._backend_mode = TtsBackendKind.LOCAL
+        state = make_state()
+
+        MenuStatus.print_block(state)
+
+        output = capsys.readouterr().out
+        assert "SGL-Omni" not in output
+        lines = [text_util.strip_ansi_codes(line) for line in output.splitlines()]
+        lines = [line for line in lines if "TTS model:" in line]
+        assert len(lines) == 1
+        assert lines[0].strip().endswith("None")
+    finally:
+        restore_tts_state(saved)
+
+
+def test_status_block_sgl_mode_none_shows_sgl_omni_line(capsys, monkeypatch):
+    # (SGL-Omni mode, NONE) means "server not configured" and keeps the SGL-Omni line
+    saved = preserve_tts_state()
+    try:
+        Tts._type = TtsModelType.NONE
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        SglOmniUtil._base_url = "http://example.test"
+        SglOmniUtil._model_id = ""
+        monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
+        state = make_state()
+
+        MenuStatus.print_block(state)
+
+        output = capsys.readouterr().out
+        lines = [text_util.strip_ansi_codes(line) for line in output.splitlines()]
+        lines = [line for line in lines if "SGL-Omni:" in line]
+        assert len(lines) == 1
+        assert "Offline" in lines[0]
+        assert "TTS model:" not in output
+    finally:
+        restore_tts_state(saved)
+        SglOmniUtil._base_url = ""
+        SglOmniUtil._model_id = ""
 
 
 def test_dependent_voice_display_info_overrides_propagate_none(monkeypatch):

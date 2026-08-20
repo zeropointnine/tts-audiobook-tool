@@ -4,7 +4,7 @@ from tts_audiobook_tool.app_types import ReadinessIssue, Sound
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.tts_models.zonos2_server_base_model import Zonos2ServerBaseModel
 from tts_audiobook_tool.tts_models.zonos2_server_model import Zonos2ServerModel
 
@@ -12,8 +12,8 @@ from tts_audiobook_tool.tts_models.zonos2_server_model import Zonos2ServerModel
 def test_zonos2_server_spec_and_registration(monkeypatch):
     info = TtsModelType.ZONOS2_SERVER.value
 
-    assert info.is_sgl_omni
-    assert info.server_model_id_substring == "zonos2"
+    assert info.backend_kind == TtsBackendKind.SGL_OMNI
+    assert info.sgl_omni_model_id_substring == "zonos2"
     assert info.voice_target_attr == "zonos2_server_voice_file_name"
     assert info.voice_transcript_attr == ""
     assert info.batch_size_attr == "zonos2_server_concurrent_requests"

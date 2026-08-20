@@ -6,6 +6,23 @@ from typing import NamedTuple
 from tts_audiobook_tool.app_types import DeviceType
 
 
+class TtsBackendKind(Enum):
+    """
+    How a TTS model variant is executed or served.
+
+    LOCAL: the variant is run by its model library inside the current
+    virtual environment (one venv per model, see `.agents/venv-models.md`).
+    SGL_OMNI: the variant is served over HTTP by an external SGL-Omni
+    (SGLang) server.
+
+    The `TtsModelType.NONE` placeholder is not a real model and has no
+    backend; its `TtsModelSpec.backend_kind` is `None`.
+    """
+
+    LOCAL = "local"
+    SGL_OMNI = "sgl_omni"
+
+
 class TtsModelSpec(NamedTuple):
     """
     Hardcoded properties of a supported TTS model
@@ -13,10 +30,11 @@ class TtsModelSpec(NamedTuple):
 
     # identifier used for serialization
     id: str
-    # Whether the model is backed by an external backend rather than local inference
-    is_sgl_omni: bool
+    # The kind of backend that executes/serves this variant;
+    # None on the NONE placeholder, which is not a real model and has no backend
+    backend_kind: TtsBackendKind | None
     # Substring to use for simple model matching against SGL-Omni model name (empty = not applicable)
-    server_model_id_substring: str
+    sgl_omni_model_id_substring: str
     # Module name, or "dist:<package>" / "dist:<package>==<version>", to test for that implies the TTS model library exists in the current py env
     local_module_test: str
     # Supported torch device types for local inference
@@ -73,8 +91,11 @@ class TtsModelType(Enum):
     # Placeholder model type when no other models are detected
     NONE = TtsModelSpec(
         id="none",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        # Not a real model: no backend. In SGL-Omni mode the placeholder
+        # means "server not configured"; in local mode it means "no TTS
+        # model library in the venv"
+        backend_kind=None,
+        sgl_omni_model_id_substring="",
         local_module_test="",
         local_torch_devices = [],
         file_tag="",
@@ -90,7 +111,7 @@ class TtsModelType(Enum):
         semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
-        requirements_file_name="requirements-sgl-omni.txt", # TODO: address entangled abstractions
+        requirements_file_name="requirements-sgl-omni.txt", # only meaningful in SGL-Omni mode ("server not configured"); in local mode this state means "no TTS model in the venv" and consumers presenting a file for it are mode-aware (see Tts.get_requirements_file_name())
         ui = {
             "proper_name": "None",
             "short_name": "None",
@@ -103,8 +124,8 @@ class TtsModelType(Enum):
 
     CHATTERBOX = TtsModelSpec(
         id="chatterbox",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="chatterbox",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="chatterbox",
@@ -135,8 +156,8 @@ class TtsModelType(Enum):
 
     FISH_S1 = TtsModelSpec(
         id="fish_s1",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="dist:fish-speech==0.1.0",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="s1-mini",
@@ -167,8 +188,8 @@ class TtsModelType(Enum):
 
     FISH_S2 = TtsModelSpec(
         id="fish_s2",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="dist:fish-speech==2.0.0",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="s2-pro",
@@ -199,8 +220,8 @@ class TtsModelType(Enum):
 
     FISH_S2_SERVER = TtsModelSpec(
         id="server_fish_s2",
-        is_sgl_omni=True,
-        server_model_id_substring="fish", # b/c sgl omni only supports one type of fish model which is v2
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="fish", # b/c sgl omni only supports one type of fish model which is v2
         local_module_test="",
         local_torch_devices = [],
         file_tag="s2-pro",
@@ -235,8 +256,8 @@ class TtsModelType(Enum):
 
     GLM = TtsModelSpec(
         id="glm",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="glm_tts",
         local_torch_devices = [DeviceType.CUDA], # cuda-only atm
         file_tag="glm",
@@ -269,8 +290,8 @@ class TtsModelType(Enum):
 
     HIGGS_V2 = TtsModelSpec(
         id="higgs_v2",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="boson_multimodal",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="higgs_v2",
@@ -301,8 +322,8 @@ class TtsModelType(Enum):
 
     HIGGS_V3_SERVER = TtsModelSpec(
         id="server_higgs_v3",
-        is_sgl_omni=True,
-        server_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model, which is v3
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="higgs", # b/c sgl omni only supports one type of higgs model, which is v3
         local_module_test="",
         local_torch_devices = [],
         file_tag="higgs_v3",
@@ -336,8 +357,8 @@ class TtsModelType(Enum):
 
     INDEXTTS2 = TtsModelSpec(
         id="indextts2",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="indextts",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="indextts2",
@@ -369,8 +390,8 @@ class TtsModelType(Enum):
 
     MIRA = TtsModelSpec(
         id="mira",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="mira",
         local_torch_devices = [], # does not take in a device as a parameters
         file_tag="mira",
@@ -403,8 +424,8 @@ class TtsModelType(Enum):
 
     MOSS = TtsModelSpec(
         id="moss",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="dist:moss-tts",
         local_torch_devices=[DeviceType.CUDA, DeviceType.CPU],
         file_tag="moss",
@@ -435,8 +456,8 @@ class TtsModelType(Enum):
 
     MOSS_SERVER = TtsModelSpec(
         id="server_moss",
-        is_sgl_omni=True,
-        server_model_id_substring="moss",
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="moss",
         local_module_test="",
         local_torch_devices=[],
         file_tag="moss",
@@ -471,8 +492,8 @@ class TtsModelType(Enum):
 
     OMNIVOICE = TtsModelSpec(
         id="omnivoice",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="omnivoice",
         local_torch_devices=[DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="omnivoice",
@@ -503,8 +524,8 @@ class TtsModelType(Enum):
 
     OUTE = TtsModelSpec(
         id="oute",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="outetts",
         local_torch_devices = [], # not applicable
         file_tag="oute",
@@ -536,8 +557,8 @@ class TtsModelType(Enum):
 
     POCKET = TtsModelSpec(
         id="pocket",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="pocket_tts",
         local_torch_devices=[DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="pocket",
@@ -569,8 +590,8 @@ class TtsModelType(Enum):
 
     QWEN3TTS = TtsModelSpec(
         id="qwen3tts",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="qwen_tts",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="qwen3",
@@ -599,8 +620,8 @@ class TtsModelType(Enum):
 
     QWEN3TTS_SERVER = TtsModelSpec(
         id="server_qwen3tts",
-        is_sgl_omni=True,
-        server_model_id_substring="qwen",
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="qwen",
         local_module_test="",
         local_torch_devices=[],
         file_tag="qwen3",
@@ -633,8 +654,8 @@ class TtsModelType(Enum):
 
     VIBEVOICE = TtsModelSpec(
         id="vibevoice",
-        is_sgl_omni=False,
-        server_model_id_substring="",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
         local_module_test="vibevoice",
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="vibevoice",
@@ -667,8 +688,8 @@ class TtsModelType(Enum):
 
     ZONOS2_SERVER = TtsModelSpec(
         id="server_zonos2",
-        is_sgl_omni=True,
-        server_model_id_substring="zonos2",
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="zonos2",
         local_module_test="",
         local_torch_devices=[],
         file_tag="zonos2",
@@ -728,28 +749,59 @@ class TtsModelType(Enum):
     
     @staticmethod
     @cache
-    def get_sgl_omni_items() -> list[TtsModelType]:
+    def get_items_by_backend(kind: TtsBackendKind) -> list[TtsModelType]:
         result = []
         for item in TtsModelType:
-            if item.value.is_sgl_omni:
+            if item.value.backend_kind == kind:
                 result.append(item)
         return result
 
     @staticmethod
+    @cache
+    def get_local_items() -> list[TtsModelType]:
+        return TtsModelType.get_items_by_backend(TtsBackendKind.LOCAL)
+
+    @staticmethod
+    @cache
+    def get_sgl_omni_items() -> list[TtsModelType]:
+        return TtsModelType.get_items_by_backend(TtsBackendKind.SGL_OMNI)
+
+    @staticmethod
+    def is_backend(item: TtsModelType, kind: TtsBackendKind) -> bool:
+        """
+        Predicate: does catalog member `item` have backend kind `kind`?
+        (The primary API is the spec field, `TtsModelSpec.backend_kind`.)
+        """
+        return item.value.backend_kind == kind
+
+    @staticmethod
+    def is_valid_sgl_omni_type(value: TtsModelType | None) -> bool:
+        """
+        Predicate: is `value` a real SGL-Omni-backed catalog member,
+        i.e. acceptable as the app's SGL-Omni TTS type?
+        """
+        return value is not None and value.value.backend_kind == TtsBackendKind.SGL_OMNI
+
+    @staticmethod
     def find_tts_type_using_sgl_omni_model_id(model_id: str) -> TtsModelType | None:
         """
-        Chooses TtsModelType member using the model id returned by 
+        Chooses a TtsModelType member using the model id returned by
         the SGL-Omni models endpoint (typically an hf repo id),
         using simple substring comparison.
+
+        If more than one variant's substring matches, the longest
+        (most specific) match wins; ties fall back to catalog order.
         """
         if not model_id:
             return None
-        
+
         model_id = model_id.lower().strip()
-        
+
+        best: tuple[int, TtsModelType] | None = None
         for item in TtsModelType.get_sgl_omni_items():
-            substring = item.value.server_model_id_substring.lower()                
+            substring = item.value.sgl_omni_model_id_substring.lower()
             if substring and substring in model_id:
-                return item
-            
-        return None
+                if best is None or len(substring) > best[0]:
+                    best = (len(substring), item)
+
+        return best[1] if best else None

@@ -1,5 +1,11 @@
 # Use Python v3.11 or v3.12
 
+
+# Artificial "launcher marker" to identify venv as meant for SGL-Omni use
+# (Server-related functionality actually requires no extra libraries beyond base app deps).
+./launcher_markers/sgl_omni
+
+
 # App dependencies
 faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
 ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
@@ -36,6 +42,3 @@ whisper_normalizer==0.1.12
 text2num==3.0.1
 xxhash==3.5.0
 
-# Artificial "launcher marker" to identify venv as meant for SGL-Omni use
-# (Server-related functionality actually requires no extra libraries beyond base app deps).
-./launcher_markers/sgl_omni

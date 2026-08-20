@@ -21,7 +21,7 @@ class MenuStatus:
         project_text = _make_project_text(state)
         lines.append(("Project", project_text))
 
-        if Tts.get_type().value.is_sgl_omni or Tts.get_type() == TtsModelType.NONE:
+        if Tts.is_sgl_mode():
             server_tts_text = _make_server_tts_text(state)
             lines.append(("SGL-Omni", server_tts_text))
         else:

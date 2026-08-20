@@ -208,3 +208,13 @@ HINT_MOSS_TEMPERATURE = Hint(
 """MOSS-TTS is susceptible to failing to properly terminate generations when 
 temperature is set too low. Use low values with caution..."""
 )
+
+HINT_SGL_OMNI_DORMANT = Hint(
+    "sgl_omni_dormant",
+    "Saved SGL-Omni settings are inactive in this venv",
+"""You have SGL-Omni settings saved, but this virtual environment is not set up
+for SGL-Omni, so they will not be used here.
+SGL-Omni runs from the dedicated venv created by requirements-sgl-omni.txt
+(see the README). Create or refresh that venv and run the app from it
+to use your saved settings again."""
+)

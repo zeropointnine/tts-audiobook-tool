@@ -8,7 +8,7 @@
 # This requirements file is basically for dev use only.
 #
 # Use Python 3.11, since this is the lowest version used by
-# any of the app's venv.
+# any of the app's venvs.
 ###############################################################
 
 # App dependencies

@@ -5,7 +5,7 @@ import pytest
 
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +31,14 @@ def initialize_tts_type_for_tests():
     if not had_type or Tts._type is None:
         setattr(Tts, "_type", TtsModelType.NONE)
 
+    # The backend mode is a process invariant, probed from the SGL-Omni
+    # sentinel package. The test venvs do not carry the sentinel, so pin
+    # it to the probed (local) value here; tests that need SGL-Omni mode
+    # set Tts._backend_mode themselves and get it restored on teardown.
+    had_mode = hasattr(Tts, "_backend_mode")
+    original_mode = getattr(Tts, "_backend_mode", None)
+    Tts._backend_mode = Tts._probe_backend_mode()
+
     try:
         yield
     finally:
@@ -38,3 +46,8 @@ def initialize_tts_type_for_tests():
             setattr(Tts, "_type", original_type)
         elif hasattr(Tts, "_type"):
             delattr(Tts, "_type")
+
+        if had_mode:
+            setattr(Tts, "_backend_mode", original_mode)
+        elif hasattr(Tts, "_backend_mode"):
+            delattr(Tts, "_backend_mode")

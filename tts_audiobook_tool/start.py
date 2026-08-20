@@ -20,7 +20,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 # This pulls in some dependencies we would ideally first like to test for the existence of,
 # but can't be helped
@@ -111,7 +111,11 @@ class Start:
     # ---
 
     def init_tts_or_exit(self, is_server: bool) -> None:
-        """ Inits TTS else prompt to continue anyway """
+        """ Inits TTS else prompt to continue anyway.
+
+        Also fixes the process-level backend mode (probed from the
+        SGL-Omni sentinel package) before any further checks run.
+        """
 
         tts_model_type, num_matches = Tts.init_local_model_type()
 
@@ -128,7 +132,8 @@ class Start:
     def exit_on_wrong_torch_flavor_windows(self) -> None:
         if not _is_cpu_only_torch_on_windows_nvidia_system():
             return
-        if Tts.get_type().value.is_sgl_omni:
+        if Tts.is_sgl_mode():
+            # SGL-Omni backend: local torch is not used at all
             return
 
         printt(f"{COL_ERROR}An NVIDIA GPU was detected, but the installed PyTorch build does not include CUDA support.")
@@ -182,7 +187,7 @@ class Start:
             f"The following packages were not found: {COL_ERROR}{', '.join(missing_packages)}{COL_DEFAULT}\n"
             "You may have updated the app from the repository without updating its dependencies.\n"
             "Update your virtual environment by re-running:\n"
-            f"`{Ansi.BOLD}pip install -r {Tts.get_type().value.requirements_file_name}{Ansi.RESET}`."
+            f"`{Ansi.BOLD}pip install -r {Tts.get_requirements_file_name()}{Ansi.RESET}`."
         )
         hints.print_hint(hint)
         exit(1)
@@ -239,6 +244,18 @@ class Start:
         # Oute
         if Tts.get_type() == TtsModelType.OUTE:
             hints.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
+
+        # SGL-Omni is a venv-level capability: in a local-mode venv without a
+        # TTS model, saved SGL-Omni settings cannot be used here
+        if (
+            Tts.get_backend_mode() == TtsBackendKind.LOCAL
+            and Tts.get_type() == TtsModelType.NONE
+            and (
+                temp_prefs.sgl_omni_type is not None
+                or temp_prefs.sgl_omni_url != SGL_OMNI_URL_DEFAULT
+            )
+        ):
+            hints.show_hint_if_necessary(temp_prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
         # Updated UI
         # 

@@ -5,7 +5,7 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.util import COL_ERROR
 
 
@@ -20,6 +20,7 @@ def preserve_tts_and_sgl_state():
     return {
         "had_tts_type": hasattr(Tts, "_type"),
         "tts_type": getattr(Tts, "_type", None),
+        "backend_mode": getattr(Tts, "_backend_mode", None),
         "sgl_omni_type": Tts._sgl_omni_type,
         "base_url": SglOmniUtil._base_url,
         "model_id": SglOmniUtil._model_id,
@@ -30,6 +31,8 @@ def restore_tts_and_sgl_state(saved) -> None:
         Tts._type = saved["tts_type"]
     else:
         delattr(Tts, "_type")
+    if saved["backend_mode"] is not None:
+        Tts._backend_mode = saved["backend_mode"]
     Tts._sgl_omni_type = saved["sgl_omni_type"]
     SglOmniUtil._base_url = saved["base_url"]
     SglOmniUtil._model_id = saved["model_id"]
@@ -39,6 +42,7 @@ def test_tts_model_heading_detail_adds_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
         Tts._type = TtsModelType.HIGGS_V3_SERVER
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
@@ -53,6 +57,7 @@ def test_tts_model_heading_detail_adds_offline_for_sgl_omni_without_model_id(mon
     saved = preserve_tts_and_sgl_state()
     try:
         Tts._type = TtsModelType.HIGGS_V3_SERVER
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
         SglOmniUtil._model_id = ""
         monkeypatch.setattr(SglOmniUtil, "update_model_id", lambda: None)
 
@@ -68,6 +73,7 @@ def test_tts_model_heading_detail_keeps_local_model_unchanged():
     saved = preserve_tts_and_sgl_state()
     try:
         Tts._type = TtsModelType.CHATTERBOX
+        Tts._backend_mode = TtsBackendKind.LOCAL
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
         state = make_state()
 
@@ -83,6 +89,7 @@ def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch)
     saved = preserve_tts_and_sgl_state()
     try:
         Tts._type = TtsModelType.MOSS_SERVER
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3-tts-4b"
 
         def update_model_id():
