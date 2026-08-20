@@ -15,30 +15,32 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 
 class MiraModel(MiraBaseModel):
 
+    # Context tokens are a small string, so several voices can be
+    # retained at once.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+
     def __init__(self):
         self.mira_tts = MiraTTS('YatharthS/MiraTTS')
         self.context_tokens = None
-        self.last_voice_path: str = ""
-        
-        # model does not use this value; is CUDA-only under the hood 
-        self._device_type = None 
 
-    def set_voice_clone(self, path: str) -> None:
-        assert(self.mira_tts is not None)
-        if self.context_tokens and path == self.last_voice_path:
-            return
-        if not path:
-            self.context_tokens = None
-        else:
-            self.context_tokens = self.mira_tts.encode_audio(path)
-        self.last_voice_path = path
+        # model does not use this value; is CUDA-only under the hood
+        self._device_type = None
 
-    def clear_voice_clone(self) -> None: 
-        """ Important to call this manually due to 'last_voice_path' """
+    def _create_voice_clone(self, source_path: str) -> str:
+        """
+        Encodes the voice file into context tokens (a small string).
+
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
+        return self.mira_tts.encode_audio(source_path)
+
+    def clear_voice_clone(self) -> None:
         self.context_tokens = None
-        self.last_voice_path = ""
+        self.clear_voice_clone_cache()
 
     def kill(self) -> None:
+        self.clear_voice_clone_cache()
         self.mira_tts = None
         self.context_tokens = None
 
@@ -57,8 +59,18 @@ class MiraModel(MiraBaseModel):
         ) -> list[Sound] | str:
 
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MIRA, voice_selection_index)
-        voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
-        self.set_voice_clone(voice_path)
+        if voice_file_name:
+            voice_path = os.path.join(project.dir_path, voice_file_name)
+            try:
+                self.context_tokens = self._get_or_create_voice_clone(
+                    source_path=voice_path,
+                    transcript="",
+                    factory=lambda: self._create_voice_clone(voice_path),
+                )
+            except Exception as e:
+                return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
+        else:
+            self.clear_voice_clone()
 
         if project.mira_temperature == -1:
             temperature = MiraBaseModel.TEMPERATURE_DEFAULT

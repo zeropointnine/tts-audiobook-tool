@@ -18,7 +18,5 @@ class FishS2BaseModel(TtsBaseModel):
 
     ROLLING_CONTINUATION_MAX_LENGTH = 3
 
-    def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
-        ...
     def clear_voice_clone(self) -> None:
         ...

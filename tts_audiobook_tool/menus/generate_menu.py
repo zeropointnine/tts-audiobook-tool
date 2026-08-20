@@ -96,7 +96,7 @@ class GenerateMenu:
 
             items.append(
                 MenuItem(
-                    "Select lines / review sound segments", 
+                    "Select lines / review sound segments",
                     lambda _, __: GenerateMenu.run_editor(state),
             ))
 
@@ -115,11 +115,11 @@ class GenerateMenu:
                     superlabel="Options" if not show_batch_item else ""
                 )
             )
-            
+
             # Max retries
             items.append(
                 MenuItem(
-                    make_retries_label, lambda _, __: ask_retries(state), 
+                    make_retries_label, lambda _, __: ask_retries(state),
                 )
             )
 
@@ -138,7 +138,7 @@ class GenerateMenu:
             )
 
             return items
-        
+
         MenuUtil.menu(state, heading_maker, items_maker, breadcrumb="Generate")
 
     @staticmethod
@@ -192,7 +192,7 @@ class GenerateMenu:
 
         def make_items(_: State) -> list[MenuItem]:
             items = []
-            
+
             # Enabled
             items.append(
                 MenuItem(
@@ -282,13 +282,13 @@ class GenerateMenu:
             intolerant_desc = ""
         else:
             low_desc = (
-                "Allows for more word errors without triggering a regeneration.\n" 
+                "Allows for more word errors without triggering a regeneration.\n"
                 "      Segments pass unless notably off.")
             medium_desc = "Balanced. Reasonable choice for most TTS models and most languages."
             high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration."
             intolerant_desc = (
                 "Segments with even one word error are flagged for regeneration.\n"
-                "      Will trigger frequent regenerations due to false positives, but yields best net accuracy.\n" 
+                "      Will trigger frequent regenerations due to false positives, but yields best net accuracy.\n"
                 "      For the time and compute unconstrained only."
             )
 
@@ -333,13 +333,13 @@ def count_out_of_range_voice_indices(
 def make_retries_label(state: State) -> str:
     return make_menu_label(
         label="Max retries",
-        value=state.project.max_retries, 
+        value=state.project.max_retries,
         default=PROJECT_MAX_RETRIES_DEFAULT
     )
 
 def make_limit_silence_gaps_label(state: State) -> str:
     if state.project.limit_silence_gaps:
-        value = f"True {state.project.limit_silence_gaps_duration:.2f}s" 
+        value = f"True {state.project.limit_silence_gaps_duration:.2f}s"
     else:
         value = "False"
     return make_menu_label(
@@ -374,15 +374,15 @@ def ask_batch_size(state: State) -> None:
     hints.show_hint_if_necessary(state.prefs, HINT_BATCH)
 
     prompt = "Enter max concurrent requests:" if Tts.is_sgl_mode() else "Enter batch size:"
-    
+
     # Note that if there is a TtsModelType local and server "member pair" for the same underlying TTS model,
     # and the two share the same Project "batch_size" attribute, that value can be out of range
-    # compared to the 'correct' max value. 
+    # compared to the 'correct' max value.
     max_value = PROJECT_CONCURRENT_REQUESTS_MAX if Tts.is_sgl_mode() else PROJECT_BATCH_SIZE_MAX
 
     ask.ask_number(
         state.project, field_name, prompt,
-        1, max_value, PROJECT_BATCH_SIZE_DEFAULT, 
+        1, max_value, PROJECT_BATCH_SIZE_DEFAULT,
         "Set batch size:", is_int=True
     )
 
@@ -396,7 +396,7 @@ def do_generate(state: State) -> None:
 
     # Get indices to generate, and check if already generated
     indices = ProjectUtil.get_selected_indices_not_generated(state.project)
-    
+
     if not indices:
         all_lines_generated = (
             state.project.sound_segments.num_generated()
@@ -445,31 +445,35 @@ def do_generate(state: State) -> None:
     else:
         s = "- Speech-to-text validation: disabled"
         printt(s)
+
+    num_voices = len( ProjectVoiceUtil.get_voice_values(state.project, tts_type) )
+    is_multi_voice_batch = (
+        state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED
+        and ProjectVoiceUtil.get_batch_size(state.project) > 1
+        and num_voices > 1
+    )
+
     # Print voice selection mode info
     voice_values = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
     if len(voice_values) > 1:
-        s = f"- Voice selection mode: "
-        if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED and ProjectVoiceUtil.get_batch_size(state.project) > 1:
-            s += f"{Ansi.STRIKETHROUGH}{state.project.voice_select_mode.label}{Ansi.RESET}"
-            s += f"\n- {COL_ERROR}Warning:{COL_DEFAULT} User-defined voice selections are not supported in batch mode"
-            s += f"\n           Voice sample 1 will be used for all generations"
-        else:
-            s += f"{state.project.voice_select_mode.label}"
-            if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
-                num_invalid_voice_indices = count_out_of_range_voice_indices(
-                    state.project.phrase_groups, indices, len(voice_values)
+        s = "- Voice selection mode: "
+        s += f"{state.project.voice_select_mode.label}"
+        if state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
+            num_invalid_voice_indices = count_out_of_range_voice_indices(
+                state.project.phrase_groups, indices, len(voice_values)
+            )
+            if num_invalid_voice_indices:
+                selection_word = make_noun(
+                    "selection",
+                    "selections",
+                    num_invalid_voice_indices,
                 )
-                if num_invalid_voice_indices:
-                    selection_word = make_noun(
-                        "selection",
-                        "selections",
-                        num_invalid_voice_indices,
-                    )
-                    s +=f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
+                s += f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
         printt(s)
     # Print auto-concat setting
     if state.project.gen_auto_concat:
         printt("- Will concatenate audio file/s when finished")
+
     # Confirm
     printt()
     b = ask.ask_confirm(f"Press {make_hotkey_string('Y')} to start: ")
@@ -502,7 +506,7 @@ def do_generate(state: State) -> None:
         printt()
         ConcatUtil.auto_concat_after_generation(state)
         return
-    
+
     s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to create audiobook file now: \a"
     hotkey = ask.ask_hotkey(s)
     printt() # TODO revisit
@@ -518,7 +522,7 @@ existing segments for regeneration.
 """
 
 RETRIES_DESC = \
-"""This is the max number of retries an audio generation will be attempted 
+"""This is the max number of retries an audio generation will be attempted
 when speech-to-text validation fails due to too many word errors.
 Higher values have diminishing returns.
 """
@@ -527,10 +531,10 @@ LIMIT_SILENCE_GAPS_MENU_SUBHEADING = \
 """Limits instances of silence within sound segment from extending beyond
 a certain duration.
 
-Larger values can be used to prevent long pauses (eg, 1-2 seconds). 
+Larger values can be used to prevent long pauses (eg, 1-2 seconds).
 
 Small values can be used to influence pacing and prosody (eg, 0.0-0.3 seconds).
-Best used with \"Text segmentation strategy: Sentence.\" 
+(Consider using \"Text segmentation strategy: Sentence.\" in that case)
 
 This setting also applies to realtime playback, voice chat, stand-alone server.
 """

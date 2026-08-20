@@ -14,9 +14,6 @@ class MiraBaseModel(TtsBaseModel):
     REPETITION_PENALTY_DEFAULT = 1.2
     MAX_NEW_TOKENS = 2048 # default is 1024, which is enough for ~60 words
 
-    def set_voice_clone(self, path: str) -> None:
-        ...
-
     def clear_voice_clone(self) -> None:
         ...
 

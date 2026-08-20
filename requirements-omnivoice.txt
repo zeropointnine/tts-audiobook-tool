@@ -29,7 +29,7 @@ num2words==0.5.14
 nvidia-ml-py
 pyloudnorm==0.1.1
 psutil
-pydantic
+pydantic>=2.9.2,<3
 pysbd==0.3.4
 pywin32; sys_platform == 'win32'
 readchar==4.2.1

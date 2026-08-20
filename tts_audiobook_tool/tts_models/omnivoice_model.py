@@ -26,12 +26,14 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     # Effectively disable OmniVoice's own long-text chunker
     AUDIO_CHUNK_THRESHOLD_SECONDS = 999.0
 
+    # Voice clone prompts are small (C x T int codes) and CPU-retained, so
+    # several voices can be kept at once.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+
     def __init__(self, model_target: str, device: DeviceType):
 
         self._model_target = model_target
         self._device_type = device
-        self._voice_info: tuple[str, str] | None = None
-        self._voice_clone_prompt: VoiceClonePrompt | None = None
 
         if device == DeviceType.CUDA:
             device_map = "cuda:0"
@@ -81,9 +83,8 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         except Exception as e:
             L.e(f"{e}")
 
+        self.clear_voice_clone_cache()
         self._model = None  # type: ignore
-        self._voice_info = None
-        self._voice_clone_prompt = None
 
     # ── Main interface ────────────────────────────────────────────────
 
@@ -139,6 +140,24 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 seed=seed,
             )
 
+    def _create_voice_clone(self, source_path: str, transcript: str) -> VoiceClonePrompt:
+        """
+        Creates the library's reusable prompt from the reference audio and
+        returns a CPU clone of it.
+
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
+        prompt = self._model.create_voice_clone_prompt(
+            ref_audio=source_path,
+            ref_text=transcript or None,
+        )
+        return VoiceClonePrompt(
+            ref_audio_tokens=prompt.ref_audio_tokens.detach().cpu().clone(),
+            ref_text=prompt.ref_text,
+            ref_rms=prompt.ref_rms,
+        )
+
     # ── Generation modes ──────────────────────────────────────────────────
 
     def _generate_voice_clone(
@@ -153,23 +172,23 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             seed: int,
     ) -> list[Sound] | str:
 
-        voice_info = (voice_path, ref_text)
         generation_config = OmniVoiceGenerationConfig(
             num_step=steps,
             guidance_scale=cfg,
             audio_chunk_threshold=self.AUDIO_CHUNK_THRESHOLD_SECONDS,
         )
 
-        if not self._voice_clone_prompt or self._voice_info != voice_info:
-            try:
-                self._voice_clone_prompt = self._model.create_voice_clone_prompt(
-                    ref_audio=voice_path,
-                    ref_text=ref_text or None,
-                )
-            except Exception as e:
-                return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
-
-            self._voice_info = voice_info
+        try:
+            # The library moves the (CPU) prompt tokens to its device at
+            # generate time and never mutates them, so the cached prompt can
+            # be used directly.
+            voice_clone_prompt = self._get_or_create_voice_clone(
+                source_path=voice_path,
+                transcript=ref_text,
+                factory=lambda: self._create_voice_clone(voice_path, ref_text),
+            )
+        except Exception as e:
+            return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
@@ -182,7 +201,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             try:
                 kw: dict = dict(
                     text=prompt,
-                    voice_clone_prompt=self._voice_clone_prompt,
+                    voice_clone_prompt=voice_clone_prompt,
                     speed=speed,
                     generation_config=generation_config,
                 )

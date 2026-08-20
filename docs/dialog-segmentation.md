@@ -214,7 +214,7 @@ The import-time dialog-segmentation path assigns zero-based `voice_index = 1`—
 
 Narration retains its inherited voice index. With the normal default of `-1`, narration resolves to voice sample 1 under user-defined voice selection.
 
-The preassignment is stored even when a second voice sample has not been configured. It takes effect only when the project uses User-defined voice selection; dialog segmentation does not change the project's voice-selection mode. Multi-item batching has its existing limitation: user-defined line assignments are not honored and generation falls back to voice sample 1.
+The preassignment is stored even when a second voice sample has not been configured. It takes effect only when the project uses User-defined voice selection; dialog segmentation does not change the project's voice-selection mode. Multi-item batching honors user-defined line assignments: each generation round is split into per-voice sub-batches (groups of batches), so every line is generated with its own voice sample.
 
 This is a narration-versus-dialog default, not speaker detection. All detected dialog receives voice sample 2 until the user edits individual line selections.
 

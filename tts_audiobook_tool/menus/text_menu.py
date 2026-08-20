@@ -461,10 +461,9 @@ shown below. Project language code can also affect how the text is segmented.
 DIALOG_SEGMENTATION_DESC = \
 f"""Detects and splits dialog from surrounding narration,
 making it easier to assign different voices.
-
 For example, {COL_DIM}He said, "Hello."{COL_DEFAULT} becomes {COL_DIM}He said,{COL_DEFAULT} and {COL_DIM}"Hello."{COL_DEFAULT}
-
 Dialog segments are preassigned to voice sample 2.
+
 For single-voice narration, leave this off to preserve natural flow.
 """
 

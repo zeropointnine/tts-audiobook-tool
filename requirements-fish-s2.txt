@@ -30,7 +30,6 @@ opencc-python-reimplemented==0.1.7
 silero-vad
 ormsgpack
 tiktoken>=0.8.0
-pydantic==2.9.2
 cachetools
 descript-audio-codec
 descript-audiotools
@@ -61,7 +60,7 @@ num2words==0.5.14
 nvidia-ml-py
 pyloudnorm==0.1.1
 psutil
-pydantic
+pydantic>=2.9.2,<3 # rem, fish lib itself pins 2.9.2
 pysbd==0.3.4
 pywin32; sys_platform == 'win32'
 requests

@@ -43,6 +43,23 @@ from tts_audiobook_tool.transcriber import Transcriber
 class TtsModelError:
     message: str
 
+@dataclass(frozen=True)
+class SubBatch:
+    """
+    One model-inference call's worth of items, all of which use a single
+    voice sample.
+
+    `voice_selection_index` is None when the existing voice logic inside
+    `GenerateUtil.generate()` applies (auto-advance rotation, disabled mode,
+    or a single-item user-defined selection).
+    """
+    voice_selection_index: int | None
+    items: tuple[tuple[int, int], ...]
+
+# Number of batch iterations applied per group in the windowed word-count
+# ordering used to preserve a semblance of index monotonicity.
+BATCH_ITERATIONS_PER_GROUP = 5
+
 class GenerateUtil:
 
     @staticmethod
@@ -98,9 +115,33 @@ class GenerateUtil:
             index = sorted_indices[i]
             items.append((index, 0))
 
-        should_bucket = (batch_size > 1 and not ProjectVoiceUtil.is_language_cjk(state.project))
-        if should_bucket:
-            items = bucket_items(items, state.project.phrase_groups, batch_size)
+        # Build a queue of rounds. A "round" is a group of sub-batches (a
+        # "batch of batches"); each sub-batch is sent to the model as a single
+        # call that can use only one voice sample.
+        #
+        # For user-defined voice selections, lines are grouped into per-voice
+        # sub-batches (see make_multi_voice_rounds). Otherwise the queue
+        # degenerates to the single-voice shape: a flat, optionally
+        # word-count-bucketed list of items chunked into sub-batches of
+        # batch_size, and the voice is resolved by the existing logic inside
+        # generate() (auto-advance rotation or disabled mode).
+        is_cjk = ProjectVoiceUtil.is_language_cjk(state.project)
+        voice_of_index: dict[int, int] | None = None
+        if batch_size > 1 and project.voice_select_mode == VoiceSelectMode.USER_DEFINED:
+            voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
+            if voice_values:
+                voice_of_index = effective_voice_indices(
+                    project.phrase_groups, sorted_indices, len(voice_values)
+                )
+        if voice_of_index is not None:
+            queue = make_multi_voice_rounds(
+                items, project.phrase_groups, voice_of_index, batch_size,
+                sort_by_words=not is_cjk,
+            )
+        else:
+            if batch_size > 1 and not is_cjk:
+                items = bucket_items(items, project.phrase_groups, batch_size)
+            queue = make_single_voice_rounds(items, batch_size)
 
         # Metrics-related variables
         num_errored = 0
@@ -127,15 +168,45 @@ class GenerateUtil:
         Tts.clear_continuation()
         Tts.reset_voice_selection_index()
 
-        # Loop through items in the batch
-        while items:
+        # Loop through the queue of rounds. Retries (re-added items) are
+        # collected and processed at the head of the queue, as their own
+        # round(s), before any further items from the main queue.
+        pending_retries: list[tuple[int, int]] = []
+        current_round: list[SubBatch] = []
+        last_voice: int | None = None
+
+        while True:
 
             if Interrupts().did_interrupt:
                 did_interrupt = True
                 break
 
-            if not items:
-                break
+            # Start a new round if needed (retries take priority over the queue)
+            if not current_round:
+                if pending_retries:
+                    current_round = make_retry_round(pending_retries, voice_of_index, batch_size)
+                    pending_retries = []
+                elif queue:
+                    current_round = queue.pop(0)
+                else:
+                    break
+
+            sub = current_round.pop(0)
+
+            # Make parallel arrays from 'sub'
+            indices = [item[0] for item in sub.items]
+            retry_counts = [item[1] for item in sub.items]
+            num_retries += sum(retry_count > 0 for retry_count in retry_counts)
+
+            # A rolling-continuation context is per voice sample, so do not
+            # carry it across a voice sample change mid-run.
+            if (
+                sub.voice_selection_index is not None
+                and last_voice is not None
+                and sub.voice_selection_index != last_voice
+            ):
+                Tts.clear_continuation()
+            last_voice = sub.voice_selection_index
 
             if not showed_vram_warning:
                 b = app_memory.show_vram_memory_warning_if_necessary()
@@ -143,22 +214,14 @@ class GenerateUtil:
                     print("\a", end="")
                     showed_vram_warning = True
 
-            # Take batch from items
-            batch = items[:batch_size]
-            items = items[batch_size:]
-
-            # Make parallel arrays from 'batch'
-            indices = [item[0] for item in batch]
-            retry_counts = [item[1] for item in batch]
-            num_retries += sum(retry_count > 0 for retry_count in retry_counts)
-
             # Print item info
             GenerateUtil.print_batch_heading(
                 indices=indices,
                 num_complete=num_passed + num_failed + num_errored,
-                num_remaining=len(items) + len(batch),
+                num_remaining=len(sorted_indices) - (num_passed + num_failed + num_errored),
                 num_total=len(sorted_indices),
-                start_time=start_time
+                start_time=start_time,
+                voice_index=sub.voice_selection_index,
             )
 
             # Generate and validate
@@ -169,7 +232,8 @@ class GenerateUtil:
                 phrase_groups=project.phrase_groups,
                 stt_variant=stt_variant, stt_config=stt_config,
                 force_random_seed=is_regen or any(count > 0 for count in retry_counts),
-                is_realtime=False
+                is_realtime=False,
+                voice_selection_index=sub.voice_selection_index,
             )
             gen_val_sum_time += (time.time() - gen_start_time)
 
@@ -361,8 +425,10 @@ class GenerateUtil:
             printt()
 
             if re_adds:
-                # Insert "re_adds" at the head of the list (not bothering with deque fyi)
-                items[:0] = re_adds
+                # Pending retries are processed at the head of the queue,
+                # as the next round(s) before any further items from the
+                # main queue.
+                pending_retries.extend(re_adds)
 
         # Update the persisted queue once per generation run, based only on files
         # that were actually saved successfully.
@@ -423,7 +489,8 @@ class GenerateUtil:
         stt_config: SttConfig,
         force_random_seed: bool,
         is_realtime: bool,
-        is_skip_reason_buffer: bool=False
+        is_skip_reason_buffer: bool=False,
+        voice_selection_index: int | None=None
     ) -> list[ValidationResult | str | TtsModelError]:
         """
         Generates and validates a batch of prompts from the Project text.
@@ -432,6 +499,10 @@ class GenerateUtil:
 
         :param indices:
             When length is 1, batch mode is disabled
+        :param voice_selection_index:
+            When set, all items in the batch are generated with this voice
+            sample (a batch must be voice-homogeneous). When None, the voice
+            is resolved by the existing logic inside `generate()`.
         """
         
         project = state.project
@@ -449,7 +520,8 @@ class GenerateUtil:
             force_random_seed=force_random_seed,
             is_realtime=is_realtime,
             save_debug_files=save_debug_files,
-            print_generation_request=True
+            print_generation_request=True,
+            voice_selection_index=voice_selection_index
         )        
         printt() # Restore print color, print blank line
         
@@ -541,7 +613,8 @@ class GenerateUtil:
             force_random_seed: bool, 
             is_realtime: bool,
             save_debug_files: bool,
-            print_generation_request: bool = False
+            print_generation_request: bool = False,
+            voice_selection_index: int | None = None
         ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError]:
         """
         Core audio generation function.
@@ -552,6 +625,10 @@ class GenerateUtil:
 
         param indices:
             Use a one-element list to not generate in batch mode
+        param voice_selection_index:
+            When set, all items are generated with this voice sample (the
+            batch must be voice-homogeneous). When None, the voice is
+            resolved from the project's voice selection mode.
         """
 
         if len(indices) == 0:
@@ -566,7 +643,6 @@ class GenerateUtil:
             prompts.append(prompt)
 
         # Generate
-        voice_selection_index = -1
         voice_tag = ""
         if Tts.get_type() == TtsModelType.NONE:
             result = "No active TTS model"
@@ -574,34 +650,29 @@ class GenerateUtil:
             voice_values = ProjectVoiceUtil.get_voice_values(project, Tts.get_type())
             has_voice_values = bool(voice_values)
             is_user_defined_voice_mode = project.voice_select_mode == VoiceSelectMode.USER_DEFINED
-            is_multi_item_batch = len(indices) > 1
             use_custom_voice_index = (
                 len(indices) == 1
                 and is_user_defined_voice_mode
                 and has_voice_values
             )
-            use_first_voice_for_unsupported_user_defined_batch = (
-                is_multi_item_batch
-                and is_user_defined_voice_mode
-                and has_voice_values
-            )
-            if project.voice_select_mode == VoiceSelectMode.DISABLED:
-                voice_selection_index = 0
-            elif use_first_voice_for_unsupported_user_defined_batch:
-                # User-defined voice selections are per line. A multi-line model
-                # batch can only receive one voice_selection_index, so use the
-                # documented fallback from the Generate menu warning: the first
-                # voice sample is used for every item in this batch.
-                voice_selection_index = 0
-            elif use_custom_voice_index:
-                requested_voice_index = phrase_groups[indices[0]].voice_index
-                # Silently clamp invalid (presumably stale) index to the nearest valid voice index
-                voice_selection_index = min(
-                    max(requested_voice_index, 0),
-                    len(voice_values) - 1,
-                )
-            else:
-                voice_selection_index = Tts.get_next_voice_selection_index()
+            if voice_selection_index is None:
+                if len(indices) > 1 and is_user_defined_voice_mode and has_voice_values:
+                    raise ValueError(
+                        "Logic error - A user-defined multi-item batch must be "
+                        "split into per-voice sub-batches with explicit "
+                        "voice_selection_index values (see make_multi_voice_rounds)"
+                    )
+                if project.voice_select_mode == VoiceSelectMode.DISABLED:
+                    voice_selection_index = 0
+                elif use_custom_voice_index:
+                    requested_voice_index = phrase_groups[indices[0]].voice_index
+                    # Silently clamp invalid (presumably stale) index to the nearest valid voice index
+                    voice_selection_index = min(
+                        max(requested_voice_index, 0),
+                        len(voice_values) - 1,
+                    )
+                else:
+                    voice_selection_index = Tts.get_next_voice_selection_index()
             voice_tag = Tts.get_voice_tag_for_selection_index(project, voice_selection_index)
             result = Tts.generate_using_project(
                 project,
@@ -760,7 +831,8 @@ class GenerateUtil:
 
     @staticmethod
     def print_batch_heading(
-        indices: list[int], num_complete: int, num_remaining: int, num_total: int, start_time: float
+        indices: list[int], num_complete: int, num_remaining: int, num_total: int, start_time: float,
+        voice_index: int | None = None
     ) -> None:
         
         line_noun = make_noun("line", "lines", len(indices))
@@ -771,6 +843,8 @@ class GenerateUtil:
             num_more = len(indices) - 3
             indices_string = f"{', '.join(index_strings)}, + {num_more} more"
         processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
+        if voice_index is not None:
+            processing_string += f" {COL_DIM}[voice {voice_index + 1}]{COL_DEFAULT}"
 
         elapsed = duration_string(time.time() - start_time)
         counts = f"{COL_DIM}(lines processed: {COL_DEFAULT}{num_complete}{COL_DIM}; remaining: {COL_DEFAULT}{num_remaining}{COL_DIM}; elapsed: {COL_DEFAULT}{elapsed}{COL_DIM})"
@@ -933,7 +1007,6 @@ def bucket_items(
         triplet = (index, retry_count, num_words)
         triplets.append(triplet)
 
-    BATCH_ITERATIONS_PER_GROUP = 5
     group_size = batch_size * BATCH_ITERATIONS_PER_GROUP
     is_descending = True
 
@@ -951,3 +1024,128 @@ def bucket_items(
     for index, retry_count, _ in grouped_triplets:
         sorted_items.append( (index, retry_count) )
     return sorted_items
+
+def effective_voice_indices(
+        phrase_groups: list[PhraseGroup],
+        indices: list[int],
+        num_voice_values: int,
+) -> dict[int, int]:
+    """
+    Maps each item index to the voice sample index that `GenerateUtil.generate`
+    will actually use for that line, given a user-defined voice selection mode.
+
+    A per-line selection of -1 (no explicit assignment) or any stale
+    out-of-range value is clamped to the nearest valid voice sample index.
+    """
+    return {
+        index: min(max(phrase_groups[index].voice_index, 0), num_voice_values - 1)
+        for index in indices
+    }
+
+def make_single_voice_rounds(
+        items: list[tuple[int, int]],
+        batch_size: int,
+) -> list[list[SubBatch]]:
+    """
+    Wraps a flat (possibly word-count-bucketed) queue into a list of rounds,
+    each holding a single voice-less sub-batch of up to `batch_size` items.
+    The voice is resolved by the existing logic inside
+    `GenerateUtil.generate()` (auto-advance rotation or disabled mode).
+    """
+    return [
+        [SubBatch(voice_selection_index=None, items=tuple(items[i:i + batch_size]))]
+        for i in range(0, len(items), batch_size)
+    ]
+
+def make_multi_voice_rounds(
+        items: list[tuple[int, int]],
+        phrase_groups: list[PhraseGroup],
+        voice_of_index: dict[int, int],
+        batch_size: int,
+        sort_by_words: bool,
+) -> list[list[SubBatch]]:
+    """
+    Builds a queue of rounds for a project with user-defined voice selections.
+    Each round is a group of per-voice sub-batches ("batches of batches");
+    each sub-batch holds at most `batch_size` items that all share one voice
+    sample, so each can be sent to the model as a single call.
+
+    The single-speaker windowing principle is applied within practical limits:
+    items are walked in index-sorted windows of
+    `batch_size * BATCH_ITERATIONS_PER_GROUP * num_voices` items, so each
+    voice keeps a comparable per-window share as the single-speaker path.
+    Within a window, each voice's items are sorted by word count (alternating
+    descending/ascending per window) to pack similar-duration sub-batches
+    together, keeping the overall order roughly in book order.
+
+    Params:
+        items: (phase group index, retry_count) tuples, sorted by index
+        voice_of_index: map from index to voice sample index (see
+            effective_voice_indices)
+        sort_by_words: False for CJK projects (no word-count sorting)
+    """
+    if not items:
+        return []
+
+    distinct_voices = {voice_of_index[index] for index, _ in items}
+    window_size = batch_size * BATCH_ITERATIONS_PER_GROUP * len(distinct_voices)
+
+    rounds: list[list[SubBatch]] = []
+    is_descending = True
+
+    for i in range(0, len(items), window_size):
+        window = items[i:i + window_size]
+
+        # Group the window's items by voice, in order of first appearance so
+        # that a round's sub-batches stay roughly in book order.
+        by_voice: dict[int, list[tuple[int, int]]] = {}
+        voice_order: list[int] = []
+        for item in window:
+            voice = voice_of_index[item[0]]
+            if voice not in by_voice:
+                by_voice[voice] = []
+                voice_order.append(voice)
+            by_voice[voice].append(item)
+
+        sub_batches: list[SubBatch] = []
+        for voice in voice_order:
+            group = by_voice[voice]
+            if sort_by_words:
+                group.sort(key=lambda item: phrase_groups[item[0]].num_words, reverse=is_descending)
+            for j in range(0, len(group), batch_size):
+                sub_batches.append(SubBatch(
+                    voice_selection_index=voice,
+                    items=tuple(group[j:j + batch_size]),
+                ))
+        rounds.append(sub_batches)
+        is_descending = not is_descending
+
+    return rounds
+
+def make_retry_round(
+        items: list[tuple[int, int]],
+        voice_of_index: dict[int, int] | None,
+        batch_size: int,
+) -> list[SubBatch]:
+    """
+    Builds a single round from pending retries (re-added items). Items keep
+    the order they were produced in and are grouped by voice sample (when the
+    project uses user-defined voice selections); no word-count re-bucketing is
+    done, matching the single-speaker behavior of processing re-adds promptly.
+    """
+    if voice_of_index is None:
+        groups: list[tuple[int | None, list[tuple[int, int]]]] = [(None, list(items))]
+    else:
+        by_voice: dict[int, list[tuple[int, int]]] = {}
+        for item in items:
+            by_voice.setdefault(voice_of_index[item[0]], []).append(item)
+        groups = [(voice, by_voice[voice]) for voice in sorted(by_voice)]
+
+    sub_batches: list[SubBatch] = []
+    for voice, group in groups:
+        for i in range(0, len(group), batch_size):
+            sub_batches.append(SubBatch(
+                voice_selection_index=voice,
+                items=tuple(group[i:i + batch_size]),
+            ))
+    return sub_batches

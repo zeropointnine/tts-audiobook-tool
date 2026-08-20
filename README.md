@@ -14,10 +14,10 @@
 - [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
 - [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
-- [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) (via SGL-Omni backend)
+- [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) (via SGL-Omni)
 - [IndexTTS2](https://github.com/index-tts/index-tts)
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
-- [MOSS-TTS (v1.5 9B and Local-Transformer 1.7B)](https://github.com/OpenMOSS/MOSS-TTS) (either locally or via SGL-Omni)
+- [MOSS-TTS (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) (either locally or via SGL-Omni)
 - [OmniVoice](https://github.com/k2-fsa/OmniVoice)
 - [Oute TTS](https://github.com/edwko/OuteTTS)
 - [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
@@ -34,15 +34,15 @@ The app employs various techniques to make the nondeterministic output of genera
 
 The app can also utilize multiple voice-clone samples, which can be assigned on a line-by-line basis. Optional dialog detection can automatically assign quoted dialog to a separate voice, simplifying setup.
 
-It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use. 
+It also includes optional realtime modes for audiobook playback and live LLM chat, mainly for voice/model testing and interactive use.
 
-The app uses a plain-text, hotkey-based console interface. 
+The app uses a plain-text, hotkey-based console interface.
 
 
 ### How to create an audiobook (quick summary)
 
 1. Assign a working project directory.
-2. Select a short reference audio clip for the voice clone, and adjust related model parameters if desired.
+2. Select a short reference audio clip for the voice clone, and adjust various model knobs if desired.
 3. Select the source EPUB or text file, and optionally define file split points.
 4. Generate
 5. Concatenate the generated sound segments to create the finished audiobook file/s.
@@ -99,9 +99,9 @@ Clone the repository and cd into it:
     git clone https://github.com/zeropointnine/tts-audiobook-tool
     cd tts-audiobook-tool
 
-### Step 3 
+### Step 3
 
-A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here. 
+A separate virtual environment must be created for each model you want to use. Perform the operations as described in one or more of the sections below, and then return here.
 
 ### Step 4 (Windows only)
 
@@ -166,12 +166,12 @@ Authenticate the model on HuggingFace:
 1. Accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s1-mini).
 
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
- 
+
 
 ## Virtual environment for Fish S2-Pro:
 
 > **ℹ️ Note!**
-> Requires 24GB VRAM 
+> Requires 24GB VRAM
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s2":
 
@@ -192,11 +192,11 @@ Authenticate the model on HuggingFace:
 1. Accept the license terms on the [HuggingFace Fish model page](https://huggingface.co/fishaudio/s2-pro).
 
 2. Authenticate locally using your [access token](https://huggingface.co/settings/tokens) by running `hf auth login`
- 
+
 
 ## Virtual environment for GLM-TTS
 
-> **ℹ️ Requires CUDA** 
+> **ℹ️ Requires CUDA**
 
 ### Linux
 
@@ -284,7 +284,7 @@ Install dependencies:
 
 ## Virtual environment for MiraTTS
 
-> **ℹ️ Requires CUDA** 
+> **ℹ️ Requires CUDA**
 
 Initialize a **Python v3.12** virtual environment named `venv-mira`:
 
@@ -372,7 +372,7 @@ Authenticate the model on HuggingFace:
     Authenticate locally using your access token by running hf auth login
 
 
-## Virtual environment for Qwen3-TTS 
+## Virtual environment for Qwen3-TTS
 
 Initialize a **Python v3.12** virtual environment named `venv-qwen3tts`:
 
@@ -457,7 +457,7 @@ The following models served through SGL-Omni are supported:
 - [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
 - [**Higgs Audio V3**](https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html) (24GB VRAM recommended)
 - [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (>24GB VRAM required)
-- [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html) 
+- [**Qwen3TTS-Base**](https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html)
 - [**ZONOS2**](https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html) (16+GB VRAM recommended)
 
 
@@ -498,7 +498,7 @@ On Linux, enter:
 
     pip install flash-attn==2.8.3 --no-build-isolation
 
-On Windows, download and install a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version and torch version: 
+On Windows, download and install a pre-compiled wheel from a trustworthy source (for example, [mjun0812](https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/tag/v0.4.10)). The filename should look something like this, depending on Python version and torch version:
 
 - flash_attn-2.7.4+cu128torch2.8-cp311-cp311-win_amd64.whl
 - flash_attn-2.7.4+cu128torch2.8-cp312-cp312-win_amd64.whl
@@ -530,7 +530,7 @@ The app ideally wants to use ~2-4 GB extra VRAM for the Whisper model, which nee
 
 ### Configurable model-specific features supported by the app
 
-Zero-shot voice cloning is a first-class feature, supported for all models. 
+Zero-shot voice cloning is a first-class feature, supported for all models.
 
 **Chatterbox**
 
@@ -541,20 +541,20 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 **IndexTTS2**
 
 - Emotion voice sample
-- Emotion vector 
+- Emotion vector
 - Emotion alpha
 - FP16 / FP8
 - Temperature, top_p, top_k, seed
 
 **Fish S1-mini**
 
-- Torch compile 
+- Torch compile
 - Temperature, top_p, repetition penalty, seed
 
 **Fish S2-Pro**
 
 - Emotion tags
-- Torch compile 
+- Torch compile
 - Experimental rolling continuation mode
 - Temperature, top_p, top_k, seed
 - SGL-Omni backend inference support (including concurrent requests and streaming)
@@ -635,17 +635,17 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  | 
-| Chatterbox Multilingual | GTX 3080 Ti, Windows | ~130% realtime  | 
+| Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  |
+| Chatterbox Multilingual | GTX 3080 Ti, Windows | ~130% realtime  |
 | Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
-| Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  | 
+| Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  |
 | Chatterbox Turbo        | Macbook Pro M1       | ~70% realtime   |
-| Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   | 
-| Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  | 
-| Higgs V2                | GTX 4090, Windows    | ~200% realtime  | 
+| Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   |
+| Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  |
+| Higgs V2                | GTX 4090, Windows    | ~200% realtime  |
 | Higgs V3                | GTX 4090, Windows    | 300%+ realtime  | SGL-Omni; concurrent requests=1
 | Higgs V3                | GTX 4090, Windows    | 2000%+ realtime | SGL-Omni; concurrent requests=10
-| IndexTTS2               | GTX 4090, Windows    | ~150% realtime  | 
+| IndexTTS2               | GTX 4090, Windows    | ~150% realtime  |
 | IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
@@ -653,12 +653,12 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | MOSS-TTS-Local-Transformer-v1.5           | GTS 4090, Windows    | 500% realtime   | batch size=20, flash attn
 | OmniVoice TTS           | GTX 3080 Ti, Linux   | 300% realtime   | default steps
 | OmniVoice TTS           | Macbook Pro M1 (MPS) | 20% realtime    | default steps
-| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  | 
+| Pocket TTS              | GTX 3080 Ti, Linux   | 1300% realtime  |
 | Pocket TTS              | Ryzen 7 7700, Linux  | ~200% realtime  | CPU mode
-| Pocket TTS              | Macbook Pro M1       | 350% realtime   | 
+| Pocket TTS              | Macbook Pro M1       | 350% realtime   |
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 300% realtime   | batch size=5
 | Qwen3-TTS 1.6B          | GTX 3080 Ti, Linux   | 100% realtime   | batch size=1
-| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  | 
+| GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  |
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
 | MiraTTS                 | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
@@ -672,6 +672,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-08-21**
+
+- Batch mode is now supported when using `Voice selection mode: user-defined`.
 
 **2026-08-19**
 
@@ -765,7 +769,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 **2026-04-24**
 
-- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upsampler** post-processing option. 
+- Added **[Sidon](https://github.com/sarulab-speech/Sidon) 48khz upsampler** post-processing option.
 - Added `Concat` > **`Limit silence gaps`** (prevents long silences in sound generations, keeps narration flowing)
 
 **2026-04-23**
@@ -780,7 +784,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 **2026-04-13**
 
-- Added side feature: **tts-server-tool**. View [server readme](tts_audiobook_tool/server/README-server.md). 
+- Added side feature: **tts-server-tool**. View [server readme](tts_audiobook_tool/server/README-server.md).
 
 **2026-04-11**
 
@@ -790,7 +794,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 - Added support for [**Fish S2-Pro**](https://huggingface.co/fishaudio/s2-pro)
 
-- Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments. 
+- Updated torch, ctranslate2, and flash-attention dependencies for all virtual environments.
 
 - Fish S1-mini and S2-Pro - Added torch compile toggle
 
@@ -810,7 +814,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 - **Batching optimization** improves net TTS inference speed by up to 25% (VibeVoice and Mira).
 
-- **VibeVoice batch support** (drastically speeds up inference). 
+- **VibeVoice batch support** (drastically speeds up inference).
 
 - **VibeVoice seed support**
 
@@ -850,7 +854,7 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 **2025-12-23**
 
-- Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce. Requires some experimentation, as you might imagine. 
+- Added option: **`Project`** > **`Word substitutions`**. This allows you to replace words in the prompt that the TTS model may mispronounce. Requires some experimentation, as you might imagine.
 
 - Relatedly, added: `Project` > `Word substitutions` > `Inspect project text for uncommon words`.
 

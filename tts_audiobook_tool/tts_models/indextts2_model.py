@@ -127,7 +127,13 @@ class IndexTts2Model(IndexTts2BaseModel):
         app_support.set_seed(seed)
 
         try:
-            # FYI, infer() caches loaded voice sample/s internally
+            # FYI, infer() internally caches the derived voice intermediates (speaker
+            # embedding, style, prompt condition, reference mel) keyed by path string,
+            # so a tool-side voice clone cache is redundant for single-voice runs.
+            # Not opting in to SUPPORTS_MULTIPLE_VOICE_CLONES either: the library cache
+            # is a single slot that fully evicts on every voice switch, and infer()
+            # only accepts a path string, so multi-voice support would require forking
+            # the indextts package.
             result = self.model.infer(
                 spk_audio_prompt=voice_path,
                 text=text,

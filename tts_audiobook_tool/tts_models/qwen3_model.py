@@ -19,11 +19,12 @@ class Qwen3Model(Qwen3BaseModel):
     """
     """
 
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+
     def __init__(self, model_target: str, device: DeviceType): 
         
         self._model_target = model_target
         self._voice_info: tuple[str, str] | None = None
-        self._voice_clone_prompt: VoiceClonePromptItem | None = None
         self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
         self._device_type = device
 
@@ -54,8 +55,8 @@ class Qwen3Model(Qwen3BaseModel):
 
     def kill(self) -> None:
         self.clear_continuation()
+        self.clear_voice_clone_cache()
         self._model = None # type: ignore
-        self._voice_clone_prompt = None
 
     @property
     def model_target(self) -> str:
@@ -78,10 +79,10 @@ class Qwen3Model(Qwen3BaseModel):
         return self._model.generate_defaults
 
     def clear_voice(self) -> None:
-        if self._voice_info is not None or self._voice_clone_prompt is not None:
+        if self._voice_info is not None:
             self.clear_continuation()
         self._voice_info = None
-        self._voice_clone_prompt = None
+        self.clear_voice_clone_cache()
 
     def clear_continuation(self) -> None:
         self.cached_continuation_history.clear()
@@ -114,18 +115,19 @@ class Qwen3Model(Qwen3BaseModel):
     def get_prompt_log_preview(prompt: str) -> str:
         return prompt.replace("\n", " ")[:50]
 
-    def build_continuation_voice_clone_prompt(self, use_continuation: bool) -> VoiceClonePromptItem:
-        if self._voice_clone_prompt is None:
-            raise ValueError("Voice clone prompt is not initialized")
-
+    def build_continuation_voice_clone_prompt(
+            self,
+            base_prompt: VoiceClonePromptItem,
+            use_continuation: bool,
+    ) -> VoiceClonePromptItem:
         if not use_continuation:
-            return self._voice_clone_prompt
+            return base_prompt
 
-        if self._voice_clone_prompt.ref_code is None:
+        if base_prompt.ref_code is None:
             raise ValueError("Qwen3 Base rolling continuation requires ICL ref_code")
 
-        text_parts = [self._voice_clone_prompt.ref_text or ""]
-        code_parts = [self._voice_clone_prompt.ref_code.detach().cpu()]
+        text_parts = [base_prompt.ref_text or ""]
+        code_parts = [base_prompt.ref_code.detach().cpu()]
         for continuation_text, continuation_codes in self.cached_continuation_history:
             text_parts.append(continuation_text)
             code_parts.append(continuation_codes.detach().cpu())
@@ -135,10 +137,24 @@ class Qwen3Model(Qwen3BaseModel):
 
         return VoiceClonePromptItem(
             ref_code=combined_codes,
-            ref_spk_embedding=self._voice_clone_prompt.ref_spk_embedding.detach().cpu(),
+            ref_spk_embedding=base_prompt.ref_spk_embedding.detach().cpu(),
             x_vector_only_mode=False,
             icl_mode=True,
             ref_text=combined_text,
+        )
+
+    def _create_voice_clone_prompt(self, voice_info: tuple[str, str]) -> VoiceClonePromptItem:
+        prompt = self._model.create_voice_clone_prompt(
+            ref_audio=voice_info[0],
+            ref_text=voice_info[1],
+            x_vector_only_mode=False,
+        )[0]
+        return VoiceClonePromptItem(
+            ref_code=prompt.ref_code.detach().cpu().clone() if prompt.ref_code is not None else None,
+            ref_spk_embedding=prompt.ref_spk_embedding.detach().cpu().clone(),
+            x_vector_only_mode=prompt.x_vector_only_mode,
+            icl_mode=prompt.icl_mode,
+            ref_text=prompt.ref_text,
         )
 
     def generate_using_project(
@@ -245,19 +261,21 @@ class Qwen3Model(Qwen3BaseModel):
         if not prompts or not voice_info[0] or not voice_info[1]:
             return "Missing required parameter"
 
-        if not self._voice_clone_prompt or self._voice_info != voice_info:
-            if self._voice_info != voice_info:
-                self.clear_continuation()
-            # Cache _voice_clone_prompt 
-            try:
-                self._voice_clone_prompt = self._model.create_voice_clone_prompt(
-                    ref_audio=voice_info[0],
-                    ref_text=voice_info[1],
-                    x_vector_only_mode=False,
-                )[0]
-            except Exception as e:
-                return f"Couldn't create voice clone for {voice_info[0]} - {make_error_string(e)}"
-            self._voice_info = voice_info
+        if self._voice_info != voice_info:
+            self.clear_continuation()
+
+        try:
+            base_voice_clone_prompt = cast(
+                VoiceClonePromptItem,
+                self._get_or_create_voice_clone(
+                    source_path=voice_info[0],
+                    transcript=voice_info[1],
+                    factory=lambda: self._create_voice_clone_prompt(voice_info),
+                ),
+            )
+        except Exception as e:
+            return f"Couldn't create voice clone for {voice_info[0]} - {make_error_string(e)}"
+        self._voice_info = voice_info
 
         rolling_continuation = rolling_continuation_max_segments > 0
 
@@ -271,7 +289,10 @@ class Qwen3Model(Qwen3BaseModel):
             printt(f"{COL_DIM_ITALICS}Rolling continuation enabled, history length: {len(self.cached_continuation_history)}")
 
         use_continuation = rolling_continuation and bool(self.cached_continuation_history)
-        voice_clone_prompt = self.build_continuation_voice_clone_prompt(use_continuation)
+        voice_clone_prompt = self.build_continuation_voice_clone_prompt(
+            base_voice_clone_prompt,
+            use_continuation,
+        )
         voice_clone_prompts = [voice_clone_prompt for _ in prompts]
         
         languages = [language for _ in prompts]

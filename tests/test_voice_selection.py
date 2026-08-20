@@ -135,6 +135,7 @@ def run_generation(
         indices: list[int],
         voices: list[str],
         next_rotation_index: int = 7,
+        voice_selection_index: int | None = None,
 ) -> tuple[int, str, int]:
     project = cast(Project, SimpleNamespace(
         voice_select_mode=voice_select_mode,
@@ -159,6 +160,7 @@ def run_generation(
             force_random_seed=False,
             is_realtime=False,
             save_debug_files=False,
+            voice_selection_index=voice_selection_index,
         )
 
     assert all(isinstance(result, TtsModelError) for result in results)
@@ -229,15 +231,26 @@ def test_custom_mode_without_configured_voice_retains_rotation() -> None:
     assert (index, voice_tag, advance_count) == (7, "voice-7", 1)
 
 
-def test_custom_mode_multi_item_batch_uses_first_voice_without_advancing() -> None:
+def test_custom_mode_multi_item_batch_with_explicit_voice_uses_it() -> None:
     index, voice_tag, advance_count = run_generation(
         VoiceSelectMode.USER_DEFINED,
         [make_phrase_group(0), make_phrase_group(1)],
         [0, 1],
         ["voice-a.flac", "voice-b.flac"],
+        voice_selection_index=1,
     )
 
-    assert (index, voice_tag, advance_count) == (0, "voice-0", 0)
+    assert (index, voice_tag, advance_count) == (1, "voice-1", 0)
+
+
+def test_custom_mode_multi_item_batch_without_explicit_voice_raises() -> None:
+    with pytest.raises(ValueError, match="voice_selection_index"):
+        run_generation(
+            VoiceSelectMode.USER_DEFINED,
+            [make_phrase_group(0), make_phrase_group(1)],
+            [0, 1],
+            ["voice-a.flac", "voice-b.flac"],
+        )
 
 
 def test_custom_voice_selection_is_stable_across_realtime_style_retries() -> None:

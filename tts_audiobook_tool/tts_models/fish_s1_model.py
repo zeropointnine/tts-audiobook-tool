@@ -17,6 +17,23 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
+# ---
+
+class VoiceClone:
+
+    def __init__(self, source_path: str, transcribed_text: str, audios: Any, prompt_tokens: Any = None):
+
+        self.source_path = source_path
+        self.transcribed_text = transcribed_text
+        self.audios = audios
+
+        # Normally pre-computed by `_create_voice_clone`; otherwise gets set
+        # on first generation
+        self.prompt_tokens: Any = prompt_tokens
+
+
+# ---
+
 class FishS1Model(FishS1BaseModel): 
     """
     Fish S1-mini TTS inference logic
@@ -26,6 +43,10 @@ class FishS1Model(FishS1BaseModel):
     fish_speech/models/text2semantic/inference.py
     See: https://github.com/fishaudio/fish-speech/blob/main/docs/en/inference.md
     """
+
+    # Prompt tokens are tiny (a few KB of int codes) and are CPU-cloned, so
+    # several voices can be retained at once.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, device: DeviceType, compile_enabled: bool):
 
@@ -82,6 +103,14 @@ class FishS1Model(FishS1BaseModel):
 
         dac_path = os.path.join(model_dir, "codec.pth")
         self.dac_model: Any = load_dac_model("modded_dac_vq", dac_path, device_value)
+        if device_value == "cuda":
+            # The s1-mini codec ships in fp32 (~470M params / 1.87 GB), and its
+            # encoder's activation footprint for a full reference clip is ~8 GiB
+            # in fp32 - enough to OOM a 12 GB GPU that is also hosting the t2s
+            # model. Casting to fp16 halves both weights and activations (this
+            # is how fish runs the codec on CUDA) and fits the whole
+            # encode + generate pipeline with headroom to spare.
+            self.dac_model = self.dac_model.half()
 
         t2s_path = model_dir
         self.t2s_model, self.decode_one_token = init_t2s_model(
@@ -95,27 +124,43 @@ class FishS1Model(FishS1BaseModel):
         logger.remove()
         logger.add(sys.stderr, level="WARNING", filter="fish_speech")
 
-    def set_voice_clone_using(self, source_path: str, transcribed_text: str) -> None:
+    def _create_voice_clone(self, source_path: str, transcribed_text: str) -> VoiceClone:
+        """
+        Prepares a voice clone: loads the reference audio and eagerly encodes
+        its prompt tokens with the DAC model.
 
-        if self._voice_clone and source_path == self._voice_clone.source_path:
-            return
+        The raw waveform is dropped after encoding (it is only needed for
+        that), and the prompt tokens are kept on CPU - they are tiny, and
+        `generate_long` moves token data to the device itself.
 
-        ref_audio, sr = torchaudio.load(source_path) # TODO error handling
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
+        ref_audio, sr = torchaudio.load(source_path)
         if ref_audio.shape[0] > 1:
             ref_audio = ref_audio.mean(0, keepdim=True)
         ref_audio = torchaudio.functional.resample(ref_audio, sr, self.dac_model.sample_rate)
-        audios = ref_audio[None].to(self.device_value)
+        audios = ref_audio[None].to(self.device_value, dtype=next(self.dac_model.parameters()).dtype)
+        audio_lengths = torch.tensor([audios.shape[2]], device=self.device_value, dtype=torch.long)
+        prompt_tokens, _ = self.dac_model.encode(audios, audio_lengths)
+        if prompt_tokens.ndim == 3:
+            prompt_tokens = prompt_tokens[0]
+        del audios
 
-        self._voice_clone = VoiceClone(
-            source_path=source_path, transcribed_text=transcribed_text, audios=audios
+        return VoiceClone(
+            source_path=source_path,
+            transcribed_text=transcribed_text,
+            audios=None,
+            prompt_tokens=prompt_tokens.detach().cpu().clone(),
         )
 
     def clear_voice_clone(self) -> None:
         self._voice_clone = None
-
+        self.clear_voice_clone_cache()
 
     def kill(self) -> None:
         # Clear all member variables in attempt to clear all resources
+        self.clear_voice_clone_cache()
         self.dac_model = None
         self._voice_clone = None
         self.t2s_model = None
@@ -139,11 +184,15 @@ class FishS1Model(FishS1BaseModel):
             project, TtsModelType.FISH_S1, voice_selection_index
         )
         if voice_file_name:
-            source_path = os.path.join(project.dir_path, voice_file_name)
-            self.set_voice_clone_using(
-                source_path=source_path,
-                transcribed_text=voice_transcript
-            )
+            voice_info = (os.path.join(project.dir_path, voice_file_name), voice_transcript)
+            try:
+                self._voice_clone = self._get_or_create_voice_clone(
+                    source_path=voice_info[0],
+                    transcript=voice_info[1],
+                    factory=lambda: self._create_voice_clone(*voice_info),
+                )
+            except Exception as e:
+                return f"Couldn't create voice clone for {voice_info[0]} - {make_error_string(e)}"
         else:
             self.clear_voice_clone()
 
@@ -198,9 +247,17 @@ class FishS1Model(FishS1BaseModel):
 
                 # Step 1: Prompt tokens
 
-                if self._voice_clone and self._voice_clone.prompt_tokens is None:
-                    audio_lengths = torch.tensor([self._voice_clone.audios.shape[2]], device=self.device_value, dtype=torch.long)
-                    prompt_tokens, _ = self.dac_model.encode(self._voice_clone.audios, audio_lengths)
+                # Safety net for VoiceClone instances built without
+                # pre-encoding. In the normal flow, `_create_voice_clone`
+                # fills this in ahead of time.
+                if (
+                    self._voice_clone
+                    and self._voice_clone.prompt_tokens is None
+                    and self._voice_clone.audios is not None
+                ):
+                    audios = self._voice_clone.audios.to(self.device_value, dtype=next(self.dac_model.parameters()).dtype)
+                    audio_lengths = torch.tensor([audios.shape[2]], device=self.device_value, dtype=torch.long)
+                    prompt_tokens, _ = self.dac_model.encode(audios, audio_lengths)
                     if prompt_tokens.ndim == 3:
                         prompt_tokens = prompt_tokens[0]
                     self._voice_clone.prompt_tokens = prompt_tokens
@@ -258,16 +315,3 @@ class FishS1Model(FishS1BaseModel):
 
         except Exception as e:
             return make_error_string(e)
-
-# ---
-
-class VoiceClone:
-
-    def __init__(self, source_path: str, transcribed_text: str, audios: Any):
-
-        self.source_path = source_path
-        self.transcribed_text = transcribed_text
-        self.audios = audios
-
-        # Gets set on first generation
-        self.prompt_tokens: Any = None

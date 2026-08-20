@@ -22,14 +22,16 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 
 class MossModel(MossBaseModel):
 
+    # Audio codes are small (T x NQ int codes) and CPU-retained, so several
+    # voices can be kept at once.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+
     def __init__(self, device: DeviceType, model_target: str = MossConfigs.get_default_repo_id()):
 
         self._device_type = device
         self.model_target = model_target
         self.dtype = self.resolve_dtype()
-        self.cached_voice_path = ""
-        self.cached_voice_stat: tuple[int, int] | None = None
-        self.cached_voice_codes: torch.Tensor | None = None
+        self._voice_info: tuple[str, str] | None = None
         self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
         self.audio_tokenizer_is_on_device = False
 
@@ -157,6 +159,9 @@ class MossModel(MossBaseModel):
         return prompt.replace("\n", " ")[:50]
 
     def kill(self) -> None:
+        self.clear_continuation()
+        self.clear_voice_clone_cache()
+        self._voice_info = None
         if self.processor:
             if hasattr(self.processor, "audio_tokenizer"):
                 self.processor.audio_tokenizer = None
@@ -164,10 +169,6 @@ class MossModel(MossBaseModel):
             self.model.cpu()
         self.processor = None
         self.model = None
-        self.cached_voice_path = ""
-        self.cached_voice_stat = None
-        self.cached_voice_codes = None
-        self.clear_continuation()
 
     def generate_outputs(
             self,
@@ -292,28 +293,19 @@ class MossModel(MossBaseModel):
     def build_audio_placeholder_content(num_items: int) -> str:
         return MOSS_AUDIO_PLACEHOLDER * num_items
 
-    def get_voice_codes(self, voice_path: str) -> torch.Tensor | None:
-        if not voice_path:
-            return None
+    def _create_voice_clone(self, source_path: str) -> torch.Tensor:
+        """
+        Encodes the voice file into audio codes (the expensive part of the
+        per-call voice setup) and returns a CPU clone.
+
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
         if self.processor is None:
             raise RuntimeError("Processor is not initialized")
-
-        normalized_voice_path = os.path.abspath(voice_path)
-        stat = os.stat(normalized_voice_path)
-        voice_stat = (stat.st_mtime_ns, stat.st_size)
-        if (
-                normalized_voice_path == self.cached_voice_path
-                and voice_stat == self.cached_voice_stat
-                and self.cached_voice_codes is not None
-        ):
-            return self.cached_voice_codes
-
         self.prepare_audio_tokenizer("voice path encode")
-        voice_codes = self.processor.encode_audios_from_path([normalized_voice_path])[0]
-        self.cached_voice_path = normalized_voice_path
-        self.cached_voice_stat = voice_stat
-        self.cached_voice_codes = voice_codes
-        return voice_codes
+        voice_codes = self.processor.encode_audios_from_path([source_path])[0]
+        return voice_codes.detach().cpu().clone()
 
     def generate_using_project(
             self,
@@ -379,6 +371,27 @@ class MossModel(MossBaseModel):
         if voice_path and not os.path.exists(voice_reference):
             return "Missing voice reference audio"
 
+        # The model doesn't use a transcript, so only the voice file state
+        # matters.
+        voice_info = (voice_reference, "") if voice_reference else None
+
+        # Rolling continuation history is voice-specific
+        if self._voice_info != voice_info:
+            self.clear_continuation()
+
+        voice_codes = None
+        if voice_reference:
+            try:
+                voice_codes = self._get_or_create_voice_clone(
+                    source_path=voice_reference,
+                    transcript="",
+                    factory=lambda: self._create_voice_clone(voice_reference),
+                )
+            except Exception as e:
+                return f"Couldn't create voice clone for {voice_reference} - {make_error_string(e)}"
+        # Only update after success above; None keeps the "no voice" state
+        self._voice_info = voice_info
+
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
@@ -399,7 +412,7 @@ class MossModel(MossBaseModel):
                             self.processor.build_user_message(
                                 text=conversation_text,
                                 language=language or None,
-                                reference=[voice_reference] if voice_reference else None,
+                                reference=[voice_codes] if voice_codes else None,
                             ),
                             self.processor.build_assistant_message(
                                 audio_codes_list=previous_audio_codes,
@@ -412,7 +425,7 @@ class MossModel(MossBaseModel):
                             self.processor.build_user_message(
                                 text=prompt,
                                 language=language or None,
-                                reference=[voice_reference],
+                                reference=[voice_codes],
                             )
                         ]]
                         processor_mode = "generation"
@@ -445,7 +458,7 @@ class MossModel(MossBaseModel):
                         self.processor.build_user_message(
                             text=prompt,
                             language=language or None,
-                            reference=[voice_reference],
+                            reference=[voice_codes],
                         )
                     ]
                     for prompt in prompts

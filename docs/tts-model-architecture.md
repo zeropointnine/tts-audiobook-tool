@@ -1,6 +1,6 @@
 # TTS Model Architecture
 
-Last updated: 2026-08-14
+Last updated: 2026-08-20
 
 ## Overview
 
@@ -120,6 +120,9 @@ Defines the interface all models must satisfy:
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
 - `prepare_text_for_inference(project, text) -> str` — concrete; the full pre-inference pipeline: project word substitutions → generic prompt normalization (incl. `un_all_caps`) → `massage_for_inference`
 - `clear_stream_state()` / `clear_continuation()` — concrete hooks for streaming and rolling-continuation state
+- `SUPPORTS_MULTIPLE_VOICE_CLONES = False` — class attribute; opt-in to retaining prepared voice clones for multiple source files simultaneously (see below)
+- `_get_or_create_voice_clone(source_path, transcript, factory)` — concrete; the shared get-or-create for prepared voice clones ([Voice Clone Cache](#voice-clone-cache))
+- `clear_voice_clone_cache()` — concrete, idempotent; drops all prepared clone values (models call it from `kill()`)
 
 Classmethods and helpers with default implementations (override when the defaults don't apply):
 
@@ -159,6 +162,50 @@ Example: [tts_audiobook_tool/tts_models/glm_model.py](tts_audiobook_tool/tts_mod
 - Implements `kill()`
 
 The split exists so that `AbcBaseModel` can be imported and its classmethods called without loading the heavy model library — which matters both for startup speed and for running the app outside the model's venv.
+
+---
+
+## Voice Clone Cache
+
+**Rationale.** A single audiobook run calls `generate_using_project()` many times — hundreds or thousands — with the same voice reference sample. As part of per-call voice setup, each model derives a reference-sample-specific intermediate representation by running that sample through one or more forward passes: codec/audio tokens, speaker embeddings, mel features, prompt conditionals, or (for Pocket) the full voice state. That representation depends only on the reference sample, not on the text being synthesized, so re-deriving it on every segment is pure waste. The cache memoizes it, keyed on the sample's identity, so on a hit the derivation is skipped entirely and the call does only the text-dependent generation (LLM decoding + acoustic head). Generation itself is never amortized — the cache saves only the repeated re-derivation of the voice setup. The size of that saving is model-dependent (a single encoder pass over a short clip vs. several extractor forward passes vs. full voice-state construction) and is largest in multi-voice runs, where without the cache every voice switch would re-derive that voice's intermediate representation.
+
+The machinery is shared; the *contents* are not.
+
+**The key.** `TtsBaseModel._make_voice_clone_cache_key(source_path, transcript)` returns `VoiceCloneCacheKey = (normalized_path, transcript, st_mtime_ns, st_size)`, where the path is resolved through `os.path.realpath` and normalized with `os.path.normcase`. The mtime/size components make an in-place modification of the voice file (same path, new contents) a cache miss, not just a path change. Models that do not use a transcript pass `""`.
+
+**The get-or-create.** `TtsBaseModel._get_or_create_voice_clone(source_path, transcript, factory)`:
+
+- The per-instance dict `_voice_clone_cache` is created lazily on the first call (the attribute does not exist until then; code must not assume it does).
+- On a key hit, the cached value is returned as-is — no factory call.
+- On a miss, `factory()` prepares the value. If the factory raises, nothing is cached and the model's caller converts the exception into the standard error string `Couldn't create voice clone for <path> - <ExcType>: <msg>`; the model's voice bookkeeping (e.g. `_voice_info`) is only updated after a successful preparation.
+- On success, multi-voice models (`SUPPORTS_MULTIPLE_VOICE_CLONES = True`) evict any cached entries for the same normalized source path (an older transcript or file revision of that file is superseded) and other models clear the whole dict, so single-voice models retain only the most recently selected value.
+
+`clear_voice_clone_cache()` drops the entire dict (idempotent, safe when the attribute was never created). Concrete `kill()` implementations call it before nulling out the model reference.
+
+**The values are opaque.** Each concrete model decides what a prepared clone is and where its tensors live; the base class only keys, evicts, and clears. A consistent convention across the current implementations is that cached values are CPU copies of anything that would otherwise sit on the inference device, so the cache itself stays VRAM-neutral. Two documented exceptions: Pocket keeps its (single) voice state on-device, matching its pre-cache memory profile, and Chatterbox copies the cached CPU `Conditionals` on-device per call because the library mutates that state during generation.
+
+**Continuation interplay.** Models with rolling-continuation history (Qwen3 base, Fish S2, MOSS) clear that history when the voice *identity* — the `(path, transcript)` pair — changes, including when the voice is removed. A mere file revision (same identity, new mtime/size) re-prepares the clone but preserves the history.
+
+| Model | Multi-voice | Cached value | Key inputs | Notes |
+|---|---|---|---|---|
+| Qwen3 base | yes | `VoiceClonePromptItem` (ref codes + speaker embedding) | path + transcript | The reference pattern the other models follow |
+| Chatterbox | yes | prepared `Conditionals` (T3 prompt token/feature) | path + transcript | |
+| Fish S1 | yes | encoded voice tokens (`VoiceClone`) | path + transcript | tokens are encoded eagerly at preparation time; failure surfaces as the standard error string |
+| Fish S2 | yes | encoded voice tokens (`VoiceClone`) | path + transcript | plus: rolling-continuation history cleared on voice-identity change |
+| GLM | yes | extracted speech tokens/features + speaker embedding | path + transcript | |
+| Higgs V2 | yes | encoded audio token ids | path + transcript string | the transcript may itself be a file path; the raw string is the key element and the file is re-read per call, so editing its contents does not invalidate the token cache |
+| Mira | yes | encoded voice prompt | path | no transcript support |
+| MOSS | yes | CPU audio codes | path (transcript always `""`) | rolling-continuation history cleared on any voice change; a no-voice call resets the active voice and history but leaves the prepared clones cached, like Higgs and Pocket |
+| OmniVoice | yes | `VoiceClonePrompt` (float audio tokens) | path + reference text | only voice-clone generation uses the cache; voice-design and auto-voice modes never touch it |
+| Pocket | no | model state derived from the audio prompt | resolved path | single slot; a bare predefined-voice name is resolved to its on-disk file for keying, but the original reference is what gets passed to the library |
+
+Server variants (SGL-Omni) do no local inference and keep no clone cache. Three local models are not part of the mechanism, each for a different reason:
+
+- **IndexTTS2** — the library's `infer()` already caches the derived voice intermediates (speaker embedding, style, prompt condition, reference mel) internally, keyed by path string only (no mtime/size check), so a tool-side cache would be redundant for single-voice runs. Multi-voice coexistence is unreachable from the tool: the library cache is a single slot that fully evicts on every voice switch, and `infer()` only accepts a path string — adopting it would require forking the `indextts` package, for a gain limited to multi-voice runs (the model supports no batching, so alternating lines re-derive the voice every line).
+- **Oute** — its "voice" is a JSON speaker preset, not a raw audio file, so there is no audio clone to prepare or cache.
+- **VibeVoice** — the library API accepts the raw voice file path and re-reads and re-tokenizes the reference clip inside `processor()` on every call; it exposes no prepared voice-clone artifact for the tool to precompute and reuse (voice tokens are fused with the text inside the processor, and passing pre-loaded audio data previously caused inference issues). The per-call overhead is negligible relative to segment generation, and VibeVoice retains no voice state between calls, so a cache would buy nothing.
+
+Fake-library tests for the mechanism live in `tests/test_<model>_voice_clone_cache.py` (one per local model with a cache), each `importorskip`-gated on its model's library so the full suite stays runnable in `venv-base`.
 
 ---
 

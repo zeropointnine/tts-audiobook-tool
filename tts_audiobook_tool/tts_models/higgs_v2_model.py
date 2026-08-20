@@ -7,8 +7,7 @@ import re
 import copy
 from numpy import ndarray
 import tqdm
-from typing import List
-from typing import Optional
+from typing import Any, List, Optional
 from dataclasses import asdict
 import torch
 
@@ -78,6 +77,10 @@ class HiggsV2Model(HiggsV2BaseModel):
     Pared-down logic from higgs-audio lib script `generation.py`
     """
 
+    # Encoded audio tokens are CPU-cloned, so several voices can be
+    # retained at once.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+
     def __init__(self, device: DeviceType):
 
         self._device_type = device
@@ -114,9 +117,20 @@ class HiggsV2Model(HiggsV2BaseModel):
         )
 
     def kill(self) -> None:
+        self.clear_voice_clone_cache()
         self.audio_tokenizer = None
         self.model_client.kill() # type: ignore
         self.model_client = None
+
+    def _create_voice_clone(self, source_path: str) -> Any:
+        """
+        Encodes the voice file into audio tokens (the expensive part of the
+        per-call voice setup) and returns a CPU clone of them.
+
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
+        return self.audio_tokenizer.encode(source_path).detach().cpu().clone()
 
     def generate_using_project(
             self, 
@@ -161,7 +175,7 @@ class HiggsV2Model(HiggsV2BaseModel):
             seed = random.randint(1, sys.maxsize)
 
         result = self.generate(
-            p_voice_path=voice_path, # TODO is this loading every gen?
+            p_voice_path=voice_path,
             p_voice_transcript=voice_transcript,
             text=prompt,
             seed=seed,
@@ -193,6 +207,20 @@ class HiggsV2Model(HiggsV2BaseModel):
             voice_path = None
             voice_transcript = None
 
+        # Get or create the encoded audio tokens for the voice file (the
+        # transcript itself is never cached: it may be a path to a file,
+        # which is re-read on each call).
+        audio_tokens = None
+        if voice_path is not None:
+            try:
+                audio_tokens = self._get_or_create_voice_clone(
+                    source_path=voice_path,
+                    transcript=voice_transcript or "",
+                    factory=lambda: self._create_voice_clone(voice_path),
+                )
+            except Exception as e:
+                return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
+
         scene_prompt = text
         ras_win_len = 7
         ras_win_max_num_repeat = 2
@@ -214,6 +242,7 @@ class HiggsV2Model(HiggsV2BaseModel):
                 ref_audio_in_system_message=ref_audio_in_system_message,
                 audio_tokenizer=self.audio_tokenizer,
                 speaker_tags=speaker_tags,
+                audio_tokens=audio_tokens,
             )
 
             chunked_text = prepare_chunk_text(
@@ -535,10 +564,13 @@ class HiggsAudioModelClient:
         return concat_wv, sr, text_result
 
 
-def prepare_generation_context(scene_prompt, voice_path, voice_transcript, ref_audio_in_system_message, audio_tokenizer, speaker_tags):
+def prepare_generation_context(scene_prompt, voice_path, voice_transcript, ref_audio_in_system_message, audio_tokenizer, speaker_tags, audio_tokens=None):
     """
     Prepare the context for generation.
     The context contains the system message, user message, assistant message, and audio prompt if any.
+
+    `audio_tokens` are pre-encoded tokens for the voice file; when omitted,
+    the voice file is encoded with `audio_tokenizer`.
     """
     system_message = None
     messages = []
@@ -575,7 +607,8 @@ def prepare_generation_context(scene_prompt, voice_path, voice_transcript, ref_a
             with open(voice_transcript, "r", encoding="utf-8") as f:
                 prompt_text = f.read().strip()
 
-        audio_tokens = audio_tokenizer.encode(voice_path)
+        if audio_tokens is None:
+            audio_tokens = audio_tokenizer.encode(voice_path)
         audio_ids.append(audio_tokens)
 
         if not ref_audio_in_system_message:

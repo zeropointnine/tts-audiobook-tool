@@ -1,5 +1,6 @@
 import os
 import random
+from typing import Any
 
 import numpy as np
 
@@ -13,10 +14,24 @@ from tts_audiobook_tool.util import *
 
 import torch
 from pocket_tts import TTSModel  # type: ignore
+from pocket_tts.utils.config import CONFIGS_DIR  # type: ignore
+# Internal library helpers, used to mirror Pocket's own resolution of voice
+# references (predefined names / URLs) so the shared cache key can point at
+# the on-disk file the library ends up using.
+from pocket_tts.utils.utils import (  # type: ignore
+    _ORIGINS_OF_PREDEFINED_VOICES,
+    download_if_necessary,
+    get_predefined_voice,
+)
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class PocketModel(PocketBaseModel):
+
+    # The voice state is large and lives on the model's device, so only the
+    # most recently prepared voice is retained (the base cache evicts the
+    # previous one when a different voice is selected).
+    SUPPORTS_MULTIPLE_VOICE_CLONES = False
 
     def __init__(self, device: DeviceType, language: str = ""):
 
@@ -26,34 +41,68 @@ class PocketModel(PocketBaseModel):
 
         self._device_type = device
         self.model.to(device.value)
-        self.last_voice_path = ""
-        self.cached_voice_state = None
 
     def kill(self) -> None:
+        self.clear_voice_clone_cache()
         self.model = None
 
-    def get_voice_state(self, voice_path: str):
+    def _resolve_voice_source_path(self, voice_path: str) -> str:
+        """
+        Pocket voice references can be local files, but also bare
+        predefined-voice names, hf:// references or URLs, which the library
+        resolves and downloads internally. The shared cache key requires an
+        on-disk file, so resolve to the local file the library ends up using
+        (its mtime/size then track the actual cached content).
+        """
+        if os.path.isfile(voice_path):
+            return voice_path
+
         assert self.model
 
-        # Pocket voice-state construction is expensive because it encodes and
-        # prompts the reference audio before text generation can begin. Reuse
-        # the computed state when the same voice path is used again.
-        #
-        # Reminder: this relies on Pocket's generate_audio_stream() default
-        # copy_state=True behavior. If a future change uses copy_state=False,
-        # generation may mutate the passed state and this cache would need to
-        # be revisited.
-        if voice_path == self.last_voice_path and self.cached_voice_state is not None:
-            return self.cached_voice_state
+        if voice_path in _ORIGINS_OF_PREDEFINED_VOICES:
+            # Same guard as the library: predefined voices need a language
+            # config to resolve their per-language embedding file.
+            origin = self.model.origin
+            if origin is None or not origin.is_relative_to(CONFIGS_DIR):
+                raise ValueError(
+                    f"Cannot use predefined voices when the model "
+                    f"is not loaded from a config associated with a language. "
+                    f"Here the origin is {origin}"
+                )
+            ref = get_predefined_voice(language=origin.stem, name=voice_path)
+        else:
+            ref = voice_path
 
+        return str(download_if_necessary(ref))
+
+    def _create_voice_clone(self, voice_path: str) -> Any:
+        """
+        Pocket voice-state construction is expensive because it encodes and
+        prompts the reference audio before text generation can begin. The
+        base cache reuses the computed state while the source file (and its
+        mtime/size) is unchanged.
+
+        ``voice_path`` is the original reference as given by the caller (the
+        library resolves predefined names / URLs itself); the cache key uses
+        the resolved on-disk file instead (see _resolve_voice_source_path).
+
+        The state is kept on the model's device on purpose: Pocket retains a
+        single voice at a time, so this matches the previous memory profile.
+
+        Reminder: this relies on Pocket's generate_audio_stream() default
+        copy_state=True behavior. If a future change uses copy_state=False,
+        generation may mutate the passed state and this cache would need to
+        be revisited.
+
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
+        assert self.model
         voice_state = self.model.get_state_for_audio_prompt(voice_path)
         device = self.model.device
         for module_state in voice_state.values():
             for k, v in module_state.items():
                 module_state[k] = v.to(device)
-
-        self.last_voice_path = voice_path
-        self.cached_voice_state = voice_state
         return voice_state
 
     def get_voice_clone_access_error_for_path(self, voice_path: str) -> str:
@@ -113,7 +162,19 @@ class PocketModel(PocketBaseModel):
 
             self.model.lsd_decode_steps = PocketBaseModel.LSD
 
-            voice_state = self.get_voice_state(voice_path)
+            if voice_path:
+                try:
+                    voice_state = self._get_or_create_voice_clone(
+                        source_path=self._resolve_voice_source_path(voice_path),
+                        transcript="",
+                        factory=lambda: self._create_voice_clone(voice_path),
+                    )
+                except Exception as e:
+                    return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
+            else:
+                # Keep the original (uncached) behavior for a missing voice path
+                voice_state = self.model.get_state_for_audio_prompt(voice_path)
+
             if seed <= -1:
                 seed = random.randrange(0, SEED_MAX)
             app_support.set_seed(seed)

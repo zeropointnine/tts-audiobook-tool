@@ -460,7 +460,7 @@ class Tts:
             device_type = Tts.get_best_supported_device_type(TtsModelType.FISH_S1)
 
             if device_type == DeviceType.CUDA:
-                compile_enabled = Tts._model_params.get("fish_compile_enabled", True) # TODO: needs to be hooked up
+                compile_enabled = Tts._model_params.get("fish_s1_compile_enabled", False)
             else:
                 compile_enabled = False
             
@@ -664,6 +664,7 @@ class Tts:
     def clear_tts_model() -> None:
         model = Tts.get_instance_if_exists()
         if model:
+            model.clear_voice_clone_cache()
             model.kill()
             # Null out all instance attributes, not just the current
             # type's (there must be at most one live instance)

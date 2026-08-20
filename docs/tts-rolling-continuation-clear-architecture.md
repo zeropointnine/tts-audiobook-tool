@@ -114,7 +114,8 @@ Audiobook creation clears rolling continuation when:
 - generation is interrupted in [`GenerateUtil.generate_files()`](../tts_audiobook_tool/generate_util.py:291);
 - the model returns an error string in [`GenerateUtil.generate()`](../tts_audiobook_tool/generate_util.py:466);
 - generated audio is empty, NaN-containing, or becomes silence after trimming in [`GenerateUtil.generate()`](../tts_audiobook_tool/generate_util.py:476);
-- an accepted segment ends at a paragraph-or-larger boundary through [`Tts.clear_continuation_if_reason()`](../tts_audiobook_tool/tts.py:284), called from [`GenerateUtil.generate()`](../tts_audiobook_tool/generate_util.py:523).
+- an accepted segment ends at a paragraph-or-larger boundary through [`Tts.clear_continuation_if_reason()`](../tts_audiobook_tool/tts.py:284), called from [`GenerateUtil.generate()`](../tts_audiobook_tool/generate_util.py:523);
+- the next sub-batch uses a different voice sample than the previous one in [`GenerateUtil.generate_files()`](../tts_audiobook_tool/generate_util.py). This is a defensive reset: a rolling-continuation cache is voice-specific, so it must not leak across voice samples. It can only trigger when a run actually switches voice samples mid-run, which requires batch mode with user-defined voice selections; rolling-continuation models (MOSS, Qwen3) force batch size 1 anyway, so in practice this mostly guards future models.
 
 ### Why Batch Size 1 Matters Most Here
 

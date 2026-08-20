@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+from typing import Any
 import torch
 
 from glm_tts.cosyvoice.cli.frontend import TTSFrontEnd, SpeechTokenizer, TextFrontEnd # type: ignore
@@ -16,13 +17,37 @@ from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback,
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
-from tts_audiobook_tool.util import printt
+from tts_audiobook_tool.util import make_error_string, printt
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+
+
+class GlmVoiceClone:
+    """
+    CPU-side data prepared for a voice file, built by
+    `GlmModel._create_voice_clone`. Everything here is derived from the voice
+    file and its transcript only; per-call work (the LLM and flow) still runs
+    on the device.
+    """
+
+    def __init__(self, source_path: str, prompt_text: str, prompt_text_token: Any,
+                 prompt_speech_token: Any, speech_feat: Any, embedding: Any):
+
+        self.source_path = source_path
+        self.prompt_text = prompt_text
+        self.prompt_text_token = prompt_text_token
+        self.prompt_speech_token = prompt_speech_token
+        self.speech_feat = speech_feat
+        self.embedding = embedding
+
 
 class GlmModel(GlmBaseModel):
     """
     Adapted code from: https://github.com/zai-org/GLM-TTS, glmtts_inference.py
     """
+
+    # The prepared voice prompt (speech token, mel features, speaker
+    # embedding) is CPU-cloned, so several voices can be retained at once.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, device: DeviceType, sample_rate: int, use_phoneme: bool=False):
 
@@ -79,11 +104,32 @@ class GlmModel(GlmBaseModel):
             = load_models(device=device_value, ckpt_path=ckpt_path, use_phoneme=self.use_phoneme, sample_rate=sample_rate)
 
     def kill(self) -> None:
+        self.clear_voice_clone_cache()
         self.frontend = None
         self.text_frontend = None
         self.speech_tokenizer = None
         self.llm = None
         self.flow = None
+
+    def _create_voice_clone(self, source_path: str, transcript: str) -> GlmVoiceClone:
+        """
+        Prepares the voice prompt for the given voice file: text
+        normalization, text tokens, speech tokens, mel features and speaker
+        embedding. All tensors are CPU-cloned; the per-call work (LLM and
+        flow) still happens on the device.
+
+        Raising here aborts the generation with an error string (handled by
+        the caller) and nothing gets cached.
+        """
+        prompt_text = self.text_frontend.text_normalize(transcript) or ""
+        return GlmVoiceClone(
+            source_path=source_path,
+            prompt_text=prompt_text,
+            prompt_text_token=self.frontend._extract_text_token(prompt_text + " ").detach().cpu().clone(),
+            prompt_speech_token=self.frontend._extract_speech_token([source_path]).detach().cpu().clone(),
+            speech_feat=self.frontend._extract_speech_feat(source_path, sample_rate=self.sample_rate).detach().cpu().clone(),
+            embedding=self.frontend._extract_spk_embedding(source_path).detach().cpu().clone(),
+        )
 
     def generate_using_project(
             self, 
@@ -130,27 +176,32 @@ class GlmModel(GlmBaseModel):
         if not prompt_speech:
             return "Voice clone path is required"
 
-        # Text Normalization
-        prompt_text = self.text_frontend.text_normalize(prompt_text) or ""
+        # Get or create the prepared voice prompt, then build fresh on-device
+        # copies from the cached CPU values (the per-call objects must not be
+        # shared with the cache, as the library may mutate them).
+        try:
+            voice = self._get_or_create_voice_clone(
+                source_path=prompt_speech,
+                transcript=prompt_text,
+                factory=lambda: self._create_voice_clone(prompt_speech, prompt_text),
+            )
+        except Exception as e:
+            return f"Couldn't create voice clone for {prompt_speech} - {make_error_string(e)}"
+
         synth_text = self.text_frontend.text_normalize(syn_text)
 
-        prompt_text_token = self.frontend._extract_text_token(prompt_text+" ")
-        prompt_speech_token = self.frontend._extract_speech_token( [prompt_speech] )
-        speech_feat = self.frontend._extract_speech_feat(prompt_speech, sample_rate=self.sample_rate)
-        embedding = self.frontend._extract_spk_embedding(prompt_speech)
-        cache_speech_token = [prompt_speech_token.squeeze().tolist()]
-        flow_prompt_token = torch.tensor(
-            cache_speech_token, dtype=torch.int32
-        ).to(self.device_value)
+        flow_prompt_token = voice.prompt_speech_token.squeeze().to(
+            self.device_value, dtype=torch.int32
+        ).unsqueeze(0)
 
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
 
         # Initialize Cache
         cache = {
-            "cache_text": [prompt_text],
-            "cache_text_token": [prompt_text_token],
-            "cache_speech_token": cache_speech_token,
+            "cache_text": [voice.prompt_text],
+            "cache_text_token": [voice.prompt_text_token],
+            "cache_speech_token": [voice.prompt_speech_token.squeeze().tolist()],
             "use_cache": self.use_cache,
         }
 
@@ -164,10 +215,10 @@ class GlmModel(GlmBaseModel):
             flow=self.flow,
             text_info=[str(self.uttid_counter), synth_text],
             cache=cache,
-            embedding=embedding,
+            embedding=voice.embedding.to(self.device_value),
             seed=seed,
             flow_prompt_token=flow_prompt_token,
-            speech_feat=speech_feat,
+            speech_feat=voice.speech_feat.to(self.device_value),
             device=self.device_value,
             use_phoneme=self.use_phoneme,
         )

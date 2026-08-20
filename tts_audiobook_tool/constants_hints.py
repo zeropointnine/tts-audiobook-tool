@@ -99,7 +99,7 @@ HINT_LINUX_CUDNN_VERSION = Hint(
     "stt_linux_cudnn_version",
     f"{COL_ERROR}cuDNN version mismatch",
 f"""The currently installed version of torch may be incompatible with faster-whisper for CUDA acceleration.
-Either downgrade your version of torch (see README file), or change the Whisper 
+Either downgrade your version of torch (see README file), or change the Whisper
 device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
 
 HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE = """The project's source text word count per segment (%1)
@@ -109,7 +109,7 @@ Make sure this is what you want before generating audio."""
 HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(
     "chatterbox_python_downgrade",
     "The app's requirements for Chatterbox have changed",
-"""To run the Chatterbox model, the app now requires a virtual environment running Python 3.11 (which is a downgrade). 
+"""To run the Chatterbox model, the app now requires a virtual environment running Python 3.11 (which is a downgrade).
 Please re-install your Chatterbox-specific virtual environment using Python v3.11 by following the procedure described in the README.
 You could also choose to roll back to a previous commit if you do not care about the most recent updates..."""
 )
@@ -124,7 +124,7 @@ HINT_TRANSCRIPTION = Hint(
     "transcription",
     "Note",
 """The Whisper speech-to-text model is used to check the generated audio for errors.
-Because it is used concurrently with the text-to-speech model, it can add 2-3 GB to 
+Because it is used concurrently with the text-to-speech model, it can add 2-3 GB to
 VRAM memory requirements."""
 )
 
@@ -153,7 +153,7 @@ Consider setting \"Word error tolerance\" to Moderate or even Strict."""
 HINT_SEED = Hint(
     "seed",
     "Note",
-"""Setting a static seed value guarantees idempotent 
+"""Setting a static seed value guarantees idempotent
 audio generations when batching is not enabled.
 Re-tried generations will always use a random seed."""
 )
@@ -161,8 +161,9 @@ Re-tried generations will always use a random seed."""
 HINT_BATCH = Hint(
     "Batching",
     "Note",
-"""When batching is active, lines will get processed slightly out of sequence 
-to maximize throughput."""
+"""When batching is active, lines will get processed slightly out of sequence
+to maximize throughput. For projects with user-defined voice selections,
+even more so."""
 )
 
 HINT_VIBEVOICE_LORA = Hint(
@@ -176,8 +177,8 @@ HINT_VIBEVOICE_LORA = Hint(
 HINT_DELETE_SEGMENTS = Hint(
     "delete_segments",
     "Tip",
-"""Use this to selectively delete sound segments with poor or inaccurate output 
-(or, you can also just delete the files directly at: %1). 
+"""Use this to selectively delete sound segments with poor or inaccurate output
+(or, you can also just delete the files directly at: %1).
 Afterwards, generate those items again as desired."""
 )
 
@@ -190,7 +191,7 @@ HINT_LLM_CHAT = Hint(
 HINT_UPDATED_UI = Hint(
     "updated_ui",
     "Updated UI",
-"""The app's menu system has been updated. Menus now always appear on a cleared screen. 
+"""The app's menu system has been updated. Menus now always appear on a cleared screen.
 You can revert this change the Options menu if you prefer the old behavior."""
 )
 
@@ -205,7 +206,7 @@ Be aware of the risks before continuing."""
 HINT_MOSS_TEMPERATURE = Hint(
     "moss_temperature",
     "Note",
-"""MOSS-TTS is susceptible to failing to properly terminate generations when 
+"""MOSS-TTS is susceptible to failing to properly terminate generations when
 temperature is set too low. Use low values with caution..."""
 )
 

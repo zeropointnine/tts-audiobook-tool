@@ -22,6 +22,24 @@ class ReasonPauses:
         """Return the pause duration in seconds for ``reason``."""
         return self.pauses[reason]
 
+    def _clone(self) -> "ReasonPauses":
+        # The `pauses` mapping is a MappingProxyType, which copy.copy/deepcopy
+        # cannot handle (TypeError: cannot pickle 'mappingproxy' object).
+        # Rebuild the dataclass with a plain dict copy instead.
+        return ReasonPauses(
+            id=self.id,
+            label=self.label,
+            menu_label=self.menu_label,
+            description=self.description,
+            pauses=dict(self.pauses),
+        )
+
+    def __copy__(self) -> "ReasonPauses":
+        return self._clone()
+
+    def __deepcopy__(self, memo) -> "ReasonPauses":
+        return self._clone()
+
 
 NORMAL_REASON_PAUSES = MappingProxyType(
     {

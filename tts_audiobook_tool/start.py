@@ -93,7 +93,7 @@ class Start:
 
     def start(self) -> None:
         """ App entrypoint """
-        
+
         print()
         self.init_tts_or_exit(self.is_server)
         self.exit_on_wrong_torch_flavor_windows()
@@ -102,7 +102,7 @@ class Start:
         self.exit_on_missing_ffmpeg_libs()
         self.exit_on_chatterbox_python_version()
         self.exit_on_missing_new_packages()
-        
+
         self.show_startup_hints()
         self.apply_project_override()
         self.init_logging()
@@ -146,7 +146,7 @@ class Start:
         if hotkey != "y":
             exit(1)
 
-    def exit_on_missing_ffmpeg_exe(self) -> None:        
+    def exit_on_missing_ffmpeg_exe(self) -> None:
         from tts_audiobook_tool.sound.ffmpeg_util import FfmpegUtil
         if not FfmpegUtil.is_ffmpeg_available():
             printt(f"{COL_ERROR}The command 'ffmpeg' must exist on the system path.")
@@ -180,7 +180,7 @@ class Start:
         missing_packages = [package for package in new_packages if not util.find_spec(package)]
         if not missing_packages:
             return
-        
+
         hint = Hint(
             "none",
             "The app's dependencies have changed",
@@ -196,9 +196,9 @@ class Start:
         """
         Packages that have been added to the requirements files since first release.
         """
-        
+
         new_packages = [
-            "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer", 
+            "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer",
             "pydantic", "requests", "text_to_num", "ebooklib", "bs4", "httpx", "textual",
             "LavaSR"
         ]
@@ -214,7 +214,7 @@ class Start:
         if sys.platform == "win32":
             new_packages.append("win32api") # ie, pywin32
 
-        # chatterbox 
+        # chatterbox
         if Tts.get_type() == TtsModelType.CHATTERBOX:
             new_packages.append("chatterbox.tts_turbo")
 
@@ -234,7 +234,7 @@ class Start:
         temp_prefs = Prefs.load(save_if_dirty=False)
 
         # Tkinter (must do concrete import to test for tkinter functionality)
-        if not self.is_server and not does_import_test_pass("tkinter"): 
+        if not self.is_server and not does_import_test_pass("tkinter"):
             hints.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
 
         # Long paths on Windows
@@ -258,7 +258,7 @@ class Start:
             hints.show_hint_if_necessary(temp_prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
         # Updated UI
-        # 
+        #
         # If user prefs does not have relatively new attribute "llm_url" and they're on the "old" menu system,
         # force the setting on and show FYI.
         b = not "llm_url" in temp_prefs.source_dict_keys and not temp_prefs.menu_clears_screen

@@ -2,8 +2,10 @@ import os
 import random
 import traceback
 from typing import Any
+import torch
 import chatterbox.mtl_tts # type: ignore
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
+from chatterbox.models.t3.modules.cond_enc import T3Cond # type: ignore
 from chatterbox.tts_turbo import ChatterboxTurboTTS # type: ignore
 
 import logging
@@ -24,6 +26,10 @@ class ChatterboxModel(ChatterboxBaseModel):
     """
     Chatterbox inference logic
     """
+
+    # Prepared conditionals are CPU-cloned (see `_create_voice_clone`), so
+    # retaining several voices at once costs only a few MB of RAM per voice.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, model_type: ChatterboxType, device: DeviceType):
         
@@ -47,7 +53,55 @@ class ChatterboxModel(ChatterboxBaseModel):
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)
 
     def kill(self) -> None:
+        self.clear_voice_clone_cache()
         self._chatterbox = None # type: ignore
+
+    def _create_voice_clone(self, source_path: str) -> Any:
+        """
+        Prepares the conditionals for the given voice file and returns a
+        CPU clone of them.
+
+        The expensive work (reference feature embedding, speech prompt
+        tokens, voice-encoder speaker embedding) happens here, once per
+        file state. The library's own `self.conds` is left pointing at the
+        on-device objects it created; the cache keeps CPU copies only.
+        """
+        self._chatterbox.prepare_conditionals(source_path)
+        conds = self._chatterbox.conds
+        if conds is None:
+            raise RuntimeError("Chatterbox prepare_conditionals() did not produce conditionals")
+        return self._clone_conditionals(conds, device="cpu")
+
+    @staticmethod
+    def _clone_conditionals(conds: Any, device: str) -> Any:
+        """
+        Builds a fresh Conditionals-like object whose tensors live on
+        `device`, without mutating the input.
+
+        The library's Conditionals.to() mutates in place, which would move
+        the cached value off CPU, so a new object is built instead. The
+        multilingual and turbo modules each define their own Conditionals
+        class, so the result uses the class of the input object.
+        """
+        t3 = conds.t3
+        t3_copy = T3Cond(
+            speaker_emb=ChatterboxModel._copy_tensor(t3.speaker_emb, device),
+            clap_emb=ChatterboxModel._copy_tensor(t3.clap_emb, device),
+            cond_prompt_speech_tokens=ChatterboxModel._copy_tensor(t3.cond_prompt_speech_tokens, device),
+            cond_prompt_speech_emb=ChatterboxModel._copy_tensor(t3.cond_prompt_speech_emb, device),
+            emotion_adv=ChatterboxModel._copy_tensor(t3.emotion_adv, device),
+        )
+        gen_copy = {
+            key: ChatterboxModel._copy_tensor(value, device) if torch.is_tensor(value) else value
+            for key, value in conds.gen.items()
+        }
+        return type(conds)(t3_copy, gen_copy)
+
+    @staticmethod
+    def _copy_tensor(value: Any, device: str) -> Any:
+        if value is None or not torch.is_tensor(value):
+            return value
+        return value.detach().to(device).clone()
 
     def generate_using_project(
             self, 
@@ -136,7 +190,18 @@ class ChatterboxModel(ChatterboxBaseModel):
 
         dic = {}
         if voice_path:
-            dic["audio_prompt_path"] = voice_path        
+            # Get-or-create the prepared conditionals, then hand the library
+            # a fresh on-device copy (the library may mutate `self.conds`,
+            # so the cached CPU value must not be shared with it).
+            try:
+                conds = self._get_or_create_voice_clone(
+                    source_path=voice_path,
+                    transcript="",
+                    factory=lambda: self._create_voice_clone(voice_path),
+                )
+            except Exception as e:
+                return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
+            self._chatterbox.conds = self._clone_conditionals(conds, self._chatterbox.device)
         dic["temperature"] = temperature
         dic["top_p"] = top_p
         dic["repetition_penalty"] = repetition_penalty

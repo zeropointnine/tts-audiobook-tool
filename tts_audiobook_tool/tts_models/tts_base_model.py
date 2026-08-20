@@ -1,6 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+import os
+from typing import Any, Callable, TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, Strictness, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
 else:
     Project = object
+
+
+VoiceCloneCacheKey = tuple[str, str, int, int]
 
 
 class TtsBaseModel(ABC):
@@ -38,6 +42,10 @@ class TtsBaseModel(ABC):
     # Gets assigned by concrete class
     INFO: TtsModelSpec
 
+    # Subclasses may opt into retaining prepared clones for multiple voice files.
+    # The default cache still avoids repeated preparation for the current voice.
+    SUPPORTS_MULTIPLE_VOICE_CLONES = False
+
     # Optional persistent callback for streamed audio chunks
     stream_chunk_callback: StreamChunkCallback | None = None
     # Optional persistent callback invoked when a streaming generation finishes
@@ -56,7 +64,59 @@ class TtsBaseModel(ABC):
         super().__init_subclass__(**kwargs)
         if not hasattr(cls, "INFO"):
             raise TypeError(f"Class {cls.__name__} must define 'INFO'")
-            
+
+    @staticmethod
+    def _make_voice_clone_cache_key(source_path: str, transcript: str) -> VoiceCloneCacheKey:
+        """Build the standard identity for a prepared voice clone."""
+        normalized_path = os.path.normcase(os.path.realpath(os.path.abspath(source_path)))
+        source_stat = os.stat(normalized_path)
+        return normalized_path, transcript, source_stat.st_mtime_ns, source_stat.st_size
+
+    def _get_or_create_voice_clone(
+            self,
+            source_path: str,
+            transcript: str,
+            factory: Callable[[], Any],
+    ) -> Any:
+        """
+        Return a prepared voice clone for the current source file state.
+
+        Cache values are intentionally opaque: each concrete model decides what
+        can safely be reused and where its tensors live. Models that opt into
+        ``SUPPORTS_MULTIPLE_VOICE_CLONES`` retain values for different source
+        paths; other models retain only the most recently selected value.
+        """
+        key = self._make_voice_clone_cache_key(source_path, transcript)
+        cache: dict[VoiceCloneCacheKey, Any] | None = getattr(self, "_voice_clone_cache", None)
+        if cache is None:
+            cache = {}
+            self._voice_clone_cache = cache
+
+        if key in cache:
+            return cache[key]
+
+        # Do not modify the existing cache unless preparation succeeds.
+        value = factory()
+
+        if self.SUPPORTS_MULTIPLE_VOICE_CLONES:
+            # A changed transcript or file revision supersedes older prepared
+            # values for this source path.
+            normalized_path = key[0]
+            stale_keys = [cached_key for cached_key in cache if cached_key[0] == normalized_path]
+            for stale_key in stale_keys:
+                del cache[stale_key]
+        else:
+            cache.clear()
+
+        cache[key] = value
+        return value
+
+    def clear_voice_clone_cache(self) -> None:
+        """Drop all prepared voice-clone values held by this model instance."""
+        cache = getattr(self, "_voice_clone_cache", None)
+        if cache is not None:
+            cache.clear()
+
     @abstractmethod
     def kill(self) -> None:
         """
