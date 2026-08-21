@@ -192,7 +192,7 @@ class Project(BaseModel):
     higgs_top_p: float = -1
     higgs_seed: int = -1
 
-    higgs_v3_voice_target: list[str] = Field(default_factory=list, alias="higgs_v3_voice_file_path") # server file path or url
+    higgs_v3_voice_file_name: list[str] = Field(default_factory=list)
     higgs_v3_voice_transcript: list[str] = Field(default_factory=list)
     higgs_v3_temperature: float = -1
     higgs_v3_top_p: float = -1

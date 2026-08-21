@@ -24,7 +24,7 @@ class VoiceFishS2ServerMenu:
             items.append(transcript_item)
 
             # clear voice
-            if state.project.higgs_v3_voice_target or state.project.higgs_v3_voice_transcript:
+            if state.project.fish_s2_server_voice_target or state.project.fish_s2_server_voice_transcript:
                 items.append(
                     VoiceMenuShared.make_clear_voice_item(state, TtsModelType.FISH_S2_SERVER)
                 )

@@ -330,9 +330,9 @@ class TtsModelType(Enum):
         sample_rate=24_000,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_target_attr="higgs_v3_voice_target",
+        voice_target_attr="higgs_v3_voice_file_name",
         requires_voice=False,
-        voice_transcript_attr="higgs_v3_voice_transcript", 
+        voice_transcript_attr="higgs_v3_voice_transcript",
         extra_file_attrs=[],
         batch_size_attr="higgs_v3_batch_size",
         can_stream=True,
@@ -343,8 +343,8 @@ class TtsModelType(Enum):
         ui = {
             "proper_name": "Higgs Audio V3",
             "short_name": "Higgs v3",
-            "voice_path_console": "", # not applicable
-            "voice_path_requestor": "", # not applicable
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
             "project_links": [
                 "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", 
                 "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"

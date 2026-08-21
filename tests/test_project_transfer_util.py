@@ -17,6 +17,7 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         'indextts2_emo_voice_file_name': 'emotion.flac',
         'oute_voice_file_name': 'oute-voice.json',
         'fish_s2_server_voice_target': ['server-target.flac'],
+        'higgs_v3_voice_file_name': ['higgs-v3.flac'],
         'higgs_v3_voice_target': ['https://example.com/voice.flac'],
     })
     project.pocket_voice_file_name = cast(Any, [
@@ -35,6 +36,7 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         'oute-voice.json',
         'primary-a.flac',
         'shared.flac',
+        'higgs-v3.flac',
         'emotion.flac',
         'primary-b.flac',
         'primary-c.flac',

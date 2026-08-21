@@ -71,8 +71,8 @@ class MossServerModel(MossServerBaseModel):
                 failed voice clone, and revisit if necessary.
                 (Would need to fall back to server file path + manually entered transcript).
 
-                Also note that data uri functionality does exist for server's MOSS implementation
-                but not for Higgs V3.
+                Also note that data URI functionality now exists for the server's Higgs V3
+                implementation as well.
                 """
                 voice_path = os.path.join(project.dir_path, voice_file_name)
                 data_uri = SoundUtil.make_audio_data_uri(voice_path)

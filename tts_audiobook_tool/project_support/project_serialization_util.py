@@ -47,7 +47,7 @@ class ProjectSerializationUtil:
         "glm_voice_transcript": ("glm_voice_text",),
         "higgs_voice_file_name": (),
         "higgs_voice_transcript": ("higgs_voice_text",),
-        "higgs_v3_voice_target": ("higgs_v3_voice_file_path",),
+        "higgs_v3_voice_file_name": (),
         "higgs_v3_voice_transcript": (),
         "indextts2_voice_file_name": (),
         "mira_voice_file_name": (),
@@ -678,7 +678,7 @@ class ProjectSerializationUtil:
             "higgs_top_p": project.higgs_top_p,
             "higgs_seed": project.higgs_seed,
 
-            "higgs_v3_voice_target": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_target),
+            "higgs_v3_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_file_name),
             "higgs_v3_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_v3_voice_transcript),
             "higgs_v3_temperature": project.higgs_v3_temperature,
             "higgs_v3_top_p": project.higgs_v3_top_p,

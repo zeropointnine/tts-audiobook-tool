@@ -1,3 +1,4 @@
+import os
 import random
 
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -5,6 +6,7 @@ from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.tts_models.higgs_v3_server_base_model import HiggsV3ServerBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -26,7 +28,7 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        
-        voice_path, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
+        voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
             project, TtsModelType.HIGGS_V3_SERVER, voice_selection_index
         )
 
@@ -53,8 +55,10 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             }
             # TODO: Re-add seed after presumed upstream bug is fixed: "seed": seed
 
-            if voice_path:
-                reference = {"audio_path": voice_path}
+            if voice_file_name:
+                voice_path = os.path.join(project.dir_path, voice_file_name)
+                data_uri = SoundUtil.make_audio_data_uri(voice_path)
+                reference = {"audio_path": data_uri}
                 if voice_transcript:
                     reference["text"] = voice_transcript
                 payload["references"] = [reference]

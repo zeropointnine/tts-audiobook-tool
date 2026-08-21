@@ -27,18 +27,21 @@ class HiggsV3ServerBaseModel(TtsBaseModel):
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:
 
-        # If has voice file path, must also have transcript
-        if ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.HIGGS_V3_SERVER) and not ProjectVoiceUtil.primary_voice_transcript(project, TtsModelType.HIGGS_V3_SERVER):
-            return [
+        issues = super().get_blocking_issues(project, instance)
+
+        references = ProjectVoiceUtil.voice_reference_pairs(
+            project, TtsModelType.HIGGS_V3_SERVER
+        )
+        if any(not transcript for _, transcript in references):
+            issues.append(
                 ReadinessIssue(
                     "voice clone transcript",
-                    "Voice clone transcript required when voice clone path is supplied"
+                    "Voice clone transcript required when a voice clone sample is supplied"
                 )
-            ]
-        
-        # Ping server
+            )
+
         readiness_issue = SglOmniUtil.check_readiness(SglOmniUtil.get_base_url())
         if readiness_issue:
-            return [readiness_issue]
-        
-        return []
+            issues.append(readiness_issue)
+
+        return issues

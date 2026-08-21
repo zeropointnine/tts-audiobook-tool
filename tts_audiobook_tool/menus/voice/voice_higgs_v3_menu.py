@@ -13,20 +13,9 @@ class VoiceHiggsV3Menu:
 
         def make_items(_: State) -> list[MenuItem]:
 
-            items = []
-
-            # Server voice path and voice transcript
-            path_item, transcript_item = VoiceMenuShared.make_manual_voice_menu_items(
-                state, TtsModelType.HIGGS_V3_SERVER, "higgs_v3_voice_target", "higgs_v3_voice_transcript", is_required=False
-            )
-            items.append(path_item)
-            items.append(transcript_item)
-
-            # Clear voice
-            if state.project.higgs_v3_voice_target or state.project.higgs_v3_voice_transcript:
-                items.append(
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.HIGGS_V3_SERVER)
-                )
+            items = [
+                *VoiceMenuShared.make_voice_sample_items(state, TtsModelType.HIGGS_V3_SERVER)
+            ]
 
             # Supported Hyperparams
             item = VoiceMenuShared.make_temperature_item(
