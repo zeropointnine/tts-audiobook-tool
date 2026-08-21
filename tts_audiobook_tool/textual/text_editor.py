@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from typing import ClassVar
 
+from textual import events
 from textual.binding import Binding, BindingType
+from textual.widgets import TextArea as BaseTextArea
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -26,12 +28,26 @@ from tts_audiobook_tool.textual.phrase_group_split_dialog import (
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
+    NonWrappingOptionList,
     OptionReconcileItem,
     STYLE_DIM,
 )
 
 
 SHOW_NEWLINE_CHARS = True
+
+# Headers reused between normal mode and manual line editing mode.
+_HEADER_LINES_DEFAULT = [
+    f"{COL_ACCENT}View/edit text",
+    f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
+    f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
+    f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to delete selected lines   [S] Split line   [E] Edit line",
+    f"{COL_DIM}- Press [ESC] to finish",
+]
+_HEADER_LINES_EDITING = [
+    f"{COL_ACCENT}View/edit text",
+    f"{COL_DIM}- Press [{COL_ACCENT}CTRL+ENTER{COL_DIM}] to confirm   [{COL_ACCENT}ESC{COL_DIM}] to cancel",
+]
 
 
 @dataclass
@@ -76,10 +92,25 @@ TextEditorListItem = TextEditorSectionItem | TextEditorPhraseGroupItem
 
 
 class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
+
+    CSS = ContentTextualApp.CSS + """
+    TextArea .text-area--selection {
+        color: $text;
+        background: $accent 60%;
+    }
+
+    #edit-area {
+        border: round #ffaa44;
+    }
+    """
+
     BINDINGS: ClassVar[list[BindingType]] = [
         *ContentTextualApp.BINDINGS,
         Binding("x", "delete_phrase_groups", show=False),
         Binding("s", "split_phrase_group", show=False),
+        Binding("e", "edit_current_line", show=False),
+        Binding("escape", "cancel_edit", show=False, priority=True),
+        Binding("ctrl+enter", "confirm_edit", show=False, priority=True),
     ]
 
     def __init__(self, project: Project) -> None:
@@ -87,16 +118,16 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         self.edit_session_or_none: TextEditSession | None = None
         self.section_items: list[TextEditorSectionItem] = []
         self.list_items: list[TextEditorListItem] = []
-        header_lines = [
-            f"{COL_ACCENT}View/edit text",
-            f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
-            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
-            f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to delete selected lines   [S] Split line",
-            f"{COL_DIM}- Press [ESC] to finish",
-        ]
+
+        # State of manual line editing (in-place with TextArea).
+        self.editor_widget: BaseTextArea | None = None
+        self.is_editing = False
+        self.editing_index: int | None = None
+        self._edit_original_text: str | None = None
+
         super().__init__(
             project,
-            header_lines,
+            list(_HEADER_LINES_DEFAULT),
             empty_state_text="No text lines",
             loading_state_text="...",
         )
@@ -189,7 +220,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         return newline_token.join(presentable_lines)
 
     def format_line(self, index: int) -> HangingIndentText:
-        """Format one row, styling selected rows except for the active row."""
+        """Format one row, styling selected/found/edited rows except headings."""
         item_index = self.phrase_indices[index]
         list_item = self.list_items[item_index]
 
@@ -197,7 +228,13 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             return self.format_section_list_item(list_item.display_text, index)
         else:
             is_find_match = index == self.find_match_index
-            style = f"{STYLE_DIM} reverse" if is_find_match else ""
+            is_being_edited = self.is_editing and index == self.editing_index
+            if is_find_match:
+                style = f"{STYLE_DIM} reverse"
+            elif is_being_edited:
+                style = "reverse"
+            else:
+                style = ""
             prefix_text = f"{list_item.ordinal:05d}  "
             presentable_text = (
                 self.presentable_phrase_group_ansi(list_item.phrase_group)
@@ -308,10 +345,205 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             )
         return items
 
+    # ---------------------------------------------------
+    # Manual line editing (in-place, with TextArea) 
+    # ---------------------------------------------------
+
+    def action_edit_current_line(self) -> None:
+        """Open a TextArea for editing the currently selected line."""
+        if self.is_editing:
+            return
+        if self.selected_index is None:
+            return
+        if self.find_active:
+            return
+
+        item = self.list_items[self.phrase_indices[self.selected_index]]
+
+        # Block editing of SectionItem
+        if isinstance(item, TextEditorSectionItem):
+            return
+
+        item_id = item.item_id
+        phrase_group = self.edit_session.get_phrase_group(item_id)
+        if phrase_group is None:
+            return
+
+        original_text = phrase_group.phrase_group.text
+
+        # Normalize \r\n / \r to \n before handing text to the TextArea widget.
+        # Pure \n round-trips through TextArea unchanged, but a *mixed*
+        # \r\n/\n string gets coalesced by the widget to all \r\n - so we
+        # normalize here and keep this same normalized value as the baseline
+        # for the change-detection comparison in action_confirm_edit, instead
+        # of re-reading the raw (un-normalized) phrase_group.text there.
+        original_text = app_text.normalize_line_terminators(original_text)
+        self._edit_original_text = original_text
+
+        # Remove the previous widget before creating the new one (avoids DuplicateIds)
+        if self.editor_widget:
+            self.editor_widget.remove()
+            self.editor_widget = None
+
+        self.editor_widget = BaseTextArea(
+            id="edit-area",
+            text=original_text,
+            theme="vscode_dark",
+        )
+        self.mount(self.editor_widget)
+
+        # Enter editing mode. Keep editing_index/selected_index untouched so
+        # the line being edited remains the one visually selected/highlighted.
+        self.is_editing = True
+        self.editing_index = self.selected_index
+
+        # Refresh the line to apply the "reverse" style to the edited line
+        self.refresh_line(self.editing_index)
+
+        # Disable the OptionList so it can't respond to clicks or keyboard
+        # navigation while editing is in progress.
+        option_list = self.query_one("#line-list", NonWrappingOptionList)
+        option_list.disabled = True
+        option_list.highlighted = self.selected_index
+
+        # Focus the TextArea last, to make sure it (and not the OptionList)
+        # ends up holding keyboard focus.
+        self.editor_widget.focus()
+
+        # Defer the scroll until after layout has been recalculated with the
+        # newly mounted TextArea taking up space, so the visible area used for
+        # the scroll calculation is accurate.
+        self.call_after_refresh(option_list.scroll_to_highlight, top=True)
+
+        self.update_header(list(_HEADER_LINES_EDITING))
+
+    def action_confirm_edit(self) -> None:
+        """Confirm the text edit by applying the changes to the edit session."""
+        if self.editor_widget is None or self.editing_index is None:
+            return
+
+        try:
+            self.query_one("#edit-area")
+        except Exception:
+            return
+
+        edited_text = self.editor_widget.text
+
+        item = self.list_items[self.phrase_indices[self.editing_index]]
+        if isinstance(item, TextEditorSectionItem):
+            return
+
+        item_id = item.item_id
+        phrase_group = self.edit_session.get_phrase_group(item_id)
+        if phrase_group is None:
+            return
+
+        # Use the same normalized baseline stored when the editor was opened,
+        # instead of re-reading phrase_group.phrase_group.text raw - keeps
+        # both sides of the comparison consistent with what the TextArea
+        # widget can actually preserve unchanged.
+        if self._edit_original_text is None:
+            return
+        original_text = self._edit_original_text
+
+        if edited_text == original_text:
+            # Text did not change, remove the widget and finish
+            self._end_edit()
+            return
+
+        result = self.edit_session.update_phrase_group_text(
+            item_id=item_id,
+            new_text=edited_text,
+        )
+
+        # Apply the mutation to update list_items and refresh the UI
+        self.apply_mutation_result(result)
+
+        if self.editor_widget:
+            self.editor_widget.remove()
+            self.editor_widget = None
+
+        self._end_edit()
+        self.refresh()
+
+    def action_cancel_edit(self) -> None:
+        """Cancel the text edit by discarding the changes."""
+        if self.editor_widget:
+            self.editor_widget.remove()
+            self.editor_widget = None
+        self._end_edit()
+
+    def check_action(
+        self, action: str, parameters: tuple[object, ...]
+    ) -> bool | None:
+        """Disable app-level bindings that would otherwise shadow in-editor keys.
+
+        With priority=True, these bindings would intercept keys unconditionally:
+        - "escape" -> "cancel_edit" would shadow the inherited "escape" ->
+        "quit_editor" binding from ContentTextualApp, preventing the TUI from
+        closing when not editing.
+        - "ctrl+a" -> "select_all" would prevent Ctrl+A from reaching the
+        focused TextArea. Note: Textual's TextArea binds Ctrl+A to
+        cursor_line_start by default (readline-style), not select-all, so we
+        explicitly call the TextArea's own select_all() here to get
+        VS Code-style "select all" behavior instead.
+        Also, "ctrl+a" behaves weirdly here. To make it work as commonly intended
+        ("selec all") is necessary to "ctrl+a" and then "ctrl+c" (only tested on Windows).
+
+        Returning False tells Textual to skip the binding, letting the key fall
+        through to the next candidate (e.g. the TextArea's own bindings).
+        """
+        if action == "cancel_edit" and not self.is_editing:
+            return False
+        if action == "select_all" and self.is_editing:
+            if self.editor_widget:
+                self.editor_widget.select_all()
+            return False
+        return True
+
+    def _end_edit(self) -> None:
+        """End editing the current line."""
+        if self.editor_widget:
+            self.editor_widget.remove()
+            self.editor_widget = None
+
+        previously_editing_index = self.editing_index
+        self.is_editing = False
+        self.editing_index = None
+        self._edit_original_text = None
+
+        # Refresh the line to remove the "reverse" style
+        if previously_editing_index is not None:
+            self.refresh_line(previously_editing_index)
+
+        # Re-enable the OptionList and restore focus/highlight to it.
+        try:
+            option_list = self.query_one("#line-list", NonWrappingOptionList)
+            option_list.disabled = False
+            if self.selected_index is not None:
+                option_list.highlighted = self.selected_index
+            self.set_focus(option_list)
+        except Exception:
+            pass
+
+        self.update_header(list(_HEADER_LINES_DEFAULT))
+
+    def on_key(self, event: events.Key) -> None:
+        """Prevent TextArea from consuming CTRL+ENTER/ESC/CTRL+F when in edit mode."""
+        if self.is_editing:
+            if event.key in ("ctrl+return", "ctrl+enter", "ctrl+j", "escape", "ctrl+f"):
+                event.prevent_default()
+                if event.key == "escape" and self.editor_widget:
+                    self.action_cancel_edit()
+                elif event.key in ("ctrl+return", "ctrl+enter", "ctrl+j") and self.editor_widget:
+                    self.action_confirm_edit()
+
+    # ---------------------------------------------------
+
     def action_delete_phrase_groups(self) -> None:
         """Delete phrase rows, or one section when it is the sole selected row."""
         edit_session = self.edit_session_or_none
-        if self.find_active or edit_session is None:
+        if self.is_editing or self.find_active or edit_session is None:
             return
         selected_items = [
             self.list_items[self.phrase_indices[index]]
@@ -335,7 +567,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
 
     def action_split_phrase_group(self) -> None:
         """Open a boundary chooser for exactly one selected phrase-group row."""
-        if self.find_active or self.edit_session_or_none is None:
+        if self.is_editing or self.find_active or self.edit_session_or_none is None:
             return
         phrase_items = [
             item

@@ -266,3 +266,145 @@ class TextEditSession:
                 )
 
         return TextEditMutationResult()
+
+    def update_phrase_group_text(
+        self,
+        item_id: int,
+        new_text: str,
+    ) -> TextEditMutationResult:
+        """Edit the text of a phrase group, preserving structure where possible.
+
+        Preserves:
+        - voice_index of the PhraseGroup
+        - Line breaks the user typed (e.g. Shift+Enter), encoded the same way
+        automatic segmentation encodes them: as trailing "\\n" characters on
+        a Phrase's text, not as separate empty-text Phrases.
+        - The reason each resulting phrase would have received had it come
+        from automatic segmentation, derived from its trailing line-break
+        count via the same convention phrase_segmenter.py uses for the last
+        phrase of a sentence (0 -> SENTENCE, 1-2 -> PARAGRAPH, 3+ ->
+        SPACE_BREAK). Reason.PHRASE never applies here, since manual edits
+        don't go through the delimiter-based sub-splitting (commas,
+        semicolons, parentheses, etc.) that produces it - every line here is
+        effectively the sole/last phrase of its own sentence.
+
+        Does NOT preserve:
+        - The exact original reason of a phrase whose text didn't change
+        (e.g. SECTION_BREAK from an EPUB import): a free-form text edit
+        can't reliably tell which lines are untouched, so reason is always
+        recomputed from the edited text's own trailing line breaks.
+        - The number of phrases (one per non-blank line): a line exceeding
+        the project's max_words_per_segment is split into multiple phrases,
+        matching how automatic segmentation enforces the same limit
+        elsewhere in the app.
+        """
+        from tts_audiobook_tool.app_types.phrase import Phrase, Reason
+        from tts_audiobook_tool.app_support import app_text
+
+        for section in self.sections:
+            for staged_phrase_group in section.phrase_groups:
+                if staged_phrase_group.item_id != item_id:
+                    continue
+
+                # Preserve the original PhraseGroup voice_index
+                voice_index = staged_phrase_group.phrase_group.voice_index
+
+                # Split the edited text into lines, keeping line terminators
+                # attached instead of discarding them. keepends=False would
+                # silently drop every "\n" the user typed (e.g. a single
+                # trailing Shift+Enter would vanish entirely and go
+                # undetected by has_changes), and PhraseGroup.text later
+                # concatenates phrase texts with no separator, so a dropped
+                # "\n" also means separate lines get jammed together with
+                # nothing between them once the phrase group is reloaded.
+                raw_lines = new_text.splitlines(keepends=True)
+
+                # Fold a blank line (pure "\n" / "\r\n") onto the end of the
+                # previous line's text instead of turning it into its own
+                # empty-text Phrase. This mirrors how automatic segmentation
+                # encodes a paragraph/section break as trailing "\n"
+                # characters on one Phrase's text (see the "p"/"x"/"xx"
+                # reason codes) rather than as a separate empty Phrase - so
+                # e.g. two trailing Shift+Enters produce one Phrase ending in
+                # "\n\n", not a second Phrase with text "".
+                merged_lines: list[str] = []
+                for raw_line in raw_lines:
+                    is_blank_line = raw_line.strip("\r\n") == ""
+                    if is_blank_line and merged_lines:
+                        merged_lines[-1] += raw_line
+                    else:
+                        merged_lines.append(raw_line)
+
+                # Build new Phrases. massage_post_normalize() collapses all
+                # \s+ (which includes "\n"), so it is applied only to each
+                # line's non-whitespace content and the trailing whitespace
+                # (line terminator) is reattached afterward, unmodified, to
+                # avoid stripping the break back out.
+                #
+                # reason is derived the same way phrase_segmenter.py derives
+                # it for the last phrase of a sentence: by the number of
+                # trailing line breaks on the *original* (pre-normalize)
+                # line, since normalization would erase that count.
+                built_phrases: list[Phrase] = []
+                for line in merged_lines:
+                    content = line.rstrip()
+                    trailing_whitespace = line[len(content):]
+
+                    num_lf = app_text.num_trailing_line_breaks(line)
+                    match num_lf:
+                        case 0:
+                            reason = Reason.SENTENCE
+                        case 1:
+                            reason = Reason.PARAGRAPH
+                        case 2:
+                            reason = Reason.PARAGRAPH
+                        case _:  # >= 3
+                            reason = Reason.SPACE_BREAK
+
+                    built_phrases.append(
+                        Phrase(
+                            app_text.massage_post_normalize(content) + trailing_whitespace,
+                            reason,
+                        )
+                    )
+
+                # Guard against an empty result: always keep at least one
+                # (possibly empty) phrase so the phrase group stays valid.
+                # There is no trailing-line-break information to classify
+                # here, so this synthetic phrase falls back to UNDEFINED.
+                if not built_phrases:
+                    built_phrases.append(Phrase("", Reason.UNDEFINED))
+
+                # Enforce the project's configured segment length. Phrases
+                # within the limit (including the empty-text guard above) pass
+                # through unchanged; oversized ones are split using the same
+                # word-count logic the app already uses for automatic
+                # segmentation, so manually edited text stays consistent with
+                # how the rest of the app defines "one segment". A falsy
+                # max_words (e.g. None or 0) disables the limit entirely.
+                max_words = self.segmentation_settings.max_words_per_segment
+                new_phrases: list[Phrase] = []
+                for phrase in built_phrases:
+                    if max_words and phrase.num_words > max_words:
+                        from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
+
+                        new_phrases.extend(
+                            PhraseSegmenter.long_phrase_to_phrases(phrase, max_words)
+                        )
+                    else:
+                        new_phrases.append(phrase)
+
+                # Replace all phrases with the newly built ones
+                staged_phrase_group.phrase_group = PhraseGroup(
+                    phrases=new_phrases,
+                    voice_index=voice_index,
+                )
+
+                self.record_affected_index(staged_phrase_group.original_index)
+                return TextEditMutationResult(
+                    changed=True,
+                    focus_item_id=item_id,
+                    earliest_affected_original_index=staged_phrase_group.original_index,
+                )
+
+        return TextEditMutationResult()

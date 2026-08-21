@@ -91,6 +91,18 @@ def massage_post_normalize(text: str) -> str:
     return text
 
 
+def normalize_line_terminators(text: str) -> str:
+    """
+    Converts "\\r\\n" and lone "\\r" to "\\n".
+
+    Used to normalize text before/around the TextArea widget, which
+    round-trips pure "\\n" text unchanged but coalesces a *mixed* "\\r\\n"/"\\n"
+    string into all "\\r\\n" — so text containing a mix must be normalized
+    to pure "\\n" first to keep the pre/post-edit comparison stable.
+    """
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def split_raw_word(raw_word: str) -> tuple[str, str, str]:
     """
     Separates word into three parts.
