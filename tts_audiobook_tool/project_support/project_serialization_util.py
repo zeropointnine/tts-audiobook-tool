@@ -41,8 +41,6 @@ class ProjectSerializationUtil:
         "fish_s1_voice_transcript": ("fish_s1_voice_text",),
         "fish_s2_voice_file_name": (),
         "fish_s2_voice_transcript": (),
-        "fish_s2_server_voice_target": (),
-        "fish_s2_server_voice_transcript": (),
         "glm_voice_file_name": (),
         "glm_voice_transcript": ("glm_voice_text",),
         "higgs_voice_file_name": (),
@@ -667,8 +665,6 @@ class ProjectSerializationUtil:
             "fish_s2_top_k": project.fish_s2_top_k,
             "fish_s2_seed": project.fish_s2_seed,
             "fish_s2_compile_enabled": project.fish_s2_compile_enabled,
-            "fish_s2_server_voice_target": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_server_voice_target),
-            "fish_s2_server_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s2_server_voice_transcript),
             "fish_s2_server_concurrent_requests": project.fish_s2_server_concurrent_requests,
 
             "higgs_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.higgs_voice_file_name),

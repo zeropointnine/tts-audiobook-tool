@@ -228,9 +228,9 @@ class TtsModelType(Enum):
         sample_rate=44_100,
         max_words_default=40,
         max_words_reco_range=(40, 80),
-        voice_target_attr="fish_s2_server_voice_target",
-        requires_voice=False, 
-        voice_transcript_attr="fish_s2_server_voice_transcript",
+        voice_target_attr="fish_s2_voice_file_name", # shares same value as local Fish S2
+        requires_voice=False,
+        voice_transcript_attr="fish_s2_voice_transcript", # shares same value as local Fish S2
         extra_file_attrs=[],
         batch_size_attr="fish_s2_server_concurrent_requests",
         can_stream=True,
@@ -241,8 +241,8 @@ class TtsModelType(Enum):
         ui = {
             "proper_name": "Fish S2-Pro",
             "short_name": "S2-Pro",
-            "voice_path_console": "",
-            "voice_path_requestor": "",
+            "voice_path_console": "Enter voice clone audio clip file path (10-30s): ",
+            "voice_path_requestor": "Select voice clone audio clip (10-30s)",
             "project_links": [
                 "https://github.com/fishaudio/fish-speech", 
                 "https://huggingface.co/fishaudio/s2-pro", 

@@ -14,20 +14,9 @@ class VoiceFishS2ServerMenu:
         """
         """
         def make_items(_: State) -> list[MenuItem]:
-            items = []
-
-            # server voice path and voice transcript
-            path_item, transcript_item = VoiceMenuShared.make_manual_voice_menu_items(
-                state, TtsModelType.FISH_S2_SERVER, "fish_s2_server_voice_target", "fish_s2_server_voice_transcript", is_required=False
-            )
-            items.append(path_item)
-            items.append(transcript_item)
-
-            # clear voice
-            if state.project.fish_s2_server_voice_target or state.project.fish_s2_server_voice_transcript:
-                items.append(
-                    VoiceMenuShared.make_clear_voice_item(state, TtsModelType.FISH_S2_SERVER)
-                )
+            items = [
+                *VoiceMenuShared.make_voice_sample_items(state, TtsModelType.FISH_S2_SERVER)
+            ]
 
             # Hyperparams
             # Shares project attributes as local inference version, TtsModelType.FISH_S2

@@ -676,6 +676,7 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 **2026-08-21**
 
 - Batch mode is now supported when using `Voice selection mode: user-defined`.
+- Higgs V3 and Fish S2-Pro running through SGL-Omni now use the standard voice-clone workflow. Add local voice sample files as usual, with support for multiple voice clones.
 
 **2026-08-19**
 

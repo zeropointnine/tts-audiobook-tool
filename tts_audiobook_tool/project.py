@@ -181,8 +181,6 @@ class Project(BaseModel):
     fish_s2_top_k: int = -1
     fish_s2_seed: int = -1
 
-    fish_s2_server_voice_target: list[str] = Field(default_factory=list)
-    fish_s2_server_voice_transcript: list[str] = Field(default_factory=list)
     fish_s2_server_concurrent_requests: int = 1
 
     higgs_voice_file_name: list[str] = Field(default_factory=list)
