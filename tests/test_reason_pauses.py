@@ -10,6 +10,7 @@ EXPECTED_PAUSES = {
     ReasonPauseTypes.NORMAL: {
         Reason.UNDEFINED: 1.0,
         Reason.WORD: 0.1,
+        Reason.PHRASE_QUOTE_END: 0.1,
         Reason.PHRASE: 0.5,
         Reason.SENTENCE: 0.9,
         Reason.PARAGRAPH: 1.2,
@@ -19,6 +20,7 @@ EXPECTED_PAUSES = {
     ReasonPauseTypes.SHORTER: {
         Reason.UNDEFINED: 1.0,
         Reason.WORD: 0.1,
+        Reason.PHRASE_QUOTE_END: 0.1,
         Reason.PHRASE: 0.3,
         Reason.SENTENCE: 0.6,
         Reason.PARAGRAPH: 0.9,

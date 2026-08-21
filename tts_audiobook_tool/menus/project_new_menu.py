@@ -83,7 +83,7 @@ class ProjectNewMenu:
 
         print_feedback("Project directory set:", state.project.dir_path)
         ask.ask_enter_to_continue()
-        
+
         return True
 
     @staticmethod
@@ -108,7 +108,7 @@ class ProjectNewMenu:
                 return False
 
             abr_path = ask.ask_file_path(
-                console_message="Enter the path to the tts-audiobook-tool ABR audio file:",
+                console_message="Now enter the path to the tts-audiobook-tool ABR audio file:",
                 dialog_title="Select ABR audio file",
                 filetypes=[('ABR audio files', '*.flac *.m4a *.m4b')],
                 initialdir=state.project.dir_path,
@@ -173,14 +173,14 @@ class ProjectNewMenu:
 
     @staticmethod
     def print_missing_supporting_files_warning(missing_paths: list[str]) -> None:
-        
+
         # Special case: Oute, not worth reasoning through this
         if len(missing_paths) == 1 and "default.json" in missing_paths[0]:
             missing_paths = []
 
         if not missing_paths:
             return
-        
+
         printt(
             f"{COL_ERROR}Note that following supporting project files do not exist and were not copied over:{COL_DEFAULT}"
         )

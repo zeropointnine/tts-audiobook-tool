@@ -27,8 +27,11 @@ class DialogSegmenter:
     ) -> list[PhraseGroup]:
         """
         Segment groups at accepted dialog boundaries without ever merging groups
-        produced by the normal segmentation pass. When dialog_voice_index is
-        provided, assign it to every resulting group inside detected dialog.
+        produced by the normal segmentation pass. A piece ending at a dialog
+        span end whose continuation starts with a lowercase alphabetic gets
+        reason PHRASE_QUOTE_END (ie, almost no pause before an attribution
+        such as: "Hello," she said.). When dialog_voice_index is provided,
+        assign it to every resulting group inside detected dialog.
         """
         if not groups:
             return []
@@ -47,6 +50,7 @@ class DialogSegmenter:
         if not dialog_spans:
             return groups
 
+        span_end_offsets = {end for _, end in dialog_spans}
         boundaries = sorted({
             boundary
             for span in dialog_spans
@@ -54,7 +58,7 @@ class DialogSegmenter:
         })
         result: list[PhraseGroup] = []
         group_start = 0
-        for group in groups:
+        for index, group in enumerate(groups):
             group_end = group_start + len(group.text)
             first_boundary = bisect_right(boundaries, group_start)
             last_boundary = bisect_left(boundaries, group_end)
@@ -62,9 +66,22 @@ class DialogSegmenter:
                 boundary - group_start
                 for boundary in boundaries[first_boundary:last_boundary]
             ]
-            result.extend(
-                DialogSegmenter._split_group(group, local_boundaries)
+            parts = DialogSegmenter._split_group(
+                group,
+                local_boundaries,
+                group_start,
+                span_end_offsets,
+                text,
             )
+            # A dialog span ending exactly at this group's boundary still
+            # continues almost without a pause when the next group (if any)
+            # starts with a lowercase alphabetic (ie, an attribution).
+            if (
+                group_end in span_end_offsets
+                and DialogSegmenter._continues_with_lowercase_alpha(text, group_end)
+            ):
+                parts[-1] = DialogSegmenter._with_quote_end_reason(parts[-1])
+            result.extend(parts)
             group_start = group_end
 
         if dialog_voice_index is None:
@@ -337,7 +354,17 @@ class DialogSegmenter:
     def _split_group(
         group: PhraseGroup,
         local_boundaries: list[int],
+        group_start: int,
+        span_end_offsets: set[int],
+        text: str,
     ) -> list[PhraseGroup]:
+        """
+        Split `group` at the given local (group-relative) dialog boundaries.
+
+        A piece ending at a dialog span end whose continuation starts with a
+        lowercase alphabetic gets reason PHRASE_QUOTE_END (an attribution
+        follows with almost no pause); other mid-phrase cuts keep reason PHRASE.
+        """
         if not local_boundaries:
             return [group]
 
@@ -360,11 +387,19 @@ class DialogSegmenter:
                 piece_end = boundary - phrase_start
                 piece_text = phrase.text[piece_start:piece_end]
                 if piece_text:
-                    reason = (
-                        phrase.reason
-                        if piece_end == len(phrase.text)
-                        else Reason.PHRASE
-                    )
+                    absolute_boundary = group_start + boundary
+                    if (
+                        absolute_boundary in span_end_offsets
+                        and DialogSegmenter._continues_with_lowercase_alpha(
+                            text,
+                            absolute_boundary,
+                        )
+                    ):
+                        reason = Reason.PHRASE_QUOTE_END
+                    elif piece_end == len(phrase.text):
+                        reason = phrase.reason
+                    else:
+                        reason = Reason.PHRASE
                     current_phrases.append(Phrase(piece_text, reason))
 
                 if current_phrases:
@@ -389,3 +424,32 @@ class DialogSegmenter:
             result.append(PhraseGroup(current_phrases, voice_index=group.voice_index))
 
         return result
+
+    @staticmethod
+    def _continues_with_lowercase_alpha(text: str, offset: int) -> bool:
+        """
+        Whether the first non-whitespace character at or after `offset` in
+        `text` is a lowercase alphabetic. Whitespace is normally consumed by
+        the preceding segment (see _end_after_attached_punctuation), so this
+        is usually the character right at `offset`; the skip is defensive for
+        boundaries that coincide with group ends.
+        """
+        index = offset
+        while index < len(text) and text[index].isspace():
+            index += 1
+        if index >= len(text):
+            return False
+        char = text[index]
+        return char.isalpha() and char.islower()
+
+    @staticmethod
+    def _with_quote_end_reason(group: PhraseGroup) -> PhraseGroup:
+        """
+        Return a new group whose final phrase has reason PHRASE_QUOTE_END.
+        Never mutates the source group, which may be shared with the caller.
+        """
+        if not group.phrases:
+            return group
+        phrases = list(group.phrases[:-1])
+        phrases.append(Phrase(group.phrases[-1].text, Reason.PHRASE_QUOTE_END))
+        return PhraseGroup(phrases, voice_index=group.voice_index)

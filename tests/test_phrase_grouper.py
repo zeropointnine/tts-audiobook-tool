@@ -67,6 +67,34 @@ class TestPhraseGrouper(unittest.TestCase):
             "One.\n\nTwo.\n\nThree.\n\nFour.",
         )
 
+    def test_phrase_quote_end_reason_orders_between_word_and_phrase(self):
+        self.assertEqual(Reason.PHRASE_QUOTE_END.json_value, "isqe")
+        self.assertIs(Reason.from_json_value("isqe"), Reason.PHRASE_QUOTE_END)
+        self.assertLess(Reason.WORD, Reason.PHRASE_QUOTE_END)
+        self.assertLess(Reason.PHRASE_QUOTE_END, Reason.PHRASE)
+        self.assertLess(Reason.PHRASE_QUOTE_END, Reason.SENTENCE)
+
+    def test_dialog_segmentation_marks_quote_end_pieces_with_phrase_quote_end_reason(self):
+        text = 'He muttered, "Never mind," she answered quietly.'
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            dialog_segmentation=True,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["He muttered, ", '"Never mind," ', "she answered quietly."],
+        )
+        self.assertEqual(
+            [[phrase.reason for phrase in group.phrases] for group in groups],
+            [[Reason.PHRASE], [Reason.PHRASE_QUOTE_END], [Reason.SENTENCE]],
+        )
+        self.assertEqual([group.voice_index for group in groups], [-1, 1, -1])
+
 
 if __name__ == '__main__':
     unittest.main()

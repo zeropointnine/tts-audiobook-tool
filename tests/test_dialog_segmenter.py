@@ -364,5 +364,190 @@ class TestDialogSegmenter(unittest.TestCase):
         )
 
 
+class TestPhraseQuoteEnd(unittest.TestCase):
+    """
+    A piece ending at a close-quote gets reason PHRASE_QUOTE_END when the
+    continuation starts with a lowercase alphabetic (ie, an attribution);
+    otherwise the existing behavior applies.
+    """
+
+    @staticmethod
+    def phrase_reasons(groups: list[PhraseGroup]) -> list[list[tuple[str, Reason]]]:
+        return [
+            [(phrase.text, phrase.reason) for phrase in group.phrases]
+            for group in groups
+        ]
+
+    def test_close_quote_with_comma_before_lowercase_attribution(self):
+        groups = segment_one('"Hello," she said.')
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [('"Hello," ', Reason.PHRASE_QUOTE_END)],
+                [("she said.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_close_quote_without_comma_before_lowercase_attribution(self):
+        groups = segment_one('"Hello" she said.')
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [('"Hello" ', Reason.PHRASE_QUOTE_END)],
+                [("she said.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_close_quote_after_question_or_exclamation(self):
+        cases = (
+            ('"Are you sure?" he asked.', [('"Are you sure?" ', Reason.PHRASE_QUOTE_END)]),
+            ('"Help!" she cried.', [('"Help!" ', Reason.PHRASE_QUOTE_END)]),
+        )
+        for text, expected_quote_phrases in cases:
+            with self.subTest(text=text):
+                groups = segment_one(text)
+                self.assertEqual(self.phrase_reasons(groups)[0], expected_quote_phrases)
+
+    def test_long_lowercase_quote_before_lowercase_continuation(self):
+        groups = segment_one(
+            'He called it "a terrible mistake indeed" she had never forgiven him for.'
+        )
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("He called it ", Reason.PHRASE)],
+                [('"a terrible mistake indeed" ', Reason.PHRASE_QUOTE_END)],
+                [("she had never forgiven him for.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_close_quote_before_uppercase_continuation_keeps_phrase_reason(self):
+        groups = segment_one('"Hello." She left.')
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [('"Hello." ', Reason.PHRASE)],
+                [("She left.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_close_quote_at_end_of_text_keeps_original_reason(self):
+        groups = segment_one('She said, "Hello,"')
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Hello,"', Reason.SENTENCE)],
+            ],
+        )
+
+    def test_span_end_coinciding_with_phrase_end_overrides_original_reason(self):
+        original_group = PhraseGroup(
+            [
+                Phrase('She said, "Hello," ', Reason.SENTENCE),
+                Phrase("she left.", Reason.SENTENCE),
+            ]
+        )
+
+        groups = DialogSegmenter.segment_groups([original_group])
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Hello," ', Reason.PHRASE_QUOTE_END)],
+                [("she left.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_adjacent_spans_only_mark_lowercase_continuations(self):
+        groups = segment_one('"Hello" "Bye" he said.')
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [('"Hello" ', Reason.PHRASE)],
+                [('"Bye" ', Reason.PHRASE_QUOTE_END)],
+                [("he said.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_span_start_boundary_still_gets_phrase_reason(self):
+        groups = segment_one('I told them, "What is up?"')
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("I told them, ", Reason.PHRASE)],
+                [('"What is up?"', Reason.SENTENCE)],
+            ],
+        )
+
+    def test_span_end_at_group_boundary_marks_last_phrase_of_previous_group(self):
+        original_groups = [
+            make_group('She said, "Hello," '),
+            make_group("she left."),
+        ]
+
+        groups = DialogSegmenter.segment_groups(original_groups)
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Hello," ', Reason.PHRASE_QUOTE_END)],
+                [("she left.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_span_end_at_group_boundary_with_uppercase_next_group_unchanged(self):
+        groups = DialogSegmenter.segment_groups(
+            [
+                make_group('She said, "Hello," '),
+                make_group("She left."),
+            ]
+        )
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Hello," ', Reason.SENTENCE)],
+                [("She left.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_span_end_at_group_boundary_with_voice_preserves_reasons_without_mutation(self):
+        original_groups = [
+            make_group('She said, "Hello," ', voice_index=4),
+            make_group("she left.", voice_index=4),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Hello," ', Reason.PHRASE_QUOTE_END)],
+                [("she left.", Reason.SENTENCE)],
+            ],
+        )
+        self.assertEqual([group.voice_index for group in groups], [4, 1, 4])
+        self.assertEqual(
+            [phrase.reason for group in original_groups for phrase in group.phrases],
+            [Reason.SENTENCE, Reason.SENTENCE],
+        )
+        self.assertEqual([group.voice_index for group in original_groups], [4, 4])
+
+
 if __name__ == "__main__":
     unittest.main()

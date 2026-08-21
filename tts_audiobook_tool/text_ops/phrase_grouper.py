@@ -29,9 +29,10 @@ class PhraseGrouper:
         One PhraseGroup gets transformed into one TTS prompt.
 
         When dialog_segmentation is enabled, a final pass subdivides groups so
-        accepted dialog and narration do not share a group, and preassigns dialog
-        to voice sample 2. It does not recombine
-        groups created by the normal segmentation passes.
+        accepted dialog and narration do not share a group, preassigns dialog
+        to voice sample 2, and marks close-quote pieces followed by a
+        lowercase continuation with reason PHRASE_QUOTE_END. It does not
+        recombine groups created by the normal segmentation passes.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         # This guarantees that imported text has no blank lines containing

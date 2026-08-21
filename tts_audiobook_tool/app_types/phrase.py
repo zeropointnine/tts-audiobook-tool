@@ -234,18 +234,21 @@ class Reason(tuple[int, str], Enum):
     UNDEFINED = 0, "undefined"
     # The string has been split after an arbitrary word
     WORD = 1, "w"
+    # The string ends at a close-quote and a lowercase continuation follows
+    # (ie, an attribution like: "Hello," she said.) - almost no pause
+    PHRASE_QUOTE_END = 2, "isqe"
     # The string has been split at a phrase (not to be confused with the class named "Phrase")
-    PHRASE = 2, "is" # "is" - think "intra-sentence"
+    PHRASE = 3, "is" # "is" - think "intra-sentence"
     # The string has been split at a sentence (which does not end in a paragraph break)
-    SENTENCE = 3, "s"
+    SENTENCE = 4, "s"
     # The string has been split at a paragraph break (line feed)
-    PARAGRAPH = 4, "p"
+    PARAGRAPH = 5, "p"
     # The string has been split at a paragraph break *plus* one or more blank lines.
     # Related publishing/typography terms for what this represents: "space break"; "scene break"; "dinkus"
-    SPACE_BREAK = 5, "x"
+    SPACE_BREAK = 6, "x"
     # The segment was the last text at the end of a section (eg, the end of an html section of an epub). 
     # Think "page break" almost.
-    SECTION_BREAK = 6, "xx"
+    SECTION_BREAK = 7, "xx"
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:

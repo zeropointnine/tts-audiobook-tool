@@ -176,6 +176,31 @@ class TestBookSerialization(unittest.TestCase):
             "Book section 1: Phrase group 1 contains no phrases",
         )
 
+    def test_phrase_quote_end_reason_round_trips_through_book_json(self):
+        book = Book(
+            sections=[
+                BookSection(
+                    phrase_groups=[
+                        self.make_phrase_group(
+                            'He said "fine" she replied.',
+                            Reason.PHRASE_QUOTE_END,
+                        ),
+                    ],
+                ),
+            ],
+        )
+
+        payload = book_to_project_text_json_dict(book)
+        phrase_payload = payload["book"]["sections"][0]["phrase_groups"][0]["phrases"][0]
+        self.assertEqual(phrase_payload["reason"], "isqe")
+
+        result = book_from_project_text_json_dict(payload)
+
+        self.assertIsInstance(result, Book)
+        assert isinstance(result, Book)
+        self.assertEqual(result.phrase_groups[0].phrases[0].reason, Reason.PHRASE_QUOTE_END)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.PHRASE_QUOTE_END)
+
     def test_save_and_load_book_project_text_file(self):
         book = Book(
             title="File Round Trip",

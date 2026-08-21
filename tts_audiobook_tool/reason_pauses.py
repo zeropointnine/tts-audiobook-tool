@@ -45,6 +45,7 @@ NORMAL_REASON_PAUSES = MappingProxyType(
     {
         Reason.UNDEFINED: 1.0,
         Reason.WORD: 0.1,
+        Reason.PHRASE_QUOTE_END: 0.1,
         Reason.PHRASE: 0.5,
         Reason.SENTENCE: 0.9,
         Reason.PARAGRAPH: 1.2,
@@ -57,6 +58,7 @@ SHORTER_REASON_PAUSES = MappingProxyType(
     {
         Reason.UNDEFINED: 1.0,
         Reason.WORD: 0.1,
+        Reason.PHRASE_QUOTE_END: 0.1,
         Reason.PHRASE: 0.3,
         Reason.SENTENCE: 0.6,
         Reason.PARAGRAPH: 0.9,
