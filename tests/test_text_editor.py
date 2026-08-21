@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 from rich.text import Text
-from textual.widgets import Button, Input, OptionList, Static
+from textual.widgets import Button, Input, OptionList, Static, TextArea
 
 import tts_audiobook_tool.textual.text_editor as text_editor_module
 from tts_audiobook_tool.app_types import Book, BookSection
@@ -935,5 +935,360 @@ def test_confirm_surfaces_commit_error_without_mutating_project(monkeypatch) -> 
 
         assert [item.text for item in project.phrase_groups] == ["One.", "Two."]
         assert app.return_value == EditorSaveFailed("Save failed: disk full")
+
+    run(exercise())
+
+
+# =============================================================================
+# Text Editing Tests (Phase 2)
+# =============================================================================
+
+
+async def edit_first_line_to(pilot, app: "TextEditor", new_text: str) -> None:
+    """Open the editor for the currently selected line, replace its content, and confirm.
+
+    Sets the TextArea's text directly instead of simulating keystroke-by-keystroke
+    typing: this exercises the edit-confirm flow rather than Textual's own input
+    handling, and avoids accidentally typing key *names* (e.g. "enter") as literal
+    characters instead of pressing them.
+
+    Assumes the caller has already positioned selected_index where the edit
+    should happen (the OptionList selects index 0 by default on load, so most
+    callers don't need to press anything first).
+    """
+    await pilot.press("e")
+    text_area = app.query_one("#edit-area", TextArea)
+    text_area.text = new_text
+    await pilot.pause()
+    await pilot.press("ctrl+enter")
+    await pilot.pause()
+
+
+def test_edit_simple_line() -> None:
+    """Test 1: Simple edit (without \\n)."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                    make_phrase_group("Goodbye world."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # Content is loaded via call_after_refresh() after on_mount
+            await pilot.pause()
+            assert app.list_items is not None
+            assert app.list_items != []
+            # OptionList initializes with selected_index = 0
+            assert app.selected_index == 0
+
+            await edit_first_line_to(pilot, app, "Hello world! This is a test.")
+
+            # Verify that the widget was removed
+            assert app.editor_widget is None
+            assert app.is_editing is False
+
+            # Verify that has_changes is True
+            assert app.has_changes is True
+
+            # Verify that the text appears correctly in the interface
+            assert "This is a test" in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_multiline_text() -> None:
+    """Test 2: Edit containing \\n (multiple lines)."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Line 1.\nLine 2.\nLine 3."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(
+                pilot, app, "Line 1.\nLine 2.\nLine 3.\nLine 4.\nLine 5."
+            )
+
+            # Verify that the widget was removed
+            assert app.editor_widget is None
+            assert app.is_editing is False
+
+            # Verify that has_changes is True
+            assert app.has_changes is True
+
+            # Verify that the text appears correctly with \n
+            formatted = str(app.format_line(0))
+            assert "Line 4." in formatted
+            assert "Line 5." in formatted
+
+    run(exercise())
+
+
+def test_edit_cancel_with_escape() -> None:
+    """Test 3: ESC discards the in-progress edit without changing state."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # Select the first line
+            await pilot.press("down")
+            assert app.selected_index == 0
+
+            # Start editing
+            await pilot.press("e")
+            assert app.editor_widget is not None
+            assert app.is_editing is True
+
+            # Change the content, but cancel instead of confirming
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = "This edit should never be saved."
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+
+            # Verify that the widget was removed
+            assert app.editor_widget is None
+            assert app.is_editing is False
+
+            # Verify that nothing was staged, and original text is untouched
+            assert app.has_changes is False
+            assert "Hello world." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_confirming_empty_text() -> None:
+    """Test 4: Confirming an edit with empty text closes the editor cleanly.
+
+    NOTE: this only pins down that the editor doesn't crash or get stuck when
+    confirmed with an empty TextArea. Whether an empty phrase group should be
+    dropped, kept, or rejected outright is a product decision the app itself
+    should encode (e.g. via validation before ctrl+enter is accepted) — verify
+    the exact expectation against the current app behavior and tighten this
+    assertion (e.g. checking edit_session.phrase_groups) if the app defines one.
+    """
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "")
+
+            # Verify that the widget was removed and editing state was exited
+            # cleanly, regardless of how the app chose to handle empty content.
+            assert app.editor_widget is None
+            assert app.is_editing is False
+
+    run(exercise())
+
+
+def test_edit_blocked_on_section_item() -> None:
+    """Test 5: Attempt to edit TextEditorSectionItem (should be blocked)."""
+    project = make_project(
+        [
+            BookSection(
+                title="Section 1",
+                phrase_groups=[make_phrase_group("Line 1.")],
+            ),
+            BookSection(
+                title="Section 2",
+                phrase_groups=[make_phrase_group("Line 2.")],
+            ),
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # Select the section (not a line)
+            await pilot.press("down")  # Go to the first line
+            await pilot.press("up")    # Go back to the section
+            assert app.selected_index == 0
+            assert isinstance(app.list_items[0], TextEditorSectionItem)
+
+            # Try to edit - should be blocked
+            await pilot.press("e")
+            await pilot.pause()
+
+            # The widget should not have been created
+            assert app.editor_widget is None
+            assert app.is_editing is False
+
+    run(exercise())
+
+
+def test_edit_creates_has_changes() -> None:
+    """Test 6: has_changes after confirming an edit."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Original text."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Modified")
+
+            assert app.has_changes is True
+
+    run(exercise())
+
+
+def test_edit_preserves_voice_index() -> None:
+    """Test 7: Preservation of voice_index."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    PhraseGroup(
+                        phrases=[Phrase("Original.", Reason.SENTENCE)],
+                        voice_index=42,
+                    ),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Modified")
+
+            item = app.list_items[0]
+            assert isinstance(item, TextEditorPhraseGroupItem)
+            assert item.phrase_group.voice_index == 42
+
+    run(exercise())
+
+
+def test_edit_single_line_edit_receives_Reason_SENTENCE() -> None:
+    """Test 8: A single-line edit (no trailing line breaks) receives Reason.SENTENCE.
+
+    Reason is always recomputed from the edited text's own trailing line
+    breaks (see update_phrase_group_text docstring) - it is never preserved
+    from before the edit. Zero trailing breaks -> Reason.SENTENCE.
+    """
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Original text."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Modified")
+
+            item = app.list_items[0]
+            assert isinstance(item, TextEditorPhraseGroupItem)
+            for phrase in item.phrase_group.phrases:
+                assert phrase.reason == Reason.SENTENCE, (
+                    f"Expected Reason.SENTENCE, got {phrase.reason}"
+                )
+
+    run(exercise())
+
+
+def test_edit_confirm_without_changes_is_noop() -> None:
+    """Test 9: Confirming without touching the text registers no change."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.press("e")
+            assert app.is_editing is True
+
+            # Confirm without editing the TextArea content at all
+            await pilot.press("ctrl+enter")
+            await pilot.pause()
+
+            assert app.editor_widget is None
+            assert app.is_editing is False
+            assert app.has_changes is False
+            assert "Hello world." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_confirm_mixed_line_endings_is_noop() -> None:
+    """Test 10: Mixed \\r\\n/\\n in stored text still confirms as no-op.
+
+    Regression test for the TextArea \\n -> \\r\\n coalescing bug: a phrase
+    group whose raw text already mixes \\r\\n and \\n (e.g. from a
+    mixed-origin import) must not be falsely detected as "changed" just
+    because the TextArea widget normalizes line terminators on load.
+    """
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Line 1.\r\nLine 2.\nLine 3."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.press("e")
+            assert app.is_editing is True
+
+            # Confirm without editing the TextArea content at all
+            await pilot.press("ctrl+enter")
+            await pilot.pause()
+
+            assert app.editor_widget is None
+            assert app.is_editing is False
+            assert app.has_changes is False
 
     run(exercise())
