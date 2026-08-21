@@ -694,10 +694,11 @@ def make_stem(
     common_model_tag = SoundSegmentUtil.get_common_model_tag(extant_file_names)
     if common_model_tag:
         stem += f"[{common_model_tag}]" + " "
-    # [5] voice tag
-    common_voice_tag = SoundSegmentUtil.get_common_voice_tag(extant_file_names)
-    if common_voice_tag:
-        stem += f"[{common_voice_tag}]" + " "
+    # [6] voice tag (most common voice; "+n" = count of other distinct voices in the set)
+    voice_tag, voice_extra = SoundSegmentUtil.get_voice_tag_summary(extant_file_names)
+    if voice_tag:
+        extra = f" +{voice_extra}" if voice_extra > 0 else ""
+        stem += f"[{voice_tag}{extra}]" + " "
 
     stem = stem.strip()
     return stem

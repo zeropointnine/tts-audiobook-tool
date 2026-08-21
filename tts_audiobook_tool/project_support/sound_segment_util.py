@@ -12,6 +12,11 @@ from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import ValidationResult
 
 
+# Voice tag written into segment file names when no voice clone was used
+# (see ProjectVoiceUtil / base TtsModel.get_voice_tag).
+NONE_VOICE_TAG = "none"
+
+
 def get_segment_stt_info_path(sound_path: str | Path) -> Path:
     """Parallel STT/timing sidecar path derived from the exact sound path."""
     return Path(sound_path).with_suffix(".json")
@@ -155,17 +160,38 @@ class SoundSegmentUtil:
         return result
 
     @staticmethod
-    def get_common_voice_tag(paths: list[str]) -> str:
-        result = ""
+    def get_voice_tag_summary(paths: list[str]) -> tuple[str, int]:
+        """
+        Summarizes the voice tags across the given sound segment file paths.
+
+        Returns (most_common_voice_tag, num_other_distinct_tags).
+        Unparsable or voiceless segments are ignored. The "none" placeholder
+        (segment generated without a voice clone) does not compete with real
+        voice tags: if at least one real voice tag is present, only those are
+        ranked; "none" is reported (extra count 0) only when it is the only
+        voice tag present. If no voice tags exist, returns ("", 0).
+        Ties in count are broken alphabetically (first tag wins), keeping
+        the result deterministic.
+        """
+        has_none = False
+        counts: dict[str, int] = {}
         for path in paths:
             sound_segment = SoundSegmentUtil.make_from_file_name(Path(path).name)
             if not sound_segment or not sound_segment.voice:
-                return ""
-            if not result:
-                result = sound_segment.voice
-            elif sound_segment.voice != result:
-                return ""
-        return result
+                continue
+            if sound_segment.voice == NONE_VOICE_TAG:
+                has_none = True
+                continue
+            counts[sound_segment.voice] = counts.get(sound_segment.voice, 0) + 1
+
+        if counts:
+            top_tag = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+            return top_tag, len(counts) - 1
+
+        if has_none:
+            return NONE_VOICE_TAG, 0
+
+        return "", 0
 
     @staticmethod
     def calc_segment_hash(index: int, text: str) -> str:
