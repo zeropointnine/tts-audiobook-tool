@@ -10,6 +10,8 @@ from numpy import ndarray
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_hint_util
+from tts_audiobook_tool.app_support import app_paths
+from tts_audiobook_tool.system_support.browser import get_chromium_info, launch_player_with_chromium
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.model_manager import ModelManager
@@ -99,6 +101,7 @@ class ConcatUtil:
         if not file_cut_indices:
             file_cut_indices = [0]
 
+        last_dest_path = ""
         for i, file_cut_index in enumerate(file_cut_indices):
 
             message = "Creating concatenated audiobook file"
@@ -138,6 +141,7 @@ class ConcatUtil:
                 printt()
                 ask.ask_error(err)
                 return
+            last_dest_path = dest_path
             
             printt(f"{COL_ACCENT}Saved {COL_DEFAULT}{make_terminal_hyperlink(dest_path)}") 
             printt()
@@ -155,12 +159,30 @@ class ConcatUtil:
 
         app_hint_util.show_player_hint(state.prefs)
 
-        hotkey = ask.ask_hotkey(f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} to open output directory in system file explorer: ")
+        chromium_info = get_chromium_info()
+        if chromium_info:
+            prompt = (
+                f"Press {make_hotkey_string('Enter')} to continue, "
+                f"{make_hotkey_string('O')} to open output dir, or "
+                f"{make_hotkey_string('P')} to play file in the browser app: "
+            )
+        else:
+            prompt = (
+                f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('O')} "
+                "to open output directory in system file explorer: "
+            )
+        hotkey = ask.ask_hotkey(prompt)
         printt()
         if hotkey == "o":
             err = open_directory_in_gui(dest_dir)
             if err:
                 ask.ask_error(err)
+        elif hotkey == "p" and chromium_info is not None:
+            launch_player_with_chromium(
+                chromium_path=chromium_info[1],
+                audio_file_path=last_dest_path,
+                user_data_dir=app_paths.get_chromium_user_data_dir(),
+            )
 
     @staticmethod
     def make_file(

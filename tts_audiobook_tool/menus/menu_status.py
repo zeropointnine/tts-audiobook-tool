@@ -25,7 +25,7 @@ class MenuStatus:
             server_tts_text = _make_server_tts_text(state)
             lines.append(("SGL-Omni", server_tts_text))
         else:
-            local_tts_text = _make_local_tts_text(state)        
+            local_tts_text = _make_local_tts_text(state)
             lines.append(("TTS model", local_tts_text))
 
         voice_display_info = Tts.get_class().get_voice_display_info(
@@ -33,13 +33,13 @@ class MenuStatus:
         )
         if voice_display_info is not None:
             lines.append((voice_display_info.status_prefix, voice_display_info.value))
-        
+
         text_text = _make_text_text(state)
         lines.append(("Text", text_text))
 
         stt_text = _make_stt_text(state)
         lines.append(("STT model", stt_text))
-        
+
         memory_text = _make_memory_text()
         if memory_text:
             lines.append(("Memory", memory_text))
@@ -68,12 +68,14 @@ def _make_project_text(state: State) -> str:
 
 def _make_local_tts_text(state: State) -> str:
     """ Eg: Some TTS (special sauce: True) (cuda, loaded)"""
-    
+
     from tts_audiobook_tool.tts import Tts
 
     instance = Tts.get_instance_if_exists()
     text = Tts.get_class().get_menu_text(state.project, instance)
-    
+    if Tts.get_type() == TtsModelType.NONE:
+        text = f"{COL_ERROR}{text}"
+
     extras = []
     if instance:
         device_type = instance.get_device_type()
@@ -91,13 +93,13 @@ def _make_local_tts_text(state: State) -> str:
 
 def _make_server_tts_text(state: State) -> str:
     from tts_audiobook_tool.tts import Tts
-    
+
     if Tts.get_type() == TtsModelType.NONE:
         if SglOmniUtil.get_model_id():
             label = f"{COL_ERROR}Unknown/unsupported"
             model_id = ellipsize(SglOmniUtil.get_model_id(), 40, from_start=True)
             qualifier = f"{QUALIFIER_COLOR}({model_id})"
-        else:                
+        else:
             label = f"{COL_ERROR}Offline"
             url = ellipsize(SglOmniUtil.get_base_url(), 40)
             qualifier = f"{QUALIFIER_COLOR}({url})"
@@ -116,7 +118,7 @@ def _make_server_tts_text(state: State) -> str:
                 qualifier = f"{QUALIFIER_COLOR}(server model id: {model_id})"
             else:
                 qualifier = f"{COL_ERROR}(offline)"
-    
+
     return f"{label}" + (f" {qualifier}" if qualifier else "")
 
 def _make_text_text(state: State) -> str:
@@ -143,7 +145,7 @@ def _make_stt_text(state: State) -> str:
     if qualifiers:
         s2 = ", ".join(qualifiers)
         text += f" {COL_DIM}({s2})"
-    
+
     return text
 
 def _make_memory_text() -> str:
