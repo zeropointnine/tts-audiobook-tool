@@ -242,11 +242,20 @@ class SoundDeviceStream:
         Stops and closes the audio stream, releasing all resources.
         The buffer is also cleared.
         """
-        if self.stream:
-            self.stream.stop()
-            self.stream.close()
-            self.stream = None
-            self.clear_buffer()
+        stream = self.stream
+        self.stream = None
+        if stream is not None:
+            # PortAudio may leave a partially-created stream object behind when
+            # start() fails. Always attempt close even if stop raises, and do
+            # not let best-effort device teardown mask the caller's real error.
+            try:
+                try:
+                    stream.stop()
+                finally:
+                    stream.close()
+            except Exception:
+                pass
+        self.clear_buffer()
 
     @property
     def output_latency(self) -> float:
@@ -266,6 +275,21 @@ class SoundDeviceStream:
         with self.lock:
             # Duration = number of samples / sample rate
             return len(self.buffer) / self.sample_rate
+
+    @property
+    def played_samples(self) -> int:
+        """
+        Samples already consumed by the audio callback, in cumulative-stream
+        indices: everything appended minus whatever is still buffered.
+
+        Unlike play_position_samples this is a pure sample count with no
+        stream-clock or PortAudio latency involved, so it is immune to
+        backend latency quirks.  It advances at 1x device time while the
+        buffer is non-empty and freezes at total_samples_added when the
+        buffer drains, so callers can extrapolate it between anchor reads.
+        """
+        with self.lock:
+            return max(0, self.total_samples_added - len(self.buffer))
 
     @property
     def play_position_samples(self) -> int:

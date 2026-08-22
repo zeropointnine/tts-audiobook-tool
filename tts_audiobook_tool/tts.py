@@ -35,6 +35,11 @@ from tts_audiobook_tool.tts_models.omnivoice_base_model import OmniVoiceBaseMode
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.model_runtime import (
+    ModelRuntimeRole,
+    current_role,
+    require_model_owner,
+)
 from tts_audiobook_tool.util import *
 
 class Tts:
@@ -78,6 +83,10 @@ class Tts:
     # startup from the SGL-Omni sentinel package and immutable for the
     # life of the process
     _backend_mode: TtsBackendKind | None = None
+    _MODEL_REGISTRY: dict[
+        TtsModelType,
+        tuple[type[TtsBaseModel], Callable[[], TtsBaseModel], str],
+    ]
 
     _model_params: dict = {}
     _force_cpu: bool = False
@@ -226,7 +235,10 @@ class Tts:
 
     @staticmethod
     def set_type(value: TtsModelType) -> None:
-        if Tts._type != value:
+        if (
+            Tts._type != value
+            and current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN
+        ):
             Tts.clear_tts_model()
         Tts._type = value
 
@@ -306,15 +318,16 @@ class Tts:
         dirty |= new_params.get("fish_s2_compile_enabled", False) != old_params.get("fish_s2_compile_enabled", False)
         dirty |= new_params.get("pocket_model_code", "") != old_params.get("pocket_model_code", "")
         dirty |= new_params.get("omnivoice_target", "") != old_params.get("omnivoice_target", "")
-        if dirty:
+        if dirty and current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
             Tts.clear_tts_model()
 
     @staticmethod
     def set_force_cpu(value: bool) -> None:
         if Tts._force_cpu != value:
             Tts._force_cpu = value
-            # Clear model, will get lazy re-inited as needed
-            Tts.clear_tts_model()
+            # Interactive main owns configuration only; worker reconciles it.
+            if current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
+                Tts.clear_tts_model()
 
     @staticmethod
     def get_class() -> type[TtsBaseModel]:
@@ -332,6 +345,7 @@ class Tts:
 
     @staticmethod
     def instance_exists() -> bool:
+        require_model_owner("TTS")
         items = [
             Tts._chatterbox,
             Tts._fish_s1,
@@ -359,6 +373,7 @@ class Tts:
 
     @staticmethod
     def get_instance() -> TtsBaseModel:
+        require_model_owner("TTS")
         # Returns existing or newly instantiated instance
         entry = Tts._model_registry_entry(Tts._type)
         if entry is None or entry[1] is None:
@@ -436,6 +451,7 @@ class Tts:
 
     @staticmethod
     def get_instance_if_exists() -> TtsBaseModel | None:
+        require_model_owner("TTS")
         # Returns instance only if it already exists, else none
         entry = Tts._model_registry_entry(Tts._type)
         if entry is None or not entry[2]:
@@ -444,6 +460,7 @@ class Tts:
 
     @staticmethod
     def get_chatterbox() -> ChatterboxBaseModel:
+        require_model_owner("TTS")
         if not Tts._chatterbox:
             model_type = Tts._model_params.get("chatterbox_type")
             assert isinstance(model_type, ChatterboxType), "chatterbox_type not set"
@@ -456,6 +473,7 @@ class Tts:
 
     @staticmethod
     def get_fish_s1() -> FishS1BaseModel:
+        require_model_owner("TTS")
         if not Tts._fish_s1:
             device_type = Tts.get_best_supported_device_type(TtsModelType.FISH_S1)
 
@@ -477,6 +495,7 @@ class Tts:
 
     @staticmethod
     def get_fish_s2() -> FishS2BaseModel:
+        require_model_owner("TTS")
         if not Tts._fish_s2:
             device_type = Tts.get_best_supported_device_type(TtsModelType.FISH_S2)
 
@@ -498,6 +517,7 @@ class Tts:
 
     @staticmethod
     def get_fish_s2_server() -> FishS2ServerBaseModel:
+        require_model_owner("TTS")
         if not Tts._fish_s2_server:
             from tts_audiobook_tool.tts_models.fish_s2_server_model import FishS2ServerModel
             Tts._fish_s2_server = FishS2ServerModel()
@@ -506,6 +526,7 @@ class Tts:
 
     @staticmethod
     def get_glm() -> GlmBaseModel:
+        require_model_owner("TTS")
         if not Tts._glm:
             device_type = Tts.get_best_supported_device_type(TtsModelType.GLM)
             sr = Tts._model_params["glm_sr"]
@@ -517,6 +538,7 @@ class Tts:
 
     @staticmethod
     def get_higgs() -> HiggsV2BaseModel:
+        require_model_owner("TTS")
         if not Tts._higgs_v2:
             device_type = Tts.get_best_supported_device_type(TtsModelType.HIGGS_V2)
             from tts_audiobook_tool.tts_models.higgs_v2_model import HiggsV2Model
@@ -527,6 +549,7 @@ class Tts:
 
     @staticmethod
     def get_higgs_v3() -> HiggsV3ServerBaseModel:
+        require_model_owner("TTS")
         if not Tts._higgs_v3:
             from tts_audiobook_tool.tts_models.higgs_v3_server_model import HiggsV3ServerModel
             Tts._higgs_v3 = HiggsV3ServerModel()
@@ -535,6 +558,7 @@ class Tts:
 
     @staticmethod
     def get_indextts2() -> IndexTts2BaseModel:
+        require_model_owner("TTS")
         if not Tts._indextts2:
             use_fp16 = Tts._model_params.get("indextts2_use_fp16", False)
             from tts_audiobook_tool.tts_models.indextts2_model import IndexTts2Model
@@ -544,6 +568,7 @@ class Tts:
 
     @staticmethod
     def get_mira() -> MiraBaseModel:
+        require_model_owner("TTS")
         if not Tts._mira:
             from tts_audiobook_tool.tts_models.mira_model import MiraModel
             Tts._mira = MiraModel()
@@ -552,6 +577,7 @@ class Tts:
 
     @staticmethod
     def get_moss() -> MossBaseModel:
+        require_model_owner("TTS")
         if not Tts._moss:
             device_type = Tts.get_best_supported_device_type(TtsModelType.MOSS)
             target = Tts._model_params.get("moss_target", "") or MossConfigs.get_default_repo_id()
@@ -567,6 +593,7 @@ class Tts:
 
     @staticmethod
     def get_moss_server() -> MossServerBaseModel:
+        require_model_owner("TTS")
         if not Tts._moss_server:
             from tts_audiobook_tool.tts_models.moss_server_model import MossServerModel
             Tts._moss_server = MossServerModel()
@@ -575,6 +602,7 @@ class Tts:
 
     @staticmethod
     def get_omnivoice() -> OmniVoiceBaseModel:
+        require_model_owner("TTS")
         if not Tts._omnivoice:
             device_type = Tts.get_best_supported_device_type(TtsModelType.OMNIVOICE)
             model_target = Tts._model_params.get("omnivoice_target", "") \
@@ -586,6 +614,7 @@ class Tts:
 
     @staticmethod
     def get_oute() -> OuteBaseModel:
+        require_model_owner("TTS")
         if not Tts._oute:
             from tts_audiobook_tool.tts_models.oute_model import OuteModel
             Tts._oute = OuteModel()
@@ -594,6 +623,7 @@ class Tts:
 
     @staticmethod
     def get_pocket() -> PocketBaseModel:
+        require_model_owner("TTS")
         if not Tts._pocket:
             language = Tts._model_params.get("pocket_model_code", "")
             device_type = Tts.get_best_supported_device_type(TtsModelType.POCKET)
@@ -604,6 +634,7 @@ class Tts:
     
     @staticmethod
     def get_qwen3() -> Qwen3BaseModel:
+        require_model_owner("TTS")
         
         if not Tts._qwen3:
 
@@ -626,6 +657,7 @@ class Tts:
 
     @staticmethod
     def get_qwen3tts_server() -> Qwen3ServerBaseModel:
+        require_model_owner("TTS")
         if not Tts._qwen3tts_server:
             from tts_audiobook_tool.tts_models.qwen3_server_model import Qwen3ServerModel
             Tts._qwen3tts_server = Qwen3ServerModel()
@@ -634,6 +666,7 @@ class Tts:
 
     @staticmethod
     def get_zonos2_server() -> Zonos2ServerBaseModel:
+        require_model_owner("TTS")
         if not Tts._zonos2_server:
             from tts_audiobook_tool.tts_models.zonos2_server_model import Zonos2ServerModel
             Tts._zonos2_server = Zonos2ServerModel()
@@ -642,6 +675,7 @@ class Tts:
 
     @staticmethod
     def get_vibevoice() -> VibeVoiceBaseModel:
+        require_model_owner("TTS")
 
         if not Tts._vibevoice:
 
@@ -662,6 +696,7 @@ class Tts:
 
     @staticmethod
     def clear_tts_model() -> None:
+        require_model_owner("TTS")
         model = Tts.get_instance_if_exists()
         if model:
             model.clear_voice_clone_cache()
@@ -760,7 +795,7 @@ class InstanceDisplayInfo:
 #   (model class, factory returning the existing-or-new instance,
 #    name of the Tts class attribute holding the live instance)
 # Built after the class body so the factory static methods are available.
-Tts._MODEL_REGISTRY: dict[TtsModelType, tuple[type[TtsBaseModel], Callable[[], TtsBaseModel], str]] = {
+Tts._MODEL_REGISTRY = {
     TtsModelType.CHATTERBOX: (ChatterboxBaseModel, Tts.get_chatterbox, "_chatterbox"),
     TtsModelType.FISH_S1: (FishS1BaseModel, Tts.get_fish_s1, "_fish_s1"),
     TtsModelType.FISH_S2: (FishS2BaseModel, Tts.get_fish_s2, "_fish_s2"),

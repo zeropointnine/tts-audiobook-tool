@@ -6,17 +6,16 @@ import threading
 import time
 
 from tts_audiobook_tool import ask
-from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.conversation.conversation_internals import PromptBuilder, ResponseSession, Ui
-from tts_audiobook_tool.app_support import app_hint_util, app_memory
+from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.util import *
 
 from tts_audiobook_tool.system_support.ansi import Ansi
 from tts_audiobook_tool.app_types import Sound
-from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -60,8 +59,7 @@ class Conversation:
     def start(self) -> None:
 
         if not Conversation._run_preflight_checks(self.state):
-            if self.state.prefs.menu_clears_screen:
-                ask.ask_enter_to_continue()
+            ask.ask_enter_to_continue()
             return
 
         self.print_various()
@@ -69,8 +67,9 @@ class Conversation:
         self.init_session_state()
         # Conversation is a top-level session. Do not inherit continuation
         # history from earlier app flows or previous chat sessions.
-        Tts.clear_continuation()
-        Tts.reset_voice_selection_index()
+        reset_error = ModelWorker.reset_chat_session_blocking()
+        if reset_error:
+            raise RuntimeError(reset_error)
         try:
             self.install_runtime()
             self.run_main_loop()
@@ -82,7 +81,8 @@ class Conversation:
     def print_various(self) -> None:
 
         # Warnings
-        warnings = Tts.get_instance().get_warning_issues(self.state.project)
+        inspection, _ = ModelWorker.inspect_tts_blocking(self.state)
+        warnings = list(inspection.warnings) if inspection is not None else []
         if warnings:
             s = "\n".join(warnings)
             printt(f"{COL_DIM_ITALICS}{s}")
@@ -127,19 +127,12 @@ class Conversation:
         if not can_continue:
             return False
 
-        # Warm up models
-        warm_up_result = ModelManager.warm_up_models(state, skip_yamnet=True)
-        if warm_up_result.should_stop:
-            app_support.print_warm_up_result_stop(warm_up_result)
-            if warm_up_result.error:
-                app_memory.gc_ram_vram()
+        inspection, error = ModelWorker.inspect_tts_blocking(state)
+        if error or inspection is None:
+            print_feedback(error or "Couldn't initialize TTS model", is_error=True)
             return False
-
-        # Must check for TTS model blockers again because instance is guaranteed to exist now
-        model_errors = Tts.get_class().get_blocking_issues(state.project, Tts.get_instance_if_exists()) 
-        if model_errors:
-            model_error_string = readiness.format_issues(model_errors, verbose=True)
-            print_feedback(model_error_string, is_error=True)
+        if inspection.blocking_issues:
+            print_feedback("\n".join(inspection.blocking_issues), is_error=True)
             return False
 
         return True
@@ -322,10 +315,7 @@ class Conversation:
         # sound_stream.shut_down, etc.) bypass the queue and don't risk
         # deadlocking ui.wait_idle() on never-processed task_done.
         self.restore_console()
-        model = Tts.get_instance_if_exists()
-        if model is not None:
-            model.clear_stream_state()
-            model.clear_continuation()
+        _ = ModelWorker.reset_chat_session_blocking()
         self.ui.stop()
         self.stop_capture()
         self.sound_stream.shut_down()

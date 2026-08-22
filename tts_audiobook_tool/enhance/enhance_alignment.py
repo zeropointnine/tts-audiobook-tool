@@ -14,10 +14,11 @@ from typing import Generator, List, NamedTuple
 import ffmpeg
 import numpy as np
 import difflib
-from tts_audiobook_tool.app_types import ConcreteWord, Word
+from tts_audiobook_tool.app_types import ConcreteWord, SttVariant, Word
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
@@ -240,19 +241,21 @@ def align_phrases_with_state(
     return result, state, False
 
 
-def transcribe_to_words(path: str) -> list[Word] | None:
+def transcribe_to_words(path: str, prefs: Prefs) -> list[Word] | None:
     """
     Creates a list of Word instances by transcribing the audio at the given file path
     Returns None if interrupted
     """
-    list_of_lists = _transcribe_stream_with_overlap(path)
+    list_of_lists = _transcribe_stream_with_overlap(path, prefs)
     if list_of_lists is None:
         return None
     words_list = _stitch_transcripts(list_of_lists)
     return words_list
 
 
-def _transcribe_stream_with_overlap(path: str) -> list[list[Word]] | None:
+def _transcribe_stream_with_overlap(
+    path: str, prefs: Prefs
+) -> list[list[Word]] | None:
     CHUNK_DURATION = 30
     OVERLAP_DURATION = 5
 
@@ -284,8 +287,17 @@ def _transcribe_stream_with_overlap(path: str) -> list[list[Word]] | None:
         s += f"{Ansi.ERASE_REST_OF_LINE}"
         print(s, end="", flush=True)
 
-        segments, _ = Stt.get_whisper().transcribe(chunk, word_timestamps=True, language=None)
-        transcribed_words = Transcriber.get_words_from_segments(segments)
+        transcription, error = ModelWorker.transcribe_audio_blocking(
+            prefs,
+            chunk,
+            word_timestamps=True,
+            stt_variant_id=SttVariant.LARGE_V3.id,
+        )
+        if error or transcription is None:
+            raise RuntimeError(error or "Worker transcription failed")
+        transcribed_words = Transcriber.get_words_from_segments(
+            transcription.segments  # type: ignore[arg-type]
+        )
         updated_words = []
         for word in transcribed_words:
             updated_word = ConcreteWord(

@@ -1,5 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem
+from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker_protocol import TtsInspected
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
@@ -18,7 +20,17 @@ class VoiceQwen3Menu:
     """
 
     @staticmethod
-    def menu(state: State) -> None:
+    def menu(state: State, inspection: TtsInspected) -> None:
+        metadata = inspection.metadata or {}
+        model_type = str(metadata.get("model_type", state.project.qwen3_model_type))
+        speakers_value = metadata.get("supported_speakers", [])
+        speakers = (
+            [str(value) for value in speakers_value]
+            if isinstance(speakers_value, (list, tuple))
+            else []
+        )
+        defaults_value = metadata.get("generate_defaults", {})
+        generate_defaults = defaults_value if isinstance(defaults_value, dict) else {}
 
         def make_voice_label(_) -> str:
             if not state.project.qwen3_voice_file_name:
@@ -30,7 +42,7 @@ class VoiceQwen3Menu:
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:
-            extra_suffix = f" {COL_DIM}(model type: {COL_ACCENT}{Tts.get_qwen3().model_type}{COL_DIM})"
+            extra_suffix = f" {COL_DIM}(model type: {COL_ACCENT}{model_type}{COL_DIM})"
             return VoiceMenuShared.make_target_label(
                 label_prefix="Select Qwen3-TTS model",
                 target=state.project.qwen3_target,
@@ -40,7 +52,6 @@ class VoiceQwen3Menu:
             )
 
         def make_speaker_label(_) -> str:
-            speakers = Tts.get_qwen3().supported_speakers
             has_only_one = (len(speakers) == 1)
             if has_only_one:
                 speaker_id = speakers[0]
@@ -85,7 +96,7 @@ class VoiceQwen3Menu:
             
             items = []
             
-            match Tts.get_qwen3().model_type:
+            match model_type:
                 case "base":
                     # Voice clone, clear voice clone
                     items.extend(
@@ -98,7 +109,7 @@ class VoiceQwen3Menu:
                 case "custom_voice":
                     # Speaker id, instructions
                     items.append(
-                        MenuItem(make_speaker_label, lambda _, __: ask_speaker_id(state.project))
+                        MenuItem(make_speaker_label, lambda _, __: ask_speaker_id(state.project, speakers))
                     )
                     if state.project.qwen3_speaker_id:
                         items.append(
@@ -142,7 +153,7 @@ class VoiceQwen3Menu:
             )
             items.append(item)
 
-            default_temp = Tts.get_qwen3().generate_defaults.get(
+            default_temp = generate_defaults.get(
                 "temperature", Qwen3BaseModel.TEMPERATURE_FALLBACK_DEFAULT
             )
             item = VoiceMenuShared.make_temperature_item(
@@ -154,7 +165,7 @@ class VoiceQwen3Menu:
             )
             items.append(item)
 
-            default_top_p = Tts.get_qwen3().generate_defaults.get(
+            default_top_p = generate_defaults.get(
                 "top_p", Qwen3BaseModel.TOP_P_DEFAULT
             )
             item = VoiceMenuShared.make_top_p_item(
@@ -164,7 +175,7 @@ class VoiceQwen3Menu:
             )
             items.append(item)
 
-            default_top_k = Tts.get_qwen3().generate_defaults.get(
+            default_top_k = generate_defaults.get(
                 "top_k", Qwen3BaseModel.TOP_K_DEFAULT
             )
             item = VoiceMenuShared.make_top_k_item(
@@ -174,7 +185,7 @@ class VoiceQwen3Menu:
             )
             items.append(item)
 
-            default_rp = Tts.get_qwen3().generate_defaults.get(
+            default_rp = generate_defaults.get(
                 "repetition_penalty", Qwen3BaseModel.REPETITION_PENALTY_DEFAULT
             )
             item = VoiceMenuShared.make_repetition_penalty_item(
@@ -189,7 +200,6 @@ class VoiceQwen3Menu:
         
         # TODO: not using atm; revisit, reword
         def make_subheading(_: State) -> str:
-            model_type = Tts.get_qwen3().model_type
             subheading = "Qwen3-TTS supports different \"model types\".\n"
             subheading += f"The current model type, {model_type}, requires\n" 
             match model_type:
@@ -212,11 +222,12 @@ def target_submenu(state: State) -> None:
         preset_targets=Qwen3BaseModel.PRESET_REPO_IDS,
         current_target=state.project.qwen3_target,
         default_target=Qwen3BaseModel.DEFAULT_REPO_ID,
-        ask_custom_target=lambda: ask_target(state.project),
-        apply_target=lambda target: apply_model_and_validate(state.project, target),
+        ask_custom_target=lambda: ask_target(state),
+        apply_target=lambda target: apply_model_and_validate(state, target),
     )
 
-def ask_target(project: Project) -> None:
+def ask_target(state: State) -> None:
+    project = state.project
 
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
@@ -226,10 +237,11 @@ def ask_target(project: Project) -> None:
         project=project,
         prompt=prompt,
         current_target=project.qwen3_target, 
-        callback=apply_model_and_validate
+        callback=lambda _, target: apply_model_and_validate(state, target)
     )
     
-def apply_model_and_validate(project: Project, target: str) -> None: 
+def apply_model_and_validate(state: State, target: str) -> None:
+    project = state.project 
 
     previous_target = project.qwen3_target
     previous_model_type = project.qwen3_model_type
@@ -239,58 +251,46 @@ def apply_model_and_validate(project: Project, target: str) -> None:
         project.qwen3_target = previous_target
         project.qwen3_model_type = previous_model_type
         project.qwen3_speaker_id = previous_speaker_id
-        Tts.set_model_params_using_project(project)
-        Tts.clear_tts_model()
+        _ = ModelWorker.clear_models_if_running_blocking()
 
     project.qwen3_target = target
-    Tts.set_model_params_using_project(project)
-    Tts.clear_tts_model() # for good measure
+    _ = ModelWorker.clear_models_if_running_blocking()
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
     printt()
 
-    # Instantiate model with new settings and check if valid
-    try:
-        instance = Tts.get_qwen3()
-        if not instance.is_model_type_supported:
-            print_feedback(f"Unsupported type: {instance.model_type}", is_error=True)
-            revert()
-            ask.ask_enter_to_continue()
-            return        
-        
-        # Success
-        
-        if project.qwen3_speaker_id:
-            # Invalidate speaker id (but keep instructions ig)
-            project.qwen3_speaker_id = ""
-
-        # Now that model has been validated (and is loaded), save the model type
-        project.qwen3_model_type = instance.model_type
-        
-        project.save()
-        print_feedback("Model set:", target)
-        ask.ask_enter_to_continue()
-
-    except (OSError, Exception) as e:
+    inspection, error = ModelWorker.inspect_tts_blocking(state)
+    if error or inspection is None:
         printt()
         printt(f"{COL_ERROR}Contents at {target} appear to be invalid:")
-        printt(f"{COL_ERROR}{make_error_string(e)}")
+        printt(f"{COL_ERROR}{error}")
         printt()
         revert()
         ask.ask_enter_to_continue()
+        return
+
+    metadata = inspection.metadata or {}
+    inspected_type = str(metadata.get("model_type", ""))
+    if not bool(metadata.get("is_model_type_supported", True)):
+        print_feedback(f"Unsupported type: {inspected_type}", is_error=True)
+        revert()
+        ask.ask_enter_to_continue()
+        return
+    if project.qwen3_speaker_id:
+        project.qwen3_speaker_id = ""
+    project.qwen3_model_type = inspected_type
+    project.save()
+    print_feedback("Model set:", target)
+    ask.ask_enter_to_continue()
 
 def on_clear_model_target(state: State, __: MenuItem) -> None:
     state.project.qwen3_target = ""
     state.project.qwen3_model_type = ""
     state.project.save()
-    Tts.set_model_params_using_project(state.project)
-    Tts.clear_tts_model()
+    _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")
-    # Preemptively re-instantiate model (can't be helped)
-    _ = Tts.get_qwen3()
 
-def ask_speaker_id(project: Project) -> None:
-    speakers = Tts.get_qwen3().supported_speakers
+def ask_speaker_id(project: Project, speakers: list[str]) -> None:
     if len(speakers) == 1:
         message = "Model has only one speaker id ({speakers[0]})"
         print_feedback(message)

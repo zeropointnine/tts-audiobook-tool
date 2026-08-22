@@ -1,6 +1,11 @@
 import signal
+from typing import Protocol
 
 from tts_audiobook_tool.app_types import SingletonBase
+
+
+class InterruptEvent(Protocol):
+    def is_set(self) -> bool: ...
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import *
 
@@ -14,6 +19,7 @@ class Interrupts(SingletonBase):
 
     _mode = ""
     _flag = False
+    _external_event: InterruptEvent | None = None
 
     def __init__(self):
         ...
@@ -28,15 +34,20 @@ class Interrupts(SingletonBase):
         self._mode = mode
         self._flag = False
 
+    def set_external_event(self, event: InterruptEvent | None) -> None:
+        """Use a process-safe event as an additional cancellation source."""
+        self._external_event = event
+
     @property
     def did_interrupt(self) -> bool:
-        return self._flag
+        event = self._external_event
+        return self._flag or (event is not None and event.is_set())
 
     def clear(self) -> bool:
         """
         Returns did_interrupt as a convenience
         """
-        result = self._flag
+        result = self.did_interrupt
         self._mode = ""
         self._flag = False
         return result

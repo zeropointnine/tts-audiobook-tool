@@ -13,7 +13,7 @@ from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
-from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.browser import (
     get_chromium_info,
@@ -60,26 +60,31 @@ class ConcatMenu:
             return label
 
         def make_items(_: State) -> list[MenuItem]:
-            
+
             file_type_value = state.project.export_type.label
             if state.project.export_type == ExportType.AAC:
                 file_type_value += f" {COL_DIM}{state.prefs.aac_bitrate}"
 
             items = []
-                
-            items.append( 
-                MenuItem(make_start_label, lambda _, __: ask_output_indices_and_make(state)) 
+
+            items.append(
+                MenuItem(make_start_label, lambda _, __: ask_output_indices_and_make(state))
             )
 
             is_limited = state.project.has_multiple_book_sections()
             label_function = make_split_points_label if is_limited else make_section_markers_label
-            items.append( 
-                MenuItem(label_function, lambda _, __: SectionMarkersMenu.menu(state)) 
+            section_markers_action = (
+                SectionMarkersMenu.edit_section_markers
+                if is_limited
+                else SectionMarkersMenu.menu
+            )
+            items.append(
+                MenuItem(label_function, lambda _, __: section_markers_action(state))
             )
 
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("File type", file_type_value), 
+                    lambda _: make_menu_label("File type", file_type_value),
                     lambda _, __: ConcatMenu.file_type_menu(state),
                     superlabel="Options"
                 )
@@ -101,7 +106,7 @@ class ConcatMenu:
                     lambda _, __: ConcatMenu.subdivide_menu(state)
                 )
             )
-                
+
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("Section break sound effect", state.project.use_break_sound_effect),
@@ -120,12 +125,12 @@ class ConcatMenu:
                 )
             )
 
+            label = make_menu_label(label="Generative upsampling", value=state.project.use_upsampler)
+            if Tts.get_type().value.sample_rate >= 44_100 and state.project.use_upsampler:
+                label += f"{COL_ERROR}*"
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label(
-                        label="Generative upsampling",
-                        value=state.project.use_upsampler,
-                    ),
+                    label,
                     lambda _, __: ConcatMenu.upsample_menu(state)
                 )
             )
@@ -144,7 +149,7 @@ class ConcatMenu:
             if can_and_haz:
                 items.append(
                     MenuItem(
-                        f"Open audiobook file in the player app", 
+                        f"Open audiobook file in the player app",
                         lambda _, __: ConcatMenu.open_audiobook_menu(state),
                         superlabel=" ", superlabel_no_blank_line=True # yes rly
                     )
@@ -238,9 +243,11 @@ class ConcatMenu:
 
     @staticmethod
     def upsample_menu(state: State) -> None:
-        
+
+        lava_sr_available, _ = ModelWorker.probe_lava_sr_blocking()
+
         def on_select(value: bool) -> None:
-            if value and not LavaSrUtil.has_lava_sr():
+            if value and not lava_sr_available:
                 print_feedback(
                     "LavaSR v2 is not installed; generative upsampling cannot be enabled",
                     is_error=True,
@@ -250,12 +257,18 @@ class ConcatMenu:
             state.project.save()
             print_feedback(f"Generative upsampling set to: {value}")
 
-        if not LavaSrUtil.has_lava_sr():
+        if not lava_sr_available:
             subheading = f"{Ansi.ITALICS}LavaSR v2 upsampler not installed\n"
-        else: 
+        else:
             subheading = UPSAMPLE_SUBHEADING
             link = text_util.make_terminal_hyperlink(LAVA_SR_PROJECT_URL, "LavaSR")
             subheading = subheading.replace("%1", link)
+            if Tts.get_type().value.sample_rate >= 44_100:
+                subheading += (
+                    "\n"
+                    f"{COL_ERROR}*{COL_DEFAULT} {Tts.get_type().value.ui['short_name']} already outputs audio at a samplerate of {Tts.get_type().value.sample_rate}."
+                    "\n"
+                )
 
         MenuUtil.options_menu(
             state=state,
@@ -309,7 +322,7 @@ class ConcatMenu:
 
     @staticmethod
     def open_audiobook_menu(state: State) -> None:
-        
+
         if chromium_info is None:
             return
 
@@ -318,7 +331,7 @@ class ConcatMenu:
         if not file_infos:
             print_feedback("No files found")
             return
-        
+
         user_data_dir = app_paths.get_chromium_user_data_dir()
 
         def on_item(_: State, item: MenuItem) -> None:
@@ -336,7 +349,7 @@ class ConcatMenu:
                 item = MenuItem(label, on_item, file_path)
                 items.append(item)
             return items
-        
+
         subheading = OPEN_AUDIOBOOK_SUBHEADING
         subheading = subheading.replace("%1", chromium_info[0])
         subheading = subheading.replace("%2", user_data_dir)
@@ -360,7 +373,7 @@ def ask_output_indices_and_make(state: State) -> None:
 
     should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.markers) > 0
     if should_ask_file_numbers:
-        
+
         infos = OutputRangeInfo.make_output_range_infos(state.project)
 
         result = ask_output_indices(infos)
@@ -404,8 +417,8 @@ def ask_output_indices_and_make(state: State) -> None:
             return
 
     ConcatUtil.make_files(
-        state=state, 
-        file_cut_indices=output_indices, 
+        state=state,
+        file_cut_indices=output_indices,
         bookmark_indices=bookmark_indices
     )
 
@@ -440,7 +453,7 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
         item_numbers = ", ".join(str(index + 1) for index in missing_audio_indices)
         print_feedback(f"No generated audio for chapter file: {item_numbers}", is_error=True)
         return None
-    
+
     return indices
 
 chromium_info = get_chromium_info()
@@ -454,21 +467,21 @@ mobile devices or in noisy environments.
 SUBDIVIDE_SUBHEADING = \
 """Affects text highlighting in the player/reader app.
 When False, highlighted text maps directly to the TTS prompts used to generate the sound segments.
-When True, highlighted text is further sub-segmented by phrase (Requires \"speech-to-text validation\" 
+When True, highlighted text is further sub-segmented by phrase (Requires \"speech-to-text validation\"
 to be enabled during TTS sound generation).
 """
 
 SECTION_BREAK_SUBHEADING = \
-"""In the concatenation step, inserts a subtle \"page turn\" sound effect when 
-two or more consecutive blank lines are encountered in the text. 
+"""In the concatenation step, inserts a subtle \"page turn\" sound effect when
+two or more consecutive blank lines are encountered in the text.
 This can be a useful audible cue, so long as the text is formatted for it.
 """
 
 OPEN_AUDIOBOOK_SUBHEADING = \
-f"""Select file to be opened in the player app using %1, which will be 
-launched with a dedicated user profile and the following flags 
+f"""Select file to be opened in the player app using %1, which will be
+launched with a dedicated user profile and the following flags
 to enable opening local audio files without user input:
-  {COL_DIM}--allow-file-access-from-files 
+  {COL_DIM}--allow-file-access-from-files
   --autoplay-policy=no-user-gesture-required
   --user-data-dir=%2
 """
@@ -477,7 +490,7 @@ HIGH_SHELF_SUBHEADING = \
 """Applies a high-shelf equalizer pass to compensate for dull or muffled-sounding TTS output.
 May be useful for lower-fidelity TTS models.
 
-This setting also applies to: 
+This setting also applies to:
 Realtime playback, LLM voice chat, and stand-alone server
 """
 
@@ -487,8 +500,8 @@ Applies to audiobook export, realtime playback, voice chat, and the standalone s
 """
 
 UPSAMPLE_SUBHEADING = \
-"""Uses %1 to enhance speech and generate higher-frequency detail, 
+"""Uses %1 to enhance speech and generate higher-frequency detail,
 producing 48 kHz audio.
 
-FLAC output is recommended to preserve the generated detail.
+FLAC file output is recommended to preserve the generated detail.
 """

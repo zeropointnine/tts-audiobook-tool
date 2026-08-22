@@ -6,6 +6,8 @@ import numpy as np
 from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant, Word
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.sound.sound_util import SoundUtil
+from tts_audiobook_tool.model_runtime import ModelRuntimeRole, current_role
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.stt import Stt
 
 from tts_audiobook_tool.util import make_error_string
@@ -28,6 +30,7 @@ class Transcriber:
             language_code: str,
             stt_variant: SttVariant = SttVariant.LARGE_V3,
             stt_config: SttConfig = SttConfig.CUDA_FLOAT16,
+            state: object | None = None,
     ) -> list[Word] | str:
         """
         All whisper transcription should be done through here.
@@ -38,6 +41,30 @@ class Transcriber:
         Makes temporary resampled audio if necessary.
         """
         sound = Transcriber.prepare_sound_for_whisper(sound)
+
+        if current_role() is ModelRuntimeRole.INTERACTIVE_MAIN:
+            if state is None:
+                return "Interactive transcription requires application state"
+            result, error = ModelWorker.transcribe_audio_blocking(
+                state,
+                sound.data,
+                language=language_code or None,
+                word_timestamps=True,
+                stt_variant_id=stt_variant.id,
+                stt_config_id=stt_config.id,
+            )
+            if error or result is None:
+                return error or "Worker transcription failed"
+            if not result.language_supported and language_code:
+                result, error = ModelWorker.transcribe_audio_blocking(
+                    state,
+                    sound.data,
+                    language=None,
+                    word_timestamps=True,
+                )
+                if error or result is None:
+                    return error or "Worker transcription failed"
+            return Transcriber.get_words_from_segments(result.segments)  # type: ignore[arg-type]
 
         Stt.set_variant(stt_variant)
         Stt.set_config(stt_config)

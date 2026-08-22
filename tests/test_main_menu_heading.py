@@ -1,6 +1,6 @@
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.menus.main_menu import get_heading_tts_text
+from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
@@ -14,6 +14,21 @@ def make_state() -> State:
     state._prefs = Prefs()
     state._project = Project(dir_path="")
     return state
+
+
+def test_main_menu_marks_itself_shown_after_render(monkeypatch):
+    state = make_state()
+    state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+    captured = {}
+
+    def menu(*args, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("tts_audiobook_tool.menus.main_menu.MenuUtil.menu", menu)
+
+    MainMenu.menu(state)
+
+    assert captured["on_shown"] == state.mark_main_menu_shown
 
 
 def preserve_tts_and_sgl_state():

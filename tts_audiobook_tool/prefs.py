@@ -40,9 +40,8 @@ class Prefs(Saveable):
             chat_save: bool = PROJECT_DEFAULT_CHAT_SAVE,
             chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
+            save_gen_log: bool = False,
             play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
-            menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT,
-            source_dict_keys: set[str] | None = None
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -70,17 +69,8 @@ class Prefs(Saveable):
         self._chat_save = chat_save
         self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
+        self._save_gen_log = save_gen_log
         self._play_on_generate = play_on_generate
-
-        # When True: 
-        # - Menu clears screen, feedback text is always followed by a keypress prompt
-        # - Menu always leads with a status text block
-        self._menu_clears_screen = menu_clears_screen
-
-        # Top-level keys that were present in the source prefs JSON when this instance
-        # was loaded. This lets callers distinguish persisted keys from values that
-        # were filled in from defaults/back-compat logic during load().
-        self.source_dict_keys = source_dict_keys if source_dict_keys is not None else set()
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -173,6 +163,13 @@ class Prefs(Saveable):
             return Prefs.recover_from_malformed_file(file_path, reason)
 
         dirty = False
+
+        # Mandatory migration: menus now always use the full-screen UI. The legacy
+        # key is omitted from the Prefs instance and from the normalized JSON payload.
+        had_legacy_menu_preference = "menu_clears_screen" in prefs_dict
+        legacy_menu_did_not_clear = prefs_dict.get("menu_clears_screen") is False
+        if had_legacy_menu_preference:
+            dirty = True
 
         # Migration-related (properties which used to but no longer exist in Preferences)
         if save_if_dirty:            
@@ -344,16 +341,16 @@ class Prefs(Saveable):
             save_debug_files = False
             dirty = True
 
+        # Save generation log
+        save_gen_log = prefs_dict.get("save_gen_log", False)
+        if not isinstance(save_gen_log, bool):
+            save_gen_log = False
+            dirty = True
+
         # Play on generate
         play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
         if not isinstance(play_on_generate, bool):
             play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
-            dirty = True
-
-        # Menu clears screen
-        menu_clears_screen = prefs_dict.get("menu_clears_screen", MENU_CLEARS_SCREEN_DEFAULT)
-        if not isinstance(menu_clears_screen, bool):
-            menu_clears_screen = MENU_CLEARS_SCREEN_DEFAULT
             dirty = True
 
         # Make prefs instance
@@ -378,17 +375,20 @@ class Prefs(Saveable):
             chat_save=chat_save,
             chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
+            save_gen_log=save_gen_log,
             play_on_generate=play_on_generate,
-            menu_clears_screen=menu_clears_screen,
             hints=hint_prefs,
-            source_dict_keys=set(prefs_dict.keys())
         )
 
-        from tts_audiobook_tool.util import set_menu_clears_screen
-        set_menu_clears_screen(prefs._menu_clears_screen)
-
-        if dirty and save_if_dirty:
+        # This removed preference must be cleaned during startup even when the
+        # caller suppresses ordinary default/validation normalization.
+        if dirty and (save_if_dirty or had_legacy_menu_preference):
             prefs.save()
+
+        if legacy_menu_did_not_clear:
+            from tts_audiobook_tool.constants_hints import HINT_FULL_SCREEN_UI
+            hints.show_hint(HINT_FULL_SCREEN_UI, and_prompt=True)
+
         return prefs
 
     @property
@@ -408,22 +408,20 @@ class Prefs(Saveable):
         self._save_debug_files = value
 
     @property
+    def save_gen_log(self) -> bool:
+        return self._save_gen_log
+
+    @save_gen_log.setter
+    def save_gen_log(self, value: bool):
+        self._save_gen_log = value
+
+    @property
     def play_on_generate(self) -> bool:
         return self._play_on_generate
 
     @play_on_generate.setter
     def play_on_generate(self, value: bool):
         self._play_on_generate = value
-
-    @property
-    def menu_clears_screen(self) -> bool:
-        return self._menu_clears_screen
-
-    @menu_clears_screen.setter
-    def menu_clears_screen(self, value: bool) -> None:
-        self._menu_clears_screen = value
-        from tts_audiobook_tool.util import set_menu_clears_screen
-        set_menu_clears_screen(value)
 
     def get_hint(self, key: str) -> bool:
         return bool(self._hints.get(key, False))
@@ -628,8 +626,8 @@ class Prefs(Saveable):
                 "chat_save": self._chat_save,
                 "chat_save_mic": self._chat_save_mic,
                 "save_debug_files": self._save_debug_files,
+                "save_gen_log": self._save_gen_log,
                 "play_on_generate": self._play_on_generate,
-                "menu_clears_screen": self._menu_clears_screen,
             }
 
         err = JsonSaveUtil.save(

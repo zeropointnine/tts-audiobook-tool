@@ -1,17 +1,18 @@
 from dataclasses import replace
 from tts_audiobook_tool.app_types import Strictness
-from tts_audiobook_tool import ask, text_util
+from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -24,9 +25,7 @@ class ProjectMenu:
     def menu(state:State) -> None:
 
         def make_heading(_: State) -> str:
-            value = text_util.make_terminal_hyperlink(state.project.dir_path, is_file=True) if state.project.dir_path else "none"
-            heading = make_menu_label("Project", value) if not state.prefs.menu_clears_screen else "Project"
-            return heading
+            return "Project"
 
         def on_new_project(_: State, __: MenuItem) -> None:
             ProjectNewMenu.menu(state)
@@ -140,9 +139,13 @@ def on_language(state: State, __: MenuItem) -> None:
 
     # Chatterbox Multilingual special case
     if Tts.get_type() == TtsModelType.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
-        instance = Tts.get_instance() # Force model instantiation
-        assert(isinstance(instance, ChatterboxBaseModel))
-        required_model_languages = instance.supported_languages_multi()
+        inspection, error = ModelWorker.inspect_tts_blocking(state)
+        if error or inspection is None:
+            ask.ask_error(error or "Couldn't inspect Chatterbox model")
+            return
+        languages = (inspection.metadata or {}).get("supported_languages_multi", [])
+        if isinstance(languages, (list, tuple)):
+            required_model_languages = [str(value) for value in languages]
         printt(f"Chatterbox-Multilingual requires one of the following language codes:\n{required_model_languages}")
         printt()
 

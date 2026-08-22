@@ -5,6 +5,11 @@ from typing import Any, Protocol, Sequence, cast
 import numpy as np
 
 from tts_audiobook_tool.app_types import ConcreteSegment, ConcreteWord, SttConfig, SttVariant
+from tts_audiobook_tool.model_runtime import (
+    ModelRuntimeRole,
+    current_role,
+    require_model_owner,
+)
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.util import *
 
@@ -149,8 +154,9 @@ class Stt:
     def set_variant(value: SttVariant) -> None:
         if value != Stt._variant:
             Stt._variant = value
-            # Clear model, will get lazy re-inited as needed
-            Stt.clear_stt_model()
+            # Interactive main owns configuration only; worker reconciles it.
+            if current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
+                Stt.clear_stt_model()
 
     @staticmethod
     def get_config() -> SttConfig:
@@ -160,11 +166,13 @@ class Stt:
     def set_config(value: SttConfig) -> None:
         if value != Stt._config:
             Stt._config = value
-            # Clear model, will get lazy re-inited as needed
-            Stt.clear_stt_model()
+            # Interactive main owns configuration only; worker reconciles it.
+            if current_role() is not ModelRuntimeRole.INTERACTIVE_MAIN:
+                Stt.clear_stt_model()
     
     @staticmethod
     def get_whisper() -> WhisperBackend:
+        require_model_owner("STT")
         """
         Returns lazy-initialized whisper backend instance.
         """
@@ -249,10 +257,12 @@ class Stt:
 
     @staticmethod
     def has_instance() -> bool:
+        require_model_owner("STT")
         return Stt._whisper is not None
 
     @staticmethod
     def clear_stt_model() -> None:
+        require_model_owner("STT")
         if Stt._whisper:
             Stt._whisper = None
             Stt._did_eager_warm_up_mlx = False

@@ -1,6 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
@@ -59,7 +60,7 @@ class VoiceOmniVoiceMenu:
             s.project.omnivoice_target = ""
             s.project.save()
             Tts.set_model_params_using_project(s.project)
-            Tts.clear_tts_model()
+            _ = ModelWorker.clear_models_if_running_blocking()
             print_feedback("Cleared, will use default model")
 
 
@@ -85,7 +86,7 @@ class VoiceOmniVoiceMenu:
                 items.append(MenuItem("Clear instructions", on_clear_instruct))
 
             items.append(
-                MenuItem(make_target_label, lambda _, __: ask_target(state.project))
+                MenuItem(make_target_label, lambda _, __: ask_target(state))
             )
             if state.project.omnivoice_target:
                 items.append(MenuItem("Clear custom model", on_clear_model_target))
@@ -169,7 +170,8 @@ def validate_instruct(instruct: str) -> tuple[str, str]:
     return "", normalized
 
 
-def ask_target(project: Project) -> None:
+def ask_target(state: State) -> None:
+    project = state.project
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"k2-fsa/OmniVoice\" or \"/path/to/local/checkpoint\""
@@ -177,27 +179,25 @@ def ask_target(project: Project) -> None:
         project=project,
         prompt=prompt,
         current_target=project.omnivoice_target,
-        callback=apply_target
+        callback=lambda _, target: apply_target(state, target)
     )
 
 
-def apply_target(project: Project, target: str) -> None:
+def apply_target(state: State, target: str) -> None:
+    project = state.project
     previous_target = project.omnivoice_target
 
     def revert() -> None:
         project.omnivoice_target = previous_target
-        Tts.set_model_params_using_project(project)
-        Tts.clear_tts_model()
+        _ = ModelWorker.clear_models_if_running_blocking()
 
     project.omnivoice_target = target
-    Tts.set_model_params_using_project(project)
-    Tts.clear_tts_model() # for good measure
+    _ = ModelWorker.clear_models_if_running_blocking()
 
-    try:
-        Tts.get_omnivoice()
-    except Exception as e:
+    inspection, error = ModelWorker.inspect_tts_blocking(state)
+    if error or inspection is None:
         revert()
-        print_feedback(f"Failed to load OmniVoice model: {e}", is_error=True)
+        print_feedback(f"Failed to load OmniVoice model: {error}", is_error=True)
         return
 
     project.save()

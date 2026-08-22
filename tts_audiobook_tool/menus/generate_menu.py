@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from tts_audiobook_tool import app_support
-from tts_audiobook_tool.app_types import Strictness, SttVariant, VoiceSelectMode
+from tts_audiobook_tool.app_types import Strictness, VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.app_support import app_hint_util, hints
 from tts_audiobook_tool import ask
@@ -11,7 +10,6 @@ from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.generate_util import GenerateUtil
-from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
@@ -28,6 +26,7 @@ from tts_audiobook_tool.textual.generate_editor import (
     GenerateEditor,
     QuickGenerationRequested,
 )
+from tts_audiobook_tool.textual.generation_app import run_generation_modal
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -81,12 +80,7 @@ class GenerateMenu:
 
         # Menu
         def heading_maker(_: State) -> str:
-            s = "Generate sound segments"
-            if not state.prefs.menu_clears_screen:
-                total_segments_generated = state.project.sound_segments.num_generated()
-                num_complete_label = f"{COL_DIM}({COL_ACCENT}{total_segments_generated}{COL_DIM} of {COL_ACCENT}{len(state.project.phrase_groups)}{COL_DIM} total lines complete)"
-                s += " " + num_complete_label
-            return s
+            return "Generate sound segments"
 
         def items_maker(_: State) -> list[MenuItem]:
 
@@ -273,7 +267,7 @@ class GenerateMenu:
             state.project.save()
             print_feedback(f"Word error tolerance set to:", state.project.strictness.label)
 
-        warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, Tts.get_instance_if_exists())
+        warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, None)
 
         if not Whitelist.supports_language(state.project.language_code):
             low_desc = f"{Ansi.ITALICS}Highly recommended when language is not {list(Whitelist.LANGUAGES.keys())}"
@@ -310,7 +304,7 @@ def make_tolerance_label(state: State) -> str:
         label="Word error tolerance",
         value=state.project.strictness.label
     )
-    warning = Tts.get_class().get_strictness_warning(state.project.strictness, state.project, Tts.get_instance_if_exists())
+    warning = Tts.get_class().get_strictness_warning(state.project.strictness, state.project, None)
     if warning:
         # Add red asterisk
         label += f"{COL_ERROR}*"
@@ -333,8 +327,7 @@ def count_out_of_range_voice_indices(
 def make_retries_label(state: State) -> str:
     return make_menu_label(
         label="Max retries",
-        value=state.project.max_retries,
-        default=PROJECT_MAX_RETRIES_DEFAULT
+        value=state.project.max_retries
     )
 
 def make_limit_silence_gaps_label(state: State) -> str:
@@ -351,8 +344,7 @@ def make_limit_silence_gaps_label(state: State) -> str:
 def make_gen_auto_concat_label(state: State) -> str:
     return make_menu_label(
         label="Concatenate when finished",
-        value=state.project.gen_auto_concat,
-        default=PROJECT_DEFAULT_GEN_AUTO_CONCAT
+        value=state.project.gen_auto_concat
     )
 
 def ask_retries(state: State) -> None:
@@ -473,38 +465,18 @@ def do_generate(state: State) -> None:
     if not b:
         return
 
-    # Print heading
-    message = f"Generating {len(indices)} audio segment/s..."
-    if state.prefs.stt_variant == SttVariant.DISABLED:
-        message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
-    MenuUtil.print_heading(state, message, dont_clear=True)
-    printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
-    printt()
-
-    # Generate
-    did_interrupt = GenerateUtil.generate_files(
+    # Generate in full-screen modal.
+    # The model worker remains alive after the modal app exits.
+    generation_result = run_generation_modal(
         state=state,
-        indices_set=indices,
+        indices=indices,
         batch_size=ProjectVoiceUtil.get_batch_size(state.project),
-        is_regen=False
+        is_regen=False,
     )
 
-    if did_interrupt:
-        ask.ask_enter_to_continue()
-        return
-
-    app_support.play_done_sound()
-
-    if state.project.gen_auto_concat:
+    if generation_result.completed and state.project.gen_auto_concat:
         printt()
         ConcatUtil.auto_concat_after_generation(state)
-        return
-
-    s = f"Press {make_hotkey_string('Enter')}, or press {make_hotkey_string('C')} to create audiobook file now: \a"
-    hotkey = ask.ask_hotkey(s)
-    printt() # TODO revisit
-    if hotkey == "c":
-        ConcatMenu.menu(state)
 
 # ---
 

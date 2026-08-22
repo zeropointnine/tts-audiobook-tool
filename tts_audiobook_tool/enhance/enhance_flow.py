@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from tts_audiobook_tool.app_support import app_hashing, app_paths, hints, app_hint_util
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
-from tts_audiobook_tool.app_types import SttVariant, Word
+from tts_audiobook_tool.app_types import Word
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_hints import *
@@ -14,7 +14,6 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.enhance import enhance_alignment
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
@@ -181,22 +180,15 @@ def make(
         MenuUtil.print_heading(None, f"Transcribing audio... {COL_DIM}(This may take some time)", dont_clear=True, non_menu=True)
         printt()
 
-        # Always use best whisper model
-        Stt.set_variant(SttVariant.LARGE_V3)
-
-        # Warm up
-        _ = Stt.get_whisper()
-
-        words = enhance_alignment.transcribe_to_words(str(source_audio_path))
+        words = enhance_alignment.transcribe_to_words(
+            str(source_audio_path), prefs
+        )
         if words is None: # interrupted
             printt("")
             print_feedback("Interrupted")
             return False
 
         printt("\a")
-
-        # Restore variant / clean up model if necessary
-        Stt.set_variant(prefs.stt_variant)
 
         # Save transcription data to pickle
         pickle_path = _make_transcription_pickle_file_path(source_audio_hash)

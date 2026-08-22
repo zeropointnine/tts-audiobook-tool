@@ -29,7 +29,7 @@ class LlmSession:
         max_tokens: int | None = None,
         temperature: float = 0.7,
         api_type: str | None = None,
-        timeout: float = 120.0,
+        timeout: float | tuple[float, float] = (15.0, 120.0),
         verbose: bool = False,
     ) -> None:
         """
@@ -43,7 +43,9 @@ class LlmSession:
             extra_params: Provider-specific params merged into the request payload as-is (e.g.
                 {"reasoning_effort": "high"} for OpenAI, {"thinking": {"type": "enabled"}} for Anthropic).
             api_type: Force "openai" or "anthropic" format. None = auto-detect from URL.
-            timeout: HTTP request timeout in seconds.
+            timeout: HTTP request timeout. A single float sets both the connection and read
+                timeout in seconds. A (connect, read) tuple sets them independently
+                (default: (15.0, 120.0) — a fast connection failure with a lenient read window).
         """
         self.api_endpoint_url = api_endpoint_url
         self.token = token

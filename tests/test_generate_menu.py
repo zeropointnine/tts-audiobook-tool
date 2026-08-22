@@ -14,6 +14,8 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
 )
 from tts_audiobook_tool.textual.generate_editor import QuickGenerationRequested
+from tts_audiobook_tool.textual.generation_app import GenerationModalResult
+from tts_audiobook_tool.model_worker_protocol import GenerationTerminalStatus
 from tts_audiobook_tool.tts import Tts
 
 
@@ -262,6 +264,86 @@ def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) ->
         ("Save failed: cleanup failed", True),
         ("Couldn't load textual css", True),
     ]
+
+
+def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
+    sound_segments = SimpleNamespace(
+        num_generated=lambda: 0,
+        num_generated_in_current_range=lambda: 0,
+    )
+    project = SimpleNamespace(
+        phrase_groups=[object()],
+        sound_segments=sound_segments,
+        gen_auto_concat=True,
+    )
+    state = cast(State, SimpleNamespace(project=project, prefs=object()))
+    concat_calls: list[State] = []
+    result_status = [GenerationTerminalStatus.COMPLETED]
+
+    monkeypatch.setattr(
+        generate_menu_module.readiness,
+        "get_generate_blocker_text",
+        lambda _state, verbose: "",
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ProjectUtil,
+        "get_selected_indices_not_generated",
+        lambda _project: {0},
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ProjectUtil,
+        "generate_range_string_display",
+        lambda _project: "all",
+    )
+    monkeypatch.setattr(
+        generate_menu_module.app_hint_util,
+        "show_pre_inference_hints",
+        lambda _prefs, _project: True,
+    )
+    monkeypatch.setattr(generate_menu_module.MenuUtil, "print_screen_heading", lambda *_: None)
+    monkeypatch.setattr(
+        generate_menu_module.Tts,
+        "get_type",
+        lambda: SimpleNamespace(value=SimpleNamespace(can_batch=False)),
+    )
+    monkeypatch.setattr(generate_menu_module.Stt, "should_skip", lambda _state: True)
+    monkeypatch.setattr(
+        generate_menu_module.ProjectVoiceUtil,
+        "get_voice_values",
+        lambda _project, _tts_type: [],
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ProjectVoiceUtil,
+        "get_batch_size",
+        lambda _project: 1,
+    )
+    monkeypatch.setattr(generate_menu_module.ask, "ask_confirm", lambda _prompt: True)
+    monkeypatch.setattr(generate_menu_module, "printt", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        generate_menu_module,
+        "run_generation_modal",
+        lambda **_kwargs: GenerationModalResult(result_status[0], "", ""),
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ConcatUtil,
+        "auto_concat_after_generation",
+        lambda passed_state: concat_calls.append(passed_state),
+    )
+
+    cases = [
+        (GenerationTerminalStatus.COMPLETED, True),
+        (GenerationTerminalStatus.CANCELLED, False),
+        (GenerationTerminalStatus.ABORTED, False),
+        (GenerationTerminalStatus.FAILED, False),
+        (GenerationTerminalStatus.WORKER_RESET, False),
+    ]
+    for status, should_concat in cases:
+        result_status[0] = status
+        concat_calls.clear()
+
+        generate_menu_module.do_generate(state)
+
+        assert concat_calls == ([state] if should_concat else [])
 
 
 def make_phrase_group(voice_index: int) -> PhraseGroup:

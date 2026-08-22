@@ -1,4 +1,43 @@
+import os
 import shutil
+import sys
+from typing import Any
+
+
+def can_use_full_screen_terminal(
+    *,
+    stdin: Any | None = None,
+    stdout: Any | None = None,
+    os_name: str | None = None,
+    term: str | None = None,
+) -> bool:
+    """Conservatively detect whether the interactive full-screen UI can run.
+
+    A missing or unfamiliar ``TERM`` value is not treated as a failure: terminal
+    capability detection is imperfect, and blocking a capable terminal is worse
+    than allowing an uncertain one. We reject only non-interactive standard
+    streams and the explicit Unix ``TERM=dumb`` capability declaration.
+    """
+    stdin = sys.stdin if stdin is None else stdin
+    stdout = sys.stdout if stdout is None else stdout
+    os_name = os.name if os_name is None else os_name
+    term = os.environ.get("TERM", "") if term is None else term
+
+    if stdin is None or stdout is None:
+        return False
+
+    try:
+        if not (stdin.isatty() and stdout.isatty()):
+            return False
+    except Exception:
+        # Stream wrappers do not always implement isatty correctly. An unknown
+        # result is not enough evidence to prevent the app from starting.
+        return True
+
+    if os_name != "nt" and term.strip().lower() == "dumb":
+        return False
+
+    return True
 
 
 def get_terminal_width(fallback: int = 80) -> int:

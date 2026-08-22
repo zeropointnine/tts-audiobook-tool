@@ -4,6 +4,7 @@ from enum import Enum
 from pathlib import Path
 from typing import ClassVar
 
+from rich.text import Text
 from textual.binding import Binding, BindingType
 from tts_audiobook_tool import readiness, text_util
 from tts_audiobook_tool.app_types import SoundSegment
@@ -50,10 +51,10 @@ class FilterType(tuple[str, str], Enum):
     UNGENERATED = "Show ungenerated lines", "ungenerated"
     GENERATED = "Show generated lines", "generated"
     GENERATED_WITH_ERRORS = (
-        "Show generated lines with any errors",
+        "Show generated lines with any word errors",
         "generated w/ errors",
     )
-    FAILED = "Show generated lines with errors, flagged as Failed", "generated/failed"
+    FAILED = "Show generated lines flagged as Failed", "generated/failed"
 
     @property
     def menu_label(self) -> str:
@@ -367,14 +368,17 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             queued_text = "Queued   " if should_queue else "         "
             queued_color = COL_ACCENT if should_queue else ""
             return f"{COL_DIM}[{queued_color}{queued_text}{COL_DIM}]"
+        return f"{COL_DIM}[generated]"
 
-        status_ansi = f"{COL_DIM}[generated]"
-        if best_segment.num_errors == -1:
-            return status_ansi
+    def make_word_errors_ansi(self, segment_status: PhraseSegmentStatus) -> str:
+        """Build the styled word-error marker shown at the start of phrase text."""
+        best_segment = segment_status.best_segment
+        if best_segment is None or best_segment.num_errors == -1:
+            return ""
         failed_marker = (
             f" {COL_ERROR}*{COL_DEFAULT}" if segment_status.is_failed else ""
         )
-        return f"{status_ansi} {COL_DIM}[word errors: {best_segment.num_errors}{failed_marker}{COL_DIM}]"
+        return f"{COL_DIM}[word errors: {best_segment.num_errors}{failed_marker}{COL_DIM}] "
 
     def format_line(self, index: int) -> HangingIndentText:
         list_item = self.list_items[self.phrase_indices[index]]
@@ -391,12 +395,14 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         if presentable_text is None:
             presentable_text = self.project.phrase_groups[phrase_index].presentable_text
             self.presentable_texts[phrase_index] = presentable_text
-        return HangingIndentText.from_ansi_prefix(
-            f"{prefix_ansi}{Ansi.RESET}",
-            presentable_text,
-            max_lines=3,
-            style=style,
-        )
+
+        text = Text.from_ansi(f"{prefix_ansi}{Ansi.RESET}")
+        content_start = len(text.plain)
+        word_errors_ansi = self.make_word_errors_ansi(segment_status)
+        if word_errors_ansi:
+            text.append(Text.from_ansi(word_errors_ansi))
+        text.append(presentable_text)
+        return HangingIndentText(text, content_start, max_lines=3, style=style)
 
     def option_id(self, index: int) -> str:
         """Use project identities so options survive filter and status changes."""

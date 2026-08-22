@@ -54,6 +54,38 @@ def test_compound_prefs_change_is_persisted_with_one_explicit_save(
     assert payload["system_prompt_preset"] == ""
 
 
+def test_save_gen_log_defaults_false_and_round_trips(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(tmp_path / PREFS_FILE_NAME)))
+
+    assert Prefs().save_gen_log is False
+
+    prefs = Prefs()
+    prefs.save_gen_log = True
+    prefs.save()
+    payload = json.loads((tmp_path / PREFS_FILE_NAME).read_text(encoding="utf-8"))
+    assert payload["save_gen_log"] is True
+
+    assert Prefs.load().save_gen_log is True
+
+
+def test_save_gen_log_invalid_value_is_normalized_to_false(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(json.dumps({"save_gen_log": "yes"}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    assert prefs.save_gen_log is False
+    normalized = json.loads(destination.read_text(encoding="utf-8"))
+    assert normalized["save_gen_log"] is False
+
+
 def test_hint_mutations_require_explicit_save(
     tmp_path: Path,
     monkeypatch,

@@ -9,6 +9,9 @@ Is blocking.
 """
 
 import time
+from dataclasses import dataclass
+from enum import Enum
+from typing import Protocol
 
 import numpy as np
 from tts_audiobook_tool import text_util
@@ -21,6 +24,15 @@ from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
+from tts_audiobook_tool.real_time_playback_events import (
+    RealTimePlaybackAwaitingContinue,
+    RealTimePlaybackBuffer,
+    RealTimePlaybackEvents,
+    RealTimePlaybackProgress,
+    RealTimePlaybackSegmentText,
+    RealTimePlaybackStarted,
+)
+from tts_audiobook_tool.generation_events import GenerationPhase
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -34,11 +46,57 @@ from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import ValidationResult
 
+
+class ContinueEvent(Protocol):
+    def wait(self, timeout: float | None = None) -> bool: ...
+
+
+class RealTimePlaybackRunStatus(str, Enum):
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    ABORTED = "aborted"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class RealTimePlaybackRunResult:
+    status: RealTimePlaybackRunStatus
+    message: str = ""
+
+
 def start(
+    state: State,
+    phrase_groups: list[PhraseGroup],
+    line_range: tuple[int, int] | None,
+    continue_event: ContinueEvent | None = None,
+) -> RealTimePlaybackRunResult:
+    """Run realtime generation/playback and always release the audio device."""
+    stream_holder: list[SoundDeviceStream] = []
+    try:
+        return _start_impl(
+            state,
+            phrase_groups,
+            line_range,
+            continue_event,
+            stream_holder,
+        )
+    finally:
+        try:
+            if stream_holder:
+                stream_holder[0].shut_down()
+        finally:
+            # Realtime runs share the resident worker/model with later jobs;
+            # continuation state must not survive failures or teardown errors.
+            Tts.clear_continuation()
+
+
+def _start_impl(
         state: State,
         phrase_groups: list[PhraseGroup],
-        line_range: tuple[int, int] | None
-    ) -> None:
+        line_range: tuple[int, int] | None,
+        continue_event: ContinueEvent | None,
+        stream_holder: list[SoundDeviceStream],
+    ) -> RealTimePlaybackRunResult:
     """
     line_range is one-indexed
     """
@@ -51,30 +109,25 @@ def start(
         app_support.print_warm_up_result_stop(warm_up_result)
         if warm_up_result.error:
             app_memory.gc_ram_vram()
-        if state.prefs.menu_clears_screen:
-            ask.ask_enter_to_continue()
-        return
+        status = (
+            RealTimePlaybackRunStatus.CANCELLED
+            if warm_up_result.did_interrupt
+            else RealTimePlaybackRunStatus.FAILED
+        )
+        return RealTimePlaybackRunResult(status, warm_up_result.error or "")
 
     # Do model readiness check now that model instance exists
     err = readiness.get_generate_blocker_text(state, verbose=True, is_realtime_playback=True)
     if err:
         print_feedback(err, is_error=True)
-        return
+        return RealTimePlaybackRunResult(RealTimePlaybackRunStatus.FAILED, err)
 
     # Print warnings if any
     warnings = Tts.get_instance().get_warning_issues(state.project)
     if warnings:
         warnings_string = "\n".join(warnings)
         print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
-
     showed_vram_warning = app_memory.show_vram_memory_warning_if_necessary()
-
-    s = "Starting real-time playback..."
-    if state.prefs.stt_variant == SttVariant.DISABLED:
-        s += f" {COL_DIM}(speech-to-text validation disabled){COL_ACCENT}"
-    MenuUtil.print_heading(None, s, dont_clear=True, non_menu=True)
-    printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
-    printt()
 
     # Realtime playback is a top-level generation run. If the previous run ended
     # normally within one paragraph, there may be no phrase-level break reason to
@@ -96,11 +149,19 @@ def start(
     # line_range is one-indexed; defensively clamp a 0 start so we don't
     # wrap to the last group via negative indexing
     start_index = max(start_index, 0)
-    start_time = time.time()
+    total = max(0, end_index - start_index + 1)
+    RealTimePlaybackEvents.emit(
+        RealTimePlaybackStarted(total, start_index, end_index)
+    )
 
     section_start_indices = set(ProjectBookUtil.get_section_start_indices(state.project))
 
     for index in range(start_index, end_index + 1):
+
+        RealTimePlaybackEvents.emit(GenerationPhase("Generating audio"))
+        RealTimePlaybackEvents.emit(
+            RealTimePlaybackProgress(index - start_index, total, index)
+        )
 
         # Pick up any Ctrl-C pressed during the previous iteration's
         # inter-segment gap (sound prep, buffer print, throttle sleep);
@@ -123,10 +184,7 @@ def start(
         printt()
         GenerateUtil.print_batch_heading(
             indices=[index],
-            num_complete=index - start_index,
-            num_remaining=end_index + 1 - index,
-            num_total=end_index + 1 - start_index,
-            start_time=start_time
+            show_divider=index != start_index,
         )
         printt(f"{COL_DIM_ITALICS}{phrase_group.presentable_text}")
         printt()
@@ -200,32 +258,41 @@ def start(
         # Start stream lazy
         if not stream:
             stream = SoundDeviceStream()
+            stream_holder.append(stream)
             if not stream.start():
-                # Abort. Stream is in a not-started state, so no shut_down() is needed; 
+                # Abort. Stream is in a not-started state, so no shut_down() is needed;
                 # skip the buffer-drain prompt.
                 Tts.clear_continuation()
                 Interrupts().clear()
                 s = "Aborting real-time playback: sound output stream failed to start"
                 print_feedback(s, is_error=True)
-                return
+                return RealTimePlaybackRunResult(
+                    RealTimePlaybackRunStatus.FAILED,
+                    s,
+                )
 
-        # Add sound to the stream
-        stream.add_data(sound.data)
+        # Add sound to the stream, capturing the half-open sample range it
+        # occupies so the app can show which source text is being played.
+        segment_start, segment_end = stream.add_data(sound.data)
         if appended_sound is not None:
             # Add page-turn sound
-            stream.add_data(appended_sound)
+            _, segment_end = stream.add_data(appended_sound)
 
         full_duration = sound.duration
         if appended_sound is not None:
             full_duration += len(appended_sound) / sound.sr
 
-        # Print buffer duration
-        value = stream.buffer_duration - full_duration
-        if value <= 0.0:
-            value = +0.0
-        s = f"{COL_ERROR}" if value < 0.1 else f"{COL_OK}"
-        s += f"{duration_string(value, include_tenth=True)}"
-        printt(f"Buffer duration: {s}")
+        RealTimePlaybackEvents.emit(RealTimePlaybackBuffer(stream.buffer_duration))
+        if segment_end > segment_start:
+            RealTimePlaybackEvents.emit(
+                RealTimePlaybackSegmentText(
+                    index=index,
+                    text=phrase_group.presentable_text,
+                    start_sample=segment_start,
+                    end_sample=segment_end,
+                    played_samples=stream.played_samples,
+                )
+            )
 
         # Pick up an interrupt pressed during sound prep or the buffer print
         # so we stop before throttling playback further.
@@ -241,25 +308,38 @@ def start(
             if did_interrupt:
                 break
 
-    # Finished
+    # Finished. Preserve the legacy behavior: buffered audio continues until
+    # the user presses Enter, at which point the stream is closed by start()'s
+    # finally block and control returns to the menu.
+    was_cancelled = Interrupts().did_interrupt
     Interrupts().clear()
+    if not did_interrupt:
+        RealTimePlaybackEvents.emit(RealTimePlaybackProgress(total, total))
 
-    should_prompt_before_shutdown = stream and stream.buffer_duration > 0
-    if should_prompt_before_shutdown:
-        # Prompt allows buffer to play until enter pressed
-        printt()
-        ask.ask_enter_to_continue()
-    if stream:
-        stream.shut_down()
-
-    # Do not let rolling continuation state leak into the next realtime run.
-    Tts.clear_continuation()
-
-    if not should_prompt_before_shutdown:
-        printt()
-        ask.ask_enter_to_continue()
-
+    buffer_duration = stream.buffer_duration if stream else 0.0
+    RealTimePlaybackEvents.emit(
+        RealTimePlaybackAwaitingContinue(buffer_duration, did_interrupt)
+    )
     printt()
+    if continue_event is None:
+        ask.ask_enter_to_continue()
+    else:
+        # The Textual app extrapolates buffer drain and the playhead on its
+        # header refresh interval; no worker-side polling is needed here.
+        continue_event.wait()
+
+    # Cancellation can arrive while waiting for Enter (for example during
+    # application shutdown), so sample the external event again afterwards.
+    was_cancelled = was_cancelled or Interrupts().did_interrupt
+    printt()
+
+    if was_cancelled:
+        status = RealTimePlaybackRunStatus.CANCELLED
+    elif did_interrupt:
+        status = RealTimePlaybackRunStatus.ABORTED
+    else:
+        status = RealTimePlaybackRunStatus.COMPLETED
+    return RealTimePlaybackRunResult(status)
 
 
 def sleep_interruptibly(duration_s: float) -> bool:

@@ -3,6 +3,7 @@ from tts_audiobook_tool.app_types import SectionMarkerMode
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
+from tts_audiobook_tool.menus.menu_shared import make_output_files_subheading
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -51,10 +52,15 @@ class SectionMarkersMenu:
             
             return items
 
+        def make_subheading(state: State) -> str:
+            if not is_limited:
+                return SUBLABEL
+            return make_output_files_subheading(state) + LIMITED_SUBLABEL
+
         label = app_text.get_section_marker_label(state.project)
         MenuUtil.menu(
             state, label, make_items,
-            subheading=LIMITED_SUBLABEL if is_limited else SUBLABEL
+            subheading=make_subheading
         )
 
     @staticmethod
@@ -93,9 +99,8 @@ def print_section_markers(state: State) -> None:
         )
         printt(s)
 
-    if state.prefs.menu_clears_screen:
-        print()
-        ask.ask_enter_to_continue()
+    print()
+    ask.ask_enter_to_continue()
     
 def mode_menu(state: State) -> None:
 

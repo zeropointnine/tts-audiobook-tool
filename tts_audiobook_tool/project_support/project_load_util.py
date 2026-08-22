@@ -31,7 +31,11 @@ class ProjectLoadUtil:
     """
 
     @staticmethod
-    def load_using_dir_path(dir_path: str) -> Project | str:
+    def load_using_dir_path(
+        dir_path: str,
+        *,
+        prompt_on_warnings: bool = True,
+    ) -> Project | str:
         from tts_audiobook_tool import ask
         from tts_audiobook_tool.project import Project
 
@@ -118,7 +122,8 @@ class ProjectLoadUtil:
             project.save()
             for warning in pending_warnings:
                 printt(warning)
-            ask.ask_enter_to_continue()
+            if prompt_on_warnings:
+                ask.ask_enter_to_continue()
 
         return project
 

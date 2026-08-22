@@ -19,13 +19,6 @@ Various frequently used small util functions, both app-specific and general
 Meant to be imported using "*"
 """
 
-# 'Global; variable
-_menu_clears_screen: bool = MENU_CLEARS_SCREEN_DEFAULT
-
-def set_menu_clears_screen(value: bool) -> None:
-    global _menu_clears_screen
-    _menu_clears_screen = value
-
 def printt(s: str="", end=None, dont_reset=False) -> None:
     """
     App-standard way of printing to the console.
@@ -50,26 +43,26 @@ def print_feedback(
 
     :param is_error: If True, prints message in red, and always shows an enter prompt
     :param no_pause: If True, doesn't do the typical slight pause
-    :param long_pause: If True, pauses 2x longer  
+    :param long_pause: If True, pauses 2x longer
     """
     if not no_preformat:
         message = Ansi.ITALICS + (COL_ERROR if is_error else COL_DIM) + message
     if end_value is not None:
         message = message.strip() + " " + COL_ACCENT + str(end_value)
     printt(message)
-    
+
     if is_error:
         from tts_audiobook_tool import ask
         ask.ask_enter_to_continue()
     else:
         if skip_pause:
             sleep_duration = 0.0
-        else:        
-            sleep_duration = PRINT_FEEDBACK_PAUSE_NO_CLEAR_SCREEN if _menu_clears_screen else PRINT_FEEDBACK_PAUSE_CLEAR_SCREEN
+        else:
+            sleep_duration = PRINT_FEEDBACK_PAUSE
             if long_pause:
                 sleep_duration *= 2
         time.sleep(sleep_duration)
-        
+
     if extra_line:
         printt()
 
@@ -82,8 +75,8 @@ def print_init(s: str) -> None:
     print()
 
 def print_model_init(model_description: str, extra: str = "") -> None:
-    """ 
-    Prints model init message in a consistent style 
+    """
+    Prints model init message in a consistent style
     """
     s = f"Initializing {model_description} model"
     if extra:
@@ -125,7 +118,7 @@ def is_number(o: Any) -> bool:
     return isinstance(o, int) or isinstance(o, float)
 
 def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=COL_DEFAULT) -> str:
-    """ 
+    """
     Truncates string for display. Uses colors.
     Ellipsis in the middle of the string, else at the end
     """
@@ -145,10 +138,10 @@ def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=
 
 def ellipsize_path_middle(path: str, length: int=60, truncate_file_suffix=False) -> str:
     """ Puts ellipsis before path name if necessary """
-    
+
     if not path:
         return path
-    
+
     p = Path(path)
     if truncate_file_suffix:
         p = p.with_suffix('')
@@ -173,12 +166,12 @@ def ellipsize_path_middle(path: str, length: int=60, truncate_file_suffix=False)
     return path[:prefix_len] + "..." + suffix
 
 def ellipsize_path_for_menu(path: str) -> str:
-    """ 
+    """
     App style for displaying filepath in a menu item
     """
     s = ellipsize(path, 40, from_start=True)
     return s
-        
+
 def estimated_wav_seconds(file_path: str) -> float:
     # Assumes 44.1khz, 16 bits, minimal metadata
     num_bytes = 0
@@ -195,10 +188,10 @@ def make_hotkey_string(hotkey: str, color: str="", outer_color: str=Ansi.RESET) 
     return f"{outer_color}[{color}{hotkey}{outer_color}]"
 
 def make_menu_label(
-        label: str, 
-        value: Any, 
-        default: Any=None, 
-        value_prefix: str="currently: ", 
+        label: str,
+        value: Any,
+        default: Any=None,
+        value_prefix: str="currently: ",
         color_code=COL_ACCENT,
         num_decimals=0,
         required_predicate: Callable[[], bool] | None = None
@@ -212,9 +205,9 @@ def make_menu_label_optional(label: str) -> str:
     return f"{label} {COL_DIM}(optional{COL_DIM})"
 
 def make_currently_string(
-        value: Any, 
-        value_prefix: str="currently: ", 
-        default: Any=None, 
+        value: Any,
+        value_prefix: str="currently: ",
+        default: Any=None,
         color_code=COL_ACCENT,
         num_decimals=0,
         required_predicate: Callable[[], bool] | None = None,
@@ -224,7 +217,7 @@ def make_currently_string(
     Used for presenting the current value for a menu item in a consistent style
     Ex: `(currently: 666)`
 
-    If "required_predicate" is provided and returns True, 
+    If "required_predicate" is provided and returns True,
     returns "(required)" to indicate missing value is required.
     """
     if required_predicate and required_predicate():
@@ -252,8 +245,8 @@ def make_parameter_value_string(
 
     if value == -1:
         # Project attributes use -1 to mean "not set explicitly", ie, use default value
-        value = default 
-    
+        value = default
+
     if isinstance(value, float):
         if num_decimals == 0:
             s = str(int(value))
@@ -261,19 +254,23 @@ def make_parameter_value_string(
             s = f"{value:.{num_decimals}f}"
     else:
         s = str(value)
-    
+
     if value == default:
         s += DEFAULT_LABEL
-    
+
     return s
 
-def make_gb_string(bytes: int) -> str:
-    """ Returns gigabyte string with either one or zero decimal places"""
+def make_gb_string(bytes: int, always_one_decimal=False) -> str:
+    """
+    Returns gigabyte string with either one or zero decimal places,
+    or always one decimal place
+    """
     gb = bytes / (1024 ** 3)
-    gb = int(gb * 10) / 10
-    if gb % 1 == 0:
-        gb = int(gb)
-    return str(gb) + "GB"
+    if always_one_decimal:
+        return f"{gb:.1f}GB"
+    else:
+        gb = int(gb * 10) / 10
+        return f"{gb:.1f}".removesuffix(".0") + "GB"
 
 def lerp_clamped(
     value: float,
@@ -290,7 +287,7 @@ def lerp_clamped(
     return mapped_min_value + (mapped_max_value - mapped_min_value) * clamped_normalized
 
 def make_file_line_ranges(markers: Collection[int], num_items: int) -> list[tuple[int, int]]:
-    """ 
+    """
     Returns ranges with length of markers + 1 (always starts with item with start index 0)
     Accepts markers in any order.
     """
@@ -321,22 +318,17 @@ def make_file_line_ranges(markers: Collection[int], num_items: int) -> list[tupl
 
     return ranges
 
-def duration_string(seconds: float, include_tenth: bool=False) -> str:
+def duration_string(seconds: float, include_tenth: bool=False, pad_seconds: bool=False) -> str:
     """ Returns, eg, 5h0m0s """
     if seconds < 60:
-        if include_tenth:
-            return f"{seconds:.1f}s"
-        else:
-            return f"{round(seconds)}s"
+        return f"{seconds:.1f}s" if include_tenth else f"{round(seconds)}s"
 
-    seconds = round(seconds)
-    minutes = seconds // 60
-    seconds = seconds % 60
+    minutes, seconds = divmod(round(seconds), 60)
+    secs = f"{seconds:02d}" if pad_seconds else str(seconds)
     if minutes < 60:
-        return f"{minutes}m{seconds}s"
-    hours = minutes // 60
-    minutes = minutes % 60
-    return f"{hours}h{minutes}m{seconds}s"
+        return f"{minutes}m{secs}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes}m{secs}s"
 
 def time_stamp(seconds: float, with_tenth: bool=True) -> str:
     """ Eg: 05:00:00 """
@@ -486,14 +478,14 @@ def is_oom_error_message(error_string: str) -> bool:
     Checks if an error string likely indicates an out-of-memory error.
     Uses pattern matching for common OOM error keywords/phrases from various sources
     (PyTorch, CUDA, system-level, etc.)
-    
+
     Returns True if the error string appears to be an OOM error.
     """
     if not isinstance(error_string, str):
         return False
-    
+
     lower = error_string.lower()
-    
+
     # Common OOM indicators
     oom_patterns = [
         r'out\s+of\s+memory',          # Generic OOM
@@ -511,7 +503,7 @@ def is_oom_error_message(error_string: str) -> bool:
         r'memory\s+exhausted',         # Memory exhausted
         r'memory\s+allocation\s+failed',  # Generic memory alloc failure
     ]
-    
+
     for pattern in oom_patterns:
         if re.search(pattern, lower):
             return True
@@ -520,7 +512,7 @@ def is_oom_error_message(error_string: str) -> bool:
 def pretty_json_string(payload: dict, ellipsize_at: int=60) -> str:
     """
     Returns pretty json string of dict, ellipsizing long strings
-    
+
     Main use case is to prevent data uri's from flooding the console
     """
 
@@ -540,6 +532,6 @@ def pretty_json_string(payload: dict, ellipsize_at: int=60) -> str:
 
     obj = copy.deepcopy(payload)
     ellipsize_strings(obj)
-    
+
     s = json.dumps(obj, indent=2)
     return s

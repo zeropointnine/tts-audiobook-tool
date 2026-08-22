@@ -68,9 +68,9 @@ class FilterDialog(ModalScreen["FilterType | None"]):
                 Static(
                     Text.from_ansi(
                         f"[{number}] {filter_type.menu_label}"
-                        f" ({self.line_counts[filter_type]})"
+                        f" {COL_DIM}({self.line_counts[filter_type]})"
                         + (
-                            f" {COL_DIM}(selected)"
+                            " (selected)"
                             if filter_type is self.current_filter
                             else ""
                         )

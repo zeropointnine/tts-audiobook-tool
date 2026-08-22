@@ -95,6 +95,8 @@ class Start:
         """ App entrypoint """
 
         print()
+        if not self.is_server:
+            self.exit_on_unsupported_terminal()
         self.init_tts_or_exit(self.is_server)
         self.exit_on_wrong_torch_flavor_windows()
         if not self.is_server:
@@ -109,6 +111,19 @@ class Start:
         self.start_app_or_server()
 
     # ---
+
+    def exit_on_unsupported_terminal(self) -> None:
+        from tts_audiobook_tool.system_support.terminal import can_use_full_screen_terminal
+
+        if can_use_full_screen_terminal():
+            return
+
+        print(
+            f"{APP_NAME} requires a full-featured interactive terminal.\n"
+            "The current terminal is unsupported. Exiting.",
+            flush=True,
+        )
+        exit(1)
 
     def init_tts_or_exit(self, is_server: bool) -> None:
         """ Inits TTS else prompt to continue anyway.
@@ -257,16 +272,6 @@ class Start:
         ):
             hints.show_hint_if_necessary(temp_prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
-        # Updated UI
-        #
-        # If user prefs does not have relatively new attribute "llm_url" and they're on the "old" menu system,
-        # force the setting on and show FYI.
-        b = not "llm_url" in temp_prefs.source_dict_keys and not temp_prefs.menu_clears_screen
-        if b:
-            temp_prefs.menu_clears_screen = True
-            temp_prefs.save()
-            hints.show_hint(HINT_UPDATED_UI, and_prompt=True)
-
     def init_logging(self) -> None:
         app_support.init_logging()
         printt()
@@ -281,6 +286,9 @@ class Start:
             Server(project_dir=self.project_path).run(host=self.server_host, port=self.server_port)
         else:
             from tts_audiobook_tool.app import App
+            from tts_audiobook_tool.model_runtime import mark_interactive_main
+
+            mark_interactive_main()
             _ = App()
 
 

@@ -28,6 +28,7 @@ from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, Q
 from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.l import L
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.app_types.phrase import Reason
@@ -35,7 +36,6 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
@@ -430,7 +430,7 @@ class MuteCurrentThreadOutput:
 class ConversationStreamingTts:
     @staticmethod
     def generate_to_sound_stream(
-        project: Project,
+        state: State,
         text: str,
         reason: Reason,
         sound_stream: SoundDeviceStream,
@@ -446,6 +446,7 @@ class ConversationStreamingTts:
             the full streamed audio plus any appended trailing silence.
             (None, None, error_string) on failure.
         """
+        project = state.project
         info = Tts.get_info()
         if sound_stream.sample_rate != info.sample_rate:
             return None, None, (
@@ -494,26 +495,20 @@ class ConversationStreamingTts:
                 stream_start = start
             stream_end = end
 
-        try:
-            result = Tts.generate_using_project(
-                project,
-                [text],
-                on_stream_chunk=append_chunk,
-                on_stream_end=on_stream_end,
-            )
-        finally:
-            model = Tts.get_instance_if_exists()
-            if model is not None:
-                model.clear_stream_state()
-
-        if isinstance(result, str):
-            Tts.clear_continuation()
-            return None, None, result
+        _, error = ModelWorker.synthesize_chat_blocking(
+            state,
+            text,
+            reason,
+            streaming=True,
+            on_chunk=append_chunk,
+            interrupt_event=interrupt_requested,
+        )
+        if not error:
+            on_stream_end()
+        if error:
+            return None, None, error
         if stream_start is None or speech_end is None or speech_end <= stream_start:
-            Tts.clear_continuation()
             return None, None, "No streamed audio output"
-
-        Tts.clear_continuation_if_reason(reason)
 
         saved_sound = None
         if saved_chunks:
@@ -547,6 +542,7 @@ class ResponseSession:
     ) -> None:
         self.ui = ui
         self.llm = llm
+        self.state = state
         self.prefs = state.prefs
         self.project = state.project
         self.chunking_config = chunking_config
@@ -563,7 +559,7 @@ class ResponseSession:
         # Each Enter-press/LLM response turn is its own rolling-continuation
         # context. Continuation may still bridge generated chunks within this
         # turn, but must not leak across independent turns.
-        Tts.clear_continuation()
+        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
 
         self.user_input_sound = user_input_sound
         self.tts_q: queue.Queue[tuple[str, Reason] | None] = queue.Queue()
@@ -642,7 +638,7 @@ class ResponseSession:
         self.ui.wait_idle()
         if not llm_failed and not was_interrupted:
             self.save_chat_output_if_needed()
-        Tts.clear_continuation()
+        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
 
     def tts_worker(self) -> None:
         while True:
@@ -651,7 +647,7 @@ class ResponseSession:
                 break
             text, reason = item
             if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                Tts.clear_continuation()
+                ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                 continue
             if not text.strip():
                 with self.state_lock:
@@ -691,7 +687,7 @@ class ResponseSession:
 
                     with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
                         stream_range, saved_sound, err = ConversationStreamingTts.generate_to_sound_stream(
-                            project=self.project,
+                            state=self.state,
                             text=text,
                             reason=reason,
                             sound_stream=self.sound_stream,
@@ -701,14 +697,14 @@ class ResponseSession:
                         )
 
                     if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                        Tts.clear_continuation()
+                        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                         with self.state_lock:
                             if self.pending_sentences and self.pending_sentences[0] == text:
                                 self.pending_sentences.pop(0)
                         continue
 
                     if err is not None:
-                        Tts.clear_continuation()
+                        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                         if not self.response_aborted.is_set():
                             self.ui.println(f"{COL_ERROR}[TTS error: {err}]{COL_DEFAULT}")
                         with self.state_lock:
@@ -733,17 +729,22 @@ class ResponseSession:
 
                 self.log_tts_inference_start(mode="non-streaming", text=text)
                 with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                    result = SoundPipeline.generate_processed_using_project(self.project, [text])
+                    result, tts_error = ModelWorker.synthesize_chat_blocking(
+                        self.state,
+                        text,
+                        reason,
+                        streaming=False,
+                        interrupt_event=self.interrupt_requested,
+                    )
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                    Tts.clear_continuation()
+                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     continue
-                if isinstance(result, str):
-                    Tts.clear_continuation()
+                if tts_error or result is None:
                     if not self.response_aborted.is_set():
-                        self.ui.println(f"{COL_ERROR}[TTS error: {result}]{COL_DEFAULT}")
+                        self.ui.println(f"{COL_ERROR}[TTS error: {tts_error}]{COL_DEFAULT}")
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
@@ -751,14 +752,14 @@ class ResponseSession:
                     continue
                 sound = result[0]
                 if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                    Tts.clear_continuation()
+                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     continue
                 
                 if sound.data.size == 0:
-                    Tts.clear_continuation()
+                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                     if not self.response_aborted.is_set():
                         self.ui.println(f"{COL_ERROR}[TTS error: empty/silent output]{COL_DEFAULT}")
                     with self.state_lock:
@@ -797,17 +798,16 @@ class ResponseSession:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                         self.spoken_segments.extend(spoken_segments)
-                    Tts.clear_continuation_if_reason(reason)
                     self.render_response()
                 else:
-                    Tts.clear_continuation()
+                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                     self.render_response()
                      
             except Exception as e:
-                Tts.clear_continuation()
+                ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
                 if not self.response_aborted.is_set():
                     self.ui.println(f"[TTS exception: {e}]")
                 with self.state_lock:
@@ -918,10 +918,6 @@ class ResponseSession:
     def abort_response(self, ticker: threading.Thread) -> None:
         self.interrupt_requested.set()
         self.response_aborted.set()
-        model = Tts.get_instance_if_exists()
-        if model is not None:
-            model.clear_stream_state()
-            model.clear_continuation()
         while not self.tts_q.empty():
             try:
                 self.tts_q.get_nowait()
@@ -1031,6 +1027,7 @@ class ResponseSession:
                 self.project.language_code,
                 self.stt_variant,
                 self.stt_config,
+                self.state,
             )
             if isinstance(words, str) or not words:
                 return []

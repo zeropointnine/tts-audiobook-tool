@@ -15,8 +15,10 @@ def combine_ansi_lines(lines: list[str]) -> str:
 
 def strip_ansi_codes(s: str) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    osc_hyperlink_escape = re.compile(r'\x1b]8;;.*?\x1b\\')
-    s = osc_hyperlink_escape.sub('', s)
+    # OSC sequences (terminal title, hyperlinks, ...): ESC ] params,
+    # terminated by BEL or ST (ESC \).
+    osc_escape = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
+    s = osc_escape.sub('', s)
     return ansi_escape.sub('', s)
 
 def make_terminal_hyperlink(url: str, text: str = "", is_file: bool=False) -> str:

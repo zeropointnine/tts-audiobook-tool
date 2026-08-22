@@ -24,7 +24,7 @@ from tts_audiobook_tool.util import *
 is_logging_initialized = False
 
 
-def init_logging() -> None:
+def init_logging(name: str = APP_NAME) -> None:
 
     global is_logging_initialized
     import warnings
@@ -33,7 +33,7 @@ def init_logging() -> None:
         return
     is_logging_initialized = True
 
-    L.init(APP_NAME)
+    L.init(name)
     L.i("START " + "-" * 60)
 
     logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -51,6 +51,19 @@ def init_logging() -> None:
         category=FutureWarning,
         module="ebooklib\\.epub",
     )
+
+
+def make_worker_log_file_path() -> str:
+    """Path of the model worker's log file.
+
+    The worker initializes logging with ``f"{APP_NAME}-worker"``; ``l.L``
+    places log files in the temp dir as ``<name>.log``. The main process can
+    compute the same path to point users at the worker's own diagnostics.
+    """
+    import tempfile
+
+    return os.path.join(tempfile.gettempdir(), f"{APP_NAME}-worker.log")
+
 
 def set_seed(seed: int) -> None:
     """
@@ -77,27 +90,28 @@ def play_done_sound() -> None:
     PlaySoundUtil.play_sound_file_async(done_wav_path)
 
 
-def make_memory_string(base_color=COL_DIM) -> str:
+def make_memory_string(base_color=COL_DIM, accent_color=COL_ACCENT, always_one_decimal=False) -> str:
+    """ Makes ANSI-formatted memory string"""
     result = app_memory.get_nv_vram()
     if result is None:
         vram_string = ""
     else:
         used, total = result
-        vram_string = f"{base_color}VRAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
+        vram_string = f"{base_color}VRAM: {accent_color}{make_gb_string(used, always_one_decimal)}{base_color}/{make_gb_string(total, always_one_decimal)}"
 
     shared_result = app_memory.get_shared_gpu_memory()
     if shared_result is None:
         shared_string = ""
     else:
         _, shared = shared_result
-        shared_string = f"{base_color}shared VRAM: {COL_ACCENT}{make_gb_string(shared)}"
+        shared_string = f"{base_color}shared VRAM: {accent_color}{make_gb_string(shared, always_one_decimal)}"
 
     result = app_memory.get_system_ram()
     if result is None:
         ram_string = ""
     else:
         used, total = result
-        ram_string = f"{base_color}RAM: {COL_ACCENT}{make_gb_string(used)}{base_color}/{make_gb_string(total)}"
+        ram_string = f"{base_color}RAM: {accent_color}{make_gb_string(used, always_one_decimal)}{base_color}/{make_gb_string(total, always_one_decimal)}"
 
     parts = [s for s in [vram_string, shared_string, ram_string] if s]
     if not parts:
@@ -110,7 +124,7 @@ def log_unload_memory_snapshot(label: str) -> None:
 
     import torch
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and torch.cuda.is_initialized():
         try:
             allocated = torch.cuda.memory_allocated()
             reserved = torch.cuda.memory_reserved()

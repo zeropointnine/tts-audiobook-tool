@@ -1,38 +1,14 @@
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from tts_audiobook_tool.app_types import VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
-
-class StubValidationResult:
-    def __init__(self, is_fail: bool) -> None:
-        self.is_fail = is_fail
-        self.voice_tag = ""
-
-    def get_ui_message_with_extras(self) -> str:
-        return "Failed" if self.is_fail else "Passed"
-
-
-@pytest.fixture(autouse=True)
-def initialized_tts_type():
-    had_type = hasattr(Tts, "_type")
-    previous_type = getattr(Tts, "_type", TtsModelType.MIRA)
-    Tts._type = TtsModelType.MIRA
-    try:
-        yield
-    finally:
-        if not had_type:
-            del Tts._type
-        else:
-            Tts._type = previous_type
+from generate_files_test_support import StubValidationResult, generate_files_mock_stack
 
 
 def make_phrase_group(num_words: int, voice_index: int) -> PhraseGroup:
@@ -87,17 +63,9 @@ def run_generate_files(
             results.append(StubValidationResult(is_fail))
         return results
 
-    with patch("tts_audiobook_tool.generate_util.ModelManager.warm_up_models", return_value=SimpleNamespace(should_stop=False)), \
-            patch("tts_audiobook_tool.generate_util.readiness.get_generate_blocker_text", return_value=""), \
-            patch("tts_audiobook_tool.generate_util.Tts.get_instance", return_value=SimpleNamespace(get_warning_issues=lambda _: [])), \
-            patch("tts_audiobook_tool.generate_util.Tts.get_type", return_value=TtsModelType.MIRA), \
-            patch("tts_audiobook_tool.generate_util.Tts.clear_continuation"), \
-            patch("tts_audiobook_tool.generate_util.Tts.reset_voice_selection_index"), \
-            patch("tts_audiobook_tool.generate_util.ProjectVoiceUtil.is_language_cjk", return_value=False), \
-            patch("tts_audiobook_tool.generate_util.app_memory.show_vram_memory_warning_if_necessary", return_value=False), \
-            patch("tts_audiobook_tool.generate_util.GenerateUtil.generate_and_validate_batch", side_effect=generate_and_validate_batch), \
-            patch("tts_audiobook_tool.generate_util.GenerateUtil.save_sound_and_timing_json", return_value=("", "saved.wav")), \
-            patch("tts_audiobook_tool.generate_util.Stt.has_instance", return_value=False):
+    with generate_files_mock_stack(
+        generate_and_validate_batch, model_type=TtsModelType.MIRA
+    ):
         did_interrupt = GenerateUtil.generate_files(
             state, set(range(len(voice_indices))), batch_size=batch_size, is_regen=False,
         )

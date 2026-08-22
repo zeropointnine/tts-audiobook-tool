@@ -768,22 +768,6 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         self.assertEqual(project.markers, {1, 3})
 
-    def test_project_model_validate_discards_marker_zero(self):
-        phrase_groups = [
-            self.make_phrase_group("One."),
-            self.make_phrase_group("Two."),
-        ]
-
-        project = Project.model_validate({
-            "phrase_groups": phrase_groups,
-            "markers": [0, 1],
-            "applied_language_code": "en",
-            "applied_strategy": "multi",
-            "applied_max_words": 80,
-        })
-
-        self.assertEqual(project.markers, {1})
-
     def test_project_model_validate_discards_non_positive_markers(self):
         phrase_groups = [
             self.make_phrase_group("One."),

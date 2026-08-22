@@ -188,11 +188,11 @@ HINT_LLM_CHAT = Hint(
 """Works best when TTS model inferences faster (or ideally much faster) than realtime"""
 )
 
-HINT_UPDATED_UI = Hint(
-    "updated_ui",
-    "Updated UI",
-"""The app's menu system has been updated. Menus now always appear on a cleared screen.
-You can revert this change the Options menu if you prefer the old behavior."""
+HINT_FULL_SCREEN_UI = Hint(
+    "full_screen_ui",
+    "Updated full-screen UI",
+"""The app now relies on a full-screen menu UI, so the “Menu does not clear screen”
+option has been removed. Menus will now always appear on a cleared screen."""
 )
 
 HINT_MOSS_REMOTE_CODE = Hint(

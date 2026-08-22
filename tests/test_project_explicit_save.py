@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tts_audiobook_tool.app_support.JsonSaveUtil import JsonSaveUtil
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
@@ -14,6 +15,19 @@ from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextI
 @pytest.fixture(autouse=True)
 def disable_debug_logging(monkeypatch) -> None:
     monkeypatch.setattr(L, "d", lambda _message="": None)
+
+
+def record_json_writes(monkeypatch) -> list[str]:
+    """Patches JsonSaveUtil.save to record artifact types (still saving)."""
+    writes: list[str] = []
+    real_save = JsonSaveUtil.save
+
+    def record_save(artifact_type, path, payload_factory):
+        writes.append(artifact_type.name)
+        return real_save(artifact_type, path, payload_factory)
+
+    monkeypatch.setattr(JsonSaveUtil, "save", record_save)
+    return writes
 
 
 def test_project_assignment_does_not_save_until_explicitly_requested(
@@ -36,17 +50,7 @@ def test_project_save_writes_only_project_json(
 ) -> None:
     project = Project(dir_path=str(tmp_path))
     project.book = Book(sections=[BookSection(phrase_groups=[])])
-    writes: list[str] = []
-
-    from tts_audiobook_tool.app_support.JsonSaveUtil import JsonSaveUtil
-
-    real_save = JsonSaveUtil.save
-
-    def record_save(artifact_type, path, payload_factory):
-        writes.append(artifact_type.name)
-        return real_save(artifact_type, path, payload_factory)
-
-    monkeypatch.setattr(JsonSaveUtil, "save", record_save)
+    writes = record_json_writes(monkeypatch)
 
     assert project.save() == ""
     assert writes == ["PROJECT"]
@@ -60,17 +64,7 @@ def test_save_book_writes_only_project_text_json(
 ) -> None:
     project = Project(dir_path=str(tmp_path))
     project.book = Book(sections=[BookSection(phrase_groups=[])])
-    writes: list[str] = []
-
-    from tts_audiobook_tool.app_support.JsonSaveUtil import JsonSaveUtil
-
-    real_save = JsonSaveUtil.save
-
-    def record_save(artifact_type, path, payload_factory):
-        writes.append(artifact_type.name)
-        return real_save(artifact_type, path, payload_factory)
-
-    monkeypatch.setattr(JsonSaveUtil, "save", record_save)
+    writes = record_json_writes(monkeypatch)
 
     assert ProjectTextIOUtil.save_book(project) == ""
     assert writes == ["PROJECT_TEXT"]
@@ -83,17 +77,7 @@ def test_text_import_commits_each_json_artifact_once(
     monkeypatch,
 ) -> None:
     project = Project(dir_path=str(tmp_path))
-    writes: list[str] = []
-
-    from tts_audiobook_tool.app_support.JsonSaveUtil import JsonSaveUtil
-
-    real_save = JsonSaveUtil.save
-
-    def record_save(artifact_type, path, payload_factory):
-        writes.append(artifact_type.name)
-        return real_save(artifact_type, path, payload_factory)
-
-    monkeypatch.setattr(JsonSaveUtil, "save", record_save)
+    writes = record_json_writes(monkeypatch)
 
     ProjectTextIOUtil.set_phrase_groups_and_save(
         project=project,

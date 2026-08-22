@@ -6,7 +6,6 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.menus.menu_status import MenuStatus
-import tts_audiobook_tool.util as util_module
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.project import Project
@@ -86,6 +85,7 @@ class MenuUtil:
         one_shot: bool = False,
         on_exit: Callable | None = None,
         breadcrumb: StringOrMaker | None = None,
+        on_shown: Callable[[], None] | None = None,
     ):
         """
         Prints a menu of items, waits for input, and executes mapped callback.
@@ -99,6 +99,9 @@ class MenuUtil:
 
         param on_exit
             Gets called when menu exits (ie, when app goes *back* to previous menu)
+
+        param on_shown
+            Gets called after the menu has been rendered and before input is read.
         """
 
         MenuUtil.menu_frames.append(MenuFrame(heading=heading, breadcrumb=breadcrumb))
@@ -178,6 +181,9 @@ class MenuUtil:
                     )
                     printt()
 
+                if on_shown:
+                    on_shown()
+
                 while True:
                     # Prompt
                     hotkey = ask.ask_hotkey()
@@ -224,9 +230,6 @@ class MenuUtil:
 
     @staticmethod
     def make_breadcrumb_text(state: State) -> str:
-        if not state.prefs.menu_clears_screen:
-            return ""
-
         ancestor_frames = MenuUtil.menu_frames[:-1]
         if not ancestor_frames:
             return ""
@@ -291,21 +294,16 @@ class MenuUtil:
         breadcrumb_text: str="",
     ) -> None:
         """
-        :param dont_clear: Doesn't clear screen even when settings are "menu clears screen"
+        :param dont_clear: Suppresses the standard screen clear.
 
         TODO: Params are a mess at this point
         """
 
-        if state and state.prefs.menu_clears_screen and not dont_clear and not non_menu:
+        if not dont_clear:
             os.system('cls' if os.name == 'nt' else 'clear')
-            MenuStatus.print_block(state)
-            printt()
-        elif util_module._menu_clears_screen and not dont_clear:
-            os.system('cls' if os.name == 'nt' else 'clear')
-
-        if state and not state.prefs.menu_clears_screen:
-            length = len(text_util.strip_ansi_codes(text))
-            print("-" * length)
+            if state and not non_menu:
+                MenuStatus.print_block(state)
+                printt()
 
         color = COL_DEFAULT if non_menu else COL_ACCENT
         if breadcrumb_text:

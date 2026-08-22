@@ -13,7 +13,7 @@ from tts_audiobook_tool.app_types import Segment, Sound
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.stt import Stt
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.transcriber import Transcriber
 
 
@@ -69,6 +69,8 @@ class RealtimeTranscriber:
         self._stop_event = threading.Event()
         self._flush_event = threading.Event()
         self._paused_event = threading.Event()
+        self._transcription_idle = threading.Event()
+        self._transcription_idle.set()
         self._stream: sd.InputStream | None = None
         self._worker_thread: threading.Thread | None = None
 
@@ -77,9 +79,6 @@ class RealtimeTranscriber:
             return
 
         self._stop_event.clear()
-
-        Stt.set_variant(self.prefs.stt_variant)
-        Stt.set_config(self.prefs.stt_config)
 
         self._worker_thread = threading.Thread(
             target=self._processing_loop,
@@ -133,8 +132,7 @@ class RealtimeTranscriber:
         """
         self._paused_event.set()
         self.flush()
-        with Stt.inference_lock:
-            pass
+        self._transcription_idle.wait()
 
     def resume(self) -> None:
         """Resume mic audio capture/processing with fresh state."""
@@ -288,19 +286,24 @@ class RealtimeTranscriber:
             self._transcribe_and_callback(buffer)
 
     def _transcribe_and_callback(self, audio: np.ndarray) -> None:
+        self._transcription_idle.clear()
         try:
             prepared_sound = Transcriber.prepare_sound_for_whisper(Sound(audio, WHISPER_SAMPLERATE))
-            with Stt.inference_lock:
-                segments, _ = Stt.get_whisper().transcribe(
-                    prepared_sound.data,
-                    word_timestamps=self.word_timestamps,
-                    language=self.language,
-                )
-                segments_list = list(segments)
+            transcription, error = ModelWorker.transcribe_audio_blocking(
+                self.prefs,
+                prepared_sound.data,
+                word_timestamps=self.word_timestamps,
+                language=self.language,
+            )
+            if error or transcription is None:
+                raise RuntimeError(error or "Worker transcription failed")
+            segments_list = list(transcription.segments)
             if segments_list:
-                self.on_transcription(segments_list, np.copy(prepared_sound.data))
+                self.on_transcription(segments_list, np.copy(prepared_sound.data))  # type: ignore[arg-type]
         except Exception as e:
             print(f"RealtimeTranscriber transcription error: {e}")
+        finally:
+            self._transcription_idle.set()
 
 # ---
 

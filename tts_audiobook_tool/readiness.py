@@ -26,7 +26,7 @@ def get_generate_blockers(state: State, is_realtime_audiobook: bool=False) -> li
                 ReadinessIssue("text", "Text must be imported into the project")
             )
 
-    model_errors = Tts.get_class().get_blocking_issues(state.project, Tts.get_instance_if_exists()) 
+    model_errors = Tts.get_class().get_blocking_issues(state.project, None) 
     if model_errors:
         items.extend(model_errors)
 
@@ -62,7 +62,7 @@ def get_chat_blockers(state: State) -> list[ReadinessIssue]:
 
     # TTS Model generation readiness
     from tts_audiobook_tool.tts import Tts
-    model_errors = Tts.get_class().get_blocking_issues(state.project, Tts.get_instance_if_exists()) 
+    model_errors = Tts.get_class().get_blocking_issues(state.project, None) 
     if model_errors:
         errors.extend(model_errors)
 

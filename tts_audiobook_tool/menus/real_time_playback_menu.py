@@ -4,8 +4,10 @@ from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool import readiness
-from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual.real_time_playback_app import (
+    run_real_time_playback_modal,
+)
 from tts_audiobook_tool.util import *
 
 class RealTimePlaybackMenu:
@@ -37,7 +39,7 @@ class RealTimePlaybackMenu:
                 value = "all"
             return make_menu_label("Line range", value)
 
-        # Menu        
+        # Menu
         items = [
             MenuItem(make_start_label, lambda _, __: do_start(state)),
             MenuItem(make_text_label, lambda _, __: RealTimePlaybackMenu.text_menu(state)),
@@ -119,8 +121,8 @@ class RealTimePlaybackMenu:
             printt("Note, custom text source does not persist.")
             if item.data == "file":
                 phrase_groups, __, ___ = ask_phrase_groups.get_from_text_file(
-                    state.project.max_words, 
-                    state.project.segmentation_strategy, 
+                    state.project.max_words,
+                    state.project.segmentation_strategy,
                     pysbd_language=state.project.language_code,
                     prefs=state.prefs,
                     dialog_segmentation=state.project.dialog_segmentation
@@ -151,9 +153,13 @@ class RealTimePlaybackMenu:
             print_feedback(f"Set to:", state.project.realtime_save)
 
         if os.path.exists(state.project.realtime_path):
-            subheading = f"Saves FLAC files to {text_util.make_terminal_hyperlink(state.project.realtime_path, is_file=True)}\n"
+            path_text = text_util.make_terminal_hyperlink(state.project.realtime_path, is_file=True)
         else:
-            subheading = f"FLAC files will be saved to {text_util.make_terminal_hyperlink(state.project.realtime_path)}\n"
+            path_text = state.project.realtime_path
+        subheading = (
+            f"Saves sound segment FLAC files generated while using realtime playback to\n"
+            f"{path_text}\n"
+        )
 
         MenuUtil.options_menu(
             state=state,
@@ -180,7 +186,7 @@ def get_active_line_range(state: State) -> tuple[int, int] | None:
     return line_range
 
 def do_start(state: State) -> None:
-    
+
     if state.real_time.custom_phrase_groups:
         text_groups = state.real_time.custom_phrase_groups
         line_range = state.real_time.custom_text_line_range
@@ -212,15 +218,15 @@ def do_start(state: State) -> None:
         if not b:
             return
 
-    real_time_playback.start(
+    run_real_time_playback_modal(
         state=state,
         phrase_groups=text_groups,
-        line_range=line_range
+        line_range=line_range,
     )
 
 REAL_TIME_SUBHEADING = (
     'Uses the same quality checks as the normal audiobook creation workflow,\n'
     'except for loudness normalization and generative upsampling.\n\n'
-    'Uninterrupted playback requires faster-than-realtime inference.\n'
+    'Uninterrupted playback requires inference to be faster-than-realtime.\n'
     'Validation/retry logic activates when buffered audio exceeds 60 seconds.\n'
 )

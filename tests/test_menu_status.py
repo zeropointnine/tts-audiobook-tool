@@ -63,7 +63,6 @@ def test_menus_omit_absent_voice_display_info(monkeypatch, capsys):
     try:
         Tts._type = TtsModelType.OMNIVOICE
         state = make_state()
-        state.prefs.menu_clears_screen = False
         tts_class = Tts.get_class()
         monkeypatch.setattr(
             tts_class,

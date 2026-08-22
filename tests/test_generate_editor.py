@@ -53,7 +53,6 @@ def make_state(project: StubProject) -> State:
             project=project,
             prefs=SimpleNamespace(
                 stt_variant=SttVariant.DISABLED,
-                menu_clears_screen=False,
             ),
         ),
     )

@@ -1,6 +1,8 @@
 from tts_audiobook_tool.app_types import ModelWarmUpResult
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase
+from tts_audiobook_tool.model_runtime import require_model_owner
 from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.sound.yamnet_detector import YamnetDetector
 from tts_audiobook_tool.state import State
@@ -22,99 +24,74 @@ class ModelManager:
 
     @staticmethod
     def warm_up_models(state: State, skip_yamnet: bool=False) -> ModelWarmUpResult:
+        require_model_owner("model registry")
+        """Reconcile process-local models with the models required by state.
+
+        Presence and desired state are deliberately separate: an already-loaded
+        model is retained when it is still wanted and cleared when it is not.
+        In the interactive application this method is called only inside the
+        model worker process.
         """
-        Instantiates required models for main inference flow, prints updates.
 
-        Params:
-            skip_yamnet - if True, does not init YAMNet model even if state would dictate otherwise
+        want_stt = not bool(Stt.should_skip(state))
+        need_tts = not Tts.instance_exists()
+        need_stt = want_stt and not Stt.has_instance()
 
-        Returns:
-            ModelWarmUpResult indicating success, interruption, or initialization failure.
-        """
-
-        should_tts = not Tts.instance_exists()        
-        should_stt = not Stt.should_skip(state) and not Stt.has_instance()
-        shoulds = [should_tts, should_stt]
-        num_shoulds = sum(1 for item in shoulds if item)
-        
-        if skip_yamnet:
-            # "Lazy unload", relevant for user flows like: 
-            # Do inference with MossLocal, select MossDelay model, do inference
-            ModelManager.clear_yamnet_detector()
-        
-        if num_shoulds == 0 and (ModelManager.has_yamnet_detector() or skip_yamnet):
-            return ModelWarmUpResult()
-
-        if not should_stt:
-            # "Lazy unload", relevant for user flows like: 
-            # Do inference, choose unsupported validation language, do inference
+        if not want_stt:
             Stt.clear_stt_model()
+        if skip_yamnet:
+            ModelManager.clear_yamnet_detector()
 
-        if num_shoulds >= 2:
+        if need_tts and need_stt:
             print_init("Warming up models...")
 
         Interrupts().set("model init")
 
-        # Init TTS
-        if should_tts:
-            try:
-                tts_instance = Tts.get_instance()
-            except Exception as e:
-                Interrupts().clear()
-                app_memory.gc_ram_vram()
-                err_msg = str(e)
-                return ModelWarmUpResult(error=err_msg)
-        else:
-            tts_instance = Tts.get_instance_if_exists()
-            if tts_instance is None:
-                try:
-                    tts_instance = Tts.get_instance()
-                except Exception as e:
-                    Interrupts().clear()
-                    app_memory.gc_ram_vram()
-                    err_msg = str(e)
-                    return ModelWarmUpResult(error=err_msg)
+        # Init or retain TTS.
+        if need_tts:
+            GenerationEvents.emit(GenerationPhase("Loading text-to-speech model"))
+        try:
+            tts_instance = Tts.get_instance()
+        except Exception as e:
+            Interrupts().clear()
+            app_memory.gc_ram_vram()
+            return ModelWarmUpResult(error=str(e))
 
-        # Check for interrupt
         if Interrupts().did_interrupt:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
 
-        # Init STT
-        if should_stt:
+        # Init STT only when desired. An existing desired instance is retained.
+        if need_stt:
+            GenerationEvents.emit(GenerationPhase("Loading speech-to-text model"))
             try:
                 Stt.eager_warm_up_for_inference()
             except Exception as e:
                 Interrupts().clear()
                 app_memory.gc_ram_vram()
-                err_msg = str(e)
-                return ModelWarmUpResult(error=err_msg)
+                return ModelWarmUpResult(error=str(e))
 
-        # Check for interrupt
         if Interrupts().did_interrupt:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
-        
-        # Init YAMNet
-        should_yamnet = (
-            Tts.get_class().can_hallucinate_music(state.project, tts_instance)
-            and not ModelManager.has_yamnet_detector()
-            and not skip_yamnet
+
+        # Reconcile YAMNet after TTS exists because capability detection may
+        # depend on the concrete TTS instance.
+        want_yamnet = (
+            not skip_yamnet
+            and Tts.get_class().can_hallucinate_music(state.project, tts_instance)
         )
-        if should_yamnet:
+        if want_yamnet and not ModelManager.has_yamnet_detector():
+            GenerationEvents.emit(GenerationPhase("Loading audio validation model"))
             try:
                 _ = ModelManager.get_yamnet_detector()
             except Exception as e:
                 Interrupts().clear()
                 app_memory.gc_ram_vram()
-                err_msg = str(e)
-                return ModelWarmUpResult(error=err_msg)
-        else:
-            # "Lazy unload", relevant for user flows like: 
-            # Do inference with MossLocal, select MossDelay model, do inference
+                return ModelWarmUpResult(error=str(e))
+        elif not want_yamnet:
             ModelManager.clear_yamnet_detector()
 
-        # Check for interrupt
         if Interrupts().did_interrupt:
             Interrupts().clear()
             return ModelWarmUpResult(did_interrupt=True)
@@ -124,18 +101,32 @@ class ModelManager:
 
     @staticmethod
     def clear_all_models(except_lava_sr: bool = False) -> None:
-
-        Stt.clear_stt_model()
-        Tts.clear_tts_model()
-        ModelManager.clear_yamnet_detector()
+        require_model_owner("model registry")
+        """Best-effort release of every process-local model."""
+        errors: list[str] = []
+        clearers = [
+            ("STT", Stt.clear_stt_model),
+            ("TTS", Tts.clear_tts_model),
+            ("YAMNet", ModelManager.clear_yamnet_detector),
+        ]
         if not except_lava_sr:
-            ModelManager.clear_lava_sr_upsampler()
+            clearers.append(("LavaSR", ModelManager.clear_lava_sr_upsampler))
 
-        # For good measure
-        app_memory.gc_ram_vram()
+        try:
+            for label, clear in clearers:
+                try:
+                    clear()
+                except Exception as exception:
+                    errors.append(f"{label}: {type(exception).__name__}: {exception}")
+        finally:
+            app_memory.gc_ram_vram()
+
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
     @staticmethod
     def is_any_model_loaded() -> bool:
+        require_model_owner("model registry")
         return Stt.has_instance() or \
             Tts.instance_exists() or \
             ModelManager.has_yamnet_detector() or \
@@ -143,6 +134,7 @@ class ModelManager:
 
     @staticmethod
     def get_yamnet_detector() -> YamnetDetector:
+        require_model_owner("YAMNet")
         if ModelManager.yamnet_detector is None:
             print_init("Initializing YAMNet...")
             ModelManager.yamnet_detector = YamnetDetector()
@@ -150,26 +142,37 @@ class ModelManager:
 
     @staticmethod
     def has_yamnet_detector() -> bool:
+        require_model_owner("model registry")
         return ModelManager.yamnet_detector is not None
 
     @staticmethod
     def clear_yamnet_detector() -> None:
-        if ModelManager.yamnet_detector is not None:
-            ModelManager.yamnet_detector.kill()
-            ModelManager.yamnet_detector = None
-            app_memory.gc_ram_vram()
+        require_model_owner("model registry")
+        detector = ModelManager.yamnet_detector
+        ModelManager.yamnet_detector = None
+        if detector is not None:
+            try:
+                detector.kill()
+            finally:
+                app_memory.gc_ram_vram()
 
     @staticmethod
-    def get_lava_sr_upsampler() -> LavaSrUtil | None:
+    def get_lava_sr_upsampler(
+        *, isolate_cuda: bool = True
+    ) -> LavaSrUtil | None:
+        require_model_owner("LavaSR")
         if not LavaSrUtil.has_lava_sr():
             return None
         if ModelManager.lava_sr_upsampler is None:
             print_init("Initializing LavaSR v2 upsampler...")
-            ModelManager.lava_sr_upsampler = LavaSrUtil()
+            ModelManager.lava_sr_upsampler = LavaSrUtil(
+                isolate_cuda=isolate_cuda
+            )
         return ModelManager.lava_sr_upsampler
 
     @staticmethod
     def clear_lava_sr_upsampler() -> None:
+        require_model_owner("model registry")
         upsampler = ModelManager.lava_sr_upsampler
         ModelManager.lava_sr_upsampler = None
         if upsampler is not None:

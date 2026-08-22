@@ -1,11 +1,10 @@
-from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import SttConfig, SttVariant
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.llm_settings_menu import LlmSettingsMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.tts import Tts
@@ -17,26 +16,12 @@ class OptionsMenu:
     @staticmethod
     def menu(state: State) -> None:
 
-        def make_unload_label(_) -> str:
-            memory_string = app_support.make_memory_string()
-            if memory_string:
-                memory_string = f"{COL_DIM}({memory_string}{COL_DIM})"
-            qualifier = "" if Tts.is_local_model() else "local "
-            return f"Attempt to unload {qualifier}models {memory_string}"
-
         def on_unload(_: State, __: MenuItem) -> None:
-            before_string = app_support.make_memory_string()
-            app_support.log_unload_memory_snapshot("before")
-            if before_string:
-                printt(f"Before: {before_string}")
-            ModelManager.clear_all_models()
-            after_string = app_support.make_memory_string()
-            app_support.log_unload_memory_snapshot("after")
-            if after_string:
-                printt(f"After:  {after_string}")
-            if state.prefs.menu_clears_screen:
-                printt()
-                ask.ask_enter_to_continue()
+            reset_error = ModelWorker.clear_models_if_running_blocking()
+            if reset_error:
+                printt(f"{COL_ERROR}{reset_error}")
+            else:
+                print_feedback("Models unloaded")
 
         def on_hints(_: State, __: MenuItem) -> None:
             state.prefs.reset_hints()
@@ -107,7 +92,7 @@ class OptionsMenu:
                         lambda _, __: OptionsMenu.tts_force_cpu_menu(state)
                     )
                 )
-                
+
             # About TTS model
             if Tts.get_type() != TtsModelType.NONE:
                 items.append(
@@ -118,7 +103,7 @@ class OptionsMenu:
                 )
 
             # Unload models
-            items.append( MenuItem(make_unload_label, on_unload) )
+            items.append(MenuItem("Unload models", on_unload))
 
             # Various:
             items.append(
@@ -141,23 +126,24 @@ class OptionsMenu:
                     lambda _, __: OptionsMenu.aac_bitrate_menu(state)
                 )
             )
-            
-            items.append(
-                MenuItem(
-                    lambda _: make_menu_label("Menu clears screen", state.prefs.menu_clears_screen, MENU_CLEARS_SCREEN_DEFAULT),
-                    lambda _, __: OptionsMenu.menu_clears_screen_menu(state)
-                )
-            )
+
             items.append( MenuItem("Reset contextual hints", on_hints) )
 
-            items.append( 
+            items.append(
                 MenuItem(
-                    make_menu_label("Save debug files", state.prefs.save_debug_files, False),
+                    make_menu_label("Save log files", state.prefs.save_gen_log),
+                    lambda _, __: OptionsMenu.save_gen_log_menu(state)
+                )
+            )
+
+            items.append(
+                MenuItem(
+                    make_menu_label("Save debug files", state.prefs.save_debug_files),
                     lambda _, __: OptionsMenu.save_debug_files_menu(state)
                 )
             )
             return items
-        
+
         MenuUtil.menu(state, "Options", item_maker, breadcrumb="Options")
 
     @staticmethod
@@ -215,7 +201,7 @@ class OptionsMenu:
             if state.prefs.tts_force_cpu != value:
                 state.prefs.tts_force_cpu = value
                 state.prefs.save()
-            print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))        
+            print_feedback(f"Set to:", str(state.prefs.tts_force_cpu))
 
         subheading = f"Forces TTS model to use CPU as its torch device even when GPU is available.\n"
 
@@ -231,6 +217,28 @@ class OptionsMenu:
         )
 
     @staticmethod
+    def save_gen_log_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            if state.prefs.save_gen_log != value:
+                state.prefs.save_gen_log = value
+                state.prefs.save()
+            print_feedback(f"Set to:", str(state.prefs.save_gen_log))
+
+        subheading = "Saves log file when generating TTS audio\n"
+
+        MenuUtil.options_menu(
+            state=state,
+            heading_text="Save log files",
+            subheading=subheading,
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.prefs.save_gen_log,
+            default_value=False,
+            on_select=on_select
+        )
+
+    @staticmethod
     def save_debug_files_menu(state: State) -> None:
 
         def on_select(value: bool) -> None:
@@ -239,8 +247,13 @@ class OptionsMenu:
                 state.prefs.save()
             print_feedback(f"Set to:", str(state.prefs.save_debug_files))
 
-        subheading = f"Saves intermediate sound files alongside finalized\n"
-        subheading += f"sound segment FLAC files in the project directory.\n"
+        segments_dir = text_util.make_terminal_hyperlink(
+            state.project.sound_segments_path, PROJECT_SOUND_SEGMENTS_SUBDIR, is_file=True
+        )
+        subheading = (
+            f"Saves intermediate sound files alongside finalized sound segment\n"
+            f"FLAC files in the project {segments_dir} directory.\n"
+        )
 
         MenuUtil.options_menu(
             state=state,
@@ -250,29 +263,6 @@ class OptionsMenu:
             values=[True, False],
             current_value=state.prefs.save_debug_files,
             default_value=False,
-            on_select=on_select
-        )
-
-    @staticmethod
-    def menu_clears_screen_menu(state: State) -> None:
-
-        def on_select(value: bool) -> None:
-            if state.prefs.menu_clears_screen != value:
-                state.prefs.menu_clears_screen = value
-                state.prefs.save()
-            print_feedback(f"Set to:", str(state.prefs.menu_clears_screen))
-
-        subheading = f"When enabled, clears screen between menus\n"
-        subheading += f"and shows status info header.\n"
-
-        MenuUtil.options_menu(
-            state=state,
-            heading_text="Menu clears screen",
-            subheading=subheading,
-            labels=["True", "False"],
-            values=[True, False],
-            current_value=state.prefs.menu_clears_screen,
-            default_value=MENU_CLEARS_SCREEN_DEFAULT,
             on_select=on_select
         )
 
@@ -335,10 +325,10 @@ class OptionsMenu:
         value = value.strip().rstrip("/")
         if not value:
             return
-        
+
         if "://" not in value:
             value = f"http://{value}"
-        
+
         state.prefs.sgl_omni_url = value
         state.prefs.save()
         SglOmniUtil.set_base_url(state.prefs.sgl_omni_url)

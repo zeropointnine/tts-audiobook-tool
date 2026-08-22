@@ -14,7 +14,7 @@ from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.system_support.browser import get_chromium_info, launch_player_with_chromium
 from tts_audiobook_tool.app_types import SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, Sound
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
@@ -24,7 +24,6 @@ from tts_audiobook_tool.sound import m4b_chapter_util
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
-from tts_audiobook_tool.sound.lava_sr_util import LavaSrUtil
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
@@ -36,11 +35,22 @@ from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
-from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.util import *
 
 class ConcatUtil:
+
+    @staticmethod
+    def unload_models_for_upsampling() -> str:
+        if not ModelWorker.is_alive():
+            return ""
+
+        printt(f"{COL_DIM_ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
+        printt()
+        error = ModelWorker.clear_models_if_running_blocking()
+        if error:
+            return f"Couldn't unload models before generative upsampling: {error}"
+        return ""
 
     # Pseudo-silence compensation for inter-segment pauses during concatenation.
     #
@@ -57,8 +67,8 @@ class ConcatUtil:
 
     @staticmethod
     def make_files(
-        state: State, 
-        file_cut_indices: list[int], 
+        state: State,
+        file_cut_indices: list[int],
         bookmark_indices: list[int]
     ) -> None:
         """
@@ -74,9 +84,11 @@ class ConcatUtil:
             raise ValueError(f"file_cut_indices and bookmark_indices are mutually exclusive: {file_cut_indices} vs {bookmark_indices}")
 
         start_time = time.time()
-        
+
         # Preflight checks
-        lava_sr_available = LavaSrUtil.has_lava_sr()
+        lava_sr_available, lava_probe_error = ModelWorker.probe_lava_sr_blocking()
+        if lava_probe_error:
+            lava_sr_available = False
         use_upsampler = state.project.use_upsampler and lava_sr_available
         if state.project.use_upsampler and not lava_sr_available:
             printt(
@@ -84,10 +96,11 @@ class ConcatUtil:
                 "but LavaSR is not installed. Continuing without upsampling."
             )
             printt()
-        if use_upsampler and ModelManager.is_any_model_loaded():
-            printt(f"{COL_DIM_ITALICS}Attempting to unload models to free up VRAM for generative upsampling...{COL_DEFAULT}")
-            printt()
-            ModelManager.clear_all_models(except_lava_sr=True)
+        if use_upsampler:
+            unload_error = ConcatUtil.unload_models_for_upsampling()
+            if unload_error:
+                ask.ask_error(unload_error)
+                return
 
         # Make subdir
         subdir = datetime.now().strftime("%y%m%d_%H%M%S") # eg, 260518_120811
@@ -122,8 +135,8 @@ class ConcatUtil:
                 num_chapters = 1
 
             stem = make_stem(
-                project=state.project, 
-                index_start=index_start, index_end=index_end, 
+                project=state.project,
+                index_start=index_start, index_end=index_end,
                 file_cut_index=file_cut_index, num_chapters=num_chapters
             )
             dest_stem_path = os.path.join(dest_dir, stem)
@@ -137,25 +150,20 @@ class ConcatUtil:
                 use_upsampler=use_upsampler,
             )
             if err:
-                ModelManager.clear_lava_sr_upsampler()
                 printt()
                 ask.ask_error(err)
                 return
             last_dest_path = dest_path
-            
-            printt(f"{COL_ACCENT}Saved {COL_DEFAULT}{make_terminal_hyperlink(dest_path)}") 
+
+            printt(f"{COL_ACCENT}Saved {COL_DEFAULT}{make_terminal_hyperlink(dest_path)}")
             printt()
 
         # Post-concat feedback, prompt
-        
+
         app_support.play_done_sound()
         elapsed = duration_string(time.time() - start_time)
         printt(f"Finished{COL_DIM} (elapsed: {elapsed})")
         printt()
-
-        app_support.log_unload_memory_snapshot("upscale operation finished")
-        ModelManager.clear_lava_sr_upsampler()
-        app_support.log_unload_memory_snapshot("clear_lava_sr_upsampler finished")
 
         app_hint_util.show_player_hint(state.prefs)
 
@@ -202,7 +210,7 @@ class ConcatUtil:
             use_upsampler: Whether to upsample concatenated segments. None uses
                 the project's setting; an explicit bool overrides it (for
                 example, after make_files resolves upsampler availability).
-        
+
         Prints to console along the way
         Returns successful file path, error message if any
         """
@@ -218,13 +226,13 @@ class ConcatUtil:
                 raw_text = ""
 
         # Intermediate file paths etc
-        
+
         is_aac = (state.project.export_type == ExportType.AAC)
         should_normalize = (state.project.normalization_type != NormalizationType.DISABLED)
 
         concat_suffix = ".m4b" if is_aac and not should_normalize else ".flac" # tricky
         concat_path = stem_path + " [concat]" + concat_suffix
-        
+
         suffix = ".m4b" if is_aac else ".flac"
         if should_normalize:
             norm_path = stem_path + " [norm]" + suffix
@@ -256,7 +264,7 @@ class ConcatUtil:
         phrases_and_paths = ConcatUtil.make_phrases_and_paths(
             state.project, index_start, index_end
         )
-                    
+
         # [1] Concatenated audio file
 
         use_upsampler = (
@@ -264,16 +272,30 @@ class ConcatUtil:
             if use_upsampler is None
             else use_upsampler
         )
-        result = ConcatUtil.concatenate_sound_segments(
-            concat_path,
-            phrases_and_paths,
-            print_progress=True,
-            use_break_sound_effect=state.project.use_break_sound_effect,
-            high_shelf=high_shelf,
-            reason_pauses=state.project.reason_pauses,
-            aac_bitrate=state.prefs.aac_bitrate,
-            use_upsampler=use_upsampler
-        )
+        upsampler_unload_error = ""
+        try:
+            result = ConcatUtil.concatenate_sound_segments(
+                concat_path,
+                phrases_and_paths,
+                print_progress=True,
+                use_break_sound_effect=state.project.use_break_sound_effect,
+                high_shelf=high_shelf,
+                reason_pauses=state.project.reason_pauses,
+                aac_bitrate=state.prefs.aac_bitrate,
+                use_upsampler=use_upsampler
+            )
+        finally:
+            # LavaSR lives in the model worker. Always explicitly unload it at
+            # the end of the upsampling phase—even on interruption or failure—
+            # before normalization or any later output-processing step begins.
+            if use_upsampler:
+                app_support.log_unload_memory_snapshot("upscale operation finished")
+                upsampler_unload_error = ModelWorker.clear_models_if_running_blocking()
+                app_support.log_unload_memory_snapshot("clear_lava_sr_upsampler finished")
+
+        if upsampler_unload_error:
+            delete_intermediate_files()
+            return "", f"Couldn't unload LavaSR after generative upsampling: {upsampler_unload_error}"
         if isinstance(result, str): # is error
             delete_intermediate_files()
             return "", result
@@ -286,8 +308,8 @@ class ConcatUtil:
 
         if norm_path:
             err = LoudnessNormalizationUtil.normalize_file(
-                source_flac=last_path, 
-                specs=state.project.normalization_type.value, 
+                source_flac=last_path,
+                specs=state.project.normalization_type.value,
                 dest_path=norm_path,
                 aac_bitrate=state.prefs.aac_bitrate
             )
@@ -322,14 +344,14 @@ class ConcatUtil:
         # [4] App metadata (final file)
 
         phrases = [item[0] for item in phrases_and_paths]
-        timed_phrases = TimedPhrase.make_list_using(phrases, durations)        
+        timed_phrases = TimedPhrase.make_list_using(phrases, durations)
         phrase_to_text_segment_start_indices = list(range(len(timed_phrases)))
         if state.project.subdivide_phrases:
             file_paths = [item[1] for item in phrases_and_paths]
             timed_phrases, bookmark_indices, phrase_to_text_segment_start_indices = make_subdivided_timed_phrases(
-                timed_phrases=timed_phrases, 
-                sound_paths=file_paths, 
-                sound_durations=durations, 
+                timed_phrases=timed_phrases,
+                sound_paths=file_paths,
+                sound_durations=durations,
                 bookmark_indices=bookmark_indices
             )
         sections = make_app_metadata_sections(
@@ -343,7 +365,7 @@ class ConcatUtil:
             timed_phrases=timed_phrases,
             title=state.project.book.title,
             version=ABR_VERSION,
-            raw_text=raw_text, 
+            raw_text=raw_text,
             bookmark_indices=bookmark_indices,
             has_break_audio=state.project.use_break_sound_effect,
             project_snapshot=ProjectSerializationUtil.to_snapshot_dict(state.project),
@@ -367,11 +389,11 @@ class ConcatUtil:
 
     @staticmethod
     def make_phrases_and_paths(
-        project: Project, 
-        index_start: int = -1, 
+        project: Project,
+        index_start: int = -1,
         index_end: int = -1
     ) -> list[tuple[Phrase, str, bool]]:
-        
+
         if index_start == -1:
             index_start = 0
         if index_end == -1:
@@ -380,7 +402,7 @@ class ConcatUtil:
         phrases_and_paths: list[tuple[Phrase, str, bool]] = []
         section_start_indices = {0, *project.markers}
 
-        for group_index, group in enumerate(project.phrase_groups):            
+        for group_index, group in enumerate(project.phrase_groups):
             phrase = group.as_flattened_phrase()
             is_first_in_section = group_index in section_start_indices
             out_of_range = (group_index < index_start or group_index > index_end)
@@ -398,8 +420,8 @@ class ConcatUtil:
 
     @staticmethod
     def num_missing_in(
-        project: Project, 
-        index_start: int, 
+        project: Project,
+        index_start: int,
         index_end: int
     ) -> int:
         num_missing = 0
@@ -427,8 +449,8 @@ class ConcatUtil:
         Concatenates a list of files to a destination file using ffmpeg streaming process.
         Adds silence or sound effect between adjacent segments based on phrase "reason".
 
-        :param aac_bitrate: 
-            Only relevant if dest_path suffix is .m4a/.m4b; ignored otherwise. 
+        :param aac_bitrate:
+            Only relevant if dest_path suffix is .m4a/.m4b; ignored otherwise.
             Must be a valid AAC bitrate string like "128k".
 
         Returns list of float durations of each added segment to be used for app metadata .
@@ -491,7 +513,7 @@ class ConcatUtil:
                 ) or 0.0
                 base = reason_pauses.get_pause_for(phrase.reason)
                 override = max(0.0, base - end_pseudo - start_pseudo)
-                
+
                 if override < base:
                     L.d(f"\n\npseudosilence - base={base:.3f} end={end_pseudo:.3f} start={start_pseudo:.3f} override={override:.3f} AMOUNT={end_pseudo + start_pseudo}\n")
 
@@ -523,13 +545,31 @@ class ConcatUtil:
                 delete_silently(dest_path) # TODO delete parent dir silently if empty
                 return "Interrupted by user"
 
-            result = SoundPipeline.make_concat_rendered_sound_segment(
-                phrase, path, use_break_sound_effect, high_shelf,
-                reason_pauses=reason_pauses,
-                is_first_in_section=is_first_in_section,
-                use_upsampler=use_upsampler,
-                add_pause=False,
-            )
+            render_path = path
+            temporary_upscaled_path = ""
+            if use_upsampler:
+                temporary_upscaled_path = f"{dest_path}.lava-{i}.flac"
+                upsample_error = ModelWorker.upsample_file_blocking(
+                    path,
+                    temporary_upscaled_path,
+                )
+                if upsample_error:
+                    ConcatUtil.close_ffmpeg_stream(process)
+                    delete_silently(temporary_upscaled_path)
+                    return upsample_error
+                render_path = temporary_upscaled_path
+
+            try:
+                result = SoundPipeline.make_concat_rendered_sound_segment(
+                    phrase, render_path, use_break_sound_effect, high_shelf,
+                    reason_pauses=reason_pauses,
+                    is_first_in_section=is_first_in_section,
+                    use_upsampler=False,
+                    add_pause=False,
+                )
+            finally:
+                if temporary_upscaled_path:
+                    delete_silently(temporary_upscaled_path)
             if isinstance(result, str): # error
                 ConcatUtil.close_ffmpeg_stream(process) # TODO clean up more and message user
                 return result
@@ -641,7 +681,6 @@ class ConcatUtil:
         else:
             bookmark_indices = []
 
-        MenuUtil.print_heading(state, "Concatenating file", dont_clear=True, non_menu=True)
         ConcatUtil.make_files(
             state=state,
             file_cut_indices=[],
@@ -652,7 +691,7 @@ class ConcatUtil:
 
 def make_stem(
     project: Project,
-    index_start: int, 
+    index_start: int,
     index_end: int,
     file_cut_index: int,
     num_chapters: int
@@ -661,7 +700,7 @@ def make_stem(
     phrases_and_paths: list[tuple[Phrase, str, bool]] = []
     num_missing = 0
 
-    for group_index, group in enumerate(project.phrase_groups):            
+    for group_index, group in enumerate(project.phrase_groups):
         phrase = group.as_flattened_phrase()
         is_first_in_section = group_index == 0 or group_index in project.markers
         out_of_range = (group_index < index_start or group_index > index_end)
@@ -704,13 +743,13 @@ def make_stem(
     return stem
 
 def make_subdivided_timed_phrases(
-        timed_phrases: list[TimedPhrase], 
+        timed_phrases: list[TimedPhrase],
         sound_paths: list[str],
         sound_durations: list[float],
         bookmark_indices: list[int]
     ) -> tuple[ list[TimedPhrase], list[int], list[int] ]:
     """
-    Uses the "forced alignment" metadata in the json files which is saved alongside the sound_paths 
+    Uses the "forced alignment" metadata in the json files which is saved alongside the sound_paths
     to break up the timed_phrases into smaller parts.
 
     The three arguments are parallel lists.
@@ -727,7 +766,7 @@ def make_subdivided_timed_phrases(
 
     for i in range(0, len(timed_phrases)):
         phrase_to_text_segment_start_indices.append(len(new_timed_phrases))
-        
+
         def add_to_new_bookmark_indices(debug_reason: str, debug_text: str) -> None:
             if i in bookmark_indices:
                 new_bookmark_index = len(new_timed_phrases)
@@ -751,7 +790,7 @@ def make_subdivided_timed_phrases(
             continue
 
         parse_result = SegmentTranscriptUtil.load_timed_phrases(subdivided_items_json_path)
-        if isinstance(parse_result, str): 
+        if isinstance(parse_result, str):
             # File/parse error; use original item
             add_to_new_bookmark_indices("parse-error", original_timed_phrase.presentable_text)
             new_timed_phrases.append(original_timed_phrase)
@@ -762,7 +801,7 @@ def make_subdivided_timed_phrases(
         # Finally, do subdivision action
         offset = original_timed_phrase.time_start
         for subdivided_index, item in enumerate(subdivided_timed_phrases):
-            
+
             if subdivided_index == 0:
                 add_to_new_bookmark_indices("first-subdivision", item.presentable_text)
 
@@ -774,7 +813,7 @@ def make_subdivided_timed_phrases(
 
             updated_item = TimedPhrase(item.text, time_start, time_end)
             new_timed_phrases.append(updated_item)
-        
+
         # Set last item's time_end using the duration of the source audio clip
         # rather than the transcription end word timestamp
         # (prevents discontinuities in segment selectedness across boundaries, which looks distracting)

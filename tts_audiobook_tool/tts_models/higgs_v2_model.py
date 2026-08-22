@@ -35,7 +35,7 @@ from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUt
 
 # --------------------------------------------------------------------------------------------------
 # Pin HuggingFace model revisions to known-working commits.
-# This prevents breaking changes in upstream model repos from breaking this tool 
+# This prevents breaking changes in upstream model repos from breaking this tool
 # See: https://huggingface.co/bosonai/higgs-audio-v2-tokenizer/discussions/5
 #
 # To find commit hashes, go to each model's "Commits" tab on HuggingFace and copy the hash
@@ -130,18 +130,19 @@ class HiggsV2Model(HiggsV2BaseModel):
         Raising here aborts the generation with an error string (handled by
         the caller) and nothing gets cached.
         """
+        assert self.audio_tokenizer is not None
         return self.audio_tokenizer.encode(source_path).detach().cpu().clone()
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
         ) -> list[Sound] | str:
-        
+
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]

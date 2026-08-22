@@ -85,17 +85,22 @@ class MainMenu:
             )
             return items
 
-        heading = f"{text_util.make_terminal_hyperlink(APP_URL, APP_NAME)}"
-        if not state.prefs.menu_clears_screen:
-            s = get_heading_tts_text(state)
-            heading += f" {COL_DIM}(TTS model: {COL_ACCENT}{s}{COL_DIM})"
-        MenuUtil.menu(state, heading, make_items, is_submenu=False, one_shot=True, breadcrumb="Main")
+        heading = text_util.make_terminal_hyperlink(APP_URL, APP_NAME)
+        MenuUtil.menu(
+            state,
+            heading,
+            make_items,
+            is_submenu=False,
+            one_shot=True,
+            breadcrumb="Main",
+            on_shown=state.mark_main_menu_shown,
+        )
 
 # ---
 
 def get_heading_tts_text(state: State) -> str:
     
-    s = Tts.get_class().get_menu_text(state.project, Tts.get_instance_if_exists())
+    s = Tts.get_class().get_menu_text(state.project, None)
     if not Tts.is_sgl_mode():
         return s
     SglOmniUtil.update_model_id()
@@ -109,38 +114,12 @@ def get_heading_tts_text(state: State) -> str:
 
 # Project
 def make_project_label(state: State) -> str:
-    if not state.prefs.menu_clears_screen:
-        if state.project.dir_path:
-            value = text_util.make_terminal_hyperlink(
-                state.project.dir_path, ellipsize_path_for_menu(state.project.dir_path), is_file=True
-            )
-        else:
-            value = ""
-        currently = make_currently_string(
-            value, 
-            required_predicate=lambda: not bool(value),
-            required_label="required"
-        )
-    else:
-        currently = ""
-
     start_here = f" {COL_ERROR}<-- start here" if not state.project.dir_path else ""
-    return f"Project {currently}{start_here}"
+    return f"Project{start_here}"
 
 # Voice
 def make_voice_label(state: State) -> str:
-    
-    base_label = f"Voice clone and model settings"
-    if state.prefs.menu_clears_screen:
-        return base_label
-    
-    voice_display_info = Tts.get_class().get_voice_display_info(state.project, Tts.get_instance_if_exists())
-    if voice_display_info is None:
-        return base_label
-    combined_string = voice_display_info.main_prefix
-    if voice_display_info.value:
-        combined_string += f": {COL_ACCENT}{voice_display_info.value}"
-    return f"{base_label} {COL_DIM}({combined_string}{COL_DIM})"
+    return "Voice clone and model settings"
 
 def on_voice(state: State, __) -> None:
     Tts.update_tts_type()
@@ -154,16 +133,7 @@ def on_voice(state: State, __) -> None:
 
 # Text
 def make_text_label(state: State) -> str:
-    if state.project.phrase_groups:
-        if state.prefs.menu_clears_screen:
-            current = ""
-        else:
-            num = len(state.project.phrase_groups)
-            lines = make_noun("line", "lines", num)
-            current = make_currently_string(f"{num} {lines}")
-    else:
-        current = ""
-    return f"Text {current}"
+    return "Text"
 
 def on_text(state: State, __) -> None:
     if not state.project.dir_path:

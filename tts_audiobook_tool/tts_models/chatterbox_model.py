@@ -32,11 +32,11 @@ class ChatterboxModel(ChatterboxBaseModel):
     SUPPORTS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, model_type: ChatterboxType, device: DeviceType):
-        
+
         self._device_type = device
         device_value = device.value
         self._model_type = model_type
-        
+
         multilingual_loader: Any = ChatterboxMultilingualTTS
         turbo_loader: Any = ChatterboxTurboTTS
 
@@ -66,8 +66,8 @@ class ChatterboxModel(ChatterboxBaseModel):
         file state. The library's own `self.conds` is left pointing at the
         on-device objects it created; the cache keeps CPU copies only.
         """
-        self._chatterbox.prepare_conditionals(source_path)
-        conds = self._chatterbox.conds
+        self._chatterbox.prepare_conditionals(source_path) # type: ignore
+        conds = self._chatterbox.conds # type: ignore
         if conds is None:
             raise RuntimeError("Chatterbox prepare_conditionals() did not produce conditionals")
         return self._clone_conditionals(conds, device="cpu")
@@ -104,15 +104,15 @@ class ChatterboxModel(ChatterboxBaseModel):
         return value.detach().to(device).clone()
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
         ) -> list[Sound] | str:
-        
+
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
 
@@ -176,7 +176,7 @@ class ChatterboxModel(ChatterboxBaseModel):
             return "Logic error: Model is not initialized"
         if language_id and self._model_type == ChatterboxType.TURBO:
             return "Logic error: language_id is not supported for Chatterbox Turbo"
-        
+
         if seed <= -1:
             seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
@@ -227,4 +227,4 @@ class ChatterboxModel(ChatterboxBaseModel):
         except Exception as e:
             traceback.print_exc()
             return make_error_string(e)
-        
+

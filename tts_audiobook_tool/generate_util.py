@@ -12,6 +12,13 @@ from tts_audiobook_tool.concat_util import ConcatUtil
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.generation_events import (
+    GenerationEvents,
+    GenerationPhase,
+    GenerationProgress,
+    GenerationStarted,
+    GenerationStats,
+)
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
@@ -87,6 +94,7 @@ class GenerateUtil:
         stt_config = state.prefs.stt_config
         showed_vram_warning = False
 
+        GenerationEvents.emit(GenerationPhase("Preparing models"))
         warm_up_result = ModelManager.warm_up_models(state)
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
@@ -103,13 +111,14 @@ class GenerateUtil:
         # Print warnings if any
         warnings = Tts.get_instance().get_warning_issues(state.project)
         if warnings:
-            warnings_string = "\n".join(warnings)
-            print_feedback(Ansi.ITALICS + warnings_string, no_preformat=True)
+            message = "\n".join(warnings)
+            print_feedback(Ansi.ITALICS + message, no_preformat=True)
 
         showed_vram_warning = app_memory.show_vram_memory_warning_if_necessary()
 
         # Make 'items' (tuple = phase group index, retry_count)
         sorted_indices = sorted(list(indices_set))
+        GenerationEvents.emit(GenerationStarted(total=len(sorted_indices)))
         items: list[tuple[int, int]] = []
         for i in range(len(sorted_indices)):
             index = sorted_indices[i]
@@ -174,6 +183,7 @@ class GenerateUtil:
         pending_retries: list[tuple[int, int]] = []
         current_round: list[SubBatch] = []
         last_voice: int | None = None
+        is_first_batch = True
 
         while True:
 
@@ -214,15 +224,27 @@ class GenerateUtil:
                     print("\a", end="")
                     showed_vram_warning = True
 
-            # Print item info
+            # Print item info and publish a structured progress snapshot.
+            num_processed = num_passed + num_failed + num_errored
+            GenerationEvents.emit(GenerationPhase("Generating audio"))
+            GenerationEvents.emit(
+                GenerationProgress(
+                    processed=num_processed,
+                    remaining=len(sorted_indices) - num_processed,
+                    total=len(sorted_indices),
+                    current_indices=tuple(indices),
+                    passed=num_passed,
+                    failed=num_failed,
+                    errored=num_errored,
+                    retries=num_retries,
+                )
+            )
             GenerateUtil.print_batch_heading(
                 indices=indices,
-                num_complete=num_passed + num_failed + num_errored,
-                num_remaining=len(sorted_indices) - (num_passed + num_failed + num_errored),
-                num_total=len(sorted_indices),
-                start_time=start_time,
                 voice_index=sub.voice_selection_index,
+                show_divider=not is_first_batch,
             )
+            is_first_batch = False
 
             # Generate and validate
             gen_start_time = time.time()
@@ -411,6 +433,19 @@ class GenerateUtil:
                 if did_abort_model_errors:
                     break
 
+            num_processed = num_passed + num_failed + num_errored
+            GenerationEvents.emit(
+                GenerationProgress(
+                    processed=num_processed,
+                    remaining=len(sorted_indices) - num_processed,
+                    total=len(sorted_indices),
+                    passed=num_passed,
+                    failed=num_failed,
+                    errored=num_errored,
+                    retries=num_retries,
+                )
+            )
+
             if did_abort_model_errors:
                 printt()
                 GenerateUtil.print_consecutive_model_errors_message(max_consecutive_model_errors)
@@ -418,10 +453,8 @@ class GenerateUtil:
                 did_interrupt = True
                 break
 
-            # Print current memory usage
-            printt()
-            s = f"Memory: {COL_DIM}{text_util.strip_ansi_codes(app_support.make_memory_string())}"
-            printt(s)
+            # Memory usage is displayed by the generation header, not the
+            # console; keep only the blank-line separator between batches.
             printt()
 
             if re_adds:
@@ -448,30 +481,39 @@ class GenerateUtil:
                         is_error=True,
                     )
 
-        # Print summary, metrics
-        warnings_string = ""
+        # Build the summary even when it will not be shown so this metrics
+        # formatting remains one straightforward path. Clean quick generations
+        # return directly to the editor; stopped or problematic quick runs keep
+        # the summary visible for review.
+        message = ""
         if did_interrupt:
             Tts.clear_continuation()
-            warnings_string += "Interrupted. "
-        warnings_string += f"Elapsed: {duration_string(time.time() - start_time)}\n"
+        message += f"Elapsed: {duration_string(time.time() - start_time)}\n"
         ok = str(num_passed)
         if num_passed == len(sorted_indices):
             ok += " (all)"
-        warnings_string += f"Lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
+        message += f"Lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         if Stt.has_instance() and ModelManager.has_yamnet_detector():
-            warnings_string += f"Num retries triggered due to detected music: {num_failed_music}\n"
-        warnings_string += f"Num retries: {num_retries}\n"
+            message += f"Num retries triggered due to detected music: {num_failed_music}\n"
+        message += f"Num retries: {num_retries}\n"
         if num_improved:
-            warnings_string += f"Lines improved on retry: {COL_OK}{num_improved}{COL_DEFAULT}\n"
+            message += f"Lines improved on retry: {COL_OK}{num_improved}{COL_DEFAULT}\n"
         col = COL_ACCENT if num_failed else ""
         if num_failed:
-            warnings_string += f"Lines saved, but with excess word errors: {col}{num_failed}{COL_DEFAULT}\n"
+            message += f"Lines saved, but with excess word errors: {col}{num_failed}{COL_DEFAULT}\n"
         if num_errored:
-            warnings_string += f"Lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
+            message += f"Lines failed to generate: {COL_ERROR}{num_errored}{COL_DEFAULT}\n"
         if DEV:
-            warnings_string += f"Num words: {sum(word_counts.values())}\n"
-            warnings_string += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
-        printt(warnings_string)
+            message += f"Num words: {sum(word_counts.values())}\n"
+            message += f"Gen/val elapsed: {duration_string(gen_val_sum_time)}\n"
+        quick_generation_completed_cleanly = (
+            is_regen
+            and not did_interrupt
+            and num_failed == 0
+            and num_errored == 0
+        )
+        if not quick_generation_completed_cleanly:
+            printt(message)
 
         # Prevent rolling-continuation state from leaking into a later run when
         # this run ends successfully without a paragraph/section break.
@@ -531,7 +573,10 @@ class GenerateUtil:
         # Should skip or not
         skip_reason = Stt.should_skip(state, is_skip_reason_buffer)
         if not skip_reason:
+            GenerationEvents.emit(GenerationPhase("Transcribing and validating"))
             printt(f"{COL_DEFAULT}Transcribing audio...", end="") # gets overwritten
+        else:
+            GenerationEvents.emit(GenerationPhase("Processing generated audio"))
 
         val_start_time = time.time()
         results: list[ValidationResult | str | TtsModelError] = []
@@ -831,8 +876,9 @@ class GenerateUtil:
 
     @staticmethod
     def print_batch_heading(
-        indices: list[int], num_complete: int, num_remaining: int, num_total: int, start_time: float,
-        voice_index: int | None = None
+        indices: list[int],
+        voice_index: int | None = None,
+        show_divider: bool = True,
     ) -> None:
 
         line_noun = make_noun("line", "lines", len(indices))
@@ -846,13 +892,9 @@ class GenerateUtil:
         if voice_index is not None:
             processing_string += f" {COL_DIM}[voice {voice_index + 1}]{COL_DEFAULT}"
 
-        elapsed = duration_string(time.time() - start_time)
-        counts = f"{COL_DIM}(lines processed: {COL_DEFAULT}{num_complete}{COL_DIM}; remaining: {COL_DEFAULT}{num_remaining}{COL_DIM}; elapsed: {COL_DEFAULT}{elapsed}{COL_DIM})"
-
-        message = f"{processing_string} {counts}"
-
-        printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(message)))}")
-        printt(f"{message}")
+        if show_divider:
+            printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")
+        printt(f"{processing_string}")
         printt()
 
     @staticmethod
@@ -874,16 +916,10 @@ class GenerateUtil:
     @staticmethod
     def do_quick_generate(state: State, phrase_index: int) -> None:
         """Regenerate exactly one project item."""
-        MenuUtil.print_heading(
-            state,
-            f"Generating audio segment for line {phrase_index + 1}...",
-            dont_clear=True,
-        )
-        printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
-        printt()
-        GenerateUtil.generate_files(
+        from tts_audiobook_tool.textual.generation_app import run_generation_modal
+        run_generation_modal(
             state=state,
-            indices_set={phrase_index},
+            indices={phrase_index},
             batch_size=ProjectVoiceUtil.get_batch_size(state.project),
             is_regen=True,
         )
@@ -901,21 +937,14 @@ class GenerateUtil:
         if not should_continue:
             return
 
-        message = f"Generating {len(indices)} audio segment/s..."
-        if state.prefs.stt_variant == SttVariant.DISABLED:
-            message += f" {COL_DIM}(speech-to-text validation disabled){COL_DEFAULT}"
-        MenuUtil.print_heading(state, message, dont_clear=True)
-        printt(f"{COL_DIM}Press {COL_ACCENT}[CTRL-C]{COL_DIM} to interrupt")
-        printt()
-
-        did_interrupt = GenerateUtil.generate_files(
+        from tts_audiobook_tool.textual.generation_app import run_generation_modal
+        generation_result = run_generation_modal(
             state=state,
-            indices_set=indices,
+            indices=indices,
             batch_size=ProjectVoiceUtil.get_batch_size(state.project),
             is_regen=False,
         )
-        if did_interrupt:
-            ask.ask_enter_to_continue()
+        if not generation_result.completed:
             return
 
         app_support.play_done_sound()
@@ -923,16 +952,6 @@ class GenerateUtil:
         if state.project.gen_auto_concat:
             printt()
             ConcatUtil.auto_concat_after_generation(state)
-            return
-
-        prompt = (
-            f"Press {make_hotkey_string('Enter')}, or press "
-            f"{make_hotkey_string('C')} to create audiobook file now: \a"
-        )
-        hotkey = ask.ask_hotkey(prompt)
-        printt()  # TODO revisit
-        if hotkey == "c":
-            ConcatMenu.menu(state)
 
 # ---
 
@@ -955,13 +974,25 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
     if num_sounds == len(gen_results):
         message += f"; sound duration: {cum_duration:.1f}s; "
         gen_elapsed = max(gen_elapsed, 0.1)
-        speed = cum_duration / gen_elapsed
-        speed = min(speed, 99.9)
+        raw_speed = cum_duration / gen_elapsed
+        speed = min(raw_speed, 99.9)
         speed_str = f"{speed:.1f}"
         if speed == 99.9:
             speed_str += "+"
         speed_str += "x"
         message += f"speed: {speed_str}"
+        # Publish structured stats only when every result produced audio,
+        # mirroring the console message; a partial batch has no meaningful
+        # realtime factor (failed results contribute no audio duration).
+        realtime_factor = gen_elapsed / cum_duration if cum_duration > 0 else 0.0
+        GenerationEvents.emit(
+            GenerationStats(
+                generation_seconds=gen_elapsed,
+                audio_seconds=cum_duration,
+                realtime_factor=realtime_factor,
+                speed_factor=raw_speed,
+            )
+        )
 
     print(message)
 

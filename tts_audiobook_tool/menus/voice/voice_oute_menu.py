@@ -2,9 +2,9 @@ from pathlib import Path
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
@@ -47,7 +47,7 @@ class VoiceOuteMenu:
         items = [
             MenuItem(
                 "Set voice clone using audio clip (up to 15s)",
-                lambda _, __: ask_create_oute_voice(project)
+                lambda _, __: ask_create_oute_voice(state)
             ),
             MenuItem(
                 "Set voice clone using Oute json file",
@@ -66,30 +66,20 @@ class VoiceOuteMenu:
 
 # ---
 
-def ask_create_oute_voice(project: Project) -> None:
-
-    from tts_audiobook_tool.app_support import app_memory
+def ask_create_oute_voice(state: State) -> None:
+    project = state.project
 
     path = VoiceMenuShared.ask_voice_file(project.dir_path, Tts.get_type())
     if not path:
         return
 
-    # Outte is about to create its own instance of whisper, so better clear ours first
-    Stt.clear_stt_model()
-    app_memory.gc_ram_vram()
+    result, error = ModelWorker.create_oute_speaker_blocking(state, path)
 
-    result = Tts.get_oute().create_speaker(path)
-
-    # Clear lingering oute-created whisper instance
-    app_memory.gc_ram_vram()
-
-    if isinstance(result, str):
-        error = result
+    if error or result is None:
         ask.ask_error(f"Error creating voice: {error}")
         return
 
-    voice_dict = result
-    project.set_oute_voice_and_save(voice_dict, Path(path).stem)
+    project.set_oute_voice_and_save(result, Path(path).stem)
 
     printt()
     print_feedback("Voice clone set")

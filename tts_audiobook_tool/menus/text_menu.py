@@ -31,16 +31,7 @@ class TextMenu:
     def menu(state: State) -> None:
 
         def make_heading(_) -> str:
-            if state.project.phrase_groups:
-                if state.prefs.menu_clears_screen:
-                    currently = ""
-                else:
-                    s = str(len(state.project.phrase_groups))
-                    s += " line" if len(state.project.phrase_groups) == 1 else " lines"
-                    currently = make_currently_string(s)
-            else:
-                currently = ""
-            return f"Text {currently}"
+            return "Text"
 
         def make_segmentation_settings_label(_) -> str:
             value = make_parameter_value_string(

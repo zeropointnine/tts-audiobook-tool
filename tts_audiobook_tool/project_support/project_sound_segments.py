@@ -25,6 +25,7 @@ class ProjectSoundSegments:
         self.project = project # TODO: circular reference, ng
         self._sound_segments_map: dict[int, list[SoundSegment]] = {}
         self._dirty = True
+        self.dont_show_scan_message = False
         self._segments_dir: str | None = None
 
         event_handler = DirHandler(self.on_dir_contents_change)
@@ -85,20 +86,23 @@ class ProjectSoundSegments:
             return
 
         self._dirty = True
-        
+
     @property
     def sound_segments_map(self) -> dict[int, list[SoundSegment]]:
         if self._dirty:
-            printt(f"{COL_DIM_ITALICS}Project directory contents have changed. Scanning...", end="\r")
+            show_scan_message = not self.dont_show_scan_message
+            if show_scan_message:
+                printt(f"{COL_DIM_ITALICS}Project directory contents have changed. Scanning...", end="\r")
             self._sound_segments_map = SoundSegmentUtil.make_sound_segments_map(self.project)
-            printt(f"{Ansi.ERASE_REST_OF_LINE}", end="\r")
+            if show_scan_message:
+                printt(f"{Ansi.ERASE_REST_OF_LINE}", end="\r")
             self._dirty = False
         return self._sound_segments_map
-    
+
     def get_filenames_for(self, index: int) -> list[str]:
         sound_segments = self.sound_segments_map.get(index, [])
         return [item.file_name for item in sound_segments]
-    
+
     def get_best_item_for(self, index: int) -> SoundSegment | None:
         """ For the given index, returns the sound segment with the least number of word fails """
         sound_segments = self.sound_segments_map.get(index, [])
@@ -108,9 +112,9 @@ class ProjectSoundSegments:
             item_fails = item.num_errors if item.num_errors != -1 else 9999
             if item_fails < best_fails:
                 best_sound_segment = item
-                best_fails = item_fails    
+                best_fails = item_fails
         return best_sound_segment
-    
+
     def get_best_file_for(self, index: int) -> str:
         item = self.get_best_item_for(index)
         return item.file_name if item else ""
@@ -137,9 +141,9 @@ class ProjectSoundSegments:
 
     def is_segment_failed(self, index: int, item: SoundSegment) -> bool:
         """
-        Determines whether a sound segment should be considered 'failed' 
+        Determines whether a sound segment should be considered 'failed'
         based on its num_errors and the project's current strictness setting.
-        
+
         Unknown error count (num_errors == -1) is treated as not-failed.
         """
         if item.num_errors == -1:
@@ -152,10 +156,10 @@ class ProjectSoundSegments:
         return ValidationFindings.is_legacy_filename_score_failed(item.num_errors, threshold)
 
     def get_failed_indices_in_generate_range(self) -> set[int]:
-        """ 
-        Within the project's defined 'generate range', 
+        """
+        Within the project's defined 'generate range',
         returns the indices of sound segments that exist but are all failed.
-        
+
         Uses dynamic failure detection based on num_errors and project strictness.
         """
         all_indices = ProjectUtil.get_indices_to_generate(self.project)
@@ -169,10 +173,10 @@ class ProjectSoundSegments:
                     failed_indices.add(index)
                     break
         return failed_indices
-    
+
     def get_word_error_counts_in_generate_range(self) -> dict[int, int]:
-        """ 
-        Within the project's defined 'generate range', 
+        """
+        Within the project's defined 'generate range',
         returns the fail counts of existing sound segment items
         """
         all_indices = ProjectUtil.get_indices_to_generate(self.project)
@@ -184,7 +188,7 @@ class ProjectSoundSegments:
             for item in items:
                 fail_counts[index] = item.num_errors
         return fail_counts
-    
+
     def delete_all(self) -> None:
         for sound_segments in self.sound_segments_map.values():
             for item in sound_segments:
@@ -202,23 +206,23 @@ class ProjectSoundSegments:
         delete_silently(str(get_segment_stt_info_path(sound_file_path)))
 
     def delete_redundants_for(self, index: int) -> int:
-        """ Keeps the item with the least word fails and deletes the rest """        
+        """ Keeps the item with the least word fails and deletes the rest """
         items = self.sound_segments_map.get(index, [])
         if not items:
             return 0
-        
+
         best_item = self.get_best_item_for(index)
         if not best_item:
             return 0
-        
+
         num_deleted = 0
         for item in items:
-            if item != best_item:    
+            if item != best_item:
                 path = Path(os.path.join(self.project.sound_segments_path, item.file_name))
                 self.delete_sound_segment_and_sidecars(path)
                 num_deleted += 1
         return num_deleted
-    
+
     def delete_by_indices(self, indices: Collection[int]) -> None:
         """ Returns num deleted and num failed """
         # Use the refreshed public catalog and tolerate files removed since the

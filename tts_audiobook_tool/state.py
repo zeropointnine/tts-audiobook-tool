@@ -15,8 +15,10 @@ from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 class State:
     """
-    Holds app's user-related state
-    Most importantly, `project` and `prefs`
+    Holds:
+    - Persistent app state (via Prefs)
+    - Project state
+    - Some transitory app state (minor)
     """
 
     _prefs: Prefs
@@ -24,6 +26,12 @@ class State:
 
 
     def __init__(self):
+
+        # The initial sound-segment scan happens while the first main menu is
+        # being assembled. Suppress its transient progress line until that
+        # menu has been drawn once.
+        self.dont_show_scan_message = True
+        self.has_shown_main_menu = False
 
         self.prefs = Prefs.load()
 
@@ -43,6 +51,24 @@ class State:
             else:
                 self.project = result
 
+    @classmethod
+    def for_worker(cls, prefs: Prefs) -> "State":
+        """
+        Process-local State for the spawned model worker.
+
+        Mirrors exactly the instance attributes set by `__init__`, but skips
+        the interactive project load from mutable global prefs (the worker
+        loads its own Project and assigns it through the normal setter).
+        If `__init__` gains a new instance attribute, mirror it here.
+        """
+        state = cls.__new__(cls)
+        state._project = None  # type: ignore[assignment]
+        state.dont_show_scan_message = False
+        state.has_shown_main_menu = False
+        state.real_time = RealTimeMenuState()
+        state.prefs = prefs
+        return state
+
     @property
     def project(self) -> Project:
         return self._project
@@ -50,16 +76,24 @@ class State:
     @project.setter
     def project(self, value: Project) -> None:
         from tts_audiobook_tool.tts import Tts
-        
+
         if self._project and self._project != value:
             self._project.kill()
 
         self._project = value
+        self._project.sound_segments.dont_show_scan_message = self.dont_show_scan_message
 
         # Sync static values
         Tts.set_model_params_using_project(self.project)
         Whitelist().set_language_code(self.project.language_code)
         self.real_time.project_text_line_range = self.project.realtime_line_range
+
+    def mark_main_menu_shown(self) -> None:
+        if self.has_shown_main_menu:
+            return
+        self.has_shown_main_menu = True
+        self.dont_show_scan_message = False
+        self.project.sound_segments.dont_show_scan_message = False
 
     @property
     def prefs(self) -> Prefs:
@@ -89,7 +123,7 @@ class State:
             return "Bad path"
         if not project_dir_path.is_absolute():
             return "Please use an absolute path"
-        
+
         if project_dir_path.exists() and os.listdir(project_dir_path):
             return "Directory is not empty"
 
@@ -111,7 +145,7 @@ class State:
         except Exception as e:
             return make_error_string(e)
 
-        # Make project 
+        # Make project
         self.prefs.project_dir = str(project_dir_path)
         self.prefs.save()
         self.project = Project( dir_path=str(project_dir_path) )

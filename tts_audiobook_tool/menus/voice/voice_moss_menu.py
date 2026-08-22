@@ -1,7 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.menus.voice.voice_moss_shared import VoiceMossShared
-from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
@@ -76,12 +76,13 @@ def target_submenu(state: State) -> None:
         preset_targets=[config.value.repo_id for config in configs],
         current_target=state.project.moss_target,
         default_target=MossConfigs.get_default_repo_id(),
-        ask_custom_target=lambda: ask_target(state.project),
-        apply_target=lambda target: apply_model_and_validate(state.project, target),
+        ask_custom_target=lambda: ask_target(state),
+        apply_target=lambda target: apply_model_and_validate(state, target),
         sublabels=[config.preset_description for config in configs],
     )
 
-def ask_target(project: Project) -> None:
+def ask_target(state: State) -> None:
+    project = state.project
 
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
@@ -91,31 +92,29 @@ def ask_target(project: Project) -> None:
         project=project,
         prompt=prompt,
         current_target=project.moss_target,
-        callback=apply_model_and_validate
+        callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
-def apply_model_and_validate(project: Project, target: str) -> None:
+def apply_model_and_validate(state: State, target: str) -> None:
+    project = state.project
 
     previous_target = project.moss_target
 
     def revert() -> None:
         project.moss_target = previous_target
-        Tts.set_model_params_using_project(project)
-        Tts.clear_tts_model()
+        _ = ModelWorker.clear_models_if_running_blocking()
 
     project.moss_target = target
-    Tts.set_model_params_using_project(project)
-    Tts.clear_tts_model()
+    _ = ModelWorker.clear_models_if_running_blocking()
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
     printt()
 
-    try:
-        _ = Tts.get_moss()
-    except Exception as e:
+    inspection, error = ModelWorker.inspect_tts_blocking(state)
+    if error or inspection is None:
         printt()
         printt(f"{COL_ERROR}Contents at {target} appear to be invalid:")
-        printt(f"{COL_ERROR}{make_error_string(e)}")
+        printt(f"{COL_ERROR}{error}")
         printt()
         revert()
         ask.ask_enter_to_continue()
@@ -128,6 +127,5 @@ def apply_model_and_validate(project: Project, target: str) -> None:
 def on_clear_model_target(state: State, __: MenuItem) -> None:
     state.project.moss_target = ""
     state.project.save()
-    Tts.set_model_params_using_project(state.project)
-    Tts.clear_tts_model()
+    _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")

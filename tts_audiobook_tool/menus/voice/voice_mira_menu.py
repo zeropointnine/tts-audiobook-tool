@@ -1,6 +1,6 @@
 from tts_audiobook_tool.menus.menu_util import MenuItem
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -14,8 +14,7 @@ class VoiceMiraMenu:
         """
         """
         def on_clear_voice() -> None:
-            if Tts.get_instance_if_exists():
-                Tts.get_mira().clear_voice_clone()
+            _ = ModelWorker.clear_models_if_running_blocking()
 
         def make_items(_: State) -> list[MenuItem]:
             items = []

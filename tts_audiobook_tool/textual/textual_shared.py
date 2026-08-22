@@ -1,6 +1,4 @@
 from collections.abc import Callable, Iterable
-import os
-import sys
 from typing import Any, ClassVar, cast
 
 from rich.console import Console, ConsoleOptions, RenderResult
@@ -525,18 +523,7 @@ class NonWrappingOptionList(OptionList):
         await super()._on_click(event)
 
 def can_textual() -> bool:
-    """Coarse test to see if terminal can support a full-screen interface."""
+    """Coarse test to see if the terminal can support a full-screen interface."""
+    from tts_audiobook_tool.system_support.terminal import can_use_full_screen_terminal
 
-    from tts_audiobook_tool.ask import can_hotkey
-
-    if not can_hotkey:
-        return False
-
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        return False
-
-    if os.name == "nt":
-        return True
-
-    term = os.environ.get("TERM", "")
-    return term not in {"", "dumb"}
+    return can_use_full_screen_terminal()

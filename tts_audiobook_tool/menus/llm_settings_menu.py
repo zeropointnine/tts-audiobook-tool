@@ -98,9 +98,9 @@ class LlmSettingsMenu:
 
         ask.ask_string_and_save(
             state.prefs,
-            "Enter LLM token:",
+            "Enter API key:",
             "llm_api_key",
-            "Set LLM token to:",
+            "Set API key to:",
             validator=validator
         )
 

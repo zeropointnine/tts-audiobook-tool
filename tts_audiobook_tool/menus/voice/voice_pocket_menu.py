@@ -1,7 +1,7 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -134,15 +134,13 @@ def ask_language(state: State) -> None:
         printt()
         state.project.pocket_model_code = lang
         state.project.save()
-        Tts.set_model_params_using_project(state.project)
-        Tts.clear_tts_model()
-        try:
-            Tts.get_pocket()
-        except Exception as e:
+        _ = ModelWorker.clear_models_if_running_blocking()
+        inspection, error = ModelWorker.inspect_tts_blocking(state)
+        if error or inspection is None:
             state.project.pocket_model_code = previous
             state.project.save()
-            Tts.set_model_params_using_project(state.project)
-            ask.ask_error(f"\n{make_error_string(e)}")
+            _ = ModelWorker.clear_models_if_running_blocking()
+            ask.ask_error(f"\n{error}")
         printt(f"{COL_DIM_ITALICS}OK ")
         printt()
 
@@ -170,9 +168,10 @@ def validate_voice_file(state: State) -> None:
         printt(f"{COL_DIM_ITALICS}Validating Pocket voice cloning access...")
         printt()
 
-        instance = Tts.get_instance()
-        
-        error = PocketBaseModel.get_gated_error_message(state.project, instance)
+        inspection, inspect_error = ModelWorker.inspect_tts_blocking(state)
+        error = inspect_error
+        if inspection is not None and inspection.blocking_issues:
+            error = inspection.blocking_issues[0]
         if error:
             message = error
             if PocketBaseModel.is_opt_in_error_string(error):

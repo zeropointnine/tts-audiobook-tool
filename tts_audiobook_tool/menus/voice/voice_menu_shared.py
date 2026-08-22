@@ -6,6 +6,7 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import Hint, SttVariant, VoiceSelectMode
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuItemListOrMaker, MenuUtil, StringOrMaker, get_string_from
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorSaveFailed,
@@ -19,7 +20,6 @@ from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool import target_util
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts import Tts
@@ -67,7 +67,7 @@ class VoiceMenuShared:
                 VoiceMossMenu.menu(state)
             case TtsModelType.MOSS_SERVER:
                 from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
-                VoiceMossServerMenu.menu(state) 
+                VoiceMossServerMenu.menu(state)
             case TtsModelType.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
@@ -78,15 +78,14 @@ class VoiceMenuShared:
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
             case TtsModelType.QWEN3TTS:
-                # Special case: Pre-emptively instantiate model 
-                has_instance = bool( Tts.get_instance_if_exists() )
-                if not has_instance:
-                    printt(f"{COL_DIM_ITALICS}Initializing model...")
-                    printt()
-                    _ = Tts.get_instance() 
-                    print_feedback("Model loaded")
+                printt(f"{COL_DIM_ITALICS}Initializing TTS model...")
+                printt()
+                inspection, error = ModelWorker.inspect_tts_blocking(state)
+                if error or inspection is None:
+                    ask.ask_error(error or "Couldn't inspect Qwen3-TTS model")
+                    return
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
-                VoiceQwen3Menu.menu(state)
+                VoiceQwen3Menu.menu(state, inspection)
             case TtsModelType.QWEN3TTS_SERVER:
                 from tts_audiobook_tool.menus.voice import VoiceQwen3ServerMenu
                 VoiceQwen3ServerMenu.menu(state)
@@ -101,7 +100,7 @@ class VoiceMenuShared:
 
     @staticmethod
     def menu_wrapper(
-            state: State, 
+            state: State,
             items: MenuItemListOrMaker,
             subheading: StringOrMaker | None = None,
     ) -> None:
@@ -155,11 +154,11 @@ class VoiceMenuShared:
         path = VoiceMenuShared.ask_voice_file(state.prefs.last_voice_dir, tts_type, message_override)
         if not path:
             return
-        
+
         if not os.path.exists(path) or not os.path.isfile(path):
             ask.ask_error(f"File doesn't exist: {path}")
             return
-        
+
         state.prefs.last_voice_dir = str(Path(path).parent)
         state.prefs.save()
 
@@ -205,10 +204,12 @@ class VoiceMenuShared:
                 else:
                     stt_variant = state.prefs.stt_variant
                 sound_result = Transcriber.transcribe_to_words(
-                    sound, state.project.language_code, stt_variant, state.prefs.stt_config
+                    sound,
+                    state.project.language_code,
+                    stt_variant,
+                    state.prefs.stt_config,
+                    state,
                 )
-                if state.prefs.stt_variant == SttVariant.DISABLED:
-                    Stt.clear_stt_model()
 
                 if isinstance(sound_result, str):
                     err = sound_result
@@ -517,20 +518,20 @@ class VoiceMenuShared:
 
     @staticmethod
     def make_manual_voice_menu_items(
-        state: State, 
+        state: State,
         tts_type: TtsModelType,
-        path_attribute: str, 
+        path_attribute: str,
         transcript_attribute: str,
         is_required: bool=False
     ) -> tuple[MenuItem, MenuItem]:
         """
         Creates pair of MenuItems for voice path and voice transcript for "SGL-Omni mode"
-        (specifically for cases where the server API for the given TTS model does NOT 
+        (specifically for cases where the server API for the given TTS model does NOT
         support handling data URI).
         """
 
         def make_path_label(_) -> str:
-            
+
             prefix = "Enter voice clone sample filepath"
             value = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
             value = value[0] if value else ""
@@ -556,11 +557,11 @@ class VoiceMenuShared:
                 "Enter voice clone reference audio path:\n"
                 f"{COL_DIM}This must be either a file path accessible from the\n"
                 f"running server environment or a URL"
-            )    
+            )
             ask.ask_string_and_save(state.project, s, path_attribute, "Voice clone sample path set:")
 
         path_item = MenuItem(make_path_label, lambda _, __: ask_path())
-        
+
         # ---
 
         def make_transcript_label(_) -> str:
@@ -590,7 +591,7 @@ class VoiceMenuShared:
             # prefix = "Enter voice clone sample transcript"
             # value = getattr(state.project, transcript_attribute)
             # has_path = bool( getattr(state.project, path_attribute) )
-            
+
             # if not value and has_path:
             #     return f"{prefix} {COL_DIM}({COL_ERROR}required{COL_DIM})"
 
@@ -682,7 +683,7 @@ class VoiceMenuShared:
         return MenuUtil.make_number_item(
             state=state,
             attr=attr,
-            base_label="Top_K", 
+            base_label="Top_K",
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=0,
@@ -704,7 +705,7 @@ class VoiceMenuShared:
         return MenuUtil.make_number_item(
             state=state,
             attr=attr,
-            base_label="Top-P", 
+            base_label="Top-P",
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
@@ -725,7 +726,7 @@ class VoiceMenuShared:
         return MenuUtil.make_number_item(
             state=state,
             attr=attr,
-            base_label="Repetition penalty", 
+            base_label="Repetition penalty",
             default_value=default_value,
             is_minus_one_default=True,
             num_decimals=2,
@@ -769,18 +770,18 @@ class VoiceMenuShared:
         seed_value: int | None = getattr(state.project, attr, None)
         if seed_value is None:
             raise ValueError(f"Attribute doesn't exist: {attr}")
-        
+
         suffix = str(seed_value) if seed_value != -1 else "random"
         label = make_menu_label("Seed", suffix)
         return MenuItem(label, on_item)
 
     @staticmethod
     def ask_target(
-            project: Project, 
+            project: Project,
             prompt: str,
-            current_target: str, 
+            current_target: str,
             callback: Callable[[Project, str], None]
-    ) -> None: 
+    ) -> None:
 
         printt(prompt)
         new_target = ask.ask(lower=False)
@@ -795,7 +796,7 @@ class VoiceMenuShared:
         if err:
             print_feedback(err, is_error=True)
             return
-        
+
         callback(project, new_target)
 
     @staticmethod
@@ -885,14 +886,14 @@ class VoiceMenuShared:
         subheading = ROLLING_CONTINUATION_DESC
         if qualifier_line:
             subheading += f"\n{qualifier_line}\n"
-        
+
         MenuUtil.print_screen_heading(
-            state, 
+            state,
             f"Rolling continuation {COL_DIM}(experimental)",
             subheading=subheading
         )
         ask.ask_number(
-            state.project, attribute_name, "Enter value", 
-            min_value=0, max_value=max_value, default_value=0, 
+            state.project, attribute_name, "Enter value",
+            min_value=0, max_value=max_value, default_value=0,
             success_prefix="Rolling continuation num segments set to", is_int=True
         )

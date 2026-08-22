@@ -33,6 +33,7 @@ class MiraModel(MiraBaseModel):
         Raising here aborts the generation with an error string (handled by
         the caller) and nothing gets cached.
         """
+        assert self.mira_tts is not None
         return self.mira_tts.encode_audio(source_path)
 
     def clear_voice_clone(self) -> None:
@@ -49,9 +50,9 @@ class MiraModel(MiraBaseModel):
         self.mira_tts.set_params(temperature=temperature, max_new_tokens=max_new_tokens, top_k=top_k, top_p=top_p, repetition_penalty=repetition_penalty)
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
@@ -117,15 +118,15 @@ class MiraModel(MiraBaseModel):
             return result
 
     def generate_single(self, prompt: str) -> Sound | str:
-        
+
         if not self.mira_tts:
             return "Logic error - model not initialized"
         if not self.context_tokens:
             return "Logic error - voice clone not set"
-        
+
         try:
-            # Model outputs float16 
-            audio_tensor = self.mira_tts.generate(prompt, self.context_tokens) 
+            # Model outputs float16
+            audio_tensor = self.mira_tts.generate(prompt, self.context_tokens)
             # Convert to float32, put on cpu, numpy format
             audio_np = audio_tensor.to(torch.float32).cpu().numpy()
         except Exception as e:
@@ -139,19 +140,19 @@ class MiraModel(MiraBaseModel):
         assert(self.mira_tts is not None)
         if not self.context_tokens:
             return "Logic error - voice clone not set"
-        
+
         context_tokens = [self.context_tokens]
 
         formatted_prompts = []
         for prompt, context_token in zip(prompts, cycle(context_tokens)):
             formatted_prompt = self.mira_tts.codec.format_prompt(prompt, context_token, None)
             formatted_prompts.append(formatted_prompt)
-        
+
         responses = self.mira_tts.pipe(formatted_prompts, gen_config=self.mira_tts.gen_config, do_preprocess=False)
         generated_tokens = [response.text for response in responses]
-        
+
         sounds: list[Sound] = []
-        
+
         for generated_token, context_token in zip(generated_tokens, cycle(context_tokens)):
             print(f"< {len(sounds) + 1}/{len(prompts)} >", end=Ansi.ERASE_REST_OF_LINE + Ansi.LINE_HOME, flush=True)
             audio = self.mira_tts.codec.decode(generated_token, context_token)
@@ -159,5 +160,5 @@ class MiraModel(MiraBaseModel):
             sound = Sound(audio_np, MiraModel.INFO.sample_rate)
             sounds.append(sound)
         print()
-                    
+
         return sounds

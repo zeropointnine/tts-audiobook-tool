@@ -1,6 +1,6 @@
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -58,7 +58,7 @@ class VoiceVibeVoiceMenu:
              
             # LoRA
             items.append(
-                MenuItem(make_lora_target_label, lambda _, __: ask_lora_target(state.project))
+                MenuItem(make_lora_target_label, lambda _, __: ask_lora_target(state))
             )
             if state.project.vibevoice_lora_target:
                 items.append(MenuItem("Clear LoRA", on_clear_lora))
@@ -73,7 +73,7 @@ class VoiceVibeVoiceMenu:
             )
             if state.project.vibevoice_target:
                 items.append(
-                    MenuItem("Clear custom model", lambda _, __: clear_custom_model(state.project))
+                    MenuItem("Clear custom model", lambda _, __: clear_custom_model(state))
                 )
 
             # Other config
@@ -120,11 +120,12 @@ def target_submenu(state: State) -> None:
         preset_targets=VibeVoiceBaseModel.PRESET_REPO_IDS,
         current_target=state.project.vibevoice_target,
         default_target=VibeVoiceBaseModel.DEFAULT_REPO_ID,
-        ask_custom_target=lambda: ask_model_target(state.project),
-        apply_target=lambda target: apply_model_and_validate(state.project, target),
+        ask_custom_target=lambda: ask_model_target(state),
+        apply_target=lambda target: apply_model_and_validate(state, target),
     )
 
-def ask_model_target(project: Project) -> None: 
+def ask_model_target(state: State) -> None:
+    project = state.project 
 
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
@@ -136,39 +137,38 @@ def ask_model_target(project: Project) -> None:
         project=project,
         prompt=prompt,
         current_target=project.vibevoice_target, 
-        callback=apply_model_and_validate
+        callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
-def apply_model_and_validate(project: Project, target: str) -> None: 
+def apply_model_and_validate(state: State, target: str) -> None:
+    project = state.project 
 
     previous_target = project.vibevoice_target
     project.vibevoice_target = target
-    Tts.set_model_params_using_project(project)
-    Tts.clear_tts_model() # for good measure
+    _ = ModelWorker.clear_models_if_running_blocking()
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
     printt()
 
-    try:
-        _ = Tts.get_vibevoice()
-    except (OSError, Exception) as e:
-        # Revert
+    inspection, error = ModelWorker.inspect_tts_blocking(state)
+    if error or inspection is None:
         project.vibevoice_target = previous_target
-        Tts.set_model_params_using_project(project)
-        ask.ask_error(f"\n{make_error_string(e)}")
+        _ = ModelWorker.clear_models_if_running_blocking()
+        ask.ask_error(f"\n{error}")
         return
 
     project.save()
     print_feedback("\nCustom model set:", target)
 
-def clear_custom_model(project: Project) -> None:
+def clear_custom_model(state: State) -> None:
+    project = state.project
     project.vibevoice_target = ""
     project.save()
-    Tts.set_model_params_using_project(project)
-    Tts.clear_tts_model()
+    _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared, will use default model")
 
-def ask_lora_target(project: Project) -> None: 
+def ask_lora_target(state: State) -> None:
+    project = state.project
     
     prompt = f"Enter huggingface repo id or local directory path to VibeVoice LoRA"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice-community/klett\", \"/path/to/checkpoint\""
@@ -179,32 +179,31 @@ def ask_lora_target(project: Project) -> None:
         project=project,
         prompt=prompt,
         current_target=project.vibevoice_lora_target, 
-        callback=apply_lora_and_validate
+        callback=lambda _, target: apply_lora_and_validate(state, target)
     )
 
-def apply_lora_and_validate(project: Project, target: str) -> None: 
+def apply_lora_and_validate(state: State, target: str) -> None:
+    project = state.project
 
     previous_target = project.vibevoice_lora_target
 
     def revert() -> None:
         project.vibevoice_lora_target = previous_target
-        Tts.set_model_params_using_project(project)
+        _ = ModelWorker.clear_models_if_running_blocking()
 
     project.vibevoice_lora_target = target
-    Tts.set_model_params_using_project(project)
-    Tts.clear_tts_model() # for good measure
+    _ = ModelWorker.clear_models_if_running_blocking()
 
     printt(f"{COL_DIM_ITALICS}Initializing model...")
     printt()
 
-    try:
-        instance = Tts.get_vibevoice()
-    except Exception as e:
+    inspection, error = ModelWorker.inspect_tts_blocking(state)
+    if error or inspection is None:
         revert()
-        ask.ask_error(f"\n{make_error_string(e)}")
+        ask.ask_error(f"\n{error}")
         return
 
-    if instance.has_lora:
+    if bool((inspection.metadata or {}).get("has_lora", False)):
         project.save()
         print_feedback("LoRA set:", target)
         ask.ask_enter_to_continue()
@@ -215,6 +214,5 @@ def apply_lora_and_validate(project: Project, target: str) -> None:
 def on_clear_lora(state: State, __: MenuItem) -> None:
     state.project.vibevoice_lora_target = ""
     state.project.save()
-    Tts.set_model_params_using_project(state.project)
-    Tts.clear_tts_model()
+    _ = ModelWorker.clear_models_if_running_blocking()
     print_feedback("Cleared LoRA")

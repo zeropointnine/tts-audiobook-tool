@@ -17,6 +17,7 @@ PROJECT_SOUND_SEGMENTS_SUBDIR = "segments"
 PROJECT_CONCAT_SUBDIR = "combined"
 PROJECT_REALTIME_OUTPUT_SUBDIR = "realtime"
 PROJECT_CHAT_OUTPUT_SUBDIR = "chat"
+PROJECT_GEN_LOG_SUBDIR = "gen_logs"
 PROJECT_JSON_FILE_NAME = "project.json"
 PROJECT_TEXT_FILE_NAME = "project_text.json"
 PROJECT_TEXT_SEGMENTS_FILE_NAME = PROJECT_TEXT_FILE_NAME
@@ -60,8 +61,6 @@ CHAT_SYSTEM_PROMPTS = [
     ("chat_system_prompt_higgs_v3.txt", "System prompt showcasing Higgs V3 \"control tokens\" feature"),
     ("chat_system_prompt_fish_s2.txt", "System prompt showcasing Fish S2 \"tags\" feature")
 ]
-
-MENU_CLEARS_SCREEN_DEFAULT = True
 
 # Value used for normalization after any sound transform post-processing steps (eg, after high-shelf EQ)
 NORMALIZATION_HEADROOM_DB = 1.0
@@ -160,9 +159,9 @@ OPT_IN_INSTRUCTIONS = (
 )
 
 ROLLING_CONTINUATION_DESC = \
-"""Within a paragraph, uses up to this many previous 
+"""Within a paragraph, uses up to this many previous
 generated segments as context for the next segment.
 
-Larger values may improve continuity; 
+Larger values may improve continuity;
 lower values may allow for more natural variation.
 """

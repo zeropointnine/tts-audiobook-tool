@@ -143,9 +143,13 @@ class ChatMenu:
 
         dir_path = os.path.join(state.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
         if os.path.exists(dir_path):
-            subheading = f"Saves FLAC files to {text_util.make_terminal_hyperlink(dir_path, is_file=True)}\n"
+            path_text = text_util.make_terminal_hyperlink(dir_path, is_file=True)
         else:
-            subheading = f"FLAC files will be saved to {text_util.make_terminal_hyperlink(dir_path)}\n"
+            path_text = dir_path
+        subheading = (
+            f"Saves sound segment FLAC files generated while using LLM Chat will be saved to\n"
+            f"{path_text}\n"
+        )
 
         MenuUtil.options_menu(
             state=state,
