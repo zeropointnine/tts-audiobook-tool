@@ -446,13 +446,6 @@ def do_generate(state: State) -> None:
         s = "- Speech-to-text validation: disabled"
         printt(s)
 
-    num_voices = len( ProjectVoiceUtil.get_voice_values(state.project, tts_type) )
-    is_multi_voice_batch = (
-        state.project.voice_select_mode == VoiceSelectMode.USER_DEFINED
-        and ProjectVoiceUtil.get_batch_size(state.project) > 1
-        and num_voices > 1
-    )
-
     # Print voice selection mode info
     voice_values = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
     if len(voice_values) > 1:

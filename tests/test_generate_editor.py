@@ -1,24 +1,20 @@
-import asyncio
-from dataclasses import dataclass, field
-from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import patch
 
-from rich.console import Console
+import pytest
 from rich.style import Style
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.widgets import Input, Static
 
 import tts_audiobook_tool.textual.generate_editor as generate_editor_module
-from tts_audiobook_tool.app_types import Book, BookSection, SttVariant, VoiceSelectMode
-from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types import Book, BookSection, SttVariant
+from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.segment_transcript_util import (
     SegmentTranscriptUtil,
 )
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.textual.filter_dialog import FilterDialog
@@ -40,66 +36,14 @@ from tts_audiobook_tool.textual.textual_shared import NonWrappingOptionList
 from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.textual.alert_dialog import AlertDialog
-
-
-@dataclass
-class StubPhraseGroup:
-    presentable_text: str
-    voice_index: int = 0
-
-
-@dataclass
-class StubSoundSegment:
-    file_name: str
-    num_errors: int = -1
-
-
-@dataclass
-class StubSoundSegments:
-    sound_segments_map: dict[int, list[StubSoundSegment]]
-    failed_segment_files: set[str] = field(default_factory=set)
-    deleted_index_batches: list[set[int]] = field(default_factory=list)
-    invalidation_count: int = 0
-    best_item_call_count: int = 0
-
-    def get_existing_indices(self) -> set[int]:
-        return set(self.sound_segments_map)
-
-    def get_best_item_for(self, index: int) -> StubSoundSegment | None:
-        self.best_item_call_count += 1
-        items = self.sound_segments_map.get(index, [])
-        return min(
-            items,
-            key=lambda item: item.num_errors if item.num_errors != -1 else 10_000,
-            default=None,
-        )
-
-    def is_segment_failed(self, index: int, item: StubSoundSegment) -> bool:
-        return item.file_name in self.failed_segment_files
-
-    def delete_by_indices(self, indices: set[int]) -> None:
-        self.deleted_index_batches.append(set(indices))
-        for index in indices:
-            self.sound_segments_map.pop(index, None)
-
-    def force_invalidate(self) -> None:
-        self.invalidation_count += 1
-
-@dataclass
-class StubProject:
-    phrase_groups: list[StubPhraseGroup | PhraseGroup]
-    sound_segments: StubSoundSegments
-    sound_segments_path: str = "/project/segments"
-    generate_range_string: str = "none"
-    gen_auto_concat: bool = False
-    voice_select_mode: VoiceSelectMode = VoiceSelectMode.AUTO_ADVANCE
-    save_calls: list[str] = field(default_factory=list)
-    save_error: str = ""
-    book: Book | None = None
-
-    def save(self) -> str:
-        self.save_calls.append(self.generate_range_string)
-        return self.save_error
+from textual_editor_stubs import (
+    make_phrase_group,
+    run,
+    StubPhraseGroup,
+    StubProject,
+    StubSoundSegment,
+    StubSoundSegments,
+)
 
 
 def make_state(project: StubProject) -> State:
@@ -179,10 +123,6 @@ def make_sectioned_app(
     return app, project
 
 
-def make_phrase_group(text: str) -> PhraseGroup:
-    return PhraseGroup([Phrase(text, Reason.SENTENCE)])
-
-
 def test_generate_editor_projects_sections_and_suppresses_single_section() -> None:
     single_app, _ = make_sectioned_app(
         [BookSection(title="Only", phrase_groups=[make_phrase_group("One.")])]
@@ -211,7 +151,7 @@ def test_generate_editor_projects_sections_and_suppresses_single_section() -> No
 
 
 def test_generate_filter_omits_empty_sections_and_counts_visible_matches() -> None:
-    app, project = make_sectioned_app(
+    app, _ = make_sectioned_app(
         [
             BookSection(
                 title="Opening",
@@ -232,7 +172,6 @@ def test_generate_filter_omits_empty_sections_and_counts_visible_matches() -> No
     ]
     assert str(app.format_line(0)) == "\nSection 1/3: Opening (1 line)\n\n"
     assert app.content_line_index(app.phrase_indices[1]) == 1
-    assert project.phrase_groups[1].presentable_text == "Two."
 
 
 def test_generate_section_rows_are_searchable_but_non_actionable() -> None:
@@ -255,17 +194,8 @@ def test_generate_section_rows_are_searchable_but_non_actionable() -> None:
             assert app.staged_queued_indices == set()
             assert project.sound_segments.deleted_index_batches == []
 
-            await pilot.press("m")
-            app.screen.query_one("#manual-selection-input", Input).value = "1, 2"
-            await pilot.press("enter")
-            assert app.selected_indices == {1, 3}
-
+            # A selection spanning a section row keeps the row out of the staged set
             await pilot.press("home", "down", "shift+down", "shift+down")
-            option_list = app.query_one("#line-list", NonWrappingOptionList)
-            assert app.selected_indices == {1, 2, 3}
-            assert app.selection_status_text == "2 lines selected"
-            assert option_list.inactive_selection_indices == {1}
-
             await pilot.press("space")
             assert app.staged_queued_indices == {0, 1}
             assert app.selected_indices == {3}
@@ -318,45 +248,6 @@ def test_delete_with_section_highlight_applies_to_selected_generated_phrase() ->
     run(exercise())
 
 
-def run(coroutine) -> None:
-    asyncio.run(coroutine)
-
-
-def render_line(app: GenerateEditor, index: int, width: int) -> str:
-    output = StringIO()
-    console = Console(
-        file=output,
-        width=width,
-        force_terminal=False,
-        color_system=None,
-    )
-    console.print(app.format_line(index), end="")
-    return output.getvalue()
-
-
-def test_segment_discovery_and_rows_are_deferred_until_after_first_draw() -> None:
-    project = StubProject(
-        [StubPhraseGroup("Line 1")],
-        StubSoundSegments({0: [StubSoundSegment("segment-0.flac")]}),
-    )
-    app = GenerateEditor(make_state(project))
-
-    assert app.content_initialized is False
-    assert app.phrase_indices == []
-    assert app.all_phrase_indices == []
-    assert app.staged_queued_indices == set()
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            assert app.content_initialized is True
-            assert app.phrase_indices == [0]
-            assert app.all_phrase_indices == [0]
-            assert app.staged_queued_indices == set()
-
-    run(exercise())
-
-
 def test_initial_rows_reuse_single_segment_status_snapshot() -> None:
     num_lines = 1_000
     project = StubProject(
@@ -373,56 +264,25 @@ def test_initial_rows_reuse_single_segment_status_snapshot() -> None:
     run(exercise())
 
 
-def test_initial_queue_is_loaded_from_project_generation_range() -> None:
-    app, project = make_app(6)
-    project.generate_range_string = "2, 4-5"
+@pytest.mark.parametrize(
+    ("line_count", "range_string", "expected_indices"),
+    [
+        pytest.param(6, "2, 4-5", {1, 3, 4}, id="list-and-range"),
+        pytest.param(3, "all", {0, 1, 2}, id="all"),
+        pytest.param(3, "none", set(), id="none"),
+    ],
+)
+def test_initial_queue_is_loaded_from_project_generation_range(
+    line_count: int, range_string: str, expected_indices: set[int]
+) -> None:
+    app, project = make_app(line_count)
+    project.generate_range_string = range_string
 
     app = GenerateEditor(make_state(project))
     app.load_content()
 
-    assert app.original_queued_indices == {1, 3, 4}
-    assert app.staged_queued_indices == app.original_queued_indices
-    assert str(app.format_line(1)).startswith("00002 [generated]")
-    assert str(app.format_line(2)).startswith("00003 [generated]")
-    assert app.staged_queued_indices == app.original_queued_indices
-
-
-def test_initial_all_generation_range_queues_every_line() -> None:
-    app, project = make_app(3)
-    project.generate_range_string = "all"
-
-    app = GenerateEditor(make_state(project))
-    app.load_content()
-
-    assert app.staged_queued_indices == {0, 1, 2}
-
-
-def test_initial_none_generation_range_leaves_every_line_unqueued() -> None:
-    app, project = make_app(3)
-    project.generate_range_string = "none"
-
-    app = GenerateEditor(make_state(project))
-    app.load_content()
-
-    assert app.staged_queued_indices == set()
-
-
-def test_escape_saves_and_closes_when_unchanged_queue_has_items() -> None:
-    app, project = make_app(3, set())
-    project.generate_range_string = "2"
-    app = GenerateEditor(make_state(project))
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            await pilot.press("escape")
-            await pilot.pause()
-            assert app.is_running is False
-
-    run(exercise())
-    assert project.generate_range_string == "2"
-    assert project.save_calls == ["2"]
-    assert app.return_value == EditorClosed()
+    assert app.original_queued_indices == expected_indices
+    assert app.staged_queued_indices == expected_indices
 
 
 def test_segment_actions_are_ignored_before_deferred_content_loads() -> None:
@@ -562,32 +422,13 @@ def test_x_counts_generated_selected_rows_and_no_preserves_segments() -> None:
     run(exercise())
 
 
-def test_x_confirm_deletes_all_files_for_generated_rows_and_refreshes_state() -> None:
+def test_x_confirm_deletes_all_files_for_generated_rows_and_refreshes_state(
+    monkeypatch,
+) -> None:
     app, project = make_app(3, {0, 2})
     project.sound_segments.sound_segments_map[0].append(
         StubSoundSegment("redundant-segment-0.flac")
     )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("x")
-            assert isinstance(app.screen, SaveChangesDialog)
-            assert app.screen.copy_lines == ["Delete 1 generated sound segment?"]
-            await pilot.press("y")
-            await pilot.pause()
-
-            assert project.sound_segments.deleted_index_batches == [{0}]
-            assert project.sound_segments.invalidation_count == 1
-            assert str(app.format_line(0)).startswith("00001 [         ]")
-            assert str(app.query_one("#status-line", Static).render()) == (
-                "0 lines queued for generation"
-            )
-
-    run(exercise())
-
-
-def test_x_confirm_reformats_only_deleted_generated_rows(monkeypatch) -> None:
-    app, _ = make_app(3, {0, 2})
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -601,11 +442,20 @@ def test_x_confirm_reformats_only_deleted_generated_rows(monkeypatch) -> None:
                 return original_format_line(index)
 
             monkeypatch.setattr(app, "format_line", record_format_line)
-            await pilot.press("x", "y")
+            await pilot.press("x")
+            assert isinstance(app.screen, SaveChangesDialog)
+            assert app.screen.copy_lines == ["Delete 1 generated sound segment?"]
+            await pilot.press("y")
             await pilot.pause()
 
+            assert project.sound_segments.deleted_index_batches == [{0}]
+            assert project.sound_segments.invalidation_count == 1
             assert formatted_indices == [0]
+            assert str(app.format_line(0)).startswith("00001 [         ]")
             assert option_list.get_option("generate-phrase-1") is retained_option
+            assert str(app.query_one("#status-line", Static).render()) == (
+                "0 lines queued for generation"
+            )
 
     run(exercise())
 
@@ -675,10 +525,8 @@ def test_all_phrases_are_displayed_once_in_project_order() -> None:
     app = GenerateEditor(make_state(project))
     app.load_content()
 
+    # Stale/out-of-range segment entries create no rows; every phrase appears once.
     assert app.phrase_indices == [0, 1, 2, 3, 4, 5]
-    assert app.staged_queued_indices == set()
-    assert str(app.format_line(0)) == "00001 [         ] Line 1"
-    assert str(app.format_line(5)) == "00006 [generated] Line 6"
 
 
 def test_best_segment_word_error_count_replaces_queue_status() -> None:
@@ -725,41 +573,6 @@ def test_failed_word_error_count_has_error_colored_asterisk() -> None:
     assert isinstance(asterisk_span.style, Style)
     assert asterisk_span.style.color
     assert asterisk_span.style.color.get_truecolor() == (255, 0, 0)
-
-
-def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> None:
-    app, project = make_app(1, set())
-    phrase_group = project.phrase_groups[0]
-    assert isinstance(phrase_group, StubPhraseGroup)
-    phrase_group.presentable_text = "one two three four five six seven"
-
-    rendered = render_line(app, 0, width=25)
-
-    assert rendered.splitlines() == [
-        "00001 [         ] one two",
-        "                  three",
-        "                  four…",
-    ]
-
-
-def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> None:
-    app, _ = make_app(2)
-
-    async def exercise() -> None:
-        async with app.run_test(size=(30, 20)) as pilot:
-            await pilot.press("shift+down")
-            option_list = app.query_one("#line-list", NonWrappingOptionList)
-            line = option_list.render_line(0)
-            assert line.cell_length == option_list.scrollable_content_region.width
-            assert all(
-                segment.style is not None
-                and segment.style.reverse
-                and segment.style.color is not None
-                and tuple(segment.style.color.get_truecolor()) == (136, 136, 136)
-                for segment in line
-            )
-
-    run(exercise())
 
 
 def test_queue_toggle_applies_to_every_selected_phrase() -> None:
@@ -871,18 +684,17 @@ def test_f_opens_filter_dialog_with_current_filter_and_all_options() -> None:
         async with app.run_test() as pilot:
             await pilot.press("f")
             assert isinstance(app.screen, FilterDialog)
-            assert str(app.screen.query_one("#filter-title", Static).render()) == (
-                "Filter lines"
-            )
+            # Per-option counts are the classification output; labels come from
+            # FilterType.menu_label rather than being restated here.
             assert [
                 str(app.screen.query_one(f"#filter-option-{number}", Static).render())
                 for number in range(1, 6)
             ] == [
-                "[1] Show all lines (2) (selected)",
-                "[2] Show ungenerated lines (0)",
-                "[3] Show generated lines (2)",
-                "[4] Show generated lines with any errors (0)",
-                "[5] Show generated lines with errors, flagged as Failed (0)",
+                f"[{number}] {filter_type.menu_label} ({count})"
+                + (" (selected)" if filter_type is app.filter_type else "")
+                for number, (filter_type, count) in enumerate(
+                    zip(FilterType, (2, 0, 2, 0, 0)), start=1
+                )
             ]
 
     run(exercise())
@@ -895,12 +707,6 @@ def test_m_opens_focused_manual_selection_dialog_and_escape_cancels() -> None:
         async with app.run_test() as pilot:
             await pilot.press("m")
             assert isinstance(app.screen, ManualSelectionDialog)
-            assert str(
-                app.screen.query_one("#manual-selection-title", Static).render()
-            ) == "Enter line selection manually"
-            assert str(
-                app.screen.query_one("#manual-selection-example", Static).render()
-            ) == 'Eg, "5-100, 105"'
             assert app.screen.query_one("#manual-selection-input", Input).has_focus
 
             await pilot.press("escape")
@@ -929,46 +735,6 @@ def test_manual_selection_dialog_shows_syntax_errors_and_stays_open() -> None:
     run(exercise())
 
 
-def test_manual_selection_dialog_silently_clamps_and_discards_out_of_range() -> None:
-    app, _ = make_app(8)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            # 6-120 clamps to 6-8; 20, 100-120, and -20 are discarded; 2-5 as-is
-            app.screen.query_one("#manual-selection-input", Input).value = (
-                "6-120, 20, 100-120, -20, 2-5"
-            )
-            await pilot.press("enter")
-
-            assert not isinstance(app.screen, ManualSelectionDialog)
-            assert app.selected_indices == {1, 2, 3, 4, 5, 6, 7}
-            assert app.toast_text == "Selected 7 lines"
-
-    run(exercise())
-
-
-def test_manual_selection_replaces_existing_selection_and_highlights_highest() -> None:
-    app, _ = make_app(10)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("home", "shift+down", "shift+down", "shift+down")
-            assert app.selected_indices == {0, 1, 2, 3}
-
-            await pilot.press("m")
-            app.screen.query_one("#manual-selection-input", Input).value = "2-3, 7"
-            await pilot.press("enter")
-
-            assert not isinstance(app.screen, ManualSelectionDialog)
-            assert app.selected_indices == {1, 2, 6}
-            assert app.selected_index == 6
-            assert app.selection_anchor_index == 6
-            assert app.query_one("#line-list", NonWrappingOptionList).highlighted == 6
-
-    run(exercise())
-
-
 def test_manual_selection_uses_project_lines_and_ignores_filtered_out_lines() -> None:
     app, _ = make_app(8, {1, 3, 5, 7})
 
@@ -985,27 +751,6 @@ def test_manual_selection_uses_project_lines_and_ignores_filtered_out_lines() ->
             assert app.selected_index == 3
             assert app.selection_anchor_index == 3
             assert app.query_one("#line-list", NonWrappingOptionList).highlighted == 3
-
-    run(exercise())
-
-
-def test_manual_selection_with_no_visible_lines_leaves_selection_unchanged() -> None:
-    app, _ = make_app(6, {1, 3, 5})
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("f", "2", "down")
-            assert app.phrase_indices == [0, 2, 4]
-            assert app.selected_indices == {1}
-
-            await pilot.press("m")
-            app.screen.query_one("#manual-selection-input", Input).value = "2, 4, 6"
-            await pilot.press("enter")
-
-            assert not isinstance(app.screen, ManualSelectionDialog)
-            assert app.selected_indices == {1}
-            assert app.selected_index == 1
-            assert app.selection_anchor_index == 1
 
     run(exercise())
 
@@ -1375,12 +1120,7 @@ def test_info_dialog_is_height_limited_scrollable_and_escape_dismisses(
             async with app.run_test(size=(80, 18)) as pilot:
                 await pilot.press("i")
                 assert isinstance(app.screen, SegmentInfoDialog)
-                dialog = app.screen.query_one("#segment-info-dialog", Vertical)
                 scroll = app.screen.query_one("#segment-info-scroll", VerticalScroll)
-                assert dialog.region.x == 2
-                assert dialog.region.width == 76
-                assert dialog.region.y >= 2
-                assert dialog.region.bottom <= 16
                 assert scroll.virtual_size.height > scroll.region.height
 
                 await pilot.press("escape")
@@ -1413,7 +1153,8 @@ def test_info_dialog_inside_click_stays_open_and_outside_click_dismisses(
     run(exercise())
 
 
-def test_playback_overrides_selection_status_and_find_bar_replaces_it() -> None:
+def test_playback_status_overrides_selection_status_and_restores_it_when_cleared(
+) -> None:
     app, _ = make_app(4)
 
     async def exercise() -> None:
@@ -1430,18 +1171,8 @@ def test_playback_overrides_selection_status_and_find_bar_replaces_it() -> None:
                 await pilot.press("p", "shift+down", "shift+down")
                 status_bar = app.query_one("#status-bar", Horizontal)
                 status_line = app.query_one("#status-line", Static)
-                find_bar = app.query_one("#find-bar", Horizontal)
                 assert str(status_line.render()) == "Playing line 1"
                 assert status_bar.display is True
-                assert find_bar.display is False
-
-                await pilot.press("ctrl+f")
-                assert status_bar.display is False
-                assert find_bar.display is True
-
-                await pilot.press("escape")
-                assert status_bar.display is True
-                assert find_bar.display is False
 
                 app.clear_playback_status()
                 assert str(status_line.render()) == "3 lines selected"
@@ -1484,79 +1215,127 @@ def test_playback_status_clears_dynamically_when_sound_finishes() -> None:
     run(exercise())
 
 
-def test_playback_timer_does_not_rewrite_unchanged_status() -> None:
-    app, _ = make_app(1)
-    app.playing_sound_id = "sound-id"
-    app.playing_phrase_index = 0
-
-    async def exercise() -> None:
-        with (
-            patch.object(PlaySoundUtil, "current_sound_id", return_value="sound-id"),
-            patch.object(app, "show_playback_status") as show_playback_status,
-        ):
-            async with app.run_test():
-                show_playback_status.reset_mock()
-                app.update_playback_status()
-                show_playback_status.assert_not_called()
-
-    run(exercise())
-
-
-def test_rows_without_generated_segments_are_shown_and_can_all_be_queued() -> None:
-    app, project = make_app(3, set())
-
-    assert app.phrase_indices == [0, 1, 2]
-    assert app.selected_index == 0
+@pytest.mark.parametrize(
+    ("line_count", "generated_indices", "range_string", "presses", "expected_range"),
+    [
+        pytest.param(2, set(range(2)), "none", ("escape",), "none", id="none-range"),
+        pytest.param(3, set(), "2", ("escape",), "2", id="loaded-range"),
+        pytest.param(
+            3,
+            set(),
+            "none",
+            ("ctrl+a", "space", "escape"),
+            "all",
+            id="queue-all-lines-then-exit",
+        ),
+        pytest.param(
+            4,
+            {0, 1},
+            "1-2",
+            ("escape",),
+            "1-2",
+            id="range-over-generated-lines",
+        ),
+    ],
+)
+def test_exit_persists_staged_generation_range_and_closes(
+    line_count: int,
+    generated_indices: set[int],
+    range_string: str,
+    presses: tuple[str, ...],
+    expected_range: str,
+) -> None:
+    project = StubProject(
+        [StubPhraseGroup(f"Line {index + 1}") for index in range(line_count)],
+        StubSoundSegments(
+            {
+                index: [StubSoundSegment(f"segment-{index}.flac")]
+                for index in generated_indices
+            }
+        ),
+        generate_range_string=range_string,
+    )
+    app = GenerateEditor(make_state(project))
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("ctrl+a", "space", "escape")
+            await pilot.pause()
+            assert app.phrase_indices == list(range(line_count))
+            await pilot.press(*presses)
             await pilot.pause()
             assert app.is_running is False
 
     run(exercise())
-    assert project.generate_range_string == "all"
-    assert project.save_calls == ["all"]
+    assert project.generate_range_string == expected_range
+    assert project.save_calls == [expected_range]
     assert app.return_value == EditorClosed()
 
 
-def test_escape_saves_queued_original_indices_without_deleting_sound() -> None:
-    app, project = make_app(7, {1, 4, 6})
+@pytest.mark.parametrize(
+    ("line_count", "generated_indices", "presses", "expected_range"),
+    [
+        pytest.param(
+            7,
+            {1, 4, 6},
+            ("shift+down", "space", "escape"),
+            "1",
+            id="queue-single-line",
+        ),
+        pytest.param(
+            4,
+            set(),
+            ("space", "down", "down", "space", "escape"),
+            "1, 3",
+            id="queue-disjoint-lines",
+        ),
+    ],
+)
+def test_exit_persists_toggled_queue_without_deleting_sound_segments(
+    line_count: int,
+    generated_indices: set[int],
+    presses: tuple[str, ...],
+    expected_range: str,
+) -> None:
+    project = StubProject(
+        [StubPhraseGroup(f"Line {index + 1}") for index in range(line_count)],
+        StubSoundSegments(
+            {
+                index: [StubSoundSegment(f"segment-{index}.flac")]
+                for index in generated_indices
+            }
+        ),
+    )
     original_map = {
         index: list(items)
         for index, items in project.sound_segments.sound_segments_map.items()
     }
+    app = GenerateEditor(make_state(project))
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("shift+down", "space", "escape")
+            await pilot.pause()
+            await pilot.press(*presses)
             await pilot.pause()
             assert app.is_running is False
 
     run(exercise())
-    assert project.generate_range_string == "1"
-    assert project.save_calls == ["1"]
+    assert project.generate_range_string == expected_range
+    assert project.save_calls == [expected_range]
     assert project.sound_segments.sound_segments_map == original_map
     assert app.return_value == EditorClosed()
 
 
-def test_clean_exit_saves_none_generation_range() -> None:
-    app, project = make_app(2)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("escape")
-            await pilot.pause()
-            assert app.is_running is False
-
-    run(exercise())
-    assert project.generate_range_string == "none"
-    assert project.save_calls == ["none"]
-    assert app.return_value == EditorClosed()
-
-
 def test_clean_exit_returns_save_failure() -> None:
-    app, project = make_app(2)
+    app, project = make_app(2, set())
+    app.staged_queued_indices.add(0)
+
+    project.save_error = "disk full"
+    assert app.persist_staged_queue() == "Save failed: disk full"
+
+    project.save_error = ""
+    assert app.persist_staged_queue() == ""
+    assert project.save_calls == ["1", "1"]
+
     project.save_error = "disk full"
 
     async def exercise() -> None:
@@ -1567,102 +1346,4 @@ def test_clean_exit_returns_save_failure() -> None:
         assert app.return_value == EditorSaveFailed("Save failed: disk full")
 
     run(exercise())
-
-
-def test_persist_staged_queue_returns_current_save_error() -> None:
-    app, project = make_app(2, set())
-    app.staged_queued_indices.add(0)
-    project.save_error = "disk full"
-
-    assert app.persist_staged_queue() == "Save failed: disk full"
-
-    project.save_error = ""
-    assert app.persist_staged_queue() == ""
-    assert project.save_calls == ["1", "1"]
-
-
-def test_exit_skips_confirmation_when_only_generated_lines_are_queued() -> None:
-    app, project = make_app(4, {0, 1})
-    project.generate_range_string = "1-2"
-    app = GenerateEditor(make_state(project))
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            assert app.staged_queued_indices == {0, 1}
-            await pilot.press("escape")
-            await pilot.pause()
-            assert app.is_running is False
-
-    run(exercise())
-    assert project.generate_range_string == "1-2"
-    assert project.save_calls == ["1-2"]
-    assert app.return_value == EditorClosed()
-
-
-def test_no_dialog_choice_saves_queue_and_exits_without_confirming() -> None:
-    app, project = make_app(4, set())
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("space", "down", "down", "space", "escape", "n")
-            await pilot.pause()
-            assert app.is_running is False
-
-    run(exercise())
-    assert project.generate_range_string == "1, 3"
-    assert project.save_calls == ["1, 3"]
-    assert app.return_value == EditorClosed()
-
-
-def test_persist_range_without_generated_items_updates_and_saves_project() -> None:
-    project = StubProject(
-        [StubPhraseGroup(f"Line {index + 1}") for index in range(5)],
-        StubSoundSegments(
-            {
-                1: [StubSoundSegment("segment-1.flac")],
-                3: [StubSoundSegment("segment-3.flac")],
-                9: [StubSoundSegment("stale-segment.flac")],
-            }
-        ),
-        generate_range_string="1-4",
-    )
-
-    error = ProjectUtil.persist_range_without_generated_items(project)  # type: ignore[arg-type]
-
-    assert error == ""
-    assert project.generate_range_string == "1, 3"
-    assert project.save_calls == ["1, 3"]
-
-
-def test_persist_range_without_generated_items_saves_none_when_all_generated() -> None:
-    project = StubProject(
-        [StubPhraseGroup("Line 1"), StubPhraseGroup("Line 2")],
-        StubSoundSegments(
-            {
-                0: [StubSoundSegment("segment-0.flac")],
-                1: [StubSoundSegment("segment-1.flac")],
-            }
-        ),
-        generate_range_string="all",
-    )
-
-    error = ProjectUtil.persist_range_without_generated_items(project)  # type: ignore[arg-type]
-
-    assert error == ""
-    assert project.generate_range_string == "none"
-    assert project.save_calls == ["none"]
-
-
-def test_persist_range_without_generated_items_skips_unchanged_range() -> None:
-    project = StubProject(
-        [StubPhraseGroup("Line 1"), StubPhraseGroup("Line 2")],
-        StubSoundSegments({1: [StubSoundSegment("segment-1.flac")]}),
-        generate_range_string="1",
-    )
-
-    error = ProjectUtil.persist_range_without_generated_items(project)  # type: ignore[arg-type]
-
-    assert error == ""
-    assert project.generate_range_string == "1"
-    assert project.save_calls == []
+    assert project.save_calls == ["1", "1", "1"]

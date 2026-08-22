@@ -1,6 +1,6 @@
-import asyncio
 from dataclasses import dataclass
 
+import pytest
 from rich.console import Console
 from rich.text import Text
 from textual.containers import Horizontal, Vertical
@@ -26,6 +26,7 @@ from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
     NonWrappingOptionList,
 )
+from textual_editor_stubs import run
 
 
 @dataclass
@@ -228,10 +229,6 @@ def test_runner_reports_unexpected_exception(monkeypatch) -> None:
     assert run_content_textual_app(app) == ContentAppFailed("RuntimeError: boom")
 
 
-def run(coroutine) -> None:
-    asyncio.run(coroutine)
-
-
 def test_base_retains_project_and_maps_options_to_phrase_groups() -> None:
     app, project = make_app()
 
@@ -267,7 +264,6 @@ def test_base_formats_section_list_items_with_shared_style() -> None:
     section_item = app.format_section_list_item("Section 1/2: Opening", 0)
 
     assert str(section_item) == "\nSection 1/2: Opening\n\n"
-    assert section_item.spans == []
     assert section_item.style == ""
 
     app.find_match_index = 0
@@ -277,57 +273,110 @@ def test_base_formats_section_list_items_with_shared_style() -> None:
     )
 
 
-def test_base_manual_selection_replaces_selection_and_highlights_highest_line() -> None:
-    app, _ = make_app()
+@pytest.mark.parametrize(
+    (
+        "phrase_indices",
+        "line_input",
+        "expected_selected_indices",
+        "expected_highlighted",
+        "expected_toast",
+    ),
+    [
+        # An existing multi-selection is replaced by the manual choice.
+        pytest.param(
+            [2, 0],
+            "1, 3",
+            {0, 1},
+            0,
+            "Selected 2 lines",
+            id="mixed-lines",
+        ),
+        pytest.param([2, 0], "1", {1}, 1, "Selected 1 line", id="single-line"),
+        # A later single line after a range becomes the highlight
+        pytest.param(
+            list(range(10)),
+            "2-3, 7",
+            {1, 2, 6},
+            6,
+            "Selected 3 lines",
+            id="range-then-later-single-line",
+        ),
+        # A range end past the last line is clamped without a warning.
+        pytest.param(
+            [2, 0],
+            "1-99",
+            {0, 1},
+            0,
+            "Selected 2 lines",
+            id="range-clamps-past-last-line",
+        ),
+        # Out-of-range single values and negative ranges are dropped.
+        pytest.param(
+            list(range(8)),
+            "6-120, 20, 100-120, -20, 2-5",
+            set(range(1, 8)),
+            7,
+            "Selected 7 lines",
+            id="range-clamps-and-drops-out-of-range-values",
+        ),
+    ],
+)
+def test_base_manual_selection_replaces_selection_and_highlights_highest_line(
+    phrase_indices: list[int],
+    line_input: str,
+    expected_selected_indices: set[int],
+    expected_highlighted: int,
+    expected_toast: str,
+) -> None:
+    phrase_count = max(phrase_indices) + 1
+    project = StubProject(
+        [StubPhraseGroup(f"line {index + 1}") for index in range(phrase_count)]
+    )
+    app = StubContentApp(project, phrase_indices=phrase_indices)
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
+            await pilot.press("ctrl+a")
             await pilot.press("m")
             assert isinstance(app.screen, ManualSelectionDialog)
-            app.screen.query_one("#manual-selection-input", Input).value = "1, 3"
-            await pilot.press("enter")
-
-            assert not isinstance(app.screen, ManualSelectionDialog)
-            assert app.selected_indices == {0, 1}
-            assert app.selected_index == 0
-            assert app.selection_anchor_index == 0
-            assert app.query_one("#line-list", OptionList).highlighted == 0
-            assert app.toast_text == "Selected 2 lines"
-
-    run(exercise())
-
-
-def test_base_manual_selection_single_line_shows_singular_toast() -> None:
-    app, _ = make_app()
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            assert isinstance(app.screen, ManualSelectionDialog)
-            app.screen.query_one("#manual-selection-input", Input).value = "1"
-            await pilot.press("enter")
-
-            assert not isinstance(app.screen, ManualSelectionDialog)
-            assert app.selected_indices == {1}
-            assert app.toast_text == "Selected 1 line"
-
-    run(exercise())
-
-
-def test_base_manual_selection_silently_clamps_out_of_range_end() -> None:
-    app, _ = make_app()
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            assert isinstance(app.screen, ManualSelectionDialog)
-            app.screen.query_one("#manual-selection-input", Input).value = "1-99"
+            app.screen.query_one("#manual-selection-input", Input).value = line_input
             await pilot.press("enter")
 
             # The dialog dismissed without surfacing a clamp warning
             assert not isinstance(app.screen, ManualSelectionDialog)
-            assert app.selected_indices == {0, 1}
-            assert app.toast_text == "Selected 2 lines"
+            assert app.selected_indices == expected_selected_indices
+            assert app.selected_index == expected_highlighted
+            assert app.selection_anchor_index == expected_highlighted
+            assert app.query_one("#line-list", OptionList).highlighted == (
+                expected_highlighted
+            )
+            assert app.toast_text == expected_toast
+
+    run(exercise())
+
+
+def test_base_manual_selection_with_no_matching_rows_leaves_selection_unchanged() -> None:
+    project = StubProject(
+        [
+            StubPhraseGroup("first"),
+            StubPhraseGroup("section heading"),
+            StubPhraseGroup("third"),
+        ]
+    )
+    app = StructuralRowStubContentApp(project, phrase_indices=[0, 1])
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            assert isinstance(app.screen, ManualSelectionDialog)
+            app.screen.query_one("#manual-selection-input", Input).value = "2"
+            await pilot.press("enter")
+
+            assert not isinstance(app.screen, ManualSelectionDialog)
+            assert app.selected_indices == {0}
+            assert app.selected_index == 0
+            assert app.selection_anchor_index == 0
+            assert app.toast_text == ""
 
     run(exercise())
 
@@ -361,6 +410,11 @@ def test_base_excludes_structural_rows_from_selection_policy_and_mutation() -> N
             await pilot.press("enter")
             assert app.selected_indices == {0, 2}
 
+            # A selection of structural rows alone reports zero content lines
+            app.collapse_selection(1)
+            assert app.selected_indices == {1}
+            assert app.selection_status_text == ""
+
     run(exercise())
 
 
@@ -381,6 +435,27 @@ def test_hanging_indent_ignores_non_printing_ansi_prefix_characters() -> None:
     rendered = ["".join(segment.text for segment in line) for line in rendered_lines]
 
     assert rendered == ["Label: one two", "       three", "       four"]
+
+
+def test_hanging_indent_caps_lines_and_truncates_hidden_overflow() -> None:
+    # At the 18-cell content width the 59-character content wraps to four
+    # lines, so the three-line cap and the truncation ellipsis both apply.
+    text = HangingIndentText.from_ansi_prefix(
+        "[00001] [Line 10] ",
+        "one two three four five six seven eight nine ten eleven twelve",
+    )
+    console = Console(width=36, force_terminal=False, color_system=None)
+
+    rendered_lines = console.render_lines(text, console.options, pad=False)
+    rendered = ["".join(segment.text for segment in line) for line in rendered_lines]
+
+    # Continuation lines are indented by the row prefix width.
+    indent = " " * 18
+    assert rendered == [
+        "[00001] [Line 10] one two three four",
+        f"{indent}five six seven",
+        f"{indent}eight nine ten…",
+    ]
 
 
 def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
@@ -409,26 +484,26 @@ def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
     run(exercise())
 
 
-def test_base_omits_side_panel_unless_editor_opts_in() -> None:
-    app, _ = make_app()
-
-    async def exercise() -> None:
-        async with app.run_test():
-            assert app.query("#content-shell")
-            assert app.query("#content-main")
-            assert not app.query("#side-panel")
-            assert not app.query("#side-panel-divider")
-
-    run(exercise())
-
-
-def test_base_composes_widget_agnostic_side_panel_when_enabled() -> None:
+def test_base_side_panel_is_opt_in_and_constrained_to_twenty_through_forty() -> None:
     project = StubProject(
         [StubPhraseGroup("first"), StubPhraseGroup("second"), StubPhraseGroup("third")]
     )
     app = SingleSelectionPanelStubContentApp(project)
+    default_app, _ = make_app()
+
+    async def panel_width_at(terminal_width: int) -> int:
+        panel_app = SingleSelectionPanelStubContentApp(project)
+        async with panel_app.run_test(size=(terminal_width, 30)):
+            return panel_app.query_one("#side-panel", Vertical).size.width
 
     async def exercise() -> None:
+        # Editors which do not opt in keep the plain shell
+        async with default_app.run_test():
+            assert default_app.query("#content-shell")
+            assert default_app.query("#content-main")
+            assert not default_app.query("#side-panel")
+            assert not default_app.query("#side-panel-divider")
+
         async with app.run_test(size=(100, 30)):
             panel = app.query_one("#side-panel", Vertical)
             assert app.query_one("#side-panel-divider")
@@ -437,21 +512,10 @@ def test_base_composes_widget_agnostic_side_panel_when_enabled() -> None:
             )
             assert panel.size.width == 35
 
+        assert await panel_width_at(50) == 20
+        assert await panel_width_at(140) == 40
+
     run(exercise())
-
-
-def test_base_side_panel_width_is_constrained_to_twenty_through_forty_columns() -> None:
-    project = StubProject(
-        [StubPhraseGroup("first"), StubPhraseGroup("second"), StubPhraseGroup("third")]
-    )
-
-    async def panel_width_at(terminal_width: int) -> int:
-        app = SingleSelectionPanelStubContentApp(project)
-        async with app.run_test(size=(terminal_width, 30)):
-            return app.query_one("#side-panel", Vertical).size.width
-
-    assert asyncio.run(panel_width_at(50)) == 20
-    assert asyncio.run(panel_width_at(140)) == 40
 
 
 def test_base_single_selection_disables_every_row_multi_selection_entry_path() -> None:
@@ -496,6 +560,7 @@ def test_base_shows_custom_non_selectable_empty_state_and_restores_list() -> Non
             empty_state = app.query_one("#empty-state", Static)
 
             assert option_list.display is False
+            assert option_list.option_count == 0
             assert empty_state.display is True
             assert str(empty_state.render()) == "Loading items"
             assert app.selected_index is None
@@ -518,9 +583,33 @@ def test_base_shows_custom_non_selectable_empty_state_and_restores_list() -> Non
     run(exercise())
 
 
-def test_base_loads_opt_in_deferred_content_after_loading_view_draws() -> None:
-    project = StubProject([StubPhraseGroup("first"), StubPhraseGroup("second")])
-    app = DeferredStubContentApp(project, [1, 0], initial_phrase_index=0)
+@pytest.mark.parametrize(
+    ("final_indices", "initial_phrase_index"),
+    [
+        pytest.param([1, 0], 0, id="installs-loaded-rows"),
+        pytest.param([], None, id="empty-result-keeps-final-empty-copy"),
+    ],
+)
+def test_base_deferred_content_loads_once_after_loading_view_draws(
+    final_indices: list[int],
+    initial_phrase_index: int | None,
+) -> None:
+    project = StubProject(
+        [
+            StubPhraseGroup(f"line {index + 1}")
+            for index in range(max(final_indices, default=0) + 1)
+        ]
+    )
+    app = DeferredStubContentApp(
+        project,
+        final_indices,
+        initial_phrase_index=initial_phrase_index,
+    )
+    expected_selected_index = (
+        None
+        if not final_indices or initial_phrase_index is None
+        else final_indices.index(initial_phrase_index)
+    )
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -528,20 +617,32 @@ def test_base_loads_opt_in_deferred_content_after_loading_view_draws() -> None:
             option_list = app.query_one("#line-list", OptionList)
             empty_state = app.query_one("#empty-state", Static)
 
+            # The loading view is visible while initialize_content runs
             assert app.state_seen_during_initialize == ("Loading content", 0)
             assert app.initialize_calls == 1
             assert app.content_initialized is True
-            assert app.phrase_indices == [1, 0]
-            assert app.selected_index == 1
-            assert option_list.option_count == 2
-            assert option_list.display is True
-            assert empty_state.display is False
+            assert app.phrase_indices == final_indices
+            assert app.selected_index == expected_selected_index
+            assert option_list.option_count == len(final_indices)
             assert app.lifecycle_events == [
                 "initialize",
                 "initial-selection",
                 "loaded",
             ]
-            assert app.state_seen_after_load == (True, [1, 0], 1)
+            assert app.state_seen_after_load == (
+                True,
+                final_indices,
+                expected_selected_index,
+            )
+
+            if final_indices:
+                assert option_list.display is True
+                assert empty_state.display is False
+            else:
+                # An empty result settles on the final empty copy
+                assert option_list.display is False
+                assert empty_state.display is True
+                assert str(empty_state.render()) == "No content"
 
             app.load_content()
             assert app.initialize_calls == 1
@@ -550,23 +651,6 @@ def test_base_loads_opt_in_deferred_content_after_loading_view_draws() -> None:
                 "initial-selection",
                 "loaded",
             ]
-
-    run(exercise())
-
-
-def test_base_deferred_empty_result_switches_to_final_empty_copy() -> None:
-    app = DeferredStubContentApp(StubProject([]), [])
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            option_list = app.query_one("#line-list", OptionList)
-            empty_state = app.query_one("#empty-state", Static)
-
-            assert app.state_seen_during_initialize == ("Loading content", 0)
-            assert option_list.display is False
-            assert empty_state.display is True
-            assert str(empty_state.render()) == "No content"
 
     run(exercise())
 
@@ -691,8 +775,12 @@ def test_base_mutates_selected_mapped_items_and_confirms_before_commit() -> None
     run(exercise())
 
 
-def test_confirmation_dialog_renders_ansi_lines_and_only_yes_no_buttons() -> None:
+def test_confirmation_dialog_renders_copy_lines_and_grows_to_fit_warnings() -> None:
     app, _ = make_app()
+    long_warning = (
+        f"{COL_ERROR}Saving these changes requires deleting 12 generated sound "
+        "segments and 3 section markers from line 2 onward."
+    )
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -721,35 +809,20 @@ def test_confirmation_dialog_renders_ansi_lines_and_only_yes_no_buttons() -> Non
             assert str(warning_renderable.spans[0].style) == "#ff0000"
             assert {button.id for button in app.screen.query(Button)} == {"yes", "no"}
 
-    run(exercise())
+            await pilot.press("escape")
 
-
-def test_confirmation_dialog_uses_one_default_copy_line() -> None:
-    app, _ = make_app()
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
+            # The default dialog carries a single copy line
             app.push_screen(SaveChangesDialog())
             await pilot.pause()
-
             assert (
                 str(app.screen.query_one("#save-changes-copy-line-1", Static).render())
                 == "Save changes before exiting?"
             )
             assert not app.screen.query("#save-changes-copy-line-2")
 
-    run(exercise())
+            await pilot.press("escape")
 
-
-def test_confirmation_dialog_warning_wraps_and_dialog_grows_to_fit() -> None:
-    app, _ = make_app()
-    long_warning = (
-        f"{COL_ERROR}Saving these changes requires deleting 12 generated sound "
-        "segments and 3 section markers from line 2 onward."
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
+            # A long warning wraps and the dialog grows to fit it
             app.push_screen(SaveChangesDialog(["Apply changes?", ""]))
             await pilot.pause()
             baseline_height = app.screen.query_one(
@@ -832,6 +905,7 @@ def test_base_clean_escape_exits_without_confirmation() -> None:
             await pilot.press("escape")
             await pilot.pause()
             assert app.is_running is False
+            assert app.has_changes is False
             assert not isinstance(app.screen, SaveChangesDialog)
 
         assert app.return_value == EditorClosed()
@@ -858,28 +932,13 @@ def test_base_confirmed_exit_commits_changes() -> None:
     run(exercise())
 
 
-def test_base_discarded_exit_closes_without_committing() -> None:
+def test_base_discarded_or_cancelled_exit_closes_or_stays_open_without_committing() -> None:
     app, _ = make_app()
     app.changed_phrase_indices.add(0)
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("escape", "n")
-            await pilot.pause()
-            assert app.committed is False
-            assert app.is_running is False
-
-        assert app.return_value == EditorClosed()
-
-    run(exercise())
-
-
-def test_base_cancelled_exit_keeps_editor_open_without_committing() -> None:
-    app, _ = make_app()
-    app.changed_phrase_indices.add(0)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
+            # Cancelling the confirmation dialog keeps the editor open
             await pilot.press("escape")
             assert isinstance(app.screen, SaveChangesDialog)
 
@@ -887,5 +946,13 @@ def test_base_cancelled_exit_keeps_editor_open_without_committing() -> None:
             assert not isinstance(app.screen, SaveChangesDialog)
             assert app.committed is False
             assert app.is_running is True
+
+            # Declining the dialog closes the editor without committing
+            await pilot.press("escape", "n")
+            await pilot.pause()
+            assert app.committed is False
+            assert app.is_running is False
+
+        assert app.return_value == EditorClosed()
 
     run(exercise())

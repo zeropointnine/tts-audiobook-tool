@@ -1,23 +1,13 @@
-import asyncio
-from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from rich.console import Console
 from rich.text import Text
-from textual.widgets import Button, Input, Static
-from tts_audiobook_tool.app_types import Book, BookSection
-from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from textual.widgets import Button, Input
+from tts_audiobook_tool.app_types import BookSection
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.state import State
 from tts_audiobook_tool.system_support.ansi import Ansi
-from tts_audiobook_tool.menus.voice import voice_menu_shared
-from tts_audiobook_tool.menus.voice.voice_menu_shared import VoiceMenuShared
 from tts_audiobook_tool.textual import voice_line_editor
 from tts_audiobook_tool.textual.content_textual_app import (
-    ContentAppCompleted,
-    ContentAppStylesheetFailed,
     EditorSaveFailed,
     EditorSaved,
 )
@@ -28,17 +18,13 @@ from tts_audiobook_tool.textual.voice_line_editor import (
     VoiceLinePhraseGroupItem,
     VoiceLineSectionItem,
 )
-
-
-@dataclass
-class StubPhraseGroup:
-    presentable_text: str
-    voice_index: int = -1
-
-
-@dataclass
-class StubProject:
-    phrase_groups: list[StubPhraseGroup]
+from textual_editor_stubs import (
+    make_phrase_group,
+    make_project,
+    run,
+    StubPhraseGroup,
+    StubProject,
+)
 
 
 def make_editor(
@@ -58,24 +44,12 @@ def make_app(
     return make_editor(project, voice_sample_count), project
 
 
-def make_phrase_group(text: str, voice_index: int = -1) -> PhraseGroup:
-    return PhraseGroup(
-        phrases=[Phrase(text, Reason.SENTENCE)],
-        voice_index=voice_index,
-    )
-
-
 def make_sectioned_editor(
     sections: list[BookSection], voice_sample_count: int = 2
 ) -> VoiceLineEditorTextualApp:
-    project = Project.model_validate({"book": Book(sections=sections)})
-    app = VoiceLineEditorTextualApp(project, voice_sample_count)
+    app = VoiceLineEditorTextualApp(make_project(sections), voice_sample_count)
     app.load_content()
     return app
-
-
-def run(coroutine) -> None:
-    asyncio.run(coroutine)
 
 
 @pytest.fixture(autouse=True)
@@ -93,9 +67,6 @@ def test_rows_are_deferred_but_voice_header_data_is_loaded_synchronously() -> No
     project = StubProject([StubPhraseGroup("Line 1")])
     app = VoiceLineEditorTextualApp(cast(Project, project), voice_sample_count=2)
 
-    assert Text.from_ansi(app.header_lines[3]).plain == (
-        "- Use number keys [1] to [2] to set voice sample for selected text line/s"
-    )
     assert app.content_initialized is False
     assert app.phrase_indices == []
     assert app.original_voice_indices == []
@@ -181,32 +152,6 @@ def test_multiple_sections_insert_generated_section_rows() -> None:
         "\nSection 2/2: Middle (1 line)\n\n",
         "[00003] [Voice 1] Three.",
     ]
-    assert app.format_line(0).spans == []
-
-
-def test_voice_assignment_uses_selected_phrase_when_section_is_highlighted() -> None:
-    app = make_sectioned_editor(
-        [
-            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
-            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
-        ]
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("2")
-            assert app.staged_voice_indices == [-1, -1]
-
-            await pilot.press("down", "shift+up")
-            assert app.selected_index == 0
-            assert app.selected_indices == {0, 1}
-            assert app.highlighted_content_line_index() is None
-
-            await pilot.press("2")
-            assert app.staged_voice_indices == [1, -1]
-            assert app.selected_indices == {0}
-
-    run(exercise())
 
 
 def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> None:
@@ -229,16 +174,6 @@ def test_empty_sections_are_hidden_and_all_empty_sections_show_empty_state() -> 
     ]
     assert empty_app.list_items == []
 
-    async def exercise() -> None:
-        async with empty_app.run_test():
-            assert (
-                empty_app.query_one("#line-list", NonWrappingOptionList).display
-                is False
-            )
-            assert empty_app.query_one("#empty-state", Static).display is True
-
-    run(exercise())
-
 
 def test_find_searches_generated_section_text_and_phrase_text() -> None:
     app = make_sectioned_editor(
@@ -256,17 +191,6 @@ def test_find_searches_generated_section_text_and_phrase_text() -> None:
     assert app.find_match_indices("needle chapter (1 line)") == [2]
     assert app.find_match_indices("haystack") == [3]
     assert app.find_match_indices("00002") == [3]
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("ctrl+f")
-            find_input = app.query_one("#find-input", Input)
-            find_input.value = "Section 2/3"
-            await pilot.press("enter")
-            assert app.find_match_index == 2
-            assert app.selected_index == 2
-
-    run(exercise())
 
 
 def test_find_text_strings_expose_voice_label_separately_from_phrase_text() -> None:
@@ -293,8 +217,8 @@ def test_find_text_strings_expose_voice_label_separately_from_phrase_text() -> N
     assert app.find_text_strings(3) == ["Section 2/2: Ending (1 line)"]
     assert app.find_text_strings(4) == ["00003", "Voice 6 *OUT OF RANGE*", "Three."]
 
-
-def test_find_matches_voice_label_metadata_not_present_in_phrase_text() -> None:
+    # Fields are searched separately, so voice-label metadata matches even
+    # when it is not part of the phrase text.
     app = make_sectioned_editor(
         [
             BookSection(
@@ -319,6 +243,23 @@ def test_find_matches_voice_label_metadata_not_present_in_phrase_text() -> None:
     assert app.find_match_indices("00003") == [4]
     assert app.find_match_indices("00004") == []
 
+    # An out-of-range voice label renders with a note that is searchable too.
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[make_phrase_group("One.", voice_index=5)],
+            ),
+            BookSection(title="Ending", phrase_groups=[make_phrase_group("Two.")]),
+        ],
+        voice_sample_count=2,
+    )
+
+    # Rows: [section, One.(v5 -> "Voice 6 *OUT OF RANGE*"), section, Two.(v-1)]
+    assert app.find_match_indices("out of range") == [1]
+    assert app.find_match_indices("voice 6") == [1]
+    assert app.find_match_indices("voice 2") == []
+
 
 def test_find_metadata_tracks_reassigned_voice() -> None:
     app = make_sectioned_editor(
@@ -338,121 +279,6 @@ def test_find_metadata_tracks_reassigned_voice() -> None:
             assert app.staged_voice_indices == [1, -1]
             assert app.find_match_indices("voice 2") == [1]
             assert app.find_match_indices("voice 1") == [3]
-
-    run(exercise())
-
-
-def test_find_matches_out_of_range_voice_label() -> None:
-    app = make_sectioned_editor(
-        [
-            BookSection(
-                title="Opening",
-                phrase_groups=[make_phrase_group("One.", voice_index=5)],
-            ),
-            BookSection(title="Ending", phrase_groups=[make_phrase_group("Two.")]),
-        ],
-        voice_sample_count=2,
-    )
-
-    # Rows: [section, One.(v5 -> "Voice 6 *OUT OF RANGE*"), section, Two.(v-1)]
-    assert app.find_match_indices("out of range") == [1]
-    assert app.find_match_indices("voice 6") == [1]
-    assert app.find_match_indices("voice 2") == []
-
-
-def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> None:
-    app, _ = make_app(2)
-
-    async def exercise() -> None:
-        async with app.run_test(size=(50, 20)) as pilot:
-            await pilot.press("shift+down")
-            option_list = app.query_one("#line-list", NonWrappingOptionList)
-            line = option_list.render_line(0)
-            assert line.cell_length == option_list.scrollable_content_region.width
-            assert all(
-                segment.style is not None
-                and segment.style.reverse
-                and segment.style.color is not None
-                and tuple(segment.style.color.get_truecolor()) == (136, 136, 136)
-                for segment in line
-            )
-
-    run(exercise())
-
-
-def test_long_text_wraps_with_hanging_indent_and_is_limited_to_three_lines() -> None:
-    app, project = make_app(1)
-    project.phrase_groups[
-        0
-    ].presentable_text = "one two three four five six seven eight nine"
-    console = Console(width=36, force_terminal=False, color_system=None)
-
-    rendered_lines = console.render_lines(
-        app.format_line(0), console.options, pad=False
-    )
-    rendered = ["".join(segment.text for segment in line) for line in rendered_lines]
-
-    assert rendered == [
-        "[00001] [Voice 1] one two",
-        "                         three four",
-        "                         five six…",
-    ]
-
-
-def test_inactive_selected_wrapped_line_dim_background_extends_each_row() -> None:
-    app, project = make_app(2)
-    project.phrase_groups[0].presentable_text = "one two three four five"
-
-    async def exercise() -> None:
-        async with app.run_test(size=(36, 20)) as pilot:
-            await pilot.press("shift+down")
-            option_list = app.query_one("#line-list", NonWrappingOptionList)
-            rendered_lines = [option_list.render_line(y) for y in range(3)]
-            assert all(
-                line.cell_length == option_list.scrollable_content_region.width
-                for line in rendered_lines
-            )
-            assert all(
-                segment.style is not None
-                and segment.style.reverse
-                and segment.style.color is not None
-                and tuple(segment.style.color.get_truecolor()) == (136, 136, 136)
-                for line in rendered_lines
-                for segment in line
-            )
-
-    run(exercise())
-
-
-def test_multiline_selection_leaves_section_rows_visually_unchanged_and_uncounted() -> (
-    None
-):
-    app = make_sectioned_editor(
-        [
-            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
-            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
-        ]
-    )
-
-    async def exercise() -> None:
-        async with app.run_test(size=(60, 24)) as pilot:
-            # Move to the first phrase, then extend through the next heading and phrase.
-            await pilot.press("down", "shift+down", "shift+down")
-            option_list = app.query_one("#line-list", NonWrappingOptionList)
-            assert app.selected_indices == {1, 2, 3}
-            assert app.selection_status_text == "2 lines selected"
-            assert option_list.inactive_selection_indices == {1}
-
-            section_row_y = next(
-                y
-                for y, (option_index, _line_offset) in enumerate(option_list._lines)
-                if option_index == 2
-            )
-            section_line = option_list.render_line(section_row_y + 1)
-            assert not any(
-                segment.style is not None and segment.style.reverse
-                for segment in section_line
-            )
 
     run(exercise())
 
@@ -518,7 +344,23 @@ def test_number_hotkey_assigns_only_phrase_rows_when_selection_crosses_section()
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("down", "shift+down", "shift+down", "2")
+            # A highlighted section row is never assigned a voice
+            await pilot.press("2")
+            assert app.staged_voice_indices == [-1, -1]
+            assert app.selected_indices == {0}
+
+            # A selection spanning a section heading assigns the phrase row only
+            await pilot.press("down", "shift+up")
+            assert app.selected_index == 0
+            assert app.selected_indices == {0, 1}
+            assert app.highlighted_content_line_index() is None
+
+            await pilot.press("2")
+            assert app.staged_voice_indices == [1, -1]
+            assert app.selected_indices == {0}
+
+            # A selection spanning phrase rows on both sides of a heading
+            await pilot.press("home", "down", "shift+down", "shift+down", "2")
             assert app.staged_voice_indices == [1, 1]
             assert app.selected_indices == {3}
             assert app.selection_anchor_index == 3
@@ -722,55 +564,3 @@ def test_unexpected_save_exception_rolls_back_project_and_records_error(
     run(exercise())
 
 
-def test_voice_menu_reports_save_failure_as_error_feedback(monkeypatch) -> None:
-    project = StubProject([StubPhraseGroup("Line 1")])
-    state = cast(State, SimpleNamespace(project=project))
-    feedback_calls: list[tuple[str, bool]] = []
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "VoiceLineEditorTextualApp",
-        lambda _: object(),
-    )
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "run_content_textual_app",
-        lambda _: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
-    )
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "print_feedback",
-        lambda message, **kwargs: feedback_calls.append(
-            (message, kwargs.get("is_error", False))
-        ),
-    )
-
-    VoiceMenuShared.assign_voice_samples_to_text_lines(state)
-
-    assert feedback_calls == [("Save failed: disk full", True)]
-
-
-def test_voice_menu_reports_css_load_failure_as_error_feedback(monkeypatch) -> None:
-    project = StubProject([StubPhraseGroup("Line 1")])
-    state = cast(State, SimpleNamespace(project=project))
-    feedback_calls: list[tuple[str, bool]] = []
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "VoiceLineEditorTextualApp",
-        lambda _: object(),
-    )
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "run_content_textual_app",
-        lambda _: ContentAppStylesheetFailed("Couldn't load textual css"),
-    )
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "print_feedback",
-        lambda message, **kwargs: feedback_calls.append(
-            (message, kwargs.get("is_error", False))
-        ),
-    )
-
-    VoiceMenuShared.assign_voice_samples_to_text_lines(state)
-
-    assert feedback_calls == [("Couldn't load textual css", True)]

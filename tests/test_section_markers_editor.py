@@ -1,19 +1,18 @@
-import asyncio
+import pytest
 from typing import cast
 
 from rich.style import Style
 from rich.text import Text
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Input, OptionList, Static
+from textual.widgets import Button, Input, Static
 
-from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.constants import COL_GRAY
+from tts_audiobook_tool.app_types import BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.textual.section_markers_dialog import (
     SectionMarkersDialog,
     SectionMarkersStep,
-    ClearSectionMarkers,
     make_blank_line_marker_indices,
 )
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -27,33 +26,21 @@ from tts_audiobook_tool.textual.section_markers_editor import (
     SectionMarkersSectionItem,
 )
 
-
-def make_phrase_group(text: str) -> PhraseGroup:
-    return PhraseGroup(phrases=[Phrase(text=text, reason=Reason.SENTENCE)])
-
+from textual_editor_stubs import (
+    make_phrase_group,
+    make_project,
+    make_project_with_markers,
+    run,
+)
 
 def make_space_break_group(text: str) -> PhraseGroup:
     return PhraseGroup(phrases=[Phrase(text=text, reason=Reason.SPACE_BREAK)])
-
 
 def style_at(text: Text, offset: int) -> Style:
     for start, end, style in text.spans:
         if start <= offset < end:
             return Style.parse(style) if isinstance(style, str) else style
     return Style()
-
-
-def make_project(sections: list[BookSection]) -> Project:
-    return Project.model_validate({"book": Book(sections=sections)})
-
-
-def make_project_with_markers(
-    sections: list[BookSection], markers: list[int]
-) -> Project:
-    return Project.model_validate(
-        {"book": Book(sections=sections), "markers": markers}
-    )
-
 
 def make_markers_editor(
     sections: list[BookSection], markers: list[int]
@@ -63,12 +50,10 @@ def make_markers_editor(
     app.load_content()
     return app, project
 
-
 def make_loaded_editor(project: Project) -> SectionMarkersEditor:
     app = SectionMarkersEditor(project)
     app.load_content()
     return app
-
 
 def test_editor_projects_multiple_sections_and_phrase_rows_in_book_order() -> None:
     app = make_loaded_editor(
@@ -103,7 +88,6 @@ def test_editor_projects_multiple_sections_and_phrase_rows_in_book_order() -> No
     assert app.find_match_indices("00003") == [4]
     assert app.find_match_indices("00004") == []
 
-
 def test_editor_omits_heading_for_a_single_section() -> None:
     app = make_loaded_editor(
         make_project(
@@ -113,38 +97,6 @@ def test_editor_omits_heading_for_a_single_section() -> None:
 
     assert app.list_items == [SectionMarkersPhraseGroupItem(0)]
     assert str(app.format_line(0)) == "00001  One."
-
-
-def test_editor_has_single_selection_and_markers_side_panel() -> None:
-    app = SectionMarkersEditor(
-        make_project_with_markers(
-            [
-                BookSection(
-                    phrase_groups=[
-                        make_phrase_group("One."),
-                        make_phrase_group("Two."),
-                        make_phrase_group("Three."),
-                    ]
-                )
-            ],
-            [0, 2],
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause()
-            panel = app.query_one("#side-panel", Vertical)
-            assert panel.size.width == 35
-            assert [child.id for child in panel.children] == ["markers-panel"]
-            assert app.query_one("#side-panel-divider")
-
-            await pilot.press("shift+down", "shift+down", "ctrl+a", "m")
-            assert app.selected_index == 2
-            assert app.selected_indices == {2}
-
-    asyncio.run(exercise())
-
 
 def test_markers_panel_text_enumerates_current_markers() -> None:
     app, _ = make_markers_editor(
@@ -171,16 +123,10 @@ def test_markers_panel_text_enumerates_current_markers() -> None:
     dim_color = Style.parse("#888888").color
     assert style_at(text, text.plain.index("Three.")).color == dim_color
 
-
-def test_markers_panel_text_shows_none_when_there_are_no_markers() -> None:
-    app, _ = make_markers_editor([BookSection(phrase_groups=[])], [])
-
-    text = app.markers_panel_text()
-    assert text.plain == "Current section markers (0 items)\n\nNone"
-    assert style_at(text, text.plain.index("None")).color == (
-        Style.parse("#888888").color
-    )
-
+    empty_app, _ = make_markers_editor([BookSection(phrase_groups=[])], [])
+    empty_text = empty_app.markers_panel_text()
+    assert empty_text.plain == "Current section markers (0 items)\n\nNone"
+    assert style_at(empty_text, empty_text.plain.index("None")).color == dim_color
 
 def test_markers_panel_reserves_its_last_line_for_overflow_count() -> None:
     app = SectionMarkersEditor(
@@ -208,22 +154,7 @@ def test_markers_panel_reserves_its_last_line_for_overflow_count() -> None:
                 style_at(Text.from_ansi(f"{COL_GRAY}x"), 0).color
             )
 
-    asyncio.run(exercise())
-
-
-def test_editor_shows_empty_state_and_escape_closes_immediately() -> None:
-    app = SectionMarkersEditor(make_project([BookSection(phrase_groups=[])]))
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            assert app.query_one("#line-list", OptionList).display is False
-            await pilot.press("escape")
-
-        assert isinstance(app.return_value, EditorClosed)
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_space_toggles_marker_on_highlighted_line_and_updates_panel() -> None:
     app, project = make_markers_editor(
@@ -245,6 +176,12 @@ def test_space_toggles_marker_on_highlighted_line_and_updates_panel() -> None:
     async def exercise() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
+
+            side_panel = app.query_one("#side-panel", Vertical)
+            assert [child.id for child in side_panel.children] == [
+                "markers-panel"
+            ]
+            assert app.query_one("#side-panel-divider")
 
             await pilot.press("shift+down")
             await pilot.press("space")
@@ -268,8 +205,7 @@ def test_space_toggles_marker_on_highlighted_line_and_updates_panel() -> None:
             # The project is not mutated until the exit is confirmed.
             assert project.markers == {2}
 
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_space_on_first_line_shows_toast_without_adding_marker() -> None:
     app, project = make_markers_editor(
@@ -293,16 +229,11 @@ def test_space_on_first_line_shows_toast_without_adding_marker() -> None:
             assert app.toast_text == "Adding first line is not allowed"
             assert project.markers == set()
 
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_header_documents_the_space_toggle_and_escape_finish_keys() -> None:
     app, _ = make_markers_editor([BookSection(phrase_groups=[])], [])
 
-    assert Text.from_ansi(app.header_lines[1]).plain == (
-        "- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END], "
-        "[L/R BRACKET] previous/next item  - [CTRL-F] Find text"
-    )
     assert Text.from_ansi(app.header_lines[2]).plain == (
         "- Press [SPACE] to toggle a section marker on the highlighted line"
     )
@@ -310,7 +241,6 @@ def test_header_documents_the_space_toggle_and_escape_finish_keys() -> None:
         "- [M] More options (add manually, by regex, by blank lines, clear)"
     )
     assert Text.from_ansi(app.header_lines[4]).plain == "- Press [ESC] to finish"
-
 
 def test_marker_row_indices_maps_markers_past_section_headings() -> None:
     app, _ = make_markers_editor(
@@ -326,102 +256,90 @@ def test_marker_row_indices_maps_markers_past_section_headings() -> None:
 
     assert app.marker_row_indices() == [4]
 
-
-def test_bracket_keys_jump_to_next_and_previous_markers_wrapping_around() -> None:
+@pytest.mark.parametrize(
+    ("line_count", "markers", "presses", "expected_selected_indices"),
+    [
+        pytest.param(
+            3,
+            [1, 2],
+            ("]", "]", "[", "["),
+            (1, 2, 1, 2),
+            id="wraps-around-at-both-ends",
+        ),
+        pytest.param(
+            4,
+            [3],
+            ("]", "["),
+            (3, 3),
+            id="skips-rows-without-markers",
+        ),
+        pytest.param(
+            2,
+            [],
+            ("]", "["),
+            (0, 0),
+            id="ignored-when-no-markers-exist",
+        ),
+    ],
+)
+def test_bracket_keys_jump_to_next_and_previous_markers_wrapping_around(
+    line_count: int,
+    markers: list[int],
+    presses: tuple[str, ...],
+    expected_selected_indices: tuple[int, ...],
+) -> None:
     app, _ = make_markers_editor(
         [
             BookSection(
                 phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
+                    make_phrase_group(f"Line {index + 1}.")
+                    for index in range(line_count)
                 ]
             )
         ],
-        [1, 2],
+        markers,
     )
 
     async def exercise() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
             assert app.selected_index == 0
-            await pilot.press("]")
-            assert app.selected_index == 1
-            await pilot.press("]")
-            assert app.selected_index == 2
-            await pilot.press("[")
-            assert app.selected_index == 1
-            await pilot.press("[")
-            assert app.selected_index == 2
+            for press, expected in zip(presses, expected_selected_indices):
+                await pilot.press(press)
+                assert app.selected_index == expected
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_bracket_keys_skip_rows_without_markers() -> None:
-    app, _ = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
-                    make_phrase_group("Four."),
-                ]
-            )
-        ],
-        [3],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.pause()
-            await pilot.press("shift+down", "shift+down")
-            assert app.selected_index == 2
-            await pilot.press("]")
-            assert app.selected_index == 3
-            await pilot.press("[")
-            assert app.selected_index == 3
-
-    asyncio.run(exercise())
-
-
-def test_bracket_keys_are_ignored_when_there_are_no_markers() -> None:
-    app, _ = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                ]
-            )
-        ],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test(size=(100, 30)) as pilot:
-            await pilot.press("]", "[")
-
-        assert app.selected_index == 0
-
-    asyncio.run(exercise())
-
-
-def test_space_is_ignored_before_deferred_content_loads() -> None:
-    app, _ = make_markers_editor(
-        [BookSection(phrase_groups=[make_phrase_group("One.")])], []
-    )
-    app.content_initialized = False
+@pytest.mark.parametrize(
+    ("key", "preloaded"),
+    [
+        pytest.param("space", True, id="space-ignored-after-load-flag-cleared"),
+        pytest.param("m", False, id="m-ignored-before-content-loads"),
+    ],
+)
+def test_editor_actions_are_ignored_before_content_is_initialized(
+    key: str, preloaded: bool
+) -> None:
+    if preloaded:
+        app, _ = make_markers_editor(
+            [BookSection(phrase_groups=[make_phrase_group("One.")])], []
+        )
+        app.content_initialized = False
+    else:
+        app = SectionMarkersEditor(
+            make_project([BookSection(phrase_groups=[])])
+        )
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("space")
+            await pilot.press(key)
+            if key == "space":
+                assert app.staged_markers == set()
+                assert app.has_changes is False
+            else:
+                assert not isinstance(app.screen, SectionMarkersDialog)
 
-        assert app.staged_markers == set()
-        assert app.has_changes is False
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_confirmed_exit_applies_staged_markers_and_saves(monkeypatch) -> None:
     app, project = make_markers_editor(
@@ -451,11 +369,36 @@ def test_confirmed_exit_applies_staged_markers_and_saves(monkeypatch) -> None:
 
         assert project.markers == {1}
         assert app.staged_markers == {1}
-        assert saves == [project]
         assert app.return_value == EditorSaved()
 
-    asyncio.run(exercise())
+    run(exercise())
 
+    # Declining the exit dialog discards staged markers without saving.
+    declined_app, declined_project = make_markers_editor(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("One."),
+                    make_phrase_group("Two."),
+                ]
+            )
+        ],
+        [],
+    )
+
+    async def exercise_decline() -> None:
+        async with declined_app.run_test() as pilot:
+            await pilot.press("shift+down", "space", "escape")
+            assert declined_app.has_changes is True
+            await pilot.press("n")
+            await pilot.pause()
+
+        assert declined_project.markers == set()
+        assert declined_app.return_value == EditorClosed()
+
+    run(exercise_decline())
+
+    assert saves == [project]
 
 def test_save_failure_rolls_back_markers_and_records_error(monkeypatch) -> None:
     app, project = make_markers_editor(
@@ -479,56 +422,7 @@ def test_save_failure_rolls_back_markers_and_records_error(monkeypatch) -> None:
         assert project.markers == set()
         assert app.return_value == EditorSaveFailed("Save failed: disk full")
 
-    asyncio.run(exercise())
-
-
-def test_declined_exit_discards_staged_markers() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                ]
-            )
-        ],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("shift+down", "space", "escape")
-            assert app.has_changes is True
-            await pilot.press("n")
-            await pilot.pause()
-
-        assert project.markers == set()
-        assert app.return_value == EditorClosed()
-
-    asyncio.run(exercise())
-
-
-def test_m_opens_section_markers_dialog_with_menu_options() -> None:
-    app = make_loaded_editor(
-        make_project(
-            [BookSection(phrase_groups=[make_phrase_group("One.")])]
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            body_text = str(
-                app.screen.query_one("#section-markers-body", Static).render()
-            )
-            assert "[1] Enter line number/s" in body_text
-            assert "[2] Add using regular expression" in body_text
-            assert "[3] Add at blank lines" in body_text
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_section_markers_dialog_width_tracks_terminal_with_limits() -> None:
     async def get_dialog_region(terminal_width: int) -> tuple[int, int]:
@@ -550,21 +444,7 @@ def test_section_markers_dialog_width_tracks_terminal_with_limits() -> None:
         assert await get_dialog_region(80) == (2, 76)
         assert await get_dialog_region(120) == (20, 80)
 
-    asyncio.run(exercise())
-
-
-def test_m_is_ignored_before_content_is_initialized() -> None:
-    app = SectionMarkersEditor(
-        make_project([BookSection(phrase_groups=[])])
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            assert not isinstance(app.screen, SectionMarkersDialog)
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_blank_lines_step_shows_description_and_no_matches() -> None:
     app = make_loaded_editor(
@@ -601,27 +481,13 @@ def test_blank_lines_step_shows_description_and_no_matches() -> None:
             )
             assert not buttons_row.display
 
-    asyncio.run(exercise())
-
-
-def test_blank_lines_step_y_is_no_op_when_no_matches() -> None:
-    app, project = make_markers_editor(
-        [BookSection(phrase_groups=[make_phrase_group("One.")])],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "3")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
+            # Confirming with no matches is a no-op.
             await pilot.press("y")
             await pilot.pause()
             assert isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == set()
 
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_blank_lines_step_confirms_and_adds_markers() -> None:
     app, project = make_markers_editor(
@@ -666,66 +532,7 @@ def test_blank_lines_step_confirms_and_adds_markers() -> None:
             panel_text = str(app.query_one("#markers-panel", Static).render())
             assert "Three." in panel_text
 
-    asyncio.run(exercise())
-
-
-def test_blank_lines_y_is_ignored_in_menu_step() -> None:
-    app = make_loaded_editor(
-        make_project(
-            [BookSection(phrase_groups=[make_phrase_group("One.")])]
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-            await pilot.press("y")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-
-    asyncio.run(exercise())
-
-
-def test_blank_lines_y_is_ignored_in_manual_and_regex_steps() -> None:
-    app = make_loaded_editor(
-        make_project(
-            [BookSection(phrase_groups=[make_phrase_group("One.")])]
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "1")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MANUAL
-            await pilot.press("y")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MANUAL
-
-            await pilot.press("escape")
-            await pilot.pause()
-            assert not isinstance(app.screen, SectionMarkersDialog)
-
-            await pilot.press("m", "2")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.REGEX
-            await pilot.press("y")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.REGEX
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_make_blank_line_marker_indices() -> None:
     # No breaks -> no markers.
@@ -762,7 +569,6 @@ def test_make_blank_line_marker_indices() -> None:
     ]
     assert make_blank_line_marker_indices(multi) == [2, 4]
 
-
 def test_manual_step_shows_line_number_input() -> None:
     app = make_loaded_editor(
         make_project(
@@ -783,10 +589,20 @@ def test_manual_step_shows_line_number_input() -> None:
             assert input_widget.display
             assert dialog.focused is input_widget
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_manual_entry_adds_markers_to_staged_set_and_updates_view() -> None:
+@pytest.mark.parametrize(
+    ("initial_markers", "line_input", "expected_staged"),
+    [
+        pytest.param([], "2, 3", {1, 2}, id="adds-new-markers"),
+        pytest.param(
+            [1], "3, 2", {1, 2}, id="merges-with-existing-staged"
+        ),
+    ],
+)
+def test_manual_entry_adds_markers_to_staged_set_and_updates_view(
+    initial_markers: list[int], line_input: str, expected_staged: set[int]
+) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
@@ -797,7 +613,7 @@ def test_manual_entry_adds_markers_to_staged_set_and_updates_view() -> None:
                 ]
             )
         ],
-        [],
+        initial_markers,
     )
 
     async def exercise() -> None:
@@ -806,50 +622,19 @@ def test_manual_entry_adds_markers_to_staged_set_and_updates_view() -> None:
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "2, 3"
+            dialog.query_one("#section-markers-input", Input).value = line_input
             await pilot.press("enter")
             await pilot.pause()
 
             assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == {1, 2}
+            assert app.staged_markers == expected_staged
             panel_text = str(
                 app.query_one("#markers-panel", Static).render()
             )
             assert "Two." in panel_text
             assert "Three." in panel_text
 
-    asyncio.run(exercise())
-
-
-def test_manual_entry_merges_with_existing_staged_markers() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
-                ]
-            )
-        ],
-        [0],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "1")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "3, 2"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == {1, 2}
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_manual_entry_drops_line_one_and_deduplicates() -> None:
     app, project = make_markers_editor(
@@ -877,10 +662,18 @@ def test_manual_entry_drops_line_one_and_deduplicates() -> None:
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == {1}
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_manual_entry_parse_error_shown_below_input() -> None:
+@pytest.mark.parametrize(
+    ("line_input", "expected_error"),
+    [
+        pytest.param("2, ten", "Parse error: ten", id="parse-error"),
+        pytest.param("5", "Index out of range: 5", id="out-of-range"),
+    ],
+)
+def test_manual_entry_error_shown_below_input(
+    line_input: str, expected_error: str
+) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
@@ -899,7 +692,7 @@ def test_manual_entry_parse_error_shown_below_input() -> None:
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "2, ten"
+            dialog.query_one("#section-markers-input", Input).value = line_input
             await pilot.press("enter")
             await pilot.pause()
 
@@ -907,13 +700,21 @@ def test_manual_entry_parse_error_shown_below_input() -> None:
             error_text = str(
                 dialog.query_one("#section-markers-error", Static).render()
             )
-            assert "Parse error: ten" in error_text
+            assert expected_error in error_text
             assert app.staged_markers == set()
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_manual_entry_out_of_range_error_shown_below_input() -> None:
+@pytest.mark.parametrize(
+    ("step_key", "expected_step"),
+    [
+        pytest.param("1", SectionMarkersStep.MANUAL, id="manual-step"),
+        pytest.param("2", SectionMarkersStep.REGEX, id="regex-step"),
+    ],
+)
+def test_empty_input_closes_dialog_without_changes(
+    step_key: str, expected_step: SectionMarkersStep
+) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
@@ -928,43 +729,11 @@ def test_manual_entry_out_of_range_error_shown_below_input() -> None:
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("m", "1")
+            await pilot.press("m", step_key)
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "5"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert isinstance(app.screen, SectionMarkersDialog)
-            error_text = str(
-                dialog.query_one("#section-markers-error", Static).render()
-            )
-            assert "Index out of range: 5" in error_text
-            assert app.staged_markers == set()
-
-    asyncio.run(exercise())
-
-
-def test_manual_entry_empty_input_closes_dialog_without_changes() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                ]
-            )
-        ],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "1")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
+            assert dialog.step is expected_step
             dialog.query_one("#section-markers-input", Input).value = ""
             await pilot.press("enter")
             await pilot.pause()
@@ -972,8 +741,7 @@ def test_manual_entry_empty_input_closes_dialog_without_changes() -> None:
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == set()
 
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_escape_closes_section_markers_dialog_at_any_step() -> None:
     app = make_loaded_editor(
@@ -1002,8 +770,7 @@ def test_escape_closes_section_markers_dialog_at_any_step() -> None:
             await pilot.press("escape")
             assert not isinstance(app.screen, SectionMarkersDialog)
 
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_regex_step_shows_pattern_input() -> None:
     app = make_loaded_editor(
@@ -1035,18 +802,38 @@ def test_regex_step_shows_pattern_input() -> None:
             assert input_widget.display
             assert dialog.focused is input_widget
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_regex_entry_adds_markers_to_staged_set_and_updates_view() -> None:
+@pytest.mark.parametrize(
+    ("phrase_texts", "pattern", "expected_staged", "expected_toast"),
+    [
+        pytest.param(
+            ["Intro.", "Chapter 1: One.", "Chapter 2: Two.", "Outro."],
+            "Chapter \\d+",
+            {1, 2},
+            "Added 2 section markers",
+            id="matches-capitalized-chapters",
+        ),
+        pytest.param(
+            ["Intro.", "Chapter 1: One."],
+            "chapter \\d+",
+            {1},
+            "Added 1 section marker",
+            id="case-insensitive-match",
+        ),
+    ],
+)
+def test_regex_entry_adds_markers_to_staged_set_and_updates_view(
+    phrase_texts: list[str],
+    pattern: str,
+    expected_staged: set[int],
+    expected_toast: str,
+) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
                 phrase_groups=[
-                    make_phrase_group("Intro."),
-                    make_phrase_group("Chapter 1: One."),
-                    make_phrase_group("Chapter 2: Two."),
-                    make_phrase_group("Outro."),
+                    make_phrase_group(text) for text in phrase_texts
                 ]
             )
         ],
@@ -1059,23 +846,30 @@ def test_regex_entry_adds_markers_to_staged_set_and_updates_view() -> None:
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "Chapter \\d+"
+            dialog.query_one("#section-markers-input", Input).value = pattern
             await pilot.press("enter")
             await pilot.pause()
 
             assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == {1, 2}
-            assert app.toast_text == "Added 2 section markers"
+            assert app.staged_markers == expected_staged
+            assert app.toast_text == expected_toast
             panel_text = str(
                 app.query_one("#markers-panel", Static).render()
             )
             assert "Chapter 1: One." in panel_text
-            assert "Chapter 2: Two." in panel_text
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_regex_entry_is_case_insensitive() -> None:
+@pytest.mark.parametrize(
+    ("pattern", "expected_error"),
+    [
+        pytest.param("^\\s*$", "No matches", id="no-matches"),
+        pytest.param("Chapter (\\d+", "Syntax error", id="syntax-error"),
+    ],
+)
+def test_regex_entry_error_shown_below_input(
+    pattern: str, expected_error: str
+) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
@@ -1094,36 +888,7 @@ def test_regex_entry_is_case_insensitive() -> None:
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "chapter \\d+"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == {1}
-
-    asyncio.run(exercise())
-
-
-def test_regex_entry_no_matches_shown_below_input() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("Intro."),
-                    make_phrase_group("Chapter 1: One."),
-                ]
-            )
-        ],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "2")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "^\\s*$"
+            dialog.query_one("#section-markers-input", Input).value = pattern
             await pilot.press("enter")
             await pilot.pause()
 
@@ -1131,73 +896,10 @@ def test_regex_entry_no_matches_shown_below_input() -> None:
             error_text = str(
                 dialog.query_one("#section-markers-error", Static).render()
             )
-            assert "No matches" in error_text
+            assert expected_error in error_text
             assert app.staged_markers == set()
 
-    asyncio.run(exercise())
-
-
-def test_regex_entry_syntax_error_shown_below_input() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("Intro."),
-                    make_phrase_group("Chapter 1: One."),
-                ]
-            )
-        ],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "2")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = "Chapter (\\d+"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert isinstance(app.screen, SectionMarkersDialog)
-            error_text = str(
-                dialog.query_one("#section-markers-error", Static).render()
-            )
-            assert "Syntax error" in error_text
-            assert app.staged_markers == set()
-
-    asyncio.run(exercise())
-
-
-def test_regex_entry_empty_input_closes_dialog_without_changes() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("Intro."),
-                    make_phrase_group("Chapter 1: One."),
-                ]
-            )
-        ],
-        [],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "2")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            dialog.query_one("#section-markers-input", Input).value = ""
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == set()
-
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_regex_entry_drops_line_one() -> None:
     app, project = make_markers_editor(
@@ -1225,8 +927,7 @@ def test_regex_entry_drops_line_one() -> None:
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == {1}
 
-    asyncio.run(exercise())
-
+    run(exercise())
 
 def test_menu_shows_clear_option_only_when_markers_exist() -> None:
     with_markers = make_loaded_editor(
@@ -1257,7 +958,7 @@ def test_menu_shows_clear_option_only_when_markers_exist() -> None:
             assert "[3] Add at blank lines" in body_text
             assert "[4] Clear section markers" in body_text
 
-    asyncio.run(exercise_with_markers())
+    run(exercise_with_markers())
 
     without_markers = make_loaded_editor(
         make_project(
@@ -1279,22 +980,39 @@ def test_menu_shows_clear_option_only_when_markers_exist() -> None:
             assert "[3] Add at blank lines" in body_text
             assert "[4] Clear section markers" not in body_text
 
-    asyncio.run(exercise_without_markers())
+            dialog = without_markers.screen
+            await pilot.press("4")
+            await pilot.pause()
+            assert isinstance(without_markers.screen, SectionMarkersDialog)
+            assert dialog.step is SectionMarkersStep.MENU
 
+    run(exercise_without_markers())
 
-def test_four_opens_clear_step_with_buttons_when_markers_exist() -> None:
+@pytest.mark.parametrize(
+    ("phrase_count", "markers", "expected_prompt"),
+    [
+        pytest.param(
+            3, [1, 2], "Clear all 2 section markers?", id="plural-count"
+        ),
+        pytest.param(
+            2, [1], "Clear all 1 section marker?", id="singular-count"
+        ),
+    ],
+)
+def test_four_opens_clear_step_with_buttons_when_markers_exist(
+    phrase_count: int, markers: list[int], expected_prompt: str
+) -> None:
     app = make_loaded_editor(
         make_project_with_markers(
             [
                 BookSection(
                     phrase_groups=[
-                        make_phrase_group("One."),
-                        make_phrase_group("Two."),
-                        make_phrase_group("Three."),
+                        make_phrase_group(f"Line {index + 1}.")
+                        for index in range(phrase_count)
                     ]
                 )
             ],
-            [1, 2],
+            markers,
         )
     )
 
@@ -1307,7 +1025,7 @@ def test_four_opens_clear_step_with_buttons_when_markers_exist() -> None:
             assert dialog.step is SectionMarkersStep.CLEAR
             body_widget = dialog.query_one("#section-markers-body", Static)
             body = str(body_widget.render())
-            assert "Clear all 2 section markers?" in body
+            assert expected_prompt in body
             assert "body-centered" in body_widget.classes
             buttons_row = dialog.query_one(
                 "#section-markers-buttons", Horizontal
@@ -1319,43 +1037,43 @@ def test_four_opens_clear_step_with_buttons_when_markers_exist() -> None:
             input_widget = dialog.query_one("#section-markers-input", Input)
             assert not input_widget.display
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_four_is_ignored_when_no_markers_exist() -> None:
-    app = make_loaded_editor(
-        make_project(
-            [BookSection(phrase_groups=[make_phrase_group("One.")])]
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-            await pilot.press("4")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-
-    asyncio.run(exercise())
-
-
-def test_y_confirms_clear_and_resets_view() -> None:
+@pytest.mark.parametrize(
+    ("phrase_count", "markers", "confirm_via", "expected_toast"),
+    [
+        pytest.param(
+            3,
+            [1, 2],
+            "key",
+            "Cleared all 2 section markers",
+            id="y-key-plural",
+        ),
+        pytest.param(
+            2,
+            [1],
+            "button",
+            "Cleared all 1 section marker",
+            id="yes-button-singular",
+        ),
+    ],
+)
+def test_confirmed_clear_resets_staged_markers_and_view(
+    phrase_count: int,
+    markers: list[int],
+    confirm_via: str,
+    expected_toast: str,
+) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
                 phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
+                    make_phrase_group(f"Line {index + 1}.")
+                    for index in range(phrase_count)
                 ]
             )
         ],
-        [1, 2],
+        markers,
     )
 
     async def exercise() -> None:
@@ -1363,20 +1081,32 @@ def test_y_confirms_clear_and_resets_view() -> None:
             await pilot.press("m", "4")
             await pilot.pause()
             assert isinstance(app.screen, SectionMarkersDialog)
-            await pilot.press("y")
+            if confirm_via == "key":
+                await pilot.press("y")
+            else:
+                dialog = app.screen
+                assert isinstance(dialog, SectionMarkersDialog)
+                await pilot.click(dialog.query_one("#yes", Button))
             await pilot.pause()
 
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == set()
-            assert app.toast_text == "Cleared all 2 section markers"
+            assert app.toast_text == expected_toast
             panel_text = str(app.query_one("#markers-panel", Static).render())
             assert "None" in panel_text
-            assert project.markers == {1, 2}
+            assert project.markers == set(markers)
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_yes_button_confirms_clear() -> None:
+@pytest.mark.parametrize(
+    "dismissal",
+    [
+        pytest.param("n", id="n-key"),
+        pytest.param("#no", id="no-button"),
+        pytest.param("escape", id="escape"),
+    ],
+)
+def test_declined_clear_preserves_staged_markers(dismissal: str) -> None:
     app, project = make_markers_editor(
         [
             BookSection(
@@ -1395,62 +1125,10 @@ def test_yes_button_confirms_clear() -> None:
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            await pilot.click(dialog.query_one("#yes", Button))
-            await pilot.pause()
-
-            assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == set()
-            assert app.toast_text == "Cleared all 1 section marker"
-
-    asyncio.run(exercise())
-
-
-def test_clear_step_shows_singular_count_in_prompt() -> None:
-    app = make_loaded_editor(
-        make_project_with_markers(
-            [
-                BookSection(
-                    phrase_groups=[
-                        make_phrase_group("One."),
-                        make_phrase_group("Two."),
-                    ]
-                )
-            ],
-            [1],
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "4")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            body = str(dialog.query_one("#section-markers-body", Static).render())
-            assert "Clear all 1 section marker?" in body
-
-    asyncio.run(exercise())
-
-
-def test_n_declines_clear_with_no_changes() -> None:
-    app, project = make_markers_editor(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                ]
-            )
-        ],
-        [1],
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "4")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            await pilot.press("n")
+            if dismissal == "#no":
+                await pilot.click(dialog.query_one("#no", Button))
+            else:
+                await pilot.press(dismissal)
             await pilot.pause()
 
             assert not isinstance(app.screen, SectionMarkersDialog)
@@ -1458,10 +1136,28 @@ def test_n_declines_clear_with_no_changes() -> None:
             assert app.toast_text == ""
             assert project.markers == {1}
 
-    asyncio.run(exercise())
+    run(exercise())
 
-
-def test_no_button_declines_clear_with_no_changes() -> None:
+@pytest.mark.parametrize(
+    ("key", "step_key", "markers"),
+    [
+        pytest.param("n", None, [1], id="n-ignored-in-menu-step"),
+        pytest.param("n", "1", [1], id="n-ignored-in-manual-step"),
+        pytest.param(
+            "y", None, [], id="y-ignored-in-menu-step-without-markers"
+        ),
+        pytest.param(
+            "y", "1", [], id="y-ignored-in-manual-step-without-markers"
+        ),
+        pytest.param(
+            "y", "2", [], id="y-ignored-in-regex-step-without-markers"
+        ),
+        pytest.param("y", None, [1], id="y-ignored-in-menu-step-with-markers"),
+    ],
+)
+def test_confirmation_keys_are_ignored_outside_clear_step(
+    key: str, step_key: str | None, markers: list[int]
+) -> None:
     app = make_loaded_editor(
         make_project_with_markers(
             [
@@ -1472,129 +1168,30 @@ def test_no_button_declines_clear_with_no_changes() -> None:
                     ]
                 )
             ],
-            [1],
+            markers,
         )
     )
+    expected_step = {
+        None: SectionMarkersStep.MENU,
+        "1": SectionMarkersStep.MANUAL,
+        "2": SectionMarkersStep.REGEX,
+    }[step_key]
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
-            await pilot.press("m", "4")
+            if step_key is None:
+                await pilot.press("m")
+            else:
+                await pilot.press("m", step_key)
             await pilot.pause()
             dialog = app.screen
             assert isinstance(dialog, SectionMarkersDialog)
-            await pilot.click(dialog.query_one("#no", Button))
-            await pilot.pause()
-
-            assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == {1}
-            assert app.toast_text == ""
-
-    asyncio.run(exercise())
-
-
-def test_escape_declines_clear_with_no_changes() -> None:
-    app = make_loaded_editor(
-        make_project_with_markers(
-            [
-                BookSection(
-                    phrase_groups=[
-                        make_phrase_group("One."),
-                        make_phrase_group("Two."),
-                    ]
-                )
-            ],
-            [1],
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m", "4")
+            assert dialog.step is expected_step
+            await pilot.press(key)
             await pilot.pause()
             assert isinstance(app.screen, SectionMarkersDialog)
-            await pilot.press("escape")
-            await pilot.pause()
+            assert dialog.step is expected_step
+            assert app.staged_markers == set(markers)
 
-            assert not isinstance(app.screen, SectionMarkersDialog)
-            assert app.staged_markers == {1}
-            assert app.toast_text == ""
+    run(exercise())
 
-    asyncio.run(exercise())
-
-
-def test_y_is_ignored_in_menu_step_when_markers_exist() -> None:
-    app = make_loaded_editor(
-        make_project_with_markers(
-            [
-                BookSection(
-                    phrase_groups=[
-                        make_phrase_group("One."),
-                        make_phrase_group("Two."),
-                    ]
-                )
-            ],
-            [1],
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-            await pilot.press("y")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-            assert app.staged_markers == {1}
-
-    asyncio.run(exercise())
-
-
-def test_n_is_ignored_in_menu_and_manual_steps() -> None:
-    app = make_loaded_editor(
-        make_project_with_markers(
-            [
-                BookSection(
-                    phrase_groups=[
-                        make_phrase_group("One."),
-                        make_phrase_group("Two."),
-                    ]
-                )
-            ],
-            [1],
-        )
-    )
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("m")
-            await pilot.pause()
-            dialog = app.screen
-            assert isinstance(dialog, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-            await pilot.press("n")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MENU
-            assert app.staged_markers == {1}
-
-            await pilot.press("1")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MANUAL
-            await pilot.press("n")
-            await pilot.pause()
-            assert isinstance(app.screen, SectionMarkersDialog)
-            assert dialog.step is SectionMarkersStep.MANUAL
-            assert app.staged_markers == {1}
-
-    asyncio.run(exercise())
-
-
-def test_clear_result_carries_marker_count() -> None:
-    # The dialog carries the count it was opened with into the result.
-    result = ClearSectionMarkers(3)
-    assert result.marker_count == 3

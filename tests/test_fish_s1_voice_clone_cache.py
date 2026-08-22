@@ -33,6 +33,11 @@ class FakeDac:
         self.encode_calls: list[tuple] = []
         self.last_tokens: torch.Tensor | None = None
 
+    def parameters(self):
+        # Fake the sliver of the nn.Module API FishS1Model touches: it reads
+        # the first parameter's dtype to move reference audio.
+        return iter([torch.zeros(2)])
+
     def encode(self, audios, audio_lengths):
         # audios arrives as (1, 1, T)
         self.encode_calls.append(tuple(audios.shape))

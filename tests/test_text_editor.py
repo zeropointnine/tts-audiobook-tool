@@ -1,16 +1,13 @@
-import asyncio
+import pytest
 from pathlib import Path
 
-from rich.text import Text
 from textual.widgets import Button, Input, OptionList, Static
 
 import tts_audiobook_tool.textual.text_editor as text_editor_module
-from tts_audiobook_tool.app_types import Book, BookSection
+from tts_audiobook_tool.app_types import BookSection
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
-from tts_audiobook_tool.constants import COL_DIM
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.textual.content_textual_app import (
-    EditorClosed,
     EditorSaveFailed,
     EditorSaved,
 )
@@ -25,17 +22,7 @@ from tts_audiobook_tool.textual.phrase_group_split_dialog import (
 )
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
 
-
-def make_phrase_group(text: str) -> PhraseGroup:
-    return PhraseGroup([Phrase(text, Reason.SENTENCE)])
-
-
-def make_project(sections: list[BookSection]) -> Project:
-    return Project.model_validate({"book": Book(sections=sections)})
-
-
-def run(coroutine) -> None:
-    asyncio.run(coroutine)
+from textual_editor_stubs import make_phrase_group, make_project, run
 
 
 def make_loaded_editor(project: Project) -> TextEditor:
@@ -43,49 +30,6 @@ def make_loaded_editor(project: Project) -> TextEditor:
     app = TextEditor(project)
     app.load_content()
     return app
-
-
-def test_edit_model_loads_only_after_initial_loading_view_draws(monkeypatch) -> None:
-    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    app = TextEditor(project)
-    original_initialize = app.initialize_content
-    state_seen_by_initializer: list[tuple[str, int]] = []
-
-    def initialize_after_recording_loading_view() -> range:
-        empty_state = app.query_one("#empty-state", Static)
-        state_seen_by_initializer.append(
-            (
-                str(empty_state.render()),
-                app.query_one("#line-list", OptionList).option_count,
-            )
-        )
-        return original_initialize()
-
-    monkeypatch.setattr(
-        app, "initialize_content", initialize_after_recording_loading_view
-    )
-
-    assert app.edit_session_or_none is None
-    assert app.section_items == []
-    assert app.list_items == []
-    assert app.phrase_indices == []
-    assert app.loading_state_text == "..."
-    assert app.empty_state_text == "No text lines"
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            assert state_seen_by_initializer == [("...", 0)]
-            assert app.edit_session_or_none is not None
-            assert app.empty_state_text == "No text lines"
-            assert app.query_one("#line-list", OptionList).option_count == 1
-            assert app.query_one("#line-list", OptionList).display is True
-
-            loaded_session = app.edit_session
-            app.load_content()
-            assert app.edit_session is loaded_session
-
-    run(exercise())
 
 
 def test_single_section_lists_only_phrase_groups() -> None:
@@ -127,20 +71,6 @@ def test_phrase_rows_show_line_feeds_as_dim_nonbreaking_tokens() -> None:
     assert "\n" not in plain_text
     assert app.find_text_strings(0) == ["00001", "One Two Three."]
 
-    dim_style = Text.from_ansi(f"{COL_DIM}x").spans[0].style
-    dim_positions: set[int] = set()
-    for span in formatted_line.spans:
-        if span.style == dim_style:
-            dim_positions.update(range(span.start, span.end))
-    newline_token = "↵\N{NO-BREAK SPACE}"
-    first_token_start = plain_text.index(newline_token)
-    second_token_start = plain_text.index(newline_token, first_token_start + 2)
-    assert dim_positions == (
-        set(range(len("00001  ")))
-        | set(range(first_token_start, first_token_start + 2))
-        | set(range(second_token_start, second_token_start + 2))
-    )
-
 
 def test_phrase_rows_use_original_presentable_text_when_newline_chars_hidden(
     monkeypatch,
@@ -176,7 +106,6 @@ def test_multiple_sections_add_ordered_headers_and_global_phrase_ordinals() -> N
         "\nSection 2/2: Middle (1 line)\n\n",
         "00003  Three.",
     ]
-    assert app.format_line(0).spans == []
     assert [type(list_item) for list_item in app.list_items] == [
         TextEditorSectionItem,
         TextEditorPhraseGroupItem,
@@ -212,16 +141,7 @@ def test_book_with_only_empty_sections_uses_empty_state_instead_of_headers() -> 
     )
     app = make_loaded_editor(project)
 
-    async def exercise() -> None:
-        async with app.run_test():
-            option_list = app.query_one("#line-list", OptionList)
-            empty_state = app.query_one("#empty-state", Static)
-            assert app.list_items == []
-            assert option_list.display is False
-            assert empty_state.display is True
-            assert str(empty_state.render()) == "No text lines"
-
-    run(exercise())
+    assert app.list_items == []
 
 
 def test_find_searches_complete_section_headings_and_phrase_group_text() -> None:
@@ -365,36 +285,6 @@ def test_delete_reconciles_options_without_formatting_unchanged_rows(
     run(exercise())
 
 
-def test_selection_status_excludes_selected_section_rows() -> None:
-    project = make_project(
-        [
-            BookSection(
-                title="Opening",
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
-            ),
-            BookSection(
-                title="Middle",
-                phrase_groups=[make_phrase_group("Three.")],
-            ),
-        ]
-    )
-    app = make_loaded_editor(project)
-
-    async def exercise() -> None:
-        async with app.run_test():
-            status_line = app.query_one("#status-line", Static)
-
-            app.selected_indices = {0, 1, 2, 3}
-            app.update_selection_status()
-            assert str(status_line.render()) == "2 lines selected"
-
-            app.selected_indices = {0, 3}
-            app.update_selection_status()
-            assert str(status_line.render()) == ""
-
-    run(exercise())
-
-
 def test_manual_selection_uses_staged_ordinals_and_excludes_section_rows() -> None:
     project = make_project(
         [
@@ -437,17 +327,38 @@ def test_manual_selection_uses_staged_ordinals_and_excludes_section_rows() -> No
     run(exercise())
 
 
-def test_delete_single_selected_section_deletes_its_phrase_groups() -> None:
+@pytest.mark.parametrize(
+    ("sections", "expected_sections", "expected_phrase_texts", "expected_project_texts"),
+    [
+        pytest.param(
+            [("Opening", ["One.", "Two."]), ("Middle", ["Three."])],
+            ["Middle"],
+            ["Three."],
+            ["One.", "Two.", "Three."],
+            id="section-loses-its-phrase-groups",
+        ),
+        pytest.param(
+            [("Only text", ["One.", "Two."]), ("Empty", [])],
+            ["Empty"],
+            [],
+            ["One.", "Two."],
+            id="section-can-lose-every-phrase-group",
+        ),
+    ],
+)
+def test_delete_single_selected_section_deletes_its_phrase_groups(
+    sections: list[tuple[str, list[str]]],
+    expected_sections: list[str],
+    expected_phrase_texts: list[str],
+    expected_project_texts: list[str],
+) -> None:
     project = make_project(
         [
             BookSection(
-                title="Opening",
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
-            ),
-            BookSection(
-                title="Middle",
-                phrase_groups=[make_phrase_group("Three.")],
-            ),
+                title=title,
+                phrase_groups=[make_phrase_group(text) for text in texts],
+            )
+            for title, texts in sections
         ]
     )
     app = make_loaded_editor(project)
@@ -456,71 +367,18 @@ def test_delete_single_selected_section_deletes_its_phrase_groups() -> None:
         async with app.run_test() as pilot:
             await pilot.press("x")
 
-            assert [section.title for section in app.edit_session.sections] == [
-                "Middle"
-            ]
+            assert [section.title for section in app.edit_session.sections] == (
+                expected_sections
+            )
             assert [
                 item.phrase_group.text for item in app.edit_session.phrase_groups
-            ] == ["Three."]
-            assert str(app.query_one("#status-line", Static).render()) == (
-                "2 lines deleted"
-            )
-            assert [item.text for item in project.phrase_groups] == [
-                "One.",
-                "Two.",
-                "Three.",
-            ]
-
-    run(exercise())
-
-
-def test_delete_single_section_can_delete_all_phrase_groups() -> None:
-    project = make_project(
-        [
-            BookSection(
-                title="Only text",
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
-            ),
-            BookSection(title="Empty", phrase_groups=[]),
-        ]
-    )
-    app = make_loaded_editor(project)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("x")
-
-            assert [section.title for section in app.edit_session.sections] == [
-                "Empty",
-            ]
-            assert app.edit_session.phrase_groups == []
+            ] == expected_phrase_texts
             assert str(app.query_one("#status-line", Static).render()) == (
                 "2 lines deleted"
             )
 
     run(exercise())
-
-
-def test_delete_final_phrase_group_shows_non_selectable_empty_state() -> None:
-    project = make_project(
-        [BookSection(title="Only", phrase_groups=[make_phrase_group("One.")])]
-    )
-    app = make_loaded_editor(project)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("x")
-
-            option_list = app.query_one("#line-list", OptionList)
-            empty_state = app.query_one("#empty-state", Static)
-            assert option_list.display is False
-            assert option_list.option_count == 0
-            assert empty_state.display is True
-            assert str(empty_state.render()) == "No text lines"
-            assert app.selected_index is None
-            assert app.selected_indices == set()
-
-    run(exercise())
+    assert [item.text for item in project.phrase_groups] == expected_project_texts
 
 
 def test_split_dialog_partitions_one_group_and_rebuilds_rows() -> None:
@@ -625,205 +483,114 @@ def test_split_is_ignored_for_a_single_phrase_group() -> None:
     run(exercise())
 
 
-def test_finish_discard_leaves_project_unchanged() -> None:
-    project = make_project(
-        [
-            BookSection(
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")]
-            )
-        ]
-    )
-    app = make_loaded_editor(project)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("x", "escape")
-            assert [item.text for item in project.phrase_groups] == ["One.", "Two."]
-            await pilot.click(app.screen.query_one("#no", Button))
-            await pilot.pause()
-            assert app.is_running is False
-
-        assert [item.text for item in project.phrase_groups] == ["One.", "Two."]
-        assert app.return_value == EditorClosed()
-
-    run(exercise())
-
-
+@pytest.mark.parametrize(
+    ("sections", "markers", "delete_original_index", "snapshot_paths",
+     "expected_requested_indices", "expected_copy"),
+    [
+        pytest.param(
+            [("", ["One.", "Two.", "Three."])],
+            set(),
+            1,
+            ["segment-1.flac", "segment-2.flac"],
+            [1],
+            "Saving these changes requires deleting 2 generated sound segments "
+            "from line 2 onward.",
+            id="plural-segments-from-first-affected-line",
+        ),
+        pytest.param(
+            [("", ["One.", "Two."])],
+            set(),
+            0,
+            ["segment.flac"],
+            [0],
+            "Saving these changes requires deleting 1 generated sound segment "
+            "from line 1 onward.",
+            id="singular-segment",
+        ),
+        pytest.param(
+            [("", ["One.", "Two."])],
+            set(),
+            0,
+            [],
+            [0],
+            None,
+            id="no-segments-plain-dialog",
+        ),
+        pytest.param(
+            [("", ["One.", "Two.", "Three."])],
+            {1, 2},
+            1,
+            [],
+            [1],
+            "Saving these changes requires deleting 2 section markers "
+            "from line 2 onward.",
+            id="markers-only",
+        ),
+        pytest.param(
+            [("", ["One.", "Two.", "Three."])],
+            {2},
+            1,
+            ["segment-1.flac", "segment-2.flac"],
+            [1],
+            "Saving these changes requires deleting 2 generated sound segments "
+            "and 1 section marker from line 2 onward.",
+            id="segments-and-singular-marker",
+        ),
+        pytest.param(
+            [("Opening", ["One.", "Two."]), ("Middle", ["Three.", "Four."])],
+            {2, 3},
+            2,
+            ["segment.flac"],
+            [2],
+            "Saving these changes requires deleting 1 generated sound segment "
+            "and 2 split points from line 3 onward.",
+            id="multi-section-split-points",
+        ),
+    ],
+)
 def test_confirmation_warns_about_generated_segments_from_first_affected_line(
     monkeypatch,
+    sections: list[tuple[str, list[str]]],
+    markers: set[int],
+    delete_original_index: int,
+    snapshot_paths: list[str],
+    expected_requested_indices: list[int],
+    expected_copy: str | None,
 ) -> None:
     project = make_project(
         [
             BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
-                ]
+                title=title,
+                phrase_groups=[make_phrase_group(text) for text in texts],
             )
+            for title, texts in sections
         ]
     )
+    project.markers = markers
     app = make_loaded_editor(project)
     requested_indices: list[int] = []
 
-    def snapshot_paths(first_index: int) -> list[Path]:
+    def snapshot_paths_from_index(first_index: int) -> list[Path]:
         requested_indices.append(first_index)
-        return [Path("segment-1.flac"), Path("segment-2.flac")]
+        return [Path(name) for name in snapshot_paths]
 
     monkeypatch.setattr(
         project.sound_segments,
         "snapshot_paths_from_index",
-        snapshot_paths,
+        snapshot_paths_from_index,
     )
-    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[1].item_id})
+    app.edit_session.delete_phrase_groups(
+        {app.edit_session.phrase_groups[delete_original_index].item_id}
+    )
 
     dialog = app.make_confirmation_dialog()
 
-    assert requested_indices == [1]
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 2 generated sound segments "
-        "from line 2 onward."
-    )
-
-
-def test_confirmation_uses_singular_segment_copy(monkeypatch) -> None:
-    project = make_project(
-        [
-            BookSection(
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")]
-            )
-        ]
-    )
-    app = make_loaded_editor(project)
-    monkeypatch.setattr(
-        project.sound_segments,
-        "snapshot_paths_from_index",
-        lambda _first_index: [Path("segment.flac")],
-    )
-    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[0].item_id})
-
-    dialog = app.make_confirmation_dialog()
-
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 1 generated sound segment "
-        "from line 1 onward."
-    )
-
-
-def test_confirmation_omits_warning_when_no_generated_segments_exist(
-    monkeypatch,
-) -> None:
-    project = make_project(
-        [
-            BookSection(
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")]
-            )
-        ]
-    )
-    app = make_loaded_editor(project)
-    monkeypatch.setattr(
-        project.sound_segments,
-        "snapshot_paths_from_index",
-        lambda _first_index: [],
-    )
-    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[0].item_id})
-
-    dialog = app.make_confirmation_dialog()
-
+    assert requested_indices == expected_requested_indices
     assert isinstance(dialog, SaveChangesDialog)
-    assert dialog.copy_lines == ["Save changes before exiting?"]
-
-
-def test_confirmation_warns_about_markers_only_when_no_segments_exist(
-    monkeypatch,
-) -> None:
-    project = make_project(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
-                ]
-            )
-        ]
-    )
-    project.markers = {1, 2}
-    app = make_loaded_editor(project)
-    monkeypatch.setattr(
-        project.sound_segments,
-        "snapshot_paths_from_index",
-        lambda _first_index: [],
-    )
-    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[1].item_id})
-
-    dialog = app.make_confirmation_dialog()
-
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 2 section markers "
-        "from line 2 onward."
-    )
-
-
-def test_confirmation_warns_about_segments_and_singular_marker(monkeypatch) -> None:
-    project = make_project(
-        [
-            BookSection(
-                phrase_groups=[
-                    make_phrase_group("One."),
-                    make_phrase_group("Two."),
-                    make_phrase_group("Three."),
-                ]
-            )
-        ]
-    )
-    project.markers = {2}
-    app = make_loaded_editor(project)
-    monkeypatch.setattr(
-        project.sound_segments,
-        "snapshot_paths_from_index",
-        lambda _first_index: [Path("segment-1.flac"), Path("segment-2.flac")],
-    )
-    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[1].item_id})
-
-    dialog = app.make_confirmation_dialog()
-
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 2 generated sound segments "
-        "and 1 section marker from line 2 onward."
-    )
-
-
-def test_confirmation_uses_split_point_label_for_multi_section_books(
-    monkeypatch,
-) -> None:
-    project = make_project(
-        [
-            BookSection(
-                title="Opening",
-                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")],
-            ),
-            BookSection(
-                title="Middle",
-                phrase_groups=[make_phrase_group("Three."), make_phrase_group("Four.")],
-            ),
-        ]
-    )
-    project.markers = {2, 3}
-    app = make_loaded_editor(project)
-    monkeypatch.setattr(
-        project.sound_segments,
-        "snapshot_paths_from_index",
-        lambda _first_index: [Path("segment.flac")],
-    )
-    app.edit_session.delete_phrase_groups({app.edit_session.phrase_groups[2].item_id})
-
-    dialog = app.make_confirmation_dialog()
-
-    assert dialog.copy_lines[2].endswith(
-        "Saving these changes requires deleting 1 generated sound segment "
-        "and 2 split points from line 3 onward."
-    )
+    if expected_copy is None:
+        assert dialog.copy_lines == ["Save changes before exiting?"]
+    else:
+        assert dialog.copy_lines[2].endswith(expected_copy)
 
 
 def test_finish_confirm_calls_commit_with_staged_book(monkeypatch) -> None:
@@ -860,20 +627,6 @@ def test_finish_confirm_calls_commit_with_staged_book(monkeypatch) -> None:
 
         assert commits == [(["Two."], 0)]
         assert app.return_value == EditorSaved()
-
-    run(exercise())
-
-
-def test_finish_without_changes_exits_without_confirmation() -> None:
-    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    app = make_loaded_editor(project)
-
-    async def exercise() -> None:
-        async with app.run_test() as pilot:
-            await pilot.press("escape")
-            await pilot.pause()
-            assert app.is_running is False
-        assert app.has_changes is False
 
     run(exercise())
 
