@@ -16,6 +16,41 @@ _QUOTE_CHARS = {_STRAIGHT_QUOTE, _CURLY_OPEN_QUOTE, _CURLY_CLOSE_QUOTE}
 # PhraseGroup voice indices are zero-based; this is voice sample 2 in the UI.
 DIALOG_VOICE_INDEX = 1
 
+# English attribution verbs that may follow a close-quote + speaker name
+# (eg, "Some dialog," John said.). Matched case-insensitively as a whole
+# word, only when the language code is "en".
+_ATTRIBUTION_VERBS_EN = {
+    # core
+    "say", "says", "said",
+    "ask", "asks", "asked",
+    "tell", "tells", "told",
+    "reply", "replies", "replied",
+    "add", "adds", "added",
+    "answer", "answers", "answered",
+    "explain", "explains", "explained",
+    "continue", "continues", "continued",
+    # vocalization
+    "exclaim", "exclaims", "exclaimed",
+    "shout", "shouts", "shouted",
+    "whisper", "whispers", "whispered",
+    "murmur", "murmurs", "murmured",
+    "mutter", "mutters", "muttered",
+    "cry", "cries", "cried",
+    "call", "calls", "called",
+    # attitude / argument
+    "remark", "remarks", "remarked",
+    "state", "states", "stated",
+    "note", "notes", "noted",
+    "declare", "declares", "declared",
+    "retort", "retorts", "retorted",
+    "respond", "responds", "responded",
+    "insist", "insists", "insisted",
+    "warn", "warns", "warned",
+    "promise", "promises", "promised",
+    "suggest", "suggests", "suggested",
+    "repeat", "repeats", "repeated",
+}
+
 
 class DialogSegmenter:
     """Detect and segment dialog within existing phrase groups."""
@@ -24,14 +59,18 @@ class DialogSegmenter:
     def segment_groups(
             groups: list[PhraseGroup],
             dialog_voice_index: int | None = None,
+            language_code: str | None = None,
     ) -> list[PhraseGroup]:
         """
         Segment groups at accepted dialog boundaries without ever merging groups
         produced by the normal segmentation pass. A piece ending at a dialog
-        span end whose continuation starts with a lowercase alphabetic gets
-        reason PHRASE_QUOTE_END (ie, almost no pause before an attribution
-        such as: "Hello," she said.). When dialog_voice_index is provided,
-        assign it to every resulting group inside detected dialog.
+        span end gets reason PHRASE_QUOTE_END (ie, almost no pause before an
+        attribution) when its continuation (a) starts with a lowercase
+        alphabetic (eg, "Hello," she said.) or (b) when language_code is
+        "en", starts with a capital-initial word whose next word is a
+        whitelisted attribution verb (eg, "Some dialog," John said.). When
+        dialog_voice_index is provided, assign it to every resulting group
+        inside detected dialog.
         """
         if not groups:
             return []
@@ -72,13 +111,19 @@ class DialogSegmenter:
                 group_start,
                 span_end_offsets,
                 text,
+                language_code,
             )
             # A dialog span ending exactly at this group's boundary still
             # continues almost without a pause when the next group (if any)
-            # starts with a lowercase alphabetic (ie, an attribution).
+            # starts with an attribution (lowercase alphabetic, or for
+            # "en" a speaker name followed by a whitelisted verb).
             if (
                 group_end in span_end_offsets
-                and DialogSegmenter._continues_with_lowercase_alpha(text, group_end)
+                and DialogSegmenter._continues_with_attribution(
+                    text,
+                    group_end,
+                    language_code,
+                )
             ):
                 parts[-1] = DialogSegmenter._with_quote_end_reason(parts[-1])
             result.extend(parts)
@@ -357,13 +402,15 @@ class DialogSegmenter:
         group_start: int,
         span_end_offsets: set[int],
         text: str,
+        language_code: str | None,
     ) -> list[PhraseGroup]:
         """
         Split `group` at the given local (group-relative) dialog boundaries.
 
-        A piece ending at a dialog span end whose continuation starts with a
-        lowercase alphabetic gets reason PHRASE_QUOTE_END (an attribution
-        follows with almost no pause); other mid-phrase cuts keep reason PHRASE.
+        A piece ending at a dialog span end gets reason PHRASE_QUOTE_END when
+        its continuation is an attribution (lowercase alphabetic, or for
+        "en" a speaker name followed by a whitelisted verb); other mid-phrase
+        cuts keep reason PHRASE.
         """
         if not local_boundaries:
             return [group]
@@ -390,9 +437,10 @@ class DialogSegmenter:
                     absolute_boundary = group_start + boundary
                     if (
                         absolute_boundary in span_end_offsets
-                        and DialogSegmenter._continues_with_lowercase_alpha(
+                        and DialogSegmenter._continues_with_attribution(
                             text,
                             absolute_boundary,
+                            language_code,
                         )
                     ):
                         reason = Reason.PHRASE_QUOTE_END
@@ -441,6 +489,62 @@ class DialogSegmenter:
             return False
         char = text[index]
         return char.isalpha() and char.islower()
+
+    @staticmethod
+    def _continues_with_attribution(
+        text: str,
+        offset: int,
+        language_code: str | None,
+    ) -> bool:
+        """
+        Whether the text at or after `offset` continues with an attribution
+        warranting an almost no pause: a lowercase alphabetic continuation
+        (any language) or, when the language code is "en", a capital-initial
+        word whose next word is a whitelisted attribution verb (eg,
+        "Some dialog," John said.).
+        """
+        if DialogSegmenter._continues_with_lowercase_alpha(text, offset):
+            return True
+        if (language_code or "") != "en":
+            return False
+        return DialogSegmenter._continues_with_name_verb(text, offset)
+
+    @staticmethod
+    def _continues_with_name_verb(text: str, offset: int) -> bool:
+        """
+        Whether the text at or after `offset` begins with a capital-initial
+        word (a speaker name) whose next word is one of
+        _ATTRIBUTION_VERBS_EN. Leading whitespace is skipped (as in
+        _continues_with_lowercase_alpha), but only spaces/tabs may separate
+        the name and the verb: a line break between them defeats the match.
+        The verb must match as a whole word (so "saying" is not "say").
+        """
+        index = offset
+        length = len(text)
+
+        while index < length and text[index].isspace():
+            index += 1
+        if index >= length:
+            return False
+
+        first_char = text[index]
+        if not (first_char.isalpha() and first_char.isupper()):
+            return False
+
+        index += 1
+        while index < length and not text[index].isspace():
+            index += 1
+
+        while index < length and text[index] in " \t":
+            index += 1
+        if index >= length or not text[index].isalpha():
+            return False
+
+        verb_start = index
+        while index < length and text[index].isalpha():
+            index += 1
+
+        return text[verb_start:index].lower() in _ATTRIBUTION_VERBS_EN
 
     @staticmethod
     def _with_quote_end_reason(group: PhraseGroup) -> PhraseGroup:

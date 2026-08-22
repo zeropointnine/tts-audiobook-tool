@@ -30,9 +30,10 @@ class PhraseGrouper:
 
         When dialog_segmentation is enabled, a final pass subdivides groups so
         accepted dialog and narration do not share a group, preassigns dialog
-        to voice sample 2, and marks close-quote pieces followed by a
-        lowercase continuation with reason PHRASE_QUOTE_END. It does not
-        recombine groups created by the normal segmentation passes.
+        to voice sample 2, and marks close-quote pieces followed by an
+        attribution with reason PHRASE_QUOTE_END (a lowercase continuation, or
+        for language code "en" a speaker name followed by a whitelisted verb).
+        It does not recombine groups created by the normal segmentation passes.
         """
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         # This guarantees that imported text has no blank lines containing
@@ -72,6 +73,7 @@ class PhraseGrouper:
             groups = DialogSegmenter.segment_groups(
                 groups,
                 dialog_voice_index=DIALOG_VOICE_INDEX,
+                language_code=pysbd_lang,
             )
 
         return groups

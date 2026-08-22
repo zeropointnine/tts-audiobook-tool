@@ -19,6 +19,13 @@ def segment_one(text: str) -> list[PhraseGroup]:
     return DialogSegmenter.segment_groups([make_group(text)])
 
 
+def segment_one_lang(text: str, language_code: str | None) -> list[PhraseGroup]:
+    return DialogSegmenter.segment_groups(
+        [make_group(text)],
+        language_code=language_code,
+    )
+
+
 class TestDialogSegmenter(unittest.TestCase):
     def test_splits_straight_quoted_dialog_from_attribution(self):
         groups = segment_one('"Hello," the man said.')
@@ -368,7 +375,9 @@ class TestPhraseQuoteEnd(unittest.TestCase):
     """
     A piece ending at a close-quote gets reason PHRASE_QUOTE_END when the
     continuation starts with a lowercase alphabetic (ie, an attribution);
-    otherwise the existing behavior applies.
+    otherwise the existing behavior applies. These tests pass no language
+    code; the English speaker-name rule is covered by
+    TestPhraseQuoteEndNameVerb.
     """
 
     @staticmethod
@@ -547,6 +556,134 @@ class TestPhraseQuoteEnd(unittest.TestCase):
             [Reason.SENTENCE, Reason.SENTENCE],
         )
         self.assertEqual([group.voice_index for group in original_groups], [4, 4])
+
+
+class TestPhraseQuoteEndNameVerb(unittest.TestCase):
+    """
+    For language code "en" only, a piece ending at a close-quote also gets
+    reason PHRASE_QUOTE_END when the continuation is a capital-initial word
+    (a speaker name) whose next word is a whitelisted attribution verb
+    (eg, "Some dialog," John said.).
+    """
+
+    @staticmethod
+    def phrase_reasons(groups: list[PhraseGroup]) -> list[list[tuple[str, Reason]]]:
+        return [
+            [(phrase.text, phrase.reason) for phrase in group.phrases]
+            for group in groups
+        ]
+
+    def test_close_quote_before_name_and_whitelisted_verb_hits_for_en(self):
+        cases = (
+            ('"Some dialog," John said.', '"Some dialog," ', "John said."),
+            ('"Some dialog," John asked.', '"Some dialog," ', "John asked."),
+            ('"Some dialog." John replied.', '"Some dialog." ', "John replied."),
+            ('"Some dialog," Jane whispered.', '"Some dialog," ', "Jane whispered."),
+            ('"Some dialog." Mark exclaimed.', '"Some dialog." ', "Mark exclaimed."),
+            (
+                '"Some dialog." Anne continued the story.',
+                '"Some dialog." ',
+                "Anne continued the story.",
+            ),
+        )
+        for text, quote, attribution in cases:
+            with self.subTest(text=text):
+                groups = segment_one_lang(text, "en")
+                self.assertEqual(
+                    self.phrase_reasons(groups),
+                    [
+                        [(quote, Reason.PHRASE_QUOTE_END)],
+                        [(attribution, Reason.SENTENCE)],
+                    ],
+                )
+
+    def test_name_verb_rule_requires_language_code_en(self):
+        text = '"Some dialog," John said.'
+        for language_code in (None, "", "es", "fr"):
+            with self.subTest(language_code=language_code):
+                groups = segment_one_lang(text, language_code)
+                self.assertEqual(
+                    self.phrase_reasons(groups),
+                    [
+                        [('"Some dialog," ', Reason.PHRASE)],
+                        [("John said.", Reason.SENTENCE)],
+                    ],
+                )
+
+    def test_name_followed_by_non_whitelisted_word_does_not_hit(self):
+        cases = (
+            ('"Some dialog," John wondered.', '"Some dialog," '),
+            ('"Some dialog." John saying.', '"Some dialog." '),
+            ('"Some dialog," John pondered on it.', '"Some dialog," '),
+        )
+        for text, quote in cases:
+            with self.subTest(text=text):
+                groups = segment_one_lang(text, "en")
+                self.assertEqual(groups[0].text, quote)
+                self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE)
+
+    def test_line_break_between_name_and_verb_defeats_match(self):
+        groups = segment_one_lang('"Some dialog,"\nJohn\nsaid.', "en")
+
+        self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE)
+
+    def test_span_end_at_group_boundary_with_name_verb_hits_for_en(self):
+        original_groups = [
+            make_group('She said, "Some dialog," '),
+            make_group("John said."),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            language_code="en",
+        )
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Some dialog," ', Reason.PHRASE_QUOTE_END)],
+                [("John said.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_span_end_at_group_boundary_name_verb_without_language_unchanged(self):
+        original_groups = [
+            make_group('She said, "Some dialog," '),
+            make_group("John said."),
+        ]
+
+        groups = DialogSegmenter.segment_groups(original_groups)
+
+        self.assertEqual(
+            self.phrase_reasons(groups),
+            [
+                [("She said, ", Reason.PHRASE)],
+                [('"Some dialog," ', Reason.SENTENCE)],
+                [("John said.", Reason.SENTENCE)],
+            ],
+        )
+
+    def test_text_to_groups_forwards_language_code_to_dialog_segmenter(self):
+        text = 'She paused. "Some dialog," John said.'
+
+        for pysbd_lang, expected in (
+            ("en", Reason.PHRASE_QUOTE_END),
+            ("es", Reason.PHRASE),
+        ):
+            with self.subTest(pysbd_lang=pysbd_lang):
+                groups = PhraseGrouper.text_to_groups(
+                    text,
+                    max_words=100,
+                    strategy=SegmentationStrategy.MAX_LEN,
+                    pysbd_lang=pysbd_lang,
+                    dialog_segmentation=True,
+                )
+                quote_groups = [
+                    group for group in groups if group.text.startswith('"Some dialog')
+                ]
+                self.assertEqual(len(quote_groups), 1)
+                self.assertEqual(quote_groups[0].phrases[-1].reason, expected)
 
 
 if __name__ == "__main__":

@@ -234,8 +234,9 @@ class Reason(tuple[int, str], Enum):
     UNDEFINED = 0, "undefined"
     # The string has been split after an arbitrary word
     WORD = 1, "w"
-    # The string ends at a close-quote and a lowercase continuation follows
-    # (ie, an attribution like: "Hello," she said.) - almost no pause
+    # The string ends at a close-quote and an attribution follows
+    # (ie, "Hello," she said. - or "Some dialog," John said. for language
+    # code "en") - almost no pause
     PHRASE_QUOTE_END = 2, "isqe"
     # The string has been split at a phrase (not to be confused with the class named "Phrase")
     PHRASE = 3, "is" # "is" - think "intra-sentence"
