@@ -640,7 +640,6 @@ class GenerateUtil:
         prompts = []
         for index in indices:
             prompt = GenerateUtil.phrase_group_to_prompt(phrase_groups[index], project)
-            print("xxx", prompt, "xxx")
             prompts.append(prompt)
 
         # Generate
