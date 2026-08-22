@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -385,7 +386,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         phrase_index = list_item.phrase_index
         segment_status = self.get_phrase_segment_status(phrase_index)
         status_ansi = self.make_phrase_status_ansi(phrase_index, segment_status)
-        prefix_ansi = f"{COL_DIM}{phrase_index + 1:05d} {status_ansi} "
+        prefix_ansi = f"{COL_DIM}{self.format_line_number(phrase_index + 1)} {status_ansi} "
         presentable_text = self.presentable_texts.get(phrase_index)
         if presentable_text is None:
             presentable_text = self.project.phrase_groups[phrase_index].presentable_text
@@ -466,12 +467,15 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             self.make_reconcile_items(old_items_by_id, changed_phrase_indices),
         )
 
-    def find_text(self, phrase_index: int) -> str:
+    def find_text_strings(self, item_index: int) -> Sequence[str]:
         """Search visible phrase text and complete section heading text."""
-        item = self.list_items[phrase_index]
+        item = self.list_items[item_index]
         if isinstance(item, GenerateSectionItem):
-            return item.display_text
-        return self.project.phrase_groups[item.phrase_index].presentable_text
+            return [item.display_text]
+        return [
+            self.format_line_number(item.phrase_index + 1),
+            self.project.phrase_groups[item.phrase_index].presentable_text,
+        ]
 
     def content_line_index(self, item_index: int) -> int | None:
         """Map phrase rows to Project lines while excluding section headings."""

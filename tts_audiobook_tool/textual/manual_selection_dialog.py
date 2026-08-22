@@ -52,7 +52,7 @@ class ManualSelectionDialog(ModalScreen[set[int] | None]):
                 markup=False,
             ),
             Static(
-                Text.from_ansi(f'{COL_DIM}Eg, "5-100, 105"'),
+                Text.from_ansi(f'{COL_DIM}Eg: "5-100, 105"'),
                 id="manual-selection-example",
                 markup=False,
             ),

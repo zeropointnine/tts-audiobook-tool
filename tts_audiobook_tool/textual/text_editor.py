@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -198,7 +199,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         else:
             is_find_match = index == self.find_match_index
             style = f"{STYLE_DIM} reverse" if is_find_match else ""
-            prefix_text = f"{list_item.ordinal:05d}  "
+            prefix_text = f"{self.format_line_number(list_item.ordinal)}  "
             presentable_text = (
                 self.presentable_phrase_group_ansi(list_item.phrase_group)
                 if SHOW_NEWLINE_CHARS
@@ -212,9 +213,12 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
                 style=style,
             )
 
-    def find_text(self, phrase_index: int) -> str:
+    def find_text_strings(self, item_index: int) -> Sequence[str]:
         """Return searchable text from the staged row rather than the Project."""
-        return self.list_items[phrase_index].searchable_text
+        item = self.list_items[item_index]
+        if isinstance(item, TextEditorSectionItem):
+            return [item.searchable_text]
+        return [self.format_line_number(item.ordinal), item.searchable_text]
 
     def option_id(self, index: int) -> str:
         """Use staged identities so options can survive structural mutations."""

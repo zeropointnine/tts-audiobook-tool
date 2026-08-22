@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -138,6 +139,14 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             and self.staged_voice_indices != self.original_voice_indices
         )
 
+    def voice_label(self, voice_index: int) -> str:
+        """Build the row's voice label, kept shared between display and search."""
+        voice_number = max(voice_index + 1, 1)
+        # Keep showing the stored number, but flag stale selections after voices change.
+        if voice_index >= self.voice_sample_count:
+            return f"Voice {voice_number} *OUT OF RANGE*"
+        return f"Voice {voice_number}"
+
     def format_line(self, index: int) -> HangingIndentText:
         """Format one row, styling selected rows except for the active row."""
         list_item = self.list_items[self.phrase_indices[index]]
@@ -148,16 +157,10 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
         style = f"{STYLE_DIM} reverse" if is_find_match else ""
         phrase_index = list_item.phrase_index
         phrase_group = self.project.phrase_groups[phrase_index]
-        voice_index = self.staged_voice_indices[phrase_index]
-        voice_number = max(voice_index + 1, 1)
-        # Keep showing the stored number, but flag stale selections after voices change.
-        if voice_index >= self.voice_sample_count:
-            voice_status = " *OUT OF RANGE*"
-        else:
-            voice_status = ""
         prefix_ansi = (
-            f"{COL_DIM}[{phrase_index + 1:05d}] "
-            f"{COL_ACCENT}[Voice {voice_number}{voice_status}]{COL_DIM} "
+            f"{COL_DIM}[{self.format_line_number(phrase_index + 1)}] "
+            f"{COL_ACCENT}[{self.voice_label(self.staged_voice_indices[phrase_index])}]"
+            f"{COL_DIM} "
         )
         return HangingIndentText.from_ansi(
             ansi_text=f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text}",
@@ -166,12 +169,17 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             style=style,
         )
 
-    def find_text(self, phrase_index: int) -> str:
-        """Search phrase text and the complete generated section heading text."""
-        list_item = self.list_items[phrase_index]
+    def find_text_strings(self, item_index: int) -> Sequence[str]:
+        """Search the row's number, voice label, and phrase text as separate fields."""
+        list_item = self.list_items[item_index]
         if isinstance(list_item, VoiceLineSectionItem):
-            return list_item.display_text
-        return self.project.phrase_groups[list_item.phrase_index].presentable_text
+            return [list_item.display_text]
+        phrase_index = list_item.phrase_index
+        return [
+            self.format_line_number(phrase_index + 1),
+            self.voice_label(self.staged_voice_indices[phrase_index]),
+            self.project.phrase_groups[phrase_index].presentable_text,
+        ]
 
     def content_line_index(self, item_index: int) -> int | None:
         """Map phrase rows by project line number, excluding section rows."""

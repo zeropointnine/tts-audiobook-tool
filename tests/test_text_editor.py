@@ -125,7 +125,7 @@ def test_phrase_rows_show_line_feeds_as_dim_nonbreaking_tokens() -> None:
 
     assert plain_text == "00001  One↵\N{NO-BREAK SPACE}↵\N{NO-BREAK SPACE}Two Three."
     assert "\n" not in plain_text
-    assert app.find_text(0) == "One Two Three."
+    assert app.find_text_strings(0) == ["00001", "One Two Three."]
 
     dim_style = Text.from_ansi(f"{COL_DIM}x").spans[0].style
     dim_positions: set[int] = set()

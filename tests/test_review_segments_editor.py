@@ -245,6 +245,8 @@ def test_generate_section_rows_are_searchable_but_non_actionable() -> None:
     )
 
     assert app.find_match_indices("section 2/2: needle") == [2]
+    assert app.find_match_indices("00002") == [3]
+    assert app.find_match_indices("00003") == []
 
     async def exercise() -> None:
         async with app.run_test() as pilot:

@@ -255,6 +255,7 @@ def test_find_searches_generated_section_text_and_phrase_text() -> None:
     assert app.find_match_indices("section 2/3") == [2]
     assert app.find_match_indices("needle chapter (1 line)") == [2]
     assert app.find_match_indices("haystack") == [3]
+    assert app.find_match_indices("00002") == [3]
 
     async def exercise() -> None:
         async with app.run_test() as pilot:
@@ -266,6 +267,97 @@ def test_find_searches_generated_section_text_and_phrase_text() -> None:
             assert app.selected_index == 2
 
     run(exercise())
+
+
+def test_find_text_strings_expose_voice_label_separately_from_phrase_text() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[
+                    make_phrase_group("One.", voice_index=0),
+                    make_phrase_group("Two.", voice_index=1),
+                ],
+            ),
+            BookSection(
+                title="Ending",
+                phrase_groups=[make_phrase_group("Three.", voice_index=5)],
+            ),
+        ],
+        voice_sample_count=2,
+    )
+
+    # Rows: [section, One.(v0), Two.(v1), section, Three.(v5 with 2 samples)]
+    assert app.find_text_strings(1) == ["00001", "Voice 1", "One."]
+    assert app.find_text_strings(2) == ["00002", "Voice 2", "Two."]
+    assert app.find_text_strings(3) == ["Section 2/2: Ending (1 line)"]
+    assert app.find_text_strings(4) == ["00003", "Voice 6 *OUT OF RANGE*", "Three."]
+
+
+def test_find_matches_voice_label_metadata_not_present_in_phrase_text() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[
+                    make_phrase_group("One.", voice_index=0),
+                    make_phrase_group("Two.", voice_index=1),
+                ],
+            ),
+            BookSection(title="Ending", phrase_groups=[make_phrase_group("Three.")]),
+        ],
+        voice_sample_count=2,
+    )
+
+    # Rows: One. is "Voice 1", Two. is "Voice 2", Three. defaults to "Voice 1".
+    assert app.find_match_indices("voice 2") == [2]
+    assert app.find_match_indices("VOICE 1") == [1, 4]
+    assert app.find_match_indices("voice 3") == []
+    # Fields are tested separately, so no match can span the label/content join.
+    assert app.find_match_indices("voice 1o") == []
+    # The displayed line number is searchable; section rows carry no number.
+    assert app.find_match_indices("00003") == [4]
+    assert app.find_match_indices("00004") == []
+
+
+def test_find_metadata_tracks_reassigned_voice() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(title="Opening", phrase_groups=[make_phrase_group("One.")]),
+            BookSection(title="Middle", phrase_groups=[make_phrase_group("Two.")]),
+        ],
+        voice_sample_count=2,
+    )
+
+    assert app.find_match_indices("voice 2") == []
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down", "2")
+            # Row 1 (One.) is now staged with voice index 1.
+            assert app.staged_voice_indices == [1, -1]
+            assert app.find_match_indices("voice 2") == [1]
+            assert app.find_match_indices("voice 1") == [3]
+
+    run(exercise())
+
+
+def test_find_matches_out_of_range_voice_label() -> None:
+    app = make_sectioned_editor(
+        [
+            BookSection(
+                title="Opening",
+                phrase_groups=[make_phrase_group("One.", voice_index=5)],
+            ),
+            BookSection(title="Ending", phrase_groups=[make_phrase_group("Two.")]),
+        ],
+        voice_sample_count=2,
+    )
+
+    # Rows: [section, One.(v5 -> "Voice 6 *OUT OF RANGE*"), section, Two.(v-1)]
+    assert app.find_match_indices("out of range") == [1]
+    assert app.find_match_indices("voice 6") == [1]
+    assert app.find_match_indices("voice 2") == []
 
 
 def test_inactive_selected_line_dim_background_extends_to_full_row_width() -> None:

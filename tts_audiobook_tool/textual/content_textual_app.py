@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar, Generic, TypeVar
 
@@ -220,9 +220,31 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         )
         self.on_content_loaded()
 
-    def find_text(self, phrase_index: int) -> str:
-        """Return the searchable text for a Project phrase group."""
-        return self.project.phrase_groups[phrase_index].presentable_text
+    def format_line_number(self, line_number: int) -> str:
+        """Format a user-facing one-based line number as displayed (e.g. "00001")."""
+        return f"{line_number:05d}"
+
+    def line_number_text(self, item_index: int) -> str | None:
+        """Return the row's displayed line-number text, or None for structural rows."""
+        line_index = self.content_line_index(item_index)
+        if line_index is None:
+            return None
+        return self.format_line_number(line_index + 1)
+
+    def find_text_strings(self, item_index: int) -> Sequence[str]:
+        """Return the strings a find query is tested against for one visible row.
+
+        Each string is tested independently: a row matches when the folded
+        query is a substring of any of them. Keep distinct fields (content,
+        metadata) as separate entries rather than joining them, and prefer
+        short strings derived from live state over cached copies. Rows which
+        display a line number expose its displayed text as the first entry.
+        """
+        strings: list[str] = []
+        if (line_number_text := self.line_number_text(item_index)) is not None:
+            strings.append(line_number_text)
+        strings.append(self.project.phrase_groups[item_index].presentable_text)
+        return strings
 
     def content_line_index(self, item_index: int) -> int | None:
         """Map a backing item to its actionable Project line, if it has one.
@@ -575,14 +597,21 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         return next((index for index in indices if index in match_index_set), None)
 
     def find_match_indices(self, query: str) -> list[int]:
-        """Return visible rows containing a case-insensitive literal query."""
+        """Return visible rows containing a case-insensitive literal query.
+
+        A row matches when the query is a substring of any of the row's
+        ``find_text_strings`` entries (content and metadata fields).
+        """
         if not query:
             return []
         folded_query = query.casefold()
         return [
             index
-            for index, phrase_index in enumerate(self.phrase_indices)
-            if folded_query in self.find_text(phrase_index).casefold()
+            for index, item_index in enumerate(self.phrase_indices)
+            if any(
+                folded_query in text.casefold()
+                for text in self.find_text_strings(item_index)
+            )
         ]
 
     def on_input_changed(self, event: Input.Changed) -> None:

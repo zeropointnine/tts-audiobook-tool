@@ -242,6 +242,25 @@ def test_base_retains_project_and_maps_options_to_phrase_groups() -> None:
     assert app.find_match_indices("hidden") == []
 
 
+def test_base_formats_and_searches_displayed_line_numbers() -> None:
+    app, _ = make_app()
+
+    assert app.format_line_number(1) == "00001"
+    assert app.format_line_number(99999) == "99999"
+    assert app.format_line_number(100000) == "100000"
+
+    # Rows display their line number via the base default content-line mapping.
+    assert app.line_number_text(0) == "00001"
+    assert app.line_number_text(1) == "00002"
+    assert app.find_text_strings(0) == ["00001", "first"]
+
+    # The stub's [2, 0] mapping means find searches by mapped phrase index:
+    # value 2 (row 0) carries number "00003", value 0 (row 1) carries "00001".
+    assert app.find_match_indices("00003") == [0]
+    assert app.find_match_indices("00001") == [1]
+    assert app.find_match_indices("00004") == []
+
+
 def test_base_formats_section_list_items_with_shared_style() -> None:
     app, _ = make_app()
 

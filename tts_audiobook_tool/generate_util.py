@@ -64,7 +64,7 @@ class GenerateUtil:
 
     @staticmethod
     def generate_files(
-            state: State, 
+            state: State,
             indices_set: set[int],
             batch_size: int,
             is_regen: bool
@@ -227,8 +227,8 @@ class GenerateUtil:
             # Generate and validate
             gen_start_time = time.time()
             results = GenerateUtil.generate_and_validate_batch(
-                state=state, 
-                indices=indices, 
+                state=state,
+                indices=indices,
                 phrase_groups=project.phrase_groups,
                 stt_variant=stt_variant, stt_config=stt_config,
                 force_random_seed=is_regen or any(count > 0 for count in retry_counts),
@@ -271,7 +271,7 @@ class GenerateUtil:
                 retry_string = f" (retry #{retry_counts[i]})" if retry_counts[i] else ""
                 item_line = f"{COL_ACCENT}Line {index + 1}{retry_string}:" # {COL_DEFAULT}{text_string}"
                 message_lines.append(item_line)
-                
+
                 new_retry_count = retry_counts[i] + 1
 
 
@@ -292,7 +292,7 @@ class GenerateUtil:
                         re_adds.append((index, new_retry_count))
                         val_line += f"; {COL_DEFAULT}will retry"
                     message_lines.append(val_line)
-                 
+
                 elif validation_result:
                     consecutive_model_errors = 0
 
@@ -317,10 +317,10 @@ class GenerateUtil:
                     # Modify validation ui message if needed
                     if not validation_result.is_fail:
                         if is_regen:
-                            val_line = val_line.replace("Passed", f"{COL_OK}Passed") 
+                            val_line = val_line.replace("Passed", f"{COL_OK}Passed")
                         else:
                             if new_retry_count > 1:
-                                val_line = val_line.replace("Passed", f"{COL_OK}Passed on retry") 
+                                val_line = val_line.replace("Passed", f"{COL_OK}Passed on retry")
                     else:
                         if is_regen:
                             if isinstance(validation_result, WordErrorResult):
@@ -345,7 +345,7 @@ class GenerateUtil:
                             num_failed_music += 1
                     else:
                         num_passed += 1
-                    
+
                     # Print STT info
                     if isinstance(validation_result, TranscriptResult):
                         stt_info = SegmentTranscriptUtil.from_validation_result(
@@ -390,7 +390,7 @@ class GenerateUtil:
 
                 printt("\n".join(message_lines))
 
-                if validation_result: 
+                if validation_result:
                     printt()
                     if stt_info is not None:
                         printt(
@@ -404,7 +404,7 @@ class GenerateUtil:
                     else:
                         # Just print source text, in a similar style
                         printt(f"{COL_DEFAULT}Source text: {COL_DIM_ITALICS}{phrase_group.presentable_text.strip()}")
-                
+
                 if i < len(results) - 1:
                     printt()
 
@@ -482,7 +482,7 @@ class GenerateUtil:
 
     @staticmethod
     def generate_and_validate_batch(
-        state: State, 
+        state: State,
         indices: list[int],
         phrase_groups: list[PhraseGroup],
         stt_variant: SttVariant,
@@ -504,7 +504,7 @@ class GenerateUtil:
             sample (a batch must be voice-homogeneous). When None, the voice
             is resolved by the existing logic inside `generate()`.
         """
-        
+
         project = state.project
         save_debug_files = state.prefs.save_debug_files
 
@@ -514,7 +514,7 @@ class GenerateUtil:
         # Generate:
         gen_start_time = time.time()
         gen_results = GenerateUtil.generate(
-            project=project, 
+            project=project,
             indices=indices,
             phrase_groups=phrase_groups,
             force_random_seed=force_random_seed,
@@ -522,9 +522,9 @@ class GenerateUtil:
             save_debug_files=save_debug_files,
             print_generation_request=True,
             voice_selection_index=voice_selection_index
-        )        
+        )
         printt() # Restore print color, print blank line
-        
+
         # Print speed info
         print_speed_info(time.time() - gen_start_time, gen_results)
 
@@ -608,9 +608,9 @@ class GenerateUtil:
     @staticmethod
     def generate(
             project: Project,
-            indices: list[int], 
+            indices: list[int],
             phrase_groups: list[PhraseGroup],
-            force_random_seed: bool, 
+            force_random_seed: bool,
             is_realtime: bool,
             save_debug_files: bool,
             print_generation_request: bool = False,
@@ -618,8 +618,8 @@ class GenerateUtil:
         ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError]:
         """
         Core audio generation function.
-        
-        Returns a list of "results" (same length as that of prompt_text), 
+
+        Returns a list of "results" (same length as that of prompt_text),
         where each result is either a generated Sound or an error string.
         The Sound is trimmed for silence and peak-normalized.
 
@@ -640,6 +640,7 @@ class GenerateUtil:
         prompts = []
         for index in indices:
             prompt = GenerateUtil.phrase_group_to_prompt(phrase_groups[index], project)
+            print("xxx", prompt, "xxx")
             prompts.append(prompt)
 
         # Generate
@@ -683,12 +684,12 @@ class GenerateUtil:
             )
 
         # `result` is either n generated Sounds or a single error string
-        if isinstance(result, str): 
+        if isinstance(result, str):
             Tts.clear_continuation()
             return [TtsModelError(result) for _ in range(len(prompts))] # return n model errors
 
         sounds = [result] if isinstance(result, Sound) else result
-        
+
         results: list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError] = [] # TODO: Revisit
 
         for i, sound in enumerate(sounds):
@@ -745,7 +746,7 @@ class GenerateUtil:
                     Tts.clear_continuation()
                 else:
                     result = (sound, gap_trims, start_trim_time, end_trim_time, original_duration, token_noise_trim_time, voice_tag)
-             
+
             results.append(result)
             Tts.clear_continuation_if_reason(phrase_groups[indices[i]].last_reason)
 
@@ -773,7 +774,7 @@ class GenerateUtil:
 
     @staticmethod
     def phrase_group_to_prompt(phrase_group: PhraseGroup, project: Project) -> str:
-        
+
         prompt = phrase_group.as_flattened_phrase().text
         return prompt
 
@@ -793,9 +794,9 @@ class GenerateUtil:
         """
 
         project = state.project
-        
+
         # Save sound
-        dir_path = project.realtime_path if is_real_time else project.sound_segments_path 
+        dir_path = project.realtime_path if is_real_time else project.sound_segments_path
         os.makedirs(dir_path, exist_ok=True)
 
         file_name = SoundSegmentUtil.make_file_name(
@@ -812,8 +813,8 @@ class GenerateUtil:
         err = SoundFileUtil.save_flac(validation_result.sound, sound_path)
         if err:
             return err, sound_path
-        
-        if not is_real_time and isinstance(validation_result, TranscriptResult): 
+
+        if not is_real_time and isinstance(validation_result, TranscriptResult):
             # Make STT/timing sidecar and save to 'parallel' json file
             info = stt_info or SegmentTranscriptUtil.from_validation_result(
                 project=project,
@@ -834,7 +835,7 @@ class GenerateUtil:
         indices: list[int], num_complete: int, num_remaining: int, num_total: int, start_time: float,
         voice_index: int | None = None
     ) -> None:
-        
+
         line_noun = make_noun("line", "lines", len(indices))
         if len(indices) <= 4:
             indices_string = ", ".join(str(item + 1) for item in indices)
@@ -850,19 +851,19 @@ class GenerateUtil:
         counts = f"{COL_DIM}(lines processed: {COL_DEFAULT}{num_complete}{COL_DIM}; remaining: {COL_DEFAULT}{num_remaining}{COL_DIM}; elapsed: {COL_DEFAULT}{elapsed}{COL_DIM})"
 
         message = f"{processing_string} {counts}"
-        
+
         printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(message)))}")
         printt(f"{message}")
         printt()
 
     @staticmethod
-    def save_debug_sound(project: Project, index: int, label: str, sound: Sound, is_realtime: bool): 
-        
+    def save_debug_sound(project: Project, index: int, label: str, sound: Sound, is_realtime: bool):
+
         dir_path = project.realtime_path if is_realtime else project.sound_segments_path
-        os.makedirs(dir_path, exist_ok=True)        
+        os.makedirs(dir_path, exist_ok=True)
         index_string = str(index + 1).zfill(5)
         timestamp = SoundSegmentUtil.make_timestamp_string()
-        
+
         # Use same start of filename as sound segment files
         if is_realtime:
             file_name = f"[{timestamp}] [{index_string}] [{label}].flac"
@@ -937,7 +938,7 @@ class GenerateUtil:
 # ---
 
 def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
-    
+
     # Elapsed
     message = f"Generated audio in {gen_elapsed:.1f}s"
 
@@ -962,9 +963,9 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
             speed_str += "+"
         speed_str += "x"
         message += f"speed: {speed_str}"
-    
+
     print(message)
-    
+
 def print_eta(saved_elapsed: list[float], num_left) -> None:
 
     MIN_SAMPLES = 5
@@ -985,19 +986,19 @@ def print_eta(saved_elapsed: list[float], num_left) -> None:
     printt(f"Est. time remaining: {duration_string(eta)}")
 
 def bucket_items(
-        items: list[tuple[int, int]], 
+        items: list[tuple[int, int]],
         phrase_groups: list[PhraseGroup],
         batch_size: int) -> list[tuple[int, int]]:
     """
-    Returns a copy of `items`, sorted by phrase group word count in an alternating 
-    descending/ascending pattern. Reason for sorting in groups is to preserve the 
+    Returns a copy of `items`, sorted by phrase group word count in an alternating
+    descending/ascending pattern. Reason for sorting in groups is to preserve the
     ordering of items to some extent. Does not "bucket" per-se.
-    
+
     Params:
-        items: list of tuples (phase group index, retry_count), 
+        items: list of tuples (phase group index, retry_count),
                which should be sorted by index
     """
-    
+
     # Make copy of items, but with added element for word count
     triplets: list[tuple[int, int, int]] = []
 

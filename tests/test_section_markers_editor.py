@@ -100,6 +100,8 @@ def test_editor_projects_multiple_sections_and_phrase_rows_in_book_order() -> No
     assert app.content_line_index(1) == 0
     assert app.find_match_indices("ending") == [3]
     assert app.find_match_indices("three") == [4]
+    assert app.find_match_indices("00003") == [4]
+    assert app.find_match_indices("00004") == []
 
 
 def test_editor_omits_heading_for_a_single_section() -> None:

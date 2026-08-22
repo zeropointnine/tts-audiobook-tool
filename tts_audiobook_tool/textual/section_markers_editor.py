@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -206,7 +207,7 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         is_marked = item.phrase_index in self.staged_markers
         number_color = COL_ACCENT if is_marked else COL_DIM
         asterisk = "*" if is_marked else " "
-        prefix_ansi = f"{number_color}{item.phrase_index + 1:05d}{asterisk} {COL_DEFAULT}"
+        prefix_ansi = f"{number_color}{self.format_line_number(item.phrase_index + 1)}{asterisk} {COL_DEFAULT}"
         phrase_group = self.project.phrase_groups[item.phrase_index]
         return HangingIndentText.from_ansi_prefix(
             f"{prefix_ansi}{Ansi.RESET}",
@@ -245,12 +246,15 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
                 self.markers_panel_text()
             )
 
-    def find_text(self, phrase_index: int) -> str:
+    def find_text_strings(self, item_index: int) -> Sequence[str]:
         """Search phrase text and complete generated section heading text."""
-        item = self.list_items[phrase_index]
+        item = self.list_items[item_index]
         if isinstance(item, SectionMarkersSectionItem):
-            return item.display_text
-        return self.project.phrase_groups[item.phrase_index].presentable_text
+            return [item.display_text]
+        return [
+            self.format_line_number(item.phrase_index + 1),
+            self.project.phrase_groups[item.phrase_index].presentable_text,
+        ]
 
     def action_next_marker(self) -> None:
         """Move the highlight to the nearest staged marker below the current row."""
@@ -324,7 +328,7 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         )
 
         for index in displayed_markers:
-            text.append(f"{index + 1:05d}  ")
+            text.append(f"{self.format_line_number(index + 1)}  ")
             text.append(
                 self.project.phrase_groups[index].presentable_text, style=STYLE_DIM
             )
