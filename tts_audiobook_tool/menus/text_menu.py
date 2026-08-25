@@ -38,6 +38,8 @@ class TextMenu:
                 state.project.max_words, MAX_WORDS_PER_SEGMENT_DEFAULT
             )
             value = f"max words {value}; {state.project.segmentation_strategy.label.lower()}"
+            if state.project.dialog_segmentation:
+                value += "; dialog"
             return make_menu_label("Segmentation settings", value)
 
         def make_items(_: State) -> list[MenuItem]:

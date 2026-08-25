@@ -25,6 +25,9 @@ from tts_audiobook_tool.textual.phrase_group_split_dialog import (
     PhraseGroupSplitDialog,
 )
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
+from tts_audiobook_tool.textual.segmentation_info_dialog import (
+    SegmentationInfoDialog,
+)
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
     OptionReconcileItem,
@@ -81,6 +84,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         *ContentTextualApp.BINDINGS,
         Binding("x", "delete_phrase_groups", show=False),
         Binding("s", "split_phrase_group", show=False),
+        Binding("i", "show_segmentation_info", show=False),
     ]
 
     def __init__(self, project: Project) -> None:
@@ -92,7 +96,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             f"{COL_ACCENT}View/edit text",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
             f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
-            f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to delete selected lines   [S] Split line",
+            f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to delete selected lines   [S] Split line  - [I] Info",
             f"{COL_DIM}- Press [ESC] to finish",
         ]
         super().__init__(
@@ -371,6 +375,12 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         self.apply_mutation_result(
             edit_session.split_phrase_group(item_id, split_point)
         )
+
+    def action_show_segmentation_info(self) -> None:
+        """Show the segmentation settings captured when the text was imported."""
+        if self.find_active:
+            return
+        self.push_screen(SegmentationInfoDialog(self.project))
 
     def make_confirmation_dialog(self) -> SaveChangesDialog:
         """Warn about generated audio and markers invalidated by the staged edit."""

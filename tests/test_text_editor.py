@@ -1,10 +1,11 @@
 import pytest
 from pathlib import Path
 
+from rich.text import Text
 from textual.widgets import Button, Input, OptionList, Static
 
 import tts_audiobook_tool.textual.text_editor as text_editor_module
-from tts_audiobook_tool.app_types import BookSection
+from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.textual.content_textual_app import (
@@ -21,6 +22,9 @@ from tts_audiobook_tool.textual.phrase_group_split_dialog import (
     PhraseGroupSplitDialog,
 )
 from tts_audiobook_tool.textual.save_changes_dialog import SaveChangesDialog
+from tts_audiobook_tool.textual.segmentation_info_dialog import (
+    SegmentationInfoDialog,
+)
 
 from textual_editor_stubs import make_phrase_group, make_project, run
 
@@ -688,5 +692,96 @@ def test_confirm_surfaces_commit_error_without_mutating_project(monkeypatch) -> 
 
         assert [item.text for item in project.phrase_groups] == ["One.", "Two."]
         assert app.return_value == EditorSaveFailed("Save failed: disk full")
+
+    run(exercise())
+
+
+def test_header_documents_the_info_key() -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    app = make_loaded_editor(project)
+
+    assert Text.from_ansi(app.header_lines[3]).plain == (
+        "- Press [X] to delete selected lines   [S] Split line  - [I] Info"
+    )
+
+
+def test_i_opens_segmentation_info_dialog() -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 80
+    project.applied_strategy = SegmentationStrategy.MULTI_SENTENCE
+    project.applied_dialog_segmentation = True
+    project.applied_language_code = "en"
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("i")
+            assert isinstance(app.screen, SegmentationInfoDialog)
+            content = app.screen.query_one("#segmentation-info-copy", Static).content
+            assert content.plain == (
+                "The text was originally imported using the following "
+                "segmentation settings:\n"
+                "\n"
+                "Max words per segment: 80\n"
+                "Segmentation strategy: Multiple sentences\n"
+                "Dialog segmentation: True\n"
+                "Language code: en"
+            )
+            dim_prefixes = {
+                content.plain[span.start:span.end]
+                for span in content.spans
+                if span.style.color is not None
+                and span.style.color.name == "#888888"
+            }
+            assert dim_prefixes == {
+                "Max words per segment:",
+                "Segmentation strategy:",
+                "Dialog segmentation:",
+                "Language code:",
+            }
+
+    run(exercise())
+
+
+def test_info_dialog_shows_none_for_missing_language_code() -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 42
+    project.applied_strategy = SegmentationStrategy.SENTENCE_PLUS
+    project.applied_dialog_segmentation = False
+    project.applied_language_code = ""
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("i")
+            content = app.screen.query_one("#segmentation-info-copy", Static).content
+            assert "Max words per segment: 42" in content.plain
+            assert "Segmentation strategy: Sentence+" in content.plain
+            assert "Dialog segmentation: False" in content.plain
+            assert content.plain.endswith("Language code: (none)")
+
+    run(exercise())
+
+
+def test_info_dialog_dismisses_on_any_key() -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_strategy = SegmentationStrategy.SENTENCE_PLUS
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("i")
+            assert isinstance(app.screen, SegmentationInfoDialog)
+
+            await pilot.press("q")
+            await pilot.pause()
+            assert not isinstance(app.screen, SegmentationInfoDialog)
+
+            await pilot.press("i")
+            assert isinstance(app.screen, SegmentationInfoDialog)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, SegmentationInfoDialog)
+            assert app.is_running is True
 
     run(exercise())
