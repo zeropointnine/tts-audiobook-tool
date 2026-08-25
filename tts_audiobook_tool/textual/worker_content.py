@@ -268,9 +268,11 @@ class WorkerLog(ReflowLog):
 
     def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
         """A wheel scroll down detaches from the tail; the base does the
-        actual scrolling."""
+        actual scrolling, and scrolling back to the very end resumes
+        following the tail."""
         self.follow_tail = False
         super()._on_mouse_scroll_down(event)
+        self._resume_if_at_end()
 
     def _on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         """Scrolling back to the very end resumes following the tail."""

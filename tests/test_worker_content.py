@@ -11,6 +11,7 @@ the log area never resizes.
 
 import asyncio
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.events import Resize
 from textual.geometry import Size
@@ -262,5 +263,64 @@ def test_max_lines_trim_keeps_bookkeeping_consistent() -> None:
             assert log._prefix[0] == 0
             assert log._prefix[-1] == sum(log._row_count)
             assert log.virtual_size.height == sum(log._row_count)
+
+    run(exercise())
+
+def test_wheel_scroll_back_to_end_reasserts_tail_following() -> None:
+    """Wheel scrolling back down to the very end re-enables tail
+    following, so appended text is still auto-revealed.
+
+    Manual wheel scrolling up detaches from the tail. Scrolling back
+    down to the very end must re-attach (like the End key), even when
+    the user keeps scrolling once the viewport has already reached the
+    bottom: extra notches past the bottom used to leave `follow_tail`
+    false, so newly-appended text stayed off screen because the scroll
+    position no longer tracked the growing tail.
+    """
+
+    async def exercise() -> None:
+        app = _HostApp()
+        async with app.run_test(size=(60, 10)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            def wheel_up() -> None:
+                log._on_mouse_scroll_up(
+                    events.MouseScrollUp(log, 5, 5, 0, -1, 0, False, False, False)
+                )
+
+            def wheel_down() -> None:
+                log._on_mouse_scroll_down(
+                    events.MouseScrollDown(log, 5, 5, 0, 1, 0, False, False, False)
+                )
+
+            # Grow the log well beyond the viewport so it is scrollable.
+            for i in range(60):
+                area.feed(["line " + str(i)], "")
+            await pilot.pause()
+            assert log.follow_tail is True
+            assert log.scroll_offset.y >= log.max_scroll_y
+
+            # Scroll up with the wheel: detaches from the tail.
+            wheel_up()
+            await pilot.pause()
+            assert log.follow_tail is False
+            assert log.scroll_offset.y < log.max_scroll_y
+
+            # Scroll back down with the wheel, including extra notches
+            # once the viewport is already at the bottom.
+            for _ in range(60):
+                wheel_down()
+            await pilot.pause()
+            assert log.follow_tail is True
+            assert log.scroll_offset.y >= log.max_scroll_y
+
+            # Newly appended text must stay auto-revealed (pinned to
+            # the tail), not remain off screen at a frozen position.
+            area.feed(["line 60"], "")
+            await pilot.pause()
+            assert log.follow_tail is True
+            assert log.scroll_offset.y >= log.max_scroll_y
 
     run(exercise())
