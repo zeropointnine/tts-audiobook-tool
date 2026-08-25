@@ -61,25 +61,25 @@ class TextMenu:
             )
 
             if state.project.phrase_groups:
-                
+
                 items.append(
                     MenuItem(
                         make_subst_label, lambda _, __: TextMenu.word_substitutions_menu(state),
-                        superlabel=" ", superlabel_no_blank_line=True                      
+                        superlabel=" ", superlabel_no_blank_line=True
                     )
                 )
 
                 items.append(
                     MenuItem(
                         "View/edit text lines", lambda _, __: TextMenu.edit_text(state),
-                        superlabel=" ", superlabel_no_blank_line=True                      
+                        superlabel=" ", superlabel_no_blank_line=True
                     ),
-                )       
+                )
 
             return items
 
         MenuUtil.menu(
-            state, make_heading, make_items, 
+            state, make_heading, make_items,
             hint=HINT_LINE_BREAKS, breadcrumb="Text"
         )
 
@@ -187,7 +187,7 @@ class TextMenu:
         def on_enter(_, __) -> None:
             inp = ask.ask(SUBSTITUTIONS_ASK_DESC, lower=False)
             if not inp:
-                return 
+                return
             # Add curlies
             if not inp.startswith("{"):
                 inp = "{" + inp
@@ -196,11 +196,11 @@ class TextMenu:
             result = ProjectUtil.parse_word_substitutions_json_string(inp)
             if isinstance(result, str):
                 print_feedback(result, is_error=True)
-                return 
+                return
             state.project.word_substitutions = result
             state.project.save()
             print_feedback("Word substitutions set")
-            return 
+            return
 
         def on_clear(_, __) -> None:
             state.project.word_substitutions = {}
@@ -213,13 +213,13 @@ class TextMenu:
             printt(s)
             printt()
             ask.ask_enter_to_continue()
-            return 
-        
+            return
+
         def on_inspect(_, __) -> None:
             MenuUtil.print_screen_heading(state, "Uncommon words", subheading=UNCOMMON_WORDS_DESC)
-            
+
             # Make list of project text words (unfiltered, still including whitespace)
-            all_words_raw = [] 
+            all_words_raw = []
             for group in state.project.phrase_groups:
                 for phrase in group.phrases:
                     all_words_raw.extend(phrase.words)
@@ -253,13 +253,13 @@ class TextMenu:
                 num_subst = len(state.project.word_substitutions)
                 value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
                 label = f"Print {make_currently_string(value)}"
-                items.append( 
-                    MenuItem(label, on_print, superlabel=" ", superlabel_no_blank_line=True) 
+                items.append(
+                    MenuItem(label, on_print, superlabel=" ", superlabel_no_blank_line=True)
                 )
             return items
 
         MenuUtil.menu(
-            state, 
+            state,
             heading=make_subst_label,
             items=items_maker,
             subheading=SUBSTITUTIONS_DESC,
@@ -333,7 +333,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
         case _:
             raise ValueError(f"Bad value: {item.data!r}")
-    
+
     # Delete now-outdated gens
     state.project.sound_segments.delete_all()
 
@@ -405,14 +405,19 @@ def on_set_text(state: State, item: MenuItem) -> bool:
                 f"{COL_DIM}  Voice selection mode must be set to: user-defined{COL_DEFAULT}"
             )
     printt()
-    ask.ask_enter_to_continue()
 
     if state.project.language_code in ("en", "es"):
         hints.show_hint_if_necessary(
             state.prefs,
-            HINT_TOLERANCE_FIRST_CLASS,
-            and_prompt=True,
+            HINT_TOLERANCE_FIRST_CLASS
         )
+    if state.project.dialog_segmentation:
+        hints.show_hint_if_necessary(
+            state.prefs,
+            HINT_DIALOG_VOICE,
+        )
+
+    ask.ask_enter_to_continue()
 
     return False
 
@@ -445,7 +450,7 @@ def make_subst_label(state: State) -> str:
 
 
 SEG_SUBHEADING = \
-"""On import, text will be segmented into sentences and phrases using the settings 
+"""On import, text will be segmented into sentences and phrases using the settings
 shown below. Project language code can also affect how the text is segmented.
 """
 
@@ -460,17 +465,17 @@ For single-voice narration, leave this off to preserve natural flow.
 
 SUBSTITUTIONS_DESC = \
 f"""List of words to be replaced in the TTS prompt at inference-time.
-Useful for helping the model pronounce proper names, neologisms, etc. 
+Useful for helping the model pronounce proper names, neologisms, etc.
 more accurately. {COL_DIM}(Requires some trial and error){COL_DEFAULT}
 """
 
 SUBSTITUTIONS_ASK_DESC = \
-f"""Enter substitutions list. Use this format: 
+f"""Enter substitutions list. Use this format:
 {COL_DIM_ITALICS}{{"Ariekei": "AriaKay", "kilohour": "kilo hour"}}
- 
+
 """
 
 UNCOMMON_WORDS_DESC = \
-f"""Words in the project text not found in the app's 
+f"""Words in the project text not found in the app's
 English \"common words\" dictionary, sorted by frequency.
 """

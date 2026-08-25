@@ -219,3 +219,14 @@ SGL-Omni runs from the dedicated venv created by requirements-sgl-omni.txt
 (see the README). Create or refresh that venv and run the app from it
 to use your saved settings again."""
 )
+
+HINT_DIALOG_VOICE = Hint(
+    "dialog_voice",
+    "Dialog voices",
+"""Because dialog segmentation was enabled for this import,
+detected dialog lines have been assigned to voice 2.
+
+To generate dialog using a different voice from the narrator/default:
+(1) Make sure to add a second voice clone and
+(2) Set Voice selection mode to User-defined."""
+)

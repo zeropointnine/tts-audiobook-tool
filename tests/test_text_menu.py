@@ -5,7 +5,7 @@ import pytest
 
 import tts_audiobook_tool.menus.text_menu as text_menu_module
 from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
-from tts_audiobook_tool.constants_hints import HINT_TOLERANCE_FIRST_CLASS
+from tts_audiobook_tool.constants_hints import HINT_DIALOG_VOICE, HINT_TOLERANCE_FIRST_CLASS
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.menus.text_menu import TextMenu, on_set_text
 from tts_audiobook_tool.state import State
@@ -229,6 +229,60 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
     on_set_text(state, MenuItem("Import", lambda *_: None, data="manual"))
 
     assert hint_calls == []
+
+
+@pytest.mark.parametrize("dialog_segmentation", [True, False])
+def test_text_import_shows_dialog_voice_hint_when_dialog_segmentation_enabled(
+    monkeypatch, dialog_segmentation: bool
+) -> None:
+    hint_calls: list[object] = []
+    project = SimpleNamespace(
+        sound_segments=SimpleNamespace(num_generated=lambda: 0, delete_all=lambda: None),
+        max_words=40,
+        segmentation_strategy=SegmentationStrategy.SENTENCE,
+        language_code="fr",
+        dialog_segmentation=dialog_segmentation,
+        book=SimpleNamespace(
+            segmentation_settings=SimpleNamespace(
+                language_code="fr",
+                max_words_per_segment=40,
+                strategy=SegmentationStrategy.SENTENCE,
+                dialog_segmentation=dialog_segmentation,
+            )
+        ),
+    )
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=object(),
+            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=None),
+        ),
+    )
+    monkeypatch.setattr(
+        text_menu_module.ask_phrase_groups,
+        "get_from_std_in",
+        lambda *args, **kwargs: ([SimpleNamespace(voice_index=-1)], "Raw text"),
+    )
+    monkeypatch.setattr(
+        text_menu_module.ProjectTextIOUtil,
+        "set_phrase_groups_and_save",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(text_menu_module, "printt", lambda *args, **kwargs: None)
+    monkeypatch.setattr(text_menu_module.ask, "ask_enter_to_continue", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        text_menu_module.hints,
+        "show_hint_if_necessary",
+        lambda *args, **kwargs: hint_calls.append(args),
+    )
+
+    on_set_text(state, MenuItem("Import", lambda *_: None, data="manual"))
+
+    if dialog_segmentation:
+        assert hint_calls == [(state.prefs, HINT_DIALOG_VOICE)]
+    else:
+        assert hint_calls == []
 
 
 @pytest.mark.parametrize(
