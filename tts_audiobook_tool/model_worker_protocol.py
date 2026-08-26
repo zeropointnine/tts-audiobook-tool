@@ -116,6 +116,7 @@ class InspectTtsCommand:
     operation_id: str
     project_dir: str
     settings: GenerationSettings
+    model_params: dict[str, object]
 
 
 @dataclass(frozen=True)

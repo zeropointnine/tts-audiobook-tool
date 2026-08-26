@@ -36,6 +36,7 @@ from tts_audiobook_tool.model_worker_protocol import (
     WorkerExited,
 )
 from tts_audiobook_tool.textual.worker_content import WorkerLog, WorkerLogContentArea
+from tts_audiobook_tool.tts import Tts
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
@@ -281,7 +282,10 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         yield from self.compose_header()
         yield Rule(id=self.DIVIDER_ID)
         yield from self.compose_below_divider()
-        yield WorkerLogContentArea(id=self.OUTPUT_SHELL_ID)
+        yield WorkerLogContentArea(
+            output_filters=Tts.get_type().value.output_filters,
+            id=self.OUTPUT_SHELL_ID,
+        )
         yield Horizontal(
             Static(self.find_label_text, id="find-label", markup=False),
             Input(id="find-input", compact=True, select_on_focus=False),

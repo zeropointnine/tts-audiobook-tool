@@ -1,6 +1,6 @@
 {
 
-    "pythonVersion": "3.11", 
+    "pythonVersion": "3.11",
 
     "typeCheckingMode": "standard",
 
@@ -10,9 +10,8 @@
         "**/.*",
         "**/node_modules",
         "**/__pycache__",
-        "**/venv*"
-    ],
-    "ignore": [
-        "**/venv*"
+        "**/venv*",
+        "tests"
+
     ]
 }

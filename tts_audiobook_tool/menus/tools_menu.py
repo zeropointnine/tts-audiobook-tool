@@ -24,7 +24,7 @@ class ToolsMenu:
         def item_maker(_: State) -> list[MenuItem]:
 
             enhance_item = MenuItem(
-                "Enhance a pre-existing audiobook", 
+                "Enhance a pre-existing audiobook",
                 lambda _, __: enhance_flow.ask_and_make(state)
             )
             epub_to_text_item = MenuItem(
@@ -40,9 +40,9 @@ class ToolsMenu:
                 lambda _, __: TranscodeUtil.ask_transcode_abr_flac_to_aac(state)
             )
             speed_item = MenuItem("Speed up voice sample", speed_handler)
-            
+
             return [enhance_item, epub_to_text_item, mp3s_item, transcode_item, speed_item]
-        
+
         MenuUtil.menu(state, "Tools", item_maker, breadcrumb="Tools")
 
     @staticmethod
@@ -102,7 +102,7 @@ class ToolsMenu:
         printt()
         s ="Enter new speed as a percentage (range: 50-200) (50 = half as fast, 200 = twice as fast)"
         printt(s)
-        inp = ask.ask()
+        inp = ask.ask_input()
         if not inp:
             cleanup()
             return

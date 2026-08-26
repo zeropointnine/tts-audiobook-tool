@@ -22,6 +22,8 @@ from tts_audiobook_tool.model_worker_protocol import (
     ConsoleOutput,
     GenerationFinished,
     GenerationTerminalStatus,
+    InspectTtsCommand,
+    TtsInspected,
     WorkerExited,
     WorkerStatus,
 )
@@ -106,6 +108,22 @@ def test_worker_status_tracks_start_and_shutdown() -> None:
     ModelWorker.shutdown()
     assert ModelWorker.status() is WorkerStatus.ABSENT
     assert not ModelWorker.is_alive()
+
+
+def test_unload_models_exits_worker_and_restarts_lazily() -> None:
+    assert ModelWorker.start() == ""
+    first_process = ModelWorker._process
+    assert first_process is not None
+
+    assert ModelWorker.unload_models_blocking() == ""
+
+    assert ModelWorker._process is None
+    assert ModelWorker.status() is WorkerStatus.ABSENT
+    assert not ModelWorker.is_alive()
+
+    assert ModelWorker.start() == ""
+    assert ModelWorker._process is not first_process
+    assert ModelWorker.is_alive()
 
 
 def test_worker_exited_is_synthesized_once_on_death() -> None:
@@ -415,4 +433,43 @@ def test_worker_reports_its_own_empty_model_inventory() -> None:
     assert snapshot.stt_loaded is False
     assert snapshot.yamnet_loaded is False
     assert snapshot.lava_sr_loaded is False
+
+
+def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
+    """Validation must inspect live edits, not only project.json on disk."""
+    monkeypatch.setattr(L, "d", lambda *_: None)
+    project = Project(dir_path=str(tmp_path))
+    assert project.save() == ""
+    project.vibevoice_lora_target = "vibevoice-community/unsaved-adapter"
+    state = SimpleNamespace(
+        project=project,
+        prefs=Prefs(project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED),
+    )
+    commands: list[object] = []
+
+    class CommandQueue:
+        def put(self, command: object) -> None:
+            commands.append(command)
+
+    def wait_for_result(cls, operation_id, _expected_type):
+        cls._active_operation_id = None
+        return TtsInspected(operation_id, "vibevoice")
+
+    monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
+    monkeypatch.setattr(ModelWorker, "_command_queue", CommandQueue())
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+    monkeypatch.setattr(
+        ModelWorker,
+        "_wait_for_blocking_result",
+        classmethod(wait_for_result),
+    )
+
+    inspection, error = ModelWorker.inspect_tts_blocking(state)
+
+    assert error == ""
+    assert inspection is not None
+    assert len(commands) == 1
+    command = commands[0]
+    assert isinstance(command, InspectTtsCommand)
+    assert command.model_params["vibevoice_lora_path"] == project.vibevoice_lora_target
 

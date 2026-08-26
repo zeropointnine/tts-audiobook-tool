@@ -15,7 +15,7 @@ from typing import Protocol
 
 import numpy as np
 from tts_audiobook_tool import text_util
-from tts_audiobook_tool.app_types import Sound, SttVariant
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
 from tts_audiobook_tool import app_support
@@ -42,7 +42,6 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.app_types.validation_result import ValidationResult
 

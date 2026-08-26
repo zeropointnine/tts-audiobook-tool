@@ -17,7 +17,7 @@ class OptionsMenu:
     def menu(state: State) -> None:
 
         def on_unload(_: State, __: MenuItem) -> None:
-            reset_error = ModelWorker.clear_models_if_running_blocking()
+            reset_error = ModelWorker.unload_models_blocking()
             if reset_error:
                 printt(f"{COL_ERROR}{reset_error}")
             else:
@@ -321,7 +321,7 @@ class OptionsMenu:
         s += f"{COL_DIM}(Eg, http://localhost:8000)"
         printt(s)
 
-        value = ask.ask("", lower=False)
+        value = ask.ask_input("", lower=False)
         value = value.strip().rstrip("/")
         if not value:
             return

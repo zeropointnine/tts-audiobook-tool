@@ -17,6 +17,8 @@ from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import worker_app as worker_app_module
 from tts_audiobook_tool.textual.worker_app import WorkerTextualApp, worker_app_css
 from tts_audiobook_tool.textual.worker_content import WorkerLog
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,31 @@ def run(coroutine) -> None:
 
 def _seed(log: WorkerLog, lines: list[str]) -> None:
     log.feed_console(list(lines), "")
+
+
+def test_worker_app_uses_active_model_output_filters(monkeypatch) -> None:
+    monkeypatch.setattr(worker_app_module, "EVENT_POLL_SECONDS", 3600.0)
+
+    async def exercise() -> None:
+        Tts._type = TtsModelType.MIRA
+        mira_app = StubWorkerApp()
+        async with mira_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            mira_log = mira_app._worker_log()
+            assert mira_log.output_filters == ("smem_size",)
+            mira_log.feed_console(["kernel smem_size=123"], "")
+            assert mira_log.line_texts() == [""]
+
+        Tts._type = TtsModelType.CHATTERBOX
+        normal_app = StubWorkerApp()
+        async with normal_app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            normal_log = normal_app._worker_log()
+            assert normal_log.output_filters == ()
+            normal_log.feed_console(["kernel smem_size=123"], "")
+            assert normal_log.line_texts() == ["kernel smem_size=123", ""]
+
+    run(exercise())
 
 
 def test_find_bar_searches_and_gates_session_keys(monkeypatch) -> None:

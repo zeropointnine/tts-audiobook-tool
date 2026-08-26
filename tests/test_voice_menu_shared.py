@@ -120,3 +120,29 @@ def test_voice_sample_selection_mode_submenu_uses_options_menu_and_saves_selecti
     assert kwargs["sublabels"] == [mode.description for mode in VoiceSelectMode]
     assert project.voice_select_mode == VoiceSelectMode.USER_DEFINED
     save.assert_called_once_with()
+
+
+def test_target_submenu_only_applies_changed_preset(monkeypatch) -> None:
+    state = cast(State, SimpleNamespace())
+    captured_items = []
+    applied_targets: list[str] = []
+
+    def capture_menu(**kwargs) -> None:
+        captured_items.extend(kwargs["items"])
+
+    monkeypatch.setattr(voice_menu_shared.MenuUtil, "menu", capture_menu)
+
+    VoiceMenuShared.target_submenu(
+        state=state,
+        heading="Model",
+        preset_targets=["repo/current", "repo/other"],
+        current_target="repo/current",
+        default_target="repo/current",
+        ask_custom_target=lambda: None,
+        apply_target=applied_targets.append,
+    )
+
+    captured_items[0].handler(state, captured_items[0])
+    captured_items[1].handler(state, captured_items[1])
+
+    assert applied_targets == ["repo/other"]

@@ -208,6 +208,15 @@ def test_catalog_helpers_classify_by_backend_kind():
     assert TtsModelType.is_valid_sgl_omni_type(TtsModelType.QWEN3TTS_SERVER)
 
 
+def test_only_mira_has_worker_output_filters() -> None:
+    assert TtsModelType.MIRA.value.output_filters == ["smem_size"]
+    assert all(
+        item.value.output_filters == []
+        for item in TtsModelType
+        if item is not TtsModelType.MIRA
+    )
+
+
 def with_substring(spec, substring):
     # TtsModelSpec is a NamedTuple; _replace is its copy-with-changed-field helper
     return spec._replace(sgl_omni_model_id_substring=substring)

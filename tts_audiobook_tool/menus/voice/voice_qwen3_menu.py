@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.menus.menu_util import MenuItem
 from tts_audiobook_tool.model_worker import ModelWorker
@@ -22,15 +25,35 @@ class VoiceQwen3Menu:
     @staticmethod
     def menu(state: State, inspection: TtsInspected) -> None:
         metadata = inspection.metadata or {}
-        model_type = str(metadata.get("model_type", state.project.qwen3_model_type))
-        speakers_value = metadata.get("supported_speakers", [])
-        speakers = (
-            [str(value) for value in speakers_value]
-            if isinstance(speakers_value, (list, tuple))
-            else []
-        )
-        defaults_value = metadata.get("generate_defaults", {})
-        generate_defaults = defaults_value if isinstance(defaults_value, dict) else {}
+
+        def get_model_type() -> str:
+            return str(metadata.get("model_type", state.project.qwen3_model_type))
+
+        def get_speakers() -> list[str]:
+            value = metadata.get("supported_speakers", [])
+            return (
+                [str(speaker) for speaker in value]
+                if isinstance(value, (list, tuple))
+                else []
+            )
+
+        def get_generate_defaults() -> dict[str, Any]:
+            value = metadata.get("generate_defaults", {})
+            return value if isinstance(value, dict) else {}
+
+        def apply_target_and_refresh(target: str) -> None:
+            def refresh(updated_inspection: TtsInspected) -> None:
+                nonlocal metadata
+                metadata = updated_inspection.metadata or {}
+
+            apply_model_and_validate(state, target, on_applied=refresh)
+
+        def clear_target_and_refresh(_: State, item: MenuItem) -> None:
+            nonlocal metadata
+            on_clear_model_target(state, item)
+            # The built-in default is a Base model. Discard metadata from the
+            # previously inspected custom target before this menu rerenders.
+            metadata = {"model_type": "base"}
 
         def make_voice_label(_) -> str:
             if not state.project.qwen3_voice_file_name:
@@ -42,6 +65,7 @@ class VoiceQwen3Menu:
             return f"Select voice clone sample {currently}"
 
         def make_target_label(_) -> str:
+            model_type = get_model_type()
             extra_suffix = f" {COL_DIM}(model type: {COL_ACCENT}{model_type}{COL_DIM})"
             return VoiceMenuShared.make_target_label(
                 label_prefix="Select Qwen3-TTS model",
@@ -52,6 +76,7 @@ class VoiceQwen3Menu:
             )
 
         def make_speaker_label(_) -> str:
+            speakers = get_speakers()
             has_only_one = (len(speakers) == 1)
             if has_only_one:
                 speaker_id = speakers[0]
@@ -60,12 +85,12 @@ class VoiceQwen3Menu:
             value = speaker_id or "None"
             suffix = make_currently_string(value)
             if speaker_id not in speakers:
-                if not speaker_id:    
+                if not speaker_id:
                     suffix = f"({COL_ERROR}required{COL_DIM})"
                 else:
                     suffix += f" ({COL_ERROR}required - current id is invalid{COL_DIM})"
             return "Set speaker " + suffix
-        
+
         def make_instructions_cv_label(_) -> str:
             if not state.project.qwen3_instructions:
                 suffix = f"{COL_DIM}(optional)"
@@ -81,7 +106,7 @@ class VoiceQwen3Menu:
                 value = truncate_pretty(state.project.qwen3_instructions, 40, content_color=COL_ACCENT)
                 suffix = make_currently_string(value)
             return f"Instructions {suffix}"
-        
+
         def on_clear_instructions(_: State, __: MenuItem) -> None:
             state.project.qwen3_instructions = ""
             state.project.save()
@@ -93,9 +118,11 @@ class VoiceQwen3Menu:
             print_feedback("Speaker cleared")
 
         def make_items(_: State) -> list[MenuItem]:
-            
+            model_type = get_model_type()
+            speakers = get_speakers()
+            generate_defaults = get_generate_defaults()
             items = []
-            
+
             match model_type:
                 case "base":
                     # Voice clone, clear voice clone
@@ -109,7 +136,13 @@ class VoiceQwen3Menu:
                 case "custom_voice":
                     # Speaker id, instructions
                     items.append(
-                        MenuItem(make_speaker_label, lambda _, __: ask_speaker_id(state.project, speakers))
+                        MenuItem(
+                            make_speaker_label,
+                            lambda _, __: ask_speaker_id(
+                                state.project,
+                                speakers,
+                            ),
+                        )
                     )
                     if state.project.qwen3_speaker_id:
                         items.append(
@@ -134,20 +167,24 @@ class VoiceQwen3Menu:
 
             # Model, clear model
             items.append(
-                MenuItem(make_target_label, lambda _, __: target_submenu(state), superlabel = VOICE_ADVANCED_SUPERLABEL)
+                MenuItem(
+                    make_target_label,
+                    lambda _, __: model_target_submenu(state, apply_target_and_refresh),
+                    superlabel=VOICE_ADVANCED_SUPERLABEL,
+                )
             )
             if state.project.qwen3_target:
                 items.append(
-                    MenuItem("Clear custom model", on_clear_model_target)
+                    MenuItem("Clear custom model", clear_target_and_refresh)
                 )
 
-            # Always show rolling cont setting even though requires type 'base' and batch 1            
+            # Always show rolling cont setting even though requires type 'base' and batch 1
             item = MenuItem(
                 VoiceMenuShared.make_rolling_continuation_label(state.project.qwen3_rolling_cont),
                 lambda _, __: VoiceMenuShared.ask_rolling_continuation(
-                    state=state, 
-                    attribute_name="qwen3_rolling_cont", 
-                    max_value=Qwen3BaseModel.ROLLING_CONTINUATION_MAX_LENGTH, 
+                    state=state,
+                    attribute_name="qwen3_rolling_cont",
+                    max_value=Qwen3BaseModel.ROLLING_CONTINUATION_MAX_LENGTH,
                     qualifier_line="Qwen3-TTS model must be of type \"base\", and batch size must be 1."
                 )
             )
@@ -197,11 +234,12 @@ class VoiceQwen3Menu:
 
             items.append(VoiceMenuShared.make_seed_item(state, "qwen3_seed", add_batch_warning=True))
             return items
-        
+
         # TODO: not using atm; revisit, reword
         def make_subheading(_: State) -> str:
+            model_type = get_model_type()
             subheading = "Qwen3-TTS supports different \"model types\".\n"
-            subheading += f"The current model type, {model_type}, requires\n" 
+            subheading += f"The current model type, {model_type}, requires\n"
             match model_type:
                 case "base":
                     subheading += "a voice clone sample.\n"
@@ -215,19 +253,32 @@ class VoiceQwen3Menu:
 
 # ---
 
-def target_submenu(state: State) -> None:
+def model_target_submenu(
+    state: State,
+    apply_target: Callable[[str], None] | None = None,
+) -> None:
+    resolved_apply_target = apply_target
+    if resolved_apply_target is None:
+        resolved_apply_target = lambda target: apply_model_and_validate(state, target)
+
     VoiceMenuShared.target_submenu(
         state=state,
         heading="Select Qwen3-TTS model",
         preset_targets=Qwen3BaseModel.PRESET_REPO_IDS,
         current_target=state.project.qwen3_target,
         default_target=Qwen3BaseModel.DEFAULT_REPO_ID,
-        ask_custom_target=lambda: ask_target(state),
-        apply_target=lambda target: apply_model_and_validate(state, target),
+        ask_custom_target=lambda: ask_target(state, resolved_apply_target),
+        apply_target=resolved_apply_target,
     )
 
-def ask_target(state: State) -> None:
+def ask_target(
+    state: State,
+    apply_target: Callable[[str], None] | None = None,
+) -> None:
     project = state.project
+    resolved_apply_target = apply_target
+    if resolved_apply_target is None:
+        resolved_apply_target = lambda target: apply_model_and_validate(state, target)
 
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
@@ -236,12 +287,16 @@ def ask_target(state: State) -> None:
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.qwen3_target, 
-        callback=lambda _, target: apply_model_and_validate(state, target)
+        current_target=project.qwen3_target,
+        callback=lambda _, target: resolved_apply_target(target)
     )
-    
-def apply_model_and_validate(state: State, target: str) -> None:
-    project = state.project 
+
+def apply_model_and_validate(
+    state: State,
+    target: str,
+    on_applied: Callable[[TtsInspected], None] | None = None,
+) -> None:
+    project = state.project
 
     previous_target = project.qwen3_target
     previous_model_type = project.qwen3_model_type
@@ -280,6 +335,8 @@ def apply_model_and_validate(state: State, target: str) -> None:
         project.qwen3_speaker_id = ""
     project.qwen3_model_type = inspected_type
     project.save()
+    if on_applied is not None:
+        on_applied(inspection)
     print_feedback("Model set:", target)
     ask.ask_enter_to_continue()
 
@@ -292,25 +349,25 @@ def on_clear_model_target(state: State, __: MenuItem) -> None:
 
 def ask_speaker_id(project: Project, speakers: list[str]) -> None:
     if len(speakers) == 1:
-        message = "Model has only one speaker id ({speakers[0]})"
+        message = f"Model has only one speaker id ({speakers[0]})"
         print_feedback(message)
         return
-    prompt = f"Choose a speaker:\n{speakers}\n"
-    inp = ask.ask(prompt, lower=False)
-    if not inp:
-        return
-    if not inp in speakers:
-        print_feedback("Invalid speaker id", is_error=True)
-        return
-    project.qwen3_speaker_id = inp
-    project.save()
-    print_feedback("Set speaker id:", inp)
+
+    def validate_speaker_id(value: str) -> str:
+        return "" if value in speakers else "Invalid speaker id"
+
+    ask.ask_string_and_save(
+        project,
+        f"Choose a speaker:\n{speakers}\n",
+        "qwen3_speaker_id",
+        "Set speaker id:",
+        validator=validate_speaker_id,
+    )
 
 def ask_instructions(project: Project) -> None:
-    printt("Enter instructions prompt:")
-    inp = ask.ask(lower=False)
-    if not inp:
-        return
-    project.qwen3_instructions = inp
-    project.save()
-    print_feedback("Set instructions: ", truncate_pretty(inp, 60))
+    ask.ask_string_and_save(
+        project,
+        "Enter instructions prompt:",
+        "qwen3_instructions",
+        "Set instructions:",
+    )

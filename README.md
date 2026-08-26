@@ -673,10 +673,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
-**2026-08-xxx**
+**2026-08-25**
 
 - New full-screen interface for `Generate` and `Realtime audiobook playback`
-- New option: `Options > Unload models`, which should now reliably free memory used by loaded models, since all model execution is handled through a worker process.
+- New option: `Options > Unload models` now frees memory reliably, since model execution is now handled through a separate worker process.
 - New option: `Options > Save log files`
 - The app now requires an ANSI-capable terminal; ‘dumb’ terminals are no longer supported.
 - Menus now always use the full-screen interface. The legacy “Menu does not clear screen” option has been removed.

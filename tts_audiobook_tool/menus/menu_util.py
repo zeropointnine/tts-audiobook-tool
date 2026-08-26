@@ -94,7 +94,7 @@ class MenuUtil:
         Otherwise, it repeats until unrecognized key is entered or enter is pressed
 
         param one_shot:
-            If True, exits after executing mapped callback function 
+            If True, exits after executing mapped callback function
             (ie, in practice, goes to previous menu)
 
         param on_exit
@@ -264,7 +264,7 @@ class MenuUtil:
     ) -> None:
         """
         Prints a heading for a blocking prompt/screen that is not a full menu,
-        but should still participate in the current breadcrumb trail. 
+        but should still participate in the current breadcrumb trail.
         Think "pseudo-menu".
 
         Temporarily pushes a MenuFrame so existing ancestor-only
@@ -328,7 +328,7 @@ class MenuUtil:
         """
         Displays a menu with a list of values.
         Think drop-down-list or radio button group.
-        If an item is selected, calls `on_select` (returns string+value tuple)
+        If a different item is selected, calls `on_select`.
 
         `labels`, `values`, and `sublabels` (if exists) are all "parallel lists"
         """
@@ -338,6 +338,8 @@ class MenuUtil:
             raise ValueError("labels and sublabels lists must have same size")
 
         def on_menu_item(_: State, item: MenuItem) -> None:
+            if item.data == current_value:
+                return
             on_select(item.data) # callback
 
         items: list[MenuItem] = []
@@ -384,7 +386,7 @@ class MenuUtil:
 
     @staticmethod
     def make_number_item(
-        state: State, 
+        state: State,
         attr: str,
         base_label: str,
         default_value: int | float,
@@ -394,7 +396,7 @@ class MenuUtil:
         min_value: int | float,
         max_value: int | float
     ) -> MenuItem:
-        """ 
+        """
         Makes "self-contained" MenuItem that displays a number value,
         and does stock "ask_number()" action on select.
         """
@@ -405,19 +407,20 @@ class MenuUtil:
             is_int = False
         else:
             raise ValueError(f"Ambiguous argument types: {default_value}, {min_value}, {max_value}")
-        
+
         if is_int and num_decimals > 0:
             num_decimals = 0
 
         def on_item(_: State, __: MenuItem) -> None:
-            ask.ask_number(
+            ask.ask_number_and_save(
                 state.project,
                 attr,
                 prompt,
                 min_value, max_value,
                 default_value,
                 "Value set:",
-                is_int=is_int
+                is_int=is_int,
+                is_minus_one_default=is_minus_one_default,
             )
 
         label = MenuUtil.make_number_label(
@@ -438,5 +441,5 @@ def get_string_from(state: State, string_or_maker: StringOrMaker) -> str:
         return string_or_maker
     else:
         return string_or_maker(state)
-    
+
 HOTKEYS_AUTO = list('123456789abcdefghijklmnopqrstuvwxyz')

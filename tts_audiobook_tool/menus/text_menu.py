@@ -187,7 +187,7 @@ class TextMenu:
     def word_substitutions_menu(state: State) -> None:
 
         def on_enter(_, __) -> None:
-            inp = ask.ask(SUBSTITUTIONS_ASK_DESC, lower=False)
+            inp = ask.ask_input(SUBSTITUTIONS_ASK_DESC, lower=False)
             if not inp:
                 return
             # Add curlies
@@ -198,6 +198,8 @@ class TextMenu:
             result = ProjectUtil.parse_word_substitutions_json_string(inp)
             if isinstance(result, str):
                 print_feedback(result, is_error=True)
+                return
+            if result == state.project.word_substitutions:
                 return
             state.project.word_substitutions = result
             state.project.save()
@@ -431,7 +433,7 @@ def on_ask_max_size(state: State, _) -> None:
     printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelType.recommended_range_string(Tts.get_type().value)}")
     printt()
 
-    ask.ask_number(
+    ask.ask_number_and_save(
         state.project,
         attr="max_words",
         prompt="Enter max words per segment:",

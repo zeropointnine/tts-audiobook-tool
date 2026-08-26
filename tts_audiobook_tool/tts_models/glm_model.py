@@ -95,7 +95,7 @@ class GlmModel(GlmBaseModel):
 
         self.uttid_counter = 0
 
-        # Load Models 
+        # Load Models
         self.frontend, \
         self.text_frontend, \
         self.speech_tokenizer, \
@@ -121,26 +121,26 @@ class GlmModel(GlmBaseModel):
         Raising here aborts the generation with an error string (handled by
         the caller) and nothing gets cached.
         """
-        prompt_text = self.text_frontend.text_normalize(transcript) or ""
+        prompt_text = self.text_frontend.text_normalize(transcript) or "" # type: ignore
         return GlmVoiceClone(
             source_path=source_path,
             prompt_text=prompt_text,
-            prompt_text_token=self.frontend._extract_text_token(prompt_text + " ").detach().cpu().clone(),
-            prompt_speech_token=self.frontend._extract_speech_token([source_path]).detach().cpu().clone(),
-            speech_feat=self.frontend._extract_speech_feat(source_path, sample_rate=self.sample_rate).detach().cpu().clone(),
-            embedding=self.frontend._extract_spk_embedding(source_path).detach().cpu().clone(),
+            prompt_text_token=self.frontend._extract_text_token(prompt_text + " ").detach().cpu().clone(), # type: ignore
+            prompt_speech_token=self.frontend._extract_speech_token([source_path]).detach().cpu().clone(), # type: ignore
+            speech_feat=self.frontend._extract_speech_feat(source_path, sample_rate=self.sample_rate).detach().cpu().clone(), # type: ignore
+            embedding=self.frontend._extract_spk_embedding(source_path).detach().cpu().clone(), # type: ignore
         )
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
         ) -> list[Sound] | str:
-        
+
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
@@ -223,15 +223,15 @@ class GlmModel(GlmBaseModel):
             use_phoneme=self.use_phoneme,
         )
 
-        # TODO: Not rly sure what uttid does; I'm mostly just following the glm library example, 
+        # TODO: Not rly sure what uttid does; I'm mostly just following the glm library example,
         # where each item in the example*.jsonl files is given an incrementing value
         self.uttid_counter += 1
-        
+
         # TODO: Inspect this more
         # json.dumps(text_tn_dict, ensure_ascii=False, indent=2)
 
         # Save Wave and Tokens
-        
+
         sound_data = tts_speech.detach().cpu().flatten().numpy()
         return Sound(sound_data, self.sample_rate)
 
@@ -277,11 +277,11 @@ def _assert_shape_and_get_len(token):
 
 def load_frontends(
         ckpt_path: str,
-        speech_tokenizer, device: str, 
-        sample_rate=24000, 
+        speech_tokenizer, device: str,
+        sample_rate=24000,
         use_phoneme=False
 ):
-    
+
     import glm_tts.frontend # type: ignore
     frontend_dir = os.path.dirname(glm_tts.frontend.__file__)
 
@@ -506,9 +506,9 @@ def generate_long(
 
 
 def load_models(
-        device: str, 
+        device: str,
         ckpt_path: str,
-        use_phoneme=False, 
+        use_phoneme=False,
         sample_rate=24000
 ):
     # Load Speech Tokenizer
@@ -520,17 +520,17 @@ def load_models(
 
     # Load Frontends
     frontend, text_frontend = load_frontends(
-        ckpt_path=ckpt_path, 
-        speech_tokenizer=speech_tokenizer, 
-        device=device, 
-        sample_rate=sample_rate, 
+        ckpt_path=ckpt_path,
+        speech_tokenizer=speech_tokenizer,
+        device=device,
+        sample_rate=sample_rate,
         use_phoneme=use_phoneme
     )
 
     llama_path = os.path.join(ckpt_path, "llm")
 
     llm = GLMTTS(
-        llama_cfg_path=os.path.join(llama_path, "config.json"), 
+        llama_cfg_path=os.path.join(llama_path, "config.json"),
         mode="PRETRAIN",
         lora_adapter_config=None,
         spk_prompt_dict_path=None
@@ -551,9 +551,9 @@ def load_models(
     )
 
     token2wav = tts_model_util.Token2Wav(
-        flow, 
-        sample_rate=sample_rate, 
-        device=device, 
+        flow,
+        sample_rate=sample_rate,
+        device=device,
         hift_path=os.path.join(ckpt_path, "hift", "hift.pt"),
         vocos_jit_path=os.path.join(ckpt_path, "vocos2d", "generator_jit.ckpt")
     )

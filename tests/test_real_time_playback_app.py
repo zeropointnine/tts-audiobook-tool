@@ -447,11 +447,6 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
     )
-    monkeypatch.setattr(
-        real_time_playback.MenuUtil,
-        "print_heading",
-        lambda state, text, dont_clear=False, non_menu=False, breadcrumb_text="": None,
-    )
     heading_calls: list[tuple[list[int], bool]] = []
     monkeypatch.setattr(
         real_time_playback.GenerateUtil,

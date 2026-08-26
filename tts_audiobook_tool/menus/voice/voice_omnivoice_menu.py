@@ -46,7 +46,7 @@ class VoiceOmniVoiceMenu:
         def make_speed_label(_) -> str:
             speed = state.project.omnivoice_speed
             return f"Speed {make_currently_string(speed, default=OmniVoiceBaseModel.DEFAULT_SPEED, num_decimals=1)}"
-        
+
         def make_steps_label(_) -> str:
             steps = state.project.omnivoice_num_step
             return f"Inference steps {make_currently_string(steps, default=OmniVoiceBaseModel.DEFAULT_STEPS)}"
@@ -77,7 +77,7 @@ class VoiceOmniVoiceMenu:
 
             items.append(
                 MenuItem(
-                    make_instruct_label, 
+                    make_instruct_label,
                     lambda _, __: ask_instruct(state.project),
                     superlabel = VOICE_ADVANCED_SUPERLABEL
                 )
@@ -126,13 +126,15 @@ def ask_instruct(project: Project) -> None:
     printt(f"{COL_DIM}Eg: \"male, british accent, low pitch\" / \"female, young adult, high pitch\"")
     if project.omnivoice_voice_file_name:
         printt(f"{COL_DIM}Note: When used alongside voice cloning, instructions may have minimal effect")
-    inp = ask.ask(lower=False)
+    inp = ask.ask_input(lower=False)
     if not inp:
         return
 
     error, normalized = validate_instruct(inp)
     if error:
         print_feedback(error, is_error=True)
+        return
+    if normalized == project.omnivoice_instruct:
         return
 
     project.omnivoice_instruct = normalized
@@ -205,45 +207,27 @@ def apply_target(state: State, target: str) -> None:
 
 
 def ask_speed(project: Project) -> None:
-    prompt = f"Enter speech speed {COL_DIM}(0.5–2.0; default 1.0){COL_DEFAULT}: "
-    inp = ask.ask(prompt, lower=False)
-    if not inp:
-        return
-    try:
-        value = float(inp)
-    except ValueError:
-        print_feedback("Invalid value", is_error=True)
-        return
-    if value != -1 and not (0.5 <= value <= 2.0): # -1 is app convention for float values for 'reset'
-        print_feedback("Value must be between 0.5 and 2.0", is_error=True)
-        return
-    project.omnivoice_speed = value
-    project.save()
-    print_feedback("Speed set:", str(value) if value != -1 else "default (1.0)")
+    ask.ask_number_and_save(
+        project,
+        "omnivoice_speed",
+        "Enter speech speed",
+        0.5,
+        2.0,
+        OmniVoiceBaseModel.DEFAULT_SPEED,
+        "Speed set:",
+        is_minus_one_default=True,
+    )
 
 
 def ask_steps(project: Project) -> None:
-    s = (
-        f"Enter number of inference steps: {COL_DIM}"
-        f"({OmniVoiceBaseModel.MIN_STEPS}–{OmniVoiceBaseModel.MAX_STEPS}; "
-        f"default {OmniVoiceBaseModel.DEFAULT_STEPS}) "
-        f"\nLarger values = enhanced quality, slower"
+    ask.ask_number_and_save(
+        project,
+        "omnivoice_num_step",
+        "Enter number of inference steps\nLarger values = enhanced quality, slower",
+        OmniVoiceBaseModel.MIN_STEPS,
+        OmniVoiceBaseModel.MAX_STEPS,
+        OmniVoiceBaseModel.DEFAULT_STEPS,
+        "Inference steps set:",
+        is_int=True,
+        is_minus_one_default=True,
     )
-    printt(s)
-    inp = ask.ask()
-    if not inp:
-        return
-    try:
-        value = int(inp)
-    except ValueError:
-        print_feedback("Invalid value", is_error=True)
-        return
-    if value != -1 and not (OmniVoiceBaseModel.MIN_STEPS <= value <= OmniVoiceBaseModel.MAX_STEPS):
-        print_feedback(
-            f"Value must be between {OmniVoiceBaseModel.MIN_STEPS} and {OmniVoiceBaseModel.MAX_STEPS} (or -1 to reset)",
-            is_error=True
-        )
-        return
-    project.omnivoice_num_step = value
-    project.save()
-    print_feedback("Inference steps set:", str(value) if value != -1 else f"default ({OmniVoiceBaseModel.DEFAULT_STEPS})")

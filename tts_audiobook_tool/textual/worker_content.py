@@ -73,6 +73,7 @@ class WorkerLog(ReflowLog):
     def __init__(
         self,
         *,
+        output_filters: list[str] | None = None,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
@@ -88,6 +89,7 @@ class WorkerLog(ReflowLog):
             disabled=disabled,
         )
         self.follow_tail = True
+        self.output_filters = tuple(output_filters or ())
         # The document starts with its (empty) current line, like a
         # freshly cleared terminal.
         self._lines.append(_Line(Text("")))
@@ -136,16 +138,20 @@ class WorkerLog(ReflowLog):
             line_text.expand_tabs(tab_size)
         return _Line(line_text)
 
+    def _is_filtered_console_line(self, text: str) -> bool:
+        """Whether a worker console line should be omitted from history."""
+        return any(substring in text for substring in self.output_filters)
+
     def feed_console(self, completed: list[str], live: str) -> None:
         """Apply one console chunk to the document.
 
         `completed` are the lines the chunk committed (each terminated
         by a newline) and `live` is the assembler's current line
         afterwards. Together they are exactly the document tail a
-        terminal would hold after the same bytes, so the document
-        becomes ``history + completed + [live]`` and `live` is the new
-        current line. A chunk without a newline only updates the
-        current line in place.
+        terminal would hold after the same bytes, except completed lines
+        matching an output filter are omitted from history. `live` is
+        always the new current line, even when it matches a filter. A
+        chunk without a newline only updates the current line in place.
         """
         if not completed:
             current = self._lines[-1].text.plain if self._lines else ""
@@ -153,26 +159,34 @@ class WorkerLog(ReflowLog):
                 # No change: the current line already holds the live
                 # text (the common case for repeated flushes).
                 return
-        self._mutate_tail(keep_current=False, new_tail=[*completed, live])
+        retained = [
+            line for line in completed if not self._is_filtered_console_line(line)
+        ]
+        self._mutate_tail(keep_current=False, new_tail=[*retained, live])
 
     def append_application_lines(self, lines: list[str]) -> None:
         """Present lines produced by the app (notices, terminal summary).
 
         A current line that still holds content (e.g. a bar interrupted
-        by the notice) becomes committed history first; an empty
-        current line is only a placeholder and is dropped. A fresh
-        empty current line ends up last.
+        by the notice) becomes committed history first unless it matches
+        an output filter; an empty current line is only a placeholder and
+        is dropped. App-generated lines are never filtered. A fresh empty
+        current line ends up last.
         """
         current = self._lines[-1] if self._lines else None
         current_text = current.text.plain if current is not None else ""
-        self._mutate_tail(keep_current=bool(current_text), new_tail=[*lines, ""])
+        keep_current = bool(current_text) and not self._is_filtered_console_line(
+            current_text
+        )
+        self._mutate_tail(keep_current=keep_current, new_tail=[*lines, ""])
 
     def finalize(self) -> None:
         """Commit the current line at session end.
 
-        The in-progress line (a bar, a status) becomes history and a
-        fresh empty current line begins below it — exactly like a
-        newline commit. The document mirrors the assembler's current
+        The in-progress line (a bar, a status) becomes history unless it
+        matches an output filter, and a fresh empty current line begins
+        below it — exactly like a newline commit. The document mirrors
+        the assembler's current
         line at all times (the one exception, an app line interrupting
         a bar, commits the bar to history at that moment), so the
         assembler's remaining line adds nothing here.
@@ -180,7 +194,10 @@ class WorkerLog(ReflowLog):
         current = self._lines[-1] if self._lines else None
         current_text = current.text.plain if current is not None else ""
         if current_text:
-            self._mutate_tail(keep_current=True, new_tail=[""])
+            self._mutate_tail(
+                keep_current=not self._is_filtered_console_line(current_text),
+                new_tail=[""],
+            )
 
     def clear(self) -> Self:
         """Clear the document, leaving a fresh empty current line."""
@@ -292,6 +309,23 @@ class WorkerLogContentArea(Vertical):
     one-row scroll.
     """
 
+    def __init__(
+        self,
+        *,
+        output_filters: list[str] | None = None,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+        disabled: bool = False,
+    ) -> None:
+        super().__init__(
+            name=name,
+            id=id,
+            classes=classes,
+            disabled=disabled,
+        )
+        self.output_filters = list(output_filters or ())
+
     DEFAULT_CSS = """
     WorkerLogContentArea {
         height: 1fr;
@@ -308,7 +342,10 @@ class WorkerLogContentArea(Vertical):
     """
 
     def compose(self) -> ComposeResult:
-        yield WorkerLog(classes="worker-log")
+        yield WorkerLog(
+            output_filters=self.output_filters,
+            classes="worker-log",
+        )
 
     @property
     def worker_log(self) -> WorkerLog:

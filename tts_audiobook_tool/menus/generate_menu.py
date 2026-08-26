@@ -350,7 +350,7 @@ def make_gen_auto_concat_label(state: State) -> str:
 def ask_retries(state: State) -> None:
     MenuUtil.print_screen_heading(state, make_retries_label(state))
     printt(RETRIES_DESC)
-    ask.ask_number(
+    ask.ask_number_and_save(
         state.project,
         "max_retries",
         "Enter value:",
@@ -372,7 +372,7 @@ def ask_batch_size(state: State) -> None:
     # compared to the 'correct' max value.
     max_value = PROJECT_CONCURRENT_REQUESTS_MAX if Tts.is_sgl_mode() else PROJECT_BATCH_SIZE_MAX
 
-    ask.ask_number(
+    ask.ask_number_and_save(
         state.project, field_name, prompt,
         1, max_value, PROJECT_BATCH_SIZE_DEFAULT,
         "Set batch size:", is_int=True

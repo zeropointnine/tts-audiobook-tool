@@ -277,25 +277,32 @@ class Tts:
         return Tts.get_backend_mode() == TtsBackendKind.SGL_OMNI
 
     @staticmethod
-    def set_model_params_using_project(project) -> None:
+    def get_model_params_using_project(project) -> dict[str, object]:
+        """Return the model configuration represented by a live Project.
 
+        Inspection commands use this snapshot because their project changes may
+        intentionally be unsaved while a custom model or adapter is validated.
+        """
         from tts_audiobook_tool.project import Project
-        assert(isinstance(project, Project))
+        assert isinstance(project, Project)
 
-        model_params = { }
-        model_params["chatterbox_type"] = project.chatterbox_type
-        model_params["vibevoice_target"] = project.vibevoice_target
-        model_params["vibevoice_lora_path"] = project.vibevoice_lora_target
-        model_params["indextts2_use_fp16"] = project.indextts2_use_fp16
-        model_params["glm_sr"] = project.glm_sr
-        model_params["moss_target"] = project.moss_target
-        model_params["qwen3_target"] = project.qwen3_target
-        model_params["fish_s1_compile_enabled"] = project.fish_s1_compile_enabled
-        model_params["fish_s2_compile_enabled"] = project.fish_s2_compile_enabled
-        model_params["pocket_model_code"] = project.pocket_model_code
-        model_params["omnivoice_target"] = project.omnivoice_target
+        return {
+            "chatterbox_type": project.chatterbox_type,
+            "vibevoice_target": project.vibevoice_target,
+            "vibevoice_lora_path": project.vibevoice_lora_target,
+            "indextts2_use_fp16": project.indextts2_use_fp16,
+            "glm_sr": project.glm_sr,
+            "moss_target": project.moss_target,
+            "qwen3_target": project.qwen3_target,
+            "fish_s1_compile_enabled": project.fish_s1_compile_enabled,
+            "fish_s2_compile_enabled": project.fish_s2_compile_enabled,
+            "pocket_model_code": project.pocket_model_code,
+            "omnivoice_target": project.omnivoice_target,
+        }
 
-        Tts.set_model_params(model_params)
+    @staticmethod
+    def set_model_params_using_project(project) -> None:
+        Tts.set_model_params(Tts.get_model_params_using_project(project))
 
     @staticmethod
     def set_model_params(new_params: dict) -> None:

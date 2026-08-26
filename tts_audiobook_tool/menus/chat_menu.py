@@ -193,7 +193,7 @@ class ChatMenu:
             return ""
 
         printt("Enter LLM system prompt:")
-        value = ask.ask(lower=False)
+        value = ask.ask_input(lower=False)
         if not value:
             return
         err = validator(value)

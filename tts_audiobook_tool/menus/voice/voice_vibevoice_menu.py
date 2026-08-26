@@ -55,7 +55,7 @@ class VoiceVibeVoiceMenu:
                     no_samples_label=make_select_voice_label,
                 )
             )
-             
+
             # LoRA
             items.append(
                 MenuItem(make_lora_target_label, lambda _, __: ask_lora_target(state))
@@ -66,8 +66,8 @@ class VoiceVibeVoiceMenu:
             # Model
             items.append(
                 MenuItem(
-                    make_model_target_label, 
-                    lambda _, __: target_submenu(state), 
+                    make_model_target_label,
+                    lambda _, __: target_submenu(state),
                     superlabel = VOICE_ADVANCED_SUPERLABEL
                 )
             )
@@ -80,7 +80,7 @@ class VoiceVibeVoiceMenu:
             item = MenuUtil.make_number_item(
                 state=state,
                 attr="vibevoice_cfg",
-                base_label="CFG", 
+                base_label="CFG",
                 default_value=VibeVoiceBaseModel.CFG_DEFAULT,
                 is_minus_one_default=True,
                 num_decimals=2,
@@ -94,7 +94,7 @@ class VoiceVibeVoiceMenu:
                 MenuUtil.make_number_item(
                     state=state,
                     attr="vibevoice_steps",
-                    base_label="Steps", 
+                    base_label="Steps",
                     default_value=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
                     is_minus_one_default=True,
                     num_decimals=0,
@@ -103,12 +103,12 @@ class VoiceVibeVoiceMenu:
                     max_value=30
                 )
             )
-            
+
             items.append(
                 VoiceMenuShared.make_seed_item(state, "vibevoice_seed")
             )
             return items
-        
+
         VoiceMenuShared.menu_wrapper(state, make_items)
 
 # ---
@@ -125,23 +125,23 @@ def target_submenu(state: State) -> None:
     )
 
 def ask_model_target(state: State) -> None:
-    project = state.project 
+    project = state.project
 
     model_name = Tts.get_type().value.ui["short_name"]
     prompt = f"Enter huggingface repo id or local directory path to {model_name} model"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice/VibeVoice-7B\"; \"/path/to/checkpoint\""
     if project.vibevoice_target:
-        prompt += f"\n{COL_DIM}(currently: {project.vibevoice_target})"    
+        prompt += f"\n{COL_DIM}(currently: {project.vibevoice_target})"
 
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.vibevoice_target, 
+        current_target=project.vibevoice_target,
         callback=lambda _, target: apply_model_and_validate(state, target)
     )
 
 def apply_model_and_validate(state: State, target: str) -> None:
-    project = state.project 
+    project = state.project
 
     previous_target = project.vibevoice_target
     project.vibevoice_target = target
@@ -169,7 +169,7 @@ def clear_custom_model(state: State) -> None:
 
 def ask_lora_target(state: State) -> None:
     project = state.project
-    
+
     prompt = f"Enter huggingface repo id or local directory path to VibeVoice LoRA"
     prompt += f"\n{COL_DIM}Eg, \"vibevoice-community/klett\", \"/path/to/checkpoint\""
     if project.vibevoice_lora_target:
@@ -178,7 +178,7 @@ def ask_lora_target(state: State) -> None:
     VoiceMenuShared.ask_target(
         project=project,
         prompt=prompt,
-        current_target=project.vibevoice_lora_target, 
+        current_target=project.vibevoice_lora_target,
         callback=lambda _, target: apply_lora_and_validate(state, target)
     )
 
@@ -200,7 +200,7 @@ def apply_lora_and_validate(state: State, target: str) -> None:
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
         revert()
-        ask.ask_error(f"\n{error}")
+        ask.ask_error(f"{error}")
         return
 
     if bool((inspection.metadata or {}).get("has_lora", False)):
@@ -209,7 +209,7 @@ def apply_lora_and_validate(state: State, target: str) -> None:
         ask.ask_enter_to_continue()
     else:
         revert()
-        ask.ask_error("\n{COL_ERROR}Couldn't load LoRA")
+        ask.ask_error("Couldn't load LoRA")
 
 def on_clear_lora(state: State, __: MenuItem) -> None:
     state.project.vibevoice_lora_target = ""

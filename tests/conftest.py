@@ -5,7 +5,7 @@ import pytest
 
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 @pytest.fixture(autouse=True)

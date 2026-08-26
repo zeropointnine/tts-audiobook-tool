@@ -185,7 +185,9 @@ Afterwards, generate those items again as desired."""
 HINT_LLM_CHAT = Hint(
     "llm_chat",
     "Tip",
-"""Works best when TTS model inferences faster (or ideally much faster) than realtime"""
+"""Works best when:
+(1) TTS model inferences faster than realtime, and
+(2) LLM returns results quickly (eg, without reasoning enabled)"""
 )
 
 HINT_FULL_SCREEN_UI = Hint(

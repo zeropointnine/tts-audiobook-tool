@@ -12,7 +12,7 @@ class TranscodeUtil:
     @staticmethod
     def ask_transcode_abr_flac_to_aac(state: State) -> None:
 
-        path = ask.ask("Enter FLAC file path or directory of FLAC files: ")
+        path = ask.ask_input("Enter FLAC file path or directory of FLAC files: ")
         if not path:
             return
         if not os.path.exists(path):
@@ -80,7 +80,7 @@ class TranscodeUtil:
             printt(s)
             printt()
 
-        ask.ask("Press enter to continue: ")
+        ask.ask_input("Press enter to continue: ")
 
 
     @staticmethod

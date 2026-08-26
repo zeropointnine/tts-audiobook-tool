@@ -67,7 +67,7 @@ def stub_language_prompt(
     monkeypatch.setattr(project_menu_module, "printt", lambda *args, **kwargs: None)
     monkeypatch.setattr(ask_module, "printt", lambda *args, **kwargs: None)
     monkeypatch.setattr(ask_module, "print_feedback", lambda *args, **kwargs: None)
-    monkeypatch.setattr(ask_module, "ask", lambda *args, **kwargs: entered_code)
+    monkeypatch.setattr(ask_module, "ask_input", lambda *args, **kwargs: entered_code)
     monkeypatch.setattr(
         project_menu_module.Whitelist,
         "set_language_code",

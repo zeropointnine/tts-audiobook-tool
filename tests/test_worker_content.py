@@ -23,8 +23,15 @@ from tts_audiobook_tool.textual.worker_content import WorkerLog, WorkerLogConten
 class _HostApp(App[None]):
     """Minimal screen giving the content area a full layout to live in."""
 
+    def __init__(self, output_filters: list[str] | None = None) -> None:
+        super().__init__()
+        self.output_filters = output_filters
+
     def compose(self) -> ComposeResult:
-        yield WorkerLogContentArea(id="area")
+        yield WorkerLogContentArea(
+            output_filters=self.output_filters,
+            id="area",
+        )
 
 
 def run(coroutine) -> None:
@@ -117,6 +124,47 @@ def test_finalize_commits_the_current_line() -> None:
 
             area.finalize()
             assert doc_lines(log) == ["bar 100%", ""]
+
+    run(exercise())
+
+
+def test_output_filters_discard_worker_lines_only_when_committed() -> None:
+    """Filtered worker output can be shown live, but it never enters history
+    through a newline, an app-line interruption, or finalization."""
+
+    async def exercise() -> None:
+        app = _HostApp(output_filters=["smem_size"])
+        async with app.run_test(size=(100, 24)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            # A matching line remains visible while it is the live line.
+            area.feed([], "kernel smem_size=123")
+            assert doc_lines(log) == ["kernel smem_size=123"]
+
+            # A newline discards that line while retaining ordinary output.
+            area.feed(["kernel smem_size=123", "compiled"], "")
+            assert doc_lines(log) == ["compiled", ""]
+
+            # App-generated lines remain visible, but a matching worker line
+            # that they interrupt does not become history.
+            area.feed([], "another smem_size report")
+            area.append_lines(["Generation cancelled."])
+            assert doc_lines(log) == [
+                "compiled",
+                "Generation cancelled.",
+                "",
+            ]
+
+            # Finalizing also drops a matching live worker line.
+            area.feed([], "final smem_size report")
+            area.finalize()
+            assert doc_lines(log) == [
+                "compiled",
+                "Generation cancelled.",
+                "",
+            ]
 
     run(exercise())
 

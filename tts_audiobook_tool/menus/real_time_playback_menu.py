@@ -64,14 +64,16 @@ class RealTimePlaybackMenu:
     def ask_line_range(state: State) -> None:
 
         if state.real_time.custom_phrase_groups:
-            text_groups = state.real_time.custom_phrase_groups
+            phrase_groups = state.real_time.custom_phrase_groups
         else:
-            text_groups = state.project.phrase_groups
-        length = len(text_groups)
+            phrase_groups = state.project.phrase_groups
+        length = len(phrase_groups)
 
         s = f"Enter line range {COL_DIM}(eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
         printt(s)
-        inp = ask.ask()
+        line_range = get_active_line_range(state)
+        prefill = f"{line_range[0]}-{line_range[1]}" if line_range else "all"
+        inp = ask.ask_input(prefill=prefill)
         if not inp:
             return
         result = RangeStringUtil.parse_range_string_normal(inp, length)
@@ -86,17 +88,18 @@ class RealTimePlaybackMenu:
             state.real_time.custom_text_line_range = result
         else:
             state.real_time.project_text_line_range = result
-            state.project.realtime_line_range = result
-            state.project.save()
+            if result != state.project.realtime_line_range:
+                state.project.realtime_line_range = result
+                state.project.save()
 
         # Print feedback
-        is_all = result is None or (result[0] == 1 and result[1] == len(text_groups))
+        is_all = result is None or (result[0] == 1 and result[1] == len(phrase_groups))
         if is_all:
-            value = f"1-{len(text_groups)} (all)"
+            value = f"1-{len(phrase_groups)} (all)"
         else:
             assert result is not None
             value = f"{result[0]}-{result[1]}"
-            if result[1] == len(text_groups):
+            if result[1] == len(phrase_groups):
                 value += " (end)"
         print_feedback("Line range set:", value)
 
@@ -109,8 +112,9 @@ class RealTimePlaybackMenu:
                 state.real_time.custom_phrase_groups = []
                 state.real_time.custom_text_line_range = None
                 state.real_time.project_text_line_range = None
-                state.project.realtime_line_range = None
-                state.project.save()
+                if state.project.realtime_line_range is not None:
+                    state.project.realtime_line_range = None
+                    state.project.save()
             print_feedback("Text source set to", "project")
             return True
 

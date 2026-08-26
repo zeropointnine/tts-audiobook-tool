@@ -5,12 +5,10 @@ import time
 
 import numpy as np
 
-from tts_audiobook_tool import app_support, ask, text_util
+from tts_audiobook_tool import app_support, text_util
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, VoiceSelectMode
 from tts_audiobook_tool.app_support import app_hint_util, app_memory
 from tts_audiobook_tool.concat_util import ConcatUtil
-from tts_audiobook_tool.menus.concat_menu import ConcatMenu
-from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.generation_events import (
     GenerationEvents,

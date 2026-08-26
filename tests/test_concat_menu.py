@@ -29,7 +29,7 @@ def test_ask_output_indices_empty_input_cancels() -> None:
         SimpleNamespace(output_index=1, num_files_exist=0),
     ]
 
-    with patch.object(concat_menu.ask, "ask", return_value=""), patch.object(
+    with patch.object(concat_menu.ask, "ask_input", return_value=""), patch.object(
         concat_menu, "printt"
     ), patch.object(concat_menu, "print_feedback") as print_feedback:
         result = concat_menu.ask_output_indices(infos)  # type: ignore[arg-type]

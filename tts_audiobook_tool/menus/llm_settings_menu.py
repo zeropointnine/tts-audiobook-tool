@@ -80,9 +80,13 @@ class LlmSettingsMenu:
                 return "Must start with http:// or https://"
             return ""
 
+        prompt = (
+            f"Enter LLM endpoint URL\n"
+            f"{COL_DIM}Eg, \"https://www.example.com/v1/chat/completions\" or \"https://www.example.com/v1/messages\"{COL_DEFAULT}"
+        )
         ask.ask_string_and_save(
             state.prefs,
-            f"Enter LLM endpoint URL\n{COL_DIM}Eg, \"https://www.example.com/v1/chat/completions\" or \"https://www.example.com/v1/messages\"{COL_DEFAULT}",
+            prompt,
             "llm_url",
             "Set LLM URL to:",
             validator=validator
@@ -145,7 +149,7 @@ class LlmSettingsMenu:
         printt(f"{COL_DIM}Use this for provider-specific fields not covered by the app.")
         printt(f'{COL_DIM}For example, using DeepSeek: {COL_MEDIUM}{{"thinking": {{"type": "disabled"}}}}')
         printt()
-        value = ask.ask(lower=False)
+        value = ask.ask_input(lower=False)
         if not value:
             return
 

@@ -445,7 +445,7 @@ class VoiceMenuShared:
         label = ""
         if len(voices) > 1:
             printt(f"Enter voice sample number to remove {COL_DIM}(or \"all\" to clear all)")
-            inp = ask.ask()
+            inp = ask.ask_input()
             if not inp:
                 return False
             if inp.lower() in {"a", "all"}:
@@ -469,7 +469,7 @@ class VoiceMenuShared:
         return not ProjectVoiceUtil.get_voice_values(state.project, tts_type)
 
     @staticmethod
-    def ask_voice_file(default_dir_path: str, tts_type: TtsModelType, message_override: str="") -> str:
+    def ask_voice_file(initial_dir: str, tts_type: TtsModelType, message_override: str="") -> str:
         """
         Asks for voice file path.
         Validates file and shows error prompt if necessary.
@@ -484,11 +484,14 @@ class VoiceMenuShared:
             console_message = ui.get("voice_path_console", "")
             requestor_title = ui.get("voice_path_requestor", "")
 
+        # We set "prefill" here to a directory, not a file path
+        # The hope is that this is more of a convenience than a hinderance
         path = ask.ask_file_path(
              console_message=console_message,
              dialog_title=requestor_title,
              filetypes=FILE_REQUESTOR_SOUND_TYPES,
-             initialdir=default_dir_path
+             initialdir=initial_dir,
+             prefill=initial_dir
         )
         if not path:
             return ""
@@ -525,9 +528,9 @@ class VoiceMenuShared:
         is_required: bool=False
     ) -> tuple[MenuItem, MenuItem]:
         """
-        Creates pair of MenuItems for voice path and voice transcript for "SGL-Omni mode"
-        (specifically for cases where the server API for the given TTS model does NOT
-        support handling data URI).
+        Creates pair of MenuItems for voice path and voice transcript.
+        For use with SGL-Omni mode, for cases where the server API for the given TTS model
+        does NOT support handling data URI.
         """
 
         def make_path_label(_) -> str:
@@ -625,7 +628,7 @@ class VoiceMenuShared:
         if hint:
             hints.show_hint_if_necessary(state.prefs, hint)
 
-        ask.ask_number(
+        ask.ask_number_and_save(
             state.project,
             attr,
             prompt,
@@ -633,7 +636,8 @@ class VoiceMenuShared:
             max_value,
             default_value,
             "Value set:",
-            is_int=False
+            is_int=False,
+            is_minus_one_default=True,
         )
 
     @staticmethod
@@ -755,7 +759,7 @@ class VoiceMenuShared:
             prompt += f"\n{COL_DIM}(Note, audio generations are not idempotent when using batch mode): "
 
         def on_item(_: State, __: MenuItem) -> None:
-            ask.ask_number(
+            ask.ask_number_and_save(
                 saveable=state.project,
                 attr=attr,
                 prompt=prompt,
@@ -782,9 +786,9 @@ class VoiceMenuShared:
             current_target: str,
             callback: Callable[[Project, str], None]
     ) -> None:
-
+        """ Gets line text input from user for a so-called "target" (ie, repo id or concrete file path) """
         printt(prompt)
-        new_target = ask.ask(lower=False)
+        new_target = ask.ask_input(prefill=current_target, lower=False)
         if not new_target:
             return
 
@@ -853,9 +857,17 @@ class VoiceMenuShared:
                 label += f" {COL_DIM}(currently: {COL_ACCENT}{value}{COL_DIM})"
             return label
 
+        def apply_preset_if_changed(target: str) -> None:
+            if target_util.is_same_target(current_target, target):
+                return
+            apply_target(target)
+
         items = []
         for i, target in enumerate(preset_targets):
-            item = MenuItem(make_preset_label(target), lambda _, __, target=target: apply_target(target))
+            item = MenuItem(
+                make_preset_label(target),
+                lambda _, __, target=target: apply_preset_if_changed(target),
+            )
             if sublabels:
                 item.sublabel = sublabels[i]
             items.append(item)
@@ -892,7 +904,7 @@ class VoiceMenuShared:
             f"Rolling continuation {COL_DIM}(experimental)",
             subheading=subheading
         )
-        ask.ask_number(
+        ask.ask_number_and_save(
             state.project, attribute_name, "Enter value",
             min_value=0, max_value=max_value, default_value=0,
             success_prefix="Rolling continuation num segments set to", is_int=True

@@ -96,7 +96,11 @@ class VoicePocketMenu:
 def select_predefined_voice(state: State) -> None:
     voices = PocketBaseModel.PREDEFINED_VOICES
 
-    current = state.project.pocket_predefined_voice or None
+    current = (
+        state.project.pocket_predefined_voice
+        if not state.project.pocket_voice_file_name
+        else None
+    ) or None
 
     def on_select(voice: str) -> None:
         state.project.pocket_predefined_voice = voice

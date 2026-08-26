@@ -12,6 +12,7 @@ import sys
 from typing import Callable
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Saveable
+from tts_audiobook_tool.ask_advanced import AskAdvanced
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.util import *
@@ -33,58 +34,47 @@ terminal_escape_sequence_pattern = re.compile(
 )
 
 
-def ask(message: str="", lower: bool=True, extra_line: bool=True) -> str:
+def ask_input(message: str="", lower: bool=True, extra_line: bool=True, prefill: str="") -> str:
     """
-    App-standard way of getting user line input.
+    App-standard way of getting user text input.
+    Should behave like a drop-in replacement for `input()`.
     Prints extra line after the input by default.
     """
+
     if not DEV:
         _clear_input_buffer()
 
     message = f"{message}{Ansi.RESET}{COL_INPUT}"
+
+    prefill = prefill.strip()
+    if lower:
+        prefill = prefill.lower()
+
     try:
-        inp = _strip_terminal_escape_sequences(input(message)).strip()
-    except (ValueError, EOFError):
+        inp = AskAdvanced.ask(message, prefill)
+
+    except Exception as e:
+        # If running env cannot handle app's standard input mechanism, this is in the almost-fatal category
+        # Might as well print out error in-place
+        printt(COL_ERROR + make_error_string(e))
         return ""
+
+    inp = _strip_terminal_escape_sequences(inp)
+    inp = inp.strip()
     if lower:
         inp = inp.lower()
+
     print(Ansi.RESET, end="")
     if extra_line:
         printt()
+
     return inp
 
+def ask_multiline() -> str:
+    """ App standard way of getting multi-line string input from user. """
+    return sys.stdin.read().strip()
 
-def ask_enter_to_continue(value: str="", is_replacement: bool=False) -> None:
-    if is_replacement:
-        message = value
-    else:
-        message = f"{value}\nPress enter: "
-
-    if can_hotkey:
-        while True:
-            key = ask_hotkey(message)
-            if key in ["\r", "\n"]:
-                printt()
-                return
-            message = ""
-    else:
-        ask(message)
-
-
-def ask_confirm(message: str="") -> bool:
-    if not message:
-        message = f"Press {make_hotkey_string('Y')} to confirm: "
-    inp = ask_hotkey(message)
-    if can_hotkey:
-        printt()
-    return inp == "y"
-
-
-def ask_error(error_message: str) -> None:
-    printt(f"{COL_ERROR}{error_message}")
-    printt()
-    ask_enter_to_continue()
-
+# ---
 
 def ask_hotkey(message: str="", lower: bool=True) -> str:
     """
@@ -121,17 +111,49 @@ def ask_hotkey(message: str="", lower: bool=True) -> str:
 
     return s
 
+def ask_enter_to_continue(value: str="", is_replacement: bool=False) -> None:
+    if is_replacement:
+        message = value
+    else:
+        message = f"{value}\nPress enter: "
 
-def ask_multiline() -> str:
-    """App standard way of getting multi-line string input from user."""
-    return sys.stdin.read().strip()
+    if can_hotkey:
+        while True:
+            key = ask_hotkey(message)
+            if key in ["\r", "\n"]:
+                printt()
+                return
+            message = ""
+    else:
+        ask_input(message)
 
+
+def ask_confirm(message: str="") -> bool:
+    if not message:
+        message = f"Press {make_hotkey_string('Y')} to confirm: "
+    inp = ask_hotkey(message)
+    if can_hotkey:
+        printt()
+    return inp == "y"
+
+
+def ask_error(error_message: str) -> None:
+    """
+    App-standard way of displaying a user-facing error message.
+    Prints user-facing error message in red plus blank line, and asks for enter key
+    """
+    printt(f"{COL_ERROR}{error_message}")
+    printt()
+    ask_enter_to_continue()
+
+# ---
 
 def ask_file_path(
         console_message: str,
         dialog_title: str,
         filetypes: list[tuple[str, str]] = [],
-        initialdir: str=""
+        initialdir: str="",
+        prefill: str=""
 ) -> str:
     """
     Gets a file path string from user using either gui file requestor or input().
@@ -144,7 +166,7 @@ def ask_file_path(
         if isinstance(path, tuple):
             path = ""
     except Exception:
-        path = ask_path_input(console_message)
+        path = ask_path_input(console_message, prefill=prefill)
         did_tk = False
 
     if not path:
@@ -155,7 +177,6 @@ def ask_file_path(
         printt(path)
     printt()
     return path
-
 
 def ask_dir_path(
         console_message: str,
@@ -186,17 +207,16 @@ def ask_dir_path(
     printt()
     return path
 
-
-def ask_path_input(message: str="") -> str:
+def ask_path_input(message: str="", prefill: str="") -> str:
     """
-    Get file/directory path, strip outer quotes.
+    Get file/directory path. Strip outer quotes if necessary.
     """
     printt(message)
-    inp = ask("")
-    return text_util.strip_quotes_around_path_string(inp)
+    inp = ask_input(lower=False, prefill=prefill)
+    inp = text_util.strip_quotes_around_path_string(inp)
+    return inp
 
-
-def ask_number(
+def ask_number_and_save(
     saveable: Saveable,
     attr: str,
     prompt: str,
@@ -205,8 +225,11 @@ def ask_number(
     default_value: float,
     success_prefix: str,
     is_int: bool=False,
-    print_range_info: bool=True
+    print_range_info: bool=True,
+    is_minus_one_default: bool=False,
 ) -> None:
+    """
+    """
     from tts_audiobook_tool.prefs import Prefs
     from tts_audiobook_tool.project import Project
     if not isinstance(saveable, Project) and not isinstance(saveable, Prefs):
@@ -220,16 +243,26 @@ def ask_number(
         max_value = int(max_value)
         default_value = int(default_value)
 
+    stored_value = getattr(saveable, attr)
+    is_effective_default_prefill = is_minus_one_default and stored_value == -1
+    prefill = default_value if is_effective_default_prefill else stored_value
+    if is_int:
+        prefill = int(prefill) # for good measure
+    prefill = str(prefill)
+
     prompt = prompt.strip()
     if not prompt.endswith(":"):
         prompt += ":"
-
     if print_range_info:
         prompt += " " + f"{COL_DIM}(valid range: {min_value}-{max_value}; default: {default_value})"
-
     printt(prompt)
-    value = ask()
+
+    value = ask_input(prefill=prefill)
     if not value:
+        return
+    if value == prefill:
+        # Do not save an unchanged displayed value. This also preserves a
+        # stored "use default" sentinel when its effective value was shown.
         return
     try:
         value = float(value)
@@ -238,7 +271,10 @@ def ask_number(
         return
     if is_int:
         value = int(value)
-    if not (min_value <= value <= max_value):
+    if value == stored_value:
+        return
+    is_default_sentinel = is_minus_one_default and value == -1
+    if not is_default_sentinel and not (min_value <= value <= max_value):
         print_feedback("Out of range", is_error=True)
         return
 
@@ -247,67 +283,41 @@ def ask_number(
 
     print_feedback(success_prefix, str(value))
 
-
-def ask_number_and_save(
-    saveable: Saveable,
-    prompt: str,
-    lb: float,
-    ub: float,
-    project_attr_name: str,
-    success_prefix: str,
-    is_int: bool=False
-) -> None:
-    if not hasattr(saveable, project_attr_name):
-        raise ValueError(f"No such attribute {project_attr_name}")
-
-    if is_int:
-        lb = int(lb)
-        ub = int(ub)
-
-    value = ask(prompt.strip() + " ")
-    if not value:
-        return
-    try:
-        value = float(value)
-    except Exception:
-        print_feedback("Bad value", is_error=True)
-        return
-    if is_int:
-        value = int(value)
-    if not (lb <= value <= ub):
-        print_feedback("Out of range", is_error=True)
-        return
-
-    setattr(saveable, project_attr_name, value)
-    saveable.save()
-    print_feedback(success_prefix, str(value))
-
-
 def ask_string_and_save(
     saveable: Saveable,
     prompt_line: str,
-    project_attr_name: str,
+    attr: str,
     success_prefix: str,
     loop_on_error: bool=False,
     validator: Callable[[str], str] | None = None,
     normalizer: Callable[[str], str] | None = None,
 ) -> bool:
     """
-    Helper to ask for a string value and save it to the project.
+    Helper to ask for a string value and save it to the project (Saveable).
+    Prefills input with current value.
+
     :param validator: Takes in the user input string and returns error string if invalid (optional)
     :param normalizer: Normalizes the user input before validation and saving (optional)
     :return: Whether a value was successfully saved
     """
-    if not hasattr(saveable, project_attr_name):
-        raise ValueError(f"No such attribute {project_attr_name}")
+    if not hasattr(saveable, attr):
+        raise ValueError(f"No such attribute {attr}")
+
+    current_value = getattr(saveable, attr)
+    prefill = current_value
 
     while True:
         printt(prompt_line)
-        value = ask(lower=False)
+        value = ask_input(prefill=prefill, lower=False)
+        prefill = "" # ie, only prefill on first try
         if not value:
+            return False
+        if value == current_value:
             return False
         if normalizer:
             value = normalizer(value)
+        if value == current_value:
+            return False
         if validator:
             err = validator(value)
             if err:
@@ -317,7 +327,7 @@ def ask_string_and_save(
                 return False
         break
 
-    setattr(saveable, project_attr_name, value)
+    setattr(saveable, attr, value)
     saveable.save()
     print_feedback(success_prefix, value)
     return True
@@ -422,7 +432,7 @@ def _read_hotkey_posix() -> str:
 
 
 def _ask_hotkey_vanilla(message: str="", lower: bool=True) -> str:
-    inp = ask(message, lower, extra_line=True)
+    inp = ask_input(message, lower, extra_line=True)
     if inp:
         inp = inp[0]
     return inp

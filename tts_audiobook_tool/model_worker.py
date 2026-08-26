@@ -678,6 +678,9 @@ def _model_worker_main(
                 from tts_audiobook_tool.tts import Tts
 
                 state = _make_worker_state(command)
+                # The project on disk can intentionally lag the interactive
+                # state while a custom model or adapter is being validated.
+                Tts.set_model_params(command.model_params)
                 instance = Tts.get_instance()
                 device_type = instance.get_device_type()
                 device = device_type.value if device_type is not None else ""
@@ -1131,6 +1134,19 @@ class ModelWorker:
         return event
 
     @classmethod
+    def unload_models_blocking(cls) -> str:
+        """Stop the model worker so all accelerator resources are released.
+
+        Clearing Python references inside a long-lived CUDA process is only
+        best-effort: library-owned references and the CUDA allocator/context can
+        keep VRAM resident. Process exit is the isolation boundary that makes
+        the user-facing unload operation deterministic. The next model command
+        starts a fresh worker lazily.
+        """
+        cls.shutdown()
+        return "" if not cls.is_alive() else "Couldn't stop model worker"
+
+    @classmethod
     def clear_models_blocking(cls) -> str:
         error = cls.start()
         if error:
@@ -1331,6 +1347,8 @@ class ModelWorker:
 
     @classmethod
     def inspect_tts_blocking(cls, state: Any) -> tuple[TtsInspected | None, str]:
+        from tts_audiobook_tool.tts import Tts
+
         error = cls.start()
         if error:
             return None, error
@@ -1357,6 +1375,7 @@ class ModelWorker:
                     operation_id,
                     state.project.dir_path,
                     settings,
+                    Tts.get_model_params_using_project(state.project),
                 )
             )
         result = cls._wait_for_blocking_result(operation_id, TtsInspected)

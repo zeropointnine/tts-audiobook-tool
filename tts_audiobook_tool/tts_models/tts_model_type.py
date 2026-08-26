@@ -47,7 +47,7 @@ class TtsModelSpec(NamedTuple):
     max_words_default: int
     # The app's recommended max-words-per-segment range (min, max)
     max_words_reco_range: tuple[int, int]
-    
+
     # Project attribute of voice clone file name (when applicable)
     voice_target_attr: str
     # Does the model require a voice clone sample to generate audio
@@ -62,7 +62,7 @@ class TtsModelSpec(NamedTuple):
     can_stream: bool
     # Should semantic trim at end of last word
     # Doing so is generally redundant and risks unintended partial cropping of end of last word
-    # due to whisper timing imprecision, but can do more good than harm if model rly likes to 
+    # due to whisper timing imprecision, but can do more good than harm if model rly likes to
     # hallucinate past the end of teh prompt (eg, for Chatterbox)
     semantic_trim_last: bool
     # Does the model require FFmpeg shared libraries (dll/so/dylib), not just the ffmpeg executable
@@ -75,7 +75,9 @@ class TtsModelSpec(NamedTuple):
     requirements_file_name: str
     # ui-related strings and values
     ui: dict
-    # List of string replace pairs 
+    # Case-sensitive substrings identifying worker console lines to be filtered out of output history
+    output_filters: list[str]
+    # List of string replace pairs
     # Primarily used for punctuation marks that models might either disregard or trigger them in other ways
     substitutions: list[ tuple[str, str] ]
 
@@ -119,6 +121,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "",
             "project_links": ["https://www.example.com"]
         },
+        output_filters=[],
         substitutions=[]
     )
 
@@ -149,6 +152,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/resemble-ai/chatterbox", "https://huggingface.co/ResembleAI"]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ")
         ]
@@ -181,6 +185,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip (up to 10s)",
             "project_links": ["https://github.com/fishaudio/fish-speech", "https://huggingface.co/fishaudio/s1-mini"]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
         ]
@@ -213,6 +218,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip (10-30s)",
             "project_links": ["https://github.com/fishaudio/fish-speech", "https://huggingface.co/fishaudio/s2-pro"]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
         ]
@@ -244,11 +250,12 @@ class TtsModelType(Enum):
             "voice_path_console": "Enter voice clone audio clip file path (10-30s): ",
             "voice_path_requestor": "Select voice clone audio clip (10-30s)",
             "project_links": [
-                "https://github.com/fishaudio/fish-speech", 
-                "https://huggingface.co/fishaudio/s2-pro", 
+                "https://github.com/fishaudio/fish-speech",
+                "https://huggingface.co/fishaudio/s2-pro",
                 "https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html"
             ]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ") # em dash does not reliably induce caesura
         ]
@@ -281,6 +288,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/zai-org/GLM-TTS", "https://huggingface.co/zai-org/GLM-TTS"]
         },
+        output_filters=[],
         substitutions=[
             (";", ","), # semicolon generates random syllable
             ("\u2014", ", "), ("\u2500", ", "), # em-dash doesn't create caesura
@@ -315,6 +323,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/boson-ai/higgs-audio", "https://huggingface.co/bosonai/higgs-audio-v2-generation-3B-base"]
         },
+        output_filters=[],
         substitutions=[ (
             "\u2014", ", "), ("\u2500", ", ")
         ]
@@ -346,10 +355,11 @@ class TtsModelType(Enum):
             "voice_path_console": "Enter voice clone audio clip file path: ",
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": [
-                "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b", 
+                "https://huggingface.co/bosonai/higgs-audio-v3-tts-4b",
                 "https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html"
             ]
         },
+        output_filters=[],
         substitutions=[ (
             "\u2014", ", "), ("\u2500", ", ")
         ]
@@ -382,6 +392,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/index-tts/index-tts", "https://huggingface.co/IndexTeam/IndexTTS-2"]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", "), # em-dash oftentimes doesn't create caesura
             ("\u2013", ", ") # en-dash oftentimes generates random syllable
@@ -415,6 +426,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip (recommended up to 15s)",
             "project_links": ["https://github.com/ysharma3501/MiraTTS", "https://huggingface.co/YatharthS/MiraTTS"]
         },
+        output_filters=["smem_size"], # warning printout that gets spammed like crazy; couldn't defeat
         substitutions=[
             # semicolon doesn't create caesura, but neither does comma reliably
             # em-dash and space-en-dash-space seems okay
@@ -449,6 +461,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/OpenMOSS/MOSS-TTS", "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5"]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ")
         ]
@@ -480,11 +493,12 @@ class TtsModelType(Enum):
             "voice_path_console": "",
             "voice_path_requestor": "",
             "project_links": [
-                "https://github.com/OpenMOSS/MOSS-TTS", 
-                "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5", 
+                "https://github.com/OpenMOSS/MOSS-TTS",
+                "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5",
                 "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"
             ]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", ")
         ]
@@ -499,7 +513,7 @@ class TtsModelType(Enum):
         file_tag="omnivoice",
         sample_rate=24_000,
         max_words_default=40,
-        max_words_reco_range=(40, 80), 
+        max_words_reco_range=(40, 80),
         voice_target_attr="omnivoice_voice_file_name",
         requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
         voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
@@ -517,6 +531,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip (3-10s recommended, up to 15s)",
             "project_links": ["https://github.com/k2-fsa/OmniVoice", "https://huggingface.co/k2-fsa/OmniVoice"]
         },
+        output_filters=[],
         substitutions=[
             # Generally handles caesura-related punctuation decently and with natural variations in duration
         ]
@@ -549,6 +564,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip (up to 15s)",
             "project_links": ["https://github.com/edwko/OuteTTS", "https://huggingface.co/OuteAI"]
         },
+        output_filters=[],
         substitutions=[
             # fyi u2500 = "box drawing light horizontal". have seen it in the wild used as an em-dash.
             ("\u2014", ", "), ("\u2500", ", ")
@@ -583,6 +599,7 @@ class TtsModelType(Enum):
             "project_links": ["https://github.com/kyutai-labs/pocket-tts", "https://huggingface.co/kyutai/pocket-tts"],
             "opt_in_url": "https://github.com/kyutai-labs/pocket-tts" # special case
         },
+        output_filters=[],
         substitutions=[
             # Generally handles caesura-related punctuation decently and with natural variations in duration
         ]
@@ -615,6 +632,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/QwenLM/Qwen3-TTS", "https://huggingface.co/collections/Qwen/qwen3-tts"]
         },
+        output_filters=[],
         substitutions=[] # Does well w/ various punctuation
     )
 
@@ -649,6 +667,7 @@ class TtsModelType(Enum):
                 "https://sgl-project.github.io/sglang-omni/cookbook/qwen3_tts.html"
             ]
         },
+        output_filters=[],
         substitutions=[] # Does well w/ various punctuation
     )
 
@@ -679,6 +698,7 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/vibevoice-community/VibeVoice"]
         },
+        output_filters=[],
         substitutions=[
             ("\u2014", ", "), ("\u2500", ", "), (";", ","), # em dash and semicolon oftentimes don't create caesuras
             ("\u2019", "'"), # fancy apostrophe causes rest of word to not be spoken
@@ -699,7 +719,7 @@ class TtsModelType(Enum):
 
         # Must disambiguate against (future) zonos2_voice_file_name attribute
         # due to server lack of support for transcript
-        voice_target_attr="zonos2_server_voice_file_name", 
+        voice_target_attr="zonos2_server_voice_file_name",
 
         requires_voice=False,
         voice_transcript_attr="",
@@ -721,8 +741,9 @@ class TtsModelType(Enum):
                 "https://sgl-project.github.io/sglang-omni/cookbook/zonos2.html"
             ]
         },
+        output_filters=[],
         substitutions=[
-            # Behaves well 
+            # Behaves well
         ]
     )
 
@@ -746,7 +767,7 @@ class TtsModelType(Enum):
     @cache
     def all_file_tags() -> set[str]:
          return { item.value.file_tag for item in TtsModelType }
-    
+
     @staticmethod
     @cache
     def get_items_by_backend(kind: TtsBackendKind) -> list[TtsModelType]:

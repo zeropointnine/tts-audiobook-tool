@@ -27,7 +27,7 @@ class VoiceOuteMenu:
             return f"Temperature {make_currently_string(value)}"
 
         def on_temperature(_: State, __: MenuItem) -> None:
-            ask.ask_number(
+            ask.ask_number_and_save(
                 project,
                 "oute_temperature",
                 "Enter temperature:",

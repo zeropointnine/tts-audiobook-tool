@@ -426,7 +426,7 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
 
     printt("Enter file numbers to create:")
     printt(f"{COL_DIM}(For example: \"1, 2, 4\" or  \"2-5\", or \"all\")")
-    inp = ask.ask()
+    inp = ask.ask_input()
 
     if not inp:
         return None

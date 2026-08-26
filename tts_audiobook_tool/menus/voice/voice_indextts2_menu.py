@@ -82,8 +82,8 @@ class VoiceIndexTts2Menu:
                 MenuItem(make_emo_voice_label, on_emo_voice, superlabel=VOICE_ADVANCED_SUPERLABEL)
             )
             if state.project.indextts2_emo_voice_file_name:
-                items.append( 
-                    MenuItem("Clear emotion voice sample", on_clear_emo) 
+                items.append(
+                    MenuItem("Clear emotion voice sample", on_clear_emo)
                 )
             items.append(
                 MenuItem(make_vector_label, lambda _, __: ask_vector(project))
@@ -144,7 +144,7 @@ class VoiceIndexTts2Menu:
                 state.project.indextts2_use_fp16 = item.data
                 state.project.save()
                 # Sync static value
-                Tts.set_model_params_using_project(state.project) 
+                Tts.set_model_params_using_project(state.project)
             print_feedback(f"FP16 set to:", str(state.project.indextts2_use_fp16))
             return True
 
@@ -171,7 +171,7 @@ def ask_vector(project: Project) -> None:
     s += f'{COL_DIM}Enter \"none\" to clear{COL_DEFAULT}'
     printt(s)
     printt()
-    inp = ask.ask("")
+    inp = ask.ask_input("")
     if not inp:
         return
     if inp == "none":
@@ -181,6 +181,8 @@ def ask_vector(project: Project) -> None:
         if isinstance(value, str):
             ask.ask_error(value)
             return
+    if value == project.indextts2_emo_vector:
+        return
     project.indextts2_emo_vector = value
     project.save()
     print_feedback("Emotion vector set:", ProjectVoiceUtil.emo_vector_to_string(project))
