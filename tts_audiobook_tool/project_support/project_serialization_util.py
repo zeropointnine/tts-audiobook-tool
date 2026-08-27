@@ -198,6 +198,11 @@ class ProjectSerializationUtil:
             value = 1
         d['version'] = value
 
+        normalize_by_id(
+            'current_model_type',
+            lambda value: value if isinstance(value, TtsModelType) else TtsModelType.get_by_id(value),
+            TtsModelType.NONE,
+        )
         normalize_by_id('segmentation_strategy', SegmentationStrategy.from_id, PROJECT_DEFAULT_SEGMENTATION_STRATEGY)
 
         normalize_int(
@@ -605,6 +610,7 @@ class ProjectSerializationUtil:
         return {
             "dir_path": project.dir_path,
             "version": project.version,
+            "current_model_type": project.current_model_type.value.id,
 
             "language_code": project.language_code,
 

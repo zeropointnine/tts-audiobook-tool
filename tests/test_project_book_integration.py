@@ -11,6 +11,7 @@ from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FI
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
+from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
@@ -41,6 +42,12 @@ class TestProjectBookIntegration(unittest.TestCase):
         }
         if extra:
             payload.update(extra)
+        with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "w", encoding="utf-8") as file:
+            json.dump(payload, file)
+
+    def write_complete_project_json(self, project_dir: str, current_model_type: object) -> None:
+        payload = ProjectSerializationUtil.to_project_json_dict(Project())
+        payload["current_model_type"] = current_model_type
         with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "w", encoding="utf-8") as file:
             json.dump(payload, file)
 
@@ -162,6 +169,104 @@ class TestProjectBookIntegration(unittest.TestCase):
             if call.args
         ))
         continue_mock.assert_called_once_with()
+
+    def test_project_current_model_type_defaults_and_normalizes_by_id(self):
+        self.assertEqual(Project().current_model_type, TtsModelType.NONE)
+        self.assertEqual(
+            Project.model_validate({"current_model_type": TtsModelType.CHATTERBOX.value.id}).current_model_type,
+            TtsModelType.CHATTERBOX,
+        )
+        self.assertEqual(
+            Project.model_validate({"current_model_type": TtsModelType.CHATTERBOX}).current_model_type,
+            TtsModelType.CHATTERBOX,
+        )
+        self.assertEqual(
+            Project.model_validate({"current_model_type": "unknown-model"}).current_model_type,
+            TtsModelType.NONE,
+        )
+
+    def test_project_current_model_type_serializes_using_id(self):
+        project = Project.model_validate({"current_model_type": TtsModelType.CHATTERBOX.value.id})
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
+
+        self.assertEqual(payload["current_model_type"], TtsModelType.CHATTERBOX.value.id)
+
+    def test_project_save_stamps_current_runtime_model_type(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            project = Project(dir_path=project_dir)
+
+            with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA):
+                error = project.save()
+
+            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
+                payload = json.load(file)
+
+        self.assertEqual(error, "")
+        self.assertEqual(project.current_model_type, TtsModelType.MIRA)
+        self.assertEqual(payload["current_model_type"], TtsModelType.MIRA.value.id)
+
+    def test_project_save_does_not_replace_current_model_type_with_none(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            project = Project.model_validate({
+                "dir_path": project_dir,
+                "current_model_type": TtsModelType.CHATTERBOX.value.id,
+            })
+
+            with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+                error = project.save()
+
+            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
+                payload = json.load(file)
+
+        self.assertEqual(error, "")
+        self.assertEqual(project.current_model_type, TtsModelType.CHATTERBOX)
+        self.assertEqual(payload["current_model_type"], TtsModelType.CHATTERBOX.value.id)
+
+    def test_project_load_reports_different_previous_model(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            self.write_complete_project_json(project_dir, TtsModelType.CHATTERBOX.value.id)
+
+            with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA), \
+                    patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
+                result = ProjectLoadUtil.load_using_dir_path(project_dir)
+
+        self.assertIsInstance(result, Project)
+        continue_mock.assert_called_once_with(
+            "FYI:\nThe last time this project was used, it was with the Chatterbox TTS model."
+        )
+
+    def test_project_load_skips_previous_model_report_when_not_applicable(self):
+        cases = [
+            ("matching model", TtsModelType.CHATTERBOX.value.id, TtsModelType.CHATTERBOX, True),
+            ("previous model is none", TtsModelType.NONE.value.id, TtsModelType.MIRA, True),
+            ("previous model id is invalid", "unknown-model", TtsModelType.MIRA, True),
+            ("noninteractive load", TtsModelType.CHATTERBOX.value.id, TtsModelType.MIRA, False),
+        ]
+        for label, stored_type, runtime_type, prompt_on_warnings in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as project_dir:
+                self.write_complete_project_json(project_dir, stored_type)
+                with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=runtime_type), \
+                        patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
+                    result = ProjectLoadUtil.load_using_dir_path(
+                        project_dir,
+                        prompt_on_warnings=prompt_on_warnings,
+                    )
+
+                self.assertIsInstance(result, Project)
+                continue_mock.assert_not_called()
+
+    def test_project_load_skips_previous_model_report_without_proper_name(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            self.write_complete_project_json(project_dir, TtsModelType.CHATTERBOX.value.id)
+
+            with patch.dict(TtsModelType.CHATTERBOX.value.ui, {}, clear=True), \
+                    patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA), \
+                    patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
+                result = ProjectLoadUtil.load_using_dir_path(project_dir)
+
+        self.assertIsInstance(result, Project)
+        continue_mock.assert_not_called()
 
     def test_project_to_dict_serializes_single_voice_item_as_string_and_multiple_as_list(self):
         project = Project.model_validate({

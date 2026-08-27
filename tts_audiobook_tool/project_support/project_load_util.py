@@ -5,7 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, SegmentationStrategy
+from tts_audiobook_tool.app_support import hints
+from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, Hint, SegmentationStrategy
 from tts_audiobook_tool.app_types.book_serialization import BOOK_FORMAT, book_from_project_text_json_dict, get_project_text_format
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
@@ -83,6 +84,28 @@ class ProjectLoadUtil:
         except Exception as e:
             return f"Failed to parse project: {e}"
 
+        from tts_audiobook_tool.tts import Tts
+
+        previous_model_type = project.current_model_type
+        proper_name = previous_model_type.value.ui.get("proper_name")
+        if (
+            prompt_on_warnings
+            and previous_model_type != TtsModelType.NONE
+            and previous_model_type != Tts.get_type()
+            and proper_name
+        ):
+            hints.show_hint(
+                Hint(
+                    key="",
+                    heading="FYI",
+                    text=(
+                        f"This project was last used with the {proper_name} model,\n"
+                        "which differs from the model currently in use."
+                    )
+                ),
+                and_prompt=True
+            )
+
         if inline_text_source:
             err = ProjectTextIOUtil.save_book(project)
             if not err:
@@ -110,8 +133,6 @@ class ProjectLoadUtil:
             if err:
                 return err
             L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
-
-        from tts_audiobook_tool.tts import Tts
 
         if Tts.get_type() == TtsModelType.OUTE:
             ProjectVoiceUtil.load_oute_voice_json(project)

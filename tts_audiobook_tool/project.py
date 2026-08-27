@@ -13,6 +13,7 @@ from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseModel
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauses, ReasonPauseTypes
@@ -101,6 +102,7 @@ class Project(BaseModel):
 
     dir_path: str = ""
     version: int = PROJECT_SPEC_VERSION
+    current_model_type: TtsModelType = TtsModelType.NONE
 
     language_code: str = PROJECT_DEFAULT_LANGUAGE
 
@@ -325,8 +327,13 @@ class Project(BaseModel):
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
 
         def make_payload() -> dict:
-            # Ensure project version is up-to-date while holding the project save lock.
+            # Ensure runtime metadata is up-to-date while holding the project save lock.
+            from tts_audiobook_tool.tts import Tts
+
             super(Project, self).__setattr__('version', PROJECT_SPEC_VERSION)
+            current_model_type = Tts.get_type()
+            if current_model_type != TtsModelType.NONE:
+                super(Project, self).__setattr__('current_model_type', current_model_type)
             self.normalize_chapter_mode()
             return ProjectSerializationUtil.to_project_json_dict(self)
 
