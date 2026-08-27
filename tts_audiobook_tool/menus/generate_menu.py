@@ -143,7 +143,7 @@ class GenerateMenu:
             state.project
         )
         if range_save_error:
-            print_feedback(range_save_error, is_error=True)
+            ask.ask_error(range_save_error)
 
         # Loop is required to re-run editor after "quick-gen"
         quick_gen_index: int | None = None
@@ -155,16 +155,16 @@ class GenerateMenu:
                 )
             )
             if not isinstance(run_result, ContentAppCompleted):
-                print_feedback(run_result.message, is_error=True)
+                ask.ask_error(run_result.message)
                 return
 
             editor_result = run_result.result
             if isinstance(editor_result, EditorSaveFailed):
-                print_feedback(editor_result.error, is_error=True)
+                ask.ask_error(editor_result.error)
                 return
             if isinstance(editor_result, QuickGenerationRequested):
                 if editor_result.save_error:
-                    print_feedback(editor_result.save_error, is_error=True)
+                    ask.ask_error(editor_result.save_error)
                 quick_gen_index = editor_result.phrase_index
                 GenerateUtil.do_quick_generate(
                     state, quick_gen_index
@@ -383,7 +383,7 @@ def do_generate(state: State) -> None:
     # Check blockers
     error = readiness.get_generate_blocker_text(state, verbose=True)
     if error:
-        print_feedback(error, is_error=True)
+        ask.ask_error(error)
         return
 
     # Get indices to generate, and check if already generated

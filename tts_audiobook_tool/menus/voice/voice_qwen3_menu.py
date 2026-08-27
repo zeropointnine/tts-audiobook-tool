@@ -316,18 +316,14 @@ def apply_model_and_validate(
 
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
-        printt()
-        printt(f"{COL_ERROR}Contents at {target} appear to be invalid:")
-        printt(f"{COL_ERROR}{error}")
-        printt()
         revert()
-        ask.ask_enter_to_continue()
+        ask.ask_error(f"\nContents at {target} appear to be invalid:\n{error}")
         return
 
     metadata = inspection.metadata or {}
     inspected_type = str(metadata.get("model_type", ""))
     if not bool(metadata.get("is_model_type_supported", True)):
-        print_feedback(f"Unsupported type: {inspected_type}", is_error=True)
+        ask.ask_error(f"Unsupported type: {inspected_type}")
         revert()
         ask.ask_enter_to_continue()
         return

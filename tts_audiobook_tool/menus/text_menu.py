@@ -90,10 +90,10 @@ class TextMenu:
         """Run one text editor and present its result in the surrounding menu."""
         run_result = run_content_textual_app(TextEditor(state.project))
         if not isinstance(run_result, ContentAppCompleted):
-            print_feedback(run_result.message, is_error=True)
+            ask.ask_error(run_result.message)
             return
         if isinstance(run_result.result, EditorSaveFailed):
-            print_feedback(run_result.result.error, is_error=True)
+            ask.ask_error(run_result.result.error)
         elif isinstance(run_result.result, EditorSaved):
             print_feedback("Saved changes", long_pause=True)
 
@@ -197,7 +197,7 @@ class TextMenu:
                 inp = inp + "}"
             result = ProjectUtil.parse_word_substitutions_json_string(inp)
             if isinstance(result, str):
-                print_feedback(result, is_error=True)
+                ask.ask_error(result)
                 return
             if result == state.project.word_substitutions:
                 return

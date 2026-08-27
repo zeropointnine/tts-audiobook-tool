@@ -58,12 +58,11 @@ def test_preflight_fails_and_reports_blockers(monkeypatch) -> None:
         readiness, "get_chat_blockers",
         lambda state: [SimpleNamespace(verbose="need a model", brief="no model")],
     )
-    monkeypatch.setattr(conversation_module, "print_feedback",
-                       lambda message, is_error=False: feedback.append((message, is_error)))
+    monkeypatch.setattr(conversation_module.ask, "ask_error", feedback.append)
 
     state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
     assert Conversation._run_preflight_checks(state) is False
-    assert feedback == [("need a model", True)]
+    assert feedback == ["need a model"]
 
 
 def test_preflight_fails_when_pre_inference_hints_block(monkeypatch) -> None:
@@ -96,14 +95,10 @@ def test_preflight_stops_on_worker_model_error(monkeypatch) -> None:
         lambda state: (None, "oom"),
     )
     feedback: list = []
-    monkeypatch.setattr(
-        conversation_module,
-        "print_feedback",
-        lambda message, is_error=False: feedback.append((message, is_error)),
-    )
+    monkeypatch.setattr(conversation_module.ask, "ask_error", feedback.append)
     state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
     assert Conversation._run_preflight_checks(state) is False
-    assert feedback == [("oom", True)]
+    assert feedback == ["oom"]
 
 
 def test_preflight_fails_on_model_blockers_after_warm_up(monkeypatch) -> None:
@@ -118,12 +113,11 @@ def test_preflight_fails_on_model_blockers_after_warm_up(monkeypatch) -> None:
         lambda state: (SimpleNamespace(blocking_issues=("bad model detail",)), ""),
     )
     feedback: list = []
-    monkeypatch.setattr(conversation_module, "print_feedback",
-                       lambda message, is_error=False: feedback.append((message, is_error)))
+    monkeypatch.setattr(conversation_module.ask, "ask_error", feedback.append)
 
     state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
     assert Conversation._run_preflight_checks(state) is False
-    assert feedback == [("bad model detail", True)]
+    assert feedback == ["bad model detail"]
 
 
 def test_preflight_success(monkeypatch) -> None:

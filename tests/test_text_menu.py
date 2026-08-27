@@ -52,45 +52,33 @@ def test_text_menu_reports_saved_editor_result(monkeypatch) -> None:
 
 
 def test_text_menu_reports_save_failure(monkeypatch) -> None:
-    feedback_calls: list[tuple[str, bool]] = []
+    feedback_calls: list[str] = []
     stub_editor_construction(monkeypatch)
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
         lambda _: ContentAppCompleted(EditorSaveFailed("Save failed: disk full")),
     )
-    monkeypatch.setattr(
-        text_menu_module,
-        "print_feedback",
-        lambda message, **kwargs: feedback_calls.append(
-            (message, kwargs.get("is_error", False))
-        ),
-    )
+    monkeypatch.setattr(text_menu_module.ask, "ask_error", feedback_calls.append)
 
     TextMenu.edit_text(make_state())
 
-    assert feedback_calls == [("Save failed: disk full", True)]
+    assert feedback_calls == ["Save failed: disk full"]
 
 
 def test_text_menu_reports_technical_launch_failure(monkeypatch) -> None:
-    feedback_calls: list[tuple[str, bool]] = []
+    feedback_calls: list[str] = []
     stub_editor_construction(monkeypatch)
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
         lambda _: ContentAppUnavailable("Unsupported terminal"),
     )
-    monkeypatch.setattr(
-        text_menu_module,
-        "print_feedback",
-        lambda message, **kwargs: feedback_calls.append(
-            (message, kwargs.get("is_error", False))
-        ),
-    )
+    monkeypatch.setattr(text_menu_module.ask, "ask_error", feedback_calls.append)
 
     TextMenu.edit_text(make_state())
 
-    assert feedback_calls == [("Unsupported terminal", True)]
+    assert feedback_calls == ["Unsupported terminal"]
 
 
 @pytest.mark.parametrize("source_kind", ["manual", "import", "epub"])

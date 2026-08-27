@@ -47,8 +47,6 @@ from tts_audiobook_tool.textual.worker_app import (
     _split_pending_control,
     worker_app_css,
 )
-from tts_audiobook_tool.util import print_feedback
-
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
 
@@ -395,7 +393,7 @@ def _reconcile_generation_result(state: State, result: GenerationModalResult) ->
     # invalidated) catalog so persisted state matches the audio on disk.
     save_error = ProjectUtil.persist_range_without_generated_items(state.project)
     if save_error:
-        print_feedback(save_error, is_error=True)
+        ask.ask_error(save_error)
 
 
 def _run_generation_console(

@@ -115,12 +115,12 @@ Run the app by entering:
 
     python -m tts_audiobook_tool
 
-Or, if you have multiple virtual environments installed, you can use `launch.py` to pick a venv and then start the app:
+Or, if you have multiple virtual environments installed, you can use `launch.py` to pick a venv and start the app:
 
     python launch.py # searches the project root for venv subdirectories by default
     python launch.py path/to/venvs-parent-dir # searches for venv subdirectories from the given path
 
-Note that any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
+Any settings and features that are specific to a given TTS model will be enabled automatically based on which virtual environment has been enabled.
 
 
 ## Virtual environment for Chatterbox:

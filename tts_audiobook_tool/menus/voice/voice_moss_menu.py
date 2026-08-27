@@ -112,12 +112,8 @@ def apply_model_and_validate(state: State, target: str) -> None:
 
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
-        printt()
-        printt(f"{COL_ERROR}Contents at {target} appear to be invalid:")
-        printt(f"{COL_ERROR}{error}")
-        printt()
         revert()
-        ask.ask_enter_to_continue()
+        ask.ask_error(f"\nContents at {target} appear to be invalid:\n{error}")
         return
 
     project.save()

@@ -118,7 +118,7 @@ def _start_impl(
     # Do model readiness check now that model instance exists
     err = readiness.get_generate_blocker_text(state, verbose=True, is_realtime_playback=True)
     if err:
-        print_feedback(err, is_error=True)
+        ask.ask_error(err)
         return RealTimePlaybackRunResult(RealTimePlaybackRunStatus.FAILED, err)
 
     # Print warnings if any
@@ -264,7 +264,7 @@ def _start_impl(
                 Tts.clear_continuation()
                 Interrupts().clear()
                 s = "Aborting real-time playback: sound output stream failed to start"
-                print_feedback(s, is_error=True)
+                ask.ask_error(s)
                 return RealTimePlaybackRunResult(
                     RealTimePlaybackRunStatus.FAILED,
                     s,

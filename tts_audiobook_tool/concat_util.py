@@ -666,7 +666,7 @@ class ConcatUtil:
             infos = OutputRangeInfo.make_output_range_infos(state.project)
             output_indices = [info.output_index for info in infos if info.num_files_exist > 0]
             if not output_indices:
-                print_feedback("No chapter files have generated audio", is_error=True)
+                ask.ask_error("No chapter files have generated audio")
                 return
 
             ConcatUtil.make_files(

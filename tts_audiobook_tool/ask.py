@@ -267,7 +267,7 @@ def ask_number_and_save(
     try:
         value = float(value)
     except Exception:
-        print_feedback("Bad value", is_error=True)
+        ask_error("Bad value")
         return
     if is_int:
         value = int(value)
@@ -275,7 +275,7 @@ def ask_number_and_save(
         return
     is_default_sentinel = is_minus_one_default and value == -1
     if not is_default_sentinel and not (min_value <= value <= max_value):
-        print_feedback("Out of range", is_error=True)
+        ask_error("Out of range")
         return
 
     setattr(saveable, attr, value)
@@ -321,7 +321,7 @@ def ask_string_and_save(
         if validator:
             err = validator(value)
             if err:
-                print_feedback(err, is_error=True)
+                ask_error(err)
                 if loop_on_error:
                     continue
                 return False

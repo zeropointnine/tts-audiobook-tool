@@ -140,8 +140,8 @@ def test_concat_menu_prevents_enabling_unavailable_lava_sr() -> None:
     with patch.object(ModelWorker, "probe_lava_sr_blocking", return_value=(False, "")), patch(
         "tts_audiobook_tool.menus.concat_menu.MenuUtil.options_menu"
     ) as options_menu, patch(
-        "tts_audiobook_tool.menus.concat_menu.print_feedback"
-    ) as print_feedback, patch.object(Project, "save") as save:
+        "tts_audiobook_tool.menus.concat_menu.ask.ask_error"
+    ) as ask_error, patch.object(Project, "save") as save:
         ConcatMenu.upsample_menu(state)
         kwargs = options_menu.call_args.kwargs
         kwargs["on_select"](True)
@@ -149,7 +149,6 @@ def test_concat_menu_prevents_enabling_unavailable_lava_sr() -> None:
     assert "LavaSR v2 upsampler not installed" in kwargs["subheading"]
     assert not project.use_upsampler
     save.assert_not_called()
-    print_feedback.assert_called_once_with(
-        "LavaSR v2 is not installed; generative upsampling cannot be enabled",
-        is_error=True,
+    ask_error.assert_called_once_with(
+        "LavaSR v2 is not installed; generative upsampling cannot be enabled"
     )

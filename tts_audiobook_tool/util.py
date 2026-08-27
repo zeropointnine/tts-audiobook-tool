@@ -31,7 +31,6 @@ def printt(s: str="", end=None, dont_reset=False) -> None:
 def print_feedback(
         message: str,
         end_value: Any = None,
-        is_error=False,
         no_preformat=False,
         extra_line=True,
         skip_pause=False,
@@ -41,27 +40,23 @@ def print_feedback(
     Should be used for printing feedback after an action is taken (eg, after a setting has been changed),
     and submenu is about to be re-printed.
 
-    :param is_error: If True, prints message in red, and always shows an enter prompt
-    :param no_pause: If True, doesn't do the typical slight pause
+    :param no_preformat: If True, doesn't apply the standard dim italic formatting
+    :param skip_pause: If True, doesn't do the typical slight pause
     :param long_pause: If True, pauses 2x longer
     """
     if not no_preformat:
-        message = Ansi.ITALICS + (COL_ERROR if is_error else COL_DIM) + message
+        message = Ansi.ITALICS + COL_DIM + message
     if end_value is not None:
         message = message.strip() + " " + COL_ACCENT + str(end_value)
     printt(message)
 
-    if is_error:
-        from tts_audiobook_tool import ask
-        ask.ask_enter_to_continue()
+    if skip_pause:
+        sleep_duration = 0.0
     else:
-        if skip_pause:
-            sleep_duration = 0.0
-        else:
-            sleep_duration = PRINT_FEEDBACK_PAUSE
-            if long_pause:
-                sleep_duration *= 2
-        time.sleep(sleep_duration)
+        sleep_duration = PRINT_FEEDBACK_PAUSE
+        if long_pause:
+            sleep_duration *= 2
+    time.sleep(sleep_duration)
 
     if extra_line:
         printt()

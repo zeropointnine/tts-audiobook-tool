@@ -120,7 +120,7 @@ class Conversation:
         if errors:
             lines = [item.verbose for item in errors]
             s = "\n".join(lines)
-            print_feedback(s, is_error=True)
+            ask.ask_error(s)
             return False
 
         can_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
@@ -129,10 +129,10 @@ class Conversation:
 
         inspection, error = ModelWorker.inspect_tts_blocking(state)
         if error or inspection is None:
-            print_feedback(error or "Couldn't initialize TTS model", is_error=True)
+            ask.ask_error(error or "Couldn't initialize TTS model")
             return False
         if inspection.blocking_issues:
-            print_feedback("\n".join(inspection.blocking_issues), is_error=True)
+            ask.ask_error("\n".join(inspection.blocking_issues))
             return False
 
         return True

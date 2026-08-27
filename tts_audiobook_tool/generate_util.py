@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 import os
 import time
 
 import numpy as np
 
-from tts_audiobook_tool import app_support, text_util
+from tts_audiobook_tool import app_support, ask, text_util
 from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant, VoiceSelectMode
 from tts_audiobook_tool.app_support import app_hint_util, app_memory
 from tts_audiobook_tool.concat_util import ConcatUtil
@@ -103,7 +104,7 @@ class GenerateUtil:
         # Do model readiness check now that model instance exists
         err = readiness.get_generate_blocker_text(state, verbose=True)
         if err:
-            print_feedback(err, is_error=True)
+            ask.ask_error(err)
             return True
 
         # Print warnings if any
@@ -474,9 +475,8 @@ class GenerateUtil:
                 project.generate_range_string = updated_range_string
                 save_error = project.save()
                 if save_error:
-                    print_feedback(
+                    ask.ask_error(
                         f"Couldn't save updated generation range: {save_error}",
-                        is_error=True,
                     )
 
         # Build the summary even when it will not be shown so this metrics

@@ -3,7 +3,7 @@ import platform
 import subprocess
 from pathlib import Path
 
-from tts_audiobook_tool import text_util
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.app_support import app_paths
 from tts_audiobook_tool.util import get_package_dir, make_error_string, print_feedback
 
@@ -93,4 +93,4 @@ def launch_player_with_chromium(
         )
         print_feedback(f"Launched process:\n{command}")
     except (FileNotFoundError, Exception) as e:
-        print_feedback(make_error_string(e), is_error=True)
+        ask.ask_error(make_error_string(e))

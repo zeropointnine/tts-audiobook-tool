@@ -164,7 +164,7 @@ def test_generation_workflow_quick_generates_and_reopens(monkeypatch) -> None:
 
 def test_generation_workflow_reports_quick_save_error_and_continues(monkeypatch) -> None:
     state = cast(State, SimpleNamespace(project=object()))
-    feedback_calls: list[tuple[str, bool]] = []
+    feedback_calls: list[str] = []
     run_results = iter(
         [
             ContentAppCompleted(
@@ -189,22 +189,16 @@ def test_generation_workflow_reports_quick_save_error_and_continues(monkeypatch)
         "do_quick_generate",
         lambda *_: None,
     )
-    monkeypatch.setattr(
-        generate_menu_module,
-        "print_feedback",
-        lambda message, is_error=False, **_: feedback_calls.append(
-            (message, is_error)
-        ),
-    )
+    monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
 
     GenerateMenu.run_editor(state)
 
-    assert feedback_calls == [("Save failed: disk full", True)]
+    assert feedback_calls == ["Save failed: disk full"]
 
 
 def test_generation_workflow_reports_save_failure_without_generation(monkeypatch) -> None:
     state = cast(State, SimpleNamespace(project=object()))
-    feedback_calls: list[tuple[str, bool]] = []
+    feedback_calls: list[str] = []
     generation_calls: list[State] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
@@ -222,23 +216,17 @@ def test_generation_workflow_reports_save_failure_without_generation(monkeypatch
         "do_generate_using_project_and_state",
         lambda passed_state: generation_calls.append(passed_state),
     )
-    monkeypatch.setattr(
-        generate_menu_module,
-        "print_feedback",
-        lambda message, is_error=False, **_: feedback_calls.append(
-            (message, is_error)
-        ),
-    )
+    monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
 
     GenerateMenu.run_editor(state)
 
-    assert feedback_calls == [("Save failed: disk full", True)]
+    assert feedback_calls == ["Save failed: disk full"]
     assert generation_calls == []
 
 
 def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) -> None:
     state = cast(State, SimpleNamespace(project=object()))
-    feedback_calls: list[tuple[str, bool]] = []
+    feedback_calls: list[str] = []
     monkeypatch.setattr(
         generate_menu_module.ProjectUtil,
         "persist_range_without_generated_items",
@@ -250,19 +238,13 @@ def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) ->
         "run_content_textual_app",
         lambda _: ContentAppStylesheetFailed("Couldn't load textual css"),
     )
-    monkeypatch.setattr(
-        generate_menu_module,
-        "print_feedback",
-        lambda message, is_error=False, **_: feedback_calls.append(
-            (message, is_error)
-        ),
-    )
+    monkeypatch.setattr(generate_menu_module.ask, "ask_error", feedback_calls.append)
 
     GenerateMenu.run_editor(state)
 
     assert feedback_calls == [
-        ("Save failed: cleanup failed", True),
-        ("Couldn't load textual css", True),
+        "Save failed: cleanup failed",
+        "Couldn't load textual css",
     ]
 
 

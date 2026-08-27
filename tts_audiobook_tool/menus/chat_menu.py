@@ -198,7 +198,7 @@ class ChatMenu:
             return
         err = validator(value)
         if err:
-            print_feedback(err, is_error=True)
+            ask.ask_error(err)
             return
         state.prefs.llm_system_prompt = value
         state.prefs.system_prompt_preset = ""

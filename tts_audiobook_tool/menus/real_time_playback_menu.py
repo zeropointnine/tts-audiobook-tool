@@ -208,7 +208,7 @@ def do_start(state: State) -> None:
     # Check model and other app blockers
     err = readiness.get_generate_blocker_text(state, verbose=True)
     if err:
-        print_feedback(err, is_error=True)
+        ask.ask_error(err)
         return
 
     # Show pre-inference hint/warning if necessary

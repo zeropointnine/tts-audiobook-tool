@@ -132,7 +132,7 @@ def ask_instruct(project: Project) -> None:
 
     error, normalized = validate_instruct(inp)
     if error:
-        print_feedback(error, is_error=True)
+        ask.ask_error(error)
         return
     if normalized == project.omnivoice_instruct:
         return
@@ -199,7 +199,7 @@ def apply_target(state: State, target: str) -> None:
     inspection, error = ModelWorker.inspect_tts_blocking(state)
     if error or inspection is None:
         revert()
-        print_feedback(f"Failed to load OmniVoice model: {error}", is_error=True)
+        ask.ask_error(f"Failed to load OmniVoice model: {error}")
         return
 
     project.save()

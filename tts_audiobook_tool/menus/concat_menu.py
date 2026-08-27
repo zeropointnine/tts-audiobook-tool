@@ -248,9 +248,8 @@ class ConcatMenu:
 
         def on_select(value: bool) -> None:
             if value and not lava_sr_available:
-                print_feedback(
+                ask.ask_error(
                     "LavaSR v2 is not installed; generative upsampling cannot be enabled",
-                    is_error=True,
                 )
                 return
             state.project.use_upsampler = value
@@ -366,7 +365,7 @@ def ask_output_indices_and_make(state: State) -> None:
 
     num_generated = state.project.sound_segments.num_generated()
     if not state.prefs.project_dir or num_generated == 0:
-        print_feedback("Requires generated audio", is_error=True)
+        ask.ask_error("Requires generated audio")
         return
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
@@ -434,14 +433,14 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
     if inp == "all" or inp == "a":
         indices = [info.output_index for info in infos if info.num_files_exist > 0]
         if not indices:
-            print_feedback("No chapter files have generated audio", is_error=True)
+            ask.ask_error("No chapter files have generated audio")
             return None
         return indices
 
     indices, warnings = RangeStringUtil.parse_ranges_string(inp, len(infos))
     if warnings:
         message = "\n".join(warnings)
-        print_feedback(message, is_error=True)
+        ask.ask_error(message)
         return None
 
     indices = list(indices)
@@ -451,7 +450,7 @@ def ask_output_indices(infos: list[OutputRangeInfo]) -> list[int] | None:
     missing_audio_indices = [index for index in indices if infos[index].num_files_exist == 0]
     if missing_audio_indices:
         item_numbers = ", ".join(str(index + 1) for index in missing_audio_indices)
-        print_feedback(f"No generated audio for chapter file: {item_numbers}", is_error=True)
+        ask.ask_error(f"No generated audio for chapter file: {item_numbers}")
         return None
 
     return indices

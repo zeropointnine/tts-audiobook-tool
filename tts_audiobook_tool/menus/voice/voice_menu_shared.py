@@ -354,10 +354,10 @@ class VoiceMenuShared:
             VoiceLineEditorTextualApp(state.project)
         )
         if not isinstance(run_result, ContentAppCompleted):
-            print_feedback(run_result.message, is_error=True)
+            ask.ask_error(run_result.message)
             return
         if isinstance(run_result.result, EditorSaveFailed):
-            print_feedback(run_result.result.error, is_error=True)
+            ask.ask_error(run_result.result.error)
         elif isinstance(run_result.result, EditorSaved):
             print_feedback("Saved changes", long_pause=True)
 
@@ -456,10 +456,10 @@ class VoiceMenuShared:
                 try:
                     index = int(inp) - 1
                 except ValueError:
-                    print_feedback("Bad value", is_error=True)
+                    ask.ask_error("Bad value")
                     return False
                 if index < 0 or index >= len(voices):
-                    print_feedback("Bad value", is_error=True)
+                    ask.ask_error("Bad value")
                     return False
 
         if not clear_all:
@@ -798,7 +798,7 @@ class VoiceMenuShared:
 
         _, err = target_util.exist_test(new_target)
         if err:
-            print_feedback(err, is_error=True)
+            ask.ask_error(err)
             return
 
         callback(project, new_target)

@@ -156,11 +156,11 @@ class LlmSettingsMenu:
         try:
             parsed = json.loads(value)
         except Exception:
-            print_feedback("Bad JSON", is_error=True)
+            ask.ask_error("Bad JSON")
             return
 
         if not isinstance(parsed, dict):
-            print_feedback("JSON value must be an object", is_error=True)
+            ask.ask_error("JSON value must be an object")
             return
 
         state.prefs.llm_extra_params = parsed

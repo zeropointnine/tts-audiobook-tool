@@ -182,6 +182,6 @@ def validate_voice_file(state: State) -> None:
                 message = PocketBaseModel.make_gated_error_message_ui()
                 # TMI: message += f"\n\n{COL_DIM}Underlying Pocket error:{COL_DEFAULT}\n{error}"
             message += "\n"
-            print_feedback(message, is_error=True, no_preformat=True)
+            ask.ask_error(message)
         else:
             print_feedback("Validated")

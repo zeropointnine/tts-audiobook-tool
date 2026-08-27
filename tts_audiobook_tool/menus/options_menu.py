@@ -19,7 +19,7 @@ class OptionsMenu:
         def on_unload(_: State, __: MenuItem) -> None:
             reset_error = ModelWorker.unload_models_blocking()
             if reset_error:
-                printt(f"{COL_ERROR}{reset_error}")
+                ask.ask_error(reset_error)
             else:
                 print_feedback("Models unloaded")
 

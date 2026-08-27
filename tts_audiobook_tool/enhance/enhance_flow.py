@@ -233,8 +233,7 @@ def make(
     else:
         save_error = AppMetadata.save_to_mp4(meta, str(source_audio_path), str(dest_path))
     if save_error:
-        printt(f"{COL_ERROR}Error: {save_error}")
-        printt()
+        ask.ask_error(f"Error: {save_error}")
     else:
         printt(f"{COL_ACCENT}Saved {dest_path}")
         printt()

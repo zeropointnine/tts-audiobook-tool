@@ -117,7 +117,7 @@ class ProjectNewMenu:
                 return False
 
             if os.path.splitext(abr_path)[1].lower() not in {'.flac', '.m4a', '.m4b'}:
-                print_feedback("Please select a .flac, .m4a, or .m4b file", is_error=True)
+                ask.ask_error("Please select a .flac, .m4a, or .m4b file")
                 return False
 
             app_meta = AppMetadata.load_from_file(abr_path)
@@ -140,7 +140,7 @@ class ProjectNewMenu:
 
             err = state.make_and_set_new_project(dest_dir)
             if err:
-                print_feedback(err, is_error=True)
+                ask.ask_error(err)
                 return False
 
             snapshot_project = ProjectTransferUtil.make_project_from_snapshot(
@@ -166,7 +166,7 @@ class ProjectNewMenu:
             hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
             return True
         except Exception as e:
-            print_feedback(make_error_string(e), is_error=True)
+            ask.ask_error(make_error_string(e))
             return False
         finally:
             ask.ask_enter_to_continue()

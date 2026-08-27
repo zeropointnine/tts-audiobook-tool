@@ -68,10 +68,10 @@ class SectionMarkersMenu:
         """Run the section-markers editor and report launch failures or saves."""
         run_result = run_content_textual_app(SectionMarkersEditor(state.project))
         if not isinstance(run_result, ContentAppCompleted):
-            print_feedback(run_result.message, is_error=True)
+            ask.ask_error(run_result.message)
             return
         if isinstance(run_result.result, EditorSaveFailed):
-            print_feedback(run_result.result.error, is_error=True)
+            ask.ask_error(run_result.result.error)
 
 def print_markers(markers: set[int], label: str) -> None:
     
@@ -106,7 +106,7 @@ def mode_menu(state: State) -> None:
 
     def on_select(value: SectionMarkerMode) -> None:
         if value == SectionMarkerMode.BOOKMARKS and not state.project.can_use_bookmark_section_markers():
-            print_feedback("Section marker mode 'Adds metadata' is unavailable for multi-section books", is_error=True)
+            ask.ask_error("Section marker mode 'Adds metadata' is unavailable for multi-section books")
             return
         state.project.chapter_mode = value
         state.project.normalize_chapter_mode()

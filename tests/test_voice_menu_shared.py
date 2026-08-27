@@ -39,7 +39,7 @@ def test_voice_sample_assignment_reports_editor_failures(
         State,
         SimpleNamespace(project=StubProject([StubPhraseGroup("Line 1")])),
     )
-    feedback_calls: list[tuple[str, bool]] = []
+    feedback_calls: list[str] = []
     monkeypatch.setattr(
         voice_menu_shared,
         "VoiceLineEditorTextualApp",
@@ -50,17 +50,11 @@ def test_voice_sample_assignment_reports_editor_failures(
         "run_content_textual_app",
         lambda _: run_result,
     )
-    monkeypatch.setattr(
-        voice_menu_shared,
-        "print_feedback",
-        lambda message, **kwargs: feedback_calls.append(
-            (message, kwargs.get("is_error", False))
-        ),
-    )
+    monkeypatch.setattr(voice_menu_shared.ask, "ask_error", feedback_calls.append)
 
     voice_menu_shared.VoiceMenuShared.assign_voice_samples_to_text_lines(state)
 
-    assert feedback_calls == [(expected_message, True)]
+    assert feedback_calls == [expected_message]
 
 # ---------------------------------------------------------------------------
 # Voice sample selection mode menu items (moved from test_voice_selection.py)

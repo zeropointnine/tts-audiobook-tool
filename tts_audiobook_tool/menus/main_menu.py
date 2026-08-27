@@ -1,4 +1,4 @@
-from tts_audiobook_tool import text_util
+from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
 from tts_audiobook_tool.menus.chat_menu import ChatMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -28,8 +28,7 @@ class MainMenu:
         while True:
 
             if state.prefs.project_dir and not os.path.exists(state.prefs.project_dir):
-                printt(f"{COL_ERROR}Project directory {state.prefs.project_dir} not found.")
-                printt()
+                ask.ask_error(f"Project directory {state.prefs.project_dir} not found.")
                 state.reset()
 
             MainMenu.menu(state)
@@ -124,10 +123,10 @@ def make_voice_label(state: State) -> str:
 def on_voice(state: State, __) -> None:
     Tts.update_tts_type()
     if Tts.get_type() == TtsModelType.NONE:
-        print_feedback("Requires TTS model", is_error=True)
+        ask.ask_error("Requires TTS model")
         return
     if not state.project.dir_path:
-        print_feedback(REQUIRES_PROJECT, is_error=True)
+        ask.ask_error(REQUIRES_PROJECT)
         return
     VoiceMenuShared.menu(state)
 
@@ -137,35 +136,35 @@ def make_text_label(state: State) -> str:
 
 def on_text(state: State, __) -> None:
     if not state.project.dir_path:
-        print_feedback(REQUIRES_PROJECT, is_error=True)
+        ask.ask_error(REQUIRES_PROJECT)
         return
     TextMenu.menu(state)
 
 def on_generate(state: State, _: MenuItem) -> None:
     if not state.project.dir_path:
-        print_feedback(REQUIRES_PROJECT, is_error=True)
+        ask.ask_error(REQUIRES_PROJECT)
         return
     GenerateMenu.menu(state)
 
 def on_concat(state: State, _: MenuItem) -> None:
     if not state.project.dir_path:
-        print_feedback(REQUIRES_PROJECT, is_error=True)
+        ask.ask_error(REQUIRES_PROJECT)
         return
     ConcatMenu.menu(state)
 
 def on_realtime_audiobook(state: State, _: MenuItem) -> None:
     if not state.project.dir_path:
-        print_feedback(REQUIRES_PROJECT, is_error=True)
+        ask.ask_error(REQUIRES_PROJECT)
         return
     RealTimePlaybackMenu.menu(state)
 
 def on_chat(state: State, _: MenuItem) -> None:
     Tts.update_tts_type()
     if Tts.get_type() == TtsModelType.NONE:
-        print_feedback(REQUIRES_TTS_MODEL, is_error=True)
+        ask.ask_error(REQUIRES_TTS_MODEL)
         return
     if not state.project.dir_path:
-        print_feedback(REQUIRES_PROJECT, is_error=True)
+        ask.ask_error(REQUIRES_PROJECT)
         return
     ChatMenu.menu(state)
 
