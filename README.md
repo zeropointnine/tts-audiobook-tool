@@ -42,14 +42,13 @@ The app uses a plain-text, hotkey-based console interface.
 ### How to create an audiobook (quick summary)
 
 1. Assign a working project directory.
-2. Select a short reference audio clip for the voice clone, and adjust various model knobs if desired.
-3. Select the source EPUB or text file, and optionally define file split points.
-4. Generate
-5. Concatenate the generated sound segments to create the finished audiobook file/s.
+2. Select a short reference audio clip for the voice clone. Adjust various model knobs to taste.
+3. Select the source EPUB or text file.
+4. Generate. Wait.
+5. Concatenate the generated sound segments to create the finished audiobook file.
 6. Use the optional web browser player to play and read your audiobook.
 
-<video src="https://github.com/user-attachments/assets/5516ce38-ef61-4126-91f5-71861e63eba5" controls="controls" muted="muted" class="d-block rounded-bottom-2 border-top width-full" style="max-height:640px;" autoplay="autoplay" loop="loop">
-</video>
+https://github.com/user-attachments/assets/53e967bc-ea28-4dbc-944d-9c0376f3ddfa
 
 ### Browser player
 
