@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import tts_audiobook_tool.menus.generate_menu as generate_menu_module
+from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
@@ -248,6 +249,30 @@ def test_generation_workflow_reports_cleanup_and_launch_failures(monkeypatch) ->
     ]
 
 
+def test_validation_confirmation_line_reflects_whisper_setting() -> None:
+    disabled_state = cast(
+        State,
+        SimpleNamespace(
+            prefs=SimpleNamespace(is_validation_disabled=True),
+            project=SimpleNamespace(strictness=Strictness.LOW),
+        ),
+    )
+    enabled_state = cast(
+        State,
+        SimpleNamespace(
+            prefs=SimpleNamespace(is_validation_disabled=False),
+            project=SimpleNamespace(strictness=Strictness.LOW),
+        ),
+    )
+
+    assert generate_menu_module.make_validation_confirmation_line(disabled_state) == (
+        "- Speech to text validation: Disabled"
+    )
+    assert generate_menu_module.make_validation_confirmation_line(enabled_state) == (
+        "- Word error tolerance: Loose"
+    )
+
+
 def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
     sound_segments = SimpleNamespace(
         num_generated=lambda: 0,
@@ -258,8 +283,15 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
         sound_segments=sound_segments,
         gen_auto_concat=True,
     )
-    state = cast(State, SimpleNamespace(project=project, prefs=object()))
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=SimpleNamespace(is_validation_disabled=True),
+        ),
+    )
     concat_calls: list[State] = []
+    printed: list[str] = []
     result_status = [GenerationTerminalStatus.COMPLETED]
 
     monkeypatch.setattr(
@@ -288,7 +320,6 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
         "get_type",
         lambda: SimpleNamespace(value=SimpleNamespace(can_batch=False)),
     )
-    monkeypatch.setattr(generate_menu_module.Stt, "should_skip", lambda _state: True)
     monkeypatch.setattr(
         generate_menu_module.ProjectVoiceUtil,
         "get_voice_values",
@@ -300,7 +331,11 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
         lambda _project: 1,
     )
     monkeypatch.setattr(generate_menu_module.ask, "ask_confirm", lambda _prompt: True)
-    monkeypatch.setattr(generate_menu_module, "printt", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        generate_menu_module,
+        "printt",
+        lambda value="", *_args, **_kwargs: printed.append(value),
+    )
     monkeypatch.setattr(
         generate_menu_module,
         "run_generation_modal",
@@ -322,10 +357,14 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
     for status, should_concat in cases:
         result_status[0] = status
         concat_calls.clear()
+        printed.clear()
 
         generate_menu_module.do_generate(state)
 
         assert concat_calls == ([state] if should_concat else [])
+        assert printed.index("- Speech to text validation: Disabled") < printed.index(
+            "- Will concatenate audio file/s when finished"
+        )
 
 
 def make_phrase_group(voice_index: int) -> PhraseGroup:

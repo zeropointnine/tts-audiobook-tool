@@ -15,7 +15,6 @@ from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorClosed,
@@ -378,6 +377,12 @@ def ask_batch_size(state: State) -> None:
         "Set batch size:", is_int=True
     )
 
+def make_validation_confirmation_line(state: State) -> str:
+    if state.prefs.is_validation_disabled:
+        return "- Speech to text validation: Disabled"
+    return f"- Word error tolerance: {state.project.strictness.label}"
+
+
 def do_generate(state: State) -> None:
 
     # Check blockers
@@ -430,14 +435,6 @@ def do_generate(state: State) -> None:
             else:
                 s = "- Batching: disabled"
         printt(s)
-    # Print stt setting
-    if not Stt.should_skip(state):
-        s = "- Speech-to-text validation: enabled"
-        s += f" {COL_DIM}({Stt.short_description()})"
-    else:
-        s = "- Speech-to-text validation: disabled"
-        printt(s)
-
     # Print voice selection mode info
     voice_values = ProjectVoiceUtil.get_voice_values(state.project, tts_type)
     if len(voice_values) > 1:
@@ -455,6 +452,10 @@ def do_generate(state: State) -> None:
                 )
                 s += f"\n  {COL_ERROR}Warning: {num_invalid_voice_indices} voice {selection_word} out of range and will be clamped"
         printt(s)
+
+    # Print validation setting
+    printt(make_validation_confirmation_line(state))
+
     # Print auto-concat setting
     if state.project.gen_auto_concat:
         printt("- Will concatenate audio file/s when finished")

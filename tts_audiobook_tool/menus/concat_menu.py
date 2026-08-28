@@ -157,7 +157,7 @@ class ConcatMenu:
 
             return items
 
-        MenuUtil.menu(state, "Create audiobook file/s", make_items, subheading=make_output_files_subheading, breadcrumb="Create audiobook")
+        MenuUtil.menu(state, "Create audiobook file/s", make_items, subheading=make_output_files_subheading)
 
     @staticmethod
     def file_type_menu(state: State) -> None:
@@ -361,6 +361,27 @@ class ConcatMenu:
             one_shot=True
         )
 
+def make_enabled_option_confirmation_lines(state: State) -> list[str]:
+    lines = []
+    if state.project.normalization_type != NormalizationType.DISABLED:
+        lines.append(
+            f"- Loudness normalization: {state.project.normalization_type.value.label}"
+        )
+    if state.project.use_upsampler:
+        lines.append("- Generative upsampling: True")
+    if state.project.use_break_sound_effect:
+        lines.append("- Section break sound effects: True")
+    high_shelf = state.project.get_high_shelf()
+    if high_shelf != HighShelfEq.DISABLED:
+        lines.append(f"- Treble uplift: {high_shelf.id.capitalize()}")
+    return lines
+
+
+def print_enabled_option_confirmation_lines(state: State) -> None:
+    for line in make_enabled_option_confirmation_lines(state):
+        printt(line)
+
+
 def ask_output_indices_and_make(state: State) -> None:
 
     num_generated = state.project.sound_segments.num_generated()
@@ -369,6 +390,8 @@ def ask_output_indices_and_make(state: State) -> None:
         return
 
     type_string = "AAC/M4B" if state.project.export_type == ExportType.AAC else "FLAC"
+
+    MenuUtil.print_screen_heading(state, "Start")
 
     should_ask_file_numbers = (state.project.chapter_mode == SectionMarkerMode.FILES) and len(state.project.markers) > 0
     if should_ask_file_numbers:
@@ -383,12 +406,13 @@ def ask_output_indices_and_make(state: State) -> None:
             bookmark_indices = []
 
         noun = make_noun('file', 'files', len(output_indices))
-        s = f"Will create the following {type_string} {noun}:"
+        s = f"- Will create the following {type_string} {noun}:"
         printt(s)
 
         strings = make_output_range_info_strings(infos, output_indices)
         s = "\n".join( ("    " + item) for item in strings)
         printt(s)
+        print_enabled_option_confirmation_lines(state)
         printt()
 
         b = ask.ask_confirm()
@@ -409,6 +433,7 @@ def ask_output_indices_and_make(state: State) -> None:
         s = f"{COL_DIM}All lines "
         s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
         printt(s)
+        print_enabled_option_confirmation_lines(state)
         printt()
 
         b = ask.ask_confirm()

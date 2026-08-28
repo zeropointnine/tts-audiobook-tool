@@ -3,7 +3,12 @@ from typing import cast
 from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import Book, BookSection
-from tts_audiobook_tool.app_types import ExportType, SectionMarkerMode
+from tts_audiobook_tool.app_types import (
+    ExportType,
+    HighShelfEq,
+    NormalizationType,
+    SectionMarkerMode,
+)
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.menus import concat_menu
 from tts_audiobook_tool.menus.concat_menu import ConcatMenu
@@ -38,6 +43,39 @@ def test_ask_output_indices_empty_input_cancels() -> None:
     print_feedback.assert_not_called()
 
 
+def test_enabled_option_confirmation_lines_only_include_enabled_options() -> None:
+    project = Project.model_validate({})
+    project.normalization_type = NormalizationType.STRONGER
+    project.use_upsampler = True
+    project.use_break_sound_effect = True
+    project.high_shelf = HighShelfEq.MODERATE.id
+    state = cast(State, SimpleNamespace(project=project))
+
+    assert concat_menu.make_enabled_option_confirmation_lines(state) == [
+        "- Loudness normalization: Stronger",
+        "- Generative upsampling: True",
+        "- Section break sound effects: True",
+        "- Treble uplift: Moderate",
+    ]
+
+    project.normalization_type = NormalizationType.DEFAULT
+    assert concat_menu.make_enabled_option_confirmation_lines(state)[0] == (
+        "- Loudness normalization: ACX standard"
+    )
+
+    project.high_shelf = HighShelfEq.STRONGER.id
+    assert concat_menu.make_enabled_option_confirmation_lines(state)[-1] == (
+        "- Treble uplift: Stronger"
+    )
+
+    project.normalization_type = NormalizationType.DISABLED
+    project.use_upsampler = False
+    project.use_break_sound_effect = False
+    project.high_shelf = HighShelfEq.DISABLED.id
+
+    assert concat_menu.make_enabled_option_confirmation_lines(state) == []
+
+
 def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_single_book_section() -> None:
     project = Project.model_validate({
         "phrase_groups": [
@@ -60,13 +98,33 @@ def test_ask_output_indices_and_make_single_file_uses_markers_as_bookmarks_for_s
     state.project.export_type = ExportType.AAC
     state.project.chapter_mode = SectionMarkerMode.BOOKMARKS
     state.project._sound_segments = SimpleNamespace(num_generated=lambda: 1)
+    events: list[str] = []
 
-    with patch.object(concat_menu.ask, "ask_confirm", return_value=True), \
-        patch.object(concat_menu.OutputRangeInfo, "make_single_info", return_value=SimpleNamespace(num_files_exist=1, num_segments=3)), \
-            patch.object(concat_menu.ConcatUtil, "make_files") as make_files_mock, \
-            patch.object(concat_menu, "printt"):
+    with patch.object(
+        concat_menu.ask,
+        "ask_confirm",
+        side_effect=lambda: events.append("confirm") or True,
+    ), patch.object(
+        concat_menu.OutputRangeInfo,
+        "make_single_info",
+        return_value=SimpleNamespace(num_files_exist=1, num_segments=3),
+    ), patch.object(
+        concat_menu.MenuUtil,
+        "print_screen_heading",
+        side_effect=lambda *_: events.append("heading"),
+    ) as print_screen_heading, patch.object(
+        concat_menu.ConcatUtil,
+        "make_files",
+    ) as make_files_mock, patch.object(
+        concat_menu,
+        "printt",
+        side_effect=lambda value="": events.append(value),
+    ):
         concat_menu.ask_output_indices_and_make(cast(State, state))
 
+    print_screen_heading.assert_called_once_with(state, "Start")
+    assert events.index("heading") < events.index("Will create a single AAC/M4B file")
+    assert events.index("Will create a single AAC/M4B file") < events.index("confirm")
     make_files_mock.assert_called_once_with(
         state=state,
         file_cut_indices=[],
@@ -98,10 +156,12 @@ def test_ask_output_indices_and_make_single_file_ignores_markers_as_bookmarks_fo
 
     with patch.object(concat_menu.ask, "ask_confirm", return_value=True), \
         patch.object(concat_menu.OutputRangeInfo, "make_single_info", return_value=SimpleNamespace(num_files_exist=1, num_segments=3)), \
+            patch.object(concat_menu.MenuUtil, "print_screen_heading") as print_screen_heading, \
             patch.object(concat_menu.ConcatUtil, "make_files") as make_files_mock, \
             patch.object(concat_menu, "printt"):
         concat_menu.ask_output_indices_and_make(cast(State, state))
 
+    print_screen_heading.assert_called_once_with(state, "Start")
     make_files_mock.assert_called_once_with(
         state=state,
         file_cut_indices=[],
@@ -126,6 +186,8 @@ def test_concat_menu_always_shows_generative_upsampling() -> None:
         return_value=[],
     ), patch.object(LavaSrUtil, "has_lava_sr", return_value=False):
         ConcatMenu.menu(state)
+        assert menu.call_args.args[1] == "Create audiobook file/s"
+        assert menu.call_args.kwargs.get("breadcrumb") is None
         make_items = menu.call_args.args[2]
         items = make_items(state)
 
