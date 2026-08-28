@@ -210,3 +210,253 @@ def test_split_rejects_endpoints_and_tracks_earliest_mutation() -> None:
     session.split_phrase_group(second.item_id, PhraseGroupSplitPoint(1))
 
     assert session.earliest_affected_original_index == 1
+
+
+def make_single_group_session(text: str = "Original.", voice_index: int = -1) -> TextEditSession:
+    return TextEditSession(
+        Book(
+            sections=[
+                BookSection(
+                    phrase_groups=[make_phrase_group(text, voice_index=voice_index)]
+                )
+            ]
+        )
+    )
+
+
+def test_update_recreates_phrases_canonically() -> None:
+    session = make_single_group_session("Original.")
+    item = session.phrase_groups[0]
+
+    result = session.update_phrase_group_text(
+        item.item_id, "Hello, world.", max_words=10, pysbd_lang="en"
+    )
+
+    assert result.changed is True
+    group = session.phrase_groups[0].phrase_group
+    assert [phrase.text for phrase in group.phrases] == ["Hello, ", "world."]
+    assert [phrase.reason for phrase in group.phrases] == [
+        Reason.PHRASE,
+        Reason.SENTENCE,
+    ]
+
+
+def test_update_preserves_trailing_whitespace() -> None:
+    session = make_single_group_session("Chapter one.\n\n")
+    item = session.phrase_groups[0]
+
+    result = session.update_phrase_group_text(
+        item.item_id, "New text.", max_words=10, pysbd_lang="en"
+    )
+
+    assert result.changed is True
+    assert session.phrase_groups[0].phrase_group.text == "New text.\n\n"
+
+
+def test_update_strips_user_trailing_whitespace() -> None:
+    session = make_single_group_session("Chapter one.\n\n")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "New text.\n\n\n", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.text == "New text.\n\n"
+
+
+def test_update_preserves_paragraph_reason() -> None:
+    session = make_single_group_session("One.\n\n")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "Two.", max_words=10, pysbd_lang="en"
+    )
+
+    group = session.phrase_groups[0].phrase_group
+    assert group.text == "Two.\n\n"
+    assert group.last_reason == Reason.PARAGRAPH
+
+
+def test_update_preserves_space_break_reason() -> None:
+    session = make_single_group_session("One.\n\n\n")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "Two.", max_words=10, pysbd_lang="en"
+    )
+
+    group = session.phrase_groups[0].phrase_group
+    assert group.text == "Two.\n\n\n"
+    assert group.last_reason == Reason.SPACE_BREAK
+
+
+def test_update_preserves_section_break_reason() -> None:
+    session = TextEditSession(
+        Book(
+            sections=[
+                BookSection(
+                    phrase_groups=[
+                        PhraseGroup([Phrase("End of chapter.", Reason.SECTION_BREAK)])
+                    ]
+                )
+            ]
+        )
+    )
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "A revised ending", max_words=10, pysbd_lang="en"
+    )
+
+    group = session.phrase_groups[0].phrase_group
+    assert group.text == "A revised ending"
+    assert group.last_reason == Reason.SECTION_BREAK
+
+
+def test_update_preserves_phrase_quote_end_reason() -> None:
+    session = TextEditSession(
+        Book(
+            sections=[
+                BookSection(
+                    phrase_groups=[
+                        PhraseGroup(
+                            [Phrase('"Hello," ', Reason.PHRASE_QUOTE_END)],
+                            voice_index=1,
+                        )
+                    ]
+                )
+            ]
+        )
+    )
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, '"Goodbye,"', max_words=10, pysbd_lang="en"
+    )
+
+    group = session.phrase_groups[0].phrase_group
+    assert group.text == '"Goodbye," '
+    assert group.last_reason == Reason.PHRASE_QUOTE_END
+
+
+def test_update_recomputes_sentence_reason_when_terminal_punct_present() -> None:
+    session = make_single_group_session("One.")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "Two!", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.last_reason == Reason.SENTENCE
+
+
+def test_update_uses_canonical_reason_when_ending_plain() -> None:
+    session = make_single_group_session("One.")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "Two", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.last_reason == Reason.SENTENCE
+
+
+def test_update_uses_canonical_reason_at_terminal_comma() -> None:
+    session = make_single_group_session("One.")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "Two,", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.last_reason == Reason.SENTENCE
+
+
+def test_update_sentence_reason_ignores_trailing_closing_quote() -> None:
+    session = make_single_group_session("One.")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, 'He said "Two."', max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.last_reason == Reason.SENTENCE
+
+
+def test_update_uses_canonical_multilingual_sentence_reasons() -> None:
+    for text, language_code in [("هل هذا صحيح؟", "ar"), ("यह सही है।", "hi")]:
+        session = make_single_group_session("Original.")
+        item = session.phrase_groups[0]
+
+        session.update_phrase_group_text(
+            item.item_id, text, max_words=10, pysbd_lang=language_code
+        )
+
+        assert session.phrase_groups[0].phrase_group.last_reason == Reason.SENTENCE
+
+
+def test_update_normalizes_whitespace_before_line_breaks() -> None:
+    session = make_single_group_session("Original.")
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "First. \t\nSecond.", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.text == "First.\nSecond."
+
+
+def test_update_preserves_voice_index() -> None:
+    session = make_single_group_session("Original.", voice_index=42)
+    item = session.phrase_groups[0]
+
+    session.update_phrase_group_text(
+        item.item_id, "Modified", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.phrase_groups[0].phrase_group.voice_index == 42
+
+
+def test_update_trailing_whitespace_only_change_is_noop() -> None:
+    session = make_single_group_session("Hello.")
+    item = session.phrase_groups[0]
+
+    result = session.update_phrase_group_text(
+        item.item_id, "Hello. ", max_words=10, pysbd_lang="en"
+    )
+
+    assert result.changed is False
+    assert session.has_changes is False
+    assert session.edited_original_indices == set()
+
+
+def test_update_records_edit_indices_but_not_structural() -> None:
+    session = TextEditSession(make_book())
+    item = session.phrase_groups[1]
+
+    session.update_phrase_group_text(
+        item.item_id, "B changed.", max_words=10, pysbd_lang="en"
+    )
+
+    assert session.did_structural_change is False
+    assert session.edited_original_indices == {item.original_index}
+    assert session.earliest_affected_original_index == item.original_index
+
+
+def test_update_ignores_unknown_item_id() -> None:
+    session = make_single_group_session("Original.")
+
+    result = session.update_phrase_group_text(
+        999_999, "X", max_words=10, pysbd_lang="en"
+    )
+
+    assert result.changed is False
+    assert session.has_changes is False
+
+
+def test_delete_and_split_mark_structural_change() -> None:
+    session = TextEditSession(make_book())
+    assert session.did_structural_change is False
+
+    session.delete_phrase_groups({session.phrase_groups[0].item_id})
+    assert session.did_structural_change is True

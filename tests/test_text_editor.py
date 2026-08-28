@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 
 from rich.text import Text
-from textual.widgets import Button, Input, OptionList, Static
+from textual.widgets import Button, Input, OptionList, Static, TextArea
 
 import tts_audiobook_tool.textual.text_editor as text_editor_module
 from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
@@ -701,8 +701,247 @@ def test_header_documents_the_info_key() -> None:
     app = make_loaded_editor(project)
 
     assert Text.from_ansi(app.header_lines[3]).plain == (
-        "- Press [X] to delete selected lines   [S] Split line  - [I] Info"
+        "- Press [X] Delete   [S] Split   [E] Edit   [I] Info"
     )
+
+
+def test_edit_mode_keeps_the_default_header() -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    app = make_loaded_editor(project)
+    expected_header = list(app.header_lines)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            assert app.is_editing is True
+            assert app.header_lines == expected_header
+
+    run(exercise())
+
+
+def test_edit_panel_shows_header_help_and_four_row_input() -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            title = app.query_one("#edit-panel-title", Static).content
+            word_count = app.query_one("#edit-panel-word-count", Static).content
+            help_text = app.query_one("#edit-panel-help", Static).content
+            assert title.plain == "Spot edit:"
+            assert word_count.plain == "Words: 1/80"
+            assert help_text.plain == "Press [ENTER] to confirm  [ESC] to cancel"
+            panel = app.query_one("#edit-panel")
+            sound_warning = app.query_one("#edit-panel-sound-warning", Static)
+            assert sound_warning.display is False
+            input_divider = app.query_one("#edit-panel-input-divider")
+            text_area = app.query_one("#edit-area", TextArea)
+            assert panel.region.height == 9
+            assert panel.styles.border_top[0] == "round"
+            assert panel.styles.border_bottom[0] == "round"
+            assert input_divider.region.y == text_area.region.y - 1
+            assert text_area.region.height == 4
+            assert text_area.styles.border_top[0] == ""
+            assert text_area.styles.border_bottom[0] == ""
+
+    run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("already_edited", "expected_message"),
+    [
+        (
+            False,
+            "This line has a sound segment which will be deleted if edited",
+        ),
+        (
+            True,
+            "This line has a sound segment which will be deleted because it has "
+            "been edited",
+        ),
+    ],
+)
+def test_edit_panel_warns_about_existing_sound_segment(
+    monkeypatch, already_edited: bool, expected_message: str
+) -> None:
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    app = make_loaded_editor(project)
+    monkeypatch.setattr(
+        project.sound_segments,
+        "get_filenames_for",
+        lambda index: ["00001.flac"] if index == 0 else [],
+    )
+    if already_edited:
+        app.edit_session.update_phrase_group_text(
+            app.edit_session.phrase_groups[0].item_id,
+            "One changed.",
+            max_words=80,
+            pysbd_lang="en",
+        )
+
+    async def exercise() -> None:
+        async with app.run_test(size=(50, 30)) as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            warning = app.query_one("#edit-panel-sound-warning", Static)
+            assert warning.display is True
+            assert warning.content.plain == expected_message
+            assert any(span.style.italic for span in warning.content.spans)
+            assert warning.styles.text_wrap == "nowrap"
+            assert warning.styles.text_overflow == "ellipsis"
+            assert app.query_one("#edit-panel").region.height == 10
+
+    run(exercise())
+
+
+def _word_count_span_colors(content: Text) -> dict[str, str]:
+    """Map each styled plain-text fragment to its foreground color name."""
+    return {
+        content.plain[span.start : span.end]: span.style.color.name
+        for span in content.spans
+        if span.style.color is not None and span.style.color.name
+    }
+
+
+def test_word_count_updates_live_using_canonical_counting() -> None:
+    """The counter initializes and updates live with canonical word counting."""
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            counter = app.query_one("#edit-panel-word-count", Static)
+            assert counter.content.plain == "Words: 1/80"
+
+            # Multiple whitespace chars collapse into one canonical word count.
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = "Hello,   world!"
+            await pilot.pause()
+            assert counter.content.plain == "Words: 2/80"
+
+    run(exercise())
+
+
+def test_word_count_marks_zero_as_error() -> None:
+    """A zero-word edit renders the count in the error color."""
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 3
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = ""
+            await pilot.pause()
+
+            counter = app.query_one("#edit-panel-word-count", Static)
+            assert counter.content.plain == "Words: 0/3"
+            colors = _word_count_span_colors(counter.content)
+            assert colors == {"Words: ": "#888888", "0": "#ff0000", "/3": "#888888"}
+
+    run(exercise())
+
+
+def test_word_count_shows_zero_for_non_vocalizable_text() -> None:
+    """Non-vocalizable text reports 0 words and blocks Enter until fixed."""
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = "!!!"
+            await pilot.pause()
+
+            counter = app.query_one("#edit-panel-word-count", Static)
+            assert counter.content.plain == "Words: 0/80"
+            colors = _word_count_span_colors(counter.content)
+            assert colors == {"Words: ": "#888888", "0": "#ff0000", "/80": "#888888"}
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.is_editing is True
+            assert app.query_one("#edit-panel").display is True
+            assert app.has_changes is False
+            assert "One." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_word_count_marks_over_limit_and_ignores_enter() -> None:
+    """Over-limit text renders the count in the error color and Enter is ignored."""
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 3
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = "one two three four"
+            await pilot.pause()
+
+            counter = app.query_one("#edit-panel-word-count", Static)
+            assert counter.content.plain == "Words: 4/3"
+            colors = _word_count_span_colors(counter.content)
+            assert colors == {"Words: ": "#888888", "4": "#ff0000", "/3": "#888888"}
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.is_editing is True
+            assert app.query_one("#edit-panel").display is True
+            assert app.has_changes is False
+            assert "One." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_word_count_accepts_exact_limit() -> None:
+    """Exactly applied_max_words is valid and commits the edit."""
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 3
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = "one two three"
+            await pilot.pause()
+
+            counter = app.query_one("#edit-panel-word-count", Static)
+            assert counter.content.plain == "Words: 3/3"
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.is_editing is False
+            assert app.query_one("#edit-panel").display is False
+            assert app.has_changes is True
+
+    run(exercise())
 
 
 def test_i_opens_segmentation_info_dialog() -> None:
@@ -783,5 +1022,492 @@ def test_info_dialog_dismisses_on_any_key() -> None:
             await pilot.pause()
             assert not isinstance(app.screen, SegmentationInfoDialog)
             assert app.is_running is True
+
+    run(exercise())
+
+
+# =============================================================================
+# Text Editing Tests (Phase 2)
+# =============================================================================
+
+
+async def edit_first_line_to(pilot, app: "TextEditor", new_text: str) -> None:
+    """Open the editor for the currently selected line, replace its content, and confirm.
+
+    Sets the TextArea's text directly instead of simulating keystroke-by-keystroke
+    typing: this exercises the edit-confirm flow rather than Textual's own input
+    handling, and avoids accidentally typing key *names* (e.g. "enter") as literal
+    characters instead of pressing them.
+
+    Assumes the caller has already positioned selected_index where the edit
+    should happen (the OptionList selects index 0 by default on load, so most
+    callers don't need to press anything first).
+    """
+    await pilot.press("e")
+    text_area = app.query_one("#edit-area", TextArea)
+    text_area.text = new_text
+    await pilot.pause()
+    await pilot.press("enter")
+    await pilot.pause()
+
+
+def test_edit_simple_line() -> None:
+    """Test 1: Simple edit (without \\n)."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                    make_phrase_group("Goodbye world."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # Content is loaded via call_after_refresh() after on_mount
+            await pilot.pause()
+            assert app.list_items is not None
+            assert app.list_items != []
+            # OptionList initializes with selected_index = 0
+            assert app.selected_index == 0
+
+            await edit_first_line_to(pilot, app, "Hello world! This is a test.")
+
+            # Verify that the persistent editor pane was hidden
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is False
+            assert app.is_editing is False
+
+            # Verify that has_changes is True
+            assert app.has_changes is True
+
+            # Verify that the text appears correctly in the interface
+            assert "This is a test" in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_multiline_text() -> None:
+    """Test 2: Edit containing \\n (multiple lines)."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Line 1.\nLine 2.\nLine 3."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(
+                pilot, app, "Line 1.\nLine 2.\nLine 3.\nLine 4.\nLine 5."
+            )
+
+            # Verify that the persistent editor pane was hidden
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is False
+            assert app.is_editing is False
+
+            # Verify that has_changes is True
+            assert app.has_changes is True
+
+            # Verify that the text appears correctly with \n
+            formatted = str(app.format_line(0))
+            assert "Line 4." in formatted
+            assert "Line 5." in formatted
+
+    run(exercise())
+
+
+def test_edit_cancel_with_escape() -> None:
+    """Test 3: ESC discards the in-progress edit without changing state."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                ]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # Select the first line
+            await pilot.press("down")
+            assert app.selected_index == 0
+
+            # Start editing
+            await pilot.press("e")
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is True
+            assert app.is_editing is True
+
+            # Change the content, but cancel instead of confirming
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = "This edit should never be saved."
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+
+            # Verify that the persistent editor pane was hidden
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is False
+            assert app.is_editing is False
+
+            # Verify that nothing was staged, and original text is untouched
+            assert app.has_changes is False
+            assert "Hello world." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_rejects_empty_text() -> None:
+    """Test 4: Empty text is rejected and the editor stays open.
+
+    Zero words are invalid under the applied_max_words requirement, so Enter
+    must be ignored: the edit remains active, nothing is staged, and the
+    original text is untouched.
+    """
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            text_area = app.query_one("#edit-area", TextArea)
+            text_area.text = ""
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is True
+            assert app.is_editing is True
+            assert app.has_changes is False
+            assert "Hello world." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_blocked_on_section_item() -> None:
+    """Test 5: Attempt to edit TextEditorSectionItem (should be blocked)."""
+    project = make_project(
+        [
+            BookSection(
+                title="Section 1",
+                phrase_groups=[make_phrase_group("Line 1.")],
+            ),
+            BookSection(
+                title="Section 2",
+                phrase_groups=[make_phrase_group("Line 2.")],
+            ),
+        ]
+    )
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # Select the section (not a line)
+            await pilot.press("down")  # Go to the first line
+            await pilot.press("up")    # Go back to the section
+            assert app.selected_index == 0
+            assert isinstance(app.list_items[0], TextEditorSectionItem)
+
+            # Try to edit - should be blocked
+            await pilot.press("e")
+            await pilot.pause()
+
+            # The persistent panel should remain hidden
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is False
+            assert app.is_editing is False
+
+    run(exercise())
+
+
+def test_edit_creates_has_changes() -> None:
+    """Test 6: has_changes after confirming an edit."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Original text."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Modified")
+
+            assert app.has_changes is True
+
+    run(exercise())
+
+
+def test_edit_preserves_voice_index() -> None:
+    """Test 7: Preservation of voice_index."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    PhraseGroup(
+                        phrases=[Phrase("Original.", Reason.SENTENCE)],
+                        voice_index=42,
+                    ),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Modified")
+
+            item = app.list_items[0]
+            assert isinstance(item, TextEditorPhraseGroupItem)
+            assert item.phrase_group.voice_index == 42
+
+    run(exercise())
+
+
+def test_edit_single_line_without_terminal_punct_uses_canonical_reason() -> None:
+    """Test 8: Spot edits retain the canonical segmenter's end Reason."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Original text."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Modified")
+
+            item = app.list_items[0]
+            assert isinstance(item, TextEditorPhraseGroupItem)
+            for phrase in item.phrase_group.phrases:
+                assert phrase.reason == Reason.SENTENCE, (
+                    f"Expected Reason.SENTENCE, got {phrase.reason}"
+                )
+
+    run(exercise())
+
+
+def test_edit_confirm_without_changes_is_noop() -> None:
+    """Test 9: Confirming without touching the text registers no change."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Hello world."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.press("e")
+            assert app.is_editing is True
+
+            # Confirm without editing the TextArea content at all
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is False
+            assert app.is_editing is False
+            assert app.has_changes is False
+            assert "Hello world." in str(app.format_line(0))
+
+    run(exercise())
+
+
+def test_edit_confirm_mixed_line_endings_is_noop() -> None:
+    """Test 10: Mixed \\r\\n/\\n in stored text still confirms as no-op.
+
+    Regression test for the TextArea \\n -> \\r\\n coalescing bug: a phrase
+    group whose raw text already mixes \\r\\n and \\n (e.g. from a
+    mixed-origin import) must not be falsely detected as "changed" just
+    because the TextArea widget normalizes line terminators on load.
+    """
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[
+                    make_phrase_group("Line 1.\r\nLine 2.\nLine 3."),
+                ]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.press("e")
+            assert app.is_editing is True
+
+            # Confirm without editing the TextArea content at all
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert app.editor_widget is not None
+            assert app.query_one("#edit-panel").display is False
+            assert app.is_editing is False
+            assert app.has_changes is False
+
+    run(exercise())
+
+
+def test_edit_uses_canonical_segmentation() -> None:
+    """Confirming an edit re-creates phrases with the canonical segmenter."""
+    project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
+    project.applied_max_words = 80
+    project.applied_language_code = "en"
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Hello, world.")
+
+            item = app.list_items[0]
+            assert isinstance(item, TextEditorPhraseGroupItem)
+            assert [phrase.text for phrase in item.phrase_group.phrases] == [
+                "Hello, ",
+                "world.",
+            ]
+            assert [phrase.reason for phrase in item.phrase_group.phrases] == [
+                Reason.PHRASE,
+                Reason.SENTENCE,
+            ]
+
+    run(exercise())
+
+
+def test_edit_preserves_original_trailing_break() -> None:
+    """An edit re-applies the original group's trailing whitespace."""
+    project = make_project(
+        [BookSection(phrase_groups=[make_phrase_group("One.\n\n")])]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "Two.")
+
+            item = app.list_items[0]
+            assert isinstance(item, TextEditorPhraseGroupItem)
+            assert item.phrase_group.text == "Two.\n\n"
+
+    run(exercise())
+
+
+def test_edit_confirmation_warns_only_about_edited_segment(monkeypatch) -> None:
+    """Edit-only confirmation deletes only the edited segment, not markers."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")]
+            )
+        ]
+    )
+    app = make_loaded_editor(project)
+    requested: list[set[int]] = []
+
+    def snapshot_paths_at_indices(indices) -> list[Path]:
+        requested.append(set(indices))
+        return [Path("segment.flac")]
+
+    monkeypatch.setattr(
+        project.sound_segments, "snapshot_paths_at_indices", snapshot_paths_at_indices
+    )
+    app.edit_session.update_phrase_group_text(
+        app.edit_session.phrase_groups[0].item_id,
+        "One changed.",
+        max_words=80,
+        pysbd_lang="en",
+    )
+
+    dialog = app.make_confirmation_dialog()
+
+    assert requested == [{0}]
+    assert isinstance(dialog, SaveChangesDialog)
+    assert dialog.copy_lines[2].endswith(
+        "Saving these changes requires deleting 1 generated sound segment."
+    )
+
+
+def test_finish_confirm_commit_edit_uses_narrow_invalidation(monkeypatch) -> None:
+    """Committing an edit-only session narrows invalidation to the edited segment."""
+    project = make_project(
+        [
+            BookSection(
+                phrase_groups=[make_phrase_group("One."), make_phrase_group("Two.")]
+            )
+        ]
+    )
+    project.applied_max_words = 80
+    app = make_loaded_editor(project)
+    commits: list[tuple[object, object]] = []
+
+    def commit(**kwargs) -> str:
+        commits.append(
+            (
+                kwargs.get("edited_segment_indices"),
+                kwargs.get("earliest_affected_original_index"),
+            )
+        )
+        return ""
+
+    monkeypatch.setattr(
+        "tts_audiobook_tool.textual.text_editor.ProjectTextEditUtil.commit", commit
+    )
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            await edit_first_line_to(pilot, app, "One changed.")
+            await pilot.press("escape")
+            await pilot.click(app.screen.query_one("#yes", Button))
+            await pilot.pause()
+            assert app.is_running is False
+
+        assert commits == [({0}, None)]
+        assert app.return_value == EditorSaved()
 
     run(exercise())

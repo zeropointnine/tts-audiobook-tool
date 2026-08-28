@@ -248,6 +248,21 @@ class ProjectSoundSegments:
                 result.append(path)
         return result
 
+    def snapshot_paths_at_indices(self, indices: Collection[int]) -> list[Path]:
+        """Snapshot recognizable generated sound paths whose index is in ``indices``."""
+        wanted = set(indices)
+        segments_path = Path(self.project.sound_segments_path)
+        if not wanted or not segments_path.is_dir():
+            return []
+        result: list[Path] = []
+        for path in segments_path.iterdir():
+            if not path.is_file() or path.suffix.lower() != ".flac":
+                continue
+            sound_segment = SoundSegmentUtil.make_from_file_name(path.name)
+            if sound_segment is not None and sound_segment.idx in wanted:
+                result.append(path)
+        return result
+
     def delete_path_snapshot(self, paths: Collection[Path]) -> None:
         """Delete a pre-mutation path snapshot and invalidate the cached catalog."""
         try:

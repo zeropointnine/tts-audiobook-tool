@@ -286,8 +286,12 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         """Yield optional panel widgets without coupling the shell to their types."""
         yield from ()
 
+    def compose_content_bottom_panel(self) -> ComposeResult:
+        """Yield optional widgets below the shared list within the content column."""
+        yield from ()
+
     def compose_content_main(self) -> Vertical:
-        """Build the shared list and empty-state pane."""
+        """Build the shared list, empty-state pane, and optional bottom panel."""
         return Vertical(
             NonWrappingOptionList(
                 *(
@@ -309,6 +313,7 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
                 id="empty-state",
                 markup=False,
             ),
+            *self.compose_content_bottom_panel(),
             id="content-main",
         )
 
@@ -549,6 +554,13 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
 
     def action_open_find(self) -> None:
         """Open find at the current row, retaining and selecting its query."""
+        # Guard against opening find while a concrete editor is mid-edit (e.g.
+        # TextEditor's in-place line editing). This binding is registered with
+        # priority=True, so it is resolved by the App before a subclass's
+        # on_key handler ever sees the key event - a local prevent_default()
+        # there is not enough to stop it.
+        if getattr(self, "is_editing", False):
+            return
         find_input = self.query_one("#find-input", Input)
         if not self.find_active:
             self.find_active = True
@@ -679,6 +691,8 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
 
     def action_select_all(self) -> None:
         """Select every visible row while retaining the current row as anchor."""
+        if getattr(self, "is_editing", False):
+            return  # prevents ctrl+a from selecting all segments outside the TextArea
         if self.find_active:
             self.query_one("#find-input", Input).select_all()
             return

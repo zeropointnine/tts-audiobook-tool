@@ -239,3 +239,48 @@ def test_commit_reports_marker_save_failure(tmp_path: Path, monkeypatch) -> None
         assert project.markers == {1}
     finally:
         stop_project(project)
+
+
+def test_commit_edit_deletes_only_edited_segment_and_keeps_markers(
+    tmp_path: Path,
+) -> None:
+    project = make_project(tmp_path)
+    try:
+        generated_files = make_generated_files(project)
+        project.markers = {1, 2}
+        session = TextEditSession(project.book)
+        session.update_phrase_group_text(
+            session.phrase_groups[1].item_id,
+            "B2.",
+            max_words=10,
+            pysbd_lang="en",
+        )
+
+        error = ProjectTextEditUtil.commit(
+            project,
+            session.to_book(),
+            session.original_snapshot,
+            earliest_affected_original_index=None,
+            edited_segment_indices=session.edited_original_indices,
+        )
+
+        assert error == ""
+        assert [phrase_group.text for phrase_group in project.phrase_groups] == [
+            "A.",
+            "B2.",
+            "C.",
+        ]
+        assert all(path.exists() for path in generated_files[0])
+        assert all(not path.exists() for path in generated_files[1])
+        assert all(path.exists() for path in generated_files[2])
+        assert project.markers == {1, 2}
+        loaded_book = load_book_from_project_text_file(project.project_text_path)
+        assert isinstance(loaded_book, Book)
+        assert [phrase_group.text for phrase_group in loaded_book.phrase_groups] == [
+            "A.",
+            "B2.",
+            "C.",
+        ]
+    finally:
+        stop_project(project)
+

@@ -2,11 +2,23 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
+from rich.text import Text
+from textual import events
+from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Rule, Static
+from textual.widgets import TextArea as BaseTextArea
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
-from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, COL_DIM, COL_ERROR
+from tts_audiobook_tool.constants import (
+    COL_ACCENT,
+    COL_DEFAULT,
+    COL_DIM,
+    COL_DIM_ITALICS,
+    COL_ERROR,
+)
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_edit_util import (
     ProjectTextEditUtil,
@@ -30,6 +42,7 @@ from tts_audiobook_tool.textual.segmentation_info_dialog import (
 )
 from tts_audiobook_tool.textual.textual_shared import (
     HangingIndentText,
+    NonWrappingOptionList,
     OptionReconcileItem,
     STYLE_DIM,
 )
@@ -37,7 +50,13 @@ from tts_audiobook_tool.textual.textual_shared import (
 
 SHOW_NEWLINE_CHARS = True
 
-
+_HEADER_LINES_DEFAULT = [
+    f"{COL_ACCENT}View/edit text",
+    f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
+    f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
+    f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] Delete  [E] Edit  [S] Split  [I] Import info",
+    f"{COL_DIM}- Press [ESC] to finish",
+]
 @dataclass
 class TextEditorPhraseGroupItem:
     """A staged phrase group and its one-based ordinal in the whole book."""
@@ -80,11 +99,64 @@ TextEditorListItem = TextEditorSectionItem | TextEditorPhraseGroupItem
 
 
 class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
+
+    CSS = ContentTextualApp.CSS + """
+    TextArea .text-area--selection {
+        color: $text;
+        background: $accent 60%;
+    }
+
+    #edit-panel {
+        display: none;
+        height: 9;
+        min-height: 9;
+        max-height: 10;
+        border: round #808080;
+    }
+
+    #edit-panel-title-row, #edit-panel-title, #edit-panel-word-count,
+    #edit-panel-help, #edit-panel-sound-warning, #edit-panel-input-divider {
+        height: 1;
+    }
+
+    #edit-panel-title, #edit-panel-word-count, #edit-panel-help,
+    #edit-panel-sound-warning {
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    #edit-panel-sound-warning {
+        display: none;
+    }
+
+    #edit-panel-title {
+        width: auto;
+    }
+
+    #edit-panel-word-count {
+        width: 1fr;
+        text-align: right;
+    }
+
+    #edit-panel-input-divider {
+        margin: 0;
+        color: #808080;
+    }
+
+    #edit-area {
+        height: 4;
+        border: none;
+    }
+    """
+
     BINDINGS: ClassVar[list[BindingType]] = [
         *ContentTextualApp.BINDINGS,
         Binding("x", "delete_phrase_groups", show=False),
         Binding("s", "split_phrase_group", show=False),
+        Binding("e", "edit_current_line", show=False),
         Binding("i", "show_segmentation_info", show=False),
+        Binding("escape", "cancel_edit", show=False, priority=True),
+        Binding("enter", "confirm_edit", show=False, priority=True),
     ]
 
     def __init__(self, project: Project) -> None:
@@ -92,18 +164,48 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         self.edit_session_or_none: TextEditSession | None = None
         self.section_items: list[TextEditorSectionItem] = []
         self.list_items: list[TextEditorListItem] = []
-        header_lines = [
-            f"{COL_ACCENT}View/edit text",
-            f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
-            f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
-            f"{COL_DIM}- Press [{COL_ACCENT}X{COL_DIM}] to delete selected lines   [S] Split line  - [I] Info",
-            f"{COL_DIM}- Press [ESC] to finish",
-        ]
+
+        # State of manual line editing (in-place with TextArea).
+        self.editor_widget: BaseTextArea | None = None
+        self.is_editing = False
+        self.editing_index: int | None = None
+        self._edit_original_text: str | None = None
+
         super().__init__(
             project,
-            header_lines,
+            list(_HEADER_LINES_DEFAULT),
             empty_state_text="No text lines",
             loading_state_text="...",
+        )
+
+    def compose_content_bottom_panel(self) -> ComposeResult:
+        """Compose the persistent editor pane below the shared line list."""
+        self.editor_widget = BaseTextArea(id="edit-area", theme="vscode_dark")
+        yield Vertical(
+            Horizontal(
+                Static(
+                    Text.from_ansi(f"{COL_ACCENT}Spot edit:"),
+                    id="edit-panel-title",
+                    markup=False,
+                ),
+                Static(
+                    self.make_edit_word_count_text(0),
+                    id="edit-panel-word-count",
+                    markup=False,
+                ),
+                id="edit-panel-title-row",
+            ),
+            Static(
+                Text.from_ansi(
+                    f"{COL_DIM}Press [ENTER] to confirm  [ESC] to cancel"
+                ),
+                id="edit-panel-help",
+                markup=False,
+            ),
+            Static("", id="edit-panel-sound-warning", markup=False),
+            Rule(id="edit-panel-input-divider"),
+            self.editor_widget,
+            id="edit-panel",
         )
 
     def initialize_content(self) -> range:
@@ -194,7 +296,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         return newline_token.join(presentable_lines)
 
     def format_line(self, index: int) -> HangingIndentText:
-        """Format one row, styling selected rows except for the active row."""
+        """Format one row, styling selected/found/edited rows except headings."""
         item_index = self.phrase_indices[index]
         list_item = self.list_items[item_index]
 
@@ -202,7 +304,13 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             return self.format_section_list_item(list_item.display_text, index)
         else:
             is_find_match = index == self.find_match_index
-            style = f"{STYLE_DIM} reverse" if is_find_match else ""
+            is_being_edited = self.is_editing and index == self.editing_index
+            if is_find_match:
+                style = f"{STYLE_DIM} reverse"
+            elif is_being_edited:
+                style = "reverse"
+            else:
+                style = ""
             prefix_text = f"{self.format_line_number(list_item.ordinal)}  "
             presentable_text = (
                 self.presentable_phrase_group_ansi(list_item.phrase_group)
@@ -316,10 +424,263 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             )
         return items
 
+    # ---------------------------------------------------
+    # Manual line editing (in-place, with TextArea)
+    # ---------------------------------------------------
+
+    def get_edit_word_count(self) -> int:
+        """Count editor words, or 0 when the text isn't vocalizable.
+
+        A PhraseGroup must be vocalizable to be legal, so text with no
+        letter/number content reports 0 words and is rejected until it gains
+        vocalizable content. Vocalizable text uses the same counting convention
+        as ``Phrase.num_words``.
+        """
+        editor_widget = self.editor_widget
+        text = editor_widget.text if editor_widget else ""
+        if not app_text.is_vocalizable(text):
+            return 0
+        return app_text.get_word_count(text)
+
+    def is_edit_word_count_valid(self, word_count: int) -> bool:
+        """Return whether edited text satisfies the project's applied limit."""
+        return 0 < word_count <= self.project.applied_max_words
+
+    def make_edit_word_count_text(self, word_count: int) -> Text:
+        """Format the live word count, highlighting an invalid current count."""
+        count_color = (
+            COL_DIM if self.is_edit_word_count_valid(word_count) else COL_ERROR
+        )
+        return Text.from_ansi(
+            f"{COL_DIM}Words: {count_color}{word_count}{COL_DIM}/"
+            f"{self.project.applied_max_words}"
+        )
+
+    def refresh_edit_word_count(self) -> int:
+        """Refresh the live editor count and return its current value."""
+        word_count = self.get_edit_word_count()
+        self.query_one("#edit-panel-word-count", Static).update(
+            self.make_edit_word_count_text(word_count)
+        )
+        return word_count
+
+    def on_text_area_changed(self, event: BaseTextArea.Changed) -> None:
+        """Refresh validation feedback whenever the spot-edit text changes."""
+        if event.text_area is self.editor_widget:
+            self.refresh_edit_word_count()
+
+    def update_edit_sound_warning(self, original_index: int) -> None:
+        """Show whether editing this generated line will invalidate its audio."""
+        warning = self.query_one("#edit-panel-sound-warning", Static)
+        has_sound_segment = bool(
+            self.project.sound_segments.get_filenames_for(original_index)
+        )
+        if has_sound_segment:
+            already_edited = original_index in self.edit_session.edited_original_indices
+            message = (
+                "This line has a sound segment which will be deleted because it has "
+                "been edited"
+                if already_edited
+                else "This line has a sound segment which will be deleted if edited"
+            )
+            warning.update(Text.from_ansi(f"{COL_DIM_ITALICS}{message}"))
+        else:
+            warning.update("")
+        warning.display = has_sound_segment
+        self.query_one("#edit-panel", Vertical).styles.height = (
+            10 if has_sound_segment else 9
+        )
+
+    def action_edit_current_line(self) -> None:
+        """Open a TextArea for editing the currently selected line."""
+        if self.is_editing:
+            return
+        if self.selected_index is None:
+            return
+        if self.find_active:
+            return
+
+        item = self.list_items[self.phrase_indices[self.selected_index]]
+
+        # Block editing of SectionItem
+        if isinstance(item, TextEditorSectionItem):
+            return
+
+        item_id = item.item_id
+        phrase_group = self.edit_session.get_phrase_group(item_id)
+        if phrase_group is None:
+            return
+
+        original_text = phrase_group.phrase_group.text
+
+        # Normalize \r\n / \r to \n before handing text to the TextArea widget.
+        # Pure \n round-trips through TextArea unchanged, but a *mixed*
+        # \r\n/\n string gets coalesced by the widget to all \r\n - so we
+        # normalize here and keep this same normalized value as the baseline
+        # for the change-detection comparison in action_confirm_edit, instead
+        # of re-reading the raw (un-normalized) phrase_group.text there.
+        original_text = app_text.normalize_line_terminators(original_text)
+        self._edit_original_text = original_text
+
+        editor_widget = self.editor_widget
+        if editor_widget is None:
+            return
+        editor_widget.text = original_text
+        self.refresh_edit_word_count()
+        self.update_edit_sound_warning(phrase_group.original_index)
+        self.query_one("#edit-panel", Vertical).display = True
+
+        # Enter editing mode. Keep editing_index/selected_index untouched so
+        # the line being edited remains the one visually selected/highlighted.
+        self.is_editing = True
+        self.editing_index = self.selected_index
+
+        # Refresh the line to apply the "reverse" style to the edited line
+        self.refresh_line(self.editing_index)
+
+        # Disable the OptionList so it can't respond to clicks or keyboard
+        # navigation while editing is in progress.
+        option_list = self.query_one("#line-list", NonWrappingOptionList)
+        option_list.disabled = True
+        option_list.highlighted = self.selected_index
+
+        # Focus the TextArea last, to make sure it (and not the OptionList)
+        # ends up holding keyboard focus.
+        editor_widget.focus()
+
+        # Defer the scroll until after layout has been recalculated with the
+        # newly shown edit panel taking up space, so the visible area used for
+        # the scroll calculation is accurate.
+        self.call_after_refresh(option_list.scroll_to_highlight, top=True)
+
+    def action_confirm_edit(self) -> None:
+        """Confirm the text edit by applying the changes to the edit session."""
+        if self.editor_widget is None or self.editing_index is None:
+            return
+
+        try:
+            self.query_one("#edit-area")
+        except Exception:
+            return
+
+        edited_text = self.editor_widget.text
+
+        # Reject empty or over-limit text, leaving the editor open so the user
+        # can keep fixing it. The live counter is refreshed here so its error
+        # state stays authoritative even if a Changed event was missed.
+        word_count = self.get_edit_word_count()
+        if not self.is_edit_word_count_valid(word_count):
+            self.refresh_edit_word_count()
+            return
+
+        item = self.list_items[self.phrase_indices[self.editing_index]]
+        if isinstance(item, TextEditorSectionItem):
+            return
+
+        item_id = item.item_id
+        phrase_group = self.edit_session.get_phrase_group(item_id)
+        if phrase_group is None:
+            return
+
+        # Use the same normalized baseline stored when the editor was opened,
+        # instead of re-reading phrase_group.phrase_group.text raw - keeps
+        # both sides of the comparison consistent with what the TextArea
+        # widget can actually preserve unchanged.
+        if self._edit_original_text is None:
+            return
+        original_text = self._edit_original_text
+
+        if edited_text == original_text:
+            # Text did not change, remove the widget and finish
+            self._end_edit()
+            return
+
+        result = self.edit_session.update_phrase_group_text(
+            item_id=item_id,
+            new_text=edited_text,
+            max_words=self.project.applied_max_words,
+            pysbd_lang=self.project.applied_language_code,
+        )
+
+        # Apply the mutation to update list_items and refresh the UI
+        self.apply_mutation_result(result)
+
+        self._end_edit()
+        self.refresh()
+
+    def action_cancel_edit(self) -> None:
+        """Cancel the text edit by discarding the changes."""
+        self._end_edit()
+
+    def check_action(
+        self, action: str, parameters: tuple[object, ...]
+    ) -> bool | None:
+        """Disable app-level bindings that would otherwise shadow in-editor keys.
+
+        With priority=True, these bindings would intercept keys unconditionally:
+        - "escape" -> "cancel_edit" would shadow the inherited "escape" ->
+        "quit_editor" binding from ContentTextualApp, preventing the TUI from
+        closing when not editing.
+        - "enter" -> "confirm_edit" must only capture Enter during an edit.
+        - "ctrl+a" -> "select_all" would prevent Ctrl+A from reaching the
+        focused TextArea. Note: Textual's TextArea binds Ctrl+A to
+        cursor_line_start by default (readline-style), not select-all, so we
+        explicitly call the TextArea's own select_all() here to get
+        VS Code-style "select all" behavior instead.
+        Also, "ctrl+a" behaves weirdly here. To make it work as commonly intended
+        ("selec all") is necessary to "ctrl+a" and then "ctrl+c" (only tested on Windows).
+
+        Returning False tells Textual to skip the binding, letting the key fall
+        through to the next candidate (e.g. the TextArea's own bindings).
+        """
+        if action in {"cancel_edit", "confirm_edit"} and not self.is_editing:
+            return False
+        if action == "select_all" and self.is_editing:
+            if self.editor_widget:
+                self.editor_widget.select_all()
+            return False
+        return True
+
+    def _end_edit(self) -> None:
+        """End editing the current line and hide its persistent pane."""
+        edit_panels = self.query("#edit-panel")
+        if edit_panels:
+            edit_panels.first(Vertical).display = False
+
+        previously_editing_index = self.editing_index
+        self.is_editing = False
+        self.editing_index = None
+        self._edit_original_text = None
+
+        # Refresh the line to remove the "reverse" style
+        if previously_editing_index is not None:
+            self.refresh_line(previously_editing_index)
+
+        # Re-enable the OptionList and restore focus/highlight to it.
+        try:
+            option_list = self.query_one("#line-list", NonWrappingOptionList)
+            option_list.disabled = False
+            if self.selected_index is not None:
+                option_list.highlighted = self.selected_index
+            self.set_focus(option_list)
+        except Exception:
+            pass
+
+    def on_key(self, event: events.Key) -> None:
+        """Prevent TextArea from consuming Enter, Escape, or Ctrl+F while editing."""
+        if self.is_editing and event.key in {"enter", "escape", "ctrl+f"}:
+            event.prevent_default()
+            if event.key == "escape" and self.editor_widget:
+                self.action_cancel_edit()
+            elif event.key == "enter" and self.editor_widget:
+                self.action_confirm_edit()
+
+    # ---------------------------------------------------
+
     def action_delete_phrase_groups(self) -> None:
         """Delete phrase rows, or one section when it is the sole selected row."""
         edit_session = self.edit_session_or_none
-        if self.find_active or edit_session is None:
+        if self.is_editing or self.find_active or edit_session is None:
             return
         selected_items = [
             self.list_items[self.phrase_indices[index]]
@@ -343,7 +704,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
 
     def action_split_phrase_group(self) -> None:
         """Open a boundary chooser for exactly one selected phrase-group row."""
-        if self.find_active or self.edit_session_or_none is None:
+        if self.is_editing or self.find_active or self.edit_session_or_none is None:
             return
         phrase_items = [
             item
@@ -387,34 +748,58 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         edit_session = self.edit_session_or_none
         if edit_session is None:
             return SaveChangesDialog()
-        first_index = edit_session.earliest_affected_original_index
-        if first_index is None:
-            return SaveChangesDialog()
+
+        if edit_session.did_structural_change:
+            first_index = edit_session.earliest_affected_original_index
+            if first_index is None:
+                return SaveChangesDialog()
+            segment_count = len(
+                self.project.sound_segments.snapshot_paths_from_index(first_index)
+            )
+            marker_count = len(
+                [marker for marker in self.project.markers if marker >= first_index]
+            )
+            if segment_count == 0 and marker_count == 0:
+                return SaveChangesDialog()
+            deletion_parts: list[str] = []
+            if segment_count > 0:
+                segment_word = "segment" if segment_count == 1 else "segments"
+                deletion_parts.append(
+                    f"{segment_count} generated sound {segment_word}"
+                )
+            if marker_count > 0:
+                marker_label = app_text.get_section_marker_label(
+                    self.project,
+                    is_title_case=False,
+                    is_singular=marker_count == 1,
+                )
+                deletion_parts.append(f"{marker_count} {marker_label}")
+            warning_text = (
+                f"Saving these changes requires deleting "
+                f"{' and '.join(deletion_parts)} "
+                f"from line {first_index + 1} onward."
+            )
+            return SaveChangesDialog(
+                [
+                    "Save changes before exiting?",
+                    "",
+                    f"{COL_ERROR}{warning_text}",
+                ]
+            )
+
+        # Edit-only: only the edited segments' audio is invalidated; markers
+        # and later segments are untouched.
         segment_count = len(
-            self.project.sound_segments.snapshot_paths_from_index(first_index)
+            self.project.sound_segments.snapshot_paths_at_indices(
+                edit_session.edited_original_indices
+            )
         )
-        marker_count = len(
-            [marker for marker in self.project.markers if marker >= first_index]
-        )
-        if segment_count == 0 and marker_count == 0:
+        if segment_count == 0:
             return SaveChangesDialog()
-        deletion_parts: list[str] = []
-        if segment_count > 0:
-            segment_word = "segment" if segment_count == 1 else "segments"
-            deletion_parts.append(
-                f"{segment_count} generated sound {segment_word}"
-            )
-        if marker_count > 0:
-            marker_label = app_text.get_section_marker_label(
-                self.project,
-                is_title_case=False,
-                is_singular=marker_count == 1,
-            )
-            deletion_parts.append(f"{marker_count} {marker_label}")
+        segment_word = "segment" if segment_count == 1 else "segments"
         warning_text = (
             f"Saving these changes requires deleting "
-            f"{' and '.join(deletion_parts)} "
-            f"from line {first_index + 1} onward."
+            f"{segment_count} generated sound {segment_word}."
         )
         return SaveChangesDialog(
             [
@@ -430,14 +815,24 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         if edit_session is None:
             self.exit(EditorSaveFailed("Text editor was not initialized"))
             return
-        error = ProjectTextEditUtil.commit(
-            project=self.project,
-            staged_book=edit_session.to_book(),
-            original_snapshot=edit_session.original_snapshot,
-            earliest_affected_original_index=(
-                edit_session.earliest_affected_original_index
-            ),
-        )
+        if edit_session.did_structural_change:
+            error = ProjectTextEditUtil.commit(
+                project=self.project,
+                staged_book=edit_session.to_book(),
+                original_snapshot=edit_session.original_snapshot,
+                earliest_affected_original_index=(
+                    edit_session.earliest_affected_original_index
+                ),
+                edited_segment_indices=None,
+            )
+        else:
+            error = ProjectTextEditUtil.commit(
+                project=self.project,
+                staged_book=edit_session.to_book(),
+                original_snapshot=edit_session.original_snapshot,
+                earliest_affected_original_index=None,
+                edited_segment_indices=edit_session.edited_original_indices,
+            )
         if error:
             result = EditorSaveFailed(f"Save failed: {error}")
         else:

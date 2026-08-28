@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from copy import deepcopy
 
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
@@ -18,21 +19,35 @@ class ProjectTextEditUtil:
         project: Project,
         staged_book: Book,
         original_snapshot: str,
-        earliest_affected_original_index: int | None,
+        earliest_affected_original_index: int | None = None,
+        edited_segment_indices: Collection[int] | None = None,
     ) -> str:
-        """Persist a staged Book, update Project, then remove invalid generated audio."""
+        """Persist a staged Book, update Project, then remove invalid generated audio.
+
+        ``edited_segment_indices`` selects edit-only invalidation: only those
+        sound segments are deleted and markers are left untouched. Otherwise
+        ``earliest_affected_original_index`` selects the structural cutoff,
+        deleting segments from that index onward and pruning markers at/after it.
+        """
         if TextEditSession.make_snapshot(project.book) != original_snapshot:
             return "Project text changed while editing"
         if not project.project_text_path:
             return "Project text path is unavailable"
 
-        cleanup_paths = (
-            project.sound_segments.snapshot_paths_from_index(
+        if edited_segment_indices is not None:
+            cleanup_paths = project.sound_segments.snapshot_paths_at_indices(
+                edited_segment_indices
+            )
+            prune_markers_cutoff = None
+        elif earliest_affected_original_index is not None:
+            cleanup_paths = project.sound_segments.snapshot_paths_from_index(
                 earliest_affected_original_index
             )
-            if earliest_affected_original_index is not None
-            else []
-        )
+            prune_markers_cutoff = earliest_affected_original_index
+        else:
+            cleanup_paths = []
+            prune_markers_cutoff = None
+
         new_book = deepcopy(staged_book)
         error = ProjectTextEditUtil.atomic_save_book(project.project_text_path, new_book)
         if error:
@@ -46,11 +61,11 @@ class ProjectTextEditUtil:
                 f"{make_error_string(exception)}"
             )
 
-        if earliest_affected_original_index is not None:
+        if prune_markers_cutoff is not None:
             new_markers = {
                 marker
                 for marker in project.markers
-                if marker < earliest_affected_original_index
+                if marker < prune_markers_cutoff
             }
             if new_markers != project.markers:
                 project.markers = new_markers
