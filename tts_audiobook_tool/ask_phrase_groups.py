@@ -1,5 +1,4 @@
 import os
-import platform
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types import SegmentationStrategy
@@ -7,6 +6,7 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
+from tts_audiobook_tool.textual.text_input_app import run_text_input_app
 from tts_audiobook_tool.util import *
 
 
@@ -75,15 +75,7 @@ def get_from_std_in(
     """
     Ask the user to input or paste text and return phrase groups plus raw text.
     """
-    printt("Enter/paste text of any length.")
-    if platform.system() == "Windows":
-        s = f"Finish with {COL_ACCENT}[CTRL-Z + ENTER] {COL_DEFAULT}on its own line"
-    else:
-        s = f"Finish with {COL_ACCENT}[ENTER + CTRL-D]{COL_DEFAULT}"
-    printt(s)
-    printt()
-    raw_text = ask.ask_multiline()
-    printt()
+    raw_text = run_text_input_app()
     if not raw_text:
         return [], ""
 
