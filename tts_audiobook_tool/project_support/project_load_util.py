@@ -88,6 +88,7 @@ class ProjectLoadUtil:
 
         previous_model_type = project.current_model_type
         proper_name = previous_model_type.value.ui.get("proper_name")
+        warned_model_mismatch = False
         if (
             prompt_on_warnings
             and previous_model_type != TtsModelType.NONE
@@ -105,6 +106,7 @@ class ProjectLoadUtil:
                 ),
                 and_prompt=True
             )
+            warned_model_mismatch = True
 
         if inline_text_source:
             err = ProjectTextIOUtil.save_book(project)
@@ -145,6 +147,14 @@ class ProjectLoadUtil:
                 printt(warning)
             if prompt_on_warnings:
                 ask.ask_enter_to_continue()
+
+        if warned_model_mismatch:
+            # Treat displaying the mismatch warning as acknowledgement so it is not repeated
+            # every time the unchanged project is opened outside its previous model's venv.
+            project.current_model_type = TtsModelType.NONE
+            err = project.save(stamp_runtime_model=False)
+            if err:
+                return err
 
         return project
 

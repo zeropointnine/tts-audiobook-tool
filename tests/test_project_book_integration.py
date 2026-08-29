@@ -223,18 +223,22 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.current_model_type, TtsModelType.CHATTERBOX)
         self.assertEqual(payload["current_model_type"], TtsModelType.CHATTERBOX.value.id)
 
-    def test_project_load_reports_different_previous_model(self):
+    def test_project_load_reports_and_acknowledges_different_previous_model(self):
         with tempfile.TemporaryDirectory() as project_dir:
             self.write_complete_project_json(project_dir, TtsModelType.CHATTERBOX.value.id)
 
             with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.MIRA), \
                     patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
                 result = ProjectLoadUtil.load_using_dir_path(project_dir)
+                with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
+                    payload = json.load(file)
+                reopened_result = ProjectLoadUtil.load_using_dir_path(project_dir)
 
         self.assertIsInstance(result, Project)
-        continue_mock.assert_called_once_with(
-            "FYI:\nThe last time this project was used, it was with the Chatterbox TTS model."
-        )
+        self.assertEqual(result.current_model_type, TtsModelType.NONE)
+        self.assertEqual(payload["current_model_type"], TtsModelType.NONE.value.id)
+        self.assertIsInstance(reopened_result, Project)
+        continue_mock.assert_called_once_with()
 
     def test_project_load_skips_previous_model_report_when_not_applicable(self):
         cases = [

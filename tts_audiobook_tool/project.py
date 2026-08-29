@@ -322,7 +322,7 @@ class Project(BaseModel):
             return ""
         return os.path.join(self.dir_path, PROJECT_TEXT_FILE_NAME)
 
-    def save(self) -> str:
+    def save(self, *, stamp_runtime_model: bool = True) -> str:
         
         file_path = os.path.join(self.dir_path, PROJECT_JSON_FILE_NAME)
 
@@ -332,7 +332,7 @@ class Project(BaseModel):
 
             super(Project, self).__setattr__('version', PROJECT_SPEC_VERSION)
             current_model_type = Tts.get_type()
-            if current_model_type != TtsModelType.NONE:
+            if stamp_runtime_model and current_model_type != TtsModelType.NONE:
                 super(Project, self).__setattr__('current_model_type', current_model_type)
             self.normalize_chapter_mode()
             return ProjectSerializationUtil.to_project_json_dict(self)
