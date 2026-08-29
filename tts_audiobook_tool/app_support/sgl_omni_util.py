@@ -8,7 +8,7 @@ import soundfile
 
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types import ReadinessIssue, Sound, StreamChunkCallback, StreamEndCallback
-from tts_audiobook_tool.constants import COL_DIM_ITALICS
+from tts_audiobook_tool.constants import COL_DIM_ITALICS, SGL_OMNI_URL_DEFAULT
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -29,7 +29,12 @@ class SglOmniUtil:
     
     @staticmethod
     def set_base_url(s: str) -> None:
-        SglOmniUtil._base_url = s
+        """
+        Sets the base URL for SGL-Omni requests.
+        An empty value falls back to SGL_OMNI_URL_DEFAULT,
+        since the program uses the default URL when no prefs value exists.
+        """
+        SglOmniUtil._base_url = s or SGL_OMNI_URL_DEFAULT
 
     @staticmethod
     def get_model_id() -> str:

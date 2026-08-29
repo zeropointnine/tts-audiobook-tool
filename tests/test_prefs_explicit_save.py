@@ -254,3 +254,57 @@ def test_quarantine_path_is_unique_when_timestamp_collides(
     assert second.endswith("-1.corrupt")
     assert Path(first).read_text(encoding="utf-8") == "first"
     assert Path(second).read_text(encoding="utf-8") == "second"
+
+
+def test_sgl_omni_url_defaults_to_empty() -> None:
+    assert Prefs().sgl_omni_url == ""
+
+
+def test_sgl_omni_url_load_normalizes_unset_values(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    # Missing file => missing key => empty
+    assert Prefs.load().sgl_omni_url == ""
+
+    destination.write_text(json.dumps({"sgl_omni_url": ""}), encoding="utf-8")
+    assert Prefs.load().sgl_omni_url == ""
+
+    destination.write_text(json.dumps({"sgl_omni_url": "   "}), encoding="utf-8")
+    assert Prefs.load().sgl_omni_url == ""
+
+    destination.write_text(json.dumps({"sgl_omni_url": 42}), encoding="utf-8")
+    assert Prefs.load().sgl_omni_url == ""
+
+    destination.write_text(
+        json.dumps({"sgl_omni_url": "http://example.test:9009"}),
+        encoding="utf-8",
+    )
+    assert Prefs.load().sgl_omni_url == "http://example.test:9009"
+
+
+def test_sgl_omni_url_setter_strips_and_allows_empty() -> None:
+    prefs = Prefs()
+    prefs.sgl_omni_url = "  http://example.test:9009  "
+    assert prefs.sgl_omni_url == "http://example.test:9009"
+
+    prefs.sgl_omni_url = "   "
+    assert prefs.sgl_omni_url == ""
+
+
+def test_sgl_omni_url_round_trips_empty(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs()
+    assert prefs.save() == ""
+
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    assert payload["sgl_omni_url"] == ""
+    assert Prefs.load().sgl_omni_url == ""

@@ -1,5 +1,7 @@
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool.constants_hints import HINT_SGL_OMNI_URL
 from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
@@ -13,12 +15,11 @@ def make_state() -> State:
     state = object.__new__(State)
     state._prefs = Prefs()
     state._project = Project(dir_path="")
+    state.has_shown_main_menu = False
     return state
 
 
-def test_main_menu_marks_itself_shown_after_render(monkeypatch):
-    state = make_state()
-    state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+def _capture_and_invoke_on_shown(monkeypatch, state) -> dict:
     captured = {}
 
     def menu(*args, **kwargs):
@@ -28,7 +29,121 @@ def test_main_menu_marks_itself_shown_after_render(monkeypatch):
 
     MainMenu.menu(state)
 
-    assert captured["on_shown"] == state.mark_main_menu_shown
+    assert "on_shown" in captured
+    captured["on_shown"]()
+    return captured
+
+
+def test_main_menu_on_shown_marks_main_menu_shown(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    try:
+        Tts._backend_mode = TtsBackendKind.LOCAL
+        state = make_state()
+        marks = []
+        state.mark_main_menu_shown = lambda: marks.append(True)  # type: ignore[method-assign]
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert marks == [True]
+
+
+def test_main_menu_on_shown_shows_sgl_omni_url_hint_when_offline_and_unset(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    state = None
+    try:
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        SglOmniUtil._model_id = ""
+        state = make_state()  # Prefs() leaves sgl_omni_url unset (empty)
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == [(state.prefs, HINT_SGL_OMNI_URL)]
+
+
+def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_when_url_set(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    try:
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        SglOmniUtil._model_id = ""
+        state = make_state()
+        state._prefs = Prefs(sgl_omni_url="http://example.test:9009")
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == []
+
+
+def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_when_online(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    try:
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        SglOmniUtil._model_id = "bosonai/higgs-audio-v3"
+        state = make_state()
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == []
+
+
+def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_in_local_mode(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    try:
+        Tts._backend_mode = TtsBackendKind.LOCAL
+        SglOmniUtil._model_id = ""
+        state = make_state()
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == []
+
+
+def test_main_menu_on_shown_does_not_show_sgl_omni_url_hint_after_first_display(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    try:
+        Tts._backend_mode = TtsBackendKind.SGL_OMNI
+        SglOmniUtil._model_id = ""
+        state = make_state()
+        state.has_shown_main_menu = True
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == []
 
 
 def preserve_tts_and_sgl_state():

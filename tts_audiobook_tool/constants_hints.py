@@ -222,6 +222,15 @@ SGL-Omni runs from the dedicated venv created by requirements-sgl-omni.txt
 to use your saved settings again."""
 )
 
+HINT_SGL_OMNI_URL = Hint(
+    "sgl_omni_url",
+    "Set the URL to your SGL Omni server",
+    """No SGL-Omni server URL is set in your preferences, so the app
+is assuming the server is running at the default address: http://localhost:8000
+It doesn't appear to be online there, so set the correct URL in
+"Options > SGL-Omni server URL" to point the app at your server."""
+)
+
 HINT_DIALOG_VOICE = Hint(
     "dialog_voice",
     "Dialog voices",

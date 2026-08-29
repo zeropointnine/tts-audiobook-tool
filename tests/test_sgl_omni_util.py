@@ -8,6 +8,7 @@ import soundfile
 
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
+from tts_audiobook_tool.constants import SGL_OMNI_URL_DEFAULT
 from tts_audiobook_tool.l import L
 
 
@@ -27,6 +28,18 @@ class ByteStream(httpx.SyncByteStream):
 
     def __iter__(self):
         yield from self.chunks
+
+
+def test_set_base_url_empty_value_falls_back_to_default():
+    saved = SglOmniUtil._base_url
+    try:
+        SglOmniUtil.set_base_url("")
+        assert SglOmniUtil.get_base_url() == SGL_OMNI_URL_DEFAULT
+
+        SglOmniUtil.set_base_url("http://example.test:9009")
+        assert SglOmniUtil.get_base_url() == "http://example.test:9009"
+    finally:
+        SglOmniUtil._base_url = saved
 
 
 def test_generate_streaming_decodes_sse_audio_chunks_and_callbacks():

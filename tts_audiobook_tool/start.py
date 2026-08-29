@@ -267,7 +267,7 @@ class Start:
             and Tts.get_type() == TtsModelType.NONE
             and (
                 temp_prefs.sgl_omni_type is not None
-                or temp_prefs.sgl_omni_url != SGL_OMNI_URL_DEFAULT
+                or temp_prefs.sgl_omni_url != ""
             )
         ):
             hints.show_hint_if_necessary(temp_prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
