@@ -10,3 +10,6 @@ dependencies = []
 
 [tool.setuptools.packages.find]
 where = ["."]
+# Explicit include: never auto-discover a stale build/ dir (or anything else)
+# as a namespace package and ship it inside the wheel.
+include = ["tts_audiobook_tool_sgl_omni_marker*"]

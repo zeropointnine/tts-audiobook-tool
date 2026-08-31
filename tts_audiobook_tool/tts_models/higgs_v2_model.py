@@ -79,7 +79,7 @@ class HiggsV2Model(HiggsV2BaseModel):
 
     # Encoded audio tokens are CPU-cloned, so several voices can be
     # retained at once.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, device: DeviceType):
 

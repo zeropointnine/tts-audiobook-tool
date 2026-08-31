@@ -31,7 +31,7 @@ class PocketModel(PocketBaseModel):
     # The voice state is large and lives on the model's device, so only the
     # most recently prepared voice is retained (the base cache evicts the
     # previous one when a different voice is selected).
-    SUPPORTS_MULTIPLE_VOICE_CLONES = False
+    RETAINS_MULTIPLE_VOICE_CLONES = False
 
     def __init__(self, device: DeviceType, language: str = ""):
 

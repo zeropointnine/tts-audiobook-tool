@@ -372,7 +372,11 @@ def _run_realtime_playback_command(
 ) -> None:
     from tts_audiobook_tool.app_support.interrupts import Interrupts
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
-    from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase
+    from tts_audiobook_tool.generation_events import (
+        GenerationEvents,
+        GenerationPhase,
+        GenerationTimedOut,
+    )
     from tts_audiobook_tool.real_time_playback import (
         RealTimePlaybackRunStatus,
         start,
@@ -384,7 +388,7 @@ def _run_realtime_playback_command(
     interrupts.set_external_event(cancellation_event)
 
     def relay(update: object) -> None:
-        if isinstance(update, GenerationPhase):
+        if isinstance(update, (GenerationPhase, GenerationTimedOut)):
             event_queue.put(RealTimePlaybackUpdate(command.operation_id, update))
 
     try:

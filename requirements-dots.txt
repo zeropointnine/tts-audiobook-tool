@@ -2,11 +2,12 @@
 # Use Python 3.12
 #################
 
-# Model dependencies
-pocket-tts==2.0.0
+# dots.tts dependencies
+dots.tts @ git+https://github.com/zeropointnine/dots.tts-for-tat.git@1c71d00554499c49deface57e6af8fa9c159c141
+transformers==4.57.6
+triton-windows==3.4.0.post21; sys_platform == 'win32'
 
 # App dependencies
-
 faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'
 ctranslate2==4.7.1; sys_platform != 'darwin' or platform_machine != 'arm64'
 mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'

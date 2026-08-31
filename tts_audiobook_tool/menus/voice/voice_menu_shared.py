@@ -38,6 +38,9 @@ class VoiceMenuShared:
             case TtsModelType.CHATTERBOX:
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)
+            case TtsModelType.DOTS:
+                from tts_audiobook_tool.menus.voice import VoiceDotsMenu
+                VoiceDotsMenu.menu(state)
             case TtsModelType.FISH_S1:
                 from tts_audiobook_tool.menus.voice import VoiceFishS1Menu
                 VoiceFishS1Menu.menu(state)

@@ -24,7 +24,7 @@ class MossModel(MossBaseModel):
 
     # Audio codes are small (T x NQ int codes) and CPU-retained, so several
     # voices can be kept at once.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, device: DeviceType, model_target: str = MossConfigs.get_default_repo_id()):
 

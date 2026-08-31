@@ -11,6 +11,7 @@ from textual.widgets import Rule, Static
 from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.generation_events import GenerationTimedOut
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleOutput,
@@ -407,7 +408,8 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         real_time_playback,
         "generate_full_flow",
         lambda state, phrase_groups, index, has_runway,
-        consecutive_model_errors=0, max_consecutive_model_errors=5: (
+        consecutive_model_errors=0, max_consecutive_model_errors=5,
+        gen_timeout_tracker=None: (
             sound, False, 0,
         ),
     )
@@ -506,3 +508,95 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
     assert (event.start_sample, event.end_sample) == (0, 48000)
     assert event.played_samples == 0
     assert streams[0].shut_downs == 1
+
+
+def test_gen_timeout_update_hard_resets_worker_even_with_cancel_pending(
+    monkeypatch,
+) -> None:
+    """A pending single-CTRL-C cancel must not suppress the gen timeout."""
+    reset_calls: list[int] = []
+    cancel_calls: list[str] = []
+    latch = {"deliver": False}
+    events = [
+        RealTimePlaybackUpdate("job", GenerationTimedOut(timeout_seconds=180.0))
+    ]
+
+    def fake_drain_events() -> list:
+        if latch["deliver"] and events:
+            return [events.pop(0)]
+        return []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(fake_drain_events))
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+
+    async def exercise() -> None:
+        app = RealTimePlaybackApp(make_state(), [], None)
+        async with app.run_test() as pilot:
+            await pilot.press("ctrl+c")
+            assert cancel_calls == ["job"]
+            assert app.cancel_requested
+
+            # The timeout fires anyway and hard-resets the worker.
+            latch["deliver"] = True
+            await pilot.pause(0.3)
+
+            assert reset_calls == [1]
+            assert app.terminal_result is not None
+            assert app.terminal_result.status is (
+                RealTimePlaybackTerminalStatus.WORKER_RESET
+            )
+            assert "GEN_TIMEOUT" in app.terminal_result.message
+            assert "180" in app.terminal_result.message
+            await pilot.press("enter")
+
+    run(exercise())
+
+
+def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, capsys) -> None:
+    reset_calls: list[int] = []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    events = iter(
+        [
+            RealTimePlaybackUpdate(
+                "job", GenerationTimedOut(timeout_seconds=180.0)
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        staticmethod(lambda timeout=0.1: next(events)),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+
+    result = _run_realtime_playback_console(make_state(), [], None)
+
+    assert reset_calls == [1]
+    assert result.status is RealTimePlaybackTerminalStatus.WORKER_RESET
+    assert "GEN_TIMEOUT" in result.message
+    assert "180" in result.message
+    assert "GEN_TIMEOUT" in capsys.readouterr().out

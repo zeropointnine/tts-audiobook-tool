@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable, Iterator
 
-from tts_audiobook_tool.generation_events import GenerationPhase
+from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,7 @@ class RealTimePlaybackAwaitingContinue:
 
 RealTimePlaybackEvent = (
     GenerationPhase
+    | GenerationTimedOut
     | RealTimePlaybackStarted
     | RealTimePlaybackProgress
     | RealTimePlaybackBuffer

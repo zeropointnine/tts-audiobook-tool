@@ -259,6 +259,7 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         self.phase = "Starting worker job"
         self.cancel_requested = False
         self.reset_in_progress = False
+        self.reset_reason = ""
         self.finishing = False
         self.terminal_result: ResultT | None = None
         # Ctrl+F opens the bottom find bar over the log; typing edits the
@@ -481,10 +482,16 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
             return
         self._begin_hard_reset()
 
-    def _begin_hard_reset(self) -> None:
+    def _begin_hard_reset(self, reason: str = "") -> None:
+        """Start a hard reset; ``reason`` (when set) explains what triggered
+        it (eg a gen timeout) and is carried into the terminal summary."""
         self.reset_in_progress = True
+        self.reset_reason = reason
         self.phase = "Hard-resetting model worker"
-        self._append_application_lines(["", f"{COL_ERROR}Terminating and hard-resetting models\n", "\n "])
+        lines = ["", f"{COL_ERROR}Terminating and hard-resetting models\n", "\n "]
+        if reason:
+            lines.insert(1, f"{COL_ERROR}{reason}\n")
+        self._append_application_lines(lines)
         self._update_header()
         self.run_worker(
             self._hard_reset_worker,
@@ -499,7 +506,9 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
 
     def _hard_reset_finished(self, error: str) -> None:
         self.reset_in_progress = False
-        message = error
+        message = self.reset_reason
+        if error:
+            message = f"{message}\n{error}" if message else error
         log_path = make_worker_log_file_path()
         if log_path:
             message = (

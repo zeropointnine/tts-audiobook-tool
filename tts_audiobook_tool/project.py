@@ -9,6 +9,10 @@ from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSett
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_models.dots_base_model import (
+    DotsBaseModel,
+    DotsCompileMode,
+)
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
@@ -165,6 +169,16 @@ class Project(BaseModel):
     chatterbox_ml_repetition_penalty: float = -1
     chatterbox_turbo_repetition_penalty: float = -1
     chatterbox_seed: int = -1
+
+    dots_target: str = ""
+    dots_voice_file_name: list[str] = Field(default_factory=list)
+    dots_voice_transcript: list[str] = Field(default_factory=list)
+    dots_seed: int = DotsBaseModel.SEED_DEFAULT
+    dots_speaker_scale: float = -1
+    dots_num_steps_soar: int = -1
+    dots_num_steps_mf: int = -1
+    dots_guidance_scale: float = -1
+    dots_compile: bool = DotsCompileMode.default().enabled
 
     fish_s1_voice_file_name: list[str] = Field(default_factory=list)
     fish_s1_voice_transcript: list[str] = Field(default_factory=list, alias="fish_s1_voice_text")

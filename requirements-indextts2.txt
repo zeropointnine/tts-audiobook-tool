@@ -29,7 +29,7 @@ hf_xet
 librosa
 loguru==0.7.3
 metaphone==0.6
-mutagen==1.47.0
+mutagen==1.48.1
 natsort==8.4.0
 num2words==0.5.14
 nvidia-ml-py

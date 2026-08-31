@@ -21,6 +21,10 @@ from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_models.dots_base_model import (
+    DotsBaseModel,
+    DotsCompileMode,
+)
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
@@ -37,6 +41,8 @@ if TYPE_CHECKING:
 class ProjectSerializationUtil:
     VOICE_LIST_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "chatterbox_voice_file_name": (),
+        "dots_voice_file_name": (),
+        "dots_voice_transcript": (),
         "fish_s1_voice_file_name": (),
         "fish_s1_voice_transcript": ("fish_s1_voice_text",),
         "fish_s2_voice_file_name": (),
@@ -353,6 +359,71 @@ class ProjectSerializationUtil:
             seed = -1
         d['chatterbox_seed'] = seed
 
+        target = d.get("dots_target", "")
+        if not isinstance(target, str) or (
+            target and target not in DotsBaseModel.PRESET_REPO_IDS
+        ):
+            target = ""
+            add_warning("dots_target", target)
+        d["dots_target"] = target
+
+        seed = d.get("dots_seed", DotsBaseModel.SEED_DEFAULT)
+        if not isinstance(seed, (int, float)) or not (
+            DotsBaseModel.SEED_MIN <= seed <= DotsBaseModel.SEED_MAX
+        ):
+            seed = DotsBaseModel.SEED_DEFAULT
+            add_warning("dots_seed", seed)
+        d["dots_seed"] = int(seed)
+
+        value = d.get("dots_speaker_scale", -1)
+        if value != -1 and (
+            not isinstance(value, (int, float))
+            or not DotsBaseModel.SPEAKER_SCALE_MIN
+            <= value
+            <= DotsBaseModel.SPEAKER_SCALE_MAX
+        ):
+            value = -1
+            add_warning("dots_speaker_scale", value)
+        d["dots_speaker_scale"] = float(value)
+
+        value = d.get("dots_num_steps_soar", -1)
+        if value != -1 and (
+            not isinstance(value, (int, float))
+            or not DotsBaseModel.NUM_STEPS_SOAR_MIN
+            <= value
+            <= DotsBaseModel.NUM_STEPS_SOAR_MAX
+        ):
+            value = -1
+            add_warning("dots_num_steps_soar", value)
+        d["dots_num_steps_soar"] = int(value)
+
+        value = d.get("dots_num_steps_mf", -1)
+        if value != -1 and (
+            not isinstance(value, (int, float))
+            or not DotsBaseModel.NUM_STEPS_MF_MIN
+            <= value
+            <= DotsBaseModel.NUM_STEPS_MF_MAX
+        ):
+            value = -1
+            add_warning("dots_num_steps_mf", value)
+        d["dots_num_steps_mf"] = int(value)
+
+        value = d.get("dots_guidance_scale", -1)
+        if value != -1 and (
+            not isinstance(value, (int, float))
+            or not DotsBaseModel.GUIDANCE_SCALE_MIN
+            <= value
+            <= DotsBaseModel.GUIDANCE_SCALE_MAX
+        ):
+            value = -1
+            add_warning("dots_guidance_scale", value)
+        d["dots_guidance_scale"] = float(value)
+
+        # A missing "dots_compile" is expected for projects predating the setting;
+        # only warn when the key exists but holds an invalid value.
+        d.setdefault("dots_compile", DotsCompileMode.default().enabled)
+        normalize_bool("dots_compile", DotsCompileMode.default().enabled, warn=True)
+
         normalize_bool('fish_s1_compile_enabled', True)
 
         seed = d.get('fish_s1_seed', -1)
@@ -654,6 +725,16 @@ class ProjectSerializationUtil:
             "chatterbox_cfg": project.chatterbox_cfg,
             "chatterbox_exaggeration": project.chatterbox_exaggeration,
             "chatterbox_seed": project.chatterbox_seed,
+
+            "dots_target": project.dots_target,
+            "dots_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.dots_voice_file_name),
+            "dots_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.dots_voice_transcript),
+            "dots_seed": project.dots_seed,
+            "dots_speaker_scale": project.dots_speaker_scale,
+            "dots_num_steps_soar": project.dots_num_steps_soar,
+            "dots_num_steps_mf": project.dots_num_steps_mf,
+            "dots_guidance_scale": project.dots_guidance_scale,
+            "dots_compile": project.dots_compile,
 
             "fish_s1_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s1_voice_file_name),
             "fish_s1_voice_text": ProjectSerializationUtil.serialize_voice_list_value(project.fish_s1_voice_transcript),

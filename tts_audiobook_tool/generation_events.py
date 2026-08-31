@@ -36,8 +36,23 @@ class GenerationStats:
     speed_factor: float
 
 
+@dataclass(frozen=True)
+class GenerationTimedOut:
+    """One generation step exceeded the GEN_TIMEOUT cap.
+
+    Emitted from a watchdog thread while the inference call is still in
+    flight; the recipient should abort the run and reset the model worker.
+    """
+
+    timeout_seconds: float
+
+
 GenerationEvent = (
-    GenerationPhase | GenerationStarted | GenerationProgress | GenerationStats
+    GenerationPhase
+    | GenerationStarted
+    | GenerationProgress
+    | GenerationStats
+    | GenerationTimedOut
 )
 GenerationEventSink = Callable[[GenerationEvent], None]
 

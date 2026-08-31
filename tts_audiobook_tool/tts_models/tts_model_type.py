@@ -158,6 +158,40 @@ class TtsModelType(Enum):
         ]
     )
 
+    DOTS = TtsModelSpec(
+        id="dots",
+        backend_kind=TtsBackendKind.LOCAL,
+        sgl_omni_model_id_substring="",
+        local_module_test="dots_tts",
+        local_torch_devices=[DeviceType.CUDA, DeviceType.CPU],
+        file_tag="dots",
+        sample_rate=48_000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="dots_voice_file_name",
+        requires_voice=False,
+        voice_transcript_attr="dots_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="",
+        can_stream=True,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-dots.txt",
+        ui={
+            "proper_name": "dots.tts",
+            "short_name": "dots.tts",
+            "voice_path_console": "Enter voice clone audio clip file path (up to 10s recommended): ",
+            "voice_path_requestor": "Select voice clone audio clip (up to 10s recommended)",
+            "project_links": [
+                "https://github.com/zeropointnine/dots.tts-for-tat",
+                "https://huggingface.co/dots-studio",
+            ],
+        },
+        output_filters=[],
+        substitutions=[],
+    )
+
     FISH_S1 = TtsModelSpec(
         id="fish_s1",
         backend_kind=TtsBackendKind.LOCAL,

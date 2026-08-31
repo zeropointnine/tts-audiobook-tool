@@ -9,7 +9,8 @@ from textual.app import ComposeResult
 
 from tts_audiobook_tool import ask, util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.generation_events import GenerationPhase
+from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut
+from tts_audiobook_tool.gen_timeout_util import make_gen_timeout_message
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleFlush,
@@ -162,6 +163,15 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
                 if update.interrupted
                 else "Playback generation complete"
             )
+        elif isinstance(update, GenerationTimedOut):
+            # A gen timeout hard-resets the worker. Deliberately not gated on
+            # cancel_requested/cancel_pending: a pending single-CTRL-C cancel
+            # must not suppress the timeout; only an already-finalized session
+            # (a reset in progress or a terminal result) skips it.
+            if self.terminal_result is None and not self.reset_in_progress:
+                self._begin_hard_reset(
+                    make_gen_timeout_message(update.timeout_seconds)
+                )
         self._update_header()
 
     def _begin_finish(self, event: RealTimePlaybackFinished) -> None:
@@ -422,6 +432,16 @@ def _run_realtime_playback_console(
                     interrupts.clear()
                     ask.ask_enter_to_continue()
                     ModelWorker.continue_realtime_playback(operation_id)
+                elif isinstance(event.update, GenerationTimedOut):
+                    # A gen timeout hard-resets the worker even when a cancel
+                    # was already requested (cancellation_sent stays True).
+                    message = make_gen_timeout_message(event.update.timeout_seconds)
+                    print(message)
+                    ModelWorker.reset()
+                    return RealTimePlaybackModalResult(
+                        RealTimePlaybackTerminalStatus.WORKER_RESET,
+                        message,
+                    )
             elif isinstance(event, RealTimePlaybackFinished):
                 return RealTimePlaybackModalResult(event.status, event.message)
             elif isinstance(event, WorkerCommandFailed):

@@ -26,7 +26,9 @@ from tts_audiobook_tool.generation_events import (
     GenerationProgress,
     GenerationStarted,
     GenerationStats,
+    GenerationTimedOut,
 )
+from tts_audiobook_tool.gen_timeout_util import make_gen_timeout_message
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleOutput,
@@ -194,6 +196,15 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             self.progress = update
         elif isinstance(update, GenerationStats):
             self.stats = update
+        elif isinstance(update, GenerationTimedOut):
+            # A gen timeout hard-resets the worker. Deliberately not gated on
+            # cancel_requested/cancel_pending: a pending single-CTRL-C cancel
+            # must not suppress the timeout; only an already-finalized session
+            # (a reset in progress or a terminal result) skips it.
+            if self.terminal_result is None and not self.reset_in_progress:
+                self._begin_hard_reset(
+                    make_gen_timeout_message(update.timeout_seconds)
+                )
         self._update_header()
 
     def _begin_finish(self, event: GenerationFinished) -> None:
@@ -442,6 +453,18 @@ def _run_generation_console(
             elif isinstance(event, GenerationUpdate):
                 if isinstance(event.update, GenerationProgress):
                     progress = event.update
+                elif isinstance(event.update, GenerationTimedOut):
+                    # A gen timeout hard-resets the worker even when a cancel
+                    # was already requested (cancellation_sent stays True).
+                    message = make_gen_timeout_message(event.update.timeout_seconds)
+                    print(message)
+                    ModelWorker.reset()
+                    return GenerationModalResult(
+                        GenerationTerminalStatus.WORKER_RESET,
+                        _read_persisted_range_string(state),
+                        transcript.path,
+                        message,
+                    )
             elif isinstance(event, GenerationFinished):
                 assembler.finish()
                 return GenerationModalResult(

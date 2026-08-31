@@ -15,7 +15,11 @@ from tts_audiobook_tool.model_worker_protocol import (
     GenerationUpdate,
     WorkerExited,
 )
-from tts_audiobook_tool.generation_events import GenerationProgress, GenerationStarted
+from tts_audiobook_tool.generation_events import (
+    GenerationProgress,
+    GenerationStarted,
+    GenerationTimedOut,
+)
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import generation_app as generation_app_module
 from tts_audiobook_tool.textual import worker_app as worker_app_module
@@ -928,3 +932,121 @@ def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> 
         run(exercise())
     finally:
         transcript.close()
+
+
+def _install_gen_timeout_worker_stubs(monkeypatch) -> dict:
+    """Stub ModelWorker so a timeout event can be delivered on demand."""
+    reset_calls: list[int] = []
+    cancel_calls: list[str] = []
+    latch = {"deliver": False}
+    events = [GenerationUpdate("job", GenerationTimedOut(180.0))]
+
+    def fake_drain_events() -> list:
+        if latch["deliver"] and events:
+            return [events.pop(0)]
+        return []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(fake_drain_events))
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+    return {"latch": latch, "reset_calls": reset_calls, "cancel_calls": cancel_calls}
+
+
+def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
+    stubs = _install_gen_timeout_worker_stubs(monkeypatch)
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, False, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            stubs["latch"]["deliver"] = True
+            await pilot.pause(0.3)
+
+            assert stubs["reset_calls"] == [1]
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            # The summary cites the gen timeout and its cap value.
+            assert "GEN_TIMEOUT" in app.terminal_result.message
+            assert "180" in app.terminal_result.message
+            await pilot.press("enter")
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_gen_timeout_still_resets_worker_after_single_ctrl_c(monkeypatch, tmp_path) -> None:
+    """A pending single-CTRL-C cancel must not suppress the gen timeout."""
+    stubs = _install_gen_timeout_worker_stubs(monkeypatch)
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, False, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            # One CTRL-C requests cancellation; the in-flight inference is
+            # still allowed to run (and hang) past the cap.
+            await pilot.press("ctrl+c")
+            assert stubs["cancel_calls"] == ["job"]
+            assert app.cancel_requested
+
+            # The timeout fires anyway and hard-resets the worker.
+            stubs["latch"]["deliver"] = True
+            await pilot.pause(0.3)
+
+            assert stubs["reset_calls"] == [1]
+            assert app.terminal_result is not None
+            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert "180" in app.terminal_result.message
+            await pilot.press("enter")
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, tmp_path) -> None:
+    reset_calls: list[int] = []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    event = GenerationUpdate("job", GenerationTimedOut(180.0))
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        staticmethod(lambda timeout=0.1: event),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"), enabled=False)
+
+    result = _run_generation_console(make_state(), {0}, 1, False, transcript)
+
+    assert reset_calls == [1]
+    assert result.status == GenerationTerminalStatus.WORKER_RESET
+    assert "GEN_TIMEOUT" in result.message
+    assert "180" in result.message

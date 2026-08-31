@@ -11,6 +11,8 @@ Tests for the backend-mode refactor:
 import types
 from types import SimpleNamespace
 
+import pytest
+
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
@@ -81,6 +83,38 @@ def test_init_local_model_type_in_local_mode_probes_local_models(monkeypatch):
     assert Tts.get_backend_mode() == TtsBackendKind.LOCAL
     assert tts_model_type == TtsModelType.CHATTERBOX
     assert num_matches == 1
+
+
+def test_start_configures_dots_windows_compile_workaround(monkeypatch):
+    from tts_audiobook_tool import start as start_module
+
+    monkeypatch.setattr(
+        Tts,
+        "init_local_model_type",
+        staticmethod(lambda: (TtsModelType.DOTS, 1)),
+    )
+    monkeypatch.setattr(start_module.sys, "platform", "win32")
+    monkeypatch.delitem(start_module.sys.modules, "torch", raising=False)
+    monkeypatch.delenv("TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER", raising=False)
+
+    object.__new__(start_module.Start).init_tts_or_exit(is_server=False)
+
+    assert start_module.os.environ["TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER"] == "0"
+
+
+def test_start_rejects_dots_workaround_after_torch_import(monkeypatch):
+    from tts_audiobook_tool import start as start_module
+
+    monkeypatch.setattr(
+        Tts,
+        "init_local_model_type",
+        staticmethod(lambda: (TtsModelType.DOTS, 1)),
+    )
+    monkeypatch.setattr(start_module.sys, "platform", "win32")
+    monkeypatch.setitem(start_module.sys.modules, "torch", types.ModuleType("torch"))
+
+    with pytest.raises(RuntimeError, match="torch was already imported"):
+        object.__new__(start_module.Start).init_tts_or_exit(is_server=False)
 
 
 def test_get_requirements_file_name_is_mode_aware():
@@ -194,7 +228,7 @@ def test_catalog_helpers_classify_by_backend_kind():
     local_items = TtsModelType.get_local_items()
     sgl_items = TtsModelType.get_sgl_omni_items()
 
-    assert len(local_items) == 13
+    assert len(local_items) == 14
     assert len(sgl_items) == 5
     assert set(local_items) | set(sgl_items) == set(TtsModelType) - {TtsModelType.NONE}
     assert all(item.value.backend_kind == TtsBackendKind.LOCAL for item in local_items)

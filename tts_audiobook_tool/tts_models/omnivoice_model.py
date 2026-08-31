@@ -28,7 +28,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
 
     # Voice clone prompts are small (C x T int codes) and CPU-retained, so
     # several voices can be kept at once.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, model_target: str, device: DeviceType):
 

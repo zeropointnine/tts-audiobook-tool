@@ -44,7 +44,7 @@ class TtsBaseModel(ABC):
 
     # Subclasses may opt into retaining prepared clones for multiple voice files.
     # The default cache still avoids repeated preparation for the current voice.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = False
+    RETAINS_MULTIPLE_VOICE_CLONES = False
 
     # Optional persistent callback for streamed audio chunks
     stream_chunk_callback: StreamChunkCallback | None = None
@@ -83,7 +83,7 @@ class TtsBaseModel(ABC):
 
         Cache values are intentionally opaque: each concrete model decides what
         can safely be reused and where its tensors live. Models that opt into
-        ``SUPPORTS_MULTIPLE_VOICE_CLONES`` retain values for different source
+        ``RETAINS_MULTIPLE_VOICE_CLONES`` retain values for different source
         paths; other models retain only the most recently selected value.
         """
         key = self._make_voice_clone_cache_key(source_path, transcript)
@@ -98,7 +98,7 @@ class TtsBaseModel(ABC):
         # Do not modify the existing cache unless preparation succeeds.
         value = factory()
 
-        if self.SUPPORTS_MULTIPLE_VOICE_CLONES:
+        if self.RETAINS_MULTIPLE_VOICE_CLONES:
             # A changed transcript or file revision supersedes older prepared
             # values for this source path.
             normalized_path = key[0]

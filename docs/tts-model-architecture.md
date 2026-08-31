@@ -122,7 +122,7 @@ Defines the interface all models must satisfy:
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
 - `prepare_text_for_inference(project, text) -> str` — concrete; the full pre-inference pipeline: project word substitutions → generic prompt normalization (incl. `un_all_caps`) → `massage_for_inference`
 - `clear_stream_state()` / `clear_continuation()` — concrete hooks for streaming and rolling-continuation state
-- `SUPPORTS_MULTIPLE_VOICE_CLONES = False` — class attribute; opt-in to retaining prepared voice clones for multiple source files simultaneously (see below)
+- `RETAINS_MULTIPLE_VOICE_CLONES = False` — class attribute; opt-in to retaining prepared voice clones for multiple source files simultaneously (see below)
 - `_get_or_create_voice_clone(source_path, transcript, factory)` — concrete; the shared get-or-create for prepared voice clones ([Voice Clone Cache](#voice-clone-cache))
 - `clear_voice_clone_cache()` — concrete, idempotent; drops all prepared clone values (models call it from `kill()`)
 
@@ -180,7 +180,7 @@ The machinery is shared; the *contents* are not.
 - The per-instance dict `_voice_clone_cache` is created lazily on the first call (the attribute does not exist until then; code must not assume it does).
 - On a key hit, the cached value is returned as-is — no factory call.
 - On a miss, `factory()` prepares the value. If the factory raises, nothing is cached and the model's caller converts the exception into the standard error string `Couldn't create voice clone for <path> - <ExcType>: <msg>`; the model's voice bookkeeping (e.g. `_voice_info`) is only updated after a successful preparation.
-- On success, multi-voice models (`SUPPORTS_MULTIPLE_VOICE_CLONES = True`) evict any cached entries for the same normalized source path (an older transcript or file revision of that file is superseded) and other models clear the whole dict, so single-voice models retain only the most recently selected value.
+- On success, multi-voice models (`RETAINS_MULTIPLE_VOICE_CLONES = True`) evict any cached entries for the same normalized source path (an older transcript or file revision of that file is superseded) and other models clear the whole dict, so single-voice models retain only the most recently selected value.
 
 `clear_voice_clone_cache()` drops the entire dict (idempotent, safe when the attribute was never created). Concrete `kill()` implementations call it before nulling out the model reference.
 

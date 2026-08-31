@@ -496,9 +496,10 @@ to be enabled during TTS sound generation).
 """
 
 SECTION_BREAK_SUBHEADING = \
-"""In the concatenation step, inserts a subtle \"page turn\" sound effect when
-two or more consecutive blank lines are encountered in the text.
-This can be a useful audible cue, so long as the text is formatted for it.
+"""When set to true, inserts a subtle \"page turn\" sound effect when
+two or more blank lines are encountered in the text. This can be a
+useful audible cue, so long as the text is formatted for it.
+Also inserts a more prominent sound at section breaks.
 """
 
 OPEN_AUDIOBOOK_SUBHEADING = \

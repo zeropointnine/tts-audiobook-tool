@@ -47,7 +47,7 @@ class GlmModel(GlmBaseModel):
 
     # The prepared voice prompt (speech token, mel features, speaker
     # embedding) is CPU-cloned, so several voices can be retained at once.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, device: DeviceType, sample_rate: int, use_phoneme: bool=False):
 

@@ -20,7 +20,7 @@ class FakeTtsModel(TtsBaseModel):
 
 
 class MultiVoiceFakeTtsModel(FakeTtsModel):
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
 
 def make_factory(calls: list[str], value: str):

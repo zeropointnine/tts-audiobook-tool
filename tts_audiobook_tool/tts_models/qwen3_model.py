@@ -19,7 +19,7 @@ class Qwen3Model(Qwen3BaseModel):
     """
     """
 
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, model_target: str, device: DeviceType): 
         

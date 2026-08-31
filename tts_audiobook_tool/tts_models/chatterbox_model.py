@@ -29,7 +29,7 @@ class ChatterboxModel(ChatterboxBaseModel):
 
     # Prepared conditionals are CPU-cloned (see `_create_voice_clone`), so
     # retaining several voices at once costs only a few MB of RAM per voice.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, model_type: ChatterboxType, device: DeviceType):
 

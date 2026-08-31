@@ -11,6 +11,7 @@ from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, Stream
 from tts_audiobook_tool.app_types.phrase import Reason
 
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
+from tts_audiobook_tool.tts_models.dots_base_model import DotsBaseModel
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_base_model import FishS2BaseModel
 from tts_audiobook_tool.tts_models.fish_s2_server_base_model import FishS2ServerBaseModel
@@ -59,6 +60,7 @@ class Tts:
     _type: TtsModelType
 
     _chatterbox: ChatterboxBaseModel | None = None
+    _dots: DotsBaseModel | None = None
     _fish_s1: FishS1BaseModel | None = None
     _fish_s2: FishS2BaseModel | None = None
     _fish_s2_server: FishS2ServerBaseModel | None = None
@@ -288,6 +290,8 @@ class Tts:
 
         return {
             "chatterbox_type": project.chatterbox_type,
+            "dots_target": project.dots_target,
+            "dots_compile": project.dots_compile,
             "vibevoice_target": project.vibevoice_target,
             "vibevoice_lora_path": project.vibevoice_lora_target,
             "indextts2_use_fp16": project.indextts2_use_fp16,
@@ -315,6 +319,8 @@ class Tts:
 
         dirty = False
         dirty |= new_params.get("chatterbox_type", "") != old_params.get("chatterbox_type", "")
+        dirty |= new_params.get("dots_target", "") != old_params.get("dots_target", "")
+        dirty |= new_params.get("dots_compile", False) != old_params.get("dots_compile", False)
         dirty |= new_params.get("vibevoice_target", "") != old_params.get("vibevoice_target", "")
         dirty |= new_params.get("vibevoice_lora_path", "") != old_params.get("vibevoice_lora_path", "")
         dirty |= new_params.get("indextts2_use_fp16", False) != old_params.get("indextts2_use_fp16", False)
@@ -355,6 +361,7 @@ class Tts:
         require_model_owner("TTS")
         items = [
             Tts._chatterbox,
+            Tts._dots,
             Tts._fish_s1,
             Tts._fish_s2,
             Tts._fish_s2_server,
@@ -477,6 +484,25 @@ class Tts:
             Tts._chatterbox = ChatterboxModel(model_type, device_type)
             printt()
         return Tts._chatterbox
+
+    @staticmethod
+    def get_dots() -> DotsBaseModel:
+        require_model_owner("TTS")
+        if not Tts._dots:
+            device_type = Tts.get_best_supported_device_type(TtsModelType.DOTS)
+            target = Tts._model_params.get("dots_target", "") or DotsBaseModel.DEFAULT_REPO_ID
+            from tts_audiobook_tool.tts_models.dots_base_model import DotsCompileMode
+            compile_enabled = Tts._model_params.get(
+                "dots_compile", DotsCompileMode.default().enabled
+            )
+            from tts_audiobook_tool.tts_models.dots_model import DotsModel
+            Tts._dots = DotsModel(
+                target,
+                device_type,
+                compile_enabled=compile_enabled,
+            )
+            printt()
+        return Tts._dots
 
     @staticmethod
     def get_fish_s1() -> FishS1BaseModel:
@@ -804,6 +830,7 @@ class InstanceDisplayInfo:
 # Built after the class body so the factory static methods are available.
 Tts._MODEL_REGISTRY = {
     TtsModelType.CHATTERBOX: (ChatterboxBaseModel, Tts.get_chatterbox, "_chatterbox"),
+    TtsModelType.DOTS: (DotsBaseModel, Tts.get_dots, "_dots"),
     TtsModelType.FISH_S1: (FishS1BaseModel, Tts.get_fish_s1, "_fish_s1"),
     TtsModelType.FISH_S2: (FishS2BaseModel, Tts.get_fish_s2, "_fish_s2"),
     TtsModelType.FISH_S2_SERVER: (FishS2ServerBaseModel, Tts.get_fish_s2_server, "_fish_s2_server"),

@@ -9,13 +9,7 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Rule, Static
 
 from tts_audiobook_tool import app_support
-from tts_audiobook_tool.constants import (
-    COL_ACCENT,
-    COL_DEFAULT,
-    COL_DIM,
-    COL_DIM_ITALICS,
-    COL_ERROR,
-)
+from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.util import duration_string
 
 
@@ -119,7 +113,7 @@ class RealTimePlaybackHeader(Vertical):
         buffer_value = duration_string(buffer_seconds, include_tenth=True)
         if buffer_seconds <= 0.0 and zero_buffer_is_error:
             buffer_value = f"{COL_ERROR}{buffer_value}{COL_DEFAULT}"
-        stats = f"Processed: {processed}/{total}  Buffer: {buffer_value}"
+        stats = f"Processed: {processed}/{total}  Buffer: {COL_OK}{buffer_value}{COL_DEFAULT}"
         self.query_one("#realtime-stats", Static).update(Text.from_ansi(stats))
 
     def update_hotkey(self, mode: PromptMode) -> None:

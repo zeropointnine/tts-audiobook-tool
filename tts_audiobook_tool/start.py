@@ -13,6 +13,7 @@ Imports must be staged carefully due to dependency checks, etc.
 # The import is for side effects only (see hf_bootstrap.py)
 import tts_audiobook_tool.hf_bootstrap  # pyright: ignore[reportUnusedImport]
 
+import os
 import sys
 from typing import Callable
 from tts_audiobook_tool.util import *
@@ -133,6 +134,23 @@ class Start:
         """
 
         tts_model_type, num_matches = Tts.init_local_model_type()
+
+        # dots.tts win32 special treatment:
+        #
+        # On Windows, PyTorch 2.8's internal static CUDA launcher passes a 64-bit
+        # CUDA stream handle through a 32-bit C long, causing dots.tts compile
+        # warm-up to fail with "Python int too large to convert to C long".
+        # Disable only that launcher so Inductor falls back to Triton's normal
+        # launcher; torch.compile and dots.tts's reduce-overhead/fullgraph
+        # optimizations remain enabled. This must run before importing torch or
+        # dots_tts because TorchInductor reads the setting at import.
+        if tts_model_type == TtsModelType.DOTS and sys.platform == "win32":
+            if "torch" in sys.modules:
+                raise RuntimeError(
+                    "Cannot configure the dots.tts Windows CUDA compile workaround "
+                    "because torch was already imported"
+                )
+            os.environ.setdefault("TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER", "0")
 
         if tts_model_type != TtsModelType.NONE:
             return

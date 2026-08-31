@@ -39,7 +39,7 @@ Important columns:
 - prepared: yes only when the voice-clone factory ran for that voice, i.e.
   a miss in the base-class voice clone cache.
 
-For a multi-voice cache (SUPPORTS_MULTIPLE_VOICE_CLONES) `prepared` should
+For a multi-voice cache (RETAINS_MULTIPLE_VOICE_CLONES) `prepared` should
 be yes for the first A/B/C calls and no for the remaining calls, and the
 cache should end with len(VOICES) entries. For the single-slot cache
 (Pocket) each voice switch evicts the previous clone, so every call
@@ -375,7 +375,7 @@ def main() -> int:
 
     preparation_count = len(preparation_times)
     cache_count = cache_entry_count(model)
-    multi_voice = type(model).SUPPORTS_MULTIPLE_VOICE_CLONES
+    multi_voice = type(model).RETAINS_MULTIPLE_VOICE_CLONES
     expected_preparations = len(voices) if multi_voice else total_calls
     expected_cache = len(voices) if multi_voice else 1
 

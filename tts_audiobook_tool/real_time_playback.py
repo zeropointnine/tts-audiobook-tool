@@ -18,6 +18,7 @@ from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
+from tts_audiobook_tool.gen_timeout_util import GenTimeoutTracker
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -141,6 +142,9 @@ def _start_impl(
     stream = None
     consecutive_model_errors = 0
     max_consecutive_model_errors = 5
+    # The first gen of the run may be dominated by model warm-up or download
+    # time, so it alone is exempt from the GEN_TIMEOUT watchdog.
+    gen_timeout_tracker = GenTimeoutTracker()
 
     start_index, end_index = line_range
     start_index -= 1
@@ -198,6 +202,7 @@ def _start_impl(
             has_runway=has_runway,
             consecutive_model_errors=consecutive_model_errors,
             max_consecutive_model_errors=max_consecutive_model_errors,
+            gen_timeout_tracker=gen_timeout_tracker,
         )
         if not did_interrupt:
             # generate_full_flow() clears Interrupts at the end, so re-arm
@@ -367,11 +372,21 @@ def generate_full_flow(
         has_runway: bool,
         consecutive_model_errors: int = 0,
         max_consecutive_model_errors: int = 5,
+        gen_timeout_tracker: GenTimeoutTracker | None = None,
 ) -> tuple[Sound | None, bool, int]:
     """
     Similar to `GenerateUtil.generate_full_flow()` but simpler control flow.
     Returns tuple: (Sound or None if problem, did_interrupt, consecutive_model_errors)
+
+    Params:
+        gen_timeout_tracker:
+            The run-shared GEN_TIMEOUT tracker; the run's very first gen is
+            exempt from the watchdog (warm-up/download). When None, a fresh
+            tracker is used (this call's first attempt is the exempt one).
     """
+
+    if gen_timeout_tracker is None:
+        gen_timeout_tracker = GenTimeoutTracker()
 
     Interrupts().set("generating")
 
@@ -384,16 +399,24 @@ def generate_full_flow(
 
     for attempt in range(num_attempts):
 
-        results = GenerateUtil.generate_and_validate_batch(
-            state=state,
-            indices=[index],
-            phrase_groups=phrase_groups,
-            stt_variant=state.prefs.stt_variant,
-            stt_config=state.prefs.stt_config,
-            force_random_seed=(attempt > 0),
-            is_realtime=True,
-            is_skip_reason_buffer=not has_runway
-        )
+        with gen_timeout_tracker.scope() as gen_timeout_guard:
+            results = GenerateUtil.generate_and_validate_batch(
+                state=state,
+                indices=[index],
+                phrase_groups=phrase_groups,
+                stt_variant=state.prefs.stt_variant,
+                stt_config=state.prefs.stt_config,
+                force_random_seed=(attempt > 0),
+                is_realtime=True,
+                is_skip_reason_buffer=not has_runway
+            )
+        if gen_timeout_guard.did_time_out:
+            # The watchdog already reported the timeout and requested the
+            # worker reset; abort the run regardless of any pending cancel.
+            printt(f"{COL_ERROR}Aborting real-time playback")
+            Tts.clear_continuation()
+            did_interrupt = True
+            break
         result = results[0]
         if isinstance(result, TtsModelError):
             consecutive_model_errors += 1

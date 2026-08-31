@@ -10,6 +10,7 @@
 `tts-audiobook-tool` is a generative-AI audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models:
 
 - [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
+- [dots.tts](https://github.com/studio-dots-ai/dots.tts)
 - [Fish Speech S2-Pro)](https://github.com/fishaudio/fish-speech) (either locally or via SGL-Omni)
 - [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech)
 - [GLM-TTS](https://github.com/zai-org/GLM-TTS)
@@ -62,17 +63,18 @@ All examples use the same source text and the same 15-second voice clone sample 
 
 | | |
 | --- | --- |
-| [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) | [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a) |
-| [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a) | [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a) |
-| [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (different voice, high temp.) |
-| [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a) |
-| [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (w/ add'l emotional guidance sample) | [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a) |
-| [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) | [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a) |
-| [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) | [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a) |
-| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) |
-| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell) | [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) |
-| [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) |
-| [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) | [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a) |
+| [Chatterbox](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-chatterbox.abr.m4a) | [dots.tts](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-dots-soar.abr.m4a) |
+| [Fish S1-mini](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s1-mini.abr.m4a) | [Fish S2-Pro](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-s2-pro.abr.m4a) |
+| [GLM-TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-glm.abr.m4a) | [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs.abr.m4a) |
+| [Higgs Audio V2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-different-voice.abr.m4a) (different voice, high temp.) | [Higgs Audio V3](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-higgs-v3.abr.m4a) |
+| [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (w/ add'l emotional guidance sample) |
+| [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a) | [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) |
+| [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a) | [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) |
+| [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) |
+| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell) |
+| [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) |
+| [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) | [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) |
+| [ZONOS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-zonos2.abr.m4a) | |
 | [Dialog example (two voices, auto-assigned lines)](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/two-voices-dialog-qwen3.abr.m4a) | |
 
 ### Enhance existing audiobooks
@@ -104,7 +106,7 @@ A separate virtual environment must be created for each model you want to use. P
 
 ### Step 4 (Windows only)
 
-To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128). This extra step is not required when using Linux.
+To enable torch CUDA acceleration on Windows, run the following commands (The project uses the same version of torch for each TTS model's virtual environments unless otherwise noted - v2.8.0/cu128).
 
     pip uninstall -y torch torchaudio
     pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
@@ -144,6 +146,28 @@ Windows CUDA support (unlike the other models, we must use torch 2.6/cu124 here)
     pip uninstall -y torch torchaudio
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
+## Virtual environment for dots.tts
+
+> **ℹ️ Note:**
+> The SOAR model variant requires 16+GB VRAM
+
+Initialize a **Python v3.12** virtual environment named `venv-dots`:
+
+    python -m venv venv-dots # linux/mac
+    C:\path\to\python3.12\python.exe -m venv venv-dots # windows
+
+Activate the virtual environment:
+
+    source venv-dots/bin/activate # linux/mac
+    venv-dots\Scripts\activate.bat # windows
+
+Install dependencies:
+
+    pip install -r requirements-dots.txt
+
+Note that the above requirements file draws from a fork of the dots.tts library, [zeropointnine/dots.tts-for-tat](https://github.com/zeropointnine/dots.tts-for-tat), refactored for use as an installable package.
+
+
 ## Virtual environment for Fish S1-mini:
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s1":
@@ -169,7 +193,7 @@ Authenticate the model on HuggingFace:
 
 ## Virtual environment for Fish S2-Pro:
 
-> **ℹ️ Note!**
+> **ℹ️ Note:**
 > Requires 24GB VRAM
 
 Initialize a **Python v3.12** virtual environment named "venv-fish-s2":
@@ -242,7 +266,7 @@ Note that we pull from [a fork of glm-tts](https://github.com/zeropointnine/glm-
 
 ## Virtual environment for Higgs Audio V2:
 
-> **ℹ️ Note!**
+> **ℹ️ Note:**
 > 24GB VRAM recommended
 
 On Linux and macOS, portaudio must be installed (eg, on Mac, `brew install portaudio`)
@@ -302,7 +326,7 @@ Install dependencies:
 
 ## Virtual environment for MOSS-TTS v1.5
 
-> **ℹ️ Note!**
+> **ℹ️ Note:**
 > 9B model requires 24GB+ VRAM
 
 Initialize a **Python v3.12** virtual environment named `venv-moss`:
@@ -447,7 +471,7 @@ Use `Backend.LLAMACPP`.
 
 ## Virtual environment for SGL-Omni server
 
-> **ℹ️ Note!**
+> **ℹ️ Note:**
 > SGL-Omni is under active development. Should be treated as experimental for the time being.
 
 The app supports server-based TTS inference using SGL-Omni. Install instructions can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially for Windows). You may also need to perform additional per-model install steps as described in the docs.
@@ -536,6 +560,17 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Multilingual and Turbo model variants
 - Exaggeration
 - CFG, temperature, top_p, top_k, repetition_penalty, seed
+
+**dots.tts**
+
+- Model variants:
+    - `dots.tts-soar` (default; full flow-matching)
+    - `dots.tts-mf` (MeanFlow-distilled, few-step)
+    - `dots.tts-mf-2steps` (fixed 2-step)
+    - `dots.tts-mf-1step` (fixed 1-step)
+- Torch compile toggle
+- Streaming support (for the stand-alone server and LLM chat mode)
+- Speaker scale, num steps, guidance scale, seed
 
 **IndexTTS2**
 
@@ -634,17 +669,19 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| Chatterbox Multilingual | GTX 4090, Windows    | ~190% realtime  |
+| Chatterbox Multilingual | RTX 4090, Windows    | ~190% realtime  |
 | Chatterbox Multilingual | GTX 3080 Ti, Windows | ~130% realtime  |
 | Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  |
 | Chatterbox Turbo        | Macbook Pro M1       | ~70% realtime   |
-| Fish S2-Pro             | GTX 4090, Windows    | 150% realtime   |
+| dots.tts (SOAR)         | RTX 4090, Windows    | 400% realtime   | default steps (10)
+| dots.tts (MF)           | GTX 3080 Ti, Linux   | 550% realtime   | default steps (4)
+| Fish S2-Pro             | RTX 4090, Windows    | 150% realtime   |
 | Fish S1-mini            | GTX 3080 Ti, Windows | 500%+ realtime  |
-| Higgs V2                | GTX 4090, Windows    | ~200% realtime  |
-| Higgs V3                | GTX 4090, Windows    | 300%+ realtime  | SGL-Omni; concurrent requests=1
-| Higgs V3                | GTX 4090, Windows    | 2000%+ realtime | SGL-Omni; concurrent requests=10
-| IndexTTS2               | GTX 4090, Windows    | ~150% realtime  |
+| Higgs V2                | RTX 4090, Windows    | ~200% realtime  |
+| Higgs V3                | RTX 4090, Windows    | 300%+ realtime  | SGL-Omni; concurrent requests=1
+| Higgs V3                | RTX 4090, Windows    | 2000%+ realtime | SGL-Omni; concurrent requests=10
+| IndexTTS2               | RTX 4090, Windows    | ~150% realtime  |
 | IndexTTS2               | GTX 3080 Ti, Windows | ~90% realtime   |
 | IndexTTS2               | Macbook Pro M1 (MPS) | ~20% realtime   |
 | MOSS-TTS v1.5           | GTS 4090, Windows    | ~45% realtime (yes really) | batch size=1, flash attn
@@ -661,16 +698,20 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
 | MiraTTS                 | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
 | Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
-| VibeVoice-Large 7B      | GTX 4090, Windows    | 600%+ realtime  | batch size=10, default steps
+| VibeVoice-Large 7B      | RTX 4090, Windows    | 600%+ realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Windows | ~120% realtime  | batch size=1, default steps
 | VibeVoice 1.5B          | Macbook Pro M1       | ~40% realtime   |
-| ZONOS2                  | GTX 4090, Windows    | 200% realtime   | SGL-Omni; concurrent requests=1
-| ZONOS2                  | GTX 4090, Windows    | 500% realtime   | SGL-Omni; concurrent requests=5
+| ZONOS2                  | RTX 4090, Windows    | 200% realtime   | SGL-Omni; concurrent requests=1
+| ZONOS2                  | RTX 4090, Windows    | 500% realtime   | SGL-Omni; concurrent requests=5
 
 
 # Update highlights
+
+**2026-09-01**
+
+- Added support for [**dots.tts**](https://github.com/studio-dots-ai/dots.tts).
 
 **2026-08-25**
 

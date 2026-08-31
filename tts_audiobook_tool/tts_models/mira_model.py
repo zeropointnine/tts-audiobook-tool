@@ -17,7 +17,7 @@ class MiraModel(MiraBaseModel):
 
     # Context tokens are a small string, so several voices can be
     # retained at once.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self):
         self.mira_tts = MiraTTS('YatharthS/MiraTTS')

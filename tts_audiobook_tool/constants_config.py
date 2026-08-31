@@ -39,6 +39,10 @@ CHAT_INPUT_MODES = (
 )
 PREFS_DEFAULT_CHAT_INPUT_MODE = CHAT_INPUT_MODE_MIC_IMMEDIATE
 
+# Max seconds one TTS-inference step ("generate and validate batch") may take
+# before the generation loop aborts and the model worker is reset
+GEN_TIMEOUT = 180
+
 # Max words per text chunk, applied to the source text in "STT flow"
 MAX_WORDS_PER_SEGMENT_STT = 40
 

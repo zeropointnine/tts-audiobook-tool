@@ -18,6 +18,7 @@ from tts_audiobook_tool.generation_events import (
     GenerationStarted,
     GenerationStats,
 )
+from tts_audiobook_tool.gen_timeout_util import GenTimeoutTracker
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
@@ -183,6 +184,9 @@ class GenerateUtil:
         current_round: list[SubBatch] = []
         last_voice: int | None = None
         is_first_batch = True
+        # The first gen may be dominated by model warm-up or download time,
+        # so it alone is exempt from the GEN_TIMEOUT watchdog.
+        gen_timeout_tracker = GenTimeoutTracker()
 
         while True:
 
@@ -247,15 +251,23 @@ class GenerateUtil:
 
             # Generate and validate
             gen_start_time = time.time()
-            results = GenerateUtil.generate_and_validate_batch(
-                state=state,
-                indices=indices,
-                phrase_groups=project.phrase_groups,
-                stt_variant=stt_variant, stt_config=stt_config,
-                force_random_seed=is_regen or any(count > 0 for count in retry_counts),
-                is_realtime=False,
-                voice_selection_index=sub.voice_selection_index,
-            )
+            with gen_timeout_tracker.scope() as gen_timeout_guard:
+                results = GenerateUtil.generate_and_validate_batch(
+                    state=state,
+                    indices=indices,
+                    phrase_groups=project.phrase_groups,
+                    stt_variant=stt_variant, stt_config=stt_config,
+                    force_random_seed=is_regen or any(count > 0 for count in retry_counts),
+                    is_realtime=False,
+                    voice_selection_index=sub.voice_selection_index,
+                )
+            if gen_timeout_guard.did_time_out:
+                # The watchdog already reported the timeout and requested the
+                # worker reset; abort the run regardless of any pending cancel.
+                printt(f"{COL_ERROR}Aborting generation run")
+                Tts.clear_continuation()
+                did_interrupt = True
+                break
             gen_val_sum_time += (time.time() - gen_start_time)
 
             # Check for OOM in results and break early if detected

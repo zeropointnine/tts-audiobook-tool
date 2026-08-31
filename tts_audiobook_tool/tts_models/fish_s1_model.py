@@ -46,7 +46,7 @@ class FishS1Model(FishS1BaseModel):
 
     # Prompt tokens are tiny (a few KB of int codes) and are CPU-cloned, so
     # several voices can be retained at once.
-    SUPPORTS_MULTIPLE_VOICE_CLONES = True
+    RETAINS_MULTIPLE_VOICE_CLONES = True
 
     def __init__(self, device: DeviceType, compile_enabled: bool):
 
