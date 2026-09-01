@@ -245,7 +245,7 @@ class PhraseSegmenter:
     @staticmethod
     def merge_ornamental_lines(phrases: list[Phrase]) -> list[Phrase]:
         """
-        When a Phrase ends with PARAGRAPH or SECTION and is 'not vocalizable', merges it with previous phrase
+        When a Phrase ends with PARAGRAPH or SPACE_BREAK and is 'not vocalizable', merges it with previous phrase
         Idea here is that these items must be typographical ornamentation lines that signify a section break
         """
         
@@ -253,10 +253,18 @@ class PhraseSegmenter:
             return phrase.reason in [Reason.PARAGRAPH, Reason.SPACE_BREAK] and not app_text.is_vocalizable(phrase.text)
         
         results: list[Phrase] = []
+        leading_ornamental_phrases: list[Phrase] = []
 
         for phrase in phrases:
-            if not results or not is_ornamental_break(phrase):
+            if not is_ornamental_break(phrase):
                 results.append(phrase)
+            elif not results:
+                # A leading ornamental line has no preceding phrase to merge
+                # into. Hold it and prepend it to the first content phrase
+                # below, so that the very first phrase of the text (and
+                # therefore the first PhraseGroup of a section) starts with
+                # vocalizable text instead of standing ornament-only.
+                leading_ornamental_phrases.append(phrase)
             else:
                 # Merge the non-vocalizable separator into the preceding phrase
                 # and retain its structural meaning. Ornamental lines commonly
@@ -265,6 +273,17 @@ class PhraseSegmenter:
                 # break between scenes.
                 results[-1].text += phrase.text
                 results[-1].reason = Reason.SPACE_BREAK
+
+        if leading_ornamental_phrases:
+            if results:
+                # Attach leading ornaments to the first content phrase. The
+                # ornament's own trailing break carries no boundary meaning at
+                # the start of the text, so the content phrase keeps its reason.
+                ornament_text = "".join(phrase.text for phrase in leading_ornamental_phrases)
+                results[0].text = ornament_text + results[0].text
+            else:
+                # The text has no vocalizable content at all; leave as-is.
+                results = leading_ornamental_phrases
 
         return results
 

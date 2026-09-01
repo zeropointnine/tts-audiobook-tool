@@ -2,6 +2,7 @@ import re
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.text_ops.phrase_segmenter import Reason, Phrase, PhraseSegmenter
 from tts_audiobook_tool.text_ops.dialog_segmenter import (
     DIALOG_VOICE_INDEX,
@@ -76,7 +77,61 @@ class PhraseGrouper:
                 language_code=pysbd_lang,
             )
 
+        groups = PhraseGrouper.merge_ornamental_groups(groups)
+
         return groups
+
+    @staticmethod
+    def merge_ornamental_groups(groups: list[PhraseGroup]) -> list[PhraseGroup]:
+        """
+        Folds ornamental-only groups into a vocalizable neighboring group.
+
+        A PhraseGroup is the app's atomic TTS prompt unit, and a group whose
+        text has no vocalizable content (a lone dinkus or divider line)
+        normalizes to an empty prompt. Segmentation already merges ornamental
+        lines into a neighboring phrase, but that invariant can be undone
+        later: an ornament trailing the text has no trailing line breaks (so
+        its reason stays SENTENCE and it never merges backward), and the
+        optional dialog pass re-splits a merged phrase at quote boundaries,
+        isolating its ornament again. This final pass restores the invariant
+        for every position: mid-text and trailing ornamental-only groups
+        merge backward into the previous group, and leading ones merge
+        forward into the first vocalizable group.
+
+        Groups are returned unchanged when no group has vocalizable text.
+        """
+
+        result: list[PhraseGroup] = []
+        leading: list[PhraseGroup] = []
+
+        for group in groups:
+            if app_text.is_vocalizable(group.text):
+                result.append(group)
+                continue
+            if not result:
+                leading.append(group)
+                continue
+            # Merge backward, mirroring PhraseSegmenter.merge_ornamental_lines:
+            # the ornament joins the previous group's last phrase and promotes
+            # its boundary to a space break.
+            if result[-1].phrases:
+                result[-1].phrases[-1].text += group.text
+                result[-1].phrases[-1].reason = Reason.SPACE_BREAK
+            else:
+                result[-1].phrases.extend(group.phrases)
+
+        if leading:
+            if result:
+                # Attach leading ornaments to the first content phrase. The
+                # ornament's own break carries no boundary meaning at the
+                # start of the text, so the content phrase keeps its reason.
+                ornament_text = "".join(group.text for group in leading)
+                result[0].phrases[0].text = ornament_text + result[0].phrases[0].text
+            else:
+                # The text has no vocalizable content at all; leave as-is.
+                result = leading
+
+        return result
 
     @staticmethod
     def group_to_groups_by_max_words(group: PhraseGroup, max_words: int) -> list[PhraseGroup]:

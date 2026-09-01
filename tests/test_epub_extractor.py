@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubNavigationTarget, EpubSourceChapter, EpubTextExtractionResult, EpubTextSlice
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
@@ -158,6 +159,117 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.phrase_groups[2].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.phrase_groups[3].last_reason, Reason.SECTION_BREAK)
+
+    def test_import_epub_merges_leading_ornamental_line_into_first_group(self):
+        # A section that opens with an ornamental line (dinkus, asterisk
+        # divider, etc) must not produce an ornament-only first PhraseGroup,
+        # which would normalize to an empty TTS prompt. The ornament rides
+        # with the section's first vocalizable phrase.
+        source_chapters = [
+            EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "✦\n\nChapter one prose follows."),
+            EpubSourceChapter("Chapter 2", "chapter2.xhtml", "application/xhtml+xml", "* * *\n\nChapter two prose follows."),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(result.section_start_indices, [1])
+        self.assertEqual(
+            [group.text for group in result.phrase_groups],
+            ["✦\n\nChapter one prose follows.", "* * *\n\nChapter two prose follows."],
+        )
+        for group_index in [0, *result.section_start_indices]:
+            self.assertTrue(app_text.is_vocalizable(result.phrase_groups[group_index].text))
+
+    def test_import_epub_merges_leading_ornamental_group_recreated_by_dialog_split(self):
+        # Dialog segmentation splits the first phrase at the opening quote of
+        # dialog, which re-isolates a leading ornament as its own group. The
+        # import pass must fold it back into the first vocalizable group.
+        source_chapters = [
+            EpubSourceChapter(
+                "Chapter 1",
+                "chapter1.xhtml",
+                "application/xhtml+xml",
+                "✦\n\n“Hello,” she said.\n\nMore prose follows here.",
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+                dialog_segmentation=True,
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(
+            [group.text for group in result.phrase_groups],
+            ["✦\n\n“Hello,” ", "she said.\n\n", "More prose follows here."],
+        )
+        self.assertEqual(
+            [group.voice_index for group in result.phrase_groups],
+            [1, -1, -1],
+        )
+        self.assertTrue(app_text.is_vocalizable(result.phrase_groups[0].text))
+
+    def test_import_epub_skips_section_with_no_vocalizable_text(self):
+        source_chapters = [
+            EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose."),
+            EpubSourceChapter("Divider", "divider.xhtml", "application/xhtml+xml", "✦\n\n◆ ◆ ◆"),
+            EpubSourceChapter("Chapter 2", "chapter2.xhtml", "application/xhtml+xml", "Chapter two prose."),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(
+            [group.text for group in result.phrase_groups],
+            ["Chapter one prose.", "Chapter two prose."],
+        )
+        self.assertEqual(result.section_start_indices, [1])
+        self.assertEqual([chapter.title for chapter in result.chapters], ["Chapter 1", "Chapter 2"])
+        self.assertIn(
+            "EPUB section has no vocalizable text and was skipped: Divider",
+            result.warnings,
+        )
+
+    def test_import_epub_merges_trailing_ornamental_line_into_last_group(self):
+        # A section ending with an ornament line: the trailing ornament has
+        # no trailing line breaks (extraction strips them), so only the
+        # grouper-level fold can prevent an ornament-only final group.
+        source_chapters = [
+            EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose.\n\n✦"),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+                extractor=StubEpubChapterTextExtractor(),
+            )
+
+        self.assertEqual(
+            [group.text for group in result.phrase_groups],
+            ["Chapter one prose.\n\n✦"],
+        )
+        self.assertTrue(app_text.is_vocalizable(result.phrase_groups[-1].text))
+        self.assertEqual(result.phrase_groups[-1].last_reason, Reason.SECTION_BREAK)
 
     def test_import_epub_single_group_chapter_still_ends_as_section(self):
         source_chapters = [

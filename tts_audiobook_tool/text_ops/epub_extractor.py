@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 from typing import Any, Protocol
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
+from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.constants import PROJECT_TEXT_EPUB_FILE_NAME
 from tts_audiobook_tool.text_ops.epub_section_skip_detector import EpubSectionSkipDetector
 from tts_audiobook_tool.l import L
@@ -522,13 +523,24 @@ class EpubExtractor:
         phrase_groups: list[PhraseGroup] = []
         markers: list[int] = []
         raw_text_parts: list[str] = []
+        kept_chapters: list[EpubTextChapter] = []
 
         for chapter in text_chapters:
             chapter_text = chapter.text
             if not chapter_text.strip():
                 continue
-            if phrase_groups:
-                markers.append(len(phrase_groups))
+            if not app_text.is_vocalizable(chapter_text):
+                # Ornament-only pages (a lone dinkus, divider, etc) contain no
+                # speakable text. Keeping them would force a section whose
+                # groups are all non-vocalizable, so skip them outright.
+                warning = (
+                    "EPUB section has no vocalizable text and was skipped: "
+                    f"{chapter.title or chapter.href}"
+                )
+                warnings.append(warning)
+                significant_warnings.append(warning)
+                EpubExtractor.log_warnings([warning])
+                continue
             chapter_phrase_groups = PhraseGrouper.text_to_groups(
                 chapter_text,
                 max_words=max_words,
@@ -536,11 +548,14 @@ class EpubExtractor:
                 pysbd_lang=language_code,
                 dialog_segmentation=dialog_segmentation,
             )
+            if phrase_groups:
+                markers.append(len(phrase_groups))
             if phrase_groups and DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY:
                 EpubExtractor.downgrade_leading_section_groups(chapter_phrase_groups)
             EpubExtractor.mark_last_phrase_as_section(chapter_phrase_groups)
             phrase_groups.extend(chapter_phrase_groups)
             raw_text_parts.append(chapter_text)
+            kept_chapters.append(chapter)
 
         raw_text = "\n\n".join(raw_text_parts)
 
@@ -554,7 +569,7 @@ class EpubExtractor:
             phrase_groups=phrase_groups,
             raw_text=raw_text,
             section_start_indices=markers,
-            chapters=text_chapters,
+            chapters=kept_chapters,
             book_title=book_title,
             warnings=warnings,
             significant_warnings=significant_warnings,

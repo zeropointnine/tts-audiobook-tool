@@ -46,6 +46,44 @@ def test_text_to_phrases_promotes_merged_ornament_to_space_break() -> None:
     ]
 
 
+def test_text_to_phrases_merges_leading_ornament_into_first_content_phrase() -> None:
+    # Regression: a leading ornamental line used to survive as its own
+    # ornament-only phrase (and therefore an ornament-only first PhraseGroup
+    # of a section). It must ride with the first content phrase instead.
+    text = "✦\n\nThe chapter begins in earnest."
+
+    result = PhraseSegmenter.text_to_phrases(text, 40, "en")
+
+    assert result == [
+        Phrase("✦\n\nThe chapter begins in earnest.", Reason.SENTENCE),
+    ]
+
+
+def test_merge_ornamental_lines_prepends_leading_ornaments_to_first_content_phrase() -> None:
+    phrases = [
+        Phrase("◇\n\n", Reason.PARAGRAPH),
+        Phrase("* * *\n\n\n", Reason.SPACE_BREAK),
+        Phrase("Content phrase.\n\n", Reason.PARAGRAPH),
+    ]
+
+    result = PhraseSegmenter.merge_ornamental_lines(phrases)
+
+    assert result == [
+        Phrase("◇\n\n* * *\n\n\nContent phrase.\n\n", Reason.PARAGRAPH),
+    ]
+
+
+def test_merge_ornamental_lines_keeps_phrases_when_no_content_exists() -> None:
+    phrases = [
+        Phrase("◇\n\n", Reason.PARAGRAPH),
+        Phrase("◆ ◆ ◆\n\n", Reason.PARAGRAPH),
+    ]
+
+    result = PhraseSegmenter.merge_ornamental_lines(phrases)
+
+    assert result == phrases
+
+
 def test_text_to_phrases_smoke_tricky_inputs() -> None:
     # Robustness smoke test: ornamental separators, dangling punctuation, and
     # whitespace-only lines must segment without crashing or emitting blank

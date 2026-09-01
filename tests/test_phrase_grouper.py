@@ -95,6 +95,78 @@ class TestPhraseGrouper(unittest.TestCase):
         )
         self.assertEqual([group.voice_index for group in groups], [-1, 1, -1])
 
+    def test_trailing_ornamental_line_merges_into_last_group(self):
+        # A trailing ornament has no trailing line breaks, so its reason stays
+        # SENTENCE and the segmenter's backward merge skips it. The grouper
+        # must still fold the resulting ornament-only group backward.
+        text = "Prose here we go.\n\nMore prose follows.\n\n✦"
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["Prose here we go.\n\n", "More prose follows.\n\n✦"],
+        )
+        self.assertEqual(groups[-1].last_reason, Reason.SPACE_BREAK)
+
+    def test_ornamental_group_reisolated_by_dialog_split_merges_backward(self):
+        # The ornament backward-merges into the quote's phrase, then the
+        # dialog pass splits that phrase at the quote's span end, isolating
+        # an ornament-only group mid-text. It must fold back into the quote
+        # group.
+        text = "He spoke at length.\n\n“First quote.”\n\n✦\n\nMore text follows."
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            dialog_segmentation=True,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["He spoke at length.\n\n", "“First quote.”\n\n✦\n\n", "More text follows."],
+        )
+        self.assertEqual(groups[1].last_reason, Reason.SPACE_BREAK)
+        self.assertEqual("".join(group.text for group in groups), text)
+
+    def test_leading_ornamental_group_merges_forward(self):
+        # With dialog segmentation, the dialog pass can re-split the leading
+        # ornament (previously merged into the first content phrase) back out
+        # at an opening quote. It must re-attach forward.
+        text = "✦\n\n“Hello,” she said.\n\nMore prose follows here."
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE_PLUS,
+            "en",
+            dialog_segmentation=True,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["✦\n\n“Hello,” ", "she said.\n\n", "More prose follows here."],
+        )
+        self.assertEqual([group.voice_index for group in groups], [1, -1, -1])
+        self.assertEqual("".join(group.text for group in groups), text)
+
+    def test_merge_ornamental_groups_keeps_groups_when_no_content_exists(self):
+        groups = [
+            PhraseGroup([Phrase("✦\n\n", Reason.PARAGRAPH)]),
+            PhraseGroup([Phrase("◆ ◆ ◆\n\n", Reason.PARAGRAPH)]),
+        ]
+
+        result = PhraseGrouper.merge_ornamental_groups(groups)
+
+        self.assertEqual([group.text for group in result], [group.text for group in groups])
+
 
 if __name__ == '__main__':
     unittest.main()
