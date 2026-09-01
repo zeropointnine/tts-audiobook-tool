@@ -100,10 +100,33 @@ def test_string_to_sentence_strings(source: str, expected: list[str]) -> None:
         ("Is it Steins;Gate or Re:Zero?", ["Is it Steins;Gate or Re:Zero?"]),
         ("Malformed,,,:::;;; text", ["Malformed,,,:::;;; ", "text"]),
         ("Malformed,,,:::;;;text", ["Malformed,,,:::;;;text"]),
+        # Double normal dash is a phrase break when bounded by
+        # vocalizable ("content") characters, with optional
+        # whitespace on either side of the dash pair
+        ("Hello--what are you doing?", ["Hello--", "what are you doing?"]),
+        ("Hello -- what are you doing?", ["Hello -- ", "what are you doing?"]),
+        ("Hello-- what are you doing?", ["Hello-- ", "what are you doing?"]),
+        ("Hello --what are you doing?", ["Hello --", "what are you doing?"]),
+        ("Numbers 3--4 work", ["Numbers 3--", "4 work"]),
+        # Not breaks: single dash, longer dash run, missing content bounds
+        ("A well-known fact", ["A well-known fact"]),
+        ("Wait---triple stays whole", ["Wait---triple stays whole"]),
+        ("Ends with--", ["Ends with--"]),
+        ("--Starts with", ["--Starts with"]),
+        ("Punct...--;;bounded", ["Punct...--;;bounded"]),
     ],
 )
 def test_sentence_to_phrases(source: str, expected: list[str]) -> None:
     assert PhraseSegmenter.sentence_string_to_phrase_strings(source) == expected
+
+
+def test_text_to_phrases_double_dash_break() -> None:
+    result = PhraseSegmenter.text_to_phrases("Hello--what are you doing?", 40, "en")
+
+    assert result == [
+        Phrase("Hello--", Reason.PHRASE),
+        Phrase("what are you doing?", Reason.SENTENCE),
+    ]
 
 
 SAMPLE1 = """

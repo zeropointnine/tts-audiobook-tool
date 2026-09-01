@@ -128,14 +128,27 @@ class PhraseSegmenter:
         # - en-dash `–`
         # - em-dash `—`
         # - close paren `)`
-
+        # - double normal dash `--` (see double_dash_break_offsets)
+        
         # Using lookahead for splits before pattern, lookbehind for splits after pattern
         
         pattern = r'(?=\()|(?<=" )|(?<=” )|(?<=, )|(?<=; )|(?<=: )|(?<=–)|(?<=—)|(?<=\))'
-        items = re.split(pattern, sentence)
+
+        # The double normal dash break cannot be expressed in the regex (its
+        # optional surrounding whitespace needs a variable-width lookbehind,
+        # and its "content character" bounds are defined by app_text), so the
+        # sentence is pre-split at those offsets and each piece is run through
+        # the pattern separately.
+        break_offsets = PhraseSegmenter.double_dash_break_offsets(sentence)
+        items: list[str] = []
+        start = 0
+        for offset in break_offsets:
+            items.extend(re.split(pattern, sentence[start:offset]))
+            start = offset
+        items.extend(re.split(pattern, sentence[start:]))
 
         # Not including these punctuation characters on purpose: 
-        # normal dash, apostrophe/single-quote or double-quote
+        # single normal dash, apostrophe/single-quote or double-quote
         
         # Remove empty strings (e.g. if sentence ends with a delimiter)
         items = [item for item in items if item]
@@ -164,6 +177,49 @@ class PhraseSegmenter:
                 new_items.append(items[i])
         items = new_items
         return items
+
+    @staticmethod
+    def double_dash_break_offsets(sentence: str) -> list[int]:
+        """
+        Returns split offsets (immediately after the second dash) for each
+        double normal dash `--` that acts as a phrase break.
+
+        A double dash is a break when it is a run of exactly two normal dashes,
+        with optional whitespace on the left and/or on the right, and with
+        vocalizable ("content") characters bounding the whole sequence:
+            content \\s* -- \\s* content
+        eg: "Hello--what are you doing?", "Hello -- what are you doing?"
+
+        Single dashes, longer dash runs, and dashes bounded by punctuation
+        or string edges are not breaks.
+        """
+        offsets: list[int] = []
+        length = len(sentence)
+        i = 0
+        while i < length:
+            if sentence[i] != "-":
+                i += 1
+                continue
+            j = i
+            while j < length and sentence[j] == "-":
+                j += 1
+            if j - i == 2:
+                def has_content_before(index: int) -> bool:
+                    k = index
+                    while k >= 0 and sentence[k] in string.whitespace:
+                        k -= 1
+                    return k >= 0 and app_text.is_vocalizable(sentence[k])
+
+                def has_content_after(index: int) -> bool:
+                    k = index
+                    while k < length and sentence[k] in string.whitespace:
+                        k += 1
+                    return k < length and app_text.is_vocalizable(sentence[k])
+
+                if has_content_before(i - 1) and has_content_after(j):
+                    offsets.append(j)
+            i = j
+        return offsets
 
     @staticmethod
     def long_phrase_to_phrases(phrase: Phrase, max_words:int) -> list[Phrase]:
