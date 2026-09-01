@@ -58,6 +58,13 @@ HINT_FISH_S2_FIRST_COMPILE = Hint(
 which may take a minute or two, with no feedback shown."""
 )
 
+HINT_DOTS_FIRST_COMPILE = Hint(
+    "dots_first",
+    "Please note...",
+"""On the first inference, the dots.tts model may go through a compilation step
+which may take an extra minute or two."""
+)
+
 HINT_TEST_REAL_TIME = Hint(
     "test_real_time",
     "Tip",

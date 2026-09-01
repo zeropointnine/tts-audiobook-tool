@@ -18,23 +18,30 @@ Hints related to 'high level app flow'
 """
 
 def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
-    """ 
-    Shows one-time hints/warnings related to doing inference 
+    """
+    Shows one-time hints/warnings related to doing inference.
+    Returns False if inference should *not* continue.
     """
     from tts_audiobook_tool.tts import Tts
 
     can_continue = True
 
     # TTS-model hint/warning
-    if Tts.get_type() == TtsModelType.FISH_S1 and project.fish_s1_compile_enabled:
-        hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE)
-    elif Tts.get_type() == TtsModelType.FISH_S2 and project.fish_s2_compile_enabled:
-        hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE)
-    elif Tts.get_type() == TtsModelType.MOSS:
-        target = project.moss_target or MossConfigs.get_default().value.repo_id
-        target = "huggingface repo id: " + target
-        hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
-        can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)
+    match Tts.get_type():
+        case TtsModelType.FISH_S1:
+            if project.fish_s1_compile_enabled:
+                hints.show_hint_if_necessary(prefs, HINT_FISH_S1_FIRST_COMPILE, and_prompt=True)
+        case TtsModelType.FISH_S2:
+            if project.fish_s2_compile_enabled:
+                hints.show_hint_if_necessary(prefs, HINT_FISH_S2_FIRST_COMPILE, and_prompt=True)
+        case TtsModelType.DOTS:
+            if project.dots_compile:
+                hints.show_hint_if_necessary(prefs, HINT_DOTS_FIRST_COMPILE, and_prompt=True)
+        case TtsModelType.MOSS:
+            target = project.moss_target or MossConfigs.get_default().value.repo_id
+            target = "huggingface repo id: " + target
+            hint = Hint.make_using(HINT_MOSS_REMOTE_CODE, target)
+            can_continue = show_hint_if_necessary(prefs, hint, and_confirm=True)
 
     # cuDNN compatibility hint/warning
     if platform.system() == "Linux":

@@ -67,6 +67,14 @@ class SubBatch:
 # ordering used to preserve a semblance of index monotonicity.
 BATCH_ITERATIONS_PER_GROUP = 5
 
+# Number of per-batch durations kept in the rolling history used to
+# extrapolate the estimated time remaining.
+BATCH_DURATION_HISTORY_SIZE = 50
+
+# The ETA is first shown once this many durations have been recorded;
+# further samples only refine the rolling average.
+ETA_MIN_BATCH_DURATIONS = 10
+
 class GenerateUtil:
 
     @staticmethod
@@ -167,6 +175,12 @@ class GenerateUtil:
         start_time = time.time()
         consecutive_model_errors = 0
         max_consecutive_model_errors = 5
+        # Rolling per-batch duration history for the ETA extrapolation. The
+        # run's first batch is never recorded (warm-up dominates it).
+        batch_durations: list[float] = []
+        did_skip_warmup_batch = False
+        # Recalculated once per completed batch; never time-interpolated.
+        eta_seconds: float | None = None
 
         Interrupts().set("generating")
         did_interrupt = False
@@ -228,6 +242,8 @@ class GenerateUtil:
                     showed_vram_warning = True
 
             # Print item info and publish a structured progress snapshot.
+            # The snapshot carries the previous batch's ETA so the header
+            # does not blank the estimate during this batch's inference.
             num_processed = num_passed + num_failed + num_errored
             GenerationEvents.emit(GenerationPhase("Generating audio"))
             GenerationEvents.emit(
@@ -240,6 +256,7 @@ class GenerateUtil:
                     failed=num_failed,
                     errored=num_errored,
                     retries=num_retries,
+                    eta_seconds=eta_seconds,
                 )
             )
             GenerateUtil.print_batch_heading(
@@ -268,7 +285,8 @@ class GenerateUtil:
                 Tts.clear_continuation()
                 did_interrupt = True
                 break
-            gen_val_sum_time += (time.time() - gen_start_time)
+            batch_gen_val_time = time.time() - gen_start_time
+            gen_val_sum_time += batch_gen_val_time
 
             # Check for OOM in results and break early if detected
             if any(GenerateUtil.is_error_result_oom(r) for r in results):
@@ -278,6 +296,16 @@ class GenerateUtil:
                 Tts.clear_continuation()
                 did_interrupt = True
                 break
+
+            # Update the rolling duration history for the ETA extrapolation.
+            # The first batch is skipped (model warm-up dominates it), and a
+            # batch containing a model-derived error is not representative.
+            if not did_skip_warmup_batch:
+                did_skip_warmup_batch = True
+            elif not any(isinstance(result, TtsModelError) for result in results):
+                batch_durations.append(batch_gen_val_time)
+                if len(batch_durations) > BATCH_DURATION_HISTORY_SIZE:
+                    batch_durations.pop(0)
 
             # Process and print results # TODO: separate biz n print logic
             re_adds: list[tuple[int, int]] = []
@@ -445,6 +473,27 @@ class GenerateUtil:
                     break
 
             num_processed = num_passed + num_failed + num_errored
+
+            if re_adds:
+                # Pending retries are processed at the head of the queue,
+                # as the next round(s) before any further items from the
+                # main queue.
+                pending_retries.extend(re_adds)
+
+            # Extrapolate the remaining time from the rolling history, once
+            # per completed batch (the consumer never interpolates it).
+            # Remaining work is counted in sub-batches (one model call
+            # each): the current round's remainder, the queued rounds, and
+            # a ceil-estimate for the pending retries, whose items have
+            # already left the main queue.
+            eta_seconds = make_batch_eta_seconds(
+                batch_durations,
+                remaining_batches=(
+                    len(current_round)
+                    + sum(len(round) for round in queue)
+                    + (len(pending_retries) + batch_size - 1) // batch_size
+                ),
+            )
             GenerationEvents.emit(
                 GenerationProgress(
                     processed=num_processed,
@@ -454,6 +503,7 @@ class GenerateUtil:
                     failed=num_failed,
                     errored=num_errored,
                     retries=num_retries,
+                    eta_seconds=eta_seconds,
                 )
             )
 
@@ -467,12 +517,6 @@ class GenerateUtil:
             # Memory usage is displayed by the generation header, not the
             # console; keep only the blank-line separator between batches.
             printt()
-
-            if re_adds:
-                # Pending retries are processed at the head of the queue,
-                # as the next round(s) before any further items from the
-                # main queue.
-                pending_retries.extend(re_adds)
 
         # Update the persisted queue once per generation run, based only on files
         # that were actually saved successfully.
@@ -926,8 +970,8 @@ class GenerateUtil:
     @staticmethod
     def do_quick_generate(state: State, phrase_index: int) -> None:
         """Regenerate exactly one project item."""
-        from tts_audiobook_tool.textual.generation_app import run_generation_modal
-        run_generation_modal(
+        from tts_audiobook_tool.textual.generation_app import run_generation_app
+        run_generation_app(
             state=state,
             indices={phrase_index},
             batch_size=ProjectVoiceUtil.get_batch_size(state.project),
@@ -947,8 +991,8 @@ class GenerateUtil:
         if not should_continue:
             return
 
-        from tts_audiobook_tool.textual.generation_app import run_generation_modal
-        generation_result = run_generation_modal(
+        from tts_audiobook_tool.textual.generation_app import run_generation_app
+        generation_result = run_generation_app(
             state=state,
             indices=indices,
             batch_size=ProjectVoiceUtil.get_batch_size(state.project),
@@ -1005,6 +1049,20 @@ def print_speed_info(gen_elapsed: float, gen_results: list) -> None:
         )
 
     print(message)
+
+def make_batch_eta_seconds(
+        batch_durations: list[float],
+        remaining_batches: int) -> float | None:
+    """
+    Extrapolates the estimated remaining seconds of a generation run from
+    the rolling per-batch duration history. Returns None until at least
+    ETA_MIN_BATCH_DURATIONS samples exist; the history itself holds at
+    most BATCH_DURATION_HISTORY_SIZE entries.
+    """
+    if len(batch_durations) < ETA_MIN_BATCH_DURATIONS:
+        return None
+    average = sum(batch_durations) / len(batch_durations)
+    return average * remaining_batches
 
 def print_eta(saved_elapsed: list[float], num_left) -> None:
 

@@ -134,9 +134,21 @@ class GenerationHeader(Vertical):
             Text.from_ansi(f"Status: {COL_DIM_ITALICS}{status}{COL_DEFAULT}")
         )
 
-    def update_stats(self, processed: int, total: int, elapsed: float) -> None:
-        """Render progress/elapsed stats on the right of row 2."""
-        stats = f"Processed: {processed}/{total}  Elapsed: {duration_string(elapsed, pad_seconds=True)}"
+    def update_stats(
+        self, processed: int, total: int, elapsed: float, eta_seconds: float | None = None
+    ) -> None:
+        """Render progress/elapsed stats on the right of row 2.
+
+        The ETA (once enough batch durations have been recorded) is a
+        per-batch snapshot, rendered before Elapsed in the same
+        right-justified column; it is not ticked down between batches, and
+        is rounded to the nearest 10 seconds.
+        """
+        stats = f"Processed: {processed}/{total}"
+        if eta_seconds is not None:
+            rounded_eta = round(eta_seconds / 10) * 10
+            stats += f"  ETA: {duration_string(rounded_eta, pad_seconds=True)}"
+        stats += f"  Elapsed: {duration_string(elapsed, pad_seconds=True)}"
         self.query_one("#generation-stats", Static).update(stats)
 
     def update_hotkey(self, mode: PromptMode) -> None:

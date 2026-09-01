@@ -26,6 +26,10 @@ class GenerationProgress:
     failed: int = 0
     errored: int = 0
     retries: int = 0
+    # Extrapolated seconds remaining, recalculated once per completed batch
+    # (never interpolated by the consumer). None until enough per-batch
+    # durations have been recorded in generate_files().
+    eta_seconds: float | None = None
 
 
 @dataclass(frozen=True)

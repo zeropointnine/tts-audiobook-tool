@@ -81,6 +81,55 @@ def test_update_stats_formats_processed_total_elapsed() -> None:
     run(exercise())
 
 
+def test_update_stats_renders_eta_before_elapsed() -> None:
+    async def exercise() -> None:
+        async with HeaderTestApp().run_test() as pilot:
+            await pilot.pause()
+            header = pilot.app.query_one(GenerationHeader)
+            header.update_stats(37, 512, 305, eta_seconds=5405.4)
+            assert (
+                str(header.query_one("#generation-stats", Static).render())
+                == "Processed: 37/512  ETA: 1h30m10s  Elapsed: 5m05s"
+            )
+
+    run(exercise())
+
+
+def test_update_stats_rounds_eta_to_nearest_10() -> None:
+    async def exercise() -> None:
+        async with HeaderTestApp().run_test() as pilot:
+            await pilot.pause()
+            header = pilot.app.query_one(GenerationHeader)
+            # 84s rounds down to 80s.
+            header.update_stats(1, 4, 30, eta_seconds=84.0)
+            assert (
+                str(header.query_one("#generation-stats", Static).render())
+                == "Processed: 1/4  ETA: 1m20s  Elapsed: 30s"
+            )
+            # 306s rounds up to 310s.
+            header.update_stats(1, 4, 30, eta_seconds=306.0)
+            assert (
+                str(header.query_one("#generation-stats", Static).render())
+                == "Processed: 1/4  ETA: 5m10s  Elapsed: 30s"
+            )
+
+    run(exercise())
+
+
+def test_update_stats_renders_zero_eta() -> None:
+    async def exercise() -> None:
+        async with HeaderTestApp().run_test() as pilot:
+            await pilot.pause()
+            header = pilot.app.query_one(GenerationHeader)
+            header.update_stats(2, 2, 30, eta_seconds=0.0)
+            assert (
+                str(header.query_one("#generation-stats", Static).render())
+                == "Processed: 2/2  ETA: 0s  Elapsed: 30s"
+            )
+
+    run(exercise())
+
+
 def test_update_memory_text(monkeypatch) -> None:
     monkeypatch.setattr(
         "tts_audiobook_tool.app_support.make_memory_string",

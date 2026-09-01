@@ -25,7 +25,7 @@ from tts_audiobook_tool.textual.generate_editor import (
     GenerateEditor,
     QuickGenerationRequested,
 )
-from tts_audiobook_tool.textual.generation_app import run_generation_modal
+from tts_audiobook_tool.textual.generation_app import run_generation_app
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
@@ -468,7 +468,7 @@ def do_generate(state: State) -> None:
 
     # Generate in full-screen modal.
     # The model worker remains alive after the modal app exits.
-    generation_result = run_generation_modal(
+    generation_result = run_generation_app(
         state=state,
         indices=indices,
         batch_size=ProjectVoiceUtil.get_batch_size(state.project),

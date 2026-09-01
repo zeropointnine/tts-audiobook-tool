@@ -342,7 +342,9 @@ def test_generation_app_waits_for_enter_after_terminal_summary(monkeypatch, tmp_
             GenerationUpdate("job", GenerationStarted(total=2)),
             GenerationUpdate(
                 "job",
-                GenerationProgress(processed=1, remaining=1, total=2),
+                GenerationProgress(
+                    processed=1, remaining=1, total=2, eta_seconds=90.0
+                ),
             ),
             GenerationFinished(
                 "job",
@@ -380,6 +382,10 @@ def test_generation_app_waits_for_enter_after_terminal_summary(monkeypatch, tmp_
             # The header title is the fixed accent-colored line.
             assert "Generating audio..." in str(
                 app.query_one("#generation-title", Static).render()
+            )
+            # The progress event's ETA snapshot reaches the stats line.
+            assert "ETA: 1m30s" in str(
+                app.query_one("#generation-stats", Static).render()
             )
             # Once the job has stopped, the header prompt line switches to
             # the continue hint.

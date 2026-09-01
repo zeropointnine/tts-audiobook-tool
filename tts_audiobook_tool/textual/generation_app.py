@@ -63,7 +63,7 @@ __all__ = [
     "GenerationTranscript",
     "make_generation_transcript_path",
     "make_worker_log_file_path",
-    "run_generation_modal",
+    "run_generation_app",
 ]
 
 
@@ -358,7 +358,12 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         header = self.query_one(GenerationHeader)
         header.update_memory_text()
         header.update_status(self.phase)
-        header.update_stats(self.progress.processed, self.progress.total, elapsed)
+        header.update_stats(
+            self.progress.processed,
+            self.progress.total,
+            elapsed,
+            eta_seconds=self.progress.eta_seconds,
+        )
         header.update_hotkey(self.prompt_mode)
 
     def action_cancel_or_reset(self) -> None:
@@ -540,7 +545,7 @@ def _present_console_result(
         ask.ask_enter_to_continue()
 
 
-def run_generation_modal(
+def run_generation_app(
     state: State,
     indices: set[int],
     batch_size: int,
