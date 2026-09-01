@@ -41,7 +41,6 @@ class Prefs(Saveable):
             chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
             save_gen_log: bool = False,
-            play_on_generate: bool = PREFS_DEFAULT_PLAY_ON_GENERATE,
     ) -> None:
         self._project_dir = project_dir
         self._hints = hints
@@ -70,7 +69,6 @@ class Prefs(Saveable):
         self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
         self._save_gen_log = save_gen_log
-        self._play_on_generate = play_on_generate
 
     @staticmethod
     def new_and_save() -> Prefs:
@@ -348,12 +346,6 @@ class Prefs(Saveable):
             save_gen_log = False
             dirty = True
 
-        # Play on generate
-        play_on_generate = prefs_dict.get("play_on_generate", PREFS_DEFAULT_PLAY_ON_GENERATE)
-        if not isinstance(play_on_generate, bool):
-            play_on_generate = PREFS_DEFAULT_PLAY_ON_GENERATE
-            dirty = True
-
         # Make prefs instance
         prefs = Prefs(
             project_dir=project_dir,
@@ -377,7 +369,6 @@ class Prefs(Saveable):
             chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
             save_gen_log=save_gen_log,
-            play_on_generate=play_on_generate,
             hints=hint_prefs,
         )
 
@@ -415,14 +406,6 @@ class Prefs(Saveable):
     @save_gen_log.setter
     def save_gen_log(self, value: bool):
         self._save_gen_log = value
-
-    @property
-    def play_on_generate(self) -> bool:
-        return self._play_on_generate
-
-    @play_on_generate.setter
-    def play_on_generate(self, value: bool):
-        self._play_on_generate = value
 
     def get_hint(self, key: str) -> bool:
         return bool(self._hints.get(key, False))
@@ -628,7 +611,6 @@ class Prefs(Saveable):
                 "chat_save_mic": self._chat_save_mic,
                 "save_debug_files": self._save_debug_files,
                 "save_gen_log": self._save_gen_log,
-                "play_on_generate": self._play_on_generate,
             }
 
         err = JsonSaveUtil.save(

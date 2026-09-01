@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import platform
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.hints import show_hint_if_necessary
 from tts_audiobook_tool.app_types import Hint, SttVariant
@@ -52,7 +53,6 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
 
     return can_continue
 
-
 def show_player_hint(prefs: Prefs) -> None:
 
     from tts_audiobook_tool.util import get_package_dir
@@ -63,9 +63,9 @@ def show_player_hint(prefs: Prefs) -> None:
         browser_path = str(Path(package_dir).parent / "browser_player" / "index.html")
     else:
         browser_path = "browser_player" + os.path.sep + "index.html"
-    s += browser_path + "\n"
+    s += text_util.make_terminal_hyperlink(browser_path, is_file=True) + "\n"
     s += "or on the web:" + "\n"
-    s += PLAYER_URL
+    s += text_util.make_terminal_hyperlink(PLAYER_URL)
 
     hint = Hint(key="player", heading="Reminder", text=s)
     show_hint_if_necessary(prefs, hint)
