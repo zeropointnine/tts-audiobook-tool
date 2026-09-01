@@ -75,21 +75,22 @@ The rule only applies to immediate consecutive section reasons. A non-section ph
 between two sections resets the sequence, allowing later genuine section breaks to remain
 `Reason.SPACE_BREAK`.
 
-## EPUB spine boundaries
+## EPUB logical-section boundaries
 
-EPUB import has an additional structural rule. Each retained EPUB spine document is
-segmented independently, and the importer force-marks the final phrase of that document
-as `Reason.SPACE_BREAK`. This marks the boundary between EPUB HTML files and is not the same
-as ordinary whitespace-derived section detection.
+EPUB import has an additional structural rule. Readable spine content is assembled into
+logical sections defined by EPUB navigation, and each logical section is segmented
+independently. The importer force-marks the final phrase of that section as
+`Reason.SECTION_BREAK`. Ordinary transitions between XHTML spine documents inside one
+logical section do not receive this reason.
 
-When a previous retained spine document has already ended with this forced section
-boundary, section-like groups at the start of the next spine document are treated as
-redundant heading/layout artifacts and downgraded to `Reason.PARAGRAPH`. The forced
-boundary remains on the previous document's final phrase, while the new document's own
-final phrase is still force-marked as `Reason.SPACE_BREAK` after segmentation.
+When a previous logical section has already ended with this forced boundary, section-like
+groups at the start of the next logical section are treated as redundant heading/layout
+artifacts and downgraded to `Reason.PARAGRAPH`. The explicit navigation boundary remains on
+the previous section's final phrase, while the new section's final phrase is force-marked
+as `Reason.SECTION_BREAK` after segmentation.
 
 This EPUB-specific mitigation is guarded by the hardcoded
-`DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY` constant in
+`DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY` compatibility constant in
 `tts_audiobook_tool/text_ops/epub_extractor.py`. It currently defaults to `True`.
 
 ## Known architectural debt

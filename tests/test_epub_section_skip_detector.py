@@ -170,6 +170,55 @@ class TestEpubSectionSkipDetector(unittest.TestCase):
         self.assertTrue(decision.should_skip)
         self.assertIn("href or title", decision.reason)
 
+    def test_detect_publication_metadata_skips_labeled_section_corroborated_by_content_beyond_scan_limit(self):
+        # Mirrors a light novel whose 7 image-only cover/insert pages pushed the copyright page
+        # to readable spine index 8, beyond both scan windows.
+        html = """
+        <html><body>
+            <h1>Copyright</h1>
+            <p>The Eminence in Shadow 06</p>
+            <p>DAISUKE AIZAWA</p>
+            <p>Translation by Nathaniel Hiroshi Thrasher</p>
+            <p>Copyright © 2025 by Yen Press, LLC</p>
+            <p>All rights reserved.</p>
+            <p>First published in Japan in 2023 by KADOKAWA CORPORATION, Tokyo.</p>
+            <p>English translation © 2025 by Yen Press, LLC</p>
+            <p>Library of Congress Cataloging-in-Publication Data</p>
+            <p>ISBNs: 979-8-8554-0698-6 (hardcover)</p>
+        </body></html>
+        """
+
+        decision = EpubSectionSkipDetector.detect_publication_metadata_skip(
+            readable_spine_index=8,
+            readable_spine_count=64,
+            href="Text/copyright.xhtml",
+            title="Copyright",
+            html=html,
+        )
+
+        self.assertTrue(decision.should_skip)
+        self.assertIn("href/title signal plus text signals", decision.reason)
+
+    def test_detect_publication_metadata_does_not_skip_labeled_weakly_signaled_section_beyond_scan_limit(self):
+        decision = EpubSectionSkipDetector.detect_publication_metadata_skip(
+            readable_spine_index=8,
+            readable_spine_count=64,
+            href="Text/copyright.xhtml",
+            title="Copyright",
+            html="<html><body><p>Copyright page</p></body></html>",
+        )
+
+        self.assertFalse(decision.should_skip)
+        self.assertEqual(decision.reason, "")
+
+    def test_is_text_bearing_spine_document_ignores_image_only_pages(self):
+        self.assertFalse(EpubSectionSkipDetector.is_text_bearing_spine_document(
+            '<html><body><div class="wrap"><img src="insert001.jpg"/></div></body></html>'
+        ))
+        self.assertTrue(EpubSectionSkipDetector.is_text_bearing_spine_document(
+            "<html><body><p>Copyright page</p></body></html>"
+        ))
+
     def test_detect_table_of_contents_skip_by_href_and_link_structure(self):
         decision = EpubSectionSkipDetector.detect_table_of_contents_skip(
             readable_spine_index=1,

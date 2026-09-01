@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
-from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubSourceChapter, EpubTextExtractionResult
+from tts_audiobook_tool.text_ops.epub_extractor import BeautifulSoupEpubChapterTextExtractor, EpubExtractor, EpubNavigationTarget, EpubSourceChapter, EpubTextExtractionResult, EpubTextSlice
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 
 
@@ -23,6 +23,12 @@ class StubWarningEpubChapterTextExtractor:
             warnings=[warning],
             significant_warnings=[warning],
         )
+
+
+def make_navigation_target(title: str, href: str, order: int, depth: int = 0) -> EpubNavigationTarget:
+    target = EpubExtractor.make_navigation_target(href, title, order, depth=depth)
+    assert target is not None
+    return target
 
 
 class StubEpubBook:
@@ -55,6 +61,7 @@ class StubEpubSpineItem:
 
 class StubEpubBookWithSpine:
     def __init__(self, items: list[StubEpubSpineItem], toc=None, metadata_values=None):
+        self.items = items
         self.items_by_id = {item.id: item for item in items}
         self.spine = [(item.id, "yes") for item in items]
         self.toc = toc or []
@@ -191,9 +198,10 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.raw_text, "Chapter 1\n\nThe story begins.")
         self.assertEqual(result.section_start_indices, [])
         self.assertEqual(result.phrase_groups[0].phrases[0].text, "Chapter 1\n\n")
-        self.assertEqual(result.warnings, [])
+        self.assertIn("EPUB navigation is unavailable or unusable", result.warnings[0])
+        self.assertEqual(result.warnings, result.significant_warnings)
 
-    def test_import_epub_uses_real_spine_chapter_boundaries_without_inserted_title_chapter(self):
+    def test_import_epub_falls_back_to_spine_boundaries_without_navigation(self):
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter 1\n\nThe story begins."),
             EpubSourceChapter("Chapter 2", "chapter2.xhtml", "application/xhtml+xml", "Chapter 2\n\nThe story continues."),
@@ -212,6 +220,334 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(result.section_start_indices, [2])
         self.assertEqual(result.phrase_groups[0].phrases[0].text, "Chapter 1\n\n")
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.PARAGRAPH)
+
+    def test_import_epub_uses_navigation_sections_across_text_and_image_spine_documents(self):
+        chapter_one_target = make_navigation_target("Chapter 1", "Text/chapter005.xhtml", 0)
+        chapter_two_target = make_navigation_target("Chapter 2", "Text/chapter010.xhtml", 1)
+        source_chapters = [
+            EpubSourceChapter(
+                "Chapter 1",
+                "Text/chapter005.xhtml",
+                "application/xhtml+xml",
+                '<html><body><img src="chapter-one.jpg"/></body></html>',
+                [chapter_one_target],
+            ),
+            EpubSourceChapter(
+                "chapter006",
+                "Text/chapter006.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>“Okay, I gotta ask—”</p></body></html>",
+            ),
+            EpubSourceChapter(
+                "chapter007",
+                "Text/chapter007.xhtml",
+                "application/xhtml+xml",
+                '<html><body><img src="illustration.jpg"/></body></html>',
+            ),
+            EpubSourceChapter(
+                "chapter008",
+                "Text/chapter008.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>“Can I have this one, Christina?”</p></body></html>",
+            ),
+            EpubSourceChapter(
+                "Chapter 2",
+                "Text/chapter010.xhtml",
+                "application/xhtml+xml",
+                '<html><body><img src="chapter-two.jpg"/></body></html>',
+                [chapter_two_target],
+            ),
+            EpubSourceChapter(
+                "chapter011",
+                "Text/chapter011.xhtml",
+                "application/xhtml+xml",
+                "<html><body><h1>Chapter 2</h1><p>The next chapter begins.</p></body></html>",
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["Chapter 1", "Chapter 2"])
+        self.assertEqual([chapter.href for chapter in result.chapters], ["Text/chapter005.xhtml", "Text/chapter010.xhtml"])
+        self.assertIn("Okay, I gotta ask", result.chapters[0].text)
+        self.assertIn("Can I have this one, Christina", result.chapters[0].text)
+        self.assertNotIn("chapter008", [chapter.title for chapter in result.chapters])
+        self.assertEqual(len(result.section_start_indices), 1)
+        self.assertEqual(result.phrase_groups[result.section_start_indices[0] - 1].last_reason, Reason.SECTION_BREAK)
+
+    def test_import_epub_splits_navigation_fragments_within_one_document(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "Fallback",
+                "Text/story.xhtml",
+                "application/xhtml+xml",
+                """
+                <html><body>
+                    <h1 id="one">One</h1><p>First section prose.</p>
+                    <a id="two"></a><h1>Two</h1><p>Second section prose.</p>
+                </body></html>
+                """,
+                [
+                    make_navigation_target("First", "Text/story.xhtml#one", 0),
+                    make_navigation_target("Second", "Text/story.xhtml#two", 1),
+                ],
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["First", "Second"])
+        self.assertIn("One\n\nFirst section prose.", result.chapters[0].text)
+        self.assertIn("Two\n\nSecond section prose.", result.chapters[1].text)
+        self.assertEqual(result.section_start_indices, [2])
+
+    def test_import_epub_uses_deepest_title_for_duplicate_navigation_location(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "Fallback",
+                "Text/story.xhtml",
+                "application/xhtml+xml",
+                '<html><body><h1 id="start">One</h1><p>Prose.</p></body></html>',
+                [
+                    make_navigation_target("Part One", "Text/story.xhtml#start", 0),
+                    make_navigation_target("Chapter One", "Text/story.xhtml#start", 1, depth=1),
+                    make_navigation_target("Duplicate sibling", "Text/story.xhtml#start", 2),
+                ],
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["Chapter One"])
+
+    def test_import_epub_splits_at_inline_fragment_in_dom_order(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "Fallback",
+                "Text/story.xhtml",
+                "application/xhtml+xml",
+                '<html><body><p id="one">Before <span id="two">after</span> end.</p></body></html>',
+                [
+                    make_navigation_target("One", "Text/story.xhtml#one", 0),
+                    make_navigation_target("Two", "Text/story.xhtml#two", 1),
+                ],
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.text for chapter in result.chapters], ["Before", "after end."])
+
+    def test_import_epub_honors_coarse_navigation_across_multiple_text_documents(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "Part One",
+                "Text/one.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>First document.</p></body></html>",
+                [make_navigation_target("Part One", "Text/one.xhtml", 0)],
+            ),
+            EpubSourceChapter(
+                "two",
+                "Text/two.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>Second document.</p></body></html>",
+            ),
+            EpubSourceChapter(
+                "three",
+                "Text/three.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>Third document.</p></body></html>",
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual(len(result.chapters), 1)
+        self.assertEqual(result.chapters[0].title, "Part One")
+        self.assertEqual(result.chapters[0].text, "First document.\n\n\nSecond document.\n\n\nThird document.")
+        self.assertEqual(result.section_start_indices, [])
+
+    def test_assemble_navigation_text_chapters_separates_merged_slices_with_two_blank_lines(self):
+        source_chapter = EpubSourceChapter(
+            "Fallback",
+            "Text/story.xhtml",
+            "application/xhtml+xml",
+            "<html><body><p>Ignored.</p></body></html>",
+        )
+        result = EpubTextExtractionResult(
+            text="First part.\n\nSecond part.",
+            slices=[
+                EpubTextSlice("First part.", None),
+                EpubTextSlice("Second part.", None),
+            ],
+        )
+
+        text_chapters, used_navigation = EpubExtractor.assemble_navigation_text_chapters(
+            [(source_chapter, result)],
+            [],
+            [],
+        )
+
+        self.assertEqual([chapter.text for chapter in text_chapters], ["First part.\n\n\nSecond part."])
+        self.assertFalse(used_navigation)
+
+    def test_import_epub_keeps_readable_content_before_first_navigation_target(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "Preface",
+                "Text/preface.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>Preface prose.</p></body></html>",
+            ),
+            EpubSourceChapter(
+                "Chapter One",
+                "Text/chapter.xhtml",
+                "application/xhtml+xml",
+                "<html><body><h1>Chapter One</h1><p>Chapter prose.</p></body></html>",
+                [make_navigation_target("Chapter One", "Text/chapter.xhtml", 0)],
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["Preface", "Chapter One"])
+        self.assertEqual(result.chapters[0].text, "Preface prose.")
+        self.assertEqual(len(result.section_start_indices), 1)
+
+    def test_import_epub_uses_latest_consecutive_empty_navigation_target_for_prose(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "First",
+                "Text/first.xhtml",
+                "application/xhtml+xml",
+                '<html><body><img src="first.jpg"/></body></html>',
+                [make_navigation_target("First", "Text/first.xhtml", 0)],
+            ),
+            EpubSourceChapter(
+                "Second",
+                "Text/second.xhtml",
+                "application/xhtml+xml",
+                '<html><body><img src="second.jpg"/></body></html>',
+                [make_navigation_target("Second", "Text/second.xhtml", 1)],
+            ),
+            EpubSourceChapter(
+                "prose",
+                "Text/prose.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>Readable prose.</p></body></html>",
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["Second"])
+        self.assertEqual(result.chapters[0].text, "Readable prose.")
+        self.assertTrue(any("Omitted empty EPUB navigation section" in warning for warning in result.warnings))
+        self.assertTrue(any("Omitted empty EPUB navigation section" in warning for warning in result.significant_warnings))
+
+    def test_import_epub_falls_back_to_spine_sections_when_fragment_targets_are_unusable(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "One",
+                "Text/one.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>First.</p></body></html>",
+                [make_navigation_target("Broken", "Text/one.xhtml#missing", 0)],
+            ),
+            EpubSourceChapter(
+                "Two",
+                "Text/two.xhtml",
+                "application/xhtml+xml",
+                "<html><body><p>Second.</p></body></html>",
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["One", "Two"])
+        self.assertTrue(any("navigation target not found" in warning for warning in result.significant_warnings))
+        self.assertTrue(any("derived from spine documents" in warning for warning in result.significant_warnings))
+
+    def test_import_epub_falls_back_globally_when_later_fragment_target_is_unresolved(self):
+        source_chapters = [
+            EpubSourceChapter(
+                "One",
+                "Text/one.xhtml",
+                "application/xhtml+xml",
+                '<html><body><h1 id="start">One</h1><p>First.</p></body></html>',
+                [make_navigation_target("One", "Text/one.xhtml#start", 0)],
+            ),
+            EpubSourceChapter(
+                "Two",
+                "Text/two.xhtml",
+                "application/xhtml+xml",
+                "<html><body><h1>Two</h1><p>Second.</p></body></html>",
+                [make_navigation_target("Two", "Text/two.xhtml#missing", 1)],
+            ),
+        ]
+
+        with patch.object(EpubExtractor, "load_source_chapters", return_value=(source_chapters, "", [], [])):
+            result = EpubExtractor.import_epub(
+                epub_path="book.epub",
+                max_words=40,
+                segmentation_strategy=SegmentationStrategy.SENTENCE_PLUS,
+                language_code="en",
+            )
+
+        self.assertEqual([chapter.title for chapter in result.chapters], ["One", "Two"])
+        self.assertNotIn("Second.", result.chapters[0].text)
+        self.assertIn("Second.", result.chapters[1].text)
+        self.assertTrue(any("navigation target not found" in warning for warning in result.significant_warnings))
+        self.assertTrue(any("derived from spine documents" in warning for warning in result.significant_warnings))
 
     def test_import_epub_reports_inline_whitespace_repair_warning_once(self):
         source_chapters = [
@@ -260,9 +596,50 @@ class TestEpubExtractor(unittest.TestCase):
         )
 
         title_by_href = EpubExtractor.extract_toc_title_by_href(book)
+        navigation_targets = EpubExtractor.extract_navigation_targets(book)
 
         self.assertEqual(title_by_href["Text/part0001.xhtml"], "Part One")
         self.assertEqual(title_by_href["Text/chapter 02.xhtml"], "Chapter Two")
+        self.assertEqual(
+            [(target.path, target.fragment, target.title) for target in navigation_targets],
+            [
+                ("Text/part0001.xhtml", "chapter", "Part One"),
+                ("Text/parent.xhtml", "", "Parent"),
+                ("Text/chapter 02.xhtml", "start", "Chapter Two"),
+            ],
+        )
+
+    def test_extract_navigation_targets_resolves_ncx_links_relative_to_ncx_resource(self):
+        book = StubEpubBookWithSpine(
+            items=[
+                StubEpubSpineItem(
+                    "ncx",
+                    "Navigation/toc.ncx",
+                    "",
+                    media_type="application/x-dtbncx+xml",
+                ),
+            ],
+            toc=[StubTocItem("Chapter One", "../Text/chapter1.xhtml#start")],
+        )
+
+        targets = EpubExtractor.extract_navigation_targets(book)
+
+        self.assertEqual(targets[0].path, "Text/chapter1.xhtml")
+        self.assertEqual(targets[0].fragment, "start")
+
+    def test_make_navigation_target_normalizes_relative_encoded_path_query_and_fragment(self):
+        target = EpubExtractor.make_navigation_target(
+            "./Text/../Text/chapter%2002.xhtml?edition=1#chapter%20start",
+            "Chapter Two",
+            3,
+        )
+
+        self.assertIsNotNone(target)
+        assert target is not None
+        self.assertEqual(target.path, "Text/chapter 02.xhtml")
+        self.assertEqual(target.fragment, "chapter start")
+        self.assertEqual(target.href, "Text/chapter 02.xhtml#chapter start")
+        self.assertIsNone(EpubExtractor.make_navigation_target("https://example.com/chapter", "External", 4))
 
     def test_load_source_chapters_prefers_toc_title_over_html_heading(self):
         book = StubEpubBookWithSpine(
@@ -285,6 +662,82 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(warnings, [])
         self.assertEqual(significant_warnings, [])
         self.assertEqual(source_chapters[0].title, "CHAPTER ONE")
+        self.assertEqual(source_chapters[0].navigation_targets[0].fragment, "start")
+
+    def test_load_source_chapters_skips_copyright_pushed_beyond_front_window_by_image_inserts(self):
+        # Mirrors a light novel spine: cover, six image-only color inserts, title page, then the
+        # copyright page at raw readable index 8. Image-only pages must not consume front matter
+        # scan budget, so the labeled copyright page is still recognized as front matter.
+        copyright_html = (
+            "<html><body>"
+            "<h1>Copyright</h1>"
+            "<p>The Eminence in Shadow 06</p>"
+            "<p>DAISUKE AIZAWA</p>"
+            "<p>Copyright © 2025 by Yen Press, LLC</p>"
+            "<p>All rights reserved.</p>"
+            "<p>First published in Japan in 2023 by KADOKAWA CORPORATION, Tokyo.</p>"
+            "<p>Library of Congress Cataloging-in-Publication Data</p>"
+            "<p>ISBNs: 979-8-8554-0698-6 (hardcover)</p>"
+            "</body></html>"
+        )
+        items = [StubEpubSpineItem("cover", "Text/cover.xhtml", '<html><body><img src="cover.jpg"/></body></html>')]
+        items += [
+            StubEpubSpineItem(
+                f"insert{i:03d}",
+                f"Text/insert{i:03d}.xhtml",
+                f'<html><body><img src="insert{i:03d}.jpg"/></body></html>',
+            )
+            for i in range(1, 7)
+        ]
+        items += [
+            StubEpubSpineItem("titlepage", "Text/titlepage.xhtml", "<html><body><p>The Eminence in Shadow 6</p></body></html>"),
+            StubEpubSpineItem("copyright", "Text/copyright.xhtml", copyright_html),
+            StubEpubSpineItem("chapter001", "Text/chapter001.xhtml", "<html><body><h1>Prologue</h1><p>Story text begins.</p></body></html>"),
+        ]
+        book = StubEpubBookWithSpine(
+            items=items,
+            toc=[
+                StubTocItem("Cover", "Text/cover.xhtml"),
+                StubTocItem("Title Page", "Text/titlepage.xhtml"),
+                StubTocItem("Copyright", "Text/copyright.xhtml"),
+                StubTocItem("Prologue", "Text/chapter001.xhtml"),
+            ],
+        )
+
+        with patch("os.path.exists", return_value=True), \
+                patch("importlib.import_module") as import_module, \
+                patch.object(EpubExtractor, "extract_title", return_value="Fallback Title"):
+            import_module.return_value.read_epub.return_value = book
+            source_chapters, _, warnings, significant_warnings = EpubExtractor.load_source_chapters("book.epub")
+
+        kept_hrefs = [chapter.href for chapter in source_chapters]
+        self.assertNotIn("Text/copyright.xhtml", kept_hrefs)
+        self.assertIn("Text/titlepage.xhtml", kept_hrefs)
+        self.assertIn("Text/chapter001.xhtml", kept_hrefs)
+        skip_warning = next(warning for warning in warnings if "copyright.xhtml" in warning)
+        self.assertIn("publication metadata", skip_warning)
+        self.assertIn(skip_warning, significant_warnings)
+
+    def test_load_source_chapters_warns_for_navigation_target_outside_spine(self):
+        book = StubEpubBookWithSpine(
+            items=[
+                StubEpubSpineItem(
+                    "chapter1",
+                    "Text/chapter1.xhtml",
+                    "<html><body><p>Body text.</p></body></html>",
+                ),
+            ],
+            toc=[StubTocItem("Missing", "Text/missing.xhtml")],
+        )
+
+        with patch("os.path.exists", return_value=True), \
+                patch("importlib.import_module") as import_module, \
+                patch.object(EpubExtractor, "extract_title", return_value="Chapter One"):
+            import_module.return_value.read_epub.return_value = book
+            _, _, warnings, significant_warnings = EpubExtractor.load_source_chapters("book.epub")
+
+        self.assertTrue(any("does not map to a spine document" in warning for warning in warnings))
+        self.assertTrue(any("does not map to a spine document" in warning for warning in significant_warnings))
 
     def test_load_source_chapters_falls_back_to_html_title_without_toc_match(self):
         book = StubEpubBookWithSpine(

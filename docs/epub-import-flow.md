@@ -4,14 +4,15 @@
 
 The app now supports importing an EPUB directly into an audiobook project through the existing **Text** workflow.
 
-The implemented import path is intentionally conservative: it converts EPUB spine content into polished plain text, segments that text with the same project settings used by ordinary text import, derives chapter dividers from EPUB document boundaries, and commits the result through the existing project persistence model.
+The implemented import path is intentionally conservative: it converts EPUB reading content into polished plain text, derives logical section boundaries from EPUB navigation while retaining spine reading order, segments each logical section with the same project settings used by ordinary text import, and commits the result through the existing project persistence model.
+
+The section-boundary algorithm is documented in [Navigation-Defined EPUB Sectioning](epub-navigation-sectioning.md).
 
 This keeps EPUB import aligned with the app's pre-existing design constraints:
 
 - the project text model remains `PhraseGroup`-based,
 - raw source text remains available as `project_text_raw.txt`,
-- segmented text remains serialized as `project_text.json`,
-- chapter boundaries continue to use `Project.markers`, serialized as `markers` in `project.json` (with legacy `chapter_indices` still accepted on load),
+- segmented text and logical `BookSection` boundaries remain serialized in `project_text.json`,
 - generated sound segments are invalidated when source text is replaced,
 - preview/confirmation behavior matches the existing text import flow,
 - richer ebook/reader formatting is not forced into the current audiobook-generation model.
@@ -26,13 +27,13 @@ The original EPUB is also copied into the project as `project_text.epub` so the 
 
 The current EPUB pathway is an import adapter into the app's existing text pipeline, not a new project representation.
 
-EPUB-specific parsing, spine traversal, HTML flattening, warning collection, and chapter-boundary calculation are isolated in `tts_audiobook_tool/epub_extractor.py`. The app menu layer in `tts_audiobook_tool/text_menu.py` only coordinates user interaction, preview, confirmation, source-file copy, and project commit.
+EPUB-specific parsing, spine traversal, navigation resolution, HTML flattening, warning collection, and logical-section calculation are isolated in the EPUB extractor. The app menu layer only coordinates user interaction, preview, confirmation, source-file copy, and project commit.
 
 This boundary keeps ebook handling from leaking into the rest of the application. Downstream audiobook features continue to consume the same structures they already understand:
 
 - `PhraseGroup` instances for generation and playback,
-- `Reason.SPACE_BREAK` markers for phrase-level section endings,
-- `markers` / `markers` for chapter-aware concat and metadata flows,
+- `Reason.SECTION_BREAK` for phrase-level logical section endings,
+- `BookSection` boundaries and titles for section-aware concat and metadata flows,
 - `project_text_raw.txt` as the readable raw text reference.
 
 ### Implemented Pipeline
@@ -42,21 +43,23 @@ EPUB file selected in Text menu
   ↓
 EpubExtractor.import_epub(...)
   ↓
-EbookLib reads the EPUB package
+EbookLib reads the EPUB package and navigation
   ↓
-Spine XHTML documents are loaded in book order
+Spine XHTML documents are loaded in reading order
   ↓
-EpubSourceChapter objects represent source spine documents
+EPUB 3 nav targets define logical sections, with EPUB 2 NCX fallback
   ↓
-BeautifulSoupEpubChapterTextExtractor flattens XHTML to clean plain text
+Canonical document targets and fragments map navigation to spine content
   ↓
-EpubTextChapter objects retain per-spine-document text chunks
+BeautifulSoupEpubChapterTextExtractor flattens fragment-aware slices to clean plain text
   ↓
-Each chapter is segmented independently with PhraseGrouper
+Readable slices are assembled into logical sections, including sections spanning spine documents; merged slice text is joined with two blank lines
   ↓
-The last phrase in each chapter is marked Reason.SPACE_BREAK
+Each logical section is segmented independently with PhraseGrouper
   ↓
-Chapter-start phrase indices become Project.markers
+The last phrase in each logical section is marked Reason.SECTION_BREAK
+  ↓
+Logical-section starts and titles become project `BookSection` records
   ↓
 Existing AppUtil.print_project_text(...) preview is shown
   ↓
@@ -72,12 +75,23 @@ Project text, chapter dividers, raw text, metadata, and EPUB copy are saved
 The importer uses small dataclasses as import-pipeline structures. They are deliberately not stored directly in the project model.
 
 ```python
+@dataclass(frozen=True)
+class EpubNavigationTarget:
+    title: str
+    path: str
+    fragment: str
+    href: str
+    order: int
+    depth: int
+
+
 @dataclass
 class EpubSourceChapter:
     title: str
     href: str
     media_type: str
     html: str
+    navigation_targets: list[EpubNavigationTarget]
 
 
 @dataclass
@@ -88,23 +102,31 @@ class EpubTextChapter:
 
 
 @dataclass
+class EpubTextSlice:
+    text: str
+    navigation_target: EpubNavigationTarget | None
+
+
+@dataclass
 class EpubTextExtractionResult:
     text: str
     warnings: list[str]
     significant_warnings: list[str]
+    slices: list[EpubTextSlice]
+    has_unresolved_navigation_target: bool
 
 
 @dataclass
 class EpubImportResult:
     phrase_groups: list[PhraseGroup]
     raw_text: str
-    markers: list[int]
+    section_start_indices: list[int]
     chapters: list[EpubTextChapter]
     warnings: list[str]
     significant_warnings: list[str]
 ```
 
-This shape gives the import path enough structure to preserve chapter boundaries during conversion and segmentation while still committing the final result into the established project format.
+This shape gives the import path enough structure to preserve navigation-defined logical section boundaries during conversion and segmentation while still committing the final result into the established project format.
 
 ---
 
@@ -128,31 +150,29 @@ It is intentionally more deliberate than raw `BeautifulSoup.get_text()`:
 - renders `<hr>` as a scene-break-like `* * *`,
 - keeps list items readable,
 - normalizes whitespace and blank lines,
-- warns when a spine document appears to contain multiple major headings,
+- retains source-position information needed for fragment-aware slices,
 - warns when no readable body text is found.
 
 The extractor does **not** preserve visual formatting such as italics, bold, underline, CSS layout, inline links, images, or footnote structure. That omission is a design choice: the current import path feeds audiobook generation, whose source-of-truth text model is plain text segmented into phrase groups.
 
 ---
 
-## Chapter Boundary Strategy
+## Logical Section Boundary Strategy
 
-EPUB spine documents are the authoritative chapter chunks for the current importer.
+The spine and the navigation table have separate responsibilities:
 
-For each readable spine document:
+- the spine determines the order in which reading content is consumed,
+- EPUB 3 navigation targets, with EPUB 2 NCX fallback through EbookLib, determine logical section starts.
 
-1. EbookLib resolves the spine item.
-2. Navigation documents are skipped.
-3. The XHTML content is decoded.
-4. A title is inferred from `h1`, `h2`, `title`, or the fallback href stem.
-5. The source document becomes an `EpubSourceChapter`.
-6. The extractor converts it to an `EpubTextChapter`.
+Targets are canonicalized into a package-relative document path plus an optional fragment. Fragment-aware slices let several navigation entries split one XHTML document, while logical assembly lets one section continue across several spine documents. Image-only starts remain pending until readable text appears, and targets outside the retained reading stream do not create empty sections.
 
-The importer does not split within a spine document based on `h1` or `h2`. If multiple major headings are detected, that condition is surfaced as a warning instead of changing the chapter model automatically.
+The importer falls back to one section per retained readable spine document when neither navigation source yields usable reading targets or when an unresolved fragment could otherwise assign prose to the wrong section. That degradation produces a significant warning; spine documents are not otherwise treated as authoritative chapter boundaries.
 
-### Mapping to `markers`
+The complete target-resolution, assembly, fallback, and edge-case rules are in [Navigation-Defined EPUB Sectioning](epub-navigation-sectioning.md).
 
-Chapters are segmented independently and concatenated afterward. This avoids fragile text-offset mapping after segmentation and ensures segments do not cross EPUB spine boundaries.
+### Mapping to section starts
+
+Logical sections are segmented independently and concatenated afterward. This avoids fragile text-offset mapping after segmentation and ensures segments do not cross navigation-defined boundaries.
 
 Conceptually:
 
@@ -161,38 +181,31 @@ phrase_groups = []
 markers = []
 raw_text_parts = []
 
-for chapter in text_chapters:
-    chapter_text = chapter.text.strip()
-    if not chapter_text:
+for section in logical_sections:
+    section_text = section.text.strip()
+    if not section_text:
         continue
 
     if phrase_groups:
         markers.append(len(phrase_groups))
 
-    chapter_phrase_groups = PhraseGrouper.text_to_groups(
-        chapter_text,
+    section_phrase_groups = PhraseGrouper.text_to_groups(
+        section_text,
         max_words=max_words,
         strategy=segmentation_strategy,
         pysbd_lang=language_code,
     )
-    EpubExtractor.mark_last_phrase_as_section(chapter_phrase_groups)
+    EpubExtractor.mark_last_phrase_as_section(section_phrase_groups)
 
-    phrase_groups.extend(chapter_phrase_groups)
-    raw_text_parts.append(chapter_text)
+    phrase_groups.extend(section_phrase_groups)
+    raw_text_parts.append(section_text)
 
 raw_text = "\n\n".join(raw_text_parts)
 ```
 
-The first chapter starts at phrase group `0`, so it does not need a divider entry. Each subsequent chapter adds a divider at the current phrase-group count before its groups are appended.
+The first emitted logical section starts at phrase group `0`, so it does not need a divider entry. Each subsequent non-empty section adds a divider at the current phrase-group count before its groups are appended.
 
-`mark_last_phrase_as_section(...)` also marks the last phrase of each chapter as `Reason.SPACE_BREAK` and normalizes its trailing line breaks, matching the app's existing section-ending expectations.
-
-This EPUB boundary marker is structural: it represents the end of a retained EPUB spine
-document, not merely whitespace found in the source text. To avoid duplicated section
-behavior, the importer also downgrades section-like groups at the start of a subsequent
-spine document when a previous retained document already ended with a forced
-`Reason.SPACE_BREAK`. This handles common heading patterns where the next XHTML file begins
-with chapter-title text separated by multiple blank lines.
+`mark_last_phrase_as_section(...)` marks the last phrase of each emitted logical section as `Reason.SECTION_BREAK`, matching the app's section-ending expectations. Source-derived section-like spacing at the start of a new logical section is normalized so the explicit boundary does not produce duplicate section behavior.
 
 ---
 
@@ -229,42 +242,42 @@ The current importer writes the same core project files as regular text import, 
 On confirmed import:
 
 - `[project root]/project_text_raw.txt` stores the flattened raw text,
-- `[project root]/project_text.json` stores segmented phrase groups,
-- `[project root]/project.json` stores project metadata, including `markers`,
+- `[project root]/project_text.json` stores the `Book`, its logical sections, and segmented phrase groups,
+- `[project root]/project.json` stores project-level metadata,
 - `[project root]/project_text.epub` stores the original EPUB copy.
 
 `PROJECT_TEXT_EPUB_FILE_NAME = "project_text.epub"` is defined in `tts_audiobook_tool/constants.py`.
 
 ### Atomic commit method
 
-Regular text replacement uses `Project.set_phrase_groups_and_save(...)`, which clears `markers` because a generic flat text import has no reliable chapter structure.
-
-EPUB import uses a separate method:
+Regular text replacement creates one flat `BookSection`. EPUB import uses a separate commit helper that projects aligned starts and titles into multiple `BookSection` records:
 
 ```python
 def set_phrase_groups_chapters_and_save(
-        self,
+        project: Project,
         phrase_groups: list[PhraseGroup],
-        markers: list[int],
+        section_start_indices: list[int],
         strategy: SegmentationStrategy,
         max_words: int,
         language_code: str,
-        raw_text: str
+        raw_text: str,
+        dialog_segmentation: bool = False,
+        title: str = "",
+        section_titles: list[str] | None = None,
 ) -> None:
     ...
 ```
 
-This method mirrors the standard text commit behavior while preserving the chapter dividers computed from the EPUB structure:
+The helper:
 
-- sets `phrase_groups`,
-- records `applied_strategy`, `applied_max_words`, and `applied_language_code`,
-- sets `markers`,
-- clears `generate_range_string`,
-- clears `realtime_line_range`,
-- saves project metadata and phrase groups through the existing save flow,
+- creates `BookSection` slices from the phrase-group starts,
+- assigns navigation labels to those sections,
+- records the applied segmentation settings on the `Book`,
+- clears legacy project markers and obsolete generation ranges,
+- saves project metadata and `project_text.json`, and
 - saves `project_text_raw.txt`.
 
-Keeping this as a separate method makes the distinction explicit: ordinary text import resets chapter dividers, while EPUB import has a valid structural source for them.
+Keeping this as a separate method makes the distinction explicit: ordinary text import has one flat section, while EPUB import has navigation-defined logical structure.
 
 ---
 
@@ -279,8 +292,9 @@ Examples include:
 - EPUB spine item missing,
 - no readable spine documents found,
 - EPUB could not be read,
-- multiple major headings detected in a single spine document,
+- navigation targets that are unresolved or out of reading order,
 - readable text missing from a document that does not look like front/back matter,
+- navigation-defined sectioning unavailable, requiring spine-section fallback,
 - the import produced no text segments.
 
 This keeps messy EPUB behavior visible without requiring new project-model fields for import diagnostics.
@@ -305,9 +319,9 @@ EPUB import uses:
 
 This makes EPUB import behave like every other text source from the perspective of TTS prompt generation.
 
-### Chapter structure is projected into existing fields
+### Logical section structure is projected into the existing book model
 
-EPUB chapter boundaries become `markers` / `markers`; they are not stored as a parallel chapter system.
+EPUB navigation-defined boundaries and titles become `BookSection` records; they are not stored as a parallel chapter system.
 
 ### Existing generated-audio invalidation rules apply
 
@@ -346,7 +360,7 @@ Phase 2a would define a more structured format for imported book text, including
 
 This would not replace the current plain-text audiobook path. Instead, EPUB import could produce two related outputs:
 
-1. the existing plain-text `PhraseGroup`/`markers` data needed for TTS generation,
+1. the existing plain-text `BookSection`/`PhraseGroup` data needed for TTS generation,
 2. a structured reader document used for display, navigation, and formatting-aware reading.
 
 Possible structured-reader content could include:
@@ -399,7 +413,7 @@ The exact schema should be designed around browser-player rendering requirements
 
 ### Relationship to the current importer
 
-The current import architecture already helps Phase 2a because it keeps per-chapter intermediate structures before flattening fully into project text.
+The current import architecture already helps Phase 2a because it keeps logical-section intermediate structures before flattening fully into project text.
 
 Phase 2a could extend the extractor result from "text plus warnings" to "plain text plus structured reader blocks plus warnings," or it could add a parallel reader-document extractor. Either approach can reuse:
 
@@ -408,7 +422,7 @@ Phase 2a could extend the extractor result from "text plus warnings" to "plain t
 - source chapter loading,
 - warning collection,
 - source EPUB copy handling,
-- chapter-to-phrase-group mapping.
+- logical-section-to-phrase-group mapping.
 
 The important architectural rule is that structured reader data should remain an additional reader-facing artifact, not a forced replacement for `PhraseGroup`-based TTS input.
 

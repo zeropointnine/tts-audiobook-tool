@@ -22,7 +22,11 @@ class EpubSectionSkipDetector:
     navigation document, publication metadata page, or table-of-contents-like page. Strongly
     labeled publication metadata and table-of-contents sections can be skipped in both the front
     and back scan windows, while weaker content-pattern heuristics are limited to front matter to
-    reduce false positives.
+    reduce false positives. Two refinements keep those windows meaningful for real books: scan
+    windows count only text-bearing sections (spine documents without readable body text, such as
+    cover pages and image-only inserts, do not consume scan budget), and a strongly labeled
+    publication metadata section is skipped anywhere in the spine when its content independently
+    corroborates the label, since a fixed window cannot anticipate unusually long front matter.
 
     These heuristics currently make English-language assumptions. In particular, the publication metadata,
     front/back matter, and table-of-contents keyword lists are English-oriented and should be expanded
@@ -130,25 +134,32 @@ class EpubSectionSkipDetector:
             title: str,
             html: str
     ) -> EpubSectionSkipDecision:
+        has_label_signal = EpubSectionSkipDetector.has_publication_metadata_href_or_title_signal(href, title)
         is_in_scan_window = EpubSectionSkipDetector.is_within_front_or_back_matter_scan_limit(
             readable_spine_index,
             readable_spine_count,
         )
-
-        if EpubSectionSkipDetector.has_publication_metadata_href_or_title_signal(href, title):
-            if is_in_scan_window:
-                return EpubSectionSkipDecision(True, "publication metadata href or title signal")
-            return EpubSectionSkipDecision()
-
-        if not EpubSectionSkipDetector.is_within_front_matter_scan_limit(readable_spine_index):
-            return EpubSectionSkipDecision()
+        if has_label_signal and is_in_scan_window:
+            return EpubSectionSkipDecision(True, "publication metadata href or title signal")
 
         text = EpubSectionSkipDetector.html_to_text_preview(html)
-        if not EpubSectionSkipDetector.is_short_enough_for_content_based_publication_metadata_skip(text):
-            return EpubSectionSkipDecision()
+        signal_count = 0
+        if EpubSectionSkipDetector.is_short_enough_for_content_based_publication_metadata_skip(text):
+            signal_count = EpubSectionSkipDetector.count_publication_metadata_text_signals(text)
+        has_corroborating_content = signal_count >= EpubSectionSkipDetector.PUBLICATION_METADATA_CONTENT_SIGNAL_THRESHOLD
 
-        signal_count = EpubSectionSkipDetector.count_publication_metadata_text_signals(text)
-        if signal_count >= EpubSectionSkipDetector.PUBLICATION_METADATA_CONTENT_SIGNAL_THRESHOLD:
+        # A strongly labeled section whose content independently corroborates the label is safe to
+        # skip anywhere in the spine: image-only inserts and other front matter can push copyright
+        # pages beyond the fixed scan windows, and mid-spine reading content does not carry multiple
+        # publication metadata phrases in a section this short.
+        if has_label_signal and has_corroborating_content:
+            return EpubSectionSkipDecision(
+                True,
+                f"publication metadata href/title signal plus text signals ({signal_count})",
+            )
+
+        if not has_label_signal and EpubSectionSkipDetector.is_within_front_matter_scan_limit(readable_spine_index) \
+                and has_corroborating_content:
             return EpubSectionSkipDecision(True, f"publication metadata text signals ({signal_count})")
 
         return EpubSectionSkipDecision()
@@ -187,6 +198,16 @@ class EpubSectionSkipDetector:
     def is_likely_empty_non_reading_section(href: str, title: str) -> bool:
         text = EpubSectionSkipDetector.normalize_key_text(f"{href} {title}")
         return any(term in text for term in EpubSectionSkipDetector.NON_READING_HREF_TITLE_TERMS)
+
+    @staticmethod
+    def is_text_bearing_spine_document(html: str) -> bool:
+        """
+        Whether a spine document carries any readable body text.
+
+        Cover pages and image-only inserts do not, so they should not consume front/back matter
+        scan budget when the caller computes scan-window positions.
+        """
+        return bool(EpubSectionSkipDetector.html_to_text_preview(html))
 
     @staticmethod
     def is_within_front_matter_scan_limit(readable_spine_index: int) -> bool:
