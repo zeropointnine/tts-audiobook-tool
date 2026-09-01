@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass
 import os
 import re
@@ -8,9 +9,11 @@ import queue
 import sys
 import threading
 import time
+from typing import TYPE_CHECKING
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+from loguru import logger
 import numpy as np
 
 from tts_audiobook_tool import text_util
@@ -28,10 +31,15 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+from tts_audiobook_tool.readiness import format_issues
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.server.audio_stream import AudioStream
 from tts_audiobook_tool.server.audio_stream_http import AudioStreamHttp
 from tts_audiobook_tool.tts import Tts
+
+if TYPE_CHECKING:
+    from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 
 
 @dataclass
@@ -42,10 +50,21 @@ class PromptItem:
     is_prompt_start: bool = False
 
 
+def get_blocking_issues_error(project: Project, instance: TtsBaseModel | None) -> str:
+    """
+    Returns user-facing error text if the TTS model has blocking issues that
+    prevent inference, else empty string.
+    """
+    issues = Tts.get_class().get_blocking_issues(project, instance)
+    if not issues:
+        return ""
+    return "TTS model is not ready for inference:\n" + format_issues(issues, verbose=True)
+
+
 class Server:
 
     def __init__(self, project_dir: str = ""):
-        
+
         # Load current project
         # (project_dir, if non-empty, is a --project CLI override validated at startup)
         prefs = Prefs.load()
@@ -62,7 +81,7 @@ class Server:
             exit(0)
         self._project = result
 
-        Tts.set_model_params_using_project(self._project) 
+        Tts.set_model_params_using_project(self._project)
 
         s = f"{COL_ACCENT}Loaded tts-audiobook-tool's current active project's settings from:\n"
         s += f"{COL_ACCENT}{text_util.make_terminal_hyperlink(self._project.dir_path, is_file=True)}"
@@ -95,7 +114,7 @@ class Server:
 
     def run(self, host: str = "127.0.0.1", port: int = 5001):
         Tts.reset_voice_selection_index()
-        
+
         _server = self
 
         class _Handler(BaseHTTPRequestHandler):
@@ -106,7 +125,7 @@ class Server:
                     data = json.loads(body) if body else {}
                     self._respond(
                         _server.prompt(
-                            data.get("prompt", ""), 
+                            data.get("prompt", ""),
                             should_segment=data.get("should_segment", True),
                             can_eager=data.get("eager_first_segment", False)
                         )
@@ -202,7 +221,13 @@ class Server:
 
         def _init_tts():
             try:
-                Tts.get_instance()
+                model = Tts.get_instance()
+
+                # Now that a concrete instance exists, verify the model is
+                # actually usable for inference
+                error = get_blocking_issues_error(self._project, model)
+                if error:
+                    raise RuntimeError(error)
             except Exception as e:
                 print_feedback(f"\n{COL_ERROR}Model initialization failed:\n\n{make_error_string(e)}")
                 # Fatal init failures can leave native ML runtimes in a bad state; normal Python
@@ -212,13 +237,19 @@ class Server:
                 sys.stderr.flush()
                 os._exit(1)
 
+            # Get and log TTS model warnings if any, now that the model instance exists
+            model = Tts.get_instance_if_exists()
+            warnings = model.get_warning_issues(self._project) if model else []
+            for warning in warnings:
+                logger.warning(warning)
+
             self._is_initializing = False
             self._tts_ready.set()
             printt(f"{COL_DIM_ITALICS}Ready")
             printt()
 
         with ThreadingHTTPServer((host, port), _Handler) as httpd:
-            
+
             # Print some useful info
             base_url = f"http://{host}:{port}"
             demo_url_1 = f"{base_url}/demos/{API_DEMO_HTML_FILE_NAME}"
@@ -292,7 +323,7 @@ class Server:
             phrase_group = PhraseGroup( [Phrase(text=prompt, reason=Reason.UNDEFINED)] )
             prompt_texts.append(prompt)
             self._queue.put((1, next(self._queue_counter), PromptItem(phrase_group, False, use_tts_streaming, is_prompt_start=True)))
-       
+
         return {
             "input": prompt,
             "prompts": prompt_texts,
@@ -462,7 +493,7 @@ class Server:
         """Background thread: pulls prompts from the queue and runs TTS inference."""
 
         while True:
-            
+
             _, _, prompt_item = self._queue.get()
             self._tts_ready.wait()
 
@@ -503,7 +534,7 @@ class Server:
 
             else:
                 prompt_text = prompt_item.phrase_group.text
-            
+
             self._prompt_currently_inferencing = prompt_text
 
             try:
@@ -515,6 +546,8 @@ class Server:
             finally:
                 self._prompt_currently_inferencing = ""
                 self._queue.task_done()
+
+# ---
 
 
 # TODO: Make configurable maybe:

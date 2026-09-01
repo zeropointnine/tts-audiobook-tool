@@ -18,6 +18,8 @@
              border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
     .toggle-btn { padding: 6px 18px; font-size: 14px; }
     .toggle-btn.active { background: #333333; color: #ffffff; }
+    #tts-streaming-controls.unsupported { opacity: 0.45; }
+    #tts-streaming-controls.unsupported button { cursor: not-allowed; box-shadow: none; }
     textarea { width: 100%; height: 160px; font-family: monospace; font-size: 13px;
                box-sizing: border-box; resize: vertical; padding: 8px;
                background: #ffffff; color: #333333; border: 1px solid #33333348; }
@@ -42,7 +44,7 @@
         <button id="local-audio-on-btn"  class="toggle-btn">On</button>
         <button id="local-audio-off-btn" class="toggle-btn">Off</button>
       </div>
-      <div style="display: flex; align-items: center; gap: 8px;">
+      <div id="tts-streaming-controls" style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 13px; color: #33333394; white-space: nowrap;">TTS streaming:</span>
         <button id="tts-streaming-on-btn"  class="toggle-btn">On</button>
         <button id="tts-streaming-off-btn" class="toggle-btn">Off</button>
@@ -106,6 +108,7 @@
     const localAudioOff  = document.getElementById('local-audio-off-btn');
     const ttsStreamingOn = document.getElementById('tts-streaming-on-btn');
     const ttsStreamingOff = document.getElementById('tts-streaming-off-btn');
+    const ttsStreamingControls = document.getElementById('tts-streaming-controls');
 
     function updateEagerVisibility() {
       eagerLabel.style.display = segment.checked ? '' : 'none';
@@ -156,8 +159,10 @@
     function setTtsStreamingActive(enabled, supported = true) {
       ttsStreamingOn.classList.toggle('active', enabled);
       ttsStreamingOff.classList.toggle('active', !enabled);
-      ttsStreamingOn.disabled = false;
-      ttsStreamingOn.title = supported ? '' : 'Current TTS engine does not support model-side streaming, but you can still send the API request and inspect the warning response';
+      ttsStreamingOn.disabled = !supported;
+      ttsStreamingOff.disabled = !supported;
+      ttsStreamingControls.classList.toggle('unsupported', !supported);
+      ttsStreamingControls.title = supported ? '' : 'Current TTS engine does not support model-side streaming';
     }
 
     async function postLocalAudio(enabled) {
