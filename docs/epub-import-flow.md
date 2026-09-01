@@ -248,6 +248,8 @@ On confirmed import:
 
 `PROJECT_TEXT_EPUB_FILE_NAME = "project_text.epub"` is defined in `tts_audiobook_tool/constants.py`.
 
+Re-importing the saved `project_text.epub` itself is supported: `EpubExtractor.copy_epub_to_project` detects that the source and destination reference the same file and skips the copy instead of failing.
+
 ### Atomic commit method
 
 Regular text replacement creates one flat `BookSection`. EPUB import uses a separate commit helper that projects aligned starts and titles into multiple `BookSection` records:

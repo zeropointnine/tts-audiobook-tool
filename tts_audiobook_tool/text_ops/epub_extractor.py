@@ -1172,6 +1172,9 @@ class EpubExtractor:
     @staticmethod
     def copy_epub_to_project(epub_path: str, project_dir: str) -> str:
         dest_path = os.path.join(project_dir, PROJECT_TEXT_EPUB_FILE_NAME)
+        if EpubExtractor.paths_reference_same_file(epub_path, dest_path):
+            # Re-importing the saved project EPUB copy; it is already in place
+            return ""
         try:
             shutil.copy(epub_path, dest_path)
             return ""
@@ -1179,6 +1182,15 @@ class EpubExtractor:
             message = f"Error saving EPUB copy: {e}"
             L.e(message)
             return message
+
+    @staticmethod
+    def paths_reference_same_file(path_a: str, path_b: str) -> bool:
+        if os.path.abspath(path_a) == os.path.abspath(path_b):
+            return True
+        try:
+            return os.path.samefile(path_a, path_b)
+        except OSError:
+            return False
 
     @staticmethod
     def log_warnings(warnings: list[str]) -> None:

@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -1113,6 +1115,63 @@ class TestEpubExtractor(unittest.TestCase):
         self.assertEqual(warnings, significant_warnings)
         self.assertEqual(len(significant_warnings), 1)
         self.assertIn("Contents Chapter 1", significant_warnings[0])
+
+    def test_copy_epub_to_project_copies_epub_from_different_location(self):
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as project_dir:
+            epub_path = os.path.join(source_dir, "book.epub")
+            with open(epub_path, "wb") as f:
+                f.write(b"epub bytes")
+
+            err = EpubExtractor.copy_epub_to_project(epub_path, project_dir)
+
+            self.assertEqual(err, "")
+            dest_path = os.path.join(project_dir, "project_text.epub")
+            with open(dest_path, "rb") as f:
+                self.assertEqual(f.read(), b"epub bytes")
+
+    def test_copy_epub_to_project_skips_copy_when_source_is_saved_destination(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            dest_path = os.path.join(project_dir, "project_text.epub")
+            with open(dest_path, "wb") as f:
+                f.write(b"saved epub bytes")
+
+            err = EpubExtractor.copy_epub_to_project(dest_path, project_dir)
+
+            self.assertEqual(err, "")
+            with open(dest_path, "rb") as f:
+                self.assertEqual(f.read(), b"saved epub bytes")
+
+    def test_copy_epub_to_project_skips_copy_for_relative_path_to_saved_destination(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            old_cwd = os.getcwd()
+            os.chdir(project_dir)
+            try:
+                dest_path = os.path.join(project_dir, "project_text.epub")
+                with open(dest_path, "wb") as f:
+                    f.write(b"saved epub bytes")
+
+                err = EpubExtractor.copy_epub_to_project(os.path.join(".", "project_text.epub"), project_dir)
+
+                self.assertEqual(err, "")
+                with open(dest_path, "rb") as f:
+                    self.assertEqual(f.read(), b"saved epub bytes")
+            finally:
+                os.chdir(old_cwd)
+
+    def test_copy_epub_to_project_skips_copy_for_differing_paths_to_same_file(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            dest_path = os.path.join(project_dir, "project_text.epub")
+            with open(dest_path, "wb") as f:
+                f.write(b"saved epub bytes")
+            linked_path = os.path.join(project_dir, "linked.epub")
+            os.symlink(dest_path, linked_path)
+
+            err = EpubExtractor.copy_epub_to_project(linked_path, project_dir)
+
+            self.assertEqual(err, "")
+            self.assertTrue(os.path.islink(linked_path))
+            with open(dest_path, "rb") as f:
+                self.assertEqual(f.read(), b"saved epub bytes")
 
 
 if __name__ == "__main__":
