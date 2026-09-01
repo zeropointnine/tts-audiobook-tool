@@ -67,6 +67,47 @@ class TestBookSerialization(unittest.TestCase):
         self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
         self.assertEqual(result.section_start_indices(), [0, 1])
 
+    def test_load_promotes_legacy_ornamental_paragraph_to_space_break(self):
+        payload = {
+            "format": "book.v2",
+            "book": {
+                "sections": [{
+                    "phrase_groups": [{
+                        "voice_index": -1,
+                        "phrases": [{
+                            "text": "Take good care of Traitre in my absence.\n\n◇\n\n",
+                            "reason": "p",
+                        }],
+                    }],
+                }],
+            },
+        }
+
+        result = book_from_project_text_json_dict(payload)
+
+        self.assertIsInstance(result, Book)
+        assert isinstance(result, Book)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.SPACE_BREAK)
+
+    def test_load_keeps_regular_paragraph_reason(self):
+        payload = {
+            "format": "book.v2",
+            "book": {
+                "sections": [{
+                    "phrase_groups": [{
+                        "voice_index": -1,
+                        "phrases": [{"text": "Ordinary paragraph.\n\n", "reason": "p"}],
+                    }],
+                }],
+            },
+        }
+
+        result = book_from_project_text_json_dict(payload)
+
+        self.assertIsInstance(result, Book)
+        assert isinstance(result, Book)
+        self.assertEqual(result.phrase_groups[0].last_reason, Reason.PARAGRAPH)
+
     def test_phrase_group_voice_index_defaults_to_negative_one_and_has_setter(self):
         group = self.make_phrase_group("One.")
 

@@ -72,7 +72,18 @@ class Phrase:
                 return f"missing required property: {item}"
 
             reason = Reason.from_json_value(item.get("reason"))
-            phrase = Phrase(text=item["text"], reason=reason)
+            text = item["text"]
+            # Older imports merged ornamental separator lines (for example ◇)
+            # into the preceding paragraph without promoting its reason. Repair
+            # that boundary while loading so existing projects append the same
+            # space-break effect as newly imported text. Text and group indices
+            # remain unchanged, so generated segment identity is preserved.
+            if (
+                reason == Reason.PARAGRAPH
+                and app_text.has_trailing_ornamental_line(text)
+            ):
+                reason = Reason.SPACE_BREAK
+            phrase = Phrase(text=text, reason=reason)
             result.append(phrase)
 
         return result

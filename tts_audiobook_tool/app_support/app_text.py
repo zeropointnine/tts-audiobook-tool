@@ -51,6 +51,22 @@ def is_vocalizable(s: str) -> bool:
     return False
 
 
+def has_trailing_ornamental_line(text: str) -> bool:
+    """Whether text ends with a non-vocalizable separator on its own line.
+
+    Imported ornaments such as ``◇`` or ``* * *`` are merged into the preceding
+    phrase so they are not sent to TTS by themselves. Older project files may
+    therefore contain text like ``"Previous paragraph.\n\n◇\n\n"`` whose saved
+    reason is only ``PARAGRAPH``. The trailing line still unambiguously records
+    the stronger space-break boundary.
+    """
+    lines = text.rstrip().splitlines()
+    if len(lines) < 2:
+        return False
+    trailing_line = lines[-1].strip()
+    return bool(trailing_line) and not is_vocalizable(trailing_line)
+
+
 def normalize_text_general(text: str) -> str:
     """
     Text normalization operations that are common to both

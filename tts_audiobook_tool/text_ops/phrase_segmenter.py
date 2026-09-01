@@ -202,8 +202,13 @@ class PhraseSegmenter:
             if not results or not is_ornamental_break(phrase):
                 results.append(phrase)
             else:
-                # Merge
+                # Merge the non-vocalizable separator into the preceding phrase
+                # and retain its structural meaning. Ornamental lines commonly
+                # have only two trailing line feeds, so their initially inferred
+                # reason is PARAGRAPH even though the ornament denotes a space
+                # break between scenes.
                 results[-1].text += phrase.text
+                results[-1].reason = Reason.SPACE_BREAK
 
         return results
 

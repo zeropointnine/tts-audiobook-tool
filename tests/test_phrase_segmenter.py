@@ -29,6 +29,23 @@ def test_text_to_phrases_keeps_non_consecutive_sections() -> None:
     ]
 
 
+def test_text_to_phrases_promotes_merged_ornament_to_space_break() -> None:
+    text = (
+        "Take good care of Traitre in my absence.\n\n◇\n\n"
+        "We discussed a few other topics."
+    )
+
+    result = PhraseSegmenter.text_to_phrases(text, 40, "en")
+
+    assert result == [
+        Phrase(
+            "Take good care of Traitre in my absence.\n\n◇\n\n",
+            Reason.SPACE_BREAK,
+        ),
+        Phrase("We discussed a few other topics.", Reason.SENTENCE),
+    ]
+
+
 def test_text_to_phrases_smoke_tricky_inputs() -> None:
     # Robustness smoke test: ornamental separators, dangling punctuation, and
     # whitespace-only lines must segment without crashing or emitting blank
