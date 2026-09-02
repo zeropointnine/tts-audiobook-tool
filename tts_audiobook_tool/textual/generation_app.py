@@ -98,7 +98,7 @@ class GenerationTranscript:
         self._pending_control = ""
 
     def write_chunk(self, text: str) -> None:
-        if not self._enabled or not text:
+        if self._file is None or not text:
             return
         text = self._pending_control + text
         self._pending_control, text = _split_pending_control(text)

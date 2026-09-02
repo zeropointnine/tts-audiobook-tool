@@ -441,6 +441,18 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
             or self.reset_in_progress
         )
 
+    @property
+    def hard_reset_available(self) -> bool:
+        """Whether the second-CTRL-C hard reset is offered.
+
+        The hard reset dumps the worker to clear its resident *local* model
+        memory; in SGL-Omni backend mode inference is remote and the worker
+        holds no local TTS model memory, so the escape hatch is not offered
+        there. The GEN_TIMEOUT watchdog remains the automatic hang backstop
+        in both modes.
+        """
+        return not Tts.is_sgl_mode()
+
     def _snap_log_to_tail(self) -> None:
         """Scroll the worker log to the bottom and resume tail following.
 
@@ -466,19 +478,23 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
             self.cancel_requested = ModelWorker.request_cancel(operation_id)
             if self.cancel_requested:
                 self.phase = "Cancellation requested"
-                self._append_application_lines(
-                    [
-                        "",
-                        f"{COL_ERROR}Cancellation requested, please wait\n",
-                        f"{COL_ERROR}Or press [{COL_DEFAULT}CTRL-C{COL_ERROR}] again to hard-reset\n",
-                        " \n"
-                    ]
-                )
+                lines = ["", f"{COL_ERROR}Cancellation requested, please wait\n"]
+                if self.hard_reset_available:
+                    lines.append(
+                        f"{COL_ERROR}Or press [{COL_DEFAULT}CTRL-C{COL_ERROR}] again to hard-reset\n"
+                    )
+                lines.append(" \n")
+                self._append_application_lines(lines)
                 # self.query_one("#generation-prompt", Static).update(
                 #     "[CTRL-C] Hard-reset option"
                 # )
                 pass
                 self._update_header()
+            return
+        if not self.hard_reset_available:
+            # SGL-Omni mode: no local model memory to clear, so there is
+            # nothing to dump; the pending cooperative cancel takes effect
+            # at the worker's next safe boundary.
             return
         self._begin_hard_reset()
 

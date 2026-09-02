@@ -198,8 +198,10 @@ class GenerateUtil:
         current_round: list[SubBatch] = []
         last_voice: int | None = None
         is_first_batch = True
+
         # The first gen may be dominated by model warm-up or download time,
         # so it alone is exempt from the GEN_TIMEOUT watchdog.
+        # Note, we are keeping this even for sgl-omni mode
         gen_timeout_tracker = GenTimeoutTracker()
 
         while True:

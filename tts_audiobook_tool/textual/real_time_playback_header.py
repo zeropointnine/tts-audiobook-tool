@@ -10,6 +10,7 @@ from textual.widgets import Rule, Static
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import duration_string
 
 
@@ -38,12 +39,23 @@ def _fit_two_lines(text: str, width: int) -> str:
 
 _PROMPT_BY_MODE: dict[PromptMode, str] = {
     "default": f"Press [{COL_ACCENT}CTRL-C{COL_DEFAULT}] to interrupt",
-    "cancel_pending": (
-        f"Press [{COL_ERROR}CTRL-C{COL_DEFAULT}] to kill process and stop immediately"
-    ),
     "awaiting_continue": f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to finish",
     "finished": f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to finish",
 }
+
+
+def _cancel_pending_prompt() -> str:
+    """Prompt shown while a requested cancellation waits for a safe boundary.
+
+    The second-CTRL-C hard reset is gated to the local backend mode: it dumps
+    the worker to clear resident *local* model memory, which does not apply
+    to SGL-Omni's remote inference. The prompt is therefore resolved when
+    rendered, not baked into the dict above (the backend mode is a process
+    invariant, but tests patch it per test).
+    """
+    if Tts.is_sgl_mode():
+        return f"{COL_DIM}Waiting for the current generation to stop...{COL_DEFAULT}"
+    return f"Press [{COL_ERROR}CTRL-C{COL_DEFAULT}] to kill process and stop immediately"
 
 
 class RealTimePlaybackHeader(Vertical):
@@ -117,8 +129,9 @@ class RealTimePlaybackHeader(Vertical):
         self.query_one("#realtime-stats", Static).update(Text.from_ansi(stats))
 
     def update_hotkey(self, mode: PromptMode) -> None:
+        text = _cancel_pending_prompt() if mode == "cancel_pending" else _PROMPT_BY_MODE[mode]
         self.query_one("#realtime-hotkey", Static).update(
-            Text.from_ansi(_PROMPT_BY_MODE[mode])
+            Text.from_ansi(text)
         )
 
 

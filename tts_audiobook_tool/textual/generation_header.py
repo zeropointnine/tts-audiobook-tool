@@ -9,6 +9,7 @@ from textual.widgets import Static
 
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.constants import *
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import duration_string
 
 # The bottom header line shows a prompt driven by the app. Quick generation
@@ -19,13 +20,24 @@ PromptMode = Literal[
 
 _PROMPT_BY_MODE: dict[PromptMode, str] = {
     "default": f"Press [{COL_ACCENT}CTRL-C{COL_DEFAULT}] to interrupt",
-    "cancel_pending": (
-        f"Press [{COL_ERROR}CTRL-C{COL_DEFAULT}] to kill process and stop immediately"
-    ),
     "finished": f"Press [{COL_ACCENT}ENTER{COL_DEFAULT}] to continue",
     "auto_continue": "Proceeding to concatenation...",
     "auto_return": "",
 }
+
+
+def _cancel_pending_prompt() -> str:
+    """Prompt shown while a requested cancellation waits for a safe boundary.
+
+    The second-CTRL-C hard reset is gated to the local backend mode: it dumps
+    the worker to clear resident *local* model memory, which does not apply
+    to SGL-Omni's remote inference. The prompt is therefore resolved when
+    rendered, not baked into the dict above (the backend mode is a process
+    invariant, but tests patch it per test).
+    """
+    if Tts.is_sgl_mode():
+        return f"{COL_DIM}Waiting for the current generation to stop...{COL_DEFAULT}"
+    return f"Press [{COL_ERROR}CTRL-C{COL_DEFAULT}] to kill process and stop immediately"
 
 
 class GenerationHeader(Vertical):
@@ -153,6 +165,7 @@ class GenerationHeader(Vertical):
 
     def update_hotkey(self, mode: PromptMode) -> None:
         """Render the full-width hotkey prompt line for the given mode (ANSI colors allowed)."""
+        text = _cancel_pending_prompt() if mode == "cancel_pending" else _PROMPT_BY_MODE[mode]
         self.query_one(
             "#generation-hotkey", Static
-        ).update(Text.from_ansi(_PROMPT_BY_MODE[mode]))
+        ).update(Text.from_ansi(text))

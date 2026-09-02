@@ -71,10 +71,10 @@ The worker ignores terminal `SIGINT`; Textual/main remains the sole keyboard own
 In the generation screen:
 
 1. First Ctrl-C sets the cooperative cancellation event.
-2. A second Ctrl-C opens a confirmation dialog.
-3. Confirming terminates and restarts the worker, discarding resident model state.
+2. In local (non-SGL-Omni) backend mode, a second Ctrl-C immediately terminates and restarts the worker, discarding resident model state.
+3. In SGL-Omni backend mode the hard reset is not offered — inference is remote and the worker holds no local TTS model memory — so additional Ctrl-C presses are ignored and the session waits for the cooperative cancel.
 
-The UI remains responsive while a blocking inference call finishes. The hard-reset action runs on a Textual thread worker so process termination does not block rendering.
+The UI remains responsive while a blocking inference call finishes. The hard-reset action runs on a Textual thread worker so process termination does not block rendering. The GEN_TIMEOUT watchdog remains the automatic hang backstop in both backend modes; it is what actually recovers a wedged worker in SGL-Omni mode, where no manual dump exists.
 
 ## Console capture
 

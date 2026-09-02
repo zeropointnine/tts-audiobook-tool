@@ -140,13 +140,15 @@ def _make_stt_text(
     worker_models: ModelStateSnapshot | None = None,
 ) -> str:
     from tts_audiobook_tool.stt import Stt
+    from tts_audiobook_tool.app_types import SttVariant
 
     text = "mlx-whisper" if Stt.should_use_mlx_whisper() else "faster-whisper"
 
     qualifiers = []
     if not Stt.should_use_mlx_whisper():
         qualifiers.append(Stt.get_variant().id) # eg, "large-v3"
-        qualifiers.append(state.prefs.stt_config.device) # eg, "cuda"
+        if Stt.get_variant() != SttVariant.DISABLED:
+            qualifiers.append(state.prefs.stt_config.device) # eg, "cuda"
     if worker_models and worker_models.stt_loaded:
         qualifiers.append("loaded")
     if qualifiers:

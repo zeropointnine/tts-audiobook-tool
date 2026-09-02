@@ -34,6 +34,8 @@ from tts_audiobook_tool.textual.generation_app import (
     _reconcile_generation_result,
     _run_generation_console,
 )
+from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
 
 
 def run(coroutine) -> None:
@@ -932,7 +934,68 @@ def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> 
             assert "to continue" in str(
                 app.query_one("#generation-hotkey", Static).render()
             )
-            await pilot.press("enter")
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_second_ctrl_c_in_sgl_omni_mode_is_not_offered(monkeypatch, tmp_path) -> None:
+    """In SGL-Omni backend mode the worker holds no local TTS model memory,
+    so the hard-reset offer is gated off: CTRL-C only requests a cancel and
+    further presses are no-ops."""
+    monkeypatch.setattr(Tts, "_backend_mode", TtsBackendKind.SGL_OMNI)
+
+    cancel_calls: list[str] = []
+    reset_calls: list[int] = []
+
+    def fake_reset() -> str:
+        reset_calls.append(1)
+        return ""
+
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+    monkeypatch.setattr(ModelWorker, "is_alive", staticmethod(lambda: True))
+    monkeypatch.setattr(
+        ModelWorker,
+        "request_cancel",
+        staticmethod(lambda operation_id: cancel_calls.append(operation_id) or True),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, False, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.press("ctrl+c")
+            assert cancel_calls == ["job"]
+            assert app.cancel_requested
+            await pilot.pause()
+            # The cancellation notice no longer offers the hard reset.
+            log = app.query_one(WorkerLogContentArea).worker_log
+            document = "\n".join(line.text.plain for line in log._lines)
+            assert "Cancellation requested" in document
+            assert "hard-reset" not in document
+            # The pending header prompt waits rather than advertising the
+            # kill-process escape hatch.
+            hotkey = str(app.query_one("#generation-hotkey", Static).render())
+            assert "kill process" not in hotkey
+            assert "Waiting for the current generation to stop" in hotkey
+
+            # Further CTRL-C presses do nothing: no worker dump, no reset,
+            # no terminal result.
+            await pilot.press("ctrl+c")
+            await pilot.press("ctrl+c")
+            await pilot.pause(0.2)
+
+            assert reset_calls == []
+            assert not app.reset_in_progress
+            assert app.terminal_result is None
 
     try:
         run(exercise())
