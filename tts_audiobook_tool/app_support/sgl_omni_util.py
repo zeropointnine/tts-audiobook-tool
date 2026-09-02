@@ -260,7 +260,10 @@ class SglOmniUtil:
             if on_stream_end is not None:
                 on_stream_end()
 
-            return Sound(np.concatenate(chunks), sample_rate or TtsModelType.HIGGS_V3_SERVER.value.sample_rate)
+            return Sound(
+                np.concatenate(chunks),
+                sample_rate or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
+            )
 
         except Exception as e:
             return make_error_string(e)
@@ -274,7 +277,7 @@ class SglOmniUtil:
         sample_rate = SglOmniUtil.get_int_header(
             response,
             ["x-sample-rate", "x-audio-sample-rate", "x-stream-sample-rate", "sample-rate"],
-            TtsModelType.QWEN3TTS_SERVER.value.sample_rate,
+            TtsModelType.QWEN3TTS_SERVER.value.default_output_sample_rate,
         )
         channels = SglOmniUtil.get_int_header(
             response,
@@ -359,10 +362,13 @@ class SglOmniUtil:
         sr = int(sample_rate)
         if not sr:
             from tts_audiobook_tool.tts import Tts
-            sr = Tts.get_type().value.sample_rate
-            L.i(f"Samplerate unknown, falling back to TtsInfo value {sr}")
+            sr = Tts.get_type().value.default_output_sample_rate
+            L.i(f"Samplerate unknown, falling back to TtsModelType value {sr}")
 
-        return Sound(data, sr or TtsModelType.HIGGS_V3_SERVER.value.sample_rate)
+        return Sound(
+            data,
+            sr or TtsModelType.HIGGS_V3_SERVER.value.default_output_sample_rate,
+        )
 
 # ---
 

@@ -212,7 +212,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 audio = audio_arrays[0].astype(np.float32)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=0)
-                results.append(Sound(audio, self.INFO.sample_rate))
+                results.append(Sound(audio, self.INFO.default_output_sample_rate))
 
             except Exception as e:
                 return make_error_string(e)
@@ -253,7 +253,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 audio = audio_arrays[0].astype(np.float32)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=0)
-                results.append(Sound(audio, self.INFO.sample_rate))
+                results.append(Sound(audio, self.INFO.default_output_sample_rate))
 
             except Exception as e:
                 return make_error_string(e)
@@ -292,7 +292,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 audio = audio_arrays[0].astype(np.float32)
                 if audio.ndim > 1:
                     audio = audio.mean(axis=0)
-                results.append(Sound(audio, self.INFO.sample_rate))
+                results.append(Sound(audio, self.INFO.default_output_sample_rate))
 
             except Exception as e:
                 return make_error_string(e)

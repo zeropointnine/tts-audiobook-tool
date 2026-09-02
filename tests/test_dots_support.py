@@ -25,7 +25,8 @@ def test_dots_spec_and_tts_registry(monkeypatch):
     assert info.backend_kind is TtsBackendKind.LOCAL
     assert info.local_module_test == "dots_tts"
     assert info.local_torch_devices == [DeviceType.CUDA, DeviceType.CPU]
-    assert info.sample_rate == 48_000
+    assert info.default_output_sample_rate == 48_000
+    assert DotsBaseModel.get_output_sample_rate(Project.model_validate({})) == 48_000
     assert info.voice_target_attr == "dots_voice_file_name"
     assert info.voice_transcript_attr == "dots_voice_transcript"
     assert not info.requires_voice

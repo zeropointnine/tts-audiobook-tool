@@ -3,7 +3,7 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class HiggsV2BaseModel(TtsBaseModel):
-    
+
     INFO = TtsModelType.HIGGS_V2.value
 
     DEFAULT_TEMPERATURE = 0.3

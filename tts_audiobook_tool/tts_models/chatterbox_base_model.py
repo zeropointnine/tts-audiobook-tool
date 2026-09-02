@@ -68,7 +68,7 @@ class ChatterboxType(tuple[str, str, str], Enum):
     @property
     def label(self) -> str:
         return self.value[1]
-    
+
     @property
     def description(self) -> str:
         return self.value[2]

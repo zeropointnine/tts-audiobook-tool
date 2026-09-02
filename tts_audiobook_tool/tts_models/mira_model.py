@@ -132,7 +132,7 @@ class MiraModel(MiraBaseModel):
         except Exception as e:
             return make_error_string(e)
 
-        return Sound(audio_np, MiraModel.INFO.sample_rate)
+        return Sound(audio_np, self.INFO.default_output_sample_rate)
 
 
     def generate_batch(self, prompts: list[str]) -> list[Sound] | str:
@@ -157,7 +157,7 @@ class MiraModel(MiraBaseModel):
             print(f"< {len(sounds) + 1}/{len(prompts)} >", end=Ansi.ERASE_REST_OF_LINE + Ansi.LINE_HOME, flush=True)
             audio = self.mira_tts.codec.decode(generated_token, context_token)
             audio_np = audio.to(torch.float32).cpu().numpy()
-            sound = Sound(audio_np, MiraModel.INFO.sample_rate)
+            sound = Sound(audio_np, self.INFO.default_output_sample_rate)
             sounds.append(sound)
         print()
 

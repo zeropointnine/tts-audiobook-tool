@@ -22,13 +22,13 @@ VoiceCloneCacheKey = tuple[str, str, int, int]
 class TtsBaseModel(ABC):
     """
     Base class for a TTS model
-    
+
     Rem, @abstractmethods are instance methods that must be implemented by concrete model classes.
     And @classmethods are static methods that can be used without instances.
 
     Implementations must subclass in two steps:
 
-        MyBaseModel(TtsBaseModel) 
+        MyBaseModel(TtsBaseModel)
             Must not contain any model library imports
             Implements the @classmethods and related non-instance-dependent static functions
             Gets called for any non-instance-related functionality
@@ -219,17 +219,30 @@ class TtsBaseModel(ABC):
     # ---
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 
-    @classmethod 
+    @classmethod
+    def get_output_sample_rate(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> int:
+        """
+        The samplerate (Hz) of the audio the model outputs under the given
+        project configuration.
+
+        Defaults to the model catalog value. Models whose output rate depends
+        on project or instance settings should override this method.
+        """
+        return cls.INFO.default_output_sample_rate
+
+    @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
-        """ 
+        """
         Compact display text identifying model, used for menu status line, plus.
         May include variant info; may be more specific when `instance` exists.
         Format should be: SomeModel {COL_DIM}(optional qualifier)
         """
         return cls.INFO.ui.get("proper_name") or ""
-    
+
     @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
@@ -242,7 +255,7 @@ class TtsBaseModel(ABC):
         # Default implementation is for model whose only potential requirement is voice clone-related
         item = cls._get_standard_voice_blocker(project)
         return [item] if item else []
-   
+
     def get_warning_issues(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
 
@@ -254,20 +267,20 @@ class TtsBaseModel(ABC):
     def get_voice_tag(cls, project: Project) -> str:
         """
         Gets "voice tag" used for sound segment filenames.
-        
-        This should effectively be a condensed version of the the value string 
+
+        This should effectively be a condensed version of the the value string
         returned by get_voice_display_info()
         """
-        
+
         # Default implementation is for model whose 'salient info' consists of voice clone only
-        
+
         # Get voice filename
         if not cls.INFO.voice_target_attr:
             raise Exception("Logic error - must override this method")
         voice_file_name = cls.get_primary_voice_value(project)
         if not voice_file_name:
             return "none"
-        
+
         return ProjectVoiceUtil.make_voice_file_name_tag(voice_file_name, cls.INFO.file_tag)
 
     @classmethod
@@ -284,10 +297,10 @@ class TtsBaseModel(ABC):
     def get_voice_display_info_default(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> VoiceDisplayInfo | None:
-       
-        # Default implementation is for model whose 'salient' voice values 
+
+        # Default implementation is for model whose 'salient' voice values
         # consist of voice clone filenames only
-        
+
         tts_model_spec = cls.INFO
         if not tts_model_spec.voice_target_attr:
             raise Exception("Logic error - must override this method")
@@ -297,7 +310,7 @@ class TtsBaseModel(ABC):
 
         voice_file_name = cls.get_primary_voice_value(project)
 
-        if bool(voice_file_name):            
+        if bool(voice_file_name):
             value = ProjectVoiceUtil.make_voice_sample_display_label(project, voice_file_name, tts_model_spec)
 
             from tts_audiobook_tool.tts import Tts
@@ -349,7 +362,7 @@ class TtsBaseModel(ABC):
     def should_trim_trailing_token_noise(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> bool:
-        """ 
+        """
         Should run "trailing token noise" detector/trimmer after gen
         """
         return False
@@ -357,7 +370,7 @@ class TtsBaseModel(ABC):
     @classmethod
     def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
         """
-        Does the model have a propensity for generating spurious music sounds 
+        Does the model have a propensity for generating spurious music sounds
         (ie, should the STT validator check for music).
 
         Should utilize project or TTS model instance arguments to make that determination
@@ -400,7 +413,7 @@ class TtsBaseModel(ABC):
         Reason why the given validation `strictness` is discouraged, if any
         """
         return TtsBaseModel.default_strictness_warning_reason(strictness, project)
-        
+
     @staticmethod
     def default_strictness_warning_reason(strictness: Strictness, project: Project) -> str:
         if strictness.level >= Strictness.HIGH.level and project.language_code != "en":

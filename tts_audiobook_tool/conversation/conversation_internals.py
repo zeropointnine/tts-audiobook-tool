@@ -447,11 +447,11 @@ class ConversationStreamingTts:
             (None, None, error_string) on failure.
         """
         project = state.project
-        info = Tts.get_info()
-        if sound_stream.sample_rate != info.sample_rate:
+        sample_rate = Tts.get_class().get_output_sample_rate(project)
+        if sound_stream.sample_rate != sample_rate:
             return None, None, (
                 f"Streaming sample rate mismatch: output stream={sound_stream.sample_rate}, "
-                f"tts={info.sample_rate}"
+                f"tts={sample_rate}"
             )
 
         stream_start: int | None = None

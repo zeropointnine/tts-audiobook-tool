@@ -23,14 +23,14 @@ class PocketBaseModel(TtsBaseModel):
     DEFAULT_INT8 = False
     TEMPERATURE_MIN = 0.01
     TEMPERATURE_MAX = 2.0
-    
+
     # This is pocket default value
-    # Higher value may improve sound quality but I didn't hear it, 
+    # Higher value may improve sound quality but I couldn't hear it,
     # so leaving it 'un-parameterized'
-    LSD = 1 
+    LSD = 1
 
     # High value here prevents pocket from doing its own internal chunking
-    MAX_TOKENS = 120 
+    MAX_TOKENS = 120
 
     # Predefined voices - stored as bare names, resolved by pocket_tts internals
     # (corresponds to https://huggingface.co/kyutai/pocket-tts/tree/main/embeddings_v3)
@@ -43,8 +43,8 @@ class PocketBaseModel(TtsBaseModel):
 
     # See https://huggingface.co/kyutai/pocket-tts/tree/main/languages
     LANGUAGES = [
-        "english_2026-04", # same as unqualified "english" 
-        "english_2026-01", 
+        "english_2026-04", # same as unqualified "english"
+        "english_2026-01",
         "french_24l",
         "german_24l",
         "italian",
@@ -72,14 +72,14 @@ class PocketBaseModel(TtsBaseModel):
     @classmethod
     def get_blocking_issues(cls, project: Project, instance: TtsBaseModel | None) -> list[ReadinessIssue]:
         errors = []
-        
+
         if instance:
             assert isinstance(instance, PocketBaseModel)
             if PocketBaseModel.get_gated_error_message(project, instance):
                 verbose_ui_message = cls.make_gated_error_message_ui()
                 errors.append(ReadinessIssue("ungated model", verbose_ui_message))
                 return errors # don't bother adding any other errors at this point
-        
+
         if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.POCKET) and not project.pocket_predefined_voice:
             errors.append(ReadinessIssue("voice clone", "Setting a voice clone file or predefined voice is required"))
 
@@ -104,7 +104,7 @@ class PocketBaseModel(TtsBaseModel):
         cached = cls.gated_error_message_cache.get(voice_path, None)
         if cached is not None:
             return cached
-        
+
         # We're avoiding referencing PocketModel directly here...
         validate_method = getattr(instance, "get_voice_clone_access_error_for_path", None)
         assert validate_method

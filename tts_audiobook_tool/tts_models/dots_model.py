@@ -63,10 +63,10 @@ class DotsModel(DotsBaseModel):
             max_generate_length=DotsBaseModel.MAX_GENERATE_LENGTH,
         )
         self._runtime: DotsTtsRuntime | None = runtime
-        if runtime.sample_rate != self.INFO.sample_rate:
+        if runtime.sample_rate != self.INFO.default_output_sample_rate:
             raise ValueError(
                 f"Unexpected dots.tts output sample rate: {runtime.sample_rate} "
-                f"(expected {self.INFO.sample_rate})"
+                f"(expected {self.INFO.default_output_sample_rate})"
             )
 
     @property
@@ -208,10 +208,10 @@ class DotsModel(DotsBaseModel):
                         .numpy()
                     )
 
-                if sample_rate != self.INFO.sample_rate:
+                if sample_rate != self.INFO.default_output_sample_rate:
                     raise ValueError(
                         f"Unexpected dots.tts output sample rate: {sample_rate} "
-                        f"(expected {self.INFO.sample_rate})"
+                        f"(expected {self.INFO.default_output_sample_rate})"
                     )
                 if audio.size == 0:
                     raise ValueError("dots.tts returned empty audio")

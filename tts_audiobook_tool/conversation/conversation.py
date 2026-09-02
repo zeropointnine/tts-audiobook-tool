@@ -184,7 +184,11 @@ class Conversation:
         # Otherwise, use the app default samplerate for the general-purpose
         # post-processing chain.
         use_streaming_tts = Tts.get_info().can_stream and self.state.project.streaming_chat
-        sr = Tts.get_info().sample_rate if use_streaming_tts else APP_SAMPLE_RATE
+        sr = (
+            Tts.get_class().get_output_sample_rate(self.state.project)
+            if use_streaming_tts
+            else APP_SAMPLE_RATE
+        )
         self.sound_stream = SoundDeviceStream(sr)
 
         self.session: ResponseSession | None = None

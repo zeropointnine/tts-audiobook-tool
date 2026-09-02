@@ -174,7 +174,7 @@ class VoiceMenuShared:
         sound = sound_result
 
         sound = SoundPipeline.apply_voice_clone_post_processing(
-            sound, tts_type.value.sample_rate,
+            sound, Tts.get_class_for_type(tts_type).get_output_sample_rate(state.project),
         )
 
         duration_s = len(sound.data) / sound.sr

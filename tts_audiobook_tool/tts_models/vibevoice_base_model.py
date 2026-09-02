@@ -70,7 +70,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         warnings = []
         if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE) and not project.vibevoice_lora_target:
             warning = "Model may generate random voices because no voice sample or lora has been defined"
-            warnings.append(warning) 
+            warnings.append(warning)
         return warnings
 
     @classmethod
@@ -129,7 +129,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
             # Assumption being made here that the LoRA is of decent quality
             # and will therefore have much better accuracy than zero-shot
             return ""
-        
+
         if "7b" in project.vibevoice_target.lower():
             # Assumption is that model is the 7B variety, which is much less flakey than 1.5B
             return ""

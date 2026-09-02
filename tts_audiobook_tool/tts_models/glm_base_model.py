@@ -14,6 +14,19 @@ class GlmBaseModel(TtsBaseModel):
     
     SAMPLE_RATES = [24000, 32000]
 
+    @classmethod
+    def get_output_sample_rate(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> int:
+        # GLM's output samplerate is a selectable project setting (see the
+        # voice menu's "Model samplerate" option). A live instance is
+        # constructed from that same setting, so the project value is
+        # authoritative here too.
+        sr = int(project.glm_sr)
+        if sr not in GlmBaseModel.SAMPLE_RATES:
+            sr = cls.INFO.default_output_sample_rate
+        return sr
+
     @classmethod 
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None

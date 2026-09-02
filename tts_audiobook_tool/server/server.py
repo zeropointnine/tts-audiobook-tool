@@ -349,7 +349,7 @@ class Server:
         phrase_group: PhraseGroup,
         generation_id: int,
     ) -> bool:
-        info = Tts.get_info()
+        sample_rate = Tts.get_class().get_output_sample_rate(self._project)
         stream_started_at = time.monotonic()
         self.log_tts_inference_start(mode="streaming", text=prompt_text)
         first_audio_callback_registered = False
@@ -366,7 +366,7 @@ class Server:
             nonlocal first_audio_callback_registered, streamed_audio_sample_count
             if self._generation_id != generation_id:
                 return
-            start, end = self._audio_stream.append_data(data, info.sample_rate, prompt_text)
+            start, end = self._audio_stream.append_data(data, sample_rate, prompt_text)
             streamed_audio_sample_count += end - start
             if not first_audio_callback_registered:
                 first_audio_callback_registered = True
@@ -379,11 +379,11 @@ class Server:
             pause_duration = self._project.reason_pauses.get_pause_for(phrase_group.last_reason)
             if pause_duration <= 0:
                 return
-            silence_sample_count = int(round(pause_duration * info.sample_rate))
+            silence_sample_count = int(round(pause_duration * sample_rate))
             if silence_sample_count <= 0:
                 return
             silence = np.zeros(silence_sample_count, dtype=np.float32)
-            start, end = self._audio_stream.append_data(silence, info.sample_rate, prompt_text)
+            start, end = self._audio_stream.append_data(silence, sample_rate, prompt_text)
             streamed_audio_sample_count += end - start
 
         try:

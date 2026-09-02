@@ -35,7 +35,7 @@ class Qwen3BaseModel(TtsBaseModel):
     REPETITION_PENALTY_DEFAULT = 1.05
 
     ROLLING_CONTINUATION_MAX_LENGTH = 3 # fyi, quality degrades quickly as segments goes up with this model
-            
+
     def clear_voice(self) -> None:
         ...
 
@@ -53,12 +53,12 @@ class Qwen3BaseModel(TtsBaseModel):
 
     @property
     def supported_speakers(self) -> list[str]:
-        ...    
+        ...
 
     def get_resolved_speaker_info(self, project: Project) -> tuple[str, bool]:
-        """ 
-        Returns resolved speaker id based on Project value, 
-        and if it is valid for the currently loaded model. 
+        """
+        Returns resolved speaker id based on Project value,
+        and if it is valid for the currently loaded model.
         """
         if self.model_type != "custom_voice":
             return "", False
@@ -73,7 +73,7 @@ class Qwen3BaseModel(TtsBaseModel):
     @property
     def is_model_type_supported(self) -> bool:
         return self.model_type in ["base", "custom_voice", "voice_design"] # ie, all current types
-    
+
     def resolve_language_code_and_warning(self, language_code: str) -> tuple[str, str]:
         """
         Returns qwen model's language value and warning if any.
@@ -103,15 +103,15 @@ class Qwen3BaseModel(TtsBaseModel):
         if language_code.startswith("zh"):
             result = "chinese", ""
         elif language_code in MAP:
-            result = MAP[language_code], ""                
+            result = MAP[language_code], ""
         elif qwen_language and not qwen_language in self.supported_languages:
             # Probably can't happen with the current qwen3tts models
             result = "auto", f"Warning: Language `{qwen_language}` is not part of the currently loaded Qwen3-TTS model's \"supported languages\" list; will use 'auto'"
         else:
             result = "auto", f"Warning: Project language code {language_code} doesn't map to a known Qwen3-TTS language value; will use 'auto'"
-        
+
         return result
-    
+
     # ---
 
     @classmethod
@@ -127,7 +127,7 @@ class Qwen3BaseModel(TtsBaseModel):
         if instance and not instance.is_model_type_supported:
             return [ ReadinessIssue("supported model type", f"Model type {instance.model_type} is unsupported") ]
 
-        if project.qwen3_rolling_cont > 0: 
+        if project.qwen3_rolling_cont > 0:
             if instance and instance.model_type != "base":
                 items.append(
                     ReadinessIssue(
@@ -143,7 +143,7 @@ class Qwen3BaseModel(TtsBaseModel):
                     )
                 )
 
-        match project.qwen3_model_type:            
+        match project.qwen3_model_type:
             case "custom_voice":
                 if not instance:
                     ... # can't know if project settings valid wo instance
@@ -157,11 +157,11 @@ class Qwen3BaseModel(TtsBaseModel):
                 err = cls._get_standard_voice_blocker(project)
                 if err:
                     items.append(err)
-        
+
         return items
 
     def get_warning_issues(self, project: Project) -> list[str]:
-        
+
         warnings = []
 
         _, warning = self.resolve_language_code_and_warning(project.language_code)
@@ -195,7 +195,7 @@ class Qwen3BaseModel(TtsBaseModel):
             assert(isinstance(instance, Qwen3BaseModel))
 
         match project.qwen3_model_type:
-            
+
             case "custom_voice":
                 status_prefix = "Speaker"
                 main_prefix = "speaker"
@@ -209,7 +209,7 @@ class Qwen3BaseModel(TtsBaseModel):
                     value = project.qwen3_speaker_id or (COL_ERROR + "required")
                 if is_valid and project.qwen3_instructions:
                     value += f"{COL_DIM} + instructions"
-            
+
             case "voice_design":
                 status_prefix = "Voice instruction"
                 main_prefix = "voice instruction"
@@ -217,7 +217,7 @@ class Qwen3BaseModel(TtsBaseModel):
                     value = COL_ERROR + "none"
                 else:
                     value = truncate_pretty(project.qwen3_instructions, 30, middle=False)
-            
+
             case "base " | _:
                 display_info = super().get_voice_display_info(project, instance)
                 if display_info is None:
@@ -228,8 +228,8 @@ class Qwen3BaseModel(TtsBaseModel):
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
-        
-        match project.qwen3_model_type:            
+
+        match project.qwen3_model_type:
             case "custom_voice":
                 if project.qwen3_speaker_id:
                     return app_text.sanitize_for_filename(project.qwen3_speaker_id)[:30]

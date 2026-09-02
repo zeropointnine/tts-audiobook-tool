@@ -236,13 +236,19 @@ def _patch_tts_for_streaming(monkeypatch, sample_rate: int, generate_side_effect
         result = generate_side_effect(on_chunk, lambda: None)
         return (None, result) if isinstance(result, str) else (None, "")
 
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(sample_rate=sample_rate))
+    fake_tts_class = SimpleNamespace(
+        get_output_sample_rate=lambda project, instance=None: sample_rate
+    )
+    monkeypatch.setattr(Tts, "get_class", staticmethod(lambda: fake_tts_class))
     monkeypatch.setattr(ModelWorker, "synthesize_chat_blocking", fake_synthesize)
     return spies
 
 
 def test_streaming_tts_reports_sample_rate_mismatch(monkeypatch) -> None:
-    monkeypatch.setattr(Tts, "get_info", lambda: SimpleNamespace(sample_rate=48000))
+    fake_tts_class = SimpleNamespace(
+        get_output_sample_rate=lambda project, instance=None: 48000
+    )
+    monkeypatch.setattr(Tts, "get_class", staticmethod(lambda: fake_tts_class))
     project = Project.model_validate({})
 
     def must_not_generate(*args, **kwargs):

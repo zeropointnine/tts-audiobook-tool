@@ -14,7 +14,7 @@ else:
 
 
 class MossServerBaseModel(MossBaseModel):
-    """ 
+    """
     Base model for the 'server' version of MOSS (v1.5)
     """
 
@@ -22,22 +22,30 @@ class MossServerBaseModel(MossBaseModel):
 
     # Rem, MOSS can fail to properly terminate gens when hyperparams are out of a certain range,
     # so max tokens should be set as "small" as possble
-    MAX_NEW_TOKENS = 1024 
+    MAX_NEW_TOKENS = 1024
 
     CONFIG = MossConfigs.DELAY
 
-    def get_loaded_arch_type(self) -> MossArchType:
-        """ 
-        Must infer architecture type using model id ("good-enough test") 
-        """
+    @staticmethod
+    def get_server_config() -> MossConfigs:
         model_id = SglOmniUtil.get_model_id()
         if not model_id:
             SglOmniUtil.update_model_id()
             model_id = SglOmniUtil.get_model_id()
+        return MossConfigs.get_by_target(model_id)
 
-        if "local" in model_id.lower():
+    @classmethod
+    def get_output_sample_rate(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> int:
+        return cls.get_server_config().value.output_sample_rate
+
+    def get_loaded_arch_type(self) -> MossArchType:
+        """
+        Must infer architecture type using model id ("good-enough test")
+        """
+        if self.get_server_config() == MossConfigs.LOCAL:
             return MossArchType.LOCAL
-
         return MossArchType.DELAY
 
     @classmethod
@@ -48,5 +56,5 @@ class MossServerBaseModel(MossBaseModel):
         readiness_issue = SglOmniUtil.check_readiness(SglOmniUtil.get_base_url())
         if readiness_issue:
             return [readiness_issue]
-        
+
         return []

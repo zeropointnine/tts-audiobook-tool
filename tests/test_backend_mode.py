@@ -15,6 +15,9 @@ import pytest
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
+from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
+from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 SENTINEL = "tts_audiobook_tool_sgl_omni_marker"
@@ -240,6 +243,28 @@ def test_catalog_helpers_classify_by_backend_kind():
     assert not TtsModelType.is_valid_sgl_omni_type(TtsModelType.NONE)
     assert not TtsModelType.is_valid_sgl_omni_type(None)
     assert TtsModelType.is_valid_sgl_omni_type(TtsModelType.QWEN3TTS_SERVER)
+
+
+def test_glm_output_sample_rate_uses_project_value_and_catalog_fallback() -> None:
+    project = SimpleNamespace(glm_sr=32_000)
+    assert GlmBaseModel.get_output_sample_rate(project) == 32_000
+
+    project.glm_sr = 12_345
+    assert GlmBaseModel.get_output_sample_rate(project) == TtsModelType.GLM.value.default_output_sample_rate
+
+
+def test_moss_output_sample_rate_follows_architecture(monkeypatch) -> None:
+    delay_project = SimpleNamespace(moss_target=MossConfigs.DELAY.value.repo_id)
+    local_project = SimpleNamespace(moss_target=MossConfigs.LOCAL.value.repo_id)
+
+    assert MossBaseModel.get_output_sample_rate(delay_project) == 24_000
+    assert MossBaseModel.get_output_sample_rate(local_project) == 48_000
+
+    monkeypatch.setattr(SglOmniUtil, "get_model_id", lambda: MossConfigs.DELAY.value.repo_id)
+    assert MossServerBaseModel.get_output_sample_rate(local_project) == 24_000
+
+    monkeypatch.setattr(SglOmniUtil, "get_model_id", lambda: MossConfigs.LOCAL.value.repo_id)
+    assert MossServerBaseModel.get_output_sample_rate(delay_project) == 48_000
 
 
 def test_only_mira_has_worker_output_filters() -> None:

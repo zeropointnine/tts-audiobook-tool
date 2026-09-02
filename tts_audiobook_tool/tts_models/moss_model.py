@@ -209,7 +209,8 @@ class MossModel(MossBaseModel):
 
         sounds = []
         audio_tensors = []
-        sample_rate = getattr(self.processor.model_config, "sampling_rate", MossBaseModel.INFO.sample_rate)
+        fallback_sample_rate = MossConfigs.get_by_target(self.model_target).value.output_sample_rate
+        sample_rate = getattr(self.processor.model_config, "sampling_rate", fallback_sample_rate)
         self.prepare_audio_tokenizer("decode")
         messages = self.processor.decode(outputs)
         for message in messages:

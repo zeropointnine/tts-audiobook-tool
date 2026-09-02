@@ -82,7 +82,7 @@ class MossBaseModel(TtsBaseModel):
 
     @classmethod
     def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None=None) -> bool:
-        
+
         if instance is not None:
             assert isinstance(instance, MossBaseModel)
             is_local = (instance.get_loaded_arch_type() == MossArchType.LOCAL)
@@ -124,6 +124,12 @@ class MossBaseModel(TtsBaseModel):
         s = util.ellipsize_path_for_menu(s)
         return s
 
+    @classmethod
+    def get_output_sample_rate(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> int:
+        return MossConfigs.get_by_target(project.moss_target).value.output_sample_rate
+
 # ---
 
 @dataclass(frozen=True)
@@ -141,10 +147,11 @@ class MossConfig:
     audio_top_k_default: int
     audio_top_k_min: int
     audio_top_k_max: int
+    output_sample_rate: int
 
 class MossConfigs(Enum):
 
-    # MOSS hf models use `trust_remote_code=True`. 
+    # MOSS hf models use `trust_remote_code=True`.
     # Therefore using pinned commits as a security precaution.
 
     DELAY = MossConfig(
@@ -162,12 +169,13 @@ class MossConfigs(Enum):
         audio_top_k_default=25,
         audio_top_k_min=10,
         audio_top_k_max=TOP_K_MAX_DEFAULT,
+        output_sample_rate=MossBaseModel.INFO.default_output_sample_rate,
     )
 
     LOCAL = MossConfig(
-        repo_id="OpenMOSS-Team/MOSS-TTS-Local-Transformer", 
+        repo_id="OpenMOSS-Team/MOSS-TTS-Local-Transformer",
         revision="12aa734e4f11a7b3fdf4eb0ad2aa2029675ffc2e",
-        arch_name="MossTTSLocal", 
+        arch_name="MossTTSLocal",
         desc_extra="1.7B params",
 
         temperature_default=1.0,
@@ -179,6 +187,7 @@ class MossConfigs(Enum):
         audio_top_k_default=50,
         audio_top_k_min=10,
         audio_top_k_max=TOP_K_MAX_DEFAULT,
+        output_sample_rate=48_000,
     )
 
     @staticmethod

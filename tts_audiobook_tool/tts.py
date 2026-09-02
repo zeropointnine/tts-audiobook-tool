@@ -347,11 +347,19 @@ class Tts:
         """
         Gets the current tts model's class, used for accessing static methods.
         """
-        entry = Tts._model_registry_entry(Tts._type)
+        return Tts.get_class_for_type(Tts._type)
+
+    @staticmethod
+    def get_class_for_type(tts_type: TtsModelType) -> type[TtsBaseModel]:
+        """
+        Gets the model class registered for the given catalog member, used
+        for accessing static/class methods without a live instance.
+        """
+        entry = Tts._model_registry_entry(tts_type)
         if entry is None or entry[0] is None:
-            raise Exception(f"Not implemented: {Tts._type}")
+            raise Exception(f"Not implemented: {tts_type}")
         return entry[0]
-    
+
     @staticmethod
     def get_info() -> TtsModelSpec:
         return Tts.get_class().INFO

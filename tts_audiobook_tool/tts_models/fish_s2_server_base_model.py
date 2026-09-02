@@ -15,7 +15,7 @@ else:
 
 class FishS2ServerBaseModel(TtsBaseModel):
 
-    INFO = TtsModelType.FISH_S2_SERVER.value 
+    INFO = TtsModelType.FISH_S2_SERVER.value
 
     TOP_K_MAX = 30 # Note, this differs from local inference version
 

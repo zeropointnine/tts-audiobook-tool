@@ -26,7 +26,7 @@ class OmniVoiceBaseModel(TtsBaseModel):
     MIN_STEPS       = 8
     MAX_STEPS       = 64
 
-    @classmethod 
+    @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:

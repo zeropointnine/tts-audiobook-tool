@@ -23,6 +23,10 @@ class MultiVoiceFakeTtsModel(FakeTtsModel):
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
 
+def test_output_sample_rate_defaults_to_catalog_value():
+    assert FakeTtsModel.get_output_sample_rate(object()) == 0
+
+
 def make_factory(calls: list[str], value: str):
     def factory():
         calls.append(value)

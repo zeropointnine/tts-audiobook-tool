@@ -204,7 +204,7 @@ class PocketModel(PocketBaseModel):
                     return "No audio output"
 
                 audio_np = np.concatenate(audio_chunks)
-                sounds.append(Sound(audio_np, PocketModel.INFO.sample_rate))
+                sounds.append(Sound(audio_np, self.INFO.default_output_sample_rate))
 
             if on_stream_end is not None:
                 on_stream_end()

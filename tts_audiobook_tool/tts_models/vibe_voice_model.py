@@ -267,7 +267,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 tensor_data = tensor_data.to(torch.float32)
 
             ndarray_data = tensor_data.cpu().numpy()
-            sound = Sound(ndarray_data, TtsModelType.VIBEVOICE.value.sample_rate)
+            sound = Sound(ndarray_data, self.INFO.default_output_sample_rate)
             sounds.append(sound)
 
         return sounds

@@ -126,7 +126,7 @@ class ConcatMenu:
             )
 
             label = make_menu_label(label="Generative upsampling", value=state.project.use_upsampler)
-            if Tts.get_type().value.sample_rate >= 44_100 and state.project.use_upsampler:
+            if Tts.get_class().get_output_sample_rate(state.project) >= 44_100 and state.project.use_upsampler:
                 label += f"{COL_ERROR}*"
             items.append(
                 MenuItem(
@@ -262,10 +262,11 @@ class ConcatMenu:
             subheading = UPSAMPLE_SUBHEADING
             link = text_util.make_terminal_hyperlink(LAVA_SR_PROJECT_URL, "LavaSR")
             subheading = subheading.replace("%1", link)
-            if Tts.get_type().value.sample_rate >= 44_100:
+            sample_rate = Tts.get_class().get_output_sample_rate(state.project)
+            if sample_rate >= 44_100:
                 subheading += (
                     "\n"
-                    f"{COL_ERROR}*{COL_DEFAULT} {Tts.get_type().value.ui['short_name']} already outputs audio at a samplerate of {Tts.get_type().value.sample_rate}."
+                    f"{COL_ERROR}*{COL_DEFAULT} {Tts.get_type().value.ui['short_name']} already outputs audio at a samplerate of {sample_rate}."
                     "\n"
                 )
 

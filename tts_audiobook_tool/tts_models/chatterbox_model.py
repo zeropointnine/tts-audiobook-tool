@@ -310,7 +310,7 @@ class ChatterboxModel(ChatterboxBaseModel):
                 if self._model_type == ChatterboxType.MULTILINGUAL:
                     ChatterboxModel._strip_alignment_analyzer_hooks(self._chatterbox)
             data = data.cpu().numpy().squeeze()
-            return Sound(data, TtsModelType.CHATTERBOX.value.sample_rate)
+            return Sound(data, self.INFO.default_output_sample_rate)
         except Exception as e:
             traceback.print_exc()
             return make_error_string(e)

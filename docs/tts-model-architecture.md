@@ -79,7 +79,7 @@ Key fields of `TtsModelSpec` most relevant to integration:
 | `local_module_test` | Probe used to detect whether the model's library is installed in the active venv: a plain importable module name, or `dist:<package>[==<version>]` tested via `importlib.metadata` (the `dist:` form is how Fish S1 vs S2 disambiguate, since both ship as `fish-speech` at different versions) |
 | `local_torch_devices` | Supported torch device types for local inference (empty for server variants and models that don't take a device) |
 | `file_tag` | Short identifier used in generated filenames (e.g. `"glm"`, `"chatterbox"`) |
-| `sample_rate` | Native output sample rate; the app resamples voice clone audio to this before saving |
+| `default_output_sample_rate` | Native/default output sample rate; used directly by static-rate models and as the fallback for dynamically configured models |
 | `max_words_default` / `max_words_reco_range` | App-recommended segment length settings for the model |
 | `voice_target_attr` | Name of the `Project` attribute that stores the voice clone filename (empty if not applicable) |
 | `requires_voice` | Whether generation is blocked without a voice clone |
@@ -95,6 +95,8 @@ Key fields of `TtsModelSpec` most relevant to integration:
 | `substitutions` | List of `(before, after)` string pairs applied to prompts before inference |
 
 There is also a derived `can_batch` property.
+
+The effective output sample rate is exposed via `TtsBaseModel.get_output_sample_rate(project, instance)`. Its default implementation returns `INFO.default_output_sample_rate`; models whose rate depends on project configuration can override it (currently GLM, for its selectable samplerate). The app resamples voice clone audio to the effective value before saving.
 
 ### Model type detection
 
@@ -119,6 +121,7 @@ Defines the interface all models must satisfy:
 - `INFO: TtsModelSpec` — class-level attribute; `__init_subclass__` raises `TypeError` if missing
 - `kill() -> None` — abstract; nulls out internal model references to aid garbage collection
 - `generate_using_project(project, prompts, force_random_seed, on_stream_chunk, on_stream_end, voice_selection_index) -> list[Sound] | str` — abstract; the main generation entry point (stream callbacks only used when `INFO.can_stream`)
+- `get_output_sample_rate(project, instance) -> int` — concrete classmethod returning `INFO.default_output_sample_rate`; GLM overrides it to return the project-configurable `glm_sr`
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
 - `prepare_text_for_inference(project, text) -> str` — concrete; the full pre-inference pipeline: project word substitutions → generic prompt normalization (incl. `un_all_caps`) → `massage_for_inference`
 - `clear_stream_state()` / `clear_continuation()` — concrete hooks for streaming and rolling-continuation state
@@ -145,6 +148,7 @@ Example: [tts_audiobook_tool/tts_models/glm_base_model.py](tts_audiobook_tool/tt
 
 - Must **not** import any model library at module level
 - Assigns `INFO = TtsModelType.###.value`
+- Inherits `get_output_sample_rate(project, instance)` for static-rate models; models with configurable output rates, such as GLM, override it
 - Implements classmethods and any model-specific constants or static helpers
 - This is the class registered in `Tts.get_class()` and used for all non-instance operations (readiness checks, voice display info, etc.)
 

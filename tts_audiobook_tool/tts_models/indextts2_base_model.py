@@ -36,7 +36,7 @@ class IndexTts2BaseModel(TtsBaseModel):
 
         return errors
 
-    @classmethod 
+    @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:
