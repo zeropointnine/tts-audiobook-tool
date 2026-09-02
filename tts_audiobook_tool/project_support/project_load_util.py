@@ -93,6 +93,7 @@ class ProjectLoadUtil:
             prompt_on_warnings
             and previous_model_type != TtsModelType.NONE
             and previous_model_type != Tts.get_type()
+            and Tts.get_type != TtsModelType.NONE
             and proper_name
         ):
             hints.show_hint(

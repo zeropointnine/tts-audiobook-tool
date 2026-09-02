@@ -31,6 +31,10 @@ class ChatterboxModel(ChatterboxBaseModel):
     # retaining several voices at once costs only a few MB of RAM per voice.
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
+    # Layer indices hooked by chatterbox's AlignmentStreamAnalyzer (see
+    # `_strip_alignment_analyzer_hooks`).
+    _ALIGNED_ATTN_LAYER_INDICES = (9, 12, 13)
+
     def __init__(self, model_type: ChatterboxType, device: DeviceType):
 
         self._device_type = device
@@ -49,12 +53,89 @@ class ChatterboxModel(ChatterboxBaseModel):
             case ChatterboxType.TURBO:
                 self._chatterbox = turbo_loader.from_pretrained(device=device_value)
 
+        if device == DeviceType.CUDA:
+            ChatterboxModel._use_gpu_watermarker(self._chatterbox, device_value)
+
+    @staticmethod
+    def _use_gpu_watermarker(chatterbox: Any, device_value: str) -> None:
+        """
+        Replaces the library's CPU Perth watermarker with a GPU instance.
+
+        Chatterbox watermarks every generated segment via
+        `perth.PerthImplicitWatermarker().apply_watermark()`. Perth's CPU
+        compute path leaks native (non-Python) memory on every call —
+        measured at roughly 5-20 MB per call depending on audio length,
+        linearly, and never released: Python GC, torch empty_cache, thread
+        count, and watermarker-instance recycling all make no difference;
+        only process exit frees it (which is why `Options > Unload models`
+        appears to reclaim it — it terminates the worker). The GPU path does
+        not leak, and the PerthNet model is tiny, so the extra VRAM cost is
+        negligible. CPU-watermarked and GPU-watermarked audio decode to the
+        same watermark bits. (Upstream perth bug; revisit if fixed.)
+        """
+        try:
+            import perth
+            chatterbox.watermarker = perth.PerthImplicitWatermarker(
+                device=device_value
+            )
+        except Exception:
+            traceback.print_exc()
+
     def supported_languages_multi(self) -> list[str]:
         return list(chatterbox.mtl_tts.SUPPORTED_LANGUAGES)
 
     def kill(self) -> None:
         self.clear_voice_clone_cache()
         self._chatterbox = None # type: ignore
+
+    @classmethod
+    def _strip_alignment_analyzer_hooks(cls, chatterbox: Any) -> None:
+        """
+        Removes stale AlignmentStreamAnalyzer forward hooks from the T3
+        transformer.
+
+        Chatterbox Multilingual creates a fresh AlignmentStreamAnalyzer for
+        every generate() call, and each one registers a forward hook on three
+        attention layers of the T3 transformer. The hook handles are discarded
+        and the hooks are never removed, so every generated segment leaves
+        three live hooks plus an orphaned analyzer (retaining CPU tensors)
+        attached to the model. This grows worker RSS by several MB per
+        generated segment for the lifetime of the model, and the stale hooks
+        copy attention maps to the CPU on every subsequent decode step
+        (progressively slowing generation). Chatterbox Turbo does not use the
+        analyzer and is unaffected.
+
+        Removing the hooks drops the last reference to each orphaned analyzer,
+        making it collectable. Hooks belonging to the in-flight generation
+        are never stripped this way: this is only called after generate()
+        has returned. (Upstream bug; revisit if chatterbox fixes it.)
+        """
+        try:
+            from chatterbox.models.t3.inference.alignment_stream_analyzer import (
+                AlignmentStreamAnalyzer,
+            )
+            tfmr = chatterbox.t3.tfmr
+        except Exception:
+            return
+
+        for layer_idx in cls._ALIGNED_ATTN_LAYER_INDICES:
+            try:
+                self_attn = tfmr.layers[layer_idx].self_attn
+            except Exception:
+                continue
+            hooks = getattr(self_attn, "_forward_hooks", None)
+            if not hooks:
+                continue
+            for handle_id, hook in list(hooks.items()):
+                if getattr(hook, "__name__", "") != "attention_forward_hook":
+                    continue
+                cells = [
+                    cell.cell_contents
+                    for cell in (getattr(hook, "__closure__", None) or [])
+                ]
+                if not any(isinstance(cell, AlignmentStreamAnalyzer) for cell in cells):
+                    continue
+                hooks.pop(handle_id, None)
 
     def _create_voice_clone(self, source_path: str) -> Any:
         """
@@ -221,7 +302,13 @@ class ChatterboxModel(ChatterboxBaseModel):
                     dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
 
         try:
-            data = self._chatterbox.generate(text, **dic)
+            try:
+                data = self._chatterbox.generate(text, **dic)
+            finally:
+                # Strip this generation's analyzer hooks before returning, so
+                # they don't accumulate on the transformer across calls.
+                if self._model_type == ChatterboxType.MULTILINGUAL:
+                    ChatterboxModel._strip_alignment_analyzer_hooks(self._chatterbox)
             data = data.cpu().numpy().squeeze()
             return Sound(data, TtsModelType.CHATTERBOX.value.sample_rate)
         except Exception as e:
