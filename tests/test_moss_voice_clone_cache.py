@@ -2,7 +2,9 @@ import importlib.metadata
 import os
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
+import soundfile
 
 # The `moss-tts` distribution installs no importable module (the model itself
 # runs via transformers remote code); its dist-info is the venv marker.
@@ -22,12 +24,12 @@ class FakeProcessor:
     model_config = SimpleNamespace(sampling_rate=24000)
 
     def __init__(self):
-        self.encode_calls: list[str] = []
+        self.encode_calls: list[tuple[list[torch.Tensor], int]] = []
         self.build_user_calls: list[dict] = []
         self.decode_calls: list = []
 
-    def encode_audios_from_path(self, paths: list) -> list:
-        self.encode_calls.append(paths[0])
+    def encode_audios_from_wav(self, wavs: list[torch.Tensor], sample_rate: int) -> list:
+        self.encode_calls.append((wavs, sample_rate))
         return [torch.randint(0, 1000, (10, 4), dtype=torch.int64)]
 
     def build_user_message(self, text=None, language=None, reference=None):
@@ -95,18 +97,26 @@ def cache_key_prefix(path: str) -> str:
     return os.path.normcase(os.path.realpath(os.path.abspath(path)))
 
 
+def write_voice(path, samples: int = 160) -> None:
+    soundfile.write(path, np.linspace(-0.25, 0.25, samples, dtype=np.float32), 16000)
+
+
 def test_moss_reuses_audio_codes_for_a_b_a(tmp_path):
     voice_a = tmp_path / "a.wav"
     voice_b = tmp_path / "b.wav"
-    voice_a.write_bytes(b"a")
-    voice_b.write_bytes(b"b")
+    write_voice(voice_a)
+    write_voice(voice_b, samples=240)
     model = make_model()
 
     assert not isinstance(generate(model, str(voice_a)), str)
     assert not isinstance(generate(model, str(voice_b)), str)
     assert not isinstance(generate(model, str(voice_a)), str)
 
-    assert model.processor.encode_calls == [str(voice_a), str(voice_b)]
+    assert len(model.processor.encode_calls) == 2
+    first_wavs, first_sample_rate = model.processor.encode_calls[0]
+    assert first_sample_rate == 16000
+    assert first_wavs[0].shape == (1, 160)
+    assert first_wavs[0].dtype == torch.float32
     assert model.model.generate_calls == 3
     assert len(model._voice_clone_cache) == 2
 
@@ -124,8 +134,8 @@ def test_moss_reuses_audio_codes_for_a_b_a(tmp_path):
 def test_moss_clears_continuation_on_voice_change(tmp_path):
     voice_a = tmp_path / "a.wav"
     voice_b = tmp_path / "b.wav"
-    voice_a.write_bytes(b"a")
-    voice_b.write_bytes(b"b")
+    write_voice(voice_a)
+    write_voice(voice_b, samples=240)
     model = make_model()
 
     # First call establishes the active voice (clearing pre-seeded history)
@@ -159,11 +169,11 @@ def test_moss_clears_continuation_on_voice_change(tmp_path):
 
 def test_moss_rebuilds_changed_voice_and_clears_cache(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"first")
+    write_voice(voice_path)
     model = make_model()
 
     assert not isinstance(generate(model, str(voice_path)), str)
-    voice_path.write_bytes(b"different file contents")
+    write_voice(voice_path, samples=320)
     assert not isinstance(generate(model, str(voice_path)), str)
 
     assert len(model.processor.encode_calls) == 2
@@ -175,7 +185,7 @@ def test_moss_rebuilds_changed_voice_and_clears_cache(tmp_path):
     assert not isinstance(generate(model, ""), str)
     assert model._voice_info is None
     assert len(model._voice_clone_cache) == 1
-    assert model.processor.encode_calls == [str(voice_path), str(voice_path)]
+    assert len(model.processor.encode_calls) == 2
 
     # Coming back to the same file reuses the retained clone
     assert not isinstance(generate(model, str(voice_path)), str)
@@ -187,13 +197,13 @@ def test_moss_rebuilds_changed_voice_and_clears_cache(tmp_path):
 
 def test_moss_error_string_on_encode_failure(tmp_path):
     voice_path = tmp_path / "voice.wav"
-    voice_path.write_bytes(b"x")
+    write_voice(voice_path)
     model = make_model()
 
-    def boom(paths):
+    def boom(wavs, sample_rate):
         raise ValueError("boom")
 
-    model.processor.encode_audios_from_path = boom
+    model.processor.encode_audios_from_wav = boom
 
     assert generate(model, str(voice_path)) == (
         f"Couldn't create voice clone for {os.path.abspath(str(voice_path))} - ValueError: boom"

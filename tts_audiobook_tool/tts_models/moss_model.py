@@ -13,6 +13,7 @@ from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossArchType, MossConfigs, MossBaseModel
 from tts_audiobook_tool.util import *
 
@@ -304,8 +305,16 @@ class MossModel(MossBaseModel):
         """
         if self.processor is None:
             raise RuntimeError("Processor is not initialized")
-        self.prepare_audio_tokenizer("voice path encode")
-        voice_codes = self.processor.encode_audios_from_path([source_path])[0]
+        # Avoid the processor's path loader: torchaudio.load() uses TorchCodec
+        # in recent torchaudio releases, although MOSS only needs the decoded
+        # waveform. The app's normal loader uses libsndfile instead.
+        sound = SoundFileUtil.load(source_path)
+        if isinstance(sound, str):
+            raise RuntimeError(f"Couldn't load voice reference audio: {sound}")
+        wav = torch.from_numpy(sound.data).to(torch.float32).unsqueeze(0)
+
+        self.prepare_audio_tokenizer("voice wav encode")
+        voice_codes = self.processor.encode_audios_from_wav([wav], sound.sr)[0]
         return voice_codes.detach().cpu().clone()
 
     def generate_using_project(

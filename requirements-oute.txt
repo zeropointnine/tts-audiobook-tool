@@ -12,6 +12,7 @@ mlx-whisper; sys_platform == 'darwin' and platform_machine == 'arm64'
 git+https://github.com/ysharma3501/LavaSR.git@33ac040892519c1bb4aed7eb32e79af51cc29e2a
 
 torch==2.8.0
+torchaudio==2.8.0
 
 audiotsm==0.1.2
 chardet==5.2.0
