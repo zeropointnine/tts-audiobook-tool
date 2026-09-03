@@ -1,4 +1,3 @@
-import os
 import random
 
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -56,7 +55,7 @@ class HiggsV3ServerModel(HiggsV3ServerBaseModel):
             # TODO: Re-add seed after presumed upstream bug is fixed: "seed": seed
 
             if voice_file_name:
-                voice_path = os.path.join(project.dir_path, voice_file_name)
+                voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
                 data_uri = SoundUtil.make_audio_data_uri(voice_path)
                 reference = {"audio_path": data_uri}
                 if voice_transcript:

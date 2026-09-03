@@ -30,7 +30,6 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 import numpy as np
 import psutil
-import torch
 
 TEXTS = [
     "The old lighthouse keeper climbed the winding stairs each evening to trim the wick and light the lamp.",

@@ -101,7 +101,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
             project, TtsModelType.OMNIVOICE, voice_selection_index
         )
-        voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
+        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
         instruct = project.omnivoice_instruct
         cfg      = project.omnivoice_cfg if project.omnivoice_cfg != -1 else self.CFG_DEFAULT
         speed    = project.omnivoice_speed if project.omnivoice_speed != -1 else self.DEFAULT_SPEED

@@ -240,13 +240,22 @@ class SoundPipeline:
         )
 
     @staticmethod
-    def apply_voice_clone_post_processing(sound: Sound, target_sr: int) -> Sound:
+    def apply_voice_clone_post_processing(sound: Sound) -> Sound:
         """
         App's standard post-processing treatment on voice clone source audio.
 
-        - Resamples to the model's native sample rate
+        - Trims silence from both ends
+        - Resamples to the app's native sample rate. TTS models all resample
+          reference audio internally as needed, so no model-specific rate is
+          used here.
         - Applies peak normalization
+
+        If the input is entirely silence, the returned Sound's data.size
+        will be 0; callers should report that.
         """
-        sound = SoundUtil.resample_if_necessary(sound, target_sr)
+        sound = SilenceUtil.trim_silence_ends(sound)[0]
+        if sound.data.size == 0:
+            return sound
+        sound = SoundPipeline.resample_for_app(sound)
         data = SoundUtil.normalize(sound.data, headroom_db=NORMALIZATION_HEADROOM_DB)
         return Sound(data, sound.sr)

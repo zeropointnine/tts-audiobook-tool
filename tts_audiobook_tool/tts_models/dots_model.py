@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import random
 
 import numpy as np
@@ -89,7 +88,7 @@ class DotsModel(DotsBaseModel):
             project, TtsModelType.DOTS, voice_selection_index
         )
         voice_path = (
-            os.path.join(project.dir_path, voice_file_name) if voice_file_name else None
+            ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else None
         )
         seed = -1 if force_random_seed else project.dots_seed
         speaker_scale = (

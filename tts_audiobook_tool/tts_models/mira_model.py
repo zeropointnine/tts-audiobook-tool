@@ -61,7 +61,7 @@ class MiraModel(MiraBaseModel):
 
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MIRA, voice_selection_index)
         if voice_file_name:
-            voice_path = os.path.join(project.dir_path, voice_file_name)
+            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
             try:
                 self.context_tokens = self._get_or_create_voice_clone(
                     source_path=voice_path,

@@ -184,7 +184,7 @@ class Qwen3Model(Qwen3BaseModel):
                 can = voice_file_name and voice_transcript
                 if can:
                     voice_info = (
-                        os.path.join(project.dir_path, voice_file_name),
+                        ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name),
                         voice_transcript
                     )
                     result = self.generate_base(

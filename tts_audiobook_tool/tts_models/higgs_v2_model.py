@@ -151,7 +151,7 @@ class HiggsV2Model(HiggsV2BaseModel):
             project, TtsModelType.HIGGS_V2, voice_selection_index
         )
         if voice_file_name:
-            voice_path = os.path.join(project.dir_path, voice_file_name)
+            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         else:
             voice_path = ""
             voice_transcript = ""

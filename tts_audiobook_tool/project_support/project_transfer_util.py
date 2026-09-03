@@ -13,6 +13,7 @@ from tts_audiobook_tool.constants import (
     PROJECT_TEXT_EPUB_FILE_NAME,
     PROJECT_TEXT_FILE_NAME,
     PROJECT_TEXT_RAW_FILE_NAME,
+    PROJECT_VOICE_SUBDIR,
 )
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -165,8 +166,15 @@ class ProjectTransferUtil:
                 missing_paths.append(os.path.join(source_dir, file_name) if source_dir else file_name)
                 continue
 
-            dest_path = os.path.join(project.dir_path, file_name)
+            # Preserve the voice-subdir layout for files sourced from there
+            rel_path = file_name
+            if source_dir:
+                voice_src_dir = os.path.join(source_dir, PROJECT_VOICE_SUBDIR)
+                if os.path.commonpath([os.path.abspath(src_path), os.path.abspath(voice_src_dir)]) == os.path.abspath(voice_src_dir):
+                    rel_path = os.path.join(PROJECT_VOICE_SUBDIR, file_name)
+            dest_path = os.path.join(project.dir_path, rel_path)
             try:
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
                 shutil.copy(src_path, dest_path)
             except Exception:
                 missing_paths.append(src_path)
@@ -179,9 +187,11 @@ class ProjectTransferUtil:
         if file_name == PROJECT_TEXT_RAW_FILE_NAME:
             candidate_names.append("text_raw.txt")
 
-        for candidate_name in candidate_names:
-            candidate_path = os.path.join(source_dir, candidate_name) if source_dir else candidate_name
-            if os.path.exists(candidate_path):
-                return candidate_path
+        candidate_dirs = [source_dir, os.path.join(source_dir, PROJECT_VOICE_SUBDIR) if source_dir else source_dir]
+        for candidate_dir in candidate_dirs:
+            for candidate_name in candidate_names:
+                candidate_path = os.path.join(candidate_dir, candidate_name) if candidate_dir else candidate_name
+                if os.path.exists(candidate_path):
+                    return candidate_path
 
         return ""

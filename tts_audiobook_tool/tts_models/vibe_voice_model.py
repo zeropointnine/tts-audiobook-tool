@@ -168,7 +168,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.VIBEVOICE, voice_selection_index)
         if voice_file_name:
-            voice_path = os.path.join(project.dir_path, voice_file_name)
+            voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         else:
             voice_path = ""
 

@@ -176,9 +176,11 @@ class VoiceMenuShared:
             return
         sound = sound_result
 
-        sound = SoundPipeline.apply_voice_clone_post_processing(
-            sound, Tts.get_class_for_type(tts_type).get_output_sample_rate(state.project),
-        )
+        sound = SoundPipeline.apply_voice_clone_post_processing(sound)
+
+        if sound.data.size == 0:
+            ask.ask_error("Selected sound sample is entirely silence")
+            return
 
         duration_s = len(sound.data) / sound.sr
         printt(f"{COL_DIM}Playing selected sound sample ({duration_s:.1f}s)...")

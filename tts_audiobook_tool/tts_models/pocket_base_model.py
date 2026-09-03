@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.app_types import ReadinessIssue
@@ -100,7 +99,7 @@ class PocketBaseModel(TtsBaseModel):
             return ""
 
         assert isinstance(instance, PocketBaseModel)
-        voice_path = os.path.join(project.dir_path, voice_file_name)
+        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         cached = cls.gated_error_message_cache.get(voice_path, None)
         if cached is not None:
             return cached

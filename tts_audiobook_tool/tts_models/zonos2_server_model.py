@@ -1,4 +1,3 @@
-import os
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCallback
@@ -68,7 +67,7 @@ class Zonos2ServerModel(Zonos2ServerBaseModel):
                 "repetition_penalty": repetition_penalty,
             }
             if voice_file_name:
-                voice_path = os.path.join(project.dir_path, voice_file_name)
+                voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
                 voice_data_uri = SoundUtil.make_audio_data_uri(voice_path)
                 payload["references"] = [{
                     "audio_path": voice_data_uri,

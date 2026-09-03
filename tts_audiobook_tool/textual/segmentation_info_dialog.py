@@ -52,7 +52,7 @@ class SegmentationInfoDialog(ModalScreen[None]):
             f"{COL_DIM}Max words per segment:{COL_DEFAULT} {self.project.applied_max_words}",
             (
                 f"{COL_DIM}Segmentation strategy:{COL_DEFAULT} "
-                f"{self.project.applied_strategy.label}"
+                f"{ self.project.applied_strategy.label if self.project.applied_strategy else 'unknown' }"
             ),
             (
                 f"{COL_DIM}Dialog segmentation:{COL_DEFAULT} "

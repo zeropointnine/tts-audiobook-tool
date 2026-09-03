@@ -1,4 +1,3 @@
-import os
 import random
 import traceback
 from typing import Any
@@ -74,7 +73,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         same watermark bits. (Upstream perth bug; revisit if fixed.)
         """
         try:
-            import perth
+            import perth # type: ignore
             chatterbox.watermarker = perth.PerthImplicitWatermarker(
                 device=device_value
             )
@@ -111,9 +110,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         has returned. (Upstream bug; revisit if chatterbox fixes it.)
         """
         try:
-            from chatterbox.models.t3.inference.alignment_stream_analyzer import (
-                AlignmentStreamAnalyzer,
-            )
+            from chatterbox.models.t3.inference.alignment_stream_analyzer import AlignmentStreamAnalyzer # type: ignore
             tfmr = chatterbox.t3.tfmr
         except Exception:
             return
@@ -202,7 +199,7 @@ class ChatterboxModel(ChatterboxBaseModel):
 
         dic = {
             "text": prompts[0],
-            "voice_path": os.path.join(project.dir_path, voice_file_name) if voice_file_name else "",
+            "voice_path": ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else "",
             "temperature": project.chatterbox_temperature
                 if project.chatterbox_temperature != -1 else ChatterboxBaseModel.DEFAULT_TEMPERATURE,
             "top_p": project.chatterbox_top_p

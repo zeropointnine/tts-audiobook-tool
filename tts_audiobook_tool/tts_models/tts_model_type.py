@@ -456,8 +456,8 @@ class TtsModelType(Enum):
         ui = {
             "proper_name": "MiraTTS",
             "short_name": "Mira",
-            "voice_path_console": "Enter voice clone audio clip file path (recommended up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (recommended up to 15s)",
+            "voice_path_console": "Enter voice clone audio clip file path (recommended up to 8s): ",
+            "voice_path_requestor": "Select voice clone audio clip (recommended up to 8s)",
             "project_links": ["https://github.com/ysharma3501/MiraTTS", "https://huggingface.co/YatharthS/MiraTTS"]
         },
         output_filters=["smem_size"], # warning printout that gets spammed like crazy; couldn't defeat

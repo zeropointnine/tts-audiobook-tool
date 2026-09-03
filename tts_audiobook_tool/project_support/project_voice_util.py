@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
-from tts_audiobook_tool.constants import OUTE_DEFAULT_VOICE_JSON_FILE_PATH
+from tts_audiobook_tool.constants import OUTE_DEFAULT_VOICE_JSON_FILE_PATH, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.oute_util import OuteUtil
@@ -22,6 +22,23 @@ class ProjectVoiceUtil:
     """
     Voice/model-specific helpers for `Project`.
     """
+
+    @staticmethod
+    def get_voice_dir_path(project: Project) -> str:
+        """ Returns the project's standard voice sample file subdir path """
+        return os.path.join(project.dir_path, PROJECT_VOICE_SUBDIR)
+
+    @staticmethod
+    def resolve_voice_file_path(project: Project, file_name: str) -> str:
+        """
+        Resolves a saved voice sample file name to its path, preferring the
+        project's voice subdir and falling back to the legacy project-dir
+        root location for older projects.
+        """
+        path = os.path.join(ProjectVoiceUtil.get_voice_dir_path(project), file_name)
+        if os.path.exists(path):
+            return path
+        return os.path.join(project.dir_path, file_name)
 
     @staticmethod
     def get_voice_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
@@ -79,7 +96,7 @@ class ProjectVoiceUtil:
         suffix = f"_{tts_model_spec.file_tag}.flac"
         value = file_name.removesuffix(suffix)
         value = ellipsize(value, 40)
-        path = os.path.join(project.dir_path, file_name)
+        path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
         if os.path.exists(path):
             value = text_util.make_terminal_hyperlink(path, value, is_file=True)
         return value
@@ -136,6 +153,19 @@ class ProjectVoiceUtil:
                 project.oute_voice_json = result
 
     @staticmethod
+    def get_used_voice_file_names(project: Project, exclude_attr: str) -> set[str]:
+        """ Returns the set of voice sample file names referenced by any model's project attrs, excluding 'exclude_attr' """
+        used: set[str] = set()
+        for model_type in TtsModelType:
+            attr = model_type.value.voice_target_attr
+            if not attr or attr == exclude_attr:
+                continue
+            used.update(ProjectVoiceUtil.get_voice_values(project, model_type))
+        if exclude_attr != "indextts2_emo_voice_file_name" and getattr(project, "indextts2_emo_voice_file_name", ""):
+            used.add(project.indextts2_emo_voice_file_name)
+        return used
+
+    @staticmethod
     def set_voice_and_save(
             project: Project,
             sound: Sound,
@@ -145,8 +175,25 @@ class ProjectVoiceUtil:
             is_secondary: bool=False,
             append: bool=False,
     ) -> str:
-        dest_file_name = f"{voice_file_stem}_{tts_type.value.file_tag}.flac"
-        dest_path = Path(project.dir_path) / dest_file_name
+        # Voice sample files are stored undecorated in the project's voice
+        # subdir. Disambiguate the stem if a different model's voice attr
+        # already references the same file name.
+        exclude_attr = "indextts2_emo_voice_file_name" if (tts_type == TtsModelType.INDEXTTS2 and is_secondary) else tts_type.value.voice_target_attr
+        used = ProjectVoiceUtil.get_used_voice_file_names(project, exclude_attr or "")
+        if append:
+            # When appending, a same-stem sample should not clobber an
+            # existing entry; give it a distinct name.
+            used.update(ProjectVoiceUtil.get_voice_values(project, tts_type))
+        stem = voice_file_stem
+        dest_file_name = f"{stem}.flac"
+        count = 2
+        while dest_file_name in used:
+            dest_file_name = f"{stem}_{count}.flac"
+            count += 1
+
+        voice_dir = Path(ProjectVoiceUtil.get_voice_dir_path(project))
+        dest_path = voice_dir / dest_file_name
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
 
         err = SoundFileUtil.save_flac(sound, str(dest_path))
         if err:
@@ -283,7 +330,7 @@ class ProjectVoiceUtil:
         for attrib, file_names in file_names_by_attr:
             valid_file_names = []
             for file_name in file_names:
-                file_path = os.path.join(project.dir_path, file_name)
+                file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
                 if not os.path.exists(file_path):
                     warnings.append((attrib, file_name, "file not found"))
                     continue

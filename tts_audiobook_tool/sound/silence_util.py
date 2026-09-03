@@ -34,6 +34,9 @@ class SilenceUtil:
         else:
             start = start or 0
         end = end or sound.duration
+        if start >= end:
+            # Entirely silent input; nothing left after trimming
+            return Sound( np.zeros(0, dtype=sound.data.dtype), sound.sr ), start, end
         result = SoundUtil.trim(sound, start, end)
         return result, start, end
 
@@ -256,7 +259,7 @@ class SilenceUtil:
                     end_time = min(end_time, sound.duration)
 
                     if start_time < end_time:
-                        silence_segments.append((start_time, end_time))
+                        silence_segments.append((float(start_time), float(end_time)))
 
             return silence_segments
         except Exception:

@@ -148,7 +148,7 @@ class GlmModel(GlmBaseModel):
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
             project, TtsModelType.GLM, voice_selection_index
         )
-        voice_path = os.path.join(project.dir_path, voice_file_name) if voice_file_name else ""
+        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
         seed = -1 if force_random_seed else project.glm_seed
 
         result = self.generate(

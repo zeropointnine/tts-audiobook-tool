@@ -349,7 +349,7 @@ class TtsBaseModel(ABC):
         if not voice_file_name:
             return None
 
-        voice_path = os.path.join(project.dir_path, voice_file_name)
+        voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
         if os.path.exists(voice_path):
             return None
 
