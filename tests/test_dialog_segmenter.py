@@ -562,8 +562,9 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
     """
     For language code "en" only, a piece ending at a close-quote also gets
     reason PHRASE_QUOTE_END when the continuation is a capital-initial word
-    (a speaker name) whose next word is a whitelisted attribution verb
-    (eg, "Some dialog," John said.).
+    (a speaker name) whose next word starts with a whitelisted attribution
+    verb stem (eg, "Some dialog," John said.; the stem "say" also accepts
+    "says"/"saying").
     """
 
     @staticmethod
@@ -613,7 +614,6 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
     def test_name_followed_by_non_whitelisted_word_does_not_hit(self):
         cases = (
             ('"Some dialog," John wondered.', '"Some dialog," '),
-            ('"Some dialog." John saying.', '"Some dialog." '),
             ('"Some dialog," John pondered on it.', '"Some dialog," '),
         )
         for text, quote in cases:
@@ -621,6 +621,30 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
                 groups = segment_one_lang(text, "en")
                 self.assertEqual(groups[0].text, quote)
                 self.assertEqual(groups[0].phrases[-1].reason, Reason.PHRASE)
+
+    def test_name_verb_prefix_match_accepts_inflected_forms(self):
+        # A verb word hits when it starts with a listed stem, so inflected
+        # forms are recognized even when they are not listed verbatim
+        # ("says", "saying" from "say"; "adding" from "add"; ...).
+        cases = (
+            ('"Some dialog," John says.', '"Some dialog," ', "John says."),
+            ('"Some dialog." John saying.', '"Some dialog." ', "John saying."),
+            ('"Some dialog," Anne adding.', '"Some dialog," ', "Anne adding."),
+            ('"Some dialog," Mark shouting.', '"Some dialog," ', "Mark shouting."),
+            ('"Some dialog," Jane answering.', '"Some dialog," ', "Jane answering."),
+            ('"Some dialog." Tom told her.', '"Some dialog." ', "Tom told her."),
+            ('"Some dialog." Jane cried.', '"Some dialog." ', "Jane cried."),
+        )
+        for text, quote, attribution in cases:
+            with self.subTest(text=text):
+                groups = segment_one_lang(text, "en")
+                self.assertEqual(
+                    self.phrase_reasons(groups),
+                    [
+                        [(quote, Reason.PHRASE_QUOTE_END)],
+                        [(attribution, Reason.SENTENCE)],
+                    ],
+                )
 
     def test_line_break_between_name_and_verb_defeats_match(self):
         groups = segment_one_lang('"Some dialog,"\nJohn\nsaid.', "en")

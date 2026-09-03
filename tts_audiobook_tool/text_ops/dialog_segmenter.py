@@ -17,38 +17,42 @@ _QUOTE_CHARS = {_STRAIGHT_QUOTE, _CURLY_OPEN_QUOTE, _CURLY_CLOSE_QUOTE}
 DIALOG_VOICE_INDEX = 1
 
 # English attribution verbs that may follow a close-quote + speaker name
-# (eg, "Some dialog," John said.). Matched case-insensitively as a whole
-# word, only when the language code is "en".
+# (eg, "Some dialog," John said.). Matched case-insensitively, only when the
+# language code is "en", as a STARTS-WITH test: the verb word in the text
+# hits when it starts with one of these stems (an inflection of it), so a
+# single stem per regular paradigm suffices — eg, "add" also covers "adds",
+# "added", "adding". Irregular forms that do not start with the base stem
+# ("said", "told", "cries", "replied", ...) are listed on their own.
 _ATTRIBUTION_VERBS_EN = {
     # core
-    "say", "says", "said",
-    "ask", "asks", "asked",
-    "tell", "tells", "told",
+    "say", "said",
+    "ask",
+    "tell", "told",
     "reply", "replies", "replied",
-    "add", "adds", "added",
-    "answer", "answers", "answered",
-    "explain", "explains", "explained",
-    "continue", "continues", "continued",
+    "add",
+    "answer",
+    "explain",
+    "continue",
     # vocalization
-    "exclaim", "exclaims", "exclaimed",
-    "shout", "shouts", "shouted",
-    "whisper", "whispers", "whispered",
-    "murmur", "murmurs", "murmured",
-    "mutter", "mutters", "muttered",
+    "exclaim",
+    "shout",
+    "whisper",
+    "murmur",
+    "mutter",
     "cry", "cries", "cried",
-    "call", "calls", "called",
+    "call",
     # attitude / argument
-    "remark", "remarks", "remarked",
-    "state", "states", "stated",
-    "note", "notes", "noted",
-    "declare", "declares", "declared",
-    "retort", "retorts", "retorted",
-    "respond", "responds", "responded",
-    "insist", "insists", "insisted",
-    "warn", "warns", "warned",
-    "promise", "promises", "promised",
-    "suggest", "suggests", "suggested",
-    "repeat", "repeats", "repeated",
+    "remark",
+    "state",
+    "note",
+    "declare",
+    "retort",
+    "respond",
+    "insist",
+    "warn",
+    "promise",
+    "suggest",
+    "repeat",
 }
 
 
@@ -513,11 +517,13 @@ class DialogSegmenter:
     def _continues_with_name_verb(text: str, offset: int) -> bool:
         """
         Whether the text at or after `offset` begins with a capital-initial
-        word (a speaker name) whose next word is one of
-        _ATTRIBUTION_VERBS_EN. Leading whitespace is skipped (as in
-        _continues_with_lowercase_alpha), but only spaces/tabs may separate
-        the name and the verb: a line break between them defeats the match.
-        The verb must match as a whole word (so "saying" is not "say").
+        word (a speaker name) whose next word starts with one of
+        _ATTRIBUTION_VERBS_EN (case-insensitively), so inflected forms are
+        recognized — eg, stem "say" also matches "says", "said" is its own
+        stem, and "add" matches "adding". Leading whitespace is skipped (as
+        in _continues_with_lowercase_alpha), but only spaces/tabs may
+        separate the name and the verb: a line break between them defeats
+        the match.
         """
         index = offset
         length = len(text)
@@ -544,7 +550,8 @@ class DialogSegmenter:
         while index < length and text[index].isalpha():
             index += 1
 
-        return text[verb_start:index].lower() in _ATTRIBUTION_VERBS_EN
+        verb = text[verb_start:index].lower()
+        return any(verb.startswith(stem) for stem in _ATTRIBUTION_VERBS_EN)
 
     @staticmethod
     def _with_quote_end_reason(group: PhraseGroup) -> PhraseGroup:
