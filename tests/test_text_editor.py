@@ -701,7 +701,7 @@ def test_header_documents_the_info_key() -> None:
     app = make_loaded_editor(project)
 
     assert Text.from_ansi(app.header_lines[3]).plain == (
-        "- Press [X] Delete   [S] Split   [E] Edit   [I] Info"
+        "- Press [X] Delete  [E] Edit  [S] Split  [I] Import info"
     )
 
 

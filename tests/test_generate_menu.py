@@ -338,7 +338,7 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         generate_menu_module,
-        "run_generation_modal",
+        "run_generation_app",
         lambda **_kwargs: GenerationModalResult(result_status[0], "", ""),
     )
     monkeypatch.setattr(

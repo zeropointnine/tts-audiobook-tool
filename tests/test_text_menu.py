@@ -168,7 +168,7 @@ def test_text_import_shows_tolerance_hint_for_first_class_language(
 
     on_set_text(state, MenuItem("Import", lambda *_: None, data=source_kind))
 
-    assert hint_calls == [(prefs, HINT_TOLERANCE_FIRST_CLASS, True)]
+    assert hint_calls == [(prefs, HINT_TOLERANCE_FIRST_CLASS, False)]
 
 
 def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch) -> None:

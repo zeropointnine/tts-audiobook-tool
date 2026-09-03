@@ -54,7 +54,12 @@ def test_header_composes_and_updates_realtime_stats() -> None:
             header.update_stats(2, 5, 0.0, zero_buffer_is_error=False)
             finished_buffer = header.query_one("#realtime-stats", Static).render()
             assert isinstance(finished_buffer, Content)
-            assert len(finished_buffer.spans) == 0
+            # A finished (expected) zero buffer shows the same text but is
+            # rendered in the OK color rather than being flagged as an error.
+            assert str(finished_buffer) == str(zero_buffer)
+            assert len(finished_buffer.spans) == 1
+            assert len(zero_buffer.spans) == 1
+            assert finished_buffer.spans[0].style != zero_buffer.spans[0].style
 
             header.update_hotkey("awaiting_continue")
             assert "ENTER" in str(

@@ -101,7 +101,7 @@ def run_generate_files(
 
 
 def test_make_batch_eta_seconds_requires_minimum_history() -> None:
-    assert BATCH_DURATION_HISTORY_SIZE == 20
+    assert BATCH_DURATION_HISTORY_SIZE == 50
     assert ETA_MIN_BATCH_DURATIONS == 10
 
     assert make_batch_eta_seconds([10.0] * (ETA_MIN_BATCH_DURATIONS - 1), 5) is None
@@ -113,20 +113,25 @@ def test_make_batch_eta_seconds_requires_minimum_history() -> None:
 
 
 def test_history_cap_drops_oldest_duration(monkeypatch) -> None:
-    state = make_generate_state(num_groups=24, max_retries=0)
-    # Batch 2 is slow (100s); once twenty-one batches have been recorded,
-    # the cap drops it from the head of the history.
-    durations = [300.0, 100.0] + [10.0] * 22
-    results = [StubValidationResult(False)] * 24
+    state = make_generate_state(num_groups=53, max_retries=0)
+    # Batch 1 (300s) is the skipped warm-up; batch 2 is slow (100s); batches
+    # 3-53 all take 10s. Fifty-one samples accumulate before the cap
+    # (BATCH_DURATION_HISTORY_SIZE) forces the oldest one out.
+    durations = [300.0, 100.0] + [10.0] * 51
+    results = [StubValidationResult(False)] * 53
 
     emits = run_generate_files(monkeypatch, state, durations, results)
     post = [e for e in emits if not e.current_indices]
-    assert len(post) == 24
+    assert len(post) == 53
 
-    # After batch 22 the history holds batches 3-22 (twenty 10s samples;
-    # the 100s batch was capped out). Two batches remain queued: ETA = 20s.
-    # Without the cap the average would still include the 100s sample.
-    assert post[21].eta_seconds == pytest.approx(20.0)
+    # After batch 51 the history holds batches 2-51 (fifty samples that still
+    # include the 100s batch; average 11.8s). Two batches remain: ETA = 23.6s.
+    assert post[50].eta_seconds == pytest.approx(23.6)
+    # After batch 52 the fifty-first sample pushes the history one past the
+    # cap, which drops the 100s batch from the head. Only 10s samples remain
+    # and one batch is left queued: ETA = 10s. Without the cap the average
+    # would still include the 100s sample.
+    assert post[51].eta_seconds == pytest.approx(10.0)
 
 
 def test_eta_appears_only_once_minimum_samples_recorded(monkeypatch) -> None:

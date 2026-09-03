@@ -186,4 +186,4 @@ def test_stt_status_does_not_repeat_disabled(monkeypatch):
 
     text = _make_stt_text(state)
 
-    assert text == f"faster-whisper {COL_DIM}(disabled, cpu)"
+    assert text == f"faster-whisper {COL_DIM}(disabled)"
