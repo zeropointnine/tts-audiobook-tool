@@ -381,3 +381,217 @@ def test_out_of_range_voice_count_ignores_unassigned_default() -> None:
     assert generate_menu_module.count_out_of_range_voice_indices(groups, range(5), 3) == 1
     assert generate_menu_module.count_out_of_range_voice_indices(groups, [], 2) == 0
     assert generate_menu_module.count_out_of_range_voice_indices(groups, range(1), 0) == 0
+
+
+# --- do_generate: queueing remaining lines when none are queued ---
+
+
+def make_empty_queue_env(
+    monkeypatch,
+    num_groups: int = 5,
+    generated_indices: set[int] | None = None,
+    save_error: str = "",
+    confirm_result: bool = True,
+) -> tuple[State, dict[str, Any]]:
+    """
+    Wire do_generate's dependencies so it can run end-to-end starting from an
+    empty generation queue (get_selected_indices_not_generated returns nothing).
+    Returns (state, calls) where calls records confirm prompts, printed output,
+    saves, run_generation_app kwargs, and ask_error messages.
+    """
+    generated_indices = set(generated_indices or [])
+    calls: dict[str, Any] = {
+        "confirms": [],
+        "printed": [],
+        "errors": [],
+        "saves": 0,
+        "range_at_save": None,
+        "runs": [],
+    }
+    sound_segments = SimpleNamespace(
+        sound_segments_map={index: [] for index in generated_indices},
+        num_generated=lambda: len(generated_indices),
+        num_generated_in_current_range=lambda: 0,
+    )
+    project = SimpleNamespace(
+        phrase_groups=[object() for _ in range(num_groups)],
+        generate_range_string="none",
+        sound_segments=sound_segments,
+        gen_auto_concat=False,
+    )
+
+    def save() -> str:
+        calls["saves"] += 1
+        calls["range_at_save"] = project.generate_range_string
+        return save_error
+
+    project.save = save
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=project,
+            prefs=SimpleNamespace(is_validation_disabled=True),
+        ),
+    )
+
+    monkeypatch.setattr(
+        generate_menu_module.readiness,
+        "get_generate_blocker_text",
+        lambda _state, verbose: "",
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ProjectUtil,
+        "get_selected_indices_not_generated",
+        lambda _project: set(),
+    )
+    monkeypatch.setattr(
+        generate_menu_module.app_hint_util,
+        "show_pre_inference_hints",
+        lambda _prefs, _project: True,
+    )
+    monkeypatch.setattr(
+        generate_menu_module.MenuUtil, "print_screen_heading", lambda *_: None
+    )
+    monkeypatch.setattr(
+        generate_menu_module.Tts,
+        "get_type",
+        lambda: SimpleNamespace(value=SimpleNamespace(can_batch=False)),
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ProjectVoiceUtil,
+        "get_voice_values",
+        lambda _project, _tts_type: [],
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ProjectVoiceUtil, "get_batch_size", lambda _project: 1
+    )
+    monkeypatch.setattr(
+        generate_menu_module,
+        "printt",
+        lambda value="", *_args, **_kwargs: calls["printed"].append(value),
+    )
+    monkeypatch.setattr(
+        generate_menu_module,
+        "print_feedback",
+        lambda *values: calls["printed"].append(values[0]),
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ask,
+        "ask_confirm",
+        lambda message: calls["confirms"].append(message) or confirm_result,
+    )
+    monkeypatch.setattr(
+        generate_menu_module.ask,
+        "ask_error",
+        lambda message: calls["errors"].append(message),
+    )
+    monkeypatch.setattr(
+        generate_menu_module,
+        "run_generation_app",
+        lambda **kwargs: calls["runs"].append(kwargs)
+        or GenerationModalResult(GenerationTerminalStatus.COMPLETED, "", ""),
+    )
+    return state, calls
+
+
+def test_do_generate_prompts_to_queue_remaining_lines_when_none_queued(
+    monkeypatch,
+) -> None:
+    state, calls = make_empty_queue_env(
+        monkeypatch, num_groups=5, generated_indices={0, 3}
+    )
+
+    generate_menu_module.do_generate(state)
+
+    # Prompted with the remaining count (lines 1, 2, 4 are ungenerated).
+    assert calls["confirms"][0] == (
+        "No lines queued for generation, but 3 lines remain. Generate them now? "
+    )
+    # Remaining lines tagged (one-indexed) and persisted.
+    assert state.project.generate_range_string == "2-3, 5"
+    assert calls["saves"] == 1
+    assert calls["range_at_save"] == "2-3, 5"
+    # Then started through the normal generation path.
+    assert calls["runs"] == [
+        {
+            "state": state,
+            "indices": {1, 2, 4},
+            "batch_size": 1,
+            "is_regen": False,
+        }
+    ]
+
+
+def test_do_generate_prompt_uses_singular_line_when_one_remains(monkeypatch) -> None:
+    state, calls = make_empty_queue_env(
+        monkeypatch, num_groups=4, generated_indices={0, 1, 2}
+    )
+
+    generate_menu_module.do_generate(state)
+
+    assert calls["confirms"][0] == (
+        "No lines queued for generation, but 1 line remain. Generate them now? "
+    )
+    assert state.project.generate_range_string == "4"
+    assert calls["runs"][0]["indices"] == {3}
+
+
+def test_do_generate_declined_prompt_does_not_tag_or_generate(monkeypatch) -> None:
+    state, calls = make_empty_queue_env(
+        monkeypatch,
+        num_groups=5,
+        generated_indices={0, 3},
+        confirm_result=False,
+    )
+
+    generate_menu_module.do_generate(state)
+
+    assert calls["confirms"] == [
+        "No lines queued for generation, but 3 lines remain. Generate them now? "
+    ]
+    assert state.project.generate_range_string == "none"
+    assert calls["saves"] == 0
+    assert calls["runs"] == []
+
+
+def test_do_generate_reports_all_generated_without_prompt(monkeypatch) -> None:
+    state, calls = make_empty_queue_env(
+        monkeypatch, num_groups=5, generated_indices={0, 1, 2, 3, 4}
+    )
+
+    generate_menu_module.do_generate(state)
+
+    assert calls["confirms"] == []
+    assert calls["saves"] == 0
+    assert calls["runs"] == []
+    assert "All lines already generated" in calls["printed"]
+
+
+def test_do_generate_reports_no_remaining_without_prompt(monkeypatch) -> None:
+    # Stale out-of-range segments inflate num_generated beyond the line count,
+    # so no in-range line is left: keep the non-interactive feedback message.
+    state, calls = make_empty_queue_env(
+        monkeypatch, num_groups=5, generated_indices={0, 1, 2, 3, 4, 5}
+    )
+
+    generate_menu_module.do_generate(state)
+
+    assert calls["confirms"] == []
+    assert calls["saves"] == 0
+    assert calls["runs"] == []
+    assert "No lines queued to be generated" in calls["printed"]
+
+
+def test_do_generate_aborts_when_queue_save_fails(monkeypatch) -> None:
+    state, calls = make_empty_queue_env(
+        monkeypatch,
+        num_groups=5,
+        generated_indices={0, 3},
+        save_error="disk full",
+    )
+
+    generate_menu_module.do_generate(state)
+
+    assert state.project.generate_range_string == "2-3, 5"
+    assert calls["errors"] == ["Save failed: disk full"]
+    assert calls["runs"] == []

@@ -15,6 +15,7 @@ from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool import readiness
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorClosed,
@@ -399,13 +400,36 @@ def do_generate(state: State) -> None:
             state.project.sound_segments.num_generated()
             == len(state.project.phrase_groups)
         )
-        message = (
-            "All lines already generated"
-            if all_lines_generated
-            else "No lines queued to be generated"
+        if all_lines_generated:
+            print_feedback("All lines already generated")
+            return
+
+        # Nothing is queued, but lines still remain to be generated.
+        remaining_indices = (
+            set(range(len(state.project.phrase_groups)))
+            - set(state.project.sound_segments.sound_segments_map.keys())
         )
-        print_feedback(message)
-        return
+        if not remaining_indices:
+            print_feedback("No lines queued to be generated")
+            return
+        num_remaining = len(remaining_indices)
+        noun = make_noun("line", "lines", num_remaining)
+        b = ask.ask_confirm(
+            f"No lines queued for generation, but {num_remaining} {noun} remain. Generate them now? "
+        )
+        if not b:
+            return
+
+        # Tag remaining lines to be generated, and persist the queue.
+        state.project.generate_range_string = RangeStringUtil.make_ranges_string(
+            remaining_indices,
+            len(state.project.phrase_groups),
+        )
+        save_error = state.project.save()
+        if save_error:
+            ask.ask_error(f"Save failed: {save_error}")
+            return
+        indices = remaining_indices
 
     # Show pre-inference hint/warning if necessary
     should_continue = app_hint_util.show_pre_inference_hints(state.prefs, state.project)
