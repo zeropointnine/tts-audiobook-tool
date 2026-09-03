@@ -147,6 +147,14 @@ def apply_model_and_validate(state: State, target: str) -> None:
     project.vibevoice_target = target
     _ = ModelWorker.clear_models_if_running_blocking()
 
+    # Preset targets are known-good repos with a single fixed architecture,
+    # so there is nothing to learn from loading the model here. Custom
+    # targets are arbitrary repos/paths, so validate those by loading.
+    if target in VibeVoiceBaseModel.PRESET_REPO_IDS:
+        project.save()
+        print_feedback("\nCustom model set:", target)
+        return
+
     printt(f"{COL_DIM_ITALICS}Initializing model...")
     printt()
 

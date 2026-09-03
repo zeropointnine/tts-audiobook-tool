@@ -108,6 +108,15 @@ def apply_model_and_validate(state: State, target: str) -> None:
     project.moss_target = target
     _ = ModelWorker.clear_models_if_running_blocking()
 
+    # Preset targets are pinned, known-good repos whose runtime properties
+    # (arch, sample rate, sampling defaults) are fully described by
+    # MossConfigs, so there is nothing to learn from loading the model here.
+    # Custom targets run arbitrary remote code, so validate those by loading.
+    if MossConfigs.get_preset_by_target(target) is not None:
+        project.save()
+        print_feedback("Model set:", target)
+        return
+
     printt(f"{COL_DIM_ITALICS}Initializing model...")
     printt()
 
