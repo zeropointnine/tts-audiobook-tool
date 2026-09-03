@@ -68,9 +68,12 @@ class VoiceMenuShared:
             case TtsModelType.MOSS:
                 from tts_audiobook_tool.menus.voice import VoiceMossMenu
                 VoiceMossMenu.menu(state)
-            case TtsModelType.MOSS_SERVER:
+            case TtsModelType.MOSS_DELAY_SERVER:
                 from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
-                VoiceMossServerMenu.menu(state)
+                VoiceMossServerMenu.menu(state, TtsModelType.MOSS_DELAY_SERVER)
+            case TtsModelType.MOSS_LOCAL_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceMossServerMenu
+                VoiceMossServerMenu.menu(state, TtsModelType.MOSS_LOCAL_SERVER)
             case TtsModelType.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)

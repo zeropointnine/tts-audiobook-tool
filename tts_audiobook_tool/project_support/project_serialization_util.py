@@ -204,6 +204,12 @@ class ProjectSerializationUtil:
             value = 1
         d['version'] = value
 
+        # The former generic MOSS server stamp did not record whether Delay or
+        # Local was served. Treat it as unknown rather than claiming the project
+        # was last used with one particular architecture.
+        if d.get('current_model_type') == 'server_moss':
+            d['current_model_type'] = TtsModelType.NONE
+
         normalize_by_id(
             'current_model_type',
             lambda value: value if isinstance(value, TtsModelType) else TtsModelType.get_by_id(value),

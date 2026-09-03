@@ -18,43 +18,47 @@ class MossServerBaseModel(MossBaseModel):
     Base model for the 'server' version of MOSS (v1.5)
     """
 
-    INFO = TtsModelType.MOSS_SERVER.value
+    # Defaults keep the shared base concrete enough for type annotations and
+    # compatibility, while the registered subclasses below override both.
+    INFO = TtsModelType.MOSS_DELAY_SERVER.value
+    CONFIG = MossConfigs.DELAY
 
     # Rem, MOSS can fail to properly terminate gens when hyperparams are out of a certain range,
     # so max tokens should be set as "small" as possble
     MAX_NEW_TOKENS = 1024
 
-    CONFIG = MossConfigs.DELAY
-
-    @staticmethod
-    def get_server_config() -> MossConfigs:
-        model_id = SglOmniUtil.get_model_id()
-        if not model_id:
-            SglOmniUtil.update_model_id()
-            model_id = SglOmniUtil.get_model_id()
-        return MossConfigs.get_by_target(model_id)
-
     @classmethod
     def get_output_sample_rate(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> int:
-        return cls.get_server_config().value.output_sample_rate
+        return cls.CONFIG.value.output_sample_rate
 
     def get_loaded_arch_type(self) -> MossArchType:
-        """
-        Must infer architecture type using model id ("good-enough test")
-        """
-        if self.get_server_config() == MossConfigs.LOCAL:
+        if self.CONFIG == MossConfigs.LOCAL:
             return MossArchType.LOCAL
         return MossArchType.DELAY
+
+    @classmethod
+    def can_hallucinate_music(cls, project: Project, instance: TtsBaseModel | None = None) -> bool:
+        return cls.CONFIG == MossConfigs.LOCAL
+
+    @classmethod
+    def should_trim_trailing_token_noise(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> bool:
+        return cls.CONFIG == MossConfigs.LOCAL
+
+    @classmethod
+    def get_menu_text(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> str:
+        return cls.INFO.ui.get("proper_name") or ""
 
     @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:
-        # Overrides with server ping check
+        # Server generation does not use local rolling continuation, so do not
+        # inherit its batch/rolling compatibility blocker.
         readiness_issue = SglOmniUtil.check_readiness(SglOmniUtil.get_base_url())
-        if readiness_issue:
-            return [readiness_issue]
-
-        return []
+        return [readiness_issue] if readiness_issue else []

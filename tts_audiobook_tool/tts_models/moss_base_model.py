@@ -77,6 +77,25 @@ class MossBaseModel(TtsBaseModel):
     def get_language_name(language_code: str) -> str:
         return MossBaseModel.LANGUAGE_NAMES_BY_CODE.get(language_code.strip().lower(), "")
 
+    @staticmethod
+    def get_generation_params(project: Project, config: "MossConfigs") -> tuple[float, float, int]:
+        """Resolve the saved-or-default sampling parameters for an architecture."""
+        if config == MossConfigs.LOCAL:
+            temperature = project.moss_local_temperature
+            audio_top_p = project.moss_local_top_p
+            audio_top_k = project.moss_local_top_k
+        else:
+            temperature = project.moss_delay_temperature
+            audio_top_p = project.moss_delay_top_p
+            audio_top_k = project.moss_delay_top_k
+
+        values = config.value
+        return (
+            values.temperature_default if temperature == -1 else temperature,
+            values.audio_top_p_default if audio_top_p == -1 else audio_top_p,
+            values.audio_top_k_default if audio_top_k == -1 else audio_top_k,
+        )
+
     def get_loaded_arch_type(self) -> MossArchType:
         raise NotImplementedError()
 

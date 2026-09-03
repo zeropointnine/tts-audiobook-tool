@@ -22,7 +22,7 @@ from tts_audiobook_tool.tts_models.indextts2_base_model import IndexTts2BaseMode
 from tts_audiobook_tool.tts_models.mira_base_model import MiraBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
-from tts_audiobook_tool.tts_models.moss_server_model import MossServerModel
+from tts_audiobook_tool.tts_models.moss_server_model import MossDelayServerModel, MossLocalServerModel
 from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
 from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
@@ -70,7 +70,8 @@ class Tts:
     _indextts2: IndexTts2BaseModel | None = None
     _mira: MiraBaseModel | None = None
     _moss: MossBaseModel | None = None
-    _moss_server: MossServerBaseModel | None = None
+    _moss_delay_server: MossServerBaseModel | None = None
+    _moss_local_server: MossServerBaseModel | None = None
     _omnivoice: OmniVoiceBaseModel | None = None
     _oute: OuteBaseModel | None = None
     _pocket: PocketBaseModel | None = None
@@ -379,7 +380,8 @@ class Tts:
             Tts._indextts2,
             Tts._mira,
             Tts._moss,
-            Tts._moss_server,
+            Tts._moss_delay_server,
+            Tts._moss_local_server,
             Tts._omnivoice,
             Tts._oute,
             Tts._pocket,
@@ -633,13 +635,20 @@ class Tts:
         return Tts._moss
 
     @staticmethod
-    def get_moss_server() -> MossServerBaseModel:
+    def get_moss_delay_server() -> MossServerBaseModel:
         require_model_owner("TTS")
-        if not Tts._moss_server:
-            from tts_audiobook_tool.tts_models.moss_server_model import MossServerModel
-            Tts._moss_server = MossServerModel()
+        if not Tts._moss_delay_server:
+            Tts._moss_delay_server = MossDelayServerModel()
             printt()
-        return Tts._moss_server
+        return Tts._moss_delay_server
+
+    @staticmethod
+    def get_moss_local_server() -> MossServerBaseModel:
+        require_model_owner("TTS")
+        if not Tts._moss_local_server:
+            Tts._moss_local_server = MossLocalServerModel()
+            printt()
+        return Tts._moss_local_server
 
     @staticmethod
     def get_omnivoice() -> OmniVoiceBaseModel:
@@ -848,7 +857,8 @@ Tts._MODEL_REGISTRY = {
     TtsModelType.INDEXTTS2: (IndexTts2BaseModel, Tts.get_indextts2, "_indextts2"),
     TtsModelType.MIRA: (MiraBaseModel, Tts.get_mira, "_mira"),
     TtsModelType.MOSS: (MossBaseModel, Tts.get_moss, "_moss"),
-    TtsModelType.MOSS_SERVER: (MossServerModel, Tts.get_moss_server, "_moss_server"),
+    TtsModelType.MOSS_DELAY_SERVER: (MossDelayServerModel, Tts.get_moss_delay_server, "_moss_delay_server"),
+    TtsModelType.MOSS_LOCAL_SERVER: (MossLocalServerModel, Tts.get_moss_local_server, "_moss_local_server"),
     TtsModelType.OMNIVOICE: (OmniVoiceBaseModel, Tts.get_omnivoice, "_omnivoice"),
     TtsModelType.OUTE: (OuteBaseModel, Tts.get_oute, "_oute"),
     TtsModelType.POCKET: (PocketBaseModel, Tts.get_pocket, "_pocket"),

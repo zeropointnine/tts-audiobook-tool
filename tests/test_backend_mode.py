@@ -17,7 +17,7 @@ from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.glm_base_model import GlmBaseModel
 from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
-from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
+from tts_audiobook_tool.tts_models.moss_server_model import MossDelayServerModel, MossLocalServerModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 SENTINEL = "tts_audiobook_tool_sgl_omni_marker"
@@ -232,7 +232,7 @@ def test_catalog_helpers_classify_by_backend_kind():
     sgl_items = TtsModelType.get_sgl_omni_items()
 
     assert len(local_items) == 14
-    assert len(sgl_items) == 5
+    assert len(sgl_items) == 6
     assert set(local_items) | set(sgl_items) == set(TtsModelType) - {TtsModelType.NONE}
     assert all(item.value.backend_kind == TtsBackendKind.LOCAL for item in local_items)
     assert all(item.value.backend_kind == TtsBackendKind.SGL_OMNI for item in sgl_items)
@@ -260,11 +260,13 @@ def test_moss_output_sample_rate_follows_architecture(monkeypatch) -> None:
     assert MossBaseModel.get_output_sample_rate(delay_project) == 24_000
     assert MossBaseModel.get_output_sample_rate(local_project) == 48_000
 
-    monkeypatch.setattr(SglOmniUtil, "get_model_id", lambda: MossConfigs.DELAY.value.repo_id)
-    assert MossServerBaseModel.get_output_sample_rate(local_project) == 24_000
-
-    monkeypatch.setattr(SglOmniUtil, "get_model_id", lambda: MossConfigs.LOCAL.value.repo_id)
-    assert MossServerBaseModel.get_output_sample_rate(delay_project) == 48_000
+    monkeypatch.setattr(
+        SglOmniUtil,
+        "get_model_id",
+        lambda: (_ for _ in ()).throw(AssertionError("fixed server variants must not inspect model id")),
+    )
+    assert MossDelayServerModel.get_output_sample_rate(local_project) == 24_000
+    assert MossLocalServerModel.get_output_sample_rate(delay_project) == 48_000
 
 
 def test_only_mira_has_worker_output_filters() -> None:

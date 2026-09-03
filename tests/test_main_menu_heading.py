@@ -218,7 +218,7 @@ def test_tts_model_heading_detail_keeps_local_model_unchanged():
 def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch):
     saved = preserve_tts_and_sgl_state()
     try:
-        Tts._type = TtsModelType.MOSS_SERVER
+        Tts._type = TtsModelType.MOSS_DELAY_SERVER
         Tts._backend_mode = TtsBackendKind.SGL_OMNI
         SglOmniUtil._model_id = "bosonai/higgs-audio-v3-tts-4b"
 
@@ -230,7 +230,7 @@ def test_tts_model_heading_detail_refreshes_stale_sgl_omni_model_id(monkeypatch)
         result = get_heading_tts_text(make_state())
 
         stripped = text_util.strip_ansi_codes(result)
-        assert stripped == "MOSS-TTS-v1.5 SGL-Omni offline"
+        assert stripped == "MOSS-TTS Delay SGL-Omni offline"
         assert "bosonai/higgs-audio-v3-tts-4b" not in stripped
         assert COL_ERROR in result
     finally:

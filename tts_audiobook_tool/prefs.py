@@ -230,6 +230,12 @@ class Prefs(Saveable):
         s = prefs_dict.get("sgl_omni_type", "")
         if s is None or s == "":
             sgl_omni_type = None
+        elif s == "server_moss":
+            # The former generic MOSS server selection could represent either
+            # architecture because runtime metadata was inferred from the
+            # served model ID. Preserve that behavior by migrating to Auto.
+            sgl_omni_type = None
+            dirty = True
         elif isinstance(s, str):
             sgl_omni_type = TtsModelType.get_by_id(s)
             if not TtsModelType.is_valid_sgl_omni_type(sgl_omni_type):

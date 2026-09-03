@@ -5,6 +5,7 @@ from tts_audiobook_tool.menus.voice.voice_moss_shared import VoiceMossShared
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs, MossBaseModel
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.menus.voice import VoiceMenuShared
@@ -30,7 +31,7 @@ class VoiceMossMenu:
 
             items = []
 
-            VoiceMossShared.append_voice_items(items, state)
+            VoiceMossShared.append_voice_items(items, state, TtsModelType.MOSS)
 
             items.append(
                 MenuItem(

@@ -181,6 +181,10 @@ class TestProjectBookIntegration(unittest.TestCase):
             TtsModelType.CHATTERBOX,
         )
         self.assertEqual(
+            Project.model_validate({"current_model_type": "server_moss"}).current_model_type,
+            TtsModelType.NONE,
+        )
+        self.assertEqual(
             Project.model_validate({"current_model_type": "unknown-model"}).current_model_type,
             TtsModelType.NONE,
         )
@@ -239,6 +243,20 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(payload["current_model_type"], TtsModelType.NONE.value.id)
         self.assertIsInstance(reopened_result, Project)
         continue_mock.assert_called_once_with()
+
+    def test_project_load_treats_legacy_moss_server_stamp_as_unknown(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            self.write_complete_project_json(project_dir, "server_moss")
+
+            with patch(
+                    "tts_audiobook_tool.tts.Tts.get_type",
+                    return_value=TtsModelType.MOSS_LOCAL_SERVER,
+            ), patch("tts_audiobook_tool.ask.ask_enter_to_continue") as continue_mock:
+                result = ProjectLoadUtil.load_using_dir_path(project_dir)
+
+        self.assertIsInstance(result, Project)
+        self.assertEqual(result.current_model_type, TtsModelType.NONE)
+        continue_mock.assert_not_called()
 
     def test_project_load_skips_previous_model_report_when_not_applicable(self):
         cases = [

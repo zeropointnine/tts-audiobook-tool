@@ -6,17 +6,14 @@ from tts_audiobook_tool.app_types import Sound, StreamChunkCallback, StreamEndCa
 from tts_audiobook_tool.constants import SEED_MAX
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.sound.sound_util import SoundUtil
-from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel
+from tts_audiobook_tool.tts_models.moss_base_model import MossBaseModel, MossConfigs
 from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
 
 class MossServerModel(MossServerBaseModel):
-    """ 
-    'Server' version of MOSS (MOSS Delay model, v1.5)
-    Uses the same project settings as the local version.
-    """
+    """Shared SGL-Omni request implementation for MOSS architectures."""
 
     def kill(self) -> None:
         pass
@@ -32,13 +29,12 @@ class MossServerModel(MossServerBaseModel):
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        
+        model_type = TtsModelType.get_by_id(self.INFO.id)
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
-            project, TtsModelType.MOSS_SERVER, voice_selection_index
+            project, model_type, voice_selection_index
         )
 
-        temperature = project.moss_delay_temperature if project.moss_delay_temperature != -1 else MossServerBaseModel.CONFIG.value.temperature_default
-        audio_top_p = project.moss_delay_top_p if project.moss_delay_top_p != -1 else MossServerBaseModel.CONFIG.value.audio_top_p_default
-        audio_top_k = project.moss_delay_top_k if project.moss_delay_top_k != -1 else MossServerBaseModel.CONFIG.value.audio_top_k_default
+        temperature, audio_top_p, audio_top_k = self.get_generation_params(project, self.CONFIG)
         
         seed = -1 if force_random_seed else project.moss_seed
         if seed == -1:
@@ -91,3 +87,17 @@ class MossServerModel(MossServerBaseModel):
             print_request=print_generation_request,
         )
         return results
+
+
+class MossDelayServerModel(MossServerModel):
+    """SGL-Omni adapter for the MOSS Delay architecture."""
+
+    INFO = TtsModelType.MOSS_DELAY_SERVER.value
+    CONFIG = MossConfigs.DELAY
+
+
+class MossLocalServerModel(MossServerModel):
+    """SGL-Omni adapter for the MOSS Local Transformer architecture."""
+
+    INFO = TtsModelType.MOSS_LOCAL_SERVER.value
+    CONFIG = MossConfigs.LOCAL

@@ -327,17 +327,7 @@ class MossModel(MossBaseModel):
         target = project.moss_target
         config = MossConfigs.get_by_target(target)
 
-        temperature = project.moss_local_temperature if config == MossConfigs.LOCAL else project.moss_delay_temperature
-        if temperature == -1:
-            temperature = config.value.temperature_default
-
-        audio_top_p = project.moss_local_top_p if config == MossConfigs.LOCAL else project.moss_delay_top_p
-        if audio_top_p == -1:
-            audio_top_p = config.value.audio_top_p_default
-
-        audio_top_k = project.moss_local_top_k if config == MossConfigs.LOCAL else project.moss_delay_top_k
-        if audio_top_k == -1:
-            audio_top_k = config.value.audio_top_k_default
+        temperature, audio_top_p, audio_top_k = self.get_generation_params(project, config)
 
         seed = -1 if force_random_seed else project.moss_seed
         language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""

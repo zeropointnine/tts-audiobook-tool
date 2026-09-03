@@ -501,9 +501,11 @@ class TtsModelType(Enum):
         ]
     )
 
-    MOSS_SERVER = TtsModelSpec(
-        id="server_moss",
+    MOSS_DELAY_SERVER = TtsModelSpec(
+        id="server_moss_delay",
         backend_kind=TtsBackendKind.SGL_OMNI,
+        # Generic fallback for MOSS server IDs. The more specific Local
+        # substring below wins when both match.
         sgl_omni_model_id_substring="moss",
         local_module_test="",
         local_torch_devices=[],
@@ -522,13 +524,50 @@ class TtsModelType(Enum):
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
         ui={
-            "proper_name": "MOSS-TTS",
-            "short_name": "MOSS",
-            "voice_path_console": "",
-            "voice_path_requestor": "",
+            "proper_name": "MOSS-TTS Delay",
+            "short_name": "MOSS Delay",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
             "project_links": [
                 "https://github.com/OpenMOSS/MOSS-TTS",
                 "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5",
+                "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"
+            ]
+        },
+        output_filters=[],
+        substitutions=[
+            ("\u2014", ", "), ("\u2500", ", ")
+        ]
+    )
+
+    MOSS_LOCAL_SERVER = TtsModelSpec(
+        id="server_moss_local",
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="moss-tts-local",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="moss",
+        default_output_sample_rate=48_000,
+        max_words_default=40,
+        max_words_reco_range=(40, 80),
+        voice_target_attr="moss_voice_file_name",
+        requires_voice=False,
+        voice_transcript_attr="moss_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="moss_batch_size",
+        can_stream=False,
+        semantic_trim_last=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui={
+            "proper_name": "MOSS-TTS Local",
+            "short_name": "MOSS Local",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": [
+                "https://github.com/OpenMOSS/MOSS-TTS",
+                "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Local-Transformer",
                 "https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html"
             ]
         },
