@@ -19,6 +19,7 @@ from tts_audiobook_tool.generation_events import (
     GenerationProgress,
     GenerationStarted,
     GenerationTimedOut,
+    ModelUnhealthy,
 )
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import generation_app as generation_app_module
@@ -33,9 +34,11 @@ from tts_audiobook_tool.textual.generation_app import (
     _read_persisted_range_string,
     _reconcile_generation_result,
     _run_generation_console,
+    run_generation_app,
 )
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
+from tts_audiobook_tool.worker_reset import HardResetCause
 
 
 def run(coroutine) -> None:
@@ -288,7 +291,7 @@ def test_console_fallback_finalizes_on_worker_exited(monkeypatch, tmp_path) -> N
     finally:
         transcript.close()
 
-    assert result.status == GenerationTerminalStatus.WORKER_RESET
+    assert result.status == GenerationTerminalStatus.FAILED
     assert "Worker log: /tmp/worker.log" in result.message
 
 
@@ -325,11 +328,11 @@ def test_generation_app_finalizes_on_worker_exited(monkeypatch, tmp_path) -> Non
         async with app.run_test(size=(100, 24)) as pilot:
             await pilot.pause(0.3)
             assert app.terminal_result is not None
-            assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.status == GenerationTerminalStatus.FAILED
             assert "Worker log: /tmp/worker.log" in app.terminal_result.message
             await pilot.press("enter")
         assert app.return_value is not None
-        assert app.return_value.status == GenerationTerminalStatus.WORKER_RESET
+        assert app.return_value.status == GenerationTerminalStatus.FAILED
 
     try:
         run(exercise())
@@ -432,12 +435,32 @@ def test_generation_app_plays_done_sound_for_completion_and_automatic_abort(
         GenerationTerminalStatus.COMPLETED,
         GenerationTerminalStatus.ABORTED,
     }
+    reset_causes = (
+        None,
+        HardResetCause.USER_ESCALATION,
+        HardResetCause.GENERATION_TIMEOUT,
+        HardResetCause.MODEL_UNHEALTHY,
+        HardResetCause.INTERFACE_FAILURE,
+    )
     for status in GenerationTerminalStatus:
-        sound_calls.clear()
+        for reset_cause in reset_causes:
+            sound_calls.clear()
+            result = GenerationModalResult(
+                status,
+                "",
+                "",
+                hard_reset_cause=reset_cause,
+            )
 
-        app._post_terminal_summary(GenerationModalResult(status, "", ""))
+            app._post_terminal_summary(result)
 
-        assert bool(sound_calls) is (status in statuses_that_alert)
+            reset_should_alert = (
+                status is GenerationTerminalStatus.WORKER_RESET
+                and reset_cause is not None
+                and reset_cause.should_alert
+            )
+            expected = status in statuses_that_alert or reset_should_alert
+            assert bool(sound_calls) is expected
 
 
 def test_quick_generation_auto_returns_without_concatenation_message() -> None:
@@ -927,6 +950,7 @@ def test_second_ctrl_c_hard_resets_worker_immediately(monkeypatch, tmp_path) -> 
             assert type(app.screen).__name__ == "Screen"
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.hard_reset_cause is HardResetCause.USER_ESCALATION
             # The WORKER_RESET message points at the worker's own log file.
             assert "Worker log" in app.terminal_result.message
             # Once the job has stopped, the header prompt line switches to
@@ -1049,6 +1073,7 @@ def test_gen_timeout_event_hard_resets_worker(monkeypatch, tmp_path) -> None:
             assert stubs["reset_calls"] == [1]
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
             # The summary cites the gen timeout and its cap value.
             assert "GEN_TIMEOUT" in app.terminal_result.message
             assert "180" in app.terminal_result.message
@@ -1082,6 +1107,7 @@ def test_gen_timeout_still_resets_worker_after_single_ctrl_c(monkeypatch, tmp_pa
             assert stubs["reset_calls"] == [1]
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.WORKER_RESET
+            assert app.terminal_result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
             assert "180" in app.terminal_result.message
             await pilot.press("enter")
 
@@ -1096,7 +1122,7 @@ def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, tmp_path) -> Non
 
     def fake_reset() -> str:
         reset_calls.append(1)
-        return ""
+        return "replacement worker failed to start"
 
     event = GenerationUpdate("job", GenerationTimedOut(180.0))
     monkeypatch.setattr(
@@ -1117,5 +1143,89 @@ def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, tmp_path) -> Non
 
     assert reset_calls == [1]
     assert result.status == GenerationTerminalStatus.WORKER_RESET
+    assert result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
     assert "GEN_TIMEOUT" in result.message
     assert "180" in result.message
+    assert "replacement worker failed to start" in result.message
+
+
+def test_console_unhealthy_reset_reports_worker_restart_failure(
+    monkeypatch, tmp_path
+) -> None:
+    reset_calls: list[int] = []
+
+    def failing_reset() -> str:
+        reset_calls.append(1)
+        return "replacement worker failed to start"
+
+    event = GenerationUpdate("job", ModelUnhealthy("TTS model is unhealthy"))
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        staticmethod(lambda timeout=0.1: event),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(failing_reset))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"), enabled=False)
+
+    result = _run_generation_console(make_state(), {0}, 1, False, transcript)
+
+    assert reset_calls == [1]
+    assert result.status is GenerationTerminalStatus.WORKER_RESET
+    assert result.hard_reset_cause is HardResetCause.MODEL_UNHEALTHY
+    assert "TTS model is unhealthy" in result.message
+    assert "replacement worker failed to start" in result.message
+
+
+def test_interface_failure_cleanup_reports_worker_restart_failure(
+    monkeypatch, tmp_path
+) -> None:
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=SimpleNamespace(
+                dir_path=str(tmp_path),
+                generate_range_string="all",
+            ),
+            prefs=SimpleNamespace(save_gen_log=False),
+        ),
+    )
+    reset_calls: list[None] = []
+
+    def failing_run(app, **_kwargs):
+        app.operation_id = "job"
+        raise RuntimeError("interface exploded")
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(
+        ModelWorker,
+        "reset",
+        staticmethod(
+            lambda: reset_calls.append(None) or "replacement worker failed to start"
+        ),
+    )
+    monkeypatch.setattr(generation_app_module, "can_textual", lambda: True)
+    monkeypatch.setattr(GenerationApp, "run", failing_run)
+    monkeypatch.setattr(
+        generation_app_module,
+        "_reconcile_generation_result",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        generation_app_module,
+        "_present_console_result",
+        lambda *_args: None,
+    )
+
+    result = run_generation_app(state, {0}, 1, False)
+
+    assert reset_calls == [None]
+    assert result.status is GenerationTerminalStatus.FAILED
+    assert "RuntimeError: interface exploded" in result.message
+    assert "replacement worker failed to start" in result.message
+    assert result.hard_reset_cause is HardResetCause.INTERFACE_FAILURE

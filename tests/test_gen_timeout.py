@@ -84,6 +84,7 @@ def test_make_gen_timeout_message_cites_the_cap_value() -> None:
     assert "GEN_TIMEOUT" in message
     assert "180s" in message
     assert "reset" in message
+    assert "was reset" not in message
 
 
 def test_tracker_exempts_first_gen_only() -> None:

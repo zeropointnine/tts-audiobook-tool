@@ -51,12 +51,25 @@ class GenerationTimedOut:
     timeout_seconds: float
 
 
+@dataclass(frozen=True)
+class ModelUnhealthy:
+    """The generation loop aborted because the TTS model appears unhealthy
+    (too many consecutive model errors, or an OOM error).
+
+    Emitted at a loop boundary just before the run aborts; the recipient
+    should hard-reset the model worker.
+    """
+
+    reason: str
+
+
 GenerationEvent = (
     GenerationPhase
     | GenerationStarted
     | GenerationProgress
     | GenerationStats
     | GenerationTimedOut
+    | ModelUnhealthy
 )
 GenerationEventSink = Callable[[GenerationEvent], None]
 

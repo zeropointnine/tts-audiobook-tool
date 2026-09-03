@@ -17,7 +17,12 @@ import numpy as np
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool import ask
-from tts_audiobook_tool.generate_util import GenerateUtil, TtsModelError
+from tts_audiobook_tool.generate_util import (
+    GenerateUtil,
+    TtsModelError,
+    make_consecutive_model_errors_reset_message,
+    make_oom_reset_message,
+)
 from tts_audiobook_tool.gen_timeout_util import GenTimeoutTracker
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_memory
@@ -33,7 +38,7 @@ from tts_audiobook_tool.real_time_playback_events import (
     RealTimePlaybackSegmentText,
     RealTimePlaybackStarted,
 )
-from tts_audiobook_tool.generation_events import GenerationPhase
+from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
@@ -427,6 +432,11 @@ def generate_full_flow(
 
         if consecutive_model_errors >= max_consecutive_model_errors:
             GenerateUtil.print_consecutive_model_errors_message(max_consecutive_model_errors)
+            GenerationEvents.emit(
+                ModelUnhealthy(
+                    reason=make_consecutive_model_errors_reset_message(max_consecutive_model_errors)
+                )
+            )
             Tts.clear_continuation()
             did_interrupt = True
             break
@@ -434,6 +444,7 @@ def generate_full_flow(
         # Check for OOM in results and break early to avoid wasting time
         if isinstance(gen_result, str) and is_oom_error_message(gen_result):
             print_gen_oom_message(gen_result)
+            GenerationEvents.emit(ModelUnhealthy(reason=make_oom_reset_message()))
             Tts.clear_continuation()
             did_interrupt = True
             break

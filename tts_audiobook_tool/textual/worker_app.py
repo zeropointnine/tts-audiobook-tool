@@ -37,6 +37,13 @@ from tts_audiobook_tool.model_worker_protocol import (
 )
 from tts_audiobook_tool.textual.worker_content import WorkerLog, WorkerLogContentArea
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.worker_reset import (
+    HardResetCause,
+    HardResetOutcome,
+    HardResetRequest,
+    hard_reset_request_from_generation_update,
+    perform_hard_reset,
+)
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
@@ -259,7 +266,8 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         self.phase = "Starting worker job"
         self.cancel_requested = False
         self.reset_in_progress = False
-        self.reset_reason = ""
+        self.reset_request: HardResetRequest | None = None
+        self.reset_outcome: HardResetOutcome | None = None
         self.finishing = False
         self.terminal_result: ResultT | None = None
         # Ctrl+F opens the bottom find bar over the log; typing edits the
@@ -346,6 +354,11 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
                 self._handle_console_output(event)
             elif isinstance(event, ConsoleFlush):
                 self._handle_console_flush(event)
+            elif self.reset_in_progress or self.terminal_result is not None:
+                # A reset/terminal result owns the session. Keep recording old
+                # worker console output, but ignore queued status and terminal
+                # events that could otherwise preempt or overwrite it.
+                continue
             elif isinstance(event, WorkerCommandFailed):
                 self._on_worker_command_failed(event.message)
             elif isinstance(event, WorkerExited):
@@ -496,41 +509,61 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
             # nothing to dump; the pending cooperative cancel takes effect
             # at the worker's next safe boundary.
             return
-        self._begin_hard_reset()
+        self._begin_hard_reset(
+            HardResetRequest(HardResetCause.USER_ESCALATION)
+        )
 
-    def _begin_hard_reset(self, reason: str = "") -> None:
-        """Start a hard reset; ``reason`` (when set) explains what triggered
-        it (eg a gen timeout) and is carried into the terminal summary."""
+    def _begin_hard_reset_for_update(self, update: object) -> bool:
+        """Start a program-requested reset for a recognized generation update.
+
+        Returns True whenever ``update`` is a reset request, including when an
+        existing reset or terminal result already owns the session.
+        """
+        request = hard_reset_request_from_generation_update(update)
+        if request is None:
+            return False
+        if (
+            self.terminal_result is None
+            and not self.finishing
+            and not self.reset_in_progress
+        ):
+            self._begin_hard_reset(request)
+        return True
+
+    def _begin_hard_reset(self, request: HardResetRequest) -> None:
+        """Start a hard reset and retain its explicit trigger metadata."""
         self.reset_in_progress = True
-        self.reset_reason = reason
+        self.reset_request = request
+        self.reset_outcome = None
         self.phase = "Hard-resetting model worker"
         lines = ["", f"{COL_ERROR}Terminating and hard-resetting models\n", "\n "]
-        if reason:
-            lines.insert(1, f"{COL_ERROR}{reason}\n")
+        if request.reason:
+            lines.insert(1, f"{COL_ERROR}{request.reason}\n")
         self._append_application_lines(lines)
         self._update_header()
         self.run_worker(
-            self._hard_reset_worker,
+            lambda: self._hard_reset_worker(request),
             name="hard-reset-model-worker",
             thread=True,
             exclusive=True,
         )
 
-    def _hard_reset_worker(self) -> None:
-        error = ModelWorker.reset()
-        self.call_from_thread(self._hard_reset_finished, error)
+    def _hard_reset_worker(self, request: HardResetRequest) -> None:
+        outcome = perform_hard_reset(request)
+        self.call_from_thread(self._hard_reset_finished, outcome)
 
-    def _hard_reset_finished(self, error: str) -> None:
+    def _hard_reset_finished(self, outcome: HardResetOutcome) -> None:
         self.reset_in_progress = False
-        message = self.reset_reason
-        if error:
-            message = f"{message}\n{error}" if message else error
+        self.reset_outcome = outcome
+        message = outcome.message
         log_path = make_worker_log_file_path()
         if log_path:
             message = (
                 f"{message}\nWorker log: {log_path}" if message else f"Worker log: {log_path}"
             )
-        self._show_terminal_summary(self.make_worker_reset_result(message))
+        self._show_terminal_summary(
+            self.make_worker_reset_result(message, outcome.request.cause)
+        )
 
     # ----------------------------------------------------------------
     # terminal summary
@@ -584,9 +617,12 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         link, continue hint, ...)."""
         return []
 
-    def make_worker_reset_result(self, message: str) -> ResultT:
-        """Build the terminal result for a hard reset that completed
-        successfully."""
+    def make_worker_reset_result(
+        self,
+        message: str,
+        cause: HardResetCause,
+    ) -> ResultT:
+        """Build the terminal result after reset and replacement were attempted."""
         raise NotImplementedError
 
     # ----------------------------------------------------------------

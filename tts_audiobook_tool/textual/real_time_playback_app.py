@@ -9,8 +9,7 @@ from textual.app import ComposeResult
 
 from tts_audiobook_tool import ask, util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.generation_events import GenerationPhase, GenerationTimedOut
-from tts_audiobook_tool.gen_timeout_util import make_gen_timeout_message
+from tts_audiobook_tool.generation_events import GenerationPhase
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleFlush,
@@ -41,6 +40,12 @@ from tts_audiobook_tool.textual.worker_app import (
     WorkerTextualApp,
     worker_app_css,
 )
+from tts_audiobook_tool.worker_reset import (
+    HardResetCause,
+    HardResetRequest,
+    hard_reset_request_from_generation_update,
+    perform_hard_reset,
+)
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types.phrase import PhraseGroup
@@ -51,6 +56,7 @@ if TYPE_CHECKING:
 class RealTimePlaybackModalResult:
     status: RealTimePlaybackTerminalStatus
     message: str = ""
+    hard_reset_cause: HardResetCause | None = None
 
     @property
     def completed(self) -> bool:
@@ -132,7 +138,19 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
             self._begin_finish(event)
 
     def _handle_update(self, update: object) -> None:
-        if self.teardown_in_progress:
+        # Once a reset or terminal flow owns the session, ignore updates that
+        # were already queued by the old worker. In particular, an unhealthy
+        # realtime run emits AwaitingContinue immediately after ModelUnhealthy;
+        # that stale update must not replace the hard-reset prompt or make
+        # ENTER signal the dying operation.
+        if (
+            self.teardown_in_progress
+            or self.reset_in_progress
+            or self.terminal_result is not None
+        ):
+            return
+        if self._begin_hard_reset_for_update(update):
+            self._update_header()
             return
         if isinstance(update, GenerationPhase):
             self.phase = update.label
@@ -163,19 +181,13 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
                 if update.interrupted
                 else "Playback generation complete"
             )
-        elif isinstance(update, GenerationTimedOut):
-            # A gen timeout hard-resets the worker. Deliberately not gated on
-            # cancel_requested/cancel_pending: a pending single-CTRL-C cancel
-            # must not suppress the timeout; only an already-finalized session
-            # (a reset in progress or a terminal result) skips it.
-            if self.terminal_result is None and not self.reset_in_progress:
-                self._begin_hard_reset(
-                    make_gen_timeout_message(update.timeout_seconds)
-                )
         self._update_header()
 
     def _begin_finish(self, event: RealTimePlaybackFinished) -> None:
-        if self.finishing or self.terminal_result is not None:
+        # A hard reset in progress owns the terminal summary: the run's own
+        # finished event may still arrive (an unhealthy-model abort emits its
+        # event just before the loop breaks) and must not preempt the reset.
+        if self.reset_in_progress or self.finishing or self.terminal_result is not None:
             return
         self.finishing = True
         if not self.teardown_in_progress:
@@ -221,7 +233,7 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         self._finalize_console()
         self._show_terminal_summary(
             RealTimePlaybackModalResult(
-                RealTimePlaybackTerminalStatus.WORKER_RESET,
+                RealTimePlaybackTerminalStatus.FAILED,
                 message,
             )
         )
@@ -253,10 +265,15 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
     def _suppress_terminal_summary_ui(self) -> bool:
         return self.teardown_in_progress
 
-    def make_worker_reset_result(self, message: str) -> RealTimePlaybackModalResult:
+    def make_worker_reset_result(
+        self,
+        message: str,
+        cause: HardResetCause,
+    ) -> RealTimePlaybackModalResult:
         return RealTimePlaybackModalResult(
             RealTimePlaybackTerminalStatus.WORKER_RESET,
             message,
+            hard_reset_cause=cause,
         )
 
     @property
@@ -362,6 +379,11 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         header.update_hotkey(self.prompt_mode)
 
     def action_continue(self) -> None:
+        # ENTER must not advance or dismiss the session while a hard reset is
+        # replacing the worker, even if an older awaiting-continue update set
+        # waiting_for_continue before the reset began.
+        if self.reset_in_progress:
+            return
         if self.waiting_for_continue and self.operation_id is not None:
             if ModelWorker.continue_realtime_playback(self.operation_id):
                 self.waiting_for_continue = False
@@ -412,6 +434,9 @@ def _run_realtime_playback_console(
 
     interrupts = Interrupts()
     interrupts.set("model worker realtime playback")
+    # The console fallback supports cooperative cancellation only. Immediate
+    # second-CTRL-C escalation is a Textual interaction; GEN_TIMEOUT remains
+    # the console path's backstop for a worker stuck inside inference.
     cancellation_sent = False
     try:
         while True:
@@ -428,20 +453,20 @@ def _run_realtime_playback_console(
                 target = sys.stderr if event.stream == "stderr" else sys.stdout
                 target.flush()
             elif isinstance(event, RealTimePlaybackUpdate):
+                reset_request = hard_reset_request_from_generation_update(event.update)
+                if reset_request is not None:
+                    # Program resets override a pending cooperative cancel.
+                    print(reset_request.reason)
+                    reset_outcome = perform_hard_reset(reset_request)
+                    return RealTimePlaybackModalResult(
+                        RealTimePlaybackTerminalStatus.WORKER_RESET,
+                        reset_outcome.message,
+                        hard_reset_cause=reset_request.cause,
+                    )
                 if isinstance(event.update, RealTimePlaybackAwaitingContinue):
                     interrupts.clear()
                     ask.ask_enter_to_continue()
                     ModelWorker.continue_realtime_playback(operation_id)
-                elif isinstance(event.update, GenerationTimedOut):
-                    # A gen timeout hard-resets the worker even when a cancel
-                    # was already requested (cancellation_sent stays True).
-                    message = make_gen_timeout_message(event.update.timeout_seconds)
-                    print(message)
-                    ModelWorker.reset()
-                    return RealTimePlaybackModalResult(
-                        RealTimePlaybackTerminalStatus.WORKER_RESET,
-                        message,
-                    )
             elif isinstance(event, RealTimePlaybackFinished):
                 return RealTimePlaybackModalResult(event.status, event.message)
             elif isinstance(event, WorkerCommandFailed):
@@ -451,7 +476,7 @@ def _run_realtime_playback_console(
                 )
             elif isinstance(event, WorkerExited):
                 return RealTimePlaybackModalResult(
-                    RealTimePlaybackTerminalStatus.WORKER_RESET,
+                    RealTimePlaybackTerminalStatus.FAILED,
                     event.message or "Model worker exited unexpectedly",
                 )
     finally:
@@ -498,11 +523,17 @@ def run_real_time_playback_modal(
     except Exception as exception:
         if app.terminal_result is not None:
             return app.terminal_result
+        message = f"{type(exception).__name__}: {exception}"
+        reset_cause = None
         if app.operation_id is not None:
-            ModelWorker.reset()
+            reset_cause = HardResetCause.INTERFACE_FAILURE
+            message = perform_hard_reset(
+                HardResetRequest(reset_cause, message)
+            ).message
         result = RealTimePlaybackModalResult(
             RealTimePlaybackTerminalStatus.FAILED,
-            f"{type(exception).__name__}: {exception}",
+            message,
+            hard_reset_cause=reset_cause,
         )
         _present_console_result(result)
         return result
@@ -510,11 +541,17 @@ def run_real_time_playback_modal(
         return result
     if app.terminal_result is not None:
         return app.terminal_result
+    message = "Realtime playback interface closed without a result"
+    reset_cause = None
     if app.operation_id is not None:
-        ModelWorker.reset()
+        reset_cause = HardResetCause.INTERFACE_FAILURE
+        message = perform_hard_reset(
+            HardResetRequest(reset_cause, message)
+        ).message
     result = RealTimePlaybackModalResult(
         RealTimePlaybackTerminalStatus.FAILED,
-        "Realtime playback interface closed without a result",
+        message,
+        hard_reset_cause=reset_cause,
     )
     _present_console_result(result)
     return result

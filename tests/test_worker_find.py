@@ -19,6 +19,7 @@ from tts_audiobook_tool.textual.worker_app import WorkerTextualApp, worker_app_c
 from tts_audiobook_tool.textual.worker_content import WorkerLog
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.worker_reset import HardResetCause
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,11 @@ class StubWorkerApp(WorkerTextualApp[_StubResult]):
     def terminal_label(self, result: _StubResult) -> str:
         return "done"
 
-    def make_worker_reset_result(self, message: str) -> _StubResult:
+    def make_worker_reset_result(
+        self,
+        message: str,
+        cause: HardResetCause,
+    ) -> _StubResult:
         return _StubResult()
 
     def _update_header(self) -> None:

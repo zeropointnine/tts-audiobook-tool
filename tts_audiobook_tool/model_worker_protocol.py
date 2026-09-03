@@ -12,6 +12,8 @@ class GenerationTerminalStatus(str, Enum):
     CANCELLED = "cancelled"
     ABORTED = "aborted"
     FAILED = "failed"
+    # The current worker was intentionally terminated and replacement startup
+    # was attempted; the result message reports any replacement startup error.
     WORKER_RESET = "worker_reset"
 
 
@@ -20,6 +22,7 @@ class RealTimePlaybackTerminalStatus(str, Enum):
     CANCELLED = "cancelled"
     ABORTED = "aborted"
     FAILED = "failed"
+    # Same reset-attempt semantics as GenerationTerminalStatus.WORKER_RESET.
     WORKER_RESET = "worker_reset"
 
 

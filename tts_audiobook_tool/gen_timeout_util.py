@@ -59,7 +59,7 @@ def make_gen_timeout_message(timeout_seconds: float) -> str:
     """Single source of the gen-timeout feedback text, citing the cap value."""
     return (
         f"TTS inference exceeded GEN_TIMEOUT ({timeout_seconds:g}s); "
-        f"generation loop aborted and model worker was reset"
+        "generation loop aborted; model-worker hard reset required"
     )
 
 

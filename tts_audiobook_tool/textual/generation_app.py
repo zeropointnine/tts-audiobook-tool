@@ -26,9 +26,7 @@ from tts_audiobook_tool.generation_events import (
     GenerationProgress,
     GenerationStarted,
     GenerationStats,
-    GenerationTimedOut,
 )
-from tts_audiobook_tool.gen_timeout_util import make_gen_timeout_message
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleOutput,
@@ -48,6 +46,12 @@ from tts_audiobook_tool.textual.worker_app import (
     WorkerTextualApp,
     _split_pending_control,
     worker_app_css,
+)
+from tts_audiobook_tool.worker_reset import (
+    HardResetCause,
+    HardResetRequest,
+    hard_reset_request_from_generation_update,
+    perform_hard_reset,
 )
 if TYPE_CHECKING:
     from tts_audiobook_tool.state import State
@@ -75,6 +79,7 @@ class GenerationModalResult:
     message: str = ""
     failed_items: int = 0
     errored_items: int = 0
+    hard_reset_cause: HardResetCause | None = None
 
     @property
     def completed(self) -> bool:
@@ -186,6 +191,12 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             self._begin_finish(event)
 
     def _handle_update(self, update: object) -> None:
+        # Program-requested resets deliberately override a pending cooperative
+        # cancellation and are handled by the shared worker-session lifecycle.
+        if self._begin_hard_reset_for_update(update):
+            self._update_header()
+            return
+
         # `update` is a GenerationEvent (typed in the IPC protocol); dispatch
         # on the concrete type.
         if isinstance(update, GenerationPhase):
@@ -196,19 +207,13 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             self.progress = update
         elif isinstance(update, GenerationStats):
             self.stats = update
-        elif isinstance(update, GenerationTimedOut):
-            # A gen timeout hard-resets the worker. Deliberately not gated on
-            # cancel_requested/cancel_pending: a pending single-CTRL-C cancel
-            # must not suppress the timeout; only an already-finalized session
-            # (a reset in progress or a terminal result) skips it.
-            if self.terminal_result is None and not self.reset_in_progress:
-                self._begin_hard_reset(
-                    make_gen_timeout_message(update.timeout_seconds)
-                )
         self._update_header()
 
     def _begin_finish(self, event: GenerationFinished) -> None:
-        if self.finishing or self.terminal_result is not None:
+        # A hard reset in progress owns the terminal summary: the run's own
+        # finished event may still arrive (an unhealthy-model abort emits its
+        # event just before the loop breaks) and must not preempt the reset.
+        if self.reset_in_progress or self.finishing or self.terminal_result is not None:
             return
         self.finishing = True
         self.phase = event.status.value.replace("_", " ").title()
@@ -264,7 +269,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         self._finalize_console()
         self._show_terminal_summary(
             GenerationModalResult(
-                status=GenerationTerminalStatus.WORKER_RESET,
+                status=GenerationTerminalStatus.FAILED,
                 remaining_range_string=_read_persisted_range_string(self.state),
                 transcript_path=self.transcript.path,
                 message=message,
@@ -328,8 +333,16 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         self.auto_continue = quick_return or regular_auto_concat
 
     def _post_terminal_summary(self, result: GenerationModalResult) -> None:
-        if result.status in (GenerationTerminalStatus.COMPLETED, GenerationTerminalStatus.ABORTED) \
-                and not self.is_regen:
+        statuses_that_alert = {
+            GenerationTerminalStatus.COMPLETED,
+            GenerationTerminalStatus.ABORTED,
+        }
+        reset_should_alert = (
+            result.status is GenerationTerminalStatus.WORKER_RESET
+            and result.hard_reset_cause is not None
+            and result.hard_reset_cause.should_alert
+        )
+        if (result.status in statuses_that_alert or reset_should_alert) and not self.is_regen:
             app_support.play_done_sound()
 
         if self.auto_continue:
@@ -373,12 +386,17 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         # the latest worker lines.
         self._snap_log_to_tail()
 
-    def make_worker_reset_result(self, message: str) -> GenerationModalResult:
+    def make_worker_reset_result(
+        self,
+        message: str,
+        cause: HardResetCause,
+    ) -> GenerationModalResult:
         return GenerationModalResult(
             status=GenerationTerminalStatus.WORKER_RESET,
             remaining_range_string=_read_persisted_range_string(self.state),
             transcript_path=self.transcript.path,
             message=message,
+            hard_reset_cause=cause,
         )
 
 
@@ -438,6 +456,9 @@ def _run_generation_console(
 
     interrupts = Interrupts()
     interrupts.set("model worker generation")
+    # The console fallback supports cooperative cancellation only. Immediate
+    # second-CTRL-C escalation is a Textual interaction; GEN_TIMEOUT remains
+    # the console path's backstop for a worker stuck inside inference.
     cancellation_sent = False
     try:
         # The loop is guaranteed to terminate: a healthy worker answers with
@@ -456,20 +477,20 @@ def _run_generation_console(
                 transcript.write_chunk(event.text)
                 assembler.feed(event.text)
             elif isinstance(event, GenerationUpdate):
-                if isinstance(event.update, GenerationProgress):
-                    progress = event.update
-                elif isinstance(event.update, GenerationTimedOut):
-                    # A gen timeout hard-resets the worker even when a cancel
-                    # was already requested (cancellation_sent stays True).
-                    message = make_gen_timeout_message(event.update.timeout_seconds)
-                    print(message)
-                    ModelWorker.reset()
+                reset_request = hard_reset_request_from_generation_update(event.update)
+                if reset_request is not None:
+                    # Program resets override a pending cooperative cancel.
+                    print(reset_request.reason)
+                    reset_outcome = perform_hard_reset(reset_request)
                     return GenerationModalResult(
                         GenerationTerminalStatus.WORKER_RESET,
                         _read_persisted_range_string(state),
                         transcript.path,
-                        message,
+                        reset_outcome.message,
+                        hard_reset_cause=reset_request.cause,
                     )
+                if isinstance(event.update, GenerationProgress):
+                    progress = event.update
             elif isinstance(event, GenerationFinished):
                 assembler.finish()
                 return GenerationModalResult(
@@ -491,7 +512,7 @@ def _run_generation_console(
             elif isinstance(event, WorkerExited):
                 assembler.finish()
                 return GenerationModalResult(
-                    GenerationTerminalStatus.WORKER_RESET,
+                    GenerationTerminalStatus.FAILED,
                     _read_persisted_range_string(state),
                     transcript.path,
                     event.message or "Model worker exited unexpectedly",
@@ -586,13 +607,19 @@ def run_generation_app(
             if app.terminal_result is not None:
                 result = app.terminal_result
             else:
+                message = f"{type(exception).__name__}: {exception}"
+                reset_cause = None
                 if app.operation_id is not None:
-                    ModelWorker.reset()
+                    reset_cause = HardResetCause.INTERFACE_FAILURE
+                    message = perform_hard_reset(
+                        HardResetRequest(reset_cause, message)
+                    ).message
                 result = GenerationModalResult(
                     GenerationTerminalStatus.FAILED,
                     _read_persisted_range_string(state),
                     transcript.path,
-                    f"{type(exception).__name__}: {exception}",
+                    message,
+                    hard_reset_cause=reset_cause,
                 )
             _reconcile_generation_result(state, result)
             _present_console_result(state, result, transcript, is_regen)
@@ -601,13 +628,19 @@ def run_generation_app(
             if app.terminal_result is not None:
                 result = app.terminal_result
             else:
+                message = "Generation interface closed without a result"
+                reset_cause = None
                 if app.operation_id is not None:
-                    ModelWorker.reset()
+                    reset_cause = HardResetCause.INTERFACE_FAILURE
+                    message = perform_hard_reset(
+                        HardResetRequest(reset_cause, message)
+                    ).message
                 result = GenerationModalResult(
                     GenerationTerminalStatus.FAILED,
                     _read_persisted_range_string(state),
                     transcript.path,
-                    "Generation interface closed without a result",
+                    message,
+                    hard_reset_cause=reset_cause,
                 )
         _reconcile_generation_result(state, result)
         if result.status == GenerationTerminalStatus.FAILED and app.terminal_result is None:

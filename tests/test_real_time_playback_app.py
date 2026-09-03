@@ -11,7 +11,7 @@ from textual.widgets import Rule, Static
 from tts_audiobook_tool import real_time_playback
 from tts_audiobook_tool.app_types import SttVariant
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.generation_events import GenerationTimedOut
+from tts_audiobook_tool.generation_events import GenerationTimedOut, ModelUnhealthy
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
     ConsoleOutput,
@@ -19,6 +19,8 @@ from tts_audiobook_tool.model_worker_protocol import (
     RealTimePlaybackFinished,
     RealTimePlaybackTerminalStatus,
     RealTimePlaybackUpdate,
+    WorkerCommandFailed,
+    WorkerExited,
 )
 from tts_audiobook_tool.real_time_playback_events import (
     RealTimePlaybackAwaitingContinue,
@@ -31,10 +33,12 @@ from tts_audiobook_tool.real_time_playback_events import (
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual import real_time_playback_app as playback_app_module
 from tts_audiobook_tool.textual.real_time_playback_app import (
     RealTimePlaybackApp,
     RealTimePlaybackModalResult,
     _run_realtime_playback_console,
+    run_real_time_playback_modal,
 )
 from tts_audiobook_tool.textual.real_time_playback_header import (
     RealTimePlaybackSourceText,
@@ -42,6 +46,7 @@ from tts_audiobook_tool.textual.real_time_playback_header import (
 from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
+from tts_audiobook_tool.worker_reset import HardResetCause
 
 
 def run(coroutine) -> None:
@@ -619,8 +624,91 @@ def test_gen_timeout_update_hard_resets_worker_even_with_cancel_pending(
             assert app.terminal_result.status is (
                 RealTimePlaybackTerminalStatus.WORKER_RESET
             )
+            assert app.terminal_result.hard_reset_cause is (
+                HardResetCause.GENERATION_TIMEOUT
+            )
             assert "GEN_TIMEOUT" in app.terminal_result.message
             assert "180" in app.terminal_result.message
+            await pilot.press("enter")
+
+    run(exercise())
+
+
+def test_unhealthy_reset_ignores_queued_awaiting_continue_and_enter(
+    monkeypatch,
+) -> None:
+    reset_started = threading.Event()
+    release_reset = threading.Event()
+    continue_calls: list[str] = []
+    latch = {"deliver": False}
+    events = [
+        RealTimePlaybackUpdate("job", ModelUnhealthy("TTS model is unhealthy")),
+        RealTimePlaybackUpdate(
+            "job", RealTimePlaybackAwaitingContinue(2.5, interrupted=True)
+        ),
+        WorkerCommandFailed("job", "stale old-worker failure"),
+    ]
+
+    def fake_drain_events() -> list:
+        if latch["deliver"] and events:
+            drained = list(events)
+            events.clear()
+            return drained
+        return []
+
+    def blocking_reset() -> str:
+        reset_started.set()
+        release_reset.wait()
+        return ""
+
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(fake_drain_events))
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(blocking_reset))
+    monkeypatch.setattr(
+        ModelWorker,
+        "continue_realtime_playback",
+        staticmethod(lambda operation_id: continue_calls.append(operation_id) or True),
+    )
+
+    async def exercise() -> None:
+        app = RealTimePlaybackApp(make_state(), [], None)
+        async with app.run_test() as pilot:
+            try:
+                latch["deliver"] = True
+                for _ in range(20):
+                    if reset_started.is_set():
+                        break
+                    await pilot.pause(0.05)
+
+                assert reset_started.is_set()
+                assert app.reset_in_progress
+                assert app.phase == "Hard-resetting model worker"
+                assert not app.waiting_for_continue
+
+                # Also defend against ENTER when a waiter predated the reset;
+                # reset ownership must win regardless of event ordering.
+                app.waiting_for_continue = True
+                await pilot.press("enter")
+                await pilot.pause()
+                assert app.waiting_for_continue
+                assert continue_calls == []
+                assert not app.teardown_in_progress
+            finally:
+                release_reset.set()
+
+            await pilot.pause(0.3)
+            assert app.terminal_result is not None
+            assert app.terminal_result.status is (
+                RealTimePlaybackTerminalStatus.WORKER_RESET
+            )
+            assert app.terminal_result.hard_reset_cause is (
+                HardResetCause.MODEL_UNHEALTHY
+            )
+            assert "stale old-worker failure" not in app.terminal_result.message
             await pilot.press("enter")
 
     run(exercise())
@@ -631,7 +719,7 @@ def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, capsys) -> None:
 
     def fake_reset() -> str:
         reset_calls.append(1)
-        return ""
+        return "replacement worker failed to start"
 
     events = iter(
         [
@@ -656,6 +744,96 @@ def test_console_loop_resets_worker_on_gen_timeout(monkeypatch, capsys) -> None:
 
     assert reset_calls == [1]
     assert result.status is RealTimePlaybackTerminalStatus.WORKER_RESET
+    assert result.hard_reset_cause is HardResetCause.GENERATION_TIMEOUT
     assert "GEN_TIMEOUT" in result.message
     assert "180" in result.message
+    assert "replacement worker failed to start" in result.message
     assert "GEN_TIMEOUT" in capsys.readouterr().out
+
+
+def test_console_unhealthy_reset_reports_worker_restart_failure(
+    monkeypatch, capsys
+) -> None:
+    reset_calls: list[int] = []
+
+    def failing_reset() -> str:
+        reset_calls.append(1)
+        return "replacement worker failed to start"
+
+    event = RealTimePlaybackUpdate(
+        "job", ModelUnhealthy("TTS model is unhealthy")
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        staticmethod(lambda timeout=0.1: event),
+    )
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(failing_reset))
+
+    result = _run_realtime_playback_console(make_state(), [], None)
+
+    assert reset_calls == [1]
+    assert result.status is RealTimePlaybackTerminalStatus.WORKER_RESET
+    assert result.hard_reset_cause is HardResetCause.MODEL_UNHEALTHY
+    assert "TTS model is unhealthy" in result.message
+    assert "replacement worker failed to start" in result.message
+    assert "TTS model is unhealthy" in capsys.readouterr().out
+
+
+def test_console_worker_exit_is_failure_not_reset(monkeypatch) -> None:
+    event = WorkerExited("job", "Model worker process exited unexpectedly")
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        staticmethod(lambda timeout=0.1: event),
+    )
+
+    result = _run_realtime_playback_console(make_state(), [], None)
+
+    assert result.status is RealTimePlaybackTerminalStatus.FAILED
+    assert result.hard_reset_cause is None
+    assert "exited unexpectedly" in result.message
+
+
+def test_interface_failure_cleanup_reports_worker_restart_failure(
+    monkeypatch,
+) -> None:
+    reset_calls: list[None] = []
+
+    def failing_run(app, **_kwargs):
+        app.operation_id = "job"
+        raise RuntimeError("interface exploded")
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(
+        ModelWorker,
+        "reset",
+        staticmethod(
+            lambda: reset_calls.append(None) or "replacement worker failed to start"
+        ),
+    )
+    monkeypatch.setattr(playback_app_module, "can_textual", lambda: True)
+    monkeypatch.setattr(RealTimePlaybackApp, "run", failing_run)
+    monkeypatch.setattr(
+        playback_app_module,
+        "_present_console_result",
+        lambda *_args: None,
+    )
+
+    result = run_real_time_playback_modal(make_state(), [], None)
+
+    assert reset_calls == [None]
+    assert result.status is RealTimePlaybackTerminalStatus.FAILED
+    assert result.hard_reset_cause is HardResetCause.INTERFACE_FAILURE
+    assert "RuntimeError: interface exploded" in result.message
+    assert "replacement worker failed to start" in result.message
