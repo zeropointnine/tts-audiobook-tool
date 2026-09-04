@@ -31,6 +31,7 @@ class App {
     metaBookmarkIndices = []; 
     isStarted = false;
     isLoading = false;
+    loadRequestId = 0;
     pollIntervalId = -1;
     lastStorePositionTime = 0;
     appMetadata = null;
@@ -164,13 +165,15 @@ class App {
     /**
      * Resets page state to that of being freshly loaded
      */
-    reset(dontAddHelp = false) {
+    reset(dontAddHelp = false, preserveAudio = false) {
     
         clearInterval(this.pollIntervalId);
         this.pollIntervalId = -1;
         
-        this.audio.src = "";
-        this.audio.load();
+        if (!preserveAudio) {
+            this.audio.src = "";
+            this.audio.load();
+        }
 
         this.isStarted = false;
         this.file = null;
@@ -202,10 +205,27 @@ class App {
 
     async loadAudioFileOrUrl(pFile, pUrl) {
 
+        const requestId = ++this.loadRequestId;
         ShowUtil.hide(this.playerHolder, false);
 
         if (this.toast.isShowingPlayPrompt()) {
             this.toast.hide();
+        }
+
+        let preparedAudioSrc = null;
+        if (pFile) {
+            ShowUtil.hide(this.loadingOverlay);
+
+            // Retire the previous session before the new audio starts, so its poller
+            // cannot save the new file's position under the previous file's identity.
+            this.reset(true);
+
+            // Request playback while the file-selection/drop gesture is still active.
+            // Waiting for metadata parsing first can lose mobile Firefox's autoplay
+            // permission, since parsing crosses several asynchronous file reads.
+            preparedAudioSrc = URL.createObjectURL(pFile);
+            this.audio.src = preparedAudioSrc;
+            this.playerPlay(false);
         }
 
         if (pUrl) {
@@ -215,6 +235,19 @@ class App {
 
         this.isLoading = true;
         const appMetadata = await MetadataUtil.loadAppMetadata(pFile, pUrl);
+
+        if (requestId !== this.loadRequestId) {
+            if (preparedAudioSrc) {
+                if (this.audio.src === preparedAudioSrc) {
+                    this.audio.pause();
+                    this.audio.src = "";
+                    this.audio.load();
+                }
+                URL.revokeObjectURL(preparedAudioSrc);
+            }
+            return;
+        }
+
         this.isLoading = false;
 
         if (pUrl) {
@@ -222,21 +255,31 @@ class App {
         }
 
         if (!appMetadata || typeof appMetadata === 'string') {
+            if (preparedAudioSrc) {
+                this.audio.pause();
+                this.audio.src = "";
+                this.audio.load();
+                URL.revokeObjectURL(preparedAudioSrc);
+            }
             const errorMessage = appMetadata || "No tts-audiobook-tool metadata found";
             alert(errorMessage);
             this.syncAddressBar(null);
             return;
         }
 
-        this.start(pFile, pUrl, appMetadata);
+        if (preparedAudioSrc && this.audio.src !== preparedAudioSrc) {
+            URL.revokeObjectURL(preparedAudioSrc);
+            preparedAudioSrc = null;
+        }
+        this.start(pFile, pUrl, appMetadata, preparedAudioSrc);
     }
 
-    start(file, url, appMetadata) {
+    start(file, url, appMetadata, preparedAudioSrc = null) {
         /**
          * Initialize page with the already-loaded metadata, etc.
          */
 
-        this.reset(true);
+        this.reset(true, Boolean(preparedAudioSrc));
 
         this.file = file;
         this.url = url;
@@ -283,8 +326,13 @@ class App {
             this.playerVisibility.show();
         }
 
-        this.audio.src = url || URL.createObjectURL(file);
-        this.playerPlay();
+        if (!preparedAudioSrc) {
+            this.audio.src = url || URL.createObjectURL(file);
+            this.playerPlay();
+        } else if (!this.audio.paused) {
+            // Playback may have begun before reset() updated the UI state.
+            this.onAudioPlay();
+        }
 
         const time = this.storageController.loadPosition();
         if (time) {
@@ -496,11 +544,13 @@ class App {
         this.lastStorePositionTime = new Date().getTime();
     }
 
-    async playerPlay() {
+    async playerPlay(validateLocalFile = true) {
         try {
-            const fileIsReadable = await this.validateLocalFileBeforePlayback();
-            if (!fileIsReadable) {
-                return;
+            if (validateLocalFile) {
+                const fileIsReadable = await this.validateLocalFileBeforePlayback();
+                if (!fileIsReadable) {
+                    return;
+                }
             }
             await this.audio.play();
         } catch (error) {
