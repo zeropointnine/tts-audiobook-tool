@@ -147,11 +147,34 @@ class Header {
     // ========================================
 
     showLastFileName(fileName) {
+        this.lastFileNameText.replaceChildren();
+
         if (fileName) {
-            this.lastFileNameText.textContent = fileName;
+            let url = null;
+            try {
+                const parsedUrl = new URL(fileName);
+                if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+                    url = parsedUrl.href;
+                }
+            } catch (_) {
+                // Local file names are displayed as plain text.
+            }
+
+            if (url) {
+                const playerUrl = new URL(window.location.href);
+                playerUrl.search = "";
+                playerUrl.hash = "";
+                playerUrl.searchParams.set("url", url);
+
+                const link = document.createElement("a");
+                link.href = playerUrl.href;
+                link.textContent = fileName;
+                this.lastFileNameText.appendChild(link);
+            } else {
+                this.lastFileNameText.textContent = fileName;
+            }
             this.lastFileNameLabel.style.display = "block";
         } else {
-            this.lastFileNameText.textContent = "";
             this.lastFileNameLabel.style.display = "none";
         }
     }

@@ -431,7 +431,7 @@ def ask_output_indices_and_make(state: State) -> None:
         info = OutputRangeInfo.make_single_info(state.project)
         s = f"Will create a single {type_string} file"
         printt(s)
-        s = f"{COL_DIM}All lines "
+        s = f"    All lines "
         s += f"({info.num_files_exist}/{info.num_segments} generated){COL_DEFAULT}"
         printt(s)
         print_enabled_option_confirmation_lines(state)

@@ -295,6 +295,13 @@ html, body {
 #lastFileNameText {
     margin-top:4px;
 }
+#lastFileNameText a,
+#lastFileNameText a:link,
+#lastFileNameText a:visited,
+#lastFileNameText a:hover,
+#lastFileNameText a:active {
+    color: inherit;
+}
 
 /* --------------------------------------- */
 

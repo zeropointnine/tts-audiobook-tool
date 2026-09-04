@@ -83,7 +83,7 @@ class GenerationHeader(Vertical):
     def __init__(
         self,
         *,
-        title: str = "Generating audio...",
+        title: str = "Generating audio",
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,

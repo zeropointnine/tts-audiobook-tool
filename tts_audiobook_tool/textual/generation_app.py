@@ -169,7 +169,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         # terminal_summary_extra_lines and action_cancel_or_reset)
         # yield Static("[CTRL-C] Request cancellation", id="generation-prompt", markup=False)
         yield GenerationHeader(
-            title="Quick generate" if self.is_regen else "Generating audio...",
+            title="Quick generate" if self.is_regen else "Generating audio",
             id="generation-header",
         )
 

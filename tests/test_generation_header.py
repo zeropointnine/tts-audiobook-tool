@@ -32,7 +32,7 @@ def test_header_composes_five_sub_widgets() -> None:
             stats = app.query_one("#generation-stats", Static)
             hotkey = app.query_one("#generation-hotkey", Static)
 
-            assert "Generating audio..." in str(title.render())
+            assert "Generating audio" in str(title.render())
             assert str(memory.render()) == ""
             assert str(status.render()) == ""
             assert str(stats.render()) == ""

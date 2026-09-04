@@ -385,7 +385,7 @@ def test_generation_app_waits_for_enter_after_terminal_summary(monkeypatch, tmp_
                 app.query_one("#generation-status", Static).render()
             )
             # The header title is the fixed accent-colored line.
-            assert "Generating audio..." in str(
+            assert "Generating audio" in str(
                 app.query_one("#generation-title", Static).render()
             )
             # The progress event's ETA snapshot reaches the stats line.
