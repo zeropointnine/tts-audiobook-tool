@@ -74,6 +74,45 @@ class TestPhraseGrouper(unittest.TestCase):
         self.assertLess(Reason.PHRASE_QUOTE_END, Reason.PHRASE)
         self.assertLess(Reason.PHRASE_QUOTE_END, Reason.SENTENCE)
 
+    def test_sentence_and_dialog_passes_split_multi_sentence_attribution(self):
+        text = '"One? Two!" she said.'
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE,
+            "en",
+            dialog_segmentation=True,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ['"One? ', 'Two!" ', 'she said.'],
+        )
+        self.assertEqual([group.voice_index for group in groups], [1, 1, -1])
+        self.assertEqual(
+            [group.last_reason for group in groups],
+            [Reason.SENTENCE, Reason.PHRASE_QUOTE_END, Reason.SENTENCE],
+        )
+
+    def test_dialog_pass_voices_each_embedded_quoted_sentence(self):
+        text = 'He said, "One. Two." Then left.'
+
+        groups = PhraseGrouper.text_to_groups(
+            text,
+            40,
+            SegmentationStrategy.SENTENCE,
+            "en",
+            dialog_segmentation=True,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ['He said, ', '"One. ', 'Two." ', 'Then left.'],
+        )
+        self.assertEqual([group.voice_index for group in groups], [-1, 1, 1, -1])
+        self.assertEqual("".join(group.text for group in groups), text)
+
     def test_dialog_segmentation_marks_quote_end_pieces_with_phrase_quote_end_reason(self):
         text = 'He muttered, "Never mind," she answered quietly.'
 

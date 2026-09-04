@@ -126,6 +126,45 @@ def test_string_to_sentence_strings(source: str, expected: list[str]) -> None:
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
+        ('"One. Two."', ['"One. ', 'Two."']),
+        (
+            'He said, "One. Two." Then left.',
+            ['He said, "One. ', 'Two." ', 'Then left.'],
+        ),
+        (
+            '"One? Two!" she said.',
+            ['"One? ', 'Two!" she said.'],
+        ),
+        ('"One." "Two."', ['"One." ', '"Two."']),
+        (
+            '“Outer one. ‘Inner one. Inner two.’ Outer two.”',
+            ['“Outer one. ', '‘Inner one. ', 'Inner two.’ ', 'Outer two.”'],
+        ),
+        ('«One. Two.» Next.', ['«One. ', 'Two.» ', 'Next.']),
+        ('「One。 Two。」 Next.', ['「One。 ', 'Two。」 ', 'Next.']),
+        ("'One. Two.' Next.", ["'One. ", "Two.' ", 'Next.']),
+        ("It's Bob's book. Next.", ["It's Bob's book. ", 'Next.']),
+        (
+            'He typed " without closing, then "Hello." Afterwards.',
+            ['He typed " without closing, then "Hello." ', 'Afterwards.'],
+        ),
+        ('  "One. Two."  ', ['  "One. ', 'Two."  ']),
+        ('And you can . . .\nYes?', ['And you can . . .\n', 'Yes?']),
+    ],
+)
+def test_quote_aware_sentence_segmentation_preserves_source(
+    source: str,
+    expected: list[str],
+) -> None:
+    result = PhraseSegmenter.string_to_sentence_strings(source, "en")
+
+    assert result == expected
+    assert "".join(result) == source
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
         ("If this, then that.", ["If this, ", "then that."]),
         ("The reason: Because", ["The reason: ", "Because"]),
         ("The reason: Because... \n", ["The reason: ", "Because... \n"]),

@@ -2,13 +2,21 @@ from __future__ import annotations
 import math
 import string
 import re
+import unicodedata
+from typing import Protocol, cast
 import pysbd
 
 from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.text_ops.quote_spans import find_quote_spans
 
 
 DOWNGRADE_CONSECUTIVE_SECTIONS = True
+
+
+class _PysbdTextSpan(Protocol):
+    sent: str
+    start: int
 
 
 class PhraseSegmenter:
@@ -64,51 +72,148 @@ class PhraseSegmenter:
 
     @staticmethod
     def string_to_sentence_strings(source: str, pysbd_lang: str) -> list[str]:
-        """ 
-        Segments source text into sentences using pysbd lib, preserving all characters.
+        """Segment source into sentences while preserving every character.
+
+        pySBD deliberately protects punctuation inside balanced quotations. We
+        retain its full-source boundaries, then collect additional boundaries
+        from each balanced quote interior and finally slice the original text.
         """
 
         from pysbd.languages import Language
         try:
             _ = Language.get_language_code(pysbd_lang)
-        except:
-            pysbd_lang = "en" # fail silently
+        except Exception:
+            pysbd_lang = "en"  # fail silently
 
-        # Segment text into sentences using pysbd
-        # Important: "clean=False" preserves leading and trailing whitespace
-        segmenter = pysbd.Segmenter(language=pysbd_lang, clean=False, char_span=False)
-        sentences = segmenter.segment(source)
+        if not source:
+            return []
 
-        def merge_danging_punc_word(sentences: list[str]) -> list[str]:
-            # TODO: Still not fully resolved, even aside from linefeed bug
-            # pysbd can create danging punc-only sentences
-            # eg:: "And you can . . . Yes?" -> "And you can . ", ". . ", "Yes?"
-                        
-            result: list[str] = []
-            for sentence in sentences:
-                if result and app_text.is_ws_punc(sentence):
-                    # TODO even more, fml
-                    #   pysbd can replace linefeed with space. 
-                    #   eg: "And you can . . .\nYes?" 
-                    result[-1] += sentence
-                else:
-                    result.append(sentence)
-            return result
+        boundaries = set(
+            PhraseSegmenter._pysbd_boundary_offsets(source, pysbd_lang)
+        )
+        quote_spans = find_quote_spans(source)
 
-        sentences = merge_danging_punc_word(sentences) # type: ignore
+        # pySBD can place a boundary immediately before a closing quote. Move
+        # such boundaries past the delimiter and its boundary whitespace, or
+        # suppress them before a lowercase continuation/attribution.
+        for span in quote_spans:
+            closing_quote_offset = span.end - 1
+            if closing_quote_offset not in boundaries:
+                continue
+            boundaries.remove(closing_quote_offset)
+            adjusted = PhraseSegmenter._boundary_after_closing_quote(
+                source,
+                span.end,
+            )
+            if PhraseSegmenter._starts_new_sentence(source, adjusted):
+                boundaries.add(adjusted)
 
-        # pysbd treats everything enclosed in quotes as a single sentence, so split those up, too
-        new_sentences = []
-        for string in sentences:
-            if is_quoted_sentence(string):
-                inner_sentences = segment_quoted_sentence(string, segmenter)
-                inner_sentences = merge_danging_punc_word(inner_sentences) # type: ignore
-                new_sentences.extend(inner_sentences)
+        for span in quote_spans:
+            interior_start = span.start + 1
+            interior_end = span.end - 1
+            interior = source[interior_start:interior_end]
+            for offset in PhraseSegmenter._pysbd_boundary_offsets(
+                interior,
+                pysbd_lang,
+            ):
+                # The quote interior's final boundary is represented by its
+                # closing delimiter and the outer pySBD pass. Adding it here
+                # would detach a following attribution such as `she said.`.
+                if offset < len(interior):
+                    boundaries.add(interior_start + offset)
+
+        # Add a missing outer boundary after a terminally punctuated quote when
+        # pySBD does not understand that delimiter style. Lowercase text remains
+        # attached as a likely continuation/attribution.
+        for span in quote_spans:
+            interior = source[span.start + 1:span.end - 1].rstrip()
+            adjusted = PhraseSegmenter._boundary_after_closing_quote(
+                source,
+                span.end,
+            )
+            if (
+                interior
+                and interior[-1] in ".!?。．！？؟።፧۔։՜"
+                and PhraseSegmenter._starts_new_sentence(source, adjusted)
+            ):
+                boundaries.add(adjusted)
+
+        # pySBD commonly protects adjacent quote spans as one unit. Their
+        # separating whitespace belongs to the preceding sentence.
+        for previous, following in zip(quote_spans, quote_spans[1:]):
+            if (
+                previous.end <= following.start
+                and source[previous.end:following.start].isspace()
+            ):
+                boundaries.add(following.start)
+
+        usable_boundaries = sorted(
+            offset for offset in boundaries if 0 < offset < len(source)
+        )
+        sentences: list[str] = []
+        start = 0
+        for end in usable_boundaries:
+            sentences.append(source[start:end])
+            start = end
+        sentences.append(source[start:])
+
+        return PhraseSegmenter._merge_dangling_punc_words(sentences)
+
+    @staticmethod
+    def _pysbd_boundary_offsets(source: str, pysbd_lang: str) -> list[int]:
+        """Return logical pySBD sentence starts after the first sentence.
+
+        pySBD spans can overlap or leave gaps around ellipses. Starts of the
+        surviving logical spans are therefore safer boundaries than ends of
+        their predecessors; slicing later assigns every gap character exactly
+        once. Punctuation-only spans are folded into the prior logical span.
+        """
+        if not source:
+            return []
+        segmenter = pysbd.Segmenter(
+            language=pysbd_lang,
+            clean=False,
+            char_span=True,
+        )
+        logical_spans: list[_PysbdTextSpan] = []
+        spans = cast(list[_PysbdTextSpan], segmenter.segment(source))
+        for span in spans:
+            if logical_spans and app_text.is_ws_punc(span.sent):
+                continue
+            logical_spans.append(span)
+        return [span.start for span in logical_spans[1:]]
+
+    @staticmethod
+    def _boundary_after_closing_quote(source: str, offset: int) -> int:
+        """Advance over punctuation and whitespace attached to a close quote."""
+        while (
+            offset < len(source)
+            and unicodedata.category(source[offset]).startswith("P")
+            and source[offset] not in {'"', "'", "“", "‘", "«", "‹", "「", "『"}
+        ):
+            offset += 1
+        while offset < len(source) and source[offset] in string.whitespace:
+            offset += 1
+        return offset
+
+    @staticmethod
+    def _starts_new_sentence(source: str, offset: int) -> bool:
+        """Use pySBD's conservative capital/open-quote continuation signal."""
+        if offset >= len(source):
+            return False
+        char = source[offset]
+        return char.isupper() or char in {'"', "'", "“", "‘", "«", "‹", "「", "『"}
+
+    @staticmethod
+    def _merge_dangling_punc_words(sentences: list[str]) -> list[str]:
+        """Attach whitespace/punctuation-only sentence fragments backward."""
+        result: list[str] = []
+        for sentence in sentences:
+            if result and app_text.is_ws_punc(sentence):
+                result[-1] += sentence
             else:
-                new_sentences.append(string)
-        sentences = new_sentences
-
-        return sentences
+                result.append(sentence)
+        return result
 
     @staticmethod
     def sentence_string_to_phrase_strings(sentence: str) -> list[str]:
@@ -310,90 +415,3 @@ class PhraseSegmenter:
                 last_reason_was_section = False
 
         return phrases
-
-# ---
-
-def is_quoted_sentence(pysbd_segmented_string: str) -> bool:
-    """
-    Given a pysbd-segmented string, does it appear to be a quoted sentence
-    (ie, a candidate for further segmentation).
-    Tested on english only for now.
-    """
-
-    def has_start_quote_char(chunk: str) -> bool:
-        for quote_char in "\"“": # normal-double-quote and fancy-starting-double-quote
-            if quote_char in chunk:
-                return True
-        return False
-
-    def has_end_quote_char(chunk: str) -> bool:
-        for quote_char in "\"”": # normal-double-quote and fancy-ending-double-quote
-            if quote_char in chunk:
-                return True
-        return False
-
-    start, _, end = split_string_parts(pysbd_segmented_string)
-    return has_start_quote_char(start) and has_end_quote_char(end)
-
-def segment_quoted_sentence(sentence: str, segmenter) -> list[str]:
-    """
-    Given a quote which may consist of multiple sentences and may have whitespace before and/or after the quote,
-    segment the inside of the quote by sentence, preserving whitespace.
-    """
-    before, content, after = split_string_parts(sentence)
-    inner_sentences = segmenter.segment(content)
-    if not inner_sentences:
-        return [sentence]
-
-    inner_sentences[0] = before + inner_sentences[0]
-    inner_sentences[-1] = inner_sentences[-1] + after
-    return inner_sentences
-
-def split_string_parts(text: str) -> tuple[str, str, str]:
-    """
-    Splits a string into three parts:
-    - before: Leading whitespace + first non-whitespace character
-    - content: Everything between before and after
-    - after: Last non-whitespace character + trailing whitespace
-
-    If there is only one non-whitespace character,
-    it should be assigned to "before", and "content" should be empty.
-
-    If there are only two non-whitespace characters,
-    the first character should be assigned to "before",
-    the second character should be assigned to "after",
-    and "content" should be empty.
-
-    Returns:
-        Tuple of (before, content, after)
-    """
-    if not text:
-        return ('', '', '')
-
-    stripped_text = text.strip()
-
-    # Handle strings that are empty or contain only whitespace.
-    # In this case, 'before' contains the whole string.
-    if not stripped_text:
-        return (text, '', '')
-
-    # Find the indices of the first and last non-whitespace characters.
-    # This is a more direct and robust way to find the split points.
-    first_char_index = text.find(stripped_text[0])
-    last_char_index = text.rfind(stripped_text[-1])
-
-    # If the first and last non-whitespace character is the same,
-    # it fully belongs to 'before' as per the docstring.
-    if first_char_index == last_char_index:
-        before = text[:first_char_index + 1]
-        content = ''
-        after = text[first_char_index + 1:]
-        return (before, content, after)
-
-    # For all other cases (2 or more non-whitespace characters),
-    # slice the string based on the found indices.
-    before = text[:first_char_index + 1]
-    content = text[first_char_index + 1:last_char_index]
-    after = text[last_char_index:]
-
-    return (before, content, after)

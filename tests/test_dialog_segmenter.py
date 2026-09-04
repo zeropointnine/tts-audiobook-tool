@@ -235,6 +235,20 @@ class TestDialogSegmenter(unittest.TestCase):
         )
         self.assertIs(groups[2], original_groups[1])
 
+    def test_group_crossing_alone_does_not_make_lowercase_quote_dialog(self):
+        original_groups = [
+            make_group('Before "too '),
+            make_group('much" after.'),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(groups, original_groups)
+        self.assertEqual([group.voice_index for group in groups], [-1, -1])
+
     def test_accepts_lowercase_dialog_spanning_existing_groups(self):
         original_groups = [
             make_group(

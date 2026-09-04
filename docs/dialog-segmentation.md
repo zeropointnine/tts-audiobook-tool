@@ -113,11 +113,12 @@ He paused. "...Well, yes."
 A quote whose first meaningful content is lowercase, numeric, or caseless is also accepted as dialog when any of the following is true:
 
 - the quoted content contains more than three verbalizable words;
-- the quote spans an existing phrase-group boundary;
 - the opening quote is at the beginning of a paragraph, ignoring leading whitespace;
 - the preceding non-whitespace character is a comma, colon, em dash, or en dash;
 - the quoted content begins with an em dash or en dash, ignoring leading whitespace;
 - the quoted content contains a question mark or exclamation mark.
+
+Crossing an existing phrase-group boundary is deliberately not a qualification signal. Normal sentence segmentation can create boundaries inside a multi-sentence quotation, and the selected grouping strategy must not change whether that quotation is classified as dialog.
 
 Examples accepted by these rules include:
 

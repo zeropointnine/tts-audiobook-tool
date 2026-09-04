@@ -6,6 +6,10 @@ import unicodedata
 
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.text_ops.quote_spans import (
+    DOUBLE_QUOTE_STYLES,
+    find_quote_spans,
+)
 
 
 _STRAIGHT_QUOTE = '"'
@@ -146,37 +150,19 @@ class DialogSegmenter:
             text: str,
             group_ends: list[int],
     ) -> list[tuple[int, int]]:
-        quote_pairs: list[tuple[int, int]] = []
-        paragraph_start = 0
-
-        # A physical line is a paragraph boundary for quote-pairing purposes.
-        for line in text.splitlines(keepends=True):
-            content_length = len(line.rstrip("\r\n"))
-            paragraph = line[:content_length]
-            quote_pairs.extend(
-                DialogSegmenter._find_quote_pairs_in_paragraph(
-                    paragraph,
-                    paragraph_start,
-                )
+        quote_pairs = [
+            (span.start, span.end - 1)
+            for span in find_quote_spans(
+                text,
+                styles=DOUBLE_QUOTE_STYLES,
+                paragraph_scoped=True,
             )
-            paragraph_start += len(line)
-
-        if paragraph_start < len(text):
-            quote_pairs.extend(
-                DialogSegmenter._find_quote_pairs_in_paragraph(
-                    text[paragraph_start:],
-                    paragraph_start,
-                )
-            )
+        ]
 
         dialog_pairs = [
             pair
             for pair in quote_pairs
-            if DialogSegmenter._is_dialog_pair(
-                text,
-                *pair,
-                group_ends,
-            )
+            if DialogSegmenter._is_dialog_pair(text, *pair)
         ]
 
         # Overlapping pairs can only result from nested/interleaved double-quote
@@ -207,92 +193,10 @@ class DialogSegmenter:
         return dialog_spans
 
     @staticmethod
-    def _find_quote_pairs_in_paragraph(
-        paragraph: str,
-        offset: int,
-    ) -> list[tuple[int, int]]:
-        quote_pairs: list[tuple[int, int]] = []
-        opening_quote_indices: list[int] = []
-
-        # Context is needed for straight quotes and also lets imperfectly
-        # normalized source text use mixed curly/straight pairs. A stack allows
-        # a valid inner pair to survive an earlier unmatched opening quote.
-        for index, char in enumerate(paragraph):
-            if char not in _QUOTE_CHARS:
-                continue
-
-            looks_closing = (
-                char == _CURLY_CLOSE_QUOTE
-                or DialogSegmenter._looks_like_closing_quote(
-                    paragraph,
-                    index,
-                )
-            )
-            if opening_quote_indices and looks_closing:
-                opening_quote_index = opening_quote_indices.pop()
-                quote_pairs.append((offset + opening_quote_index, offset + index))
-                continue
-
-            looks_opening = (
-                char == _CURLY_OPEN_QUOTE
-                or DialogSegmenter._looks_like_opening_quote(
-                    paragraph,
-                    index,
-                )
-            )
-            if looks_opening:
-                opening_quote_indices.append(index)
-
-        return quote_pairs
-
-    @staticmethod
-    def _looks_like_opening_quote(text: str, index: int) -> bool:
-        next_index = DialogSegmenter._next_non_whitespace_index(
-            text,
-            index + 1,
-        )
-        if next_index is None:
-            return False
-        if index == 0 or text[index - 1].isspace():
-            return True
-
-        previous_char = text[index - 1]
-        return previous_char in "([{<:;,—–-"
-
-    @staticmethod
-    def _looks_like_closing_quote(text: str, index: int) -> bool:
-        previous_index = DialogSegmenter._previous_non_whitespace_index(
-            text,
-            index - 1,
-        )
-        if previous_index is None:
-            return False
-        if index == len(text) - 1 or text[index + 1].isspace():
-            return True
-
-        next_char = text[index + 1]
-        return unicodedata.category(next_char).startswith("P")
-
-    @staticmethod
-    def _next_non_whitespace_index(text: str, start: int) -> int | None:
-        for index in range(start, len(text)):
-            if not text[index].isspace():
-                return index
-        return None
-
-    @staticmethod
-    def _previous_non_whitespace_index(text: str, start: int) -> int | None:
-        for index in range(start, -1, -1):
-            if not text[index].isspace():
-                return index
-        return None
-
-    @staticmethod
     def _is_dialog_pair(
         text: str,
         opening_quote_index: int,
         closing_quote_index: int,
-        group_ends: list[int],
     ) -> bool:
         content = text[opening_quote_index + 1:closing_quote_index]
         if not app_text.is_vocalizable(content):
@@ -310,11 +214,6 @@ class DialogSegmenter:
         # evidence makes dialog more likely. Otherwise, retain the conservative
         # behavior for short inline labels, emphasized terms, and scare quotes.
         if app_text.get_word_count(content, vocalizable_only=True) > 3:
-            return True
-
-        opening_group_index = bisect_right(group_ends, opening_quote_index)
-        closing_group_index = bisect_right(group_ends, closing_quote_index)
-        if opening_group_index != closing_group_index:
             return True
 
         paragraph_start = max(
