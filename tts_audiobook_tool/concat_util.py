@@ -31,7 +31,7 @@ from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.app_types.phrase import Phrase
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.output_range_info import OutputRangeInfo
@@ -350,6 +350,7 @@ class ConcatUtil:
             file_paths = [item[1] for item in phrases_and_paths]
             timed_phrases, bookmark_indices, phrase_to_text_segment_start_indices = make_subdivided_timed_phrases(
                 timed_phrases=timed_phrases,
+                phrase_groups=state.project.phrase_groups,
                 sound_paths=file_paths,
                 sound_durations=durations,
                 bookmark_indices=bookmark_indices
@@ -744,20 +745,23 @@ def make_stem(
 
 def make_subdivided_timed_phrases(
         timed_phrases: list[TimedPhrase],
+        phrase_groups: list[PhraseGroup],
         sound_paths: list[str],
         sound_durations: list[float],
         bookmark_indices: list[int]
     ) -> tuple[ list[TimedPhrase], list[int], list[int] ]:
     """
-    Uses the "forced alignment" metadata in the json files which is saved alongside the sound_paths
-    to break up the timed_phrases into smaller parts.
+    Breaks timed PhraseGroups into their constituent phrases. Groups with audio
+    use forced-alignment timings from their sidecar JSON; groups without audio
+    retain their original phrase boundaries with zeroed timings.
 
-    The three arguments are parallel lists.
+    The first four arguments are parallel lists.
 
-    Returns updated timed_phrases and bookmark_indices.
+    Returns updated timed_phrases, bookmark_indices, and the starting text
+    segment index corresponding to each original PhraseGroup.
     """
 
-    if not (len(timed_phrases) == len(sound_paths) == len(sound_durations)):
+    if not (len(timed_phrases) == len(phrase_groups) == len(sound_paths) == len(sound_durations)):
         raise ValueError("lists must have same lengths")
 
     new_timed_phrases: list[TimedPhrase] = []
@@ -778,8 +782,16 @@ def make_subdivided_timed_phrases(
         sound_path = sound_paths[i]
 
         if not sound_path:
-            add_to_new_bookmark_indices("no-time-segment", original_timed_phrase.presentable_text)
-            new_timed_phrases.append(original_timed_phrase)
+            phrase_group = phrase_groups[i]
+            if not phrase_group.phrases:
+                add_to_new_bookmark_indices("no-time-segment", original_timed_phrase.presentable_text)
+                new_timed_phrases.append(original_timed_phrase)
+                continue
+
+            for phrase_index, phrase in enumerate(phrase_group.phrases):
+                if phrase_index == 0:
+                    add_to_new_bookmark_indices("first-missing-audio-phrase", phrase.presentable_text)
+                new_timed_phrases.append(TimedPhrase.make_using(phrase, 0.0, 0.0))
             continue
 
         subdivided_items_json_path = get_segment_stt_info_path(sound_path)

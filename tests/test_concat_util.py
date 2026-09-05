@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
-from tts_audiobook_tool.app_types.phrase import Phrase, Reason
-from tts_audiobook_tool.concat_util import ConcatUtil, make_stem
+from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
+from tts_audiobook_tool.concat_util import ConcatUtil, make_stem, make_subdivided_timed_phrases
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
@@ -26,6 +27,39 @@ def make_fake_project(num_groups: int, missing_indices: frozenset[int] = frozens
 
     project.sound_segments.get_best_file_for.side_effect = get_best_file_for
     return project
+
+
+def test_subdivided_metadata_preserves_phrases_for_missing_audio_groups() -> None:
+    groups = [
+        PhraseGroup([
+            Phrase("First phrase, ", Reason.PHRASE),
+            Phrase("second phrase. ", Reason.SENTENCE),
+        ]),
+        PhraseGroup([
+            Phrase("Third phrase.\n\n", Reason.PARAGRAPH),
+        ]),
+    ]
+    timed_groups = [
+        TimedPhrase(group.text, 0.0, 0.0)
+        for group in groups
+    ]
+
+    segments, bookmarks, group_start_indices = make_subdivided_timed_phrases(
+        timed_phrases=timed_groups,
+        phrase_groups=groups,
+        sound_paths=["", ""],
+        sound_durations=[0.0, 0.0],
+        bookmark_indices=[1],
+    )
+
+    assert [segment.text for segment in segments] == [
+        "First phrase, ",
+        "second phrase. ",
+        "Third phrase.\n\n",
+    ]
+    assert all(segment.time_start == 0.0 and segment.time_end == 0.0 for segment in segments)
+    assert bookmarks == [2]
+    assert group_start_indices == [0, 2]
 
 
 @pytest.mark.parametrize("reason", [Reason.SPACE_BREAK, Reason.SECTION_BREAK])
