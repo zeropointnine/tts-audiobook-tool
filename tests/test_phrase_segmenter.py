@@ -198,7 +198,23 @@ def test_quote_aware_sentence_segmentation_preserves_source(
         ("Wait---triple stays whole", ["Wait---triple stays whole"]),
         ("Ends with--", ["Ends with--"]),
         ("--Starts with", ["--Starts with"]),
-        ("Punct...--;;bounded", ["Punct...--;;bounded"]),
+        # The double dash is not a break here, but the ellipsis is.
+        ("Punct...--;;bounded", ["Punct...", "--;;bounded"]),
+        # Ellipses become phrase breaks when vocalizable content exists on
+        # both sides. Literal spaces, but not other whitespace, may separate
+        # three or more dots.
+        ("One... two", ["One... ", "two"]),
+        ("One..... two", ["One..... ", "two"]),
+        ("One… two", ["One… ", "two"]),
+        ("One…… two", ["One…… ", "two"]),
+        ("One. . . two", ["One. . . ", "two"]),
+        ("One.  .   .    . two", ["One.  .   .    . ", "two"]),
+        ("... One", ["... One"]),
+        ("One...", ["One..."]),
+        ("...", ["..."]),
+        ("One.\t.\t. two", ["One.\t.\t. two"]),
+        ("One.\n.\n. two", ["One.\n.\n. two"]),
+        ("One... “Two”", ["One... ", "“Two”"]),
     ],
 )
 def test_sentence_to_phrases(source: str, expected: list[str]) -> None:
@@ -214,6 +230,15 @@ def test_text_to_phrases_double_dash_break() -> None:
     assert result == [
         Phrase("Hello--", Reason.PHRASE),
         Phrase("what are you doing?", Reason.SENTENCE),
+    ]
+
+
+def test_text_to_phrases_ellipsis_break() -> None:
+    result = PhraseSegmenter.text_to_phrases("One... two", 40, "en")
+
+    assert result == [
+        Phrase("One... ", Reason.PHRASE),
+        Phrase("two", Reason.SENTENCE),
     ]
 
 

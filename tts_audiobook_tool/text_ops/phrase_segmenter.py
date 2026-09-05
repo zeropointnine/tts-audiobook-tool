@@ -242,7 +242,11 @@ class PhraseSegmenter:
         # citation comma could recreate the very fragment this policy avoids.
         protected_parentheticals = PhraseSegmenter.non_phrase_parenthetical_ranges(sentence, language_code)
         punctuation_offsets = [match.start() for match in re.finditer(pattern, sentence)]
-        ordinary_offsets = punctuation_offsets + PhraseSegmenter.double_dash_break_offsets(sentence)
+        ordinary_offsets = (
+            punctuation_offsets
+            + PhraseSegmenter.double_dash_break_offsets(sentence)
+            + PhraseSegmenter.ellipsis_phrase_break_offsets(sentence)
+        )
         ordinary_offsets = [
             offset
             for offset in ordinary_offsets
@@ -377,6 +381,26 @@ class PhraseSegmenter:
         author_list = rf"{author}(?:\s+(?:et\s+al\.?|and\s+{author}|&\s*{author}))*"
         author_year = rf"{author_list},?\s+(?:1[5-9]\d{{2}}|20\d{{2}})[a-z]?"
         return re.fullmatch(rf"{author_year}(?:\s*;\s*{author_year})*", normalized) is not None
+
+    @staticmethod
+    def ellipsis_phrase_break_offsets(sentence: str) -> list[int]:
+        """Return phrase boundaries immediately after qualifying ellipses.
+
+        An ellipsis is a maximal run of at least three consecutive dots, one
+        or more Unicode ellipsis characters, or at least three dots separated
+        by one or more literal spaces. A boundary is useful only when the text
+        on each side contains vocalizable content. Tabs, line breaks, and other
+        whitespace characters do not form a spaced ellipsis.
+        """
+        ellipsis_pattern = re.compile(r"\.{3,}|…+|\.(?: +\.){2,}")
+        return [
+            match.end()
+            for match in ellipsis_pattern.finditer(sentence)
+            if (
+                app_text.is_vocalizable(sentence[:match.start()])
+                and app_text.is_vocalizable(sentence[match.end():])
+            )
+        ]
 
     @staticmethod
     def double_dash_break_offsets(sentence: str) -> list[int]:

@@ -705,7 +705,9 @@ class TtsModelType(Enum):
             "voice_path_requestor": "Select voice clone audio clip",
             "project_links": ["https://github.com/QwenLM/Qwen3-TTS", "https://huggingface.co/collections/Qwen/qwen3-tts"]
         },
-        output_filters=[],
+        output_filters=[
+            "for open-end generation"
+        ],
         substitutions=[] # Does well w/ various punctuation
     )
 
