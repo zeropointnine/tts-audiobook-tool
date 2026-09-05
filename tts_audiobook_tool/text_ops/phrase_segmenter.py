@@ -20,12 +20,12 @@ class _PysbdTextSpan(Protocol):
 
 
 class PhraseSegmenter:
-    """ 
+    """
     Creates Phrases from strings
     """
 
     @staticmethod
-    def text_to_phrases(text: str, max_words: int, pysbd_lang: str, ) -> list[Phrase]:
+    def text_to_phrases(text: str, max_words: int, pysbd_lang: str) -> list[Phrase]:
         """
         Returns list of Phrases with 'reasons', ready to be grouped as needed
         """
@@ -37,7 +37,7 @@ class PhraseSegmenter:
         for sentence_string in sentence_strings:
 
             # Sentence strings to phrase strings
-            phrase_strings = PhraseSegmenter.sentence_string_to_phrase_strings(sentence_string)
+            phrase_strings = PhraseSegmenter.sentence_string_to_phrase_strings(sentence_string, pysbd_lang)
 
             # Make Phrases proper, disambiguating btw sentence/paragraph/section
             for i, phrase in enumerate(phrase_strings):
@@ -216,14 +216,11 @@ class PhraseSegmenter:
         return result
 
     @staticmethod
-    def sentence_string_to_phrase_strings(sentence: str) -> list[str]:
+    def sentence_string_to_phrase_strings(sentence: str, language_code: str) -> list[str]:
         """
         Returns list of phrase strings from a sentence string
         """
 
-        # Split before:
-        # - open paren `(` 
-        
         # Split after:
         # - double-quote+space `" `
         # - fancy-close-double-quote+space `” `
@@ -232,29 +229,39 @@ class PhraseSegmenter:
         # - colon+space `: `
         # - en-dash `–`
         # - em-dash `—`
-        # - close paren `)`
         # - double normal dash `--` (see double_dash_break_offsets)
-        
-        # Using lookahead for splits before pattern, lookbehind for splits after pattern
-        
-        pattern = r'(?=\()|(?<=" )|(?<=” )|(?<=, )|(?<=; )|(?<=: )|(?<=–)|(?<=—)|(?<=\))'
+        #
+        # Parenthetical boundaries are selected separately because whether they
+        # merit a spoken phrase depends on their matched content.
 
-        # The double normal dash break cannot be expressed in the regex (its
-        # optional surrounding whitespace needs a variable-width lookbehind,
-        # and its "content character" bounds are defined by app_text), so the
-        # sentence is pre-split at those offsets and each piece is run through
-        # the pattern separately.
-        break_offsets = PhraseSegmenter.double_dash_break_offsets(sentence)
+        # Using lookbehind for splits after pattern
+        pattern = r'(?<=" )|(?<=” )|(?<=, )|(?<=; )|(?<=: )|(?<=–)|(?<=—)'
+
+        # Collect every boundary as a source offset. Ordinary punctuation inside
+        # a short or reference-like parenthetical is suppressed too; otherwise a
+        # citation comma could recreate the very fragment this policy avoids.
+        protected_parentheticals = PhraseSegmenter.non_phrase_parenthetical_ranges(sentence, language_code)
+        punctuation_offsets = [match.start() for match in re.finditer(pattern, sentence)]
+        ordinary_offsets = punctuation_offsets + PhraseSegmenter.double_dash_break_offsets(sentence)
+        ordinary_offsets = [
+            offset
+            for offset in ordinary_offsets
+            if not any(open_index < offset <= close_index for open_index, close_index in protected_parentheticals)
+        ]
+        break_offsets = sorted(set(
+            ordinary_offsets
+            + PhraseSegmenter.parenthetical_phrase_break_offsets(sentence, language_code)
+        ))
         items: list[str] = []
         start = 0
         for offset in break_offsets:
-            items.extend(re.split(pattern, sentence[start:offset]))
+            items.append(sentence[start:offset])
             start = offset
-        items.extend(re.split(pattern, sentence[start:]))
+        items.append(sentence[start:])
 
-        # Not including these punctuation characters on purpose: 
+        # Not including these punctuation characters on purpose:
         # single normal dash, apostrophe/single-quote or double-quote
-        
+
         # Remove empty strings (e.g. if sentence ends with a delimiter)
         items = [item for item in items if item]
 
@@ -282,6 +289,94 @@ class PhraseSegmenter:
                 new_items.append(items[i])
         items = new_items
         return items
+
+    @staticmethod
+    def parenthetical_phrase_break_offsets(sentence: str, language_code: str) -> list[int]:
+        """Return boundaries around substantial, balanced parenthetical asides.
+
+        Parentheses alone are too weak a signal for a spoken phrase: short labels,
+        acronyms, citations, and references usually sound better attached to their
+        surrounding text. Isolating only parentheticals with at least three
+        vocalizable words gives substantial asides a natural pause without
+        fragmenting those common compact uses.
+        """
+        pairs = PhraseSegmenter.balanced_top_level_parenthetical_pairs(sentence)
+        if pairs is None:
+            return []
+
+        offsets: list[int] = []
+        for open_index, close_index in pairs:
+            content = sentence[open_index + 1:close_index]
+            if PhraseSegmenter.is_phrase_worthy_parenthetical(content, language_code):
+                offsets.extend((open_index, close_index + 1))
+
+        return offsets
+
+    @staticmethod
+    def non_phrase_parenthetical_ranges(sentence: str, language_code: str) -> list[tuple[int, int]]:
+        pairs = PhraseSegmenter.balanced_top_level_parenthetical_pairs(sentence)
+        if pairs is None:
+            return []
+        return [
+            (open_index, close_index)
+            for open_index, close_index in pairs
+            if not PhraseSegmenter.is_phrase_worthy_parenthetical(
+                sentence[open_index + 1:close_index],
+                language_code,
+            )
+        ]
+
+    @staticmethod
+    def balanced_top_level_parenthetical_pairs(sentence: str) -> list[tuple[int, int]] | None:
+        stack: list[int] = []
+        pairs: list[tuple[int, int]] = []
+
+        for index, char in enumerate(sentence):
+            if char == "(":
+                stack.append(index)
+            elif char == ")":
+                if not stack:
+                    return None
+                open_index = stack.pop()
+                if not stack:
+                    pairs.append((open_index, index))
+
+        return None if stack else pairs
+
+    @staticmethod
+    def is_phrase_worthy_parenthetical(content: str, language_code: str) -> bool:
+        return (
+            app_text.get_word_count(content, vocalizable_only=True) >= 3
+            and not PhraseSegmenter.is_citation_or_reference_like_parenthetical(content, language_code)
+        )
+
+    @staticmethod
+    def is_citation_or_reference_like_parenthetical(content: str, language_code: str) -> bool:
+        if language_code.lower() != "en":
+            return False
+
+        normalized = " ".join(content.split())
+        if not normalized:
+            return False
+
+        reference_prefix = re.compile(
+            r"^(?:see|cf\.?|compare|fig(?:ure)?s?\.?|ch(?:apter)?\.?|"
+            r"p(?:age)?s?\.?|pp\.?|sec(?:tion)?s?\.?|vol(?:ume)?\.?|"
+            r"no\.?|doi|isbn|§)\s",
+            re.IGNORECASE,
+        )
+        if reference_prefix.search(normalized):
+            return True
+
+        # Numeric footnotes, page/range lists, and Roman-numeral references.
+        if re.fullmatch(r"(?:\d+|[ivxlcdm]+)(?:\s*[-–,;]\s*(?:\d+|[ivxlcdm]+))*", normalized, re.IGNORECASE):
+            return True
+
+        # Common author-year citations, including "Smith et al., 2020".
+        author = r"[A-Z][^\W\d_]*(?:['’\-][^\W\d_]+)?"
+        author_list = rf"{author}(?:\s+(?:et\s+al\.?|and\s+{author}|&\s*{author}))*"
+        author_year = rf"{author_list},?\s+(?:1[5-9]\d{{2}}|20\d{{2}})[a-z]?"
+        return re.fullmatch(rf"{author_year}(?:\s*;\s*{author_year})*", normalized) is not None
 
     @staticmethod
     def double_dash_break_offsets(sentence: str) -> list[int]:
@@ -353,10 +448,10 @@ class PhraseSegmenter:
         When a Phrase ends with PARAGRAPH or SPACE_BREAK and is 'not vocalizable', merges it with previous phrase
         Idea here is that these items must be typographical ornamentation lines that signify a section break
         """
-        
+
         def is_ornamental_break(phrase: Phrase) -> bool:
             return phrase.reason in [Reason.PARAGRAPH, Reason.SPACE_BREAK] and not app_text.is_vocalizable(phrase.text)
-        
+
         results: list[Phrase] = []
         leading_ornamental_phrases: list[Phrase] = []
 

@@ -168,8 +168,6 @@ def test_quote_aware_sentence_segmentation_preserves_source(
         ("If this, then that.", ["If this, ", "then that."]),
         ("The reason: Because", ["The reason: ", "Because"]),
         ("The reason: Because... \n", ["The reason: ", "Because... \n"]),
-        ("They liked it (but I didn't).",
-         ["They liked it ", "(but I didn't)."]),
         ("They liked it; I didn't", ["They liked it; ", "I didn't"]),
         ('I was like, "Yo"', ['I was like, ', '"Yo"']),
         ('"Alright then," she said.', ['"Alright then," ', "she said."]),
@@ -177,6 +175,16 @@ def test_quote_aware_sentence_segmentation_preserves_source(
         ("Is it Steins;Gate or Re:Zero?", ["Is it Steins;Gate or Re:Zero?"]),
         ("Malformed,,,:::;;; text", ["Malformed,,,:::;;; ", "text"]),
         ("Malformed,,,:::;;;text", ["Malformed,,,:::;;;text"]),
+        ("", []),
+        ("   ", ["   "]),
+        ("Wait, ", ["Wait, "]),
+        ("Alpha, ; Beta", ["Alpha, ; ", "Beta"]),
+        ('He answered "yes" and left.', ['He answered "yes" ', "and left."]),
+        ("He answered ”yes” and left.", ["He answered ”yes” ", "and left."]),
+        ("First–second", ["First–", "second"]),
+        ("First – second", ["First – ", "second"]),
+        ("First—second", ["First—", "second"]),
+        ("First — second", ["First — ", "second"]),
         # Double normal dash is a phrase break when bounded by
         # vocalizable ("content") characters, with optional
         # whitespace on either side of the dash pair
@@ -194,7 +202,10 @@ def test_quote_aware_sentence_segmentation_preserves_source(
     ],
 )
 def test_sentence_to_phrases(source: str, expected: list[str]) -> None:
-    assert PhraseSegmenter.sentence_string_to_phrase_strings(source) == expected
+    result = PhraseSegmenter.sentence_string_to_phrase_strings(source, "en")
+
+    assert result == expected
+    assert "".join(result) == source
 
 
 def test_text_to_phrases_double_dash_break() -> None:

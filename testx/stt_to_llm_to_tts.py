@@ -446,7 +446,7 @@ def main() -> None:
                         at phrase boundaries while TTS state changes can still
                         repaint independently.
                         """
-                        phrases = PhraseSegmenter.sentence_string_to_phrase_strings(text)
+                        phrases = PhraseSegmenter.sentence_string_to_phrase_strings(text, project.language_code)
                         if len(phrases) >= 2:
                             return "".join(phrases[:-1])
                         return ""
@@ -468,7 +468,7 @@ def main() -> None:
                         elif not pending_sentences and not spoken_segments:
                             # Nothing sent yet: cut at first phrase boundary rather than
                             # waiting for a full sentence, so TTS starts sooner.
-                            phrases = PhraseSegmenter.sentence_string_to_phrase_strings(tts_buffer)
+                            phrases = PhraseSegmenter.sentence_string_to_phrase_strings(tts_buffer, project.language_code)
                             if len(phrases) >= 2:
                                 first = phrases[0]
                                 if first.strip():
