@@ -55,24 +55,29 @@ class OuteModel(OuteBaseModel):
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
 
+        temperature = project.oute_temperature
+        if temperature == -1:
+            temperature = OuteBaseModel.DEFAULT_TEMPERATURE
+
         result = self.generate(
             prompt,
             project.oute_voice_json,
-            project.oute_temperature)
+            temperature)
 
         if isinstance(result, Sound):
             return [result]
         else:
             return result
-        
+
     def generate(
         self,
         prompt: str,
         voice: dict,
-        temperature: float = -1
+        temperature: float
     ) -> Sound | str:
         """
         :param voice: Oute-specific voice clone data
+        :param temperature: Must be concrete (ie, resolved default)
         """
 
         # First, clone GENERATION_CONFIG from config file
@@ -86,8 +91,7 @@ class OuteModel(OuteBaseModel):
 
         gen_config.text = prompt
         gen_config.speaker = voice
-        if temperature != -1:
-            gen_config.sampler_config = SamplerConfig(temperature)
+        gen_config.sampler_config = SamplerConfig(temperature)
 
         try:
             assert(self._interface is not None)

@@ -219,11 +219,17 @@ class ChatterboxModel(ChatterboxBaseModel):
                 })
             case ChatterboxType.TURBO:
                 dic.update({
-                    "turbo_top_k": project.chatterbox_turbo_top_k,
+                    "turbo_top_k": project.chatterbox_turbo_top_k
+                        if project.chatterbox_turbo_top_k != -1 else None,
                     "repetition_penalty": project.chatterbox_turbo_repetition_penalty
                         if project.chatterbox_turbo_repetition_penalty != -1 else ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO,
                 })
             # Note how each model has an independent repetition penalty value b/c the values behave differently on each
+
+        # Randomize seed here so that generate() receives a concrete value
+        seed = dic["seed"]
+        if seed <= -1:
+            dic["seed"] = random.randrange(0, SEED_MAX)
 
         result = self.generate(**dic)
 
@@ -236,18 +242,18 @@ class ChatterboxModel(ChatterboxBaseModel):
         self,
         text: str,
         voice_path: str,
-        exaggeration: float = -1,
-        cfg: float = -1,
+        repetition_penalty: float,
+        seed: int,
+        exaggeration: float = ChatterboxBaseModel.DEFAULT_EXAGGERATION,
+        cfg: float = ChatterboxBaseModel.DEFAULT_CFG,
         temperature: float = ChatterboxBaseModel.DEFAULT_TEMPERATURE,
         top_p: float = ChatterboxBaseModel.DEFAULT_TOP_P,
-        turbo_top_k: int = -1,
-        repetition_penalty: float = -1,
-        seed: int = -1,
+        turbo_top_k: int | None = None,
         language_id: str = ""
     ) -> Sound | str:
         """
-        :param seed: If -1, is set to random int
-        :param turbo_top_k: If -1, is not passed to model
+        All values must be concrete (ie, resolved defaults, randomized seed).
+        :param turbo_top_k: If None, is not passed to the model
         """
 
         if self._chatterbox is None:
@@ -255,16 +261,7 @@ class ChatterboxModel(ChatterboxBaseModel):
         if language_id and self._model_type == ChatterboxType.TURBO:
             return "Logic error: language_id is not supported for Chatterbox Turbo"
 
-        if seed <= -1:
-            seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
-
-        if repetition_penalty == -1:
-            match self._model_type:
-                case ChatterboxType.MULTILINGUAL:
-                    repetition_penalty = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
-                case ChatterboxType.TURBO:
-                    repetition_penalty = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
 
         dic = {}
         if voice_path:
@@ -288,14 +285,10 @@ class ChatterboxModel(ChatterboxBaseModel):
             case ChatterboxType.MULTILINGUAL:
                 if language_id:
                     dic["language_id"] = language_id
-                if exaggeration == -1:
-                    exaggeration = ChatterboxBaseModel.DEFAULT_EXAGGERATION
-                if cfg == -1:
-                    cfg = ChatterboxBaseModel.DEFAULT_CFG
                 dic["exaggeration"] = exaggeration
                 dic["cfg_weight"] = cfg
             case ChatterboxType.TURBO:
-                if turbo_top_k != -1:
+                if turbo_top_k is not None:
                     dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
 
         try:

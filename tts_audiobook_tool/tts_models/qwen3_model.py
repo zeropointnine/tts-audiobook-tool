@@ -168,11 +168,20 @@ class Qwen3Model(Qwen3BaseModel):
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
-        temperature = project.qwen3_temperature
-        top_k = project.qwen3_top_k
-        top_p = project.qwen3_top_p
-        repetition_penalty = project.qwen3_repetition_penalty
         seed = -1 if force_random_seed else project.qwen3_seed
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
+        app_support.set_seed(seed)
+
+        # Sentinel resolution and library-kwarg mapping live here (the project
+        # layer) so that the generate methods receive concrete values only.
+        gen_kwargs = self._build_gen_kwargs(
+            temperature=project.qwen3_temperature,
+            top_k=project.qwen3_top_k,
+            top_p=project.qwen3_top_p,
+            repetition_penalty=project.qwen3_repetition_penalty,
+            seed=seed
+        )
 
         match self.model_type:
             
@@ -191,11 +200,7 @@ class Qwen3Model(Qwen3BaseModel):
                         prompts=prompts,
                         voice_info=voice_info,
                         language=language,
-                        temperature=temperature,
-                        top_k=top_k,
-                        top_p=top_p,
-                        repetition_penalty=repetition_penalty,
-                        seed=seed,
+                        gen_kwargs=gen_kwargs,
                         rolling_continuation_max_segments=project.qwen3_rolling_cont,
                     )
                 else:
@@ -217,11 +222,7 @@ class Qwen3Model(Qwen3BaseModel):
                         speaker_id=speaker_id,
                         instruct=project.qwen3_instructions,
                         language=language,
-                        temperature=temperature,
-                        top_k=top_k,
-                        top_p=top_p,
-                        repetition_penalty=repetition_penalty,
-                        seed=seed
+                        gen_kwargs=gen_kwargs,
                     )
             
             case "voice_design":
@@ -230,11 +231,7 @@ class Qwen3Model(Qwen3BaseModel):
                     prompts=prompts,
                     instruct=project.qwen3_instructions,
                     language=language,
-                    temperature=temperature,
-                    top_k=top_k,
-                    top_p=top_p,
-                    repetition_penalty=repetition_penalty,
-                    seed=seed
+                    gen_kwargs=gen_kwargs,
                 )
             
             case _:
@@ -247,15 +244,12 @@ class Qwen3Model(Qwen3BaseModel):
           prompts: list[str],
            voice_info: tuple[str, str],
            language: str,
-           temperature: float = -1,
-            top_k: int = -1,
-            top_p: float = -1,
-            repetition_penalty: float = -1,
-            seed: int = -1,
-             rolling_continuation_max_segments: int = 0,
+           gen_kwargs: dict[str, Any],
+            rolling_continuation_max_segments: int = 0,
     ) -> list[Sound] | str:
         """
-        Generate function for model_type="base" (voice clone-based)
+        Generate function for model_type="base" (voice clone-based).
+        `gen_kwargs` must contain concrete values (see _build_gen_kwargs).
         """
         
         if not prompts or not voice_info[0] or not voice_info[1]:
@@ -297,12 +291,8 @@ class Qwen3Model(Qwen3BaseModel):
         
         languages = [language for _ in prompts]
 
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
-
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
+        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True)
         if use_continuation:
             printt(
                 f"{COL_DIM_ITALICS}Qwen3 Base: using rolling continuation "
@@ -312,13 +302,6 @@ class Qwen3Model(Qwen3BaseModel):
             )
 
         try:
-            gen_kwargs = self._build_gen_kwargs(
-                temperature=temperature, 
-                top_k=top_k, 
-                top_p=top_p,
-                repetition_penalty=repetition_penalty, 
-                seed=seed
-            )
             wavs, sr, generated_codes = self.generate_base_with_codes(
                 prompts=prompts,
                 voice_clone_prompt=voice_clone_prompts,
@@ -407,29 +390,20 @@ class Qwen3Model(Qwen3BaseModel):
         speaker_id: str,
         instruct: str,
         language: str,
-        temperature: float = -1,
-        top_k: int = -1,
-        top_p: float = -1,
-        repetition_penalty: float = -1,
-        seed: int = -1
+        gen_kwargs: dict[str, Any],
     ) -> list[Sound] | str:
+        """
+        `gen_kwargs` must contain concrete values (see _build_gen_kwargs).
+        """
 
         speaker_ids = [speaker_id for _ in prompts]
         languages = [language for _ in prompts]
         instructs = [instruct for _ in prompts] if instruct else None
 
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
-
         # Inference code does not print its own feedback, so add some, matching behvior of other models
         printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
 
         try:
-            gen_kwargs = self._build_gen_kwargs(
-                temperature=temperature, top_k=top_k, top_p=top_p,
-                repetition_penalty=repetition_penalty, seed=seed
-            )
             wavs, sr = self._model.generate_custom_voice(
                 text=prompts,
                 speaker=speaker_ids,
@@ -449,28 +423,19 @@ class Qwen3Model(Qwen3BaseModel):
         prompts: list[str],
         instruct: str,
         language: str,
-        temperature: float = -1,
-        top_k: int = -1,
-        top_p: float = -1,
-        repetition_penalty: float = -1,
-        seed: int = -1
+        gen_kwargs: dict[str, Any],
     ) -> list[Sound] | str:
+        """
+        `gen_kwargs` must contain concrete values (see _build_gen_kwargs).
+        """
 
         languages = [language for _ in prompts]
         instructs = [instruct for _ in prompts] 
-
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
         printt("{COL_DIM_ITALICS}Generating...", dont_reset=True) 
 
         try:
-            gen_kwargs = self._build_gen_kwargs(
-                temperature=temperature, top_k=top_k, top_p=top_p,
-                repetition_penalty=repetition_penalty, seed=seed
-            )
             wavs, sr = self._model.generate_voice_design(
                 text=prompts,
                 language=languages,
@@ -494,8 +459,13 @@ class Qwen3Model(Qwen3BaseModel):
     ) -> dict[str, Any]:
         """
         Build kwargs dict for library generate calls.
-        Only includes parameters where the user has explicitly set a value (not -1 sentinel).
-        The library's _merge_generate_kwargs will apply defaults for any missing params.
+
+        Called only by generate_using_project() (the project layer): resolves
+        any -1 sentinel values (applying library defaults where needed) so that
+        the generate methods receive concrete values. Only includes parameters
+        where the user has explicitly set a value (not -1 sentinel); the
+        library's _merge_generate_kwargs will apply defaults for any missing
+        params.
 
         The Qwen3-TTS architecture has two sampling components: a "main talker" that generates
         the lead codebook token at each step, and a "subtalker" (code_predictor) that generates

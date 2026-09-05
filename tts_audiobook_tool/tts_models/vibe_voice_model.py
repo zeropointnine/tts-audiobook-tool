@@ -177,6 +177,8 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         num_steps = VibeVoiceBaseModel.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
         seed = -1 if force_random_seed else project.vibevoice_seed
+        if seed <= -1:
+            seed = random.randrange(0, SEED_MAX)
 
         result = self.generate(
             texts=prompts,
@@ -193,14 +195,15 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             self,
             texts: list[str],
             voice_path: str,
+            seed: int,
             cfg_scale: float=VibeVoiceBaseModel.CFG_DEFAULT,
             num_steps: int=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
-            seed: int = -1,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
     ) -> list[Sound] | str:
         """
-        Returns list[Sound] or error string
+        Returns list[Sound] or error string.
+        All values must be concrete (ie, resolved defaults, randomized seed).
 
         FYI: Couldn't pass pre-loaded sound data without inference issues for some reason,
         but in practice overhead is negligible
@@ -208,8 +211,6 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         if self.model is None or self.processor is None:
             return "model or processor is not initialized" # logic error
 
-        if seed <= -1:
-            seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
 
         try:

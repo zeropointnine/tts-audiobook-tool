@@ -91,6 +91,8 @@ class DotsModel(DotsBaseModel):
             ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else None
         )
         seed = -1 if force_random_seed else project.dots_seed
+        if seed == -1:
+            seed = random.randrange(0, self.SEED_MAX)
         speaker_scale = (
             self.SPEAKER_SCALE_DEFAULT
             if project.dots_speaker_scale == -1
@@ -132,8 +134,6 @@ class DotsModel(DotsBaseModel):
         if runtime is None:
             return "Logic error - dots.tts model not initialized"
 
-        if seed == -1:
-            seed = random.randrange(0, self.SEED_MAX)
         seed_everything(seed)
 
         sampling_locked = runtime.model.config.sampling is not None

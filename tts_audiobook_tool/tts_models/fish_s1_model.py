@@ -213,6 +213,8 @@ class FishS1Model(FishS1BaseModel):
             repetition_penalty = project.fish_s1_repetition_penalty
 
         seed = -1 if force_random_seed else project.fish_s1_seed
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
 
         result = self.generate(
             prompt=prompt,
@@ -235,9 +237,10 @@ class FishS1Model(FishS1BaseModel):
             repetition_penalty: float,
             seed: int
     ) -> Sound | str:
+        """
+        All values must be concrete (ie, resolved defaults, randomized seed).
+        """
 
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)

@@ -315,6 +315,8 @@ class FishS2Model(FishS2BaseModel):
             top_k = project.fish_s2_top_k
 
         seed = -1 if force_random_seed else project.fish_s2_seed
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
         rolling_continuation_max_segments = project.fish_s2_rolling_cont
 
         result = self.generate(
@@ -340,14 +342,15 @@ class FishS2Model(FishS2BaseModel):
             seed: int,
             rolling_continuation_max_segments: int,
     ) -> Sound | str:
+        """
+        All values must be concrete (ie, resolved defaults, randomized seed).
+        """
 
         rolling_continuation = rolling_continuation_max_segments > 0
 
         if not rolling_continuation:
             self.clear_continuation()
 
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)

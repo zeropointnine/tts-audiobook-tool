@@ -133,6 +133,8 @@ class PocketModel(PocketBaseModel):
             temperature = PocketModel.DEFAULT_TEMPERATURE
 
         seed = -1 if force_random_seed else project.pocket_seed
+        if seed <= -1:
+            seed = random.randrange(0, SEED_MAX)
 
         return self.generate(
             prompts,
@@ -175,8 +177,6 @@ class PocketModel(PocketBaseModel):
                 # Keep the original (uncached) behavior for a missing voice path
                 voice_state = self.model.get_state_for_audio_prompt(voice_path)
 
-            if seed <= -1:
-                seed = random.randrange(0, SEED_MAX)
             app_support.set_seed(seed)
             sounds = []
             for text in texts:

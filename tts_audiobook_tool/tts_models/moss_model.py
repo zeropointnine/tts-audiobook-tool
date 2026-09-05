@@ -339,6 +339,8 @@ class MossModel(MossBaseModel):
         temperature, audio_top_p, audio_top_k = self.get_generation_params(project, config)
 
         seed = -1 if force_random_seed else project.moss_seed
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
         language = MossBaseModel.get_language_name(project.language_code) if project.language_code else ""
 
         return self.generate(
@@ -392,8 +394,6 @@ class MossModel(MossBaseModel):
         # Only update after success above; None keeps the "no voice" state
         self._voice_info = voice_info
 
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
 
         try:

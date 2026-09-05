@@ -173,7 +173,11 @@ def test_glm_requires_voice_path(tmp_path, monkeypatch):
     calls: list = []
     stub_generate_long(monkeypatch, calls)
 
-    assert model.generate(prompt_text="t", prompt_speech="", syn_text="x", seed=1) == (
+    # Empty voice path is rejected by generate_using_project() (the project
+    # layer) before generate() runs
+    from tts_audiobook_tool.project import Project
+
+    assert model.generate_using_project(Project(), ["x"]) == (
         "Voice clone path is required"
     )
     assert getattr(model, "_voice_clone_cache", None) in (None, {})

@@ -74,16 +74,31 @@ class IndexTts2Model(IndexTts2BaseModel):
             emo_voice_path = ""
 
         seed = -1 if force_random_seed else project.indextts2_seed
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
+
+        temperature = project.indextts2_temperature
+        if temperature == -1:
+            temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
+        emo_alpha = project.indextts2_emo_alpha
+        if emo_alpha == -1:
+            emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
+        top_p = project.indextts2_top_p
+        if top_p == -1:
+            top_p = IndexTts2BaseModel.DEFAULT_TOP_P
+        top_k = project.indextts2_top_k
+        if top_k == -1:
+            top_k = IndexTts2BaseModel.DEFAULT_TOP_K
 
         result = self.generate(
             text=prompt,
             voice_path=voice_path,
-            temperature=project.indextts2_temperature,
-            emo_alpha=project.indextts2_emo_alpha,
+            temperature=temperature,
+            emo_alpha=emo_alpha,
             emo_voice_path=emo_voice_path,
             emo_vector=project.indextts2_emo_vector,
-            top_p=project.indextts2_top_p,
-            top_k=project.indextts2_top_k,
+            top_p=top_p,
+            top_k=top_k,
             seed=seed
         )
 
@@ -100,30 +115,21 @@ class IndexTts2Model(IndexTts2BaseModel):
             emo_alpha: float,
             emo_voice_path: str,
             emo_vector: list[float],
-            top_p: float = -1,
-            top_k: int = -1,
-            seed: int = -1
+            top_p: float,
+            top_k: int,
+            seed: int
     ) -> Sound | str:
         """
+        All values must be concrete (ie, resolved defaults, randomized seed).
         Returns generated audio or error string
         """
 
         if not self.model:
             return "Model is not initialized"
 
-        if temperature == -1:
-            temperature = IndexTts2BaseModel.DEFAULT_TEMPERATURE
-        if emo_alpha == -1:
-            emo_alpha = IndexTts2BaseModel.DEFAULT_EMO_VOICE_ALPHA
-        if top_p == -1:
-            top_p = IndexTts2BaseModel.DEFAULT_TOP_P
-        if top_k == -1:
-            top_k = IndexTts2BaseModel.DEFAULT_TOP_K
         if emo_vector and len(emo_vector) != 8:
             return "emo_vector should be either empty or have length of 8"
 
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
 
         try:

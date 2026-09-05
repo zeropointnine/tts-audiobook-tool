@@ -111,33 +111,40 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         has_voice    = bool(voice_path and os.path.isfile(voice_path))
         has_instruct = bool(instruct)
 
+        # Common to all generation modes
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
+        app_support.set_seed(seed)
+        generation_config = OmniVoiceGenerationConfig(
+            num_step=steps,
+            guidance_scale=cfg,
+            audio_chunk_threshold=self.AUDIO_CHUNK_THRESHOLD_SECONDS,
+        )
+
         if has_voice:
             return self._generate_voice_clone(
                 prompts=prompts,
                 voice_path=voice_path,
                 ref_text=ref_text,
                 instruct=instruct,
-                cfg=cfg,
                 speed=speed,
-                steps=steps,
                 seed=seed,
+                generation_config=generation_config,
             )
         elif has_instruct:
             return self._generate_voice_design(
                 prompts=prompts,
                 instruct=instruct,
-                cfg=cfg,
                 speed=speed,
-                steps=steps,
                 seed=seed,
+                generation_config=generation_config,
             )
         else:
             return self._generate_auto_voice(
                 prompts=prompts,
-                cfg=cfg,
                 speed=speed,
-                steps=steps,
                 seed=seed,
+                generation_config=generation_config,
             )
 
     def _create_voice_clone(self, source_path: str, transcript: str) -> VoiceClonePrompt:
@@ -166,17 +173,10 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             voice_path: str,
             ref_text: str,
             instruct: str,
-            cfg: float,
             speed: float,
-            steps: int,
             seed: int,
+            generation_config: OmniVoiceGenerationConfig,
     ) -> list[Sound] | str:
-
-        generation_config = OmniVoiceGenerationConfig(
-            num_step=steps,
-            guidance_scale=cfg,
-            audio_chunk_threshold=self.AUDIO_CHUNK_THRESHOLD_SECONDS,
-        )
 
         try:
             # The library moves the (CPU) prompt tokens to its device at
@@ -189,10 +189,6 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             )
         except Exception as e:
             return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
-
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
 
         printt("Generating...", dont_reset=True)
 
@@ -223,21 +219,10 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             self,
             prompts: list[str],
             instruct: str,
-            cfg: float,
             speed: float,
-            steps: int,
             seed: int,
+            generation_config: OmniVoiceGenerationConfig,
     ) -> list[Sound] | str:
-
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
-
-        generation_config = OmniVoiceGenerationConfig(
-            num_step=steps,
-            guidance_scale=cfg,
-            audio_chunk_threshold=self.AUDIO_CHUNK_THRESHOLD_SECONDS,
-        )
 
         printt("Generating...", dont_reset=True)
 
@@ -263,21 +248,10 @@ class OmniVoiceModel(OmniVoiceBaseModel):
     def _generate_auto_voice(
             self,
             prompts: list[str],
-            cfg: float,
             speed: float,
-            steps: int,
             seed: int,
+            generation_config: OmniVoiceGenerationConfig,
     ) -> list[Sound] | str:
-
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
-
-        generation_config = OmniVoiceGenerationConfig(
-            num_step=steps,
-            guidance_scale=cfg,
-            audio_chunk_threshold=self.AUDIO_CHUNK_THRESHOLD_SECONDS,
-        )
 
         printt("Generating...", dont_reset=True)
 

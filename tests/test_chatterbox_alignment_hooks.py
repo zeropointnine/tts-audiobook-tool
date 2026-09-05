@@ -11,7 +11,7 @@ from chatterbox.models.t3.inference.alignment_stream_analyzer import (
 )
 
 from tts_audiobook_tool.app_types import DeviceType, Sound
-from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
 
 
@@ -119,7 +119,12 @@ def test_wrapper_generate_leaves_no_analyzer_hooks():
     model._chatterbox = chatterbox
 
     for _ in range(3):
-        result = model.generate(text="Test sentence.", voice_path="", seed=1)
+        result = model.generate(
+            text="Test sentence.",
+            voice_path="",
+            repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
+            seed=1,
+        )
         assert isinstance(result, Sound)
 
     assert num_hooks(chatterbox) == [0, 0, 0]

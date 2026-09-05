@@ -139,6 +139,12 @@ class TtsBaseModel(ABC):
         Generates Sound/s using the relevant TTS model attributes in the `project` object.
         Typically delegates-to/wraps a more "parameter-specific" concrete method.
 
+        Contract: this method owns all decision logic — reading project settings,
+        resolving -1 sentinels to defaults, randomizing the seed, and any
+        model-type/mode dispatch. The concrete generate() method it calls must
+        receive fully-resolved concrete values, and must not itself contain
+        sentinel/default-resolution conditionals.
+
         :param prompts:
             List of one or more prompts to process
         :param force_random_seed:

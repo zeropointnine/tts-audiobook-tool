@@ -149,7 +149,11 @@ class GlmModel(GlmBaseModel):
             project, TtsModelType.GLM, voice_selection_index
         )
         voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else ""
+        if not voice_path:
+            return "Voice clone path is required"
         seed = -1 if force_random_seed else project.glm_seed
+        if seed == -1:
+            seed = random.randrange(0, SEED_MAX)
 
         result = self.generate(
             prompt_text=voice_transcript,
@@ -168,13 +172,13 @@ class GlmModel(GlmBaseModel):
         prompt_text: str,
         prompt_speech: str,
         syn_text: str,
-        seed=-1
+        seed: int
     ):
+        """
+        All values must be concrete (ie, randomized seed).
+        """
         assert(self.frontend is not None)
         assert(self.text_frontend is not None)
-
-        if not prompt_speech:
-            return "Voice clone path is required"
 
         # Get or create the prepared voice prompt, then build fresh on-device
         # copies from the cached CPU values (the per-call objects must not be
@@ -193,9 +197,6 @@ class GlmModel(GlmBaseModel):
         flow_prompt_token = voice.prompt_speech_token.squeeze().to(
             self.device_value, dtype=torch.int32
         ).unsqueeze(0)
-
-        if seed == -1:
-            seed = random.randrange(0, SEED_MAX)
 
         # Initialize Cache
         cache = {

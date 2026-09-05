@@ -9,7 +9,7 @@ from chatterbox.mtl_tts import Conditionals
 from chatterbox.models.t3.modules.cond_enc import T3Cond
 
 from tts_audiobook_tool.app_types import DeviceType
-from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
 
 
@@ -58,7 +58,12 @@ def make_model() -> ChatterboxModel:
 
 
 def generate(model: ChatterboxModel, voice_path: str):
-    return model.generate(text="Test sentence.", voice_path=voice_path, seed=1)
+    return model.generate(
+        text="Test sentence.",
+        voice_path=voice_path,
+        repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
+        seed=1,
+    )
 
 
 def cache_key_prefix(path: str) -> str:
@@ -150,7 +155,7 @@ def test_chatterbox_error_string_on_prepare_failure(tmp_path):
 def test_chatterbox_no_voice_path_bypasses_cache(tmp_path):
     model = make_model()
 
-    assert not isinstance(model.generate(text="hi", voice_path="", seed=1), str)
+    assert not isinstance(generate(model, ""), str)
 
     # The lazy cache attribute is only created on first use
     assert getattr(model, "_voice_clone_cache", None) in (None, {})
