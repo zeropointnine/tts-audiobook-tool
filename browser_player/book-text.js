@@ -268,21 +268,41 @@ class BookText {
      * Seek to a specific segment by index
      * @param {number} i - Segment index
      * @param {boolean} andPlay - Whether to start playback after seeking
+     * @returns {boolean} True if the seek was performed, false if debounced
      */
     seekBySegmentIndex(i, andPlay = false) {
         
         // Prevent frequent seeks bc looks glitchy, not ideal but
         if (Date.now() - this.lastSeekTime < 200) {
-            return;
+            return false;
         }
         this.lastSeekTime = Date.now()
 
-        this.unhighlightByIndex(this.currentIndex);
+        // Clear the old highlight while the poll loop catches up to the new
+        // position -- unless seeking within the current segment, in which case
+        // the poll will not re-apply it (no index change), so it is kept.
+        if (i != this.currentIndex) {
+            this.unhighlightByIndex(this.currentIndex);
+        }
         const targetTime = this.textSegments[i]["time_start"];
         this.onSeek(targetTime);
         if (this.onIsPaused() && andPlay) {
             this._play();
         }
+        return true;
+    }
+
+    /**
+     * Smoothly scroll the text so that the given segment is brought into view.
+     * 
+     * Initiated directly (e.g. after a bookmark selection) rather than waiting
+     * for the poll-driven highlight follow-along scrolling, which only fires
+     * when the highlighted segment changes.
+     * 
+     * @param {number} i - Segment index
+     */
+    scrollToIndex(i) {
+        this._scrollSpanIntoView(this.getSpanByIndex(i));
     }
 
     /**
@@ -525,9 +545,17 @@ class BookText {
      * @private
      */
     _scrollCurrentSpanIntoView() {
-        const currentSpan = this.getCurrentSpan();
-        if (currentSpan && !(document.activeElement instanceof HTMLInputElement)) {
-            currentSpan.scrollIntoView({
+        this._scrollSpanIntoView(this.getCurrentSpan());
+    }
+
+    /**
+     * Smoothly scroll a span element into view
+     * @param {HTMLElement|null} span - The span element, or null
+     * @private
+     */
+    _scrollSpanIntoView(span) {
+        if (span && !(document.activeElement instanceof HTMLInputElement)) {
+            span.scrollIntoView({
                 behavior: 'smooth',
                 block: 'center',
                 inline: 'nearest'

@@ -464,9 +464,15 @@ class App {
     }
 
     onNavigationItemSelected(index) {
-        this.bookText.seekBySegmentIndex(index);
+        const seeked = this.bookText.seekBySegmentIndex(index);
         this.playerPlay();
         this.overlayManager.hideAll();
+        if (seeked) {
+            // Scroll the text to the selected bookmark immediately. The poll-driven
+            // follow-along scroll only fires when the highlighted segment changes
+            // (and is animated), so it can't be relied upon here.
+            this.bookText.scrollToIndex(index);
+        }
     }
 
     onBookmarksChanged(e) {
