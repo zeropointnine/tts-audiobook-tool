@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 from typing import TYPE_CHECKING
 
 from tts_audiobook_tool.app_types import HighShelfEq, Sound
@@ -15,6 +16,87 @@ from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+
+
+class BreakEffectTracker:
+    """
+    Render-time decision helper implementing the app's two break-sound-effect rules:
+
+    1. The first sound segment of a section never gets a SPACE_BREAK effect.
+    2. In a run of consecutive sound segments that would each get a SPACE_BREAK
+       effect, only the first keeps it; the rest fall back to silence pauses.
+
+    A "sound segment" is a segment that actually emits audio. The caller feeds
+    the tracker one group index and reason per emitted segment, in emission
+    order, and receives the break effect to append for that segment (or None
+    to append the configured pause instead).
+
+    Rule 2 counts run membership on the would-be assignment, so a segment
+    suppressed by rule 1 still anchors its run: its followers are suppressed
+    as well. Any emitted segment whose reason is not SPACE_BREAK resets the
+    run. SECTION_BREAK effects are never suppressed by these rules.
+
+    The final segment of an output stream never receives any break effect.
+    """
+
+    def __init__(self, section_start_indices: list[int], start_group_index: int = 0):
+        """
+        :param section_start_indices:
+            Group indices where sections begin, including 0 for the first
+            section (eg from `ProjectBookUtil.get_section_start_indices`).
+        :param start_group_index:
+            The group index the output stream begins at. Seeding from the
+            group preceding it means a stream starting mid-section does not
+            falsely trigger rule 1, while one starting exactly at a section
+            start does.
+        """
+
+        starts = sorted(set(section_start_indices))
+        if not starts or starts[0] != 0:
+            starts = [0, *starts]
+        self._starts = starts
+
+        preceding = start_group_index - 1
+        self._last_section_index = self.section_index_for(preceding) if preceding >= 0 else -1
+        self._space_break_run_active = False
+
+    def section_index_for(self, group_index: int) -> int:
+        return max(bisect.bisect_right(self._starts, group_index) - 1, 0)
+
+    def next_break_effect(
+        self,
+        group_index: int,
+        reason: Reason,
+        effects_enabled: bool,
+        is_final: bool,
+    ) -> Reason | None:
+        """
+        Returns the break sound effect to append for the next emitted segment
+        (SPACE_BREAK or SECTION_BREAK), or None for the configured pause.
+
+        Must be called once per emitted segment, in emission order. Disabled
+        effects and the final segment short-circuit to None without touching
+        tracker state.
+        """
+
+        if not effects_enabled or is_final:
+            return None
+
+        section_index = self.section_index_for(group_index)
+        first_in_section = section_index != self._last_section_index
+        would_space_break = reason == Reason.SPACE_BREAK
+        # Rule 2 uses the previous emitted segment's would-be status, so it
+        # must be read before the run state is updated below.
+        suppress_space_break = first_in_section or self._space_break_run_active
+
+        self._last_section_index = section_index
+        self._space_break_run_active = would_space_break
+
+        if reason == Reason.SECTION_BREAK:
+            return Reason.SECTION_BREAK
+        if would_space_break and not suppress_space_break:
+            return Reason.SPACE_BREAK
+        return None
 
 
 class SoundPipeline:
@@ -77,10 +159,8 @@ class SoundPipeline:
     def make_concat_rendered_sound_segment(
         phrase: Phrase,
         path: str,
-        use_break_sound_effect: bool,
         high_shelf: HighShelfEq,
         reason_pauses: ReasonPauses,
-        is_first_in_section: bool = False,
         use_upsampler: bool = False,
         add_pause: bool = True,
     ) -> Sound | str:
@@ -90,13 +170,13 @@ class SoundPipeline:
         - Applies upsampler (optional)
         - Resamples to 48k
         - Applies high shelf filter (optional)
-        - Adds ending silence (unless `add_pause` is False)
+        - Adds trailing pause (unless `add_pause` is False)
 
-        When `add_pause` is False, the trailing pause/section effect is omitted
-        and the caller is responsible for appending it (e.g. via
-        `append_pause_or_section_effect`). This is used by the concat flow so
-        that the pause duration can be adjusted based on pseudo-silence measured
-        across adjacent segments.
+        When `add_pause` is False, the trailing pause is omitted and the caller
+        is responsible for appending it (e.g. via `append_pause_or_section_effect`).
+        This is used by the concat flow so that the pause or break effect can be
+        decided based on `BreakEffectTracker` state and the pseudo-silence
+        measured across adjacent segments.
         """
 
         result = SoundFileUtil.load(path)
@@ -120,8 +200,7 @@ class SoundPipeline:
                 sound,
                 reason=phrase.reason,
                 reason_pauses=reason_pauses,
-                use_break_sound_effect=use_break_sound_effect,
-                is_first_in_section=is_first_in_section,
+                break_effect=None,
             )
         return sound
 
@@ -153,13 +232,16 @@ class SoundPipeline:
         sound: Sound,
         reason: Reason,
         reason_pauses: ReasonPauses,
-        use_break_sound_effect: bool,
-        is_first_in_section: bool = False,
+        break_effect: Reason | None,
         pause_duration_override: float | None = None,
     ) -> Sound:
         """
-        Appends the trailing pause or section break sound effect for a segment.
+        Appends the trailing break effect or pause for a segment.
 
+        :param break_effect:
+            Precomputed decision from `BreakEffectTracker.next_break_effect`:
+            which break sound effect to append (SPACE_BREAK or SECTION_BREAK),
+            or None to append the pause for ``reason`` instead.
         :param pause_duration_override:
             When not None, uses this duration (in seconds) instead of
             the configured pause for ``reason``. Only affects the pure-silence
@@ -167,16 +249,10 @@ class SoundPipeline:
             compensate for pseudo-silence already present at segment boundaries.
         """
 
-        b = SoundPipeline.should_append_break_sound_effect(
-                reason,
-                use_break_sound_effect=use_break_sound_effect,
-                is_first_in_section=is_first_in_section,
-        )
-        if b:
-            if reason == Reason.SPACE_BREAK:
-                return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
-            elif reason == Reason.SECTION_BREAK:
-                return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
+        if break_effect == Reason.SPACE_BREAK:
+            return SoundUtil.append_sound_using_path(sound, SPACE_BREAK_SOUND_EFFECT_PATH)
+        if break_effect == Reason.SECTION_BREAK:
+            return SoundUtil.append_sound_using_path(sound, SECTION_BREAK_SOUND_EFFECT_PATH)
 
         pause_duration = (
             pause_duration_override
@@ -187,18 +263,6 @@ class SoundPipeline:
             return SoundUtil.add_silence(sound, pause_duration)
 
         return sound
-
-    @staticmethod
-    def should_append_break_sound_effect(
-        reason: Reason,
-        use_break_sound_effect: bool,
-        is_first_in_section: bool = False,
-    ) -> bool:
-        if not use_break_sound_effect:
-            return False
-        if reason == Reason.SPACE_BREAK and is_first_in_section:
-            return False
-        return reason in [Reason.SPACE_BREAK, Reason.SECTION_BREAK]
 
     @staticmethod
     def limit_silence_gaps_if_enabled(

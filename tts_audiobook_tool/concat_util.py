@@ -25,7 +25,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.reason_pauses import ReasonPauses
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
-from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
@@ -264,6 +264,7 @@ class ConcatUtil:
         phrases_and_paths = ConcatUtil.make_phrases_and_paths(
             state.project, index_start, index_end
         )
+        section_start_indices = ProjectBookUtil.get_section_start_indices(state.project)
 
         # [1] Concatenated audio file
 
@@ -281,6 +282,8 @@ class ConcatUtil:
                 use_break_sound_effect=state.project.use_break_sound_effect,
                 high_shelf=high_shelf,
                 reason_pauses=state.project.reason_pauses,
+                section_start_indices=section_start_indices,
+                start_group_index=index_start,
                 aac_bitrate=state.prefs.aac_bitrate,
                 use_upsampler=use_upsampler
             )
@@ -393,19 +396,17 @@ class ConcatUtil:
         project: Project,
         index_start: int = -1,
         index_end: int = -1
-    ) -> list[tuple[Phrase, str, bool]]:
+    ) -> list[tuple[Phrase, str]]:
 
         if index_start == -1:
             index_start = 0
         if index_end == -1:
             index_end = len(project.phrase_groups) - 1
 
-        phrases_and_paths: list[tuple[Phrase, str, bool]] = []
-        section_start_indices = {0, *project.markers}
+        phrases_and_paths: list[tuple[Phrase, str]] = []
 
         for group_index, group in enumerate(project.phrase_groups):
             phrase = group.as_flattened_phrase()
-            is_first_in_section = group_index in section_start_indices
             out_of_range = (group_index < index_start or group_index > index_end)
             if out_of_range:
                 file_path = ""
@@ -415,7 +416,7 @@ class ConcatUtil:
                     file_path = os.path.join(project.sound_segments_path, file_name)
                 else:
                     file_path = ""
-            phrases_and_paths.append((phrase, file_path, is_first_in_section))
+            phrases_and_paths.append((phrase, file_path))
 
         return phrases_and_paths
 
@@ -438,11 +439,13 @@ class ConcatUtil:
     @staticmethod
     def concatenate_sound_segments(
         dest_path: str,
-        phrases_and_paths: list[ tuple[Phrase, str, bool] ],
+        phrases_and_paths: list[ tuple[Phrase, str] ],
         use_break_sound_effect: bool,
         high_shelf: HighShelfEq,
         reason_pauses: ReasonPauses,
         print_progress: bool,
+        section_start_indices: list[int] | None = None,
+        start_group_index: int = 0,
         aac_bitrate: str=AAC_BITRATE_DEFAULT,
         use_upsampler: bool = False
     ) -> list[float] | str:
@@ -450,6 +453,12 @@ class ConcatUtil:
         Concatenates a list of files to a destination file using ffmpeg streaming process.
         Adds silence or sound effect between adjacent segments based on phrase "reason".
 
+        :param section_start_indices:
+            Group indices where sections begin (eg from
+            `ProjectBookUtil.get_section_start_indices`). Feeds the
+            `BreakEffectTracker` rules for break sound effects.
+        :param start_group_index:
+            The group index the output begins at, used to seed the tracker.
         :param aac_bitrate:
             Only relevant if dest_path suffix is .m4a/.m4b; ignored otherwise.
             Must be a valid AAC bitrate string like "128k".
@@ -470,12 +479,19 @@ class ConcatUtil:
 
         Interrupts().set("concat")
 
+        # Render-time break effect rules. The tracker is fed one entry per
+        # flushed (present) segment, in emission order.
+        tracker = BreakEffectTracker(
+            section_start_indices if section_start_indices is not None else [0],
+            start_group_index=start_group_index,
+        )
+
         # Look-ahead buffer. The previous present segment is held (rendered, but
         # without its trailing pause) until the next present segment is rendered,
         # so the inserted pause can be adjusted using the pseudo-silence measured
         # at the end of the held segment and the start of the next one.
-        # pending = (sound_no_pause, phrase, is_first_in_section, index, path)
-        pending: tuple[Sound, Phrase, bool, int, str] | None = None
+        # pending = (sound_no_pause, phrase, index, path)
+        pending: tuple[Sound, Phrase, int, str] | None = None
 
         def flush_pending(next_sound: Sound | None) -> None:
             """
@@ -486,17 +502,18 @@ class ConcatUtil:
             """
             nonlocal duration_sum
             assert pending is not None
-            sound, phrase, is_first, idx, path = pending
+            sound, phrase, idx, path = pending
             is_final_segment = next_sound is None
-            append_break_sound_effect = use_break_sound_effect and not is_final_segment
+
+            break_effect = tracker.next_break_effect(
+                idx,
+                phrase.reason,
+                effects_enabled=use_break_sound_effect,
+                is_final=is_final_segment,
+            )
 
             override: float | None = None
-            use_effect = SoundPipeline.should_append_break_sound_effect(
-                phrase.reason,
-                use_break_sound_effect=append_break_sound_effect,
-                is_first_in_section=is_first,
-            )
-            if (not use_effect
+            if (break_effect is None
                     and ConcatUtil.PSEUDO_SILENCE_COMPENSATION_ENABLED
                     and next_sound is not None):
                 # FYI, start/end silence measurements not idempotent wrt upsampling vs not
@@ -522,8 +539,7 @@ class ConcatUtil:
                 sound,
                 reason=phrase.reason,
                 reason_pauses=reason_pauses,
-                use_break_sound_effect=append_break_sound_effect,
-                is_first_in_section=is_first,
+                break_effect=break_effect,
                 pause_duration_override=override,
             )
 
@@ -535,7 +551,7 @@ class ConcatUtil:
                 s = f"{time_stamp(duration_sum, with_tenth=False)} {Path(path).stem[:80]} ... "
                 print("\x1b[1G" + s, end="\033[K", flush=True)
 
-        for i, (phrase, path, is_first_in_section) in enumerate(phrases_and_paths):
+        for i, (phrase, path) in enumerate(phrases_and_paths):
 
             if not path:
                 # durations[i] already 0.0
@@ -562,9 +578,8 @@ class ConcatUtil:
 
             try:
                 result = SoundPipeline.make_concat_rendered_sound_segment(
-                    phrase, render_path, use_break_sound_effect, high_shelf,
+                    phrase, render_path, high_shelf,
                     reason_pauses=reason_pauses,
-                    is_first_in_section=is_first_in_section,
                     use_upsampler=False,
                     add_pause=False,
                 )
@@ -588,7 +603,7 @@ class ConcatUtil:
             if pending is not None:
                 flush_pending(curr_sound)
 
-            pending = (curr_sound, phrase, is_first_in_section, i, path)
+            pending = (curr_sound, phrase, i, path)
 
         # Flush the final held segment. No following segment exists, so no
         # pseudo-silence compensation is applied (hardcoded pause is used).
@@ -698,27 +713,22 @@ def make_stem(
     num_chapters: int
 ) -> str:
 
-    phrases_and_paths: list[tuple[Phrase, str, bool]] = []
+    extant_file_paths: list[str] = []
     num_missing = 0
 
-    for group_index, group in enumerate(project.phrase_groups):
-        phrase = group.as_flattened_phrase()
-        is_first_in_section = group_index == 0 or group_index in project.markers
+    for group_index in range(len(project.phrase_groups)):
         out_of_range = (group_index < index_start or group_index > index_end)
         if out_of_range:
-            file_path = ""
+            continue
+        stem = project.sound_segments.get_best_file_for(group_index)
+        if stem:
+            file_path = os.path.join(project.sound_segments_path, stem)
+            extant_file_paths.append(file_path)
         else:
-            stem = project.sound_segments.get_best_file_for(group_index)
-            if stem:
-                file_path = os.path.join(project.sound_segments_path, stem)
-            else:
-                file_path = ""
-        phrases_and_paths.append((phrase, file_path, is_first_in_section))
-        if file_path == "" and not out_of_range:
             num_missing += 1
 
     # Make Filename
-    extant_file_names = [file_name for _, file_name, _ in phrases_and_paths if file_name]
+    extant_file_names = extant_file_paths
     # [1] project name
     stem = app_text.sanitize_for_filename(Path(project.dir_path).name[:20]) + " "
     # [2] file number

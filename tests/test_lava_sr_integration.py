@@ -93,6 +93,8 @@ def _make_minimal_concat_state() -> State:
         high_shelf="disabled",
         reason_pauses=SimpleNamespace(),
         phrase_groups=[],
+        markers=set(),
+        has_multiple_book_sections=lambda: False,
     )
     return cast(
         State,

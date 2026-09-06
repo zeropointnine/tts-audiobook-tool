@@ -84,9 +84,18 @@ class ProjectBookUtil:
 
     @staticmethod
     def get_section_start_indices(project: Project) -> list[int]:
-        if project.book.sections:
+        """
+        Single source of truth for "where sections begin", used by the
+        `BreakEffectTracker` break sound effect rules in concat and realtime
+        playback.
+
+        Structurally sectioned books (eg EPUB) use their Book sections.
+        Single-section books (eg plain text) fall back to user-configured
+        section markers.
+        """
+        if project.has_multiple_book_sections():
             return project.book.section_start_indices()
-        return [0, *project.markers]
+        return [0, *sorted(project.markers)]
 
     @staticmethod
     def get_section_ranges(project: Project) -> list[tuple[int, int]]:

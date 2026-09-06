@@ -315,7 +315,9 @@ Flat phrase-group access is still preserved for older flows:
 - `ProjectBookUtil.get_flat_phrase_groups(project)` returns the flat
   phrase-group list
 - `ProjectBookUtil.get_section_start_indices(project)` returns the section
-  start indices (from `book` when present, falling back to `markers`)
+  start indices (from `book` when it has multiple sections, falling back to
+  `markers` for single-section books). This is the single source of truth for
+  the `BreakEffectTracker` break sound effect rules.
 
 This allows older flows to remain functional while the canonical persisted shape
 uses structured book text.

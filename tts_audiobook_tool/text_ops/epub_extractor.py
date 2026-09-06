@@ -19,10 +19,6 @@ from tts_audiobook_tool.app_types.phrase import PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 
 
-# The legacy constant name remains the compatibility switch even though boundaries are now logical.
-DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY = True
-
-
 @dataclass(frozen=True)
 class EpubNavigationTarget:
     title: str
@@ -550,8 +546,6 @@ class EpubExtractor:
             )
             if phrase_groups:
                 markers.append(len(phrase_groups))
-            if phrase_groups and DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY:
-                EpubExtractor.downgrade_leading_section_groups(chapter_phrase_groups)
             EpubExtractor.mark_last_phrase_as_section(chapter_phrase_groups)
             phrase_groups.extend(chapter_phrase_groups)
             raw_text_parts.append(chapter_text)
@@ -734,24 +728,6 @@ class EpubExtractor:
             return
         last_phrase = last_group.phrases[-1]
         last_phrase.reason = Reason.SECTION_BREAK
-
-    @staticmethod
-    def downgrade_leading_section_groups(phrase_groups: list[PhraseGroup]) -> None:
-        """
-        Downgrades section-like groups at the start of an EPUB logical section.
-
-        EPUB import force-marks the previous logical section's final phrase as a section
-        break. If the next section begins with heading text that also ends in section-like
-        spacing, that leading source-derived break is redundant and should behave as a
-        paragraph. The navigation boundary remains on the previous section.
-        """
-
-        for group in phrase_groups:
-            if group.last_reason != Reason.SPACE_BREAK:
-                break
-            last_phrase = group.phrases[-1]
-            last_phrase.reason = Reason.PARAGRAPH
-            last_phrase.text = last_phrase.text.rstrip() + "\n\n"
 
     @staticmethod
     def load_source_chapters(epub_path: str) -> tuple[list[EpubSourceChapter], str, list[str], list[str]]:

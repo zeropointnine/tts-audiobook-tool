@@ -75,7 +75,7 @@ def test_concatenate_does_not_append_break_effect_to_final_segment(reason: Reaso
          patch.object(SoundPipeline, "append_pause_or_section_effect", return_value=sound) as append_mock:
         result = ConcatUtil.concatenate_sound_segments(
             dest_path="output.flac",
-            phrases_and_paths=[(phrase, "segment.flac", False)],
+            phrases_and_paths=[(phrase, "segment.flac")],
             use_break_sound_effect=True,
             high_shelf=HighShelfEq.DISABLED,
             reason_pauses=ReasonPauseTypes.NORMAL.value,
@@ -87,10 +87,101 @@ def test_concatenate_does_not_append_break_effect_to_final_segment(reason: Reaso
         sound,
         reason=reason,
         reason_pauses=ReasonPauseTypes.NORMAL.value,
-        use_break_sound_effect=False,
-        is_first_in_section=False,
+        break_effect=None,
         pause_duration_override=None,
     )
+
+
+def concatenate_with_mocks(phrases: list[Phrase]) -> list[Reason | None]:
+    """
+    Runs the concat flow over one present segment per phrase and returns the
+    `break_effect` decision recorded for each flushed segment.
+    """
+    sound = Sound(np.zeros(48000, dtype=np.float32), 48000)
+    decisions: list[Reason | None] = []
+
+    def fake_append(sound_in, reason, reason_pauses, break_effect, pause_duration_override):
+        decisions.append(break_effect)
+        return sound_in
+
+    with patch.object(ConcatUtil, "init_ffmpeg_stream", return_value=MagicMock()), \
+         patch.object(ConcatUtil, "close_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "add_audio_to_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "PSEUDO_SILENCE_COMPENSATION_ENABLED", False), \
+         patch.object(
+             SoundPipeline,
+             "make_concat_rendered_sound_segment",
+             side_effect=lambda phrase, path, high_shelf, **kwargs: sound,
+         ), \
+         patch.object(SoundPipeline, "append_pause_or_section_effect", side_effect=fake_append):
+        ConcatUtil.concatenate_sound_segments(
+            dest_path="output.flac",
+            phrases_and_paths=[(phrase, f"segment{i}.flac") for i, phrase in enumerate(phrases)],
+            use_break_sound_effect=True,
+            high_shelf=HighShelfEq.DISABLED,
+            reason_pauses=ReasonPauseTypes.NORMAL.value,
+            print_progress=False,
+        )
+
+    return decisions
+
+
+def test_concatenate_collapses_consecutive_space_break_runs() -> None:
+    phrases = [
+        Phrase("One", Reason.SENTENCE),
+        Phrase("Two", Reason.SPACE_BREAK),
+        Phrase("Three", Reason.SPACE_BREAK),
+        Phrase("Four", Reason.SPACE_BREAK),
+    ]
+
+    decisions = concatenate_with_mocks(phrases)
+
+    assert decisions == [None, Reason.SPACE_BREAK, None, None]
+
+
+def test_concatenate_applies_rule1_per_section_and_missing_leading_audio() -> None:
+    sound = Sound(np.zeros(48000, dtype=np.float32), 48000)
+    phrases = [
+        Phrase("Zeroth", Reason.SENTENCE),
+        Phrase("First", Reason.SPACE_BREAK),   # group 1, section start, file missing
+        Phrase("Second", Reason.SPACE_BREAK),  # group 2: first present of section -> rule 1
+        Phrase("Third", Reason.SPACE_BREAK),   # group 3: run continues -> rule 2
+    ]
+    decisions: list[Reason | None] = []
+
+    def fake_append(sound_in, reason, reason_pauses, break_effect, pause_duration_override):
+        decisions.append(break_effect)
+        return sound_in
+
+    phrases_and_paths = [
+        (phrases[0], "segment0.flac"),
+        (phrases[1], ""),  # missing audio
+        (phrases[2], "segment2.flac"),
+        (phrases[3], "segment3.flac"),
+    ]
+
+    with patch.object(ConcatUtil, "init_ffmpeg_stream", return_value=MagicMock()), \
+         patch.object(ConcatUtil, "close_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "add_audio_to_ffmpeg_stream"), \
+         patch.object(ConcatUtil, "PSEUDO_SILENCE_COMPENSATION_ENABLED", False), \
+         patch.object(
+             SoundPipeline,
+             "make_concat_rendered_sound_segment",
+             side_effect=lambda phrase, path, high_shelf, **kwargs: sound,
+         ), \
+         patch.object(SoundPipeline, "append_pause_or_section_effect", side_effect=fake_append):
+        ConcatUtil.concatenate_sound_segments(
+            dest_path="output.flac",
+            phrases_and_paths=phrases_and_paths,
+            use_break_sound_effect=True,
+            high_shelf=HighShelfEq.DISABLED,
+            reason_pauses=ReasonPauseTypes.NORMAL.value,
+            print_progress=False,
+            section_start_indices=[0, 1],
+        )
+
+    # Only present segments get decisions, aligned to their group indices
+    assert decisions == [None, None, None]
 
 
 class TestMakeStemMissingCount:

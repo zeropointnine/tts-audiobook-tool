@@ -4,14 +4,17 @@ from tts_audiobook_tool.app_types.phrase import Phrase, Reason
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 
 
-def test_text_to_phrases_downgrades_immediate_consecutive_sections() -> None:
+def test_text_to_phrases_keeps_immediate_consecutive_sections() -> None:
+    # Consecutive SPACE_BREAK reasons are preserved at segmentation time;
+    # suppressing their break sound effects is handled at render time by
+    # BreakEffectTracker, not by rewriting reasons.
     text = "Chapter 1\n\n\nThe Beginning\n\n\nProse starts here."
 
     result = PhraseSegmenter.text_to_phrases(text, 40, "en")
 
     assert result == [
         Phrase("Chapter 1\n\n\n", Reason.SPACE_BREAK),
-        Phrase("The Beginning\n\n", Reason.PARAGRAPH),
+        Phrase("The Beginning\n\n\n", Reason.SPACE_BREAK),
         Phrase("Prose starts here.", Reason.SENTENCE),
     ]
 

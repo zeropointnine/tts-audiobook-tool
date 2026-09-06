@@ -11,9 +11,6 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.text_ops.quote_spans import find_quote_spans
 
 
-DOWNGRADE_CONSECUTIVE_SECTIONS = True
-
-
 class _PysbdTextSpan(Protocol):
     sent: str
     start: int
@@ -65,8 +62,6 @@ class PhraseSegmenter:
         phrases = new_result
 
         phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
-        if DOWNGRADE_CONSECUTIVE_SECTIONS:
-            phrases = PhraseSegmenter.downgrade_consecutive_space_breaks(phrases)
 
         return phrases
 
@@ -510,27 +505,3 @@ class PhraseSegmenter:
                 results = leading_ornamental_phrases
 
         return results
-
-    @staticmethod
-    def downgrade_consecutive_space_breaks(phrases: list[Phrase]) -> list[Phrase]:
-        """
-        Downgrades immediate repeated SPACE_BREAK reasons to PARAGRAPH.
-
-        Some EPUB-to-text converters emit multiple blank lines around adjacent headings,
-        e.g. chapter number followed by chapter title. The first such break can be useful
-        as a section/prosody marker, but repeated immediate SPACE_BREAK reasons overstate the
-        structure and can trigger repeated section effects in downstream audio/browser flows.
-        """
-
-        last_reason_was_section = False
-
-        for phrase in phrases:
-            if phrase.reason == Reason.SPACE_BREAK:
-                if last_reason_was_section:
-                    phrase.reason = Reason.PARAGRAPH
-                    phrase.text = phrase.text.rstrip() + "\n\n"
-                last_reason_was_section = True
-            else:
-                last_reason_was_section = False
-
-        return phrases

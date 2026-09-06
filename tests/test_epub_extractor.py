@@ -135,7 +135,10 @@ class TestEpubExtractor(unittest.TestCase):
             [-1, 1, -1],
         )
 
-    def test_import_epub_downgrades_leading_section_after_previous_spine_boundary(self):
+    def test_import_epub_preserves_leading_space_breaks_after_boundary(self):
+        # Leading SPACE_BREAK reasons at a logical section start are preserved
+        # at import time; suppressing redundant break sound effects there is
+        # handled at render time by BreakEffectTracker.
         source_chapters = [
             EpubSourceChapter("Chapter 1", "chapter1.xhtml", "application/xhtml+xml", "Chapter one prose."),
             EpubSourceChapter(
@@ -157,9 +160,9 @@ class TestEpubExtractor(unittest.TestCase):
 
         self.assertEqual(result.section_start_indices, [1])
         self.assertEqual(result.phrase_groups[0].last_reason, Reason.SECTION_BREAK)
-        self.assertEqual(result.phrase_groups[1].text, "Chapter 2\n\n")
-        self.assertEqual(result.phrase_groups[1].last_reason, Reason.PARAGRAPH)
-        self.assertEqual(result.phrase_groups[2].last_reason, Reason.PARAGRAPH)
+        self.assertEqual(result.phrase_groups[1].text, "Chapter 2\n\n\n")
+        self.assertEqual(result.phrase_groups[1].last_reason, Reason.SPACE_BREAK)
+        self.assertEqual(result.phrase_groups[2].last_reason, Reason.SPACE_BREAK)
         self.assertEqual(result.phrase_groups[3].last_reason, Reason.SECTION_BREAK)
 
     def test_import_epub_merges_leading_ornamental_line_into_first_group(self):

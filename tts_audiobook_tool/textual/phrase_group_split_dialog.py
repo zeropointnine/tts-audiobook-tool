@@ -54,6 +54,8 @@ class PhraseGroupSplitDialog(ModalScreen[PhraseGroupSplitPoint | None]):
             f"[{index}] {phrase.presentable_text}"
             for index, phrase in enumerate(self.phrase_group.phrases, start=1)
         )
+
+        placeholder = f"1-{boundary_count}" if boundary_count > 1 else "1"
         yield Vertical(
             Static(
                 "Split after which phrase?\n",
@@ -61,7 +63,7 @@ class PhraseGroupSplitDialog(ModalScreen[PhraseGroupSplitPoint | None]):
             ),
             Static(preview, id="split-preview", markup=False),
             Input(
-                placeholder=f"1-{boundary_count}",
+                placeholder=placeholder,
                 id="split-boundary",
                 type="integer",
                 compact=True,
@@ -71,15 +73,29 @@ class PhraseGroupSplitDialog(ModalScreen[PhraseGroupSplitPoint | None]):
         )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+
         if event.input.id != "split-boundary":
             return
+        if event.value == "":
+            self.query_one("#split-error", Static).update("")
+            return
+
+        is_value_error = False
+        boundary = -1
         try:
             boundary = int(event.value)
         except ValueError:
-            boundary = 0
-        if not 0 < boundary < len(self.phrase_group.phrases):
-            self.query_one("#split-error", Static).update("Bad value")
+            is_value_error = True
+
+        message = ""
+        if is_value_error:
+            message = "Bad value"
+        elif not 0 < boundary < len(self.phrase_group.phrases):
+            message = "Out of range"
+        if message:
+            self.query_one("#split-error", Static).update(message)
             return
+
         self.dismiss(PhraseGroupSplitPoint(boundary))
 
     def action_cancel(self) -> None:

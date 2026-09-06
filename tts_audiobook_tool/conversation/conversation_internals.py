@@ -778,7 +778,7 @@ class ResponseSession:
                     sound,
                     reason=reason,
                     reason_pauses=self.project.reason_pauses,
-                    use_break_sound_effect=False,
+                    break_effect=None,
                 )
                 self.saved_turn_sounds.append(sound)
 

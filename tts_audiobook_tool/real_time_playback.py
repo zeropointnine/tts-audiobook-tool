@@ -39,7 +39,7 @@ from tts_audiobook_tool.real_time_playback_events import (
     RealTimePlaybackStarted,
 )
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationPhase, ModelUnhealthy
-from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
@@ -162,7 +162,12 @@ def _start_impl(
         RealTimePlaybackStarted(total, start_index, end_index)
     )
 
-    section_start_indices = set(ProjectBookUtil.get_section_start_indices(state.project))
+    # Render-time break effect rules. The tracker is fed one entry per
+    # successfully generated segment, in emission order.
+    break_effect_tracker = BreakEffectTracker(
+        ProjectBookUtil.get_section_start_indices(state.project),
+        start_group_index=start_index,
+    )
 
     for index in range(start_index, end_index + 1):
 
@@ -243,14 +248,14 @@ def _start_impl(
         if index == end_index:
             appended_sound = None
         else:
-            is_first_in_section = index in section_start_indices
-            use_sound_effect = SoundPipeline.should_append_break_sound_effect(
+            break_effect = break_effect_tracker.next_break_effect(
+                index,
                 phrase.reason,
-                use_break_sound_effect=state.project.use_break_sound_effect,
-                is_first_in_section=is_first_in_section,
+                effects_enabled=state.project.use_break_sound_effect,
+                is_final=False,
             )
-            if use_sound_effect:
-                if phrase.reason == Reason.SECTION_BREAK:
+            if break_effect is not None:
+                if break_effect == Reason.SECTION_BREAK:
                     path = SECTION_BREAK_SOUND_EFFECT_PATH
                 else:
                     path = SPACE_BREAK_SOUND_EFFECT_PATH

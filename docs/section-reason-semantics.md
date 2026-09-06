@@ -18,80 +18,67 @@ objects. A phrase receives a `Reason` describing why the segment ended:
 objects. `PhraseGroup.last_reason` is derived from the final phrase in the group, so a
 phrase-level `Reason.SPACE_BREAK` becomes the group-level section signal used downstream.
 
-During concat, `tts_audiobook_tool/concat_util.py` passes flattened phrases to the sound
-pipeline. `tts_audiobook_tool/sound/sound_pipeline.py` uses the phrase reason to append
-either silence or, when enabled, the section-break sound effect. Therefore,
-`Reason.SPACE_BREAK` is not just a descriptive label; it controls audible behavior.
+Reasons are preserved as segmentation produces them; pauses and browser display follow
+the stored reasons directly. Break *sound effects* are decided at render time by the
+rules below, so a `Reason.SPACE_BREAK` no longer implies that a sound effect will play.
 
 The browser player currently receives timed text segments without explicit `Reason`
-metadata. When section-break audio is present, `browser_player/book-text.js` infers
+metadata. When break audio is present, `browser_player/book-text.js` infers
 horizontal rule placement from displayed text ending with three or more line feeds. This
 means section-like display is currently coupled to whitespace rather than an explicit
 semantic marker in app metadata.
 
-## Problem with consecutive section assignment
+## Break sound effect rules (render time)
 
-Some EPUB-to-text converters emit multiple blank lines around adjacent heading-like
-blocks. For example:
+Break sound effects are governed by exactly two rules, implemented identically for
+concatenation (`tts_audiobook_tool/concat_util.py`) and real-time playback
+(`tts_audiobook_tool/real_time_playback.py`) by `BreakEffectTracker` in
+`tts_audiobook_tool/sound/sound_pipeline.py`:
 
-```text
-Chapter 1
+1. The first sound segment of a section never gets a SPACE_BREAK effect.
+2. In a run of consecutive sound segments that would each get a SPACE_BREAK
+   effect, only the first keeps it; the rest fall back to their configured
+   silence pause.
 
+Notes on the rules' semantics:
 
-The Beginning
+- A "sound segment" is a segment that actually emits audio (a present file during
+  concat, a successful generation during realtime playback). Missing or failed
+  segments do not advance tracker state.
+- Rule 2 counts run membership on the *would-be* assignment, so a segment
+  suppressed by rule 1 still anchors its run: its followers are suppressed as
+  well. Any segment whose reason is not SPACE_BREAK resets the run.
+- SECTION_BREAK effects are never suppressed by these rules (for example, a
+  single-group EPUB section still gets its page-turn). The final segment of an
+  output file or playback range never gets any break effect.
+- When a SPACE_BREAK effect is suppressed, the segment still gets its configured
+  `Reason.SPACE_BREAK` pause; only the sound effect is dropped.
+- Section starts come from `ProjectBookUtil.get_section_start_indices`: Book
+  sections for structurally sectioned books (eg EPUB), user-configured section
+  markers for single-section books (eg plain text).
 
+These rules replace the earlier mitigation layers: the render-time
+`is_first_in_section` gate inside `SoundPipeline.should_append_break_sound_effect`
+(removed), `PhraseSegmenter.downgrade_consecutive_space_breaks` (removed), and
+`EpubExtractor.downgrade_leading_section_groups` (removed).
 
-Prose starts here. Etc.
-```
+Consequences of removing the import-time downgrades:
 
-Naively treating every segment ending with three or more line breaks as
-`Reason.SPACE_BREAK` gives both `Chapter 1` and `The Beginning` section-like prosody. That
-overstates the intended structure: the chapter number may reasonably mark the section,
-but the immediately following title should usually not trigger another section pause,
-section-break sound effect, or horizontal rule.
-
-## Tactical mitigation
-
-The segmenter performs a final O(n) phrase-level pass after basic phrase segmentation and
-ornamental-line merging. The pass preserves the first `Reason.SPACE_BREAK` in an immediate
-run, then downgrades subsequent immediate `Reason.SPACE_BREAK` phrases to
-`Reason.PARAGRAPH`.
-
-This mitigation is guarded by the hardcoded `DOWNGRADE_CONSECUTIVE_SECTIONS` constant in
-`tts_audiobook_tool/text_ops/phrase_segmenter.py`. It currently defaults to `True`.
-
-When a phrase is downgraded, trailing section spacing is also reduced from section-like
-spacing to paragraph spacing. This keeps browser horizontal-rule inference aligned with
-the corrected semantic reason.
-
-The rule is intentionally phrase-level rather than `PhraseGroup`-level because:
-
-- `Reason` is assigned to `Phrase` objects.
-- `PhraseGroup.last_reason` is derived state.
-- Downstream grouping, concat, real-time playback, and metadata generation all depend on
-  phrase reasons.
-
-The rule only applies to immediate consecutive section reasons. A non-section phrase
-between two sections resets the sequence, allowing later genuine section breaks to remain
-`Reason.SPACE_BREAK`.
+- Consecutive SPACE_BREAK reasons keep their space-break pauses (previously the
+  downgraded spots got shorter paragraph pauses).
+- The browser player shows a horizontal rule at each blank-line run (previously
+  consecutive ones were hidden by rewriting trailing whitespace).
 
 ## EPUB logical-section boundaries
 
-EPUB import has an additional structural rule. Readable spine content is assembled into
-logical sections defined by EPUB navigation, and each logical section is segmented
-independently. The importer force-marks the final phrase of that section as
-`Reason.SECTION_BREAK`. Ordinary transitions between XHTML spine documents inside one
-logical section do not receive this reason.
+EPUB import assembles readable spine content into logical sections defined by EPUB
+navigation, and each logical section is segmented independently. The importer force-marks
+the final phrase of each logical section as `Reason.SECTION_BREAK`. Ordinary transitions
+between XHTML spine documents inside one logical section do not receive this reason.
 
-When a previous logical section has already ended with this forced boundary, section-like
-groups at the start of the next logical section are treated as redundant heading/layout
-artifacts and downgraded to `Reason.PARAGRAPH`. The explicit navigation boundary remains on
-the previous section's final phrase, while the new section's final phrase is force-marked
-as `Reason.SECTION_BREAK` after segmentation.
-
-This EPUB-specific mitigation is guarded by the hardcoded
-`DOWNGRADE_LEADING_SECTIONS_AFTER_EPUB_BOUNDARY` compatibility constant in
-`tts_audiobook_tool/text_ops/epub_extractor.py`. It currently defaults to `True`.
+Redundant leading space breaks at the start of the next logical section are no longer
+downgraded at import time; rule 1 above suppresses their sound effects at render time
+instead.
 
 ## Known architectural debt
 
@@ -104,8 +91,10 @@ The current system conflates several distinct concepts:
 - browser horizontal-rule display,
 - chapter/bookmark/file divider semantics.
 
-A more structured approach should likely separate these concerns. For example, future
-metadata could carry explicit layout markers or structural annotations rather than asking
-the browser player to infer horizontal rules from trailing line feeds. Similarly, section
-sound effects and long pauses could be controlled by explicit semantic markers rather
-than being coupled directly to whitespace-derived `Reason.SPACE_BREAK` values.
+The break effect rules are now a single render-time concern, but display and prosody
+remain coupled to whitespace-derived reasons. A more structured approach should likely
+separate these concerns. For example, future metadata could carry explicit layout
+markers or structural annotations rather than asking the browser player to infer
+horizontal rules from trailing line feeds. Similarly, section sound effects and long
+pauses could be controlled by explicit semantic markers rather than being coupled
+directly to whitespace-derived `Reason.SPACE_BREAK` values.
