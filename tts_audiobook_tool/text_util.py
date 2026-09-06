@@ -13,13 +13,16 @@ def combine_ansi_lines(lines: list[str]) -> str:
     return f"{Ansi.RESET}\n".join(lines) + Ansi.RESET
 
 
-def strip_ansi_codes(s: str) -> str:
+def strip_ansi_codes(s: str, and_line_feeds: bool=False) -> str:
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     # OSC sequences (terminal title, hyperlinks, ...): ESC ] params,
     # terminated by BEL or ST (ESC \).
     osc_escape = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
     s = osc_escape.sub('', s)
-    return ansi_escape.sub('', s)
+    s = ansi_escape.sub('', s)
+    if and_line_feeds:
+        s = s.replace("\r", "").replace("\n", "")
+    return s
 
 def make_terminal_hyperlink(url: str, text: str = "", is_file: bool=False) -> str:
     display = text or url
@@ -46,9 +49,9 @@ def make_url_with_params(base_url: str, params: dict) -> str:
     return base_url
 
 def load_text_file(path: str, errors: str="strict") -> str:
-    """ 
-    Load text file of potentially unknown provenance or format 
-    
+    """
+    Load text file of potentially unknown provenance or format
+
     param errors:
         is passed to the decode(errors=) function.
         rem:
@@ -73,7 +76,7 @@ def load_text_file(path: str, errors: str="strict") -> str:
 
         # 4. Decode using the detected encoding
         transcript = raw_data.decode(encoding, errors=errors)
-        
+
         # print(f"Loaded with encoding: {encoding} (Confidence: {confidence})")
         return transcript
 

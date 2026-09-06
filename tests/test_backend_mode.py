@@ -269,13 +269,15 @@ def test_moss_output_sample_rate_follows_architecture(monkeypatch) -> None:
     assert MossLocalServerModel.get_output_sample_rate(delay_project) == 48_000
 
 
-def test_only_mira_has_worker_output_filters() -> None:
-    assert TtsModelType.MIRA.value.output_filters == ["smem_size"]
-    assert all(
-        item.value.output_filters == []
-        for item in TtsModelType
-        if item is not TtsModelType.MIRA
-    )
+def test_worker_output_filters_defined_only_where_expected() -> None:
+    # MIRA leaks "smem_size" setup info; QWEN3TTS leaks an "open-end generation"
+    # pad-token warning. Every other model variant must keep a clean worker log.
+    expected = {
+        TtsModelType.MIRA: ["smem_size"],
+        TtsModelType.QWEN3TTS: ["for open-end generation"],
+    }
+    for item in TtsModelType:
+        assert item.value.output_filters == expected.get(item, [])
 
 
 def with_substring(spec, substring):

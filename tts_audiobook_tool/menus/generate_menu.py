@@ -380,7 +380,7 @@ def ask_batch_size(state: State) -> None:
 
 def make_validation_confirmation_line(state: State) -> str:
     if state.prefs.is_validation_disabled:
-        return "- Speech to text validation: Disabled"
+        return f"- Speech to text validation: {COL_ERROR}Disabled{COL_DEFAULT}"
     return f"- Word error tolerance: {state.project.strictness.label}"
 
 
@@ -415,7 +415,7 @@ def do_generate(state: State) -> None:
         num_remaining = len(remaining_indices)
         noun = make_noun("line", "lines", num_remaining)
         b = ask.ask_confirm(
-            f"No lines queued for generation, but {num_remaining} {noun} remain. Generate them now? "
+            f"No lines queued, but {num_remaining} {noun} remaining.\nGenerate them now? "
         )
         if not b:
             return

@@ -4,6 +4,7 @@ from typing import Any, cast
 import tts_audiobook_tool.menus.generate_menu as generate_menu_module
 from tts_audiobook_tool.app_types import Strictness
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.constants import COL_DEFAULT, COL_ERROR
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
@@ -266,7 +267,7 @@ def test_validation_confirmation_line_reflects_whisper_setting() -> None:
     )
 
     assert generate_menu_module.make_validation_confirmation_line(disabled_state) == (
-        "- Speech to text validation: Disabled"
+        f"- Speech to text validation: {COL_ERROR}Disabled{COL_DEFAULT}"
     )
     assert generate_menu_module.make_validation_confirmation_line(enabled_state) == (
         "- Word error tolerance: Loose"
@@ -362,7 +363,8 @@ def test_auto_concat_runs_only_after_successful_generation(monkeypatch) -> None:
         generate_menu_module.do_generate(state)
 
         assert concat_calls == ([state] if should_concat else [])
-        assert printed.index("- Speech to text validation: Disabled") < printed.index(
+        validation_line = f"- Speech to text validation: {COL_ERROR}Disabled{COL_DEFAULT}"
+        assert printed.index(validation_line) < printed.index(
             "- Will concatenate audio file/s when finished"
         )
 
@@ -505,7 +507,7 @@ def test_do_generate_prompts_to_queue_remaining_lines_when_none_queued(
 
     # Prompted with the remaining count (lines 1, 2, 4 are ungenerated).
     assert calls["confirms"][0] == (
-        "No lines queued for generation, but 3 lines remain. Generate them now? "
+        "No lines queued, but 3 lines remaining.\nGenerate them now? "
     )
     # Remaining lines tagged (one-indexed) and persisted.
     assert state.project.generate_range_string == "2-3, 5"
@@ -530,7 +532,7 @@ def test_do_generate_prompt_uses_singular_line_when_one_remains(monkeypatch) -> 
     generate_menu_module.do_generate(state)
 
     assert calls["confirms"][0] == (
-        "No lines queued for generation, but 1 line remain. Generate them now? "
+        "No lines queued, but 1 line remaining.\nGenerate them now? "
     )
     assert state.project.generate_range_string == "4"
     assert calls["runs"][0]["indices"] == {3}
@@ -547,7 +549,7 @@ def test_do_generate_declined_prompt_does_not_tag_or_generate(monkeypatch) -> No
     generate_menu_module.do_generate(state)
 
     assert calls["confirms"] == [
-        "No lines queued for generation, but 3 lines remain. Generate them now? "
+        "No lines queued, but 3 lines remaining.\nGenerate them now? "
     ]
     assert state.project.generate_range_string == "none"
     assert calls["saves"] == 0

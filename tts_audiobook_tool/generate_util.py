@@ -123,6 +123,8 @@ class GenerateUtil:
         showed_vram_warning = False
 
         GenerationEvents.emit(GenerationPhase("Preparing models"))
+
+        skip_divider_flag = Tts.instance_exists()
         warm_up_result = ModelManager.warm_up_models(state)
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
@@ -217,7 +219,6 @@ class GenerateUtil:
         pending_retries: list[tuple[int, int]] = []
         current_round: list[SubBatch] = []
         last_voice: int | None = None
-        is_first_batch = True
 
         # The first gen may be dominated by model warm-up or download time,
         # so it alone is exempt from the GEN_TIMEOUT watchdog.
@@ -284,9 +285,9 @@ class GenerateUtil:
             GenerateUtil.print_batch_heading(
                 indices=indices,
                 voice_index=sub.voice_selection_index,
-                show_divider=not is_first_batch,
+                show_divider=not skip_divider_flag,
             )
-            is_first_batch = False
+            skip_divider_flag = False
 
             # Generate and validate
             gen_start_time = time.time()
@@ -563,23 +564,25 @@ class GenerateUtil:
                         f"Couldn't save updated generation range: {save_error}",
                     )
 
-        # Build the summary even when it will not be shown so this metrics
-        # formatting remains one straightforward path. Clean quick generations
-        # return directly to the editor; stopped or problematic quick runs keep
-        # the summary visible for review.
-        message = ""
         if did_interrupt:
             Tts.clear_continuation()
-        message += f"Elapsed: {duration_string(time.time() - start_time)}\n"
+
+        # Print summary info
+        elapsed_line = f"Elapsed: {duration_string(time.time() - start_time)}"
+        divider = "-" * len(elapsed_line)
+        message = f"{COL_ACCENT}{divider}\n{COL_DEFAULT}{elapsed_line}\n"
+
         ok = str(num_passed)
         if num_passed == len(sorted_indices):
             ok += " (all)"
         message += f"Lines saved: {COL_OK}{ok}{COL_DEFAULT}\n"
         if Stt.has_instance() and ModelManager.has_yamnet_detector():
             message += f"Num retries triggered due to detected music: {num_failed_music}\n"
+
         message += f"Num retries: {num_retries}\n"
         if num_improved:
             message += f"Lines improved on retry: {COL_OK}{num_improved}{COL_DEFAULT}\n"
+
         col = COL_ACCENT if num_failed else ""
         if num_failed:
             message += f"Lines saved, but with excess word errors: {col}{num_failed}{COL_DEFAULT}\n"

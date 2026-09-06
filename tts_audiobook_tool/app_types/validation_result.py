@@ -14,11 +14,11 @@ POSSIBLE_TRUNCATION_UI_MESSAGE = f"Audio ends abruptly, last word may be truncat
 
 @dataclass
 class ValidationResult(ABC):
-    """ 
+    """
     Base class for a validation result.
     A validation result contains a Sound, which may or may not be already-transformed.
     """
-    
+
     sound: Sound
     intra_sample_silence_trims: list[SilenceGapTrim] = field(default_factory=list, kw_only=True)
     generated_start_trim_time: float | None = field(default=None, kw_only=True)
@@ -32,7 +32,7 @@ class ValidationResult(ABC):
     @abstractmethod
     def is_fail(self) -> bool:
         ...
-    
+
     @abstractmethod
     def get_ui_message(self) -> str:
         """ User-facing description, including color code formatting """
@@ -98,7 +98,7 @@ class ValidationResult(ABC):
 @dataclass
 class TranscriptResult(ValidationResult, ABC):
     """
-    Base class for a ValidationResult that has transcript data 
+    Base class for a ValidationResult that has transcript data
     (ie, anything other than SkippedResult)
     """
     transcript_words: list[Word]
@@ -117,7 +117,7 @@ class WordErrorResult(TranscriptResult):
     @property
     def num_errors(self) -> int:
         return self.findings.effective_word_error_count
-    
+
     @property
     def is_fail(self) -> bool:
         return self.findings.is_failed(self.threshold)
@@ -130,10 +130,10 @@ class TrimmedResult(TranscriptResult):
     """ The sound has been trimmed at either/both ends """
 
     # Values stored for reporting purposes
-    start_time: float | None 
+    start_time: float | None
     end_time: float | None
     original_duration: float
-    
+
     def __post_init__(self):
         if self.start_time is None and self.end_time is None:
             raise ValueError("start or end must be a float")
@@ -184,7 +184,7 @@ class ExcessiveDurationResult(TranscriptResult):
 
     @staticmethod
     def is_excessively_long(source_text: str, language_code: str, sound_duration: float) -> bool:
-        
+
         normalized_source = TextNormalizer.normalize_source(source_text, language_code)
         words = app_text.get_words(normalized_source, vocalizable_only=True)
 
@@ -192,7 +192,7 @@ class ExcessiveDurationResult(TranscriptResult):
         if any(sum(char.isdigit() for char in word) >= 3 for word in words):
             return False
 
-        threshold = 1.5 + len(words) * 0.75 
+        threshold = 1.5 + len(words) * 0.75
         return sound_duration > threshold
 
     @property
@@ -212,4 +212,4 @@ class SkippedResult(ValidationResult):
         return False
 
     def get_ui_message(self) -> str:
-        return f"Skipped {COL_DIM}({self.message})"
+        return f"Validation skipped {COL_DIM}({self.message})"
