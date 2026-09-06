@@ -41,9 +41,9 @@ class OmniVoiceBaseModel(TtsBaseModel):
     def generate(
         self,
         text: str,
+        speed: float,
         ref_audio_path: str = "",
         ref_text: str = "",
-        speed: float = DEFAULT_SPEED,
         instruct: str = "",
         language_id: str = "",
         duration: float | None = None,

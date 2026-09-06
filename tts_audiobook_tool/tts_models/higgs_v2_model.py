@@ -141,6 +141,7 @@ class HiggsV2Model(HiggsV2BaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -182,7 +183,8 @@ class HiggsV2Model(HiggsV2BaseModel):
             seed=seed,
             temperature=temperature,
             top_k=top_k,
-            top_p=top_p
+            top_p=top_p,
+            print_params=print_params
         )
 
         if isinstance(result, Sound):
@@ -198,8 +200,13 @@ class HiggsV2Model(HiggsV2BaseModel):
             seed: int,
             temperature: float,
             top_k: int,
-            top_p: float
+            top_p: float,
+            print_params: bool=False
     ) -> Sound | str:
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals(), keys_blacklist=["p_voice_path", "p_voice_transcript"])
 
         if p_voice_path:
             voice_path = p_voice_path

@@ -26,6 +26,7 @@ class MossServerModel(MossServerBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
        

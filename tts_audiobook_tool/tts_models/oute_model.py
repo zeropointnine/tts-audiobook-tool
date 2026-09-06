@@ -49,6 +49,7 @@ class OuteModel(OuteBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
         
         if len(prompts) != 1:
@@ -62,7 +63,8 @@ class OuteModel(OuteBaseModel):
         result = self.generate(
             prompt,
             project.oute_voice_json,
-            temperature)
+            temperature,
+            print_params=print_params)
 
         if isinstance(result, Sound):
             return [result]
@@ -73,12 +75,17 @@ class OuteModel(OuteBaseModel):
         self,
         prompt: str,
         voice: dict,
-        temperature: float
+        temperature: float,
+        print_params: bool = False
     ) -> Sound | str:
         """
         :param voice: Oute-specific voice clone data
         :param temperature: Must be concrete (ie, resolved default)
         """
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals(), keys_blacklist=["voice"])
 
         # First, clone GENERATION_CONFIG from config file
         from outetts.models.config import SamplerConfig # type: ignore

@@ -57,6 +57,7 @@ class MiraModel(MiraBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
 
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MIRA, voice_selection_index)
@@ -106,6 +107,18 @@ class MiraModel(MiraBaseModel):
             seed = random.randrange(0, SEED_MAX)
         app_support.set_seed(seed)
         self.mira_tts.gen_config.random_seed = seed
+
+        # This model has no single concrete generate() w/ concrete-value params,
+        # so print the resolved params here instead
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params({
+                "temperature": temperature,
+                "top_k": top_k,
+                "top_p": top_p,
+                "repetition_penalty": repetition_penalty,
+                "seed": seed,
+            })
 
         if len(prompts) == 1:
             result = self.generate_single(prompts[0])

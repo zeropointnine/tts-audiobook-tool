@@ -134,16 +134,16 @@ class TtsBaseModel(ABC):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
     ) -> list[Sound] | str:
         """
         Generates Sound/s using the relevant TTS model attributes in the `project` object.
         Typically delegates-to/wraps a more "parameter-specific" concrete method.
 
-        Contract: this method owns all decision logic — reading project settings,
+        Contract: this method should own all decision logic — reading project settings,
         resolving -1 sentinels to defaults, randomizing the seed, and any
-        model-type/mode dispatch. The concrete generate() method it calls must
-        receive fully-resolved concrete values, and must not itself contain
-        sentinel/default-resolution conditionals.
+        model-type/mode dispatch. The concrete generate() method it calls should
+        receive fully-resolved concrete values.
 
         :param prompts:
             List of one or more prompts to process
@@ -155,13 +155,47 @@ class TtsBaseModel(ABC):
         :param on_stream_end:
             Optional callback invoked once when streaming generation completes
             (ie, after the last chunk)
-
+        :param print_params:
+            If True, implementations should print the resolved generation parameters
         Returns:
             A list of Sounds (one per prompt), or error string
             Sound.data must be of np.dtype("float32")
 
         """
         ...
+
+    @classmethod
+    def print_params(cls, o: Any, keys_blacklist: list[str] | None = None) -> None:
+        """
+        Prints salient generation parameters.
+        These are typically the values of the TTS models' concrete `generate()` function,
+        but may also be manually added-to from instance values, etc.
+        Is meant to be used "in situ" as part of the main generate loop's output history.
+        Excludes prompt text and file path, as those get printed elsewhere.
+        By convention, exclude values which are both "optional" and "disabled".
+        """
+
+        blacklist = list(_PARAMS_PRINT_BLACKLIST)
+        if keys_blacklist:
+            blacklist += keys_blacklist
+
+        dic = o if isinstance(o, dict) else vars(o)
+        parts = []
+        for key in sorted(dic):
+            if key in blacklist:
+                continue
+            value = dic[key]
+            # skip None or empty string or empty Collection
+            if value == None or (isinstance(value, str) and not value) or (isinstance(value, Collection) and not value):
+                continue
+            if isinstance(value, str):
+                value = ellipsize(value, 20)
+                value = '"' + value + '"'
+            parts.append(f"{key}: {value}")
+        s = ", ".join(parts)
+
+        print(f"{COL_DEFAULT}Params: {COL_DIM}{s}\n") # Preserve dim color (not using printt)
+
 
     def clear_stream_state(self) -> None:
         """
@@ -425,3 +459,11 @@ class TtsBaseModel(ABC):
         if strictness.level >= Strictness.HIGH.level and project.language_code != "en":
             return f"Not recommended when language code != en"
         return ""
+
+_PARAMS_PRINT_BLACKLIST = [
+    "TtsBaseModel", "self", "print_params",
+    "prompt", "prompts", "text", "texts",
+    "voice_path", "voice_target",
+    "on_stream_chunk", "on_stream_end",
+]
+

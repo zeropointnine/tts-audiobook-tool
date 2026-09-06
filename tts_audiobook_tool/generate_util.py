@@ -645,6 +645,7 @@ class GenerateUtil:
             is_realtime=is_realtime,
             save_debug_files=save_debug_files,
             print_generation_request=True,
+            print_params=True,
             voice_selection_index=voice_selection_index
         )
         printt() # Restore print color, print blank line
@@ -741,6 +742,7 @@ class GenerateUtil:
             is_realtime: bool,
             save_debug_files: bool,
             print_generation_request: bool = False,
+            print_params: bool = False,
             voice_selection_index: int | None = None
         ) -> list[tuple[Sound, list[SilenceGapTrim], float | None, float | None, float, float | None, str] | str | TtsModelError]:
         """
@@ -806,7 +808,8 @@ class GenerateUtil:
                 prompts,
                 force_random_seed,
                 voice_selection_index=voice_selection_index,
-                print_generation_request=print_generation_request
+                print_generation_request=print_generation_request,
+                print_params=print_params
             )
 
         # `result` is either n generated Sounds or a single error string
@@ -969,7 +972,7 @@ class GenerateUtil:
         else:
             index_strings = [str(item + 1) for item in indices[:3]]
             num_more = len(indices) - 3
-            indices_string = f"{', '.join(index_strings)}, + {num_more} more"
+            indices_string = f"{', '.join(index_strings)}, +{num_more} more"
         processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
         if voice_index is not None:
             processing_string += f" {COL_DIM}[voice {voice_index + 1}]{COL_DEFAULT}"

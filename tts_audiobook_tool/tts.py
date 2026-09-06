@@ -183,9 +183,9 @@ class Tts:
                 if exists:
                     model_infos.append(model_info)
             return model_infos
-        
+
         matches = get_matches()
-        
+
         match len(matches):
             case 0:
                 # No match
@@ -412,6 +412,7 @@ class Tts:
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             print_generation_request: bool = False,
+            print_params: bool = False,
             voice_selection_index: int | None = None,
     ):
         """
@@ -434,19 +435,21 @@ class Tts:
             f"voice_selection_index={voice_selection_index} "
             f"has_on_stream_chunk={on_stream_chunk is not None} has_on_stream_end={on_stream_end is not None}"
         )
+
         prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
         kwargs = {
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,
             "voice_selection_index": voice_selection_index,
+            "print_params": print_params,
         }
         if Tts._type.value.backend_kind == TtsBackendKind.SGL_OMNI:
             kwargs["print_generation_request"] = print_generation_request
 
         return instance.generate_using_project(
-            project,
-            prepared_prompts,
-            force_random_seed,
+            project=project,
+            prompts=prepared_prompts,
+            force_random_seed=force_random_seed,
             **kwargs,
         )
 
@@ -489,7 +492,7 @@ class Tts:
             model_type = Tts._model_params.get("chatterbox_type")
             assert isinstance(model_type, ChatterboxType), "chatterbox_type not set"
             device_type = Tts.get_best_supported_device_type(TtsModelType.CHATTERBOX)
-            
+
             from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
             Tts._chatterbox = ChatterboxModel(model_type, device_type)
             printt()
@@ -524,12 +527,12 @@ class Tts:
                 compile_enabled = Tts._model_params.get("fish_s1_compile_enabled", False)
             else:
                 compile_enabled = False
-            
+
             if device_type == DeviceType.CUDA:
                 extra = f"compile: {compile_enabled}"
             else:
                 extra = ""
-            
+
             from tts_audiobook_tool.tts_models.fish_s1_model import FishS1Model
             Tts._fish_s1 = FishS1Model(device_type, compile_enabled)
             printt()
@@ -546,12 +549,12 @@ class Tts:
                 compile_enabled = Tts._model_params.get("fish_s2_compile_enabled", True)
             else:
                 compile_enabled = False
-            
+
             if device_type == DeviceType.CUDA:
                 extra = f"compile: {compile_enabled}"
             else:
                 extra = ""
-            
+
             from tts_audiobook_tool.tts_models.fish_s2_model import FishS2Model
             Tts._fish_s2 = FishS2Model(device_type, compile_enabled)
             printt()
@@ -681,15 +684,15 @@ class Tts:
             Tts._pocket = PocketModel(device=device_type, language=language)
             printt()
         return Tts._pocket
-    
+
     @staticmethod
     def get_qwen3() -> Qwen3BaseModel:
         require_model_owner("TTS")
-        
+
         if not Tts._qwen3:
 
             device_type = Tts.get_best_supported_device_type(TtsModelType.QWEN3TTS)
-            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID            
+            target = Tts._model_params["qwen3_target"] or Qwen3BaseModel.DEFAULT_REPO_ID
 
             looks_like_path = os.path.isabs(target) or target.startswith(("./", "../")) or "\\" in target
             if looks_like_path and not os.path.exists(target):
@@ -731,8 +734,8 @@ class Tts:
 
             device_type = Tts.get_best_supported_device_type(TtsModelType.VIBEVOICE)
             target = Tts._model_params.get("vibevoice_target", "") or VibeVoiceBaseModel.DEFAULT_REPO_ID
-            lora_path = Tts._model_params.get("vibevoice_lora_path", "") 
-            
+            lora_path = Tts._model_params.get("vibevoice_lora_path", "")
+
             from tts_audiobook_tool.tts_models.vibe_voice_model import VibeVoiceModel
             Tts._vibevoice = VibeVoiceModel(
                 device=device_type,
@@ -827,11 +830,11 @@ class Tts:
 @dataclass
 class InstanceDisplayInfo:
     """ Info about the instantiated TTS model used for UI """
-    
+
     # Short descriptor of model instance; required
     # Could be name of model or something more specific, like the model's hf repo id
     model_description: str
-    
+
     # Should usually be populated, depending on model
     device: str = ""
 

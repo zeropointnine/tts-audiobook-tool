@@ -66,7 +66,7 @@ def tensor_bytes(t) -> int:
 
 
 def analyzer_report(model) -> tuple[int, float, dict[int, int]]:
-    from chatterbox.models.t3.inference.alignment_stream_analyzer import (
+    from chatterbox.models.t3.inference.alignment_stream_analyzer import ( # type: ignore
         AlignmentStreamAnalyzer,
     )
     from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
@@ -96,7 +96,7 @@ def main() -> None:
     parser.add_argument("--apply-fix", action="store_true")
     args = parser.parse_args()
 
-    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+    from chatterbox.mtl_tts import ChatterboxMultilingualTTS # type: ignore
     from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
 
     asset = os.path.join(

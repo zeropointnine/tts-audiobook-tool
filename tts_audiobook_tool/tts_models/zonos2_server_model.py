@@ -21,14 +21,15 @@ class Zonos2ServerModel(Zonos2ServerBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
             print_generation_request: bool = False,
     ) -> list[Sound] | str:
         """
         SGL-Omni notes/limitations circa 2026-08:
 
         - Voice transcript not supported, though local reference implementation does
-        - Seed not supported 
-        - "Accurate mode" is always True and cannot be changed (but why?).
+        - Seed not supported
+        - "Accurate mode" is always True and cannot be changed (but why?)
         - Min-p is not actually hooked up, apparently
         - emotion_* featureset not supported
         - We are NOT using "language" param, w/c is used to apply model's own prompt normalization logic
@@ -54,10 +55,10 @@ class Zonos2ServerModel(Zonos2ServerBaseModel):
         payloads = []
         for prompt in prompts:
 
-            # Allows for 40 tokens per prompt word (conservative value), 
+            # Allows for 40 tokens per prompt word (conservative value),
             # plus 200 tokens of overhead, capped to 4096.
             max_new_tokens = min(200 + (len(prompt.split()) * 40), 4096)
- 
+
             payload = {
                 "input": self.prepare_text_for_inference(project, prompt),
                 "stream": is_streaming,

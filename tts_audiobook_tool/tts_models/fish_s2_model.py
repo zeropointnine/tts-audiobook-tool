@@ -33,12 +33,12 @@ class VoiceClone:
 
 # ---
 
-class FishS2Model(FishS2BaseModel): 
+class FishS2Model(FishS2BaseModel):
     """
     Fish S2 TTS inference logic
 
     Almost identical to FishS1Model class. Not worth de-duping code IME.
-    
+
     Note that the updated fish_speech lib does not seem to be compatible with the older S1-mini model.
     So this class and the FishS1Model class must use different fish lib github commit points as a dependency
     (ie, must use different venvs).
@@ -51,7 +51,7 @@ class FishS2Model(FishS2BaseModel):
     def __init__(self, device: DeviceType, compile_enabled: bool):
 
         # TODO verify mpc; also mpc + compile? probably not presumably?
-        
+
         self._device_type = device
         device_value = device.value
         self._compile_enabled = (device == DeviceType.CUDA and compile_enabled)
@@ -234,7 +234,7 @@ class FishS2Model(FishS2BaseModel):
             temperature=temperature,
             top_p=top_p,
             top_k=top_k, # type: ignore  # rem, when venv is s1, gets flagged as an error
-            
+
             # the app already segments audiobook/conversation text into bounded
             # prompt-sized units before model inference. Keep Fish S2 from doing
             # its own internal text chunking so this wrapper remains responsible
@@ -264,13 +264,14 @@ class FishS2Model(FishS2BaseModel):
         self.decode_one_token = None
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -326,12 +327,13 @@ class FishS2Model(FishS2BaseModel):
             top_k=top_k,
             seed=seed,
             rolling_continuation_max_segments=rolling_continuation_max_segments,
+            print_params=print_params,
         )
 
         if isinstance(result, Sound):
             return [result]
         else:
-            return result    
+            return result
 
     def generate(
             self,
@@ -341,10 +343,18 @@ class FishS2Model(FishS2BaseModel):
             top_k: int,
             seed: int,
             rolling_continuation_max_segments: int,
+            print_params: bool=False,
     ) -> Sound | str:
         """
         All values must be concrete (ie, resolved defaults, randomized seed).
         """
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            dic = locals().copy()
+            if not rolling_continuation_max_segments:
+                dic.pop("rolling_continuation_max_segments")
+            TtsBaseModel.print_params(dic)
 
         rolling_continuation = rolling_continuation_max_segments > 0
 

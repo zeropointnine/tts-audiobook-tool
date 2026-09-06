@@ -11,6 +11,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
+from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 
@@ -21,8 +22,8 @@ class Qwen3Model(Qwen3BaseModel):
 
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    def __init__(self, model_target: str, device: DeviceType): 
-        
+    def __init__(self, model_target: str, device: DeviceType):
+
         self._model_target = model_target
         self._voice_info: tuple[str, str] | None = None
         self.cached_continuation_history: list[tuple[str, torch.Tensor]] = []
@@ -38,13 +39,13 @@ class Qwen3Model(Qwen3BaseModel):
             try:
                 from flash_attn import flash_attn_func # type: ignore
                 attn_implementation = "flash_attention_2"
-                
+
                 # FYI, can ignore:
                 # You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour
-               
+
             except ImportError:
                 # eat silently
-                ... 
+                ...
 
         self._model: Qwen3TTSModel = Qwen3TTSModel.from_pretrained(
                 self._model_target,
@@ -73,7 +74,7 @@ class Qwen3Model(Qwen3BaseModel):
     @property
     def supported_speakers(self) -> list[str]:
         return self._model.get_supported_speakers() or []
-    
+
     @property
     def generate_defaults(self) -> dict[str, Any]:
         return self._model.generate_defaults
@@ -158,13 +159,14 @@ class Qwen3Model(Qwen3BaseModel):
         )
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool=False
     ) -> list[Sound] | str:
 
         language = self.resolve_language_code_and_warning(project.language_code)[0]
@@ -184,7 +186,7 @@ class Qwen3Model(Qwen3BaseModel):
         )
 
         match self.model_type:
-            
+
             case "base":
 
                 voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
@@ -202,6 +204,7 @@ class Qwen3Model(Qwen3BaseModel):
                         language=language,
                         gen_kwargs=gen_kwargs,
                         rolling_continuation_max_segments=project.qwen3_rolling_cont,
+                        print_params=print_params,
                     )
                 else:
                     result = "Missing voice path or transcript"
@@ -224,7 +227,7 @@ class Qwen3Model(Qwen3BaseModel):
                         language=language,
                         gen_kwargs=gen_kwargs,
                     )
-            
+
             case "voice_design":
 
                 result = self.generate_voice_design(
@@ -233,25 +236,26 @@ class Qwen3Model(Qwen3BaseModel):
                     language=language,
                     gen_kwargs=gen_kwargs,
                 )
-            
+
             case _:
                 result = f"Unsupported model type: {self.model_type}"
 
         return result
 
     def generate_base(
-          self,
-          prompts: list[str],
-           voice_info: tuple[str, str],
-           language: str,
-           gen_kwargs: dict[str, Any],
-            rolling_continuation_max_segments: int = 0,
+            self,
+            prompts: list[str],
+            voice_info: tuple[str, str],
+            language: str,
+            gen_kwargs: dict[str, Any],
+            rolling_continuation_max_segments: int,
+            print_params: bool = False,
     ) -> list[Sound] | str:
         """
         Generate function for model_type="base" (voice clone-based).
         `gen_kwargs` must contain concrete values (see _build_gen_kwargs).
         """
-        
+
         if not prompts or not voice_info[0] or not voice_info[1]:
             return "Missing required parameter"
 
@@ -288,8 +292,21 @@ class Qwen3Model(Qwen3BaseModel):
             use_continuation,
         )
         voice_clone_prompts = [voice_clone_prompt for _ in prompts]
-        
+
         languages = [language for _ in prompts]
+
+        if print_params:
+            params = {
+                "temperature":          gen_kwargs["temperature"],
+                "top_k":                gen_kwargs["top_k"],
+                "top_p":                gen_kwargs["top_p"],
+                "repetition_penalty":   gen_kwargs["repetition_penalty"],
+                "seed":                 gen_kwargs["seed"],
+                "language":             language,
+            }
+            if rolling_continuation_max_segments > 0:
+                params["rolling_continuation_max_segments"] = rolling_continuation_max_segments
+            TtsBaseModel.print_params(params)
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
         printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True)
@@ -310,13 +327,13 @@ class Qwen3Model(Qwen3BaseModel):
             )
             if rolling_continuation:
                 self.cache_continuation(prompts[0], generated_codes[0], rolling_continuation_max_segments)
-            
+
             # FYI, this output can be ignored:
             # setting `pad_token_id` to `eos_token_id`:2150 for open-end generation.
-        
+
         except Exception as e:
             return str(e)
-        
+
         sounds = [Sound(wav, sr) for wav in wavs]
         return sounds
 
@@ -345,14 +362,13 @@ class Qwen3Model(Qwen3BaseModel):
                 ref_tok = self._model._tokenize_texts([self._model._build_ref_text(ref_text)])[0]
                 ref_ids.append(ref_tok)
 
-        merged_gen_kwargs = self._model._merge_generate_kwargs(**gen_kwargs)
         talker_codes_list, _ = self._model.model.generate(
             input_ids=input_ids,
             ref_ids=ref_ids,
             voice_clone_prompt=cast(Any, voice_clone_prompt_dict),
             languages=languages,
             non_streaming_mode=True,
-            **merged_gen_kwargs,
+            **gen_kwargs,
         )
 
         codes_for_decode = []
@@ -401,7 +417,7 @@ class Qwen3Model(Qwen3BaseModel):
         instructs = [instruct for _ in prompts] if instruct else None
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True) 
+        printt(f"{COL_DIM_ITALICS}Generating...", dont_reset=True)
 
         try:
             wavs, sr = self._model.generate_custom_voice(
@@ -430,10 +446,10 @@ class Qwen3Model(Qwen3BaseModel):
         """
 
         languages = [language for _ in prompts]
-        instructs = [instruct for _ in prompts] 
+        instructs = [instruct for _ in prompts]
 
         # Inference code does not print its own feedback, so add some, matching behvior of other models
-        printt("{COL_DIM_ITALICS}Generating...", dont_reset=True) 
+        printt("{COL_DIM_ITALICS}Generating...", dont_reset=True)
 
         try:
             wavs, sr = self._model.generate_voice_design(
@@ -461,11 +477,8 @@ class Qwen3Model(Qwen3BaseModel):
         Build kwargs dict for library generate calls.
 
         Called only by generate_using_project() (the project layer): resolves
-        any -1 sentinel values (applying library defaults where needed) so that
-        the generate methods receive concrete values. Only includes parameters
-        where the user has explicitly set a value (not -1 sentinel); the
-        library's _merge_generate_kwargs will apply defaults for any missing
-        params.
+        any -1 sentinel values and applies the loaded model's generation defaults
+        so that the generate methods receive concrete values.
 
         The Qwen3-TTS architecture has two sampling components: a "main talker" that generates
         the lead codebook token at each step, and a "subtalker" (code_predictor) that generates
@@ -496,4 +509,4 @@ class Qwen3Model(Qwen3BaseModel):
             kwargs["repetition_penalty"] = repetition_penalty
         if seed != -1:
             kwargs["seed"] = seed
-        return kwargs
+        return self._model._merge_generate_kwargs(**kwargs)

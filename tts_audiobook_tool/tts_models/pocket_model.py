@@ -121,6 +121,7 @@ class PocketModel(PocketBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
     ) -> list[Sound] | str:
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.POCKET, voice_selection_index)
         if voice_file_name:
@@ -143,6 +144,7 @@ class PocketModel(PocketBaseModel):
             seed,
             on_stream_chunk=on_stream_chunk,
             on_stream_end=on_stream_end,
+            print_params=print_params,
         )
 
     def generate(
@@ -153,9 +155,14 @@ class PocketModel(PocketBaseModel):
             seed: int,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            print_params: bool = False,
     ) -> list[Sound] | str:
-        
-        # Print something to stay consistent w/ other model behavior b/c model lib does not 
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals())
+
+        # Print something to stay consistent w/ other model behavior b/c model lib does not
         printt(f"{COL_DIM_ITALICS}Generating...")
 
         try:

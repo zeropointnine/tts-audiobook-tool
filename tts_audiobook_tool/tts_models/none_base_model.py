@@ -50,5 +50,6 @@ class NoneModel(NoneBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
     ) -> list[Sound] | str:
         return "No TTS model"

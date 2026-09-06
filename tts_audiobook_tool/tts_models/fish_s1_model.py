@@ -174,6 +174,7 @@ class FishS1Model(FishS1BaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -221,7 +222,8 @@ class FishS1Model(FishS1BaseModel):
             temperature=temperature,
             top_p=top_p,
             repetition_penalty=repetition_penalty,
-            seed=seed
+            seed=seed,
+            print_params=print_params
         )
 
         if isinstance(result, Sound):
@@ -235,11 +237,16 @@ class FishS1Model(FishS1BaseModel):
             temperature: float,
             top_p: float,
             repetition_penalty: float,
-            seed: int
+            seed: int,
+            print_params: bool=False
     ) -> Sound | str:
         """
         All values must be concrete (ie, resolved defaults, randomized seed).
         """
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals())
 
         torch.manual_seed(seed)
         if torch.cuda.is_available():

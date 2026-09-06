@@ -47,13 +47,13 @@ class MossModel(MossBaseModel):
         printt(f"Attention implementation: {attn_implementation}")
 
         if target_util.is_hf_repo_id_syntax(model_target):
-            
+
             # TODO: Should not derive revision by repo id. Should pass revision into ctor.
             preset = MossConfigs.get_preset_by_target(model_target)
             revision = preset.value.revision if preset else None
             if revision:
                 printt(f"Using pinned MOSS-TTS revision: {revision[:12]}")
-            
+
             local_path = huggingface_hub.snapshot_download(
                 repo_id=model_target,
                 revision=revision,
@@ -63,7 +63,7 @@ class MossModel(MossBaseModel):
         else:
             local_path = model_target
 
-        # Due to transformers bug, can't simply use hf repo id here bc on Windows, 
+        # Due to transformers bug, can't simply use hf repo id here bc on Windows,
         # it mangles the repo id (uses backslash instead of forward slash)
 
         self.processor = AutoProcessor.from_pretrained(
@@ -118,7 +118,7 @@ class MossModel(MossBaseModel):
         config = getattr(self.model, "config", None)
         local_num_layers = getattr(config, "local_num_layers", None)
         has_local_transformer = hasattr(self.model, "local_transformer")
-        
+
         if has_local_transformer or local_num_layers is not None:
             return MossArchType.LOCAL
         if type(self.model).__name__ == "MossTTSDelayModel":
@@ -325,6 +325,7 @@ class MossModel(MossBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
     ) -> list[Sound] | str:
 
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.MOSS, voice_selection_index)
@@ -352,6 +353,7 @@ class MossModel(MossBaseModel):
             audio_top_p=audio_top_p,
             audio_top_k=audio_top_k,
             seed=seed,
+            print_params=print_params,
         )
 
     def generate(
@@ -364,7 +366,10 @@ class MossModel(MossBaseModel):
             audio_top_p: float,
             audio_top_k: int,
             seed: int,
+            print_params: bool=False,
     ) -> list[Sound] | str:
+
+        locals_snapshot = locals()
 
         if self.model is None or self.processor is None:
             return "Model or processor is not initialized"
@@ -372,6 +377,13 @@ class MossModel(MossBaseModel):
         voice_reference = os.path.abspath(voice_path) if voice_path else ""
         if voice_path and not os.path.exists(voice_reference):
             return "Missing voice reference audio"
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            dic = locals_snapshot.copy()
+            if not rolling_continuation_max_segments:
+                dic.pop("rolling_continuation_max_segments")
+            TtsBaseModel.print_params(dic)
 
         # The model doesn't use a transcript, so only the voice file state
         # matters.
@@ -466,7 +478,7 @@ class MossModel(MossBaseModel):
                 processor_mode = "generation"
 
             else:
-                
+
                 # No voice clone data
                 conversations = [
                     [self.processor.build_user_message(text=prompt, language=language or None)]
@@ -479,13 +491,13 @@ class MossModel(MossBaseModel):
 
             if isinstance(decoded, str):
                 # Return single error string
-                return decoded 
+                return decoded
 
             # Return list of Sounds
             return decoded
 
         except Exception as e:
-            
+
             return make_error_string(e)
 
 MOSS_AUDIO_PLACEHOLDER = "<|audio|>"

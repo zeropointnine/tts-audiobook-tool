@@ -181,6 +181,15 @@ class ChatterboxModel(ChatterboxBaseModel):
             return value
         return value.detach().to(device).clone()
 
+    @staticmethod
+    def _resolve_setting(value: float, default: float) -> float:
+        """
+        Maps the project-level "unset" sentinel (-1) to the given default.
+        """
+        if value == -1:
+            return default
+        return value
+
     def generate_using_project(
             self,
             project: Project,
@@ -189,6 +198,7 @@ class ChatterboxModel(ChatterboxBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
 
         if len(prompts) != 1:
@@ -197,41 +207,46 @@ class ChatterboxModel(ChatterboxBaseModel):
         # Parameters common to both model types
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.CHATTERBOX, voice_selection_index)
 
-        dic = {
-            "text": prompts[0],
-            "voice_path": ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else "",
-            "temperature": project.chatterbox_temperature
-                if project.chatterbox_temperature != -1 else ChatterboxBaseModel.DEFAULT_TEMPERATURE,
-            "top_p": project.chatterbox_top_p
-                if project.chatterbox_top_p != -1 else ChatterboxBaseModel.DEFAULT_TOP_P,
-            "seed": -1 if force_random_seed else project.chatterbox_seed,
-        }
+        temperature = ChatterboxModel._resolve_setting(project.chatterbox_temperature, ChatterboxBaseModel.DEFAULT_TEMPERATURE)
+        top_p = ChatterboxModel._resolve_setting(project.chatterbox_top_p, ChatterboxBaseModel.DEFAULT_TOP_P)
+        # Only consumed by the multilingual variant, but always passed
+        exaggeration = ChatterboxModel._resolve_setting(project.chatterbox_exaggeration, ChatterboxBaseModel.DEFAULT_EXAGGERATION)
+        cfg = ChatterboxModel._resolve_setting(project.chatterbox_cfg, ChatterboxBaseModel.DEFAULT_CFG)
+
+        # Note how each model has an independent repetition penalty value b/c the values behave differently on each
+        language_id = ""
+        repetition_penalty: float
+        turbo_top_k: int | None = None
         match self._model_type:
             case ChatterboxType.MULTILINGUAL:
-                dic.update({
-                    "language_id": project.language_code,
-                    "exaggeration": project.chatterbox_exaggeration
-                        if project.chatterbox_exaggeration != -1 else ChatterboxBaseModel.DEFAULT_EXAGGERATION,
-                    "cfg": project.chatterbox_cfg
-                        if project.chatterbox_cfg != -1 else ChatterboxBaseModel.DEFAULT_CFG,
-                    "repetition_penalty": project.chatterbox_ml_repetition_penalty
-                        if project.chatterbox_ml_repetition_penalty != -1 else ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
-                })
+                language_id = project.language_code
+                repetition_penalty = ChatterboxModel._resolve_setting(
+                    project.chatterbox_ml_repetition_penalty, ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
+                )
             case ChatterboxType.TURBO:
-                dic.update({
-                    "turbo_top_k": project.chatterbox_turbo_top_k
-                        if project.chatterbox_turbo_top_k != -1 else None,
-                    "repetition_penalty": project.chatterbox_turbo_repetition_penalty
-                        if project.chatterbox_turbo_repetition_penalty != -1 else ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO,
-                })
-            # Note how each model has an independent repetition penalty value b/c the values behave differently on each
+                turbo_top_k = None if project.chatterbox_turbo_top_k == -1 else project.chatterbox_turbo_top_k
+                repetition_penalty = ChatterboxModel._resolve_setting(
+                    project.chatterbox_turbo_repetition_penalty, ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
+                )
 
         # Randomize seed here so that generate() receives a concrete value
-        seed = dic["seed"]
+        seed = -1 if force_random_seed else project.chatterbox_seed
         if seed <= -1:
-            dic["seed"] = random.randrange(0, SEED_MAX)
+            seed = random.randrange(0, SEED_MAX)
 
-        result = self.generate(**dic)
+        result = self.generate(
+            text=prompts[0],
+            voice_path=ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name) if voice_file_name else "",
+            temperature=temperature,
+            top_p=top_p,
+            exaggeration=exaggeration,
+            cfg=cfg,
+            seed=seed,
+            language_id=language_id,
+            repetition_penalty=repetition_penalty,
+            turbo_top_k=turbo_top_k,
+            print_params=print_params
+        )
 
         if isinstance(result, Sound):
             return [result]
@@ -244,15 +259,17 @@ class ChatterboxModel(ChatterboxBaseModel):
         voice_path: str,
         repetition_penalty: float,
         seed: int,
-        exaggeration: float = ChatterboxBaseModel.DEFAULT_EXAGGERATION,
-        cfg: float = ChatterboxBaseModel.DEFAULT_CFG,
-        temperature: float = ChatterboxBaseModel.DEFAULT_TEMPERATURE,
-        top_p: float = ChatterboxBaseModel.DEFAULT_TOP_P,
+        exaggeration: float,
+        cfg: float,
+        temperature: float,
+        top_p: float,
         turbo_top_k: int | None = None,
-        language_id: str = ""
+        language_id: str = "",
+        print_params: bool=False
     ) -> Sound | str:
         """
         All values must be concrete (ie, resolved defaults, randomized seed).
+        `exaggeration`/`cfg` are only consumed by the multilingual variant.
         :param turbo_top_k: If None, is not passed to the model
         """
 
@@ -260,6 +277,10 @@ class ChatterboxModel(ChatterboxBaseModel):
             return "Logic error: Model is not initialized"
         if language_id and self._model_type == ChatterboxType.TURBO:
             return "Logic error: language_id is not supported for Chatterbox Turbo"
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals())
 
         app_support.set_seed(seed)
 

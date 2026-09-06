@@ -56,8 +56,9 @@ class IndexTts2Model(IndexTts2BaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
-        
+
         if len(prompts) != 1:
             raise ValueError("Implementation does not support batching")
         prompt = prompts[0]
@@ -99,7 +100,8 @@ class IndexTts2Model(IndexTts2BaseModel):
             emo_vector=project.indextts2_emo_vector,
             top_p=top_p,
             top_k=top_k,
-            seed=seed
+            seed=seed,
+            print_params=print_params
         )
 
         if isinstance(result, Sound):
@@ -117,7 +119,8 @@ class IndexTts2Model(IndexTts2BaseModel):
             emo_vector: list[float],
             top_p: float,
             top_k: int,
-            seed: int
+            seed: int,
+            print_params: bool=False
     ) -> Sound | str:
         """
         All values must be concrete (ie, resolved defaults, randomized seed).
@@ -129,6 +132,10 @@ class IndexTts2Model(IndexTts2BaseModel):
 
         if emo_vector and len(emo_vector) != 8:
             return "emo_vector should be either empty or have length of 8"
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals())
 
         app_support.set_seed(seed)
 

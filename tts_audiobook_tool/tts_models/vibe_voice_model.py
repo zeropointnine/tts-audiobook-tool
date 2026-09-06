@@ -75,7 +75,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 attn_implementation = "sdpa" # fyi, in my testing, "eager" is unusable
                 # ... note, triton is still required though
         else:
-            attn_implementation = "sdpa" 
+            attn_implementation = "sdpa"
         printt(f"Attention implementation: {attn_implementation}")
 
         # Load model
@@ -85,7 +85,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             device_map=device_value,
             attn_implementation=attn_implementation
         )
-        
+
         if lora_path:
             # Load LoRA adapter
             printt()
@@ -97,7 +97,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 # which contains the language_model as a submodule
                 # We need to load the adapter onto the language_model submodule
                 language_model = self.model.model.language_model
-                
+
                 if hasattr(language_model, 'load_adapter'):
                     language_model.load_adapter(lora_path)
                 else:
@@ -113,7 +113,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
                 self._has_lora = False
         else:
             self._has_lora = False
-        
+
         self.model.eval()
 
     @property
@@ -140,7 +140,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
     def massage_for_inference(self, text: str) -> str:
         text = super().massage_for_inference(text)
         # Required speaker tag
-        text = f"{SPEAKER_TAG}{text}" 
+        text = f"{SPEAKER_TAG}{text}"
         return text
 
     def on_audio_chunk_received(self, sample_idx: int, chunk: torch.Tensor) -> None:
@@ -157,15 +157,16 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             self.stream_end_callback()
 
     def generate_using_project(
-            self, 
-            project: Project, 
-            prompts: list[str], 
+            self,
+            project: Project,
+            prompts: list[str],
             force_random_seed: bool=False,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
         ) -> list[Sound] | str:
-        
+
         voice_file_name = ProjectVoiceUtil.current_voice_value(project, TtsModelType.VIBEVOICE, voice_selection_index)
         if voice_file_name:
             voice_path = ProjectVoiceUtil.resolve_voice_file_path(project, voice_file_name)
@@ -173,7 +174,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             voice_path = ""
 
         cfg_scale = VibeVoiceBaseModel.CFG_DEFAULT if project.vibevoice_cfg == -1 else project.vibevoice_cfg
-        
+
         num_steps = VibeVoiceBaseModel.DEFAULT_NUM_STEPS if project.vibevoice_steps == -1 else project.vibevoice_steps
 
         seed = -1 if force_random_seed else project.vibevoice_seed
@@ -188,6 +189,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             seed=seed,
             on_stream_chunk=on_stream_chunk,
             on_stream_end=on_stream_end,
+            print_params=print_params,
         )
         return result
 
@@ -196,10 +198,11 @@ class VibeVoiceModel(VibeVoiceBaseModel):
             texts: list[str],
             voice_path: str,
             seed: int,
-            cfg_scale: float=VibeVoiceBaseModel.CFG_DEFAULT,
-            num_steps: int=VibeVoiceBaseModel.DEFAULT_NUM_STEPS,
+            cfg_scale: float,
+            num_steps: int,
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
+            print_params: bool = False,
     ) -> list[Sound] | str:
         """
         Returns list[Sound] or error string.
@@ -210,6 +213,12 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         """
         if self.model is None or self.processor is None:
             return "model or processor is not initialized" # logic error
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            params = locals().copy()
+            params["lora"] = self._has_lora
+            TtsBaseModel.print_params(params)
 
         app_support.set_seed(seed)
 
@@ -256,7 +265,7 @@ class VibeVoiceModel(VibeVoiceBaseModel):
 
         if not outputs.speech_outputs: # type: ignore
             return "No audio output"
-            
+
         sounds = []
         for i, data in enumerate(outputs.speech_outputs): # type: ignore
             if data is None:

@@ -207,8 +207,8 @@ option has been removed. Menus will now always appear on a cleared screen."""
 HINT_MOSS_REMOTE_CODE = Hint(
     "moss_remote_code",
     "Caution",
-"""MOSS-TTS utilizes remotely downloaded code to operate:
-%1
+"""MOSS-TTS utilizes remotely downloaded code to operate
+(%1)
 Be aware of the risks before continuing."""
 )
 

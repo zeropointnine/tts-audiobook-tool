@@ -124,6 +124,10 @@ def test_wrapper_generate_leaves_no_analyzer_hooks():
             voice_path="",
             repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
             seed=1,
+            exaggeration=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
+            cfg=ChatterboxBaseModel.DEFAULT_CFG,
+            temperature=ChatterboxBaseModel.DEFAULT_TEMPERATURE,
+            top_p=ChatterboxBaseModel.DEFAULT_TOP_P,
         )
         assert isinstance(result, Sound)
 

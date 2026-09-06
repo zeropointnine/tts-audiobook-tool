@@ -63,6 +63,10 @@ def generate(model: ChatterboxModel, voice_path: str):
         voice_path=voice_path,
         repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
         seed=1,
+        exaggeration=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
+        cfg=ChatterboxBaseModel.DEFAULT_CFG,
+        temperature=ChatterboxBaseModel.DEFAULT_TEMPERATURE,
+        top_p=ChatterboxBaseModel.DEFAULT_TOP_P,
     )
 
 

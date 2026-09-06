@@ -83,6 +83,7 @@ class DotsModel(DotsBaseModel):
         on_stream_chunk: StreamChunkCallback | None = None,
         on_stream_end: StreamEndCallback | None = None,
         voice_selection_index: int = 0,
+            print_params: bool = False,
     ) -> list[Sound] | str:
         voice_file_name, voice_transcript = ProjectVoiceUtil.current_voice_reference_pair(
             project, TtsModelType.DOTS, voice_selection_index
@@ -115,6 +116,7 @@ class DotsModel(DotsBaseModel):
             seed=seed,
             on_stream_chunk=on_stream_chunk,
             on_stream_end=on_stream_end,
+            print_params=print_params,
         )
 
     def generate(
@@ -129,10 +131,18 @@ class DotsModel(DotsBaseModel):
         seed: int,
         on_stream_chunk: StreamChunkCallback | None = None,
         on_stream_end: StreamEndCallback | None = None,
+        print_params: bool = False,
     ) -> list[Sound] | str:
+
+        locals_snapshot = locals()
+
         runtime = self._runtime
         if runtime is None:
             return "Logic error - dots.tts model not initialized"
+
+        if print_params:
+            from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+            TtsBaseModel.print_params(locals_snapshot)
 
         seed_everything(seed)
 

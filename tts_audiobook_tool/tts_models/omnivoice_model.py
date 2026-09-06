@@ -96,6 +96,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             on_stream_chunk: StreamChunkCallback | None = None,
             on_stream_end: StreamEndCallback | None = None,
             voice_selection_index: int = 0,
+            print_params: bool = False,
     ) -> list[Sound] | str:
 
         voice_file_name, ref_text = ProjectVoiceUtil.current_voice_reference_pair(
@@ -114,7 +115,6 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         # Common to all generation modes
         if seed == -1:
             seed = random.randrange(0, SEED_MAX)
-        app_support.set_seed(seed)
         generation_config = OmniVoiceGenerationConfig(
             num_step=steps,
             guidance_scale=cfg,
@@ -130,6 +130,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 speed=speed,
                 seed=seed,
                 generation_config=generation_config,
+                print_params=print_params,
             )
         elif has_instruct:
             return self._generate_voice_design(
@@ -138,6 +139,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 speed=speed,
                 seed=seed,
                 generation_config=generation_config,
+                print_params=print_params,
             )
         else:
             return self._generate_auto_voice(
@@ -145,6 +147,7 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 speed=speed,
                 seed=seed,
                 generation_config=generation_config,
+                print_params=print_params,
             )
 
     def _create_voice_clone(self, source_path: str, transcript: str) -> VoiceClonePrompt:
@@ -176,7 +179,10 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
+            print_params: bool = False,
     ) -> list[Sound] | str:
+
+        locals_snapshot = locals()
 
         try:
             # The library moves the (CPU) prompt tokens to its device at
@@ -190,7 +196,12 @@ class OmniVoiceModel(OmniVoiceBaseModel):
         except Exception as e:
             return f"Couldn't create voice clone for {voice_path} - {make_error_string(e)}"
 
+        if print_params:
+            self._print_params(locals_snapshot, generation_config)
+
         printt("Generating...", dont_reset=True)
+
+        app_support.set_seed(seed)
 
         results = []
         for prompt in prompts:
@@ -222,9 +233,15 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
+            print_params: bool = False,
     ) -> list[Sound] | str:
 
+        if print_params:
+            self._print_params(locals(), generation_config)
+
         printt("Generating...", dont_reset=True)
+
+        app_support.set_seed(seed)
 
         results = []
         for prompt in prompts:
@@ -251,9 +268,15 @@ class OmniVoiceModel(OmniVoiceBaseModel):
             speed: float,
             seed: int,
             generation_config: OmniVoiceGenerationConfig,
+            print_params: bool = False,
     ) -> list[Sound] | str:
 
+        if print_params:
+            self._print_params(locals(), generation_config)
+
         printt("Generating...", dont_reset=True)
+
+        app_support.set_seed(seed)
 
         results = []
         for prompt in prompts:
@@ -272,3 +295,10 @@ class OmniVoiceModel(OmniVoiceBaseModel):
                 return make_error_string(e)
 
         return results
+
+    @staticmethod
+    def _print_params(d: dict, config: OmniVoiceGenerationConfig):
+        from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
+        d["num_step"] = config.num_step
+        d["guidance_scale"] = config.guidance_scale
+        TtsBaseModel.print_params(d, keys_blacklist=["generation_config"])

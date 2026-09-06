@@ -38,7 +38,11 @@ pydantic==2.9.2
 # relaxes its pin.
 cachetools
 descript-audio-codec
-descript-audiotools
+# PyPI stops at audiotools 0.7.2, whose stale protobuf<3.20 constraint conflicts
+# with current ONNX/TensorFlow tooling. Upstream 0.7.4 fixes that constraint.
+git+https://github.com/descriptinc/audiotools@ffe03e96b4d2dfb3ddecad289a6a95a7e96cc8c6#egg=descript-audiotools
+# 3.20.3 satisfies audiotools 0.7.4, tf2onnx 1.16, TensorFlow 2.16, and ONNX 1.17.
+protobuf==3.20.3
 
 triton-windows==3.3.1.post19; sys_platform == 'win32'
 
