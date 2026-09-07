@@ -1,3 +1,4 @@
+import os
 import random
 from typing import cast
 
@@ -14,6 +15,27 @@ from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+
+
+def resolve_model_dir(model_target: str) -> str:
+    """
+    Resolve a "target" (hf repo id or local dir path) to a local model directory.
+
+    Resolving via snapshot_download before handing off to qwen_tts/transformers
+    lets offline machines load from the hf cache without any network access.
+    (qwen_tts ultimately calls AutoModel/AutoProcessor.from_pretrained(), which
+    otherwise HEAD-requests huggingface.co on every load, even when cached.)
+    """
+
+    if os.path.isdir(model_target):
+        return model_target
+
+    import huggingface_hub
+    return huggingface_hub.snapshot_download(
+        repo_id=model_target,
+        cache_dir=huggingface_hub.constants.HF_HUB_CACHE,
+        local_files_only=False,
+    )
 
 
 class Qwen3Model(Qwen3BaseModel):
@@ -48,7 +70,7 @@ class Qwen3Model(Qwen3BaseModel):
                 ...
 
         self._model: Qwen3TTSModel = Qwen3TTSModel.from_pretrained(
-                self._model_target,
+                resolve_model_dir(self._model_target),
             device_map=device_map,
             dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
