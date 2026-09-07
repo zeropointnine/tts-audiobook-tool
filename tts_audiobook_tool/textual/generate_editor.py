@@ -2,11 +2,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from time import perf_counter
 from typing import ClassVar
 
 from rich.text import Text
 from textual.binding import Binding, BindingType
 from tts_audiobook_tool import readiness, text_util
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.app_types import SoundSegment
 from tts_audiobook_tool.constants import (
     COL_ACCENT,
@@ -163,6 +165,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.playing_sound_id = ""
         self.playing_sound_path = ""
         self.playing_phrase_index: int | None = None
+        self.content_initialized_at: float | None = None
 
         super().__init__(
             state.project,
@@ -198,6 +201,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.staged_queued_indices = set(self.original_queued_indices)
         self.refresh_phrase_classifications()
         self.update_queued_status()
+        self.content_initialized_at = perf_counter()
         return self.get_filtered_phrase_indices()
 
     def initial_selected_phrase_index(self) -> int | None:
@@ -210,8 +214,21 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         # row refreshes query the live catalog, while the derived index sets are
         # retained for queue operations.
         self.phrase_segment_statuses.clear()
+        if self.content_initialized_at is not None:
+            # The rows are installed synchronously, but they are only painted
+            # on the next refresh; log once that refresh has completed.
+            self.call_after_refresh(self.log_display_elapsed)
         if self.quick_gen_restore_phrase_index is not None and self.is_running:
             self.call_after_refresh(self.play_quick_generated_item)
+
+    def log_display_elapsed(self) -> None:
+        """Log how long the real content took to display after initialization."""
+        started_at = self.content_initialized_at
+        self.content_initialized_at = None
+        if started_at is None:
+            return
+        elapsed = perf_counter() - started_at
+        L.d(f"Displayed text after initialization in {elapsed:.3f}s")
 
     def play_quick_generated_item(self) -> None:
         """Play the quick-generated item after its restored row is mounted."""

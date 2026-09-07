@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterable
 from typing import Any, ClassVar, cast
+from weakref import WeakKeyDictionary
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
@@ -9,6 +10,7 @@ from rich.text import Text
 from textual import events
 from textual.binding import Binding, BindingType
 from textual.css.styles import RulesMap
+from textual.geometry import Size
 from textual.strip import Strip
 from textual.visual import VisualType
 from textual.widgets import OptionList
@@ -284,7 +286,24 @@ class HangingIndentText:
         yield rendered
 
 
+class _OptionGeometry:
+    """Memoized geometry for one Option, valid for the recorded widths."""
+
+    __slots__ = ("width", "height", "container_width", "optimal_width")
+
+    def __init__(self) -> None:
+        self.width: int | None = None
+        self.height: int = 0
+
+
 class NonWrappingOptionList(OptionList):
+    # The always-shown vertical scrollbar keeps the content width stable from
+    # the first layout pass. Without it, measuring the options grows the
+    # virtual height, the scrollbar appears, the content width shrinks by the
+    # scrollbar gutter, and every option must be re-measured at the new width
+    # — doubling editor init time for large books.
+    DEFAULT_CSS = OptionList.DEFAULT_CSS + "\nNonWrappingOptionList { overflow-y: scroll; }\n"
+
     BINDINGS: ClassVar[list[BindingType]] = [
         *OptionList.BINDINGS,
         Binding("shift+up", "extend_cursor_up", show=False),
@@ -308,7 +327,83 @@ class NonWrappingOptionList(OptionList):
         self.inactive_selection_indices: set[int] = set()
         self.inactive_selection_style = Style.parse(f"{STYLE_DIM} reverse")
         self.defer_option_cache_clear = False
+        # Per-option height memo. Textual re-measures options by rendering
+        # them, which dominates editor init time for large books when repeated
+        # across refresh passes. Memo entries survive _clear_caches and are
+        # keyed weakly by Option object, so replaced/removed options drop out
+        # automatically; a width change (resize, padding change) recomputes.
+        self._option_geometry: WeakKeyDictionary[Option, _OptionGeometry] = (
+            WeakKeyDictionary()
+        )
         super().__init__(*content, **kwargs)
+
+    def _option_height(self, option: Option, width: int) -> int:
+        """Return the option's rendered height, memoized per (option, width)."""
+        geometry = self._option_geometry.get(option)
+        if geometry is None or geometry.width != width:
+            rules = cast(RulesMap, self.styles)
+            height = self._get_visual(option).get_height(rules, width)
+            geometry = _OptionGeometry()
+            geometry.width = width
+            geometry.height = height
+            self._option_geometry[option] = geometry
+        return geometry.height
+
+    def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
+        """Get height for the given width.
+
+        Mirrors Textual 8.2.8's OptionList.get_content_height but sources each
+        option's height from the per-option memo.
+        """
+        padding_width = self.get_component_styles("option-list--option").padding.width
+        option_count = len(self.options)
+        return sum(
+            self._option_height(option, width - padding_width)
+            + (1 if option._divider and index != option_count - 1 else 0)
+            for index, option in enumerate(self.options)
+        )
+
+    def _update_lines(self) -> None:
+        """Mirror of Textual 8.2.8 OptionList._update_lines using the geometry memo.
+
+        The base version measures every option not yet in the line cache by
+        rendering it; because _clear_caches empties the line cache between
+        refresh cycles, a full re-measure pass can repeat several times during
+        editor init. Routing through the per-option memo makes repeats free.
+        """
+        if not self.scrollable_content_region:
+            return
+
+        line_cache = self._line_cache
+        lines = line_cache.lines
+        next_index = lines[-1][0] + 1 if lines else 0
+        width = self.scrollable_content_region.width - self._get_left_gutter_width()
+
+        if next_index < len(self.options):
+            padding = self.get_component_styles("option-list--option").padding
+            for index, option in enumerate(self.options[next_index:], next_index):
+                line_cache.index_to_line[index] = len(line_cache.lines)
+                line_count = (
+                    self._option_height(option, width - padding.width)
+                    + option._divider
+                )
+                line_cache.heights[index] = line_count
+                line_cache.lines.extend(
+                    [(index, line_no) for line_no in range(0, line_count)]
+                )
+
+        last_divider = self.options and self.options[-1]._divider
+        virtual_size = Size(width, len(lines) - (1 if last_divider else 0))
+        if virtual_size != self.virtual_size:
+            self.virtual_size = virtual_size
+            self._scroll_update(virtual_size)
+
+    def _replace_option_prompt(self, index: int, prompt: VisualType) -> None:
+        """Invalidate memoized geometry for an option whose prompt changes in place."""
+        options = self._options
+        if 0 <= index < len(options):
+            self._option_geometry.pop(options[index], None)
+        super()._replace_option_prompt(index, prompt)
 
     def _clear_caches(self) -> None:
         """Allow a prompt update batch to invalidate caches only once."""
@@ -375,6 +470,7 @@ class NonWrappingOptionList(OptionList):
                 changed_options.add(option)
                 reflow = True
             elif prompt is not None:
+                self._option_geometry.pop(option, None)
                 option._set_prompt(prompt)
                 changed_options.add(option)
             if reflow:
