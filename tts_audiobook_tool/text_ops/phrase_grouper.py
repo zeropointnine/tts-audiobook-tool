@@ -115,10 +115,13 @@ class PhraseGrouper:
             # the ornament joins the previous group's last phrase and promotes
             # its boundary to a space break.
             if result[-1].phrases:
-                result[-1].phrases[-1].text += group.text
-                result[-1].phrases[-1].reason = Reason.SPACE_BREAK
+                last_phrase = result[-1].phrases[-1]
+                last_phrase.text += group.text
+                last_phrase.reason = Reason.SPACE_BREAK
+                result[-1].invalidate_presentable_memos()
             else:
                 result[-1].phrases.extend(group.phrases)
+                result[-1].invalidate_presentable_memos()
 
         if leading:
             if result:
@@ -127,6 +130,7 @@ class PhraseGrouper:
                 # start of the text, so the content phrase keeps its reason.
                 ornament_text = "".join(group.text for group in leading)
                 result[0].phrases[0].text = ornament_text + result[0].phrases[0].text
+                result[0].invalidate_presentable_memos()
             else:
                 # The text has no vocalizable content at all; leave as-is.
                 result = leading
@@ -202,6 +206,7 @@ class PhraseGrouper:
                     last_new_group.last_reason < Reason.PARAGRAPH
                 if can_merge:
                     new_groups[-1].phrases.append(group.phrases[0])
+                    new_groups[-1].invalidate_presentable_memos()
                     did_merge = True
             if not did_merge:
                 new_groups.append(group)
@@ -219,6 +224,7 @@ class PhraseGrouper:
                 can_merge = next_group.num_words + group.num_words <= max_words
                 if can_merge:
                     next_group.phrases.insert(0, group.phrases[0])
+                    next_group.invalidate_presentable_memos()
                     did_merge = True
             if not did_merge:
                 new_groups.append(group)

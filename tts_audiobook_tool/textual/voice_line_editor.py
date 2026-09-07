@@ -163,7 +163,7 @@ class VoiceLineEditorTextualApp(ContentTextualApp[EditorSaved | EditorSaveFailed
             f"{COL_DIM} "
         )
         return HangingIndentText.from_ansi(
-            ansi_text=f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text}",
+            ansi_text=f"{prefix_ansi}{COL_DEFAULT}{phrase_group.presentable_text_lf_ansi}",
             content_start=len(prefix_ansi),
             max_lines=3,
             style=style,

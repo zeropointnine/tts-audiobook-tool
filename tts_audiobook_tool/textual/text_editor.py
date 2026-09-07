@@ -284,17 +284,6 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             list_items.extend(section_item.phrase_group_items)
         return list_items
 
-    @staticmethod
-    def presentable_phrase_group_ansi(phrase_group: PhraseGroup) -> str:
-        """Return presentable text with line feeds shown as dim literal tokens."""
-        text = "".join(f"{phrase.text} " for phrase in phrase_group.phrases)
-        text = text.replace("\r", " ")
-        presentable_lines = [
-            app_text.massage_post_normalize(line) for line in text.split("\n")
-        ]
-        newline_token = f"{COL_DIM}↵\N{NO-BREAK SPACE}{COL_DEFAULT}"
-        return newline_token.join(presentable_lines)
-
     def format_line(self, index: int) -> HangingIndentText:
         """Format one row, styling selected/found/edited rows except headings."""
         item_index = self.phrase_indices[index]
@@ -312,12 +301,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             else:
                 style = ""
             prefix_text = f"{self.format_line_number(list_item.ordinal)}  "
-            presentable_text = (
-                self.presentable_phrase_group_ansi(list_item.phrase_group)
-                if SHOW_NEWLINE_CHARS
-                else list_item.phrase_group.presentable_text
-            )
-            ansi_text = f"{COL_DIM}{prefix_text}{COL_DEFAULT}{presentable_text}"
+            ansi_text = f"{COL_DIM}{prefix_text}{COL_DEFAULT}{list_item.phrase_group.presentable_text_lf_ansi}"
             return HangingIndentText.from_ansi(
                 ansi_text=ansi_text,
                 content_start=len(prefix_text),

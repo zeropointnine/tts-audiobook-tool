@@ -13,12 +13,13 @@ class Phrase:
         self._text = text
         self.reason = reason
         self._words = app_text.get_words(self._text, vocalizable_only=False)
+        self._presentable_text_memo: str | None = None
 
     def __eq__(self, other: Any):
         if not isinstance(other, Phrase):
             return NotImplemented
         return self._text == other._text and self.reason == other.reason
-    
+
     def __str__(self):
         s = f"[Phrase] reason: {str(self.reason.json_value)}, text: {repr(self._text)}"
         return s
@@ -31,13 +32,15 @@ class Phrase:
     def text(self, value: str) -> None:
         self._text = value
         self._words = app_text.get_words(self._text, vocalizable_only=False)
+        self._presentable_text_memo = None
 
     @property
     def presentable_text(self) -> str:
         """ Text in 'presentable' format for UI-related purposes """
-        text = self.text.replace("\n", " ").replace("\r", " ")
-        text = app_text.massage_post_normalize(text)
-        return text
+        if self._presentable_text_memo is None:
+            text = self.text.replace("\n", " ").replace("\r", " ")
+            self._presentable_text_memo = app_text.massage_post_normalize(text)
+        return self._presentable_text_memo
 
     @property
     def words(self) -> list[str]:
@@ -92,15 +95,33 @@ class PhraseGroup:
     """
     Wraps a list of `Phrase` instances.
     This is the app's atomic unit of TTS text inference.
-    
-    Reason for this higher-level wrapper is that after TTS+STT, 
+
+    Reason for this higher-level wrapper is that after TTS+STT,
     we can force-align the transcript with the PhraseGroup's constituent phrases.
     Ie, add 'phrase-level granularity' to the timing metadata.
     """
-    
+
     def __init__(self, phrases: list[Phrase] | None = None, voice_index: int = -1):
-        self.phrases: list[Phrase] = phrases or []
+        self._presentable_text_memo: str | None = None
+        self._presentable_text_lf_ansi_memo: str | None = None
+        # Route through the property so memos are cleared on assignment
+        self.phrases = phrases or []
         self.voice_index = voice_index
+
+    @property
+    def phrases(self) -> list[Phrase]:
+        return self._phrases
+
+    @phrases.setter
+    def phrases(self, value: list[Phrase]) -> None:
+        self._phrases = value
+        self.invalidate_presentable_memos()
+
+    def invalidate_presentable_memos(self) -> None:
+        """Clear memoized presentable-text results. Call after mutating the
+        phrases list in place, or after mutating a member Phrase's text."""
+        self._presentable_text_memo = None
+        self._presentable_text_lf_ansi_memo = None
 
     @property
     def voice_index(self) -> int:
@@ -119,7 +140,7 @@ class PhraseGroup:
 
     @property
     def text(self) -> str:
-        """ 
+        """
         Concatenated phrases text. Does not modify whitespace."""
         s = ""
         for phrase in self.phrases:
@@ -129,13 +150,27 @@ class PhraseGroup:
     @property
     def presentable_text(self) -> str:
         """ Text in 'presentable' format for UI-related purposes """
-        text = ""
-        for phrase in self.phrases:
-            text += phrase.text + " "
-        text = text.replace("\n", " ").replace("\r", " ")
-        text = app_text.massage_post_normalize(text)
-        return text
-    
+        if self._presentable_text_memo is None:
+            text = ""
+            for phrase in self.phrases:
+                text += phrase.text + " "
+            text = text.replace("\n", " ").replace("\r", " ")
+            self._presentable_text_memo = app_text.massage_post_normalize(text)
+        return self._presentable_text_memo
+
+    @property
+    def presentable_text_lf_ansi(self) -> str:
+        """Return presentable text with line feeds shown as dim literal tokens."""
+        if self._presentable_text_lf_ansi_memo is None:
+            text = "".join(f"{phrase.text} " for phrase in self.phrases)
+            text = text.replace("\r", " ")
+            presentable_lines = [
+                app_text.massage_post_normalize(line) for line in text.split("\n")
+            ]
+            newline_token = f"{COL_DIM}↵\N{NO-BREAK SPACE}{COL_DEFAULT}"
+            self._presentable_text_lf_ansi_memo = newline_token.join(presentable_lines)
+        return self._presentable_text_lf_ansi_memo
+
     @property
     def last_reason(self) -> Reason:
         return self.phrases[-1].reason if self.phrases else Reason.UNDEFINED
@@ -229,18 +264,18 @@ class PhraseGroup:
         return value
 
 
-@total_ordering 
+@total_ordering
 class Reason(tuple[int, str], Enum):
     """
     Describes the "semantic reason" why a piece of text has been segmented (at the end of the text).
-    
+
     Value comparisons can be made between members directly or using the level property
     (eg, "reason1 < reason2" or "reason1.level < reason2.level")
 
     Configurable side effects associated with reasons, such as pause durations,
     are defined separately.
     """
-    
+
     # For back-compat and as fallback
     UNDEFINED = 0, "undefined"
     # The string has been split after an arbitrary word
@@ -258,7 +293,7 @@ class Reason(tuple[int, str], Enum):
     # The string has been split at a paragraph break *plus* one or more blank lines.
     # Related publishing/typography terms for what this represents: "space break"; "scene break"; "dinkus"
     SPACE_BREAK = 6, "x"
-    # The segment was the last text at the end of a section (eg, the end of an html section of an epub). 
+    # The segment was the last text at the end of a section (eg, the end of an html section of an epub).
     # Think "page break" almost.
     SECTION_BREAK = 7, "xx"
 
@@ -266,7 +301,7 @@ class Reason(tuple[int, str], Enum):
         if self.__class__ is other.__class__:
             return self.value[0] < other.value[0]
         return NotImplemented
-    
+
     @property
     def level(self) -> int:
         return self.value[0]

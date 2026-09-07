@@ -159,7 +159,6 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.ungenerated_indices: set[int] = set()
         self.queued_ungenerated_count = 0
         self.phrase_segment_statuses: dict[int, PhraseSegmentStatus] = {}
-        self.presentable_texts: dict[int, str] = {}
         self.filter_type = FilterType.ALL
         self.playing_sound_id = ""
         self.playing_sound_path = ""
@@ -391,17 +390,14 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         segment_status = self.get_phrase_segment_status(phrase_index)
         status_ansi = self.make_phrase_status_ansi(phrase_index, segment_status)
         prefix_ansi = f"{COL_DIM}{self.format_line_number(phrase_index + 1)} {status_ansi} "
-        presentable_text = self.presentable_texts.get(phrase_index)
-        if presentable_text is None:
-            presentable_text = self.project.phrase_groups[phrase_index].presentable_text
-            self.presentable_texts[phrase_index] = presentable_text
+        presentable_text = self.project.phrase_groups[phrase_index].presentable_text_lf_ansi
 
         text = Text.from_ansi(f"{prefix_ansi}{Ansi.RESET}")
         content_start = len(text.plain)
         word_errors_ansi = self.make_word_errors_ansi(segment_status)
         if word_errors_ansi:
             text.append(Text.from_ansi(word_errors_ansi))
-        text.append(presentable_text)
+        text.append(Text.from_ansi(presentable_text))
         return HangingIndentText(text, content_start, max_lines=3, style=style)
 
     def option_id(self, index: int) -> str:
@@ -480,7 +476,9 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             return [item.display_text]
         return [
             self.format_line_number(item.phrase_index + 1),
-            self.project.phrase_groups[item.phrase_index].presentable_text,
+            text_util.strip_ansi_codes(
+                self.project.phrase_groups[item.phrase_index].presentable_text_lf_ansi
+            ),
         ]
 
     def content_line_index(self, item_index: int) -> int | None:
