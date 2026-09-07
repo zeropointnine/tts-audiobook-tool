@@ -702,6 +702,175 @@ class TestPhraseQuoteEndNameVerb(unittest.TestCase):
             ],
         )
 
+    def test_multi_paragraph_dialog_gets_dialog_voice_across_paragraphs(self):
+        original_groups = [
+            make_group("“First paragraph of the speech,\n"),
+            make_group("“second paragraph continues,\n"),
+            make_group("“third paragraph closes.” Then narration.\n"),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "“First paragraph of the speech,\n",
+                "“second paragraph continues,\n",
+                "“third paragraph closes.” ",
+                "Then narration.\n",
+            ],
+        )
+        self.assertEqual(
+            [group.voice_index for group in groups],
+            [1, 1, 1, -1],
+        )
+        self.assertEqual(
+            "".join(group.text for group in groups),
+            "".join(group.text for group in original_groups),
+        )
+
+    def test_multi_paragraph_dialog_supports_straight_quotes(self):
+        original_groups = [
+            make_group('"Opens without closing.\n'),
+            make_group('"Closes here." Then.\n'),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ['"Opens without closing.\n', '"Closes here." ', "Then.\n"],
+        )
+        self.assertEqual(
+            [group.voice_index for group in groups],
+            [1, 1, -1],
+        )
+
+    def test_multi_paragraph_dialog_closing_attribution_keeps_quote_end_reason(self):
+        original_groups = [
+            make_group("“Opens,\n"),
+            make_group("“and closes here,” he said.\n"),
+        ]
+
+        groups = DialogSegmenter.segment_groups(original_groups)
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["“Opens,\n", "“and closes here,” ", "he said.\n"],
+        )
+        self.assertEqual(
+            groups[1].phrases[-1].reason,
+            Reason.PHRASE_QUOTE_END,
+        )
+
+    def test_multi_paragraph_dialog_is_never_merged_into_one_group(self):
+        original_groups = [
+            make_group("“Opens,\n"),
+            make_group("“middle,\n"),
+            make_group("“closes.”\n"),
+        ]
+
+        groups = DialogSegmenter.segment_groups(original_groups)
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["“Opens,\n", "“middle,\n", "“closes.”\n"],
+        )
+
+    def test_multi_paragraph_dialog_with_trailing_unmatched_openers(self):
+        # Speech paragraphs containing complete pairs earlier in the
+        # paragraph and ending with an unmatched opening quote that
+        # continues the speech in the next paragraph.
+        original_groups = [
+            make_group("“Closed pair.” Narration. “Opens and continues\n"),
+            make_group("“into this closed pair.” More narration. “Opens again\n"),
+            make_group("“and closes here.” After.\n"),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "“Closed pair.” ",
+                "Narration. ",
+                "“Opens and continues\n",
+                "“into this closed pair.” ",
+                "More narration. ",
+                "“Opens again\n",
+                "“and closes here.” ",
+                "After.\n",
+            ],
+        )
+        self.assertEqual(
+            [group.voice_index for group in groups],
+            [1, -1, 1, 1, -1, 1, 1, -1],
+        )
+        self.assertEqual(
+            "".join(group.text for group in groups),
+            "".join(group.text for group in original_groups),
+        )
+
+    def test_narration_paragraph_abandons_chained_quote_context(self):
+        original_groups = [
+            make_group("He began “like this\n"),
+            make_group("Narration interrupts instead.\n"),
+            make_group("Later “speech.” End.\n"),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                "He began “like this\n",
+                "Narration interrupts instead.\n",
+                # Short lowercase inline quote without a dialog signal: the
+                # existing conservative qualification ignores it.
+                "Later “speech.” End.\n",
+            ],
+        )
+        self.assertEqual(
+            [group.voice_index for group in groups],
+            [-1, -1, -1],
+        )
+
+    def test_chained_dialog_spanning_multiple_existing_groups(self):
+        original_groups = [
+            make_group('“First part of speech, and it is longer, spans groups\n'),
+            make_group('“second part is here as well,” said the man.\n'),
+        ]
+
+        groups = DialogSegmenter.segment_groups(
+            original_groups,
+            dialog_voice_index=1,
+        )
+
+        self.assertEqual(
+            [group.text for group in groups],
+            [
+                '“First part of speech, and it is longer, spans groups\n',
+                '“second part is here as well,” ',
+                'said the man.\n',
+            ],
+        )
+        self.assertEqual(
+            [group.voice_index for group in groups],
+            [1, 1, -1],
+        )
+
     def test_text_to_groups_forwards_language_code_to_dialog_segmenter(self):
         text = 'She paused. "Some dialog," John said.'
 

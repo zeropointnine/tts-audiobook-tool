@@ -66,8 +66,8 @@ class PhraseGrouper:
         # Split group when exceeds max_words
         results = []
         for group in groups:
-            groups = PhraseGrouper.group_to_groups_by_max_words(group, max_words)
-            results.extend(groups)
+            split_groups = PhraseGrouper.group_to_groups_by_max_words(group, max_words)
+            results.extend(split_groups)
         groups = results
 
         if dialog_segmentation:

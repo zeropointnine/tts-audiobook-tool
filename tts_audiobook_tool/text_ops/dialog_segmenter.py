@@ -8,6 +8,7 @@ from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.text_ops.quote_spans import (
     DOUBLE_QUOTE_STYLES,
+    find_paragraph_chained_quote_spans,
     find_quote_spans,
 )
 
@@ -158,6 +159,18 @@ class DialogSegmenter:
                 paragraph_scoped=True,
             )
         ]
+
+        # Multi-paragraph dialog following the publishing convention: each
+        # paragraph of the speech opens with a quote mark and only the final
+        # paragraph closes it. Such spans straddle paragraph boundaries by
+        # design and are found by the chained pass.
+        quote_pairs.extend(
+            (span.start, span.end - 1)
+            for span in find_paragraph_chained_quote_spans(
+                text,
+                styles=DOUBLE_QUOTE_STYLES,
+            )
+        )
 
         dialog_pairs = [
             pair

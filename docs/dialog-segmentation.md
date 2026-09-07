@@ -78,11 +78,32 @@ Quote marks are considered within a paragraph and processed in reading order.
 - An opening quote mark must have a corresponding closing quote mark.
 - Unmatched quote marks do not create boundaries.
 - Pairing may span existing phrase groups or text segments.
-- Pairing must not cross a paragraph boundary.
+- Pairing within a paragraph must not cross a paragraph boundary.
 - A paragraph may contain multiple independent quote pairs.
 - Double-quote nesting is not given a special semantic interpretation.
 
-The paragraph limit is intentionally strict. It prevents one malformed or unmatched quote mark from changing the interpretation of large amounts of later text.
+The paragraph limit for ordinary pairing is intentionally strict. It prevents one malformed or unmatched quote mark from changing the interpretation of large amounts of later text.
+
+### Multi-paragraph pairing
+
+Paired quotes may also span paragraphs when they follow the published-book convention for multi-paragraph dialog:
+
+- the first paragraph of the speech opens with a quote mark that has no closing quote mark in that paragraph;
+- every subsequent paragraph of the same speech begins with a new opening quote mark, and only the final paragraph contains the closing quote mark;
+- a paragraph that does not begin with an opening quote mark (narration, a new speaker, a heading) ends the chained quote context. A pending unmatched opening quote is then simply discarded and never pairs with later text.
+
+The unmatched opening mark that continues a speech may sit at the end of a paragraph that also contains complete quote pairs earlier in it (common when a speaker's paragraph interleaves full sentences with narration before running on into the next paragraph). Such a trailing unmatched opener extends the chain the same way a leading unmatched opener does.
+
+The repeated opening mark is required at every continuation paragraph, so a single stray unmatched quote cannot silently change the interpretation of later paragraphs. There is deliberately no word-count or length limit on continuation paragraphs: the chain is governed by paragraph structure alone.
+
+Example:
+
+```text
+“This is the first paragraph of a long speech,
+“and this is the second, which continues it,” he said.
+```
+
+Both paragraphs are detected as dialog; `he said.` after the closing quote is not.
 
 ---
 
@@ -228,7 +249,7 @@ Dialog segmentation must preserve the following properties:
 - Concatenating the resulting segment text reproduces the original text exactly.
 - Quote marks and punctuation are never removed or rewritten.
 - Existing segment boundaries are never eliminated.
-- Paragraph boundaries are never crossed while searching for a pair.
+- Paragraph boundaries are never crossed while searching for an ordinary in-paragraph pair; a chained multi-paragraph quote must be re-affirmed by an opening quote mark at the start of each subsequent paragraph, otherwise pairing does not cross the paragraph boundary.
 - Ignored or unmatched quote pairs leave segmentation unchanged.
 - Existing per-segment properties remain associated with narration pieces subdivided from that segment.
 - Accepted quoted pieces receive voice index `1` without mutating reused source groups.
@@ -272,6 +293,23 @@ I told them,
 
 No additional boundary is needed when the existing segment already contains only dialog.
 
+### Multi-paragraph dialog
+
+```text
+“First paragraph of the speech,
+“second paragraph continues,
+“third paragraph closes.” Then narration.
+```
+
+Result (each paragraph remains its own segment):
+
+```text
+“First paragraph of the speech,
+“second paragraph continues,
+“third paragraph closes.”
+Then narration.
+```
+
 ### Multiple dialog passages
 
 ```text
@@ -300,9 +338,13 @@ The lowercase dialog signals reduce false negatives for dialog continuations, br
 
 Conversely, capitalization alone cannot prove that text is dialog. Capitalized labels, titles, interface terms, and quoted names may still be treated as dialog. Short lowercase inline quotes remain unassigned only when they have no structural dialog signal.
 
-### Paragraph-local pairing
+### Paragraph-local pairing with chained extension
 
-Stopping at every paragraph boundary limits the effect of malformed source text and makes unmatched-quote behavior predictable. The tradeoff is that conventional multi-paragraph dialog is not yet recognized as one continuing quote context.
+Ordinary pairing stops at every paragraph boundary, which limits the effect of malformed source text and makes unmatched-quote behavior predictable. The chained multi-paragraph rule extends across paragraphs only under the strict published convention (repeated opening marks, closing mark in the final paragraph), so conventional multi-paragraph dialog is recognized without loosening the malformed-text guarantees.
+
+### Multi-paragraph dialog
+
+Dialog that follows the published multi-paragraph convention is recognized across paragraphs, and every dialog piece receives the dialog voice. Because normal first-pass segmentation keeps paragraph boundaries, the paragraphs of one speech remain separate segments; the chain ends at the first paragraph that does not begin with an opening quote mark.
 
 ### No recombination
 
@@ -323,18 +365,6 @@ Supporting only common straight and curly double quotes keeps pairing behavior p
 ---
 
 ## Possible refinements
-
-### Multi-paragraph dialog
-
-Quotes that span paragraphs are a likely future extension. Supporting them safely requires more than simply removing the paragraph limit. Published multi-paragraph dialog commonly places an opening quote mark at the start of each paragraph while omitting a closing mark until the final paragraph.
-
-A future rule set could carry quote state across paragraph boundaries while considering:
-
-- repeated opening marks at paragraph starts;
-- section and chapter boundaries as hard stops;
-- limits on how far an unmatched quote may propagate;
-- malformed source text and OCR errors;
-- whether each paragraph should remain independently classifiable for voice assignment.
 
 ### Language-aware qualification
 

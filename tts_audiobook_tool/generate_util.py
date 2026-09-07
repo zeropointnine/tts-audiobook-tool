@@ -978,7 +978,7 @@ class GenerateUtil:
             indices_string = f"{', '.join(index_strings)}, +{num_more} more"
         processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
         if voice_index is not None:
-            processing_string += f" {COL_DIM}[voice {voice_index + 1}]{COL_DEFAULT}"
+            processing_string += f" {COL_DIM}(voice {voice_index + 1}){COL_DEFAULT}"
 
         if show_divider:
             printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")

@@ -54,11 +54,17 @@ class PhraseSegmenter:
                     reason = Reason.PHRASE
                 phrases.append( Phrase(phrase, reason) )
 
-        # Split long phrases if necessary
+        # Split long phrases if necessary.
         new_result: list[Phrase] = []
         for phrase in phrases:
-            phrases = PhraseSegmenter.long_phrase_to_phrases(phrase, max_words)
-            new_result.extend(phrases)
+            # Whitespace-only phrases have zero words, which would crash the
+            # word splitter (num_phrases == 0). They can only occur when the
+            # text has no vocalizable content at all; mixed text always
+            # attaches whitespace to a preceding content phrase. Drop them.
+            if phrase.num_words == 0:
+                continue
+            split_phrases = PhraseSegmenter.long_phrase_to_phrases(phrase, max_words)
+            new_result.extend(split_phrases)
         phrases = new_result
 
         phrases = PhraseSegmenter.merge_ornamental_lines(phrases)
