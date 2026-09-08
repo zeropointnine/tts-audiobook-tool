@@ -229,7 +229,7 @@ def test_delete_ignores_section_rows_rebuilds_ordinals_and_focuses_survivor() ->
             ] == [1, 2]
             assert app.selected_index == 0
             assert app.selected_indices == {0}
-            assert str(app.query_one("#status-line", Static).render()) == (
+            assert str(app.query_one("#status-left", Static).render()) == (
                 "2 lines deleted"
             )
             assert project.book.sections[0].title == "Opening"
@@ -377,7 +377,7 @@ def test_delete_single_selected_section_deletes_its_phrase_groups(
             assert [
                 item.phrase_group.text for item in app.edit_session.phrase_groups
             ] == expected_phrase_texts
-            assert str(app.query_one("#status-line", Static).render()) == (
+            assert str(app.query_one("#status-left", Static).render()) == (
                 "2 lines deleted"
             )
 

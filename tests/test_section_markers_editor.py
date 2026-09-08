@@ -226,7 +226,7 @@ def test_space_on_first_line_shows_toast_without_adding_marker() -> None:
             await pilot.press("space")
 
             assert app.staged_markers == set()
-            assert app.toast_text == "Adding first line is not allowed"
+            assert app.toast_status.left == "Adding first line is not allowed"
             assert project.markers == set()
 
     run(exercise())
@@ -528,7 +528,7 @@ def test_blank_lines_step_confirms_and_adds_markers() -> None:
 
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == {2}
-            assert app.toast_text == "Added 1 section marker"
+            assert app.toast_status.left == "Added 1 section marker"
             panel_text = str(app.query_one("#markers-panel", Static).render())
             assert "Three." in panel_text
 
@@ -852,7 +852,7 @@ def test_regex_entry_adds_markers_to_staged_set_and_updates_view(
 
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == expected_staged
-            assert app.toast_text == expected_toast
+            assert app.toast_status.left == expected_toast
             panel_text = str(
                 app.query_one("#markers-panel", Static).render()
             )
@@ -1091,7 +1091,7 @@ def test_confirmed_clear_resets_staged_markers_and_view(
 
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == set()
-            assert app.toast_text == expected_toast
+            assert app.toast_status.left == expected_toast
             panel_text = str(app.query_one("#markers-panel", Static).render())
             assert "None" in panel_text
             assert project.markers == set(markers)
@@ -1133,7 +1133,7 @@ def test_declined_clear_preserves_staged_markers(dismissal: str) -> None:
 
             assert not isinstance(app.screen, SectionMarkersDialog)
             assert app.staged_markers == {1}
-            assert app.toast_text == ""
+            assert app.toast_status.left == ""
             assert project.markers == {1}
 
     run(exercise())

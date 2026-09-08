@@ -684,7 +684,7 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         self.apply_mutation_result(result)
         if result.deleted_count:
             line_noun = "line" if result.deleted_count == 1 else "lines"
-            self.set_toast_text(f"{result.deleted_count} {line_noun} deleted")
+            self.show_status_toast(left=f"{result.deleted_count} {line_noun} deleted")
 
     def action_split_phrase_group(self) -> None:
         """Open a boundary chooser for exactly one selected phrase-group row."""

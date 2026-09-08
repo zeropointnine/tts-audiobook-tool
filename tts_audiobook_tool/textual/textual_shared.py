@@ -125,25 +125,36 @@ CONTENT_TEXTUAL_APP_CSS = """\
     layout: horizontal;
 }
 
-#status-line {
-    width: 1fr;
+#status-left,
+#status-right {
+    width: auto;
     height: 1;
     text-style: italic;
 }
 
-#status-line.status-pinned {
-    color: $col-dim;
-    content-align: right middle;
-}
-
-#status-line.status-selected {
-    color: $col-default;
-    content-align: right middle;
-}
-
-#status-line.status-toast {
-    color: $col-accent;
+#status-left {
+    dock: left;
     content-align: left middle;
+}
+
+#status-right {
+    dock: right;
+    content-align: right middle;
+}
+
+#status-bar.status-pinned > #status-left,
+#status-bar.status-pinned > #status-right {
+    color: $col-dim;
+}
+
+#status-bar.status-selected > #status-left,
+#status-bar.status-selected > #status-right {
+    color: $col-default;
+}
+
+#status-bar.status-toast > #status-left,
+#status-bar.status-toast > #status-right {
+    color: $col-accent;
 }
 
 #find-bar {

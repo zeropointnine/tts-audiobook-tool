@@ -350,7 +350,7 @@ def test_base_manual_selection_replaces_selection_and_highlights_highest_line(
             assert app.query_one("#line-list", OptionList).highlighted == (
                 expected_highlighted
             )
-            assert app.toast_text == expected_toast
+            assert app.toast_status.left == expected_toast
 
     run(exercise())
 
@@ -376,7 +376,7 @@ def test_base_manual_selection_with_no_matching_rows_leaves_selection_unchanged(
             assert app.selected_indices == {0}
             assert app.selected_index == 0
             assert app.selection_anchor_index == 0
-            assert app.toast_text == ""
+            assert app.toast_status.left == ""
 
     run(exercise())
 
@@ -467,18 +467,21 @@ def test_base_composes_header_list_status_and_superseding_find_bar() -> None:
             assert app.query_one("#line-list")
             status_bar = app.query_one("#status-bar", Horizontal)
             find_bar = app.query_one("#find-bar", Horizontal)
-            status_line = app.query_one("#status-line", Static)
+            status_left = app.query_one("#status-left", Static)
+            status_right = app.query_one("#status-right", Static)
             assert status_bar.display is True
             assert find_bar.display is False
 
             await pilot.press("ctrl+f")
             assert status_bar.display is False
-            assert status_line.display is False
+            assert status_left.display is False
+            assert status_right.display is False
             assert find_bar.display is True
 
             await pilot.press("escape")
             assert status_bar.display is True
-            assert status_line.display is True
+            assert status_left.display is True
+            assert status_right.display is True
             assert find_bar.display is False
 
     run(exercise())
@@ -690,32 +693,75 @@ def test_base_parses_ansi_header_strings_when_composing_and_updating() -> None:
     run(exercise())
 
 
-def test_status_layers_apply_precedence_and_restore_after_toast() -> None:
+def test_status_modes_render_independent_sides_with_whole_mode_precedence() -> None:
     app, _ = make_app()
 
     async def exercise() -> None:
         async with app.run_test():
-            status_line = app.query_one("#status-line", Static)
-            assert str(status_line.render()) == ""
-            assert status_line.has_class("status-pinned")
+            status_bar = app.query_one("#status-bar", Horizontal)
+            status_left = app.query_one("#status-left", Static)
+            status_right = app.query_one("#status-right", Static)
+            assert str(status_left.render()) == ""
+            assert str(status_right.render()) == ""
+            assert status_bar.has_class("status-pinned")
 
-            app.set_pinned_text("Pinned")
-            app.set_selected_text("")
-            assert str(status_line.render()) == "Pinned"
-            assert status_line.has_class("status-pinned")
+            app.set_pinned_status(left="Pinned left", right="Pinned right")
+            app.set_pinned_status(right="Updated pinned right")
+            assert str(status_left.render()) == "Pinned left"
+            assert str(status_right.render()) == "Updated pinned right"
+            assert status_bar.has_class("status-pinned")
 
-            app.set_selected_text("2 lines selected")
-            assert str(status_line.render()) == "2 lines selected"
-            assert status_line.has_class("status-selected")
+            app.set_selected_status(left="Selected left")
+            assert str(status_left.render()) == "Selected left"
+            assert str(status_right.render()) == ""
+            assert status_bar.has_class("status-selected")
 
-            app.set_toast_text("2 lines deleted")
-            app.collapse_selection(0)
-            assert str(status_line.render()) == "2 lines deleted"
-            assert status_line.has_class("status-toast")
+            app.set_selected_status(left="", right="2 lines selected")
+            assert str(status_left.render()) == ""
+            assert str(status_right.render()) == "2 lines selected"
+            assert status_bar.has_class("status-selected")
 
-            app.clear_toast_text()
-            assert str(status_line.render()) == "Pinned"
-            assert status_line.has_class("status-pinned")
+            app.show_status_toast(left="2 lines deleted", right="Undo unavailable")
+            assert str(status_left.render()) == "2 lines deleted"
+            assert str(status_right.render()) == "Undo unavailable"
+            assert status_bar.has_class("status-toast")
+
+            app.clear_status_toast()
+            assert str(status_left.render()) == ""
+            assert str(status_right.render()) == "2 lines selected"
+            assert status_bar.has_class("status-selected")
+
+            app.set_selected_status(right="")
+            assert str(status_left.render()) == "Pinned left"
+            assert str(status_right.render()) == "Updated pinned right"
+            assert status_bar.has_class("status-pinned")
+
+    run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("width", "expected_overlap"),
+    [pytest.param(40, False, id="separate"), pytest.param(15, True, id="overlap")],
+)
+def test_status_sides_keep_intrinsic_width_and_edge_alignment(
+    width: int,
+    expected_overlap: bool,
+) -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test(size=(width, 24)) as pilot:
+            app.set_pinned_status(left="LEFT-12345", right="RIGHT-12345")
+            await pilot.pause()
+            status_bar = app.query_one("#status-bar", Horizontal)
+            status_left = app.query_one("#status-left", Static)
+            status_right = app.query_one("#status-right", Static)
+
+            assert status_left.region.width == len("LEFT-12345")
+            assert status_right.region.width == len("RIGHT-12345")
+            assert status_left.region.x == status_bar.region.x
+            assert status_right.region.right == status_bar.region.right
+            assert status_left.region.overlaps(status_right.region) is expected_overlap
 
     run(exercise())
 
@@ -733,15 +779,18 @@ def test_new_toast_restarts_fixed_expiry_window(monkeypatch) -> None:
                 return original_set_timer(delay, callback, **kwargs)
 
             monkeypatch.setattr(app, "set_timer", record_set_timer)
-            status_line = app.query_one("#status-line", Static)
-            app.set_toast_text("First")
+            status_bar = app.query_one("#status-bar", Horizontal)
+            status_left = app.query_one("#status-left", Static)
+            status_right = app.query_one("#status-right", Static)
+            app.show_status_toast(left="First", right="Old right")
             first_timer = app.toast_timer
-            app.set_toast_text("Second")
+            app.show_status_toast(left="Second")
 
             assert durations == [1.5, 1.5]
             assert first_timer is not None and app.toast_timer is not first_timer
-            assert str(status_line.render()) == "Second"
-            assert status_line.has_class("status-toast")
+            assert str(status_left.render()) == "Second"
+            assert str(status_right.render()) == ""
+            assert status_bar.has_class("status-toast")
 
     run(exercise())
 

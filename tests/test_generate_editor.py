@@ -452,7 +452,7 @@ def test_x_confirm_deletes_all_files_for_generated_rows_and_refreshes_state(
             assert formatted_indices == [0]
             assert str(app.format_line(0)).startswith("00001 [         ]")
             assert option_list.get_option("generate-phrase-1") is retained_option
-            assert str(app.query_one("#status-line", Static).render()) == (
+            assert str(app.query_one("#status-right", Static).render()) == (
                 "0 lines queued for generation"
             )
 
@@ -589,7 +589,7 @@ def test_queue_toggle_applies_to_every_selected_phrase() -> None:
                 if "Queued" in str(first_line)[span.start : span.end]
             )
             assert queued_span.style
-            assert str(app.query_one("#status-line", Static).render()) == (
+            assert str(app.query_one("#status-right", Static).render()) == (
                 "3 lines queued for generation"
             )
             assert app.selected_indices == {2}
@@ -602,7 +602,7 @@ def test_queue_toggle_applies_to_every_selected_phrase() -> None:
 
             await pilot.press("home", "space")
             assert app.staged_queued_indices == set()
-            assert str(app.query_one("#status-line", Static).render()) == (
+            assert str(app.query_one("#status-right", Static).render()) == (
                 "0 lines queued for generation"
             )
             assert app.staged_queued_indices == app.original_queued_indices
@@ -637,7 +637,7 @@ def test_queue_status_update_does_not_rescan_segment_state() -> None:
     app.update_queued_status()
 
     assert project.sound_segments.best_item_call_count == 0
-    assert app.pinned_text == "400 lines queued for generation"
+    assert app.pinned_status.right == "400 lines queued for generation"
 
 
 def test_queue_toggle_does_not_queue_lines_with_sound_segments() -> None:
@@ -650,7 +650,7 @@ def test_queue_toggle_does_not_queue_lines_with_sound_segments() -> None:
 
             await pilot.press("home", "shift+down", "shift+down", "space")
             assert app.staged_queued_indices == {0, 2}
-            assert str(app.query_one("#status-line", Static).render()) == (
+            assert str(app.query_one("#status-right", Static).render()) == (
                 "2 lines queued for generation (all)"
             )
 
@@ -864,7 +864,7 @@ def test_p_plays_highlighted_best_sound_segment() -> None:
                 assert app.playing_sound_id == "second-sound-id"
                 assert app.playing_sound_path == "/project/segments/best.flac"
                 assert app.playing_phrase_index == 1
-                status_line = app.query_one("#status-line", Static)
+                status_line = app.query_one("#status-right", Static)
                 assert str(status_line.render()) == "Playing line 2"
 
     run(exercise())
@@ -895,7 +895,7 @@ def test_p_on_current_sound_stops_it_instead_of_restarting() -> None:
                 assert app.playing_sound_id == ""
                 assert app.playing_sound_path == ""
                 assert app.playing_phrase_index is None
-                status_line = app.query_one("#status-line", Static)
+                status_line = app.query_one("#status-right", Static)
                 assert str(status_line.render()) == "0 lines queued for generation"
 
     run(exercise())
@@ -938,7 +938,7 @@ def test_p_on_different_sound_starts_new_playback() -> None:
                 ]
                 assert app.playing_sound_id == "second-sound-id"
                 assert app.playing_sound_path == "/project/segments/segment-1.flac"
-                status_line = app.query_one("#status-line", Static)
+                status_line = app.query_one("#status-right", Static)
                 assert str(status_line.render()) == "Playing line 2"
 
     run(exercise())
@@ -1169,7 +1169,7 @@ def test_playback_status_overrides_selection_status_and_restores_it_when_cleared
             async with app.run_test() as pilot:
                 await pilot.press("p", "shift+down", "shift+down")
                 status_bar = app.query_one("#status-bar", Horizontal)
-                status_line = app.query_one("#status-line", Static)
+                status_line = app.query_one("#status-right", Static)
                 assert str(status_line.render()) == "Playing line 1"
                 assert status_bar.display is True
 
@@ -1200,13 +1200,13 @@ def test_playback_status_clears_dynamically_when_sound_finishes() -> None:
             async with app.run_test() as pilot:
                 nonlocal current_sound_id
                 await pilot.press("p")
-                assert str(app.query_one("#status-line", Static).render()) == (
+                assert str(app.query_one("#status-right", Static).render()) == (
                     "Playing line 1"
                 )
 
                 current_sound_id = ""
                 await pilot.pause(0.2)
-                assert str(app.query_one("#status-line", Static).render()) == (
+                assert str(app.query_one("#status-right", Static).render()) == (
                     "0 lines queued for generation"
                 )
                 assert app.playing_phrase_index is None

@@ -37,6 +37,26 @@ EditorResultT = TypeVar("EditorResultT")
 
 
 @dataclass(frozen=True)
+class _StatusContent:
+    """The independently rendered text for one status mode."""
+
+    left: str = ""
+    right: str = ""
+
+    def updated(
+        self,
+        *,
+        left: str | None = None,
+        right: str | None = None,
+    ) -> "_StatusContent":
+        """Return a copy with only the supplied sides replaced."""
+        return _StatusContent(
+            left=self.left if left is None else left,
+            right=self.right if right is None else right,
+        )
+
+
+@dataclass(frozen=True)
 class EditorClosed:
     """The editor closed without committing a change."""
 
@@ -165,9 +185,9 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         self.find_search_start_index: int | None = None
         self.find_query_submitted = False
         self.find_match_index: int | None = None
-        self.pinned_text = ""
-        self.selected_text = self.selection_status_text
-        self.toast_text = ""
+        self.pinned_status = _StatusContent()
+        self.selected_status = _StatusContent(right=self.selection_status_text)
+        self.toast_status = _StatusContent()
         self.toast_timer: Timer | None = None
         self.configure()
 
@@ -343,13 +363,10 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
             )
         yield Horizontal(*content_children, id="content-shell")
         yield Horizontal(
-            Static(
-                self.status_text,
-                id="status-line",
-                classes=f"status-{self.status_mode}",
-                markup=False,
-            ),
+            Static(self.status_content.left, id="status-left", markup=False),
+            Static(self.status_content.right, id="status-right", markup=False),
             id="status-bar",
+            classes=f"status-{self.status_mode}",
         )
         yield Horizontal(
             Static(self.find_label_text, id="find-label", markup=False),
@@ -415,55 +432,71 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         """Return the highest-priority active status layer."""
         if self.toast_timer is not None:
             return "toast"
-        if self.selected_text:
+        if self.selected_status.left or self.selected_status.right:
             return "selected"
         return "pinned"
 
     @property
-    def status_text(self) -> str:
-        """Return the text from the highest-priority active status layer."""
+    def status_content(self) -> _StatusContent:
+        """Return both sides of the highest-priority active status layer."""
         if self.toast_timer is not None:
-            return self.toast_text
-        return self.selected_text or self.pinned_text
+            return self.toast_status
+        if self.selected_status.left or self.selected_status.right:
+            return self.selected_status
+        return self.pinned_status
 
     def update_status_line(self) -> None:
-        """Render the current status layer when the status widget is mounted."""
-        status_widgets = self.query("#status-line")
-        if not status_widgets:
+        """Render both sides of the current status layer when mounted."""
+        if not self.is_running:
             return
-        status_line = status_widgets.first(Static)
-        status_line.update(self.status_text)
-        status_line.set_classes(f"status-{self.status_mode}")
+        status_bars = self.query("#status-bar")
+        if not status_bars:
+            return
+        status_content = self.status_content
+        status_bar = status_bars.first(Horizontal)
+        status_bar.query_one("#status-left", Static).update(status_content.left)
+        status_bar.query_one("#status-right", Static).update(status_content.right)
+        status_bar.set_classes(f"status-{self.status_mode}")
 
-    def set_pinned_text(self, text: str) -> None:
-        """Set the dim, left-aligned pinned (lowest-priority) status text."""
-        self.pinned_text = text
+    def set_pinned_status(
+        self,
+        *,
+        left: str | None = None,
+        right: str | None = None,
+    ) -> None:
+        """Update either side of the pinned (lowest-priority) status mode."""
+        self.pinned_status = self.pinned_status.updated(left=left, right=right)
         self.update_status_line()
 
-    def set_selected_text(self, text: str) -> None:
-        """Set right-aligned status text which overrides pinned text when non-empty."""
-        self.selected_text = text
+    def set_selected_status(
+        self,
+        *,
+        left: str | None = None,
+        right: str | None = None,
+    ) -> None:
+        """Update either side of the selected status mode."""
+        self.selected_status = self.selected_status.updated(left=left, right=right)
         self.update_status_line()
 
     def update_selection_status(self) -> None:
-        """Format the current selection into the selected-text status layer."""
-        self.set_selected_text(self.selection_status_text)
+        """Format the current selection into the selected mode's right side."""
+        self.set_selected_status(right=self.selection_status_text)
 
-    def set_toast_text(self, text: str) -> None:
-        """Show left-aligned status text for 1.5 seconds, restarting on each call."""
+    def show_status_toast(self, *, left: str = "", right: str = "") -> None:
+        """Show a two-sided status toast for 1.5 seconds, restarting its timer."""
         if self.toast_timer is not None:
             self.toast_timer.stop()
-        self.toast_text = text
+        self.toast_status = _StatusContent(left=left, right=right)
         self.toast_timer = self.set_timer(
             TOAST_DURATION_SECONDS,
-            self.clear_toast_text,
-            name="clear-toast-text",
+            self.clear_status_toast,
+            name="clear-status-toast",
         )
         self.update_status_line()
 
-    def clear_toast_text(self) -> None:
-        """Clear toast feedback and reveal the selected or pinned status layer."""
-        self.toast_text = ""
+    def clear_status_toast(self) -> None:
+        """Clear toast feedback and reveal the selected or pinned status mode."""
+        self.toast_status = _StatusContent()
         self.toast_timer = None
         self.update_status_line()
 
@@ -755,7 +788,7 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         self.update_selection_status()
         count = len(matching_rows)
         line_noun = "line" if count == 1 else "lines"
-        self.set_toast_text(f"Selected {count} {line_noun}")
+        self.show_status_toast(left=f"Selected {count} {line_noun}")
 
     def mutate_selected_items(
         self,

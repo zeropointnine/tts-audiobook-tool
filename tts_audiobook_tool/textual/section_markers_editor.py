@@ -142,7 +142,7 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
                 is_title_case=False,
                 is_singular=cleared == 1,
             )
-            self.set_toast_text(f"Cleared all {cleared} {label}")
+            self.show_status_toast(left=f"Cleared all {cleared} {label}")
             return
         added = set(result) - self.staged_markers
         if not added:
@@ -158,7 +158,7 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             is_title_case=False,
             is_singular=added_count == 1,
         )
-        self.set_toast_text(f"Added {added_count} {label}")
+        self.show_status_toast(left=f"Added {added_count} {label}")
 
     @property
     def has_changes(self) -> bool:
@@ -227,7 +227,7 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             highlighted_phrase_index == 0
             and highlighted_phrase_index not in self.staged_markers
         ):
-            self.set_toast_text("Adding first line is not allowed")
+            self.show_status_toast(left="Adding first line is not allowed")
             return
         if highlighted_phrase_index in self.staged_markers:
             self.staged_markers.remove(highlighted_phrase_index)
@@ -237,7 +237,7 @@ class SectionMarkersEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             toast = f"Added line {highlighted_phrase_index + 1}"
         self.refresh_line(self.selected_index, reflow=False)
         self.update_markers_panel()
-        self.set_toast_text(toast)
+        self.show_status_toast(left=toast)
 
     def update_markers_panel(self) -> None:
         """Re-render the read-only side panel from the staged markers."""

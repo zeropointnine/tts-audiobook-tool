@@ -253,10 +253,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         status_text = (
             f"{self.queued_ungenerated_count} lines queued for generation{all_text}"
         )
-        if self.is_running:
-            self.set_pinned_text(status_text)
-        else:
-            self.pinned_text = status_text
+        self.set_pinned_status(right=status_text)
 
     @property
     def find_label_text(self) -> str:
@@ -296,7 +293,9 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
     def show_playback_status(self) -> None:
         """Show the currently tracked phrase without querying playback state."""
         if self.playing_phrase_index is not None:
-            self.set_selected_text(f"Playing line {self.playing_phrase_index + 1}")
+            self.set_selected_status(
+                right=f"Playing line {self.playing_phrase_index + 1}"
+            )
 
     def update_selection_status(self) -> None:
         """Keep playback visible, otherwise show the current selection count."""
