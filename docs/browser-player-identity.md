@@ -18,7 +18,7 @@ Older browser-player versions used a single `fileId` for both concerns. The curr
 
 ## ABR text/timeline model
 
-ABR metadata `text_segments` represents the full audiobook text segment sequence. It is not limited to the currently rendered or exported audio span.
+ABR metadata `text_segments` represents the full audiobook text segment sequence. It is not limited to the currently rendered or exported audio span. ABR v4 may wrap the leaves of one subdivided generated phrase in a one-level nested list. The browser normalizes that wire shape into one conceptual flattened leaf sequence; nesting is retained separately as display-only group ranges.
 
 Segments with playable audio have positive duration:
 
@@ -39,15 +39,15 @@ Zero-timed segments may be:
 - missing generated audio
 - non-verbal or formatting-related text
 
-The browser player infers the playable audio span from the first and last positive-duration `text_segments` entries.
+The browser player infers the playable audio span from the first and last positive-duration leaves in that flattened sequence.
 
 ---
 
 ## Bookmark identity
 
-Bookmarks are stored as indices into `text_segments`.
+Bookmarks are stored as indices into the conceptual flattened leaf sequence of `text_segments`.
 
-Therefore bookmark identity is based on the full text segment sequence, ignoring audio timing.
+Therefore bookmark identity is based on the full flattened text sequence, ignoring audio timing and nesting topology.
 
 Conceptually:
 
@@ -58,7 +58,7 @@ textId = hash({
 })
 ```
 
-This means local bookmarks survive regenerated audio, changed durations, or partial/complete render changes as long as the text segment sequence remains stable.
+This means local bookmarks survive regenerated audio, changed durations, partial/complete render changes, or regrouping between equivalent flat and nested wire representations as long as the flattened text sequence remains stable.
 
 ---
 
@@ -104,7 +104,7 @@ abrPlayer:v3:position:${positionId}
 abrPlayer:v3:bookmarks:${textId}
 ```
 
-`v3` refers to the current ABR metadata/identity contract produced by the generation side. It is not dynamically based on the opened file's embedded `version` field; older ABR payloads are normalized into the current browser identity model.
+`v3` is the browser storage namespace version, not the opened file's embedded ABR version. It remains unchanged for ABR v4 because flattened bookmark indices and playback identity semantics are unchanged; older and newer ABR payloads are normalized into the same browser identity model.
 
 Legacy keys are intentionally not read:
 

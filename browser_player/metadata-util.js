@@ -56,10 +56,11 @@ class MetadataUtil {
             return "Couldn't parse metadata"
         }
 
-        const textSegments = rawMetadata["text_segments"];
-        if (!Array.isArray(textSegments) || textSegments.length === 0) {
-            return "ABR metadata missing required field 'text_segments'";
+        const textSegmentResult = MetadataUtil.normalizeTextSegments(rawMetadata["text_segments"]);
+        if (typeof textSegmentResult === "string") {
+            return textSegmentResult;
         }
+        const { textSegments, textSegmentGroups } = textSegmentResult;
 
         const version = Number.isInteger(rawMetadata["version"]) && rawMetadata["version"] >= 1
             ? rawMetadata["version"]
@@ -84,6 +85,7 @@ class MetadataUtil {
             version,
             rawText,
             textSegments,
+            textSegmentGroups,
             bookmarks,
             hasBreakAudio,
             projectSnapshot,
@@ -96,6 +98,87 @@ class MetadataUtil {
             "has_section_break_audio": hasBreakAudio,
             "project_snapshot": projectSnapshot,
         }
+    }
+
+    /**
+     * Normalize the ABR wire representation into one flat, leaf-indexed playback
+     * sequence plus lightweight ranges for entries that were explicitly nested.
+     * Bookmarks and sections in ABR v4 use these flattened leaf indices.
+     */
+    static normalizeTextSegments(rawTextSegments) {
+        if (!Array.isArray(rawTextSegments) || rawTextSegments.length === 0) {
+            return "ABR metadata missing required field 'text_segments'";
+        }
+
+        const textSegments = [];
+        const textSegmentGroups = [];
+
+        const addLeaf = (rawSegment, outerIndex, childIndex, groupIndex) => {
+            const path = childIndex === null
+                ? `text_segments[${outerIndex}]`
+                : `text_segments[${outerIndex}][${childIndex}]`;
+
+            if (!rawSegment || typeof rawSegment !== "object" || Array.isArray(rawSegment)) {
+                return `${path} must be a timed segment object`;
+            }
+            if (typeof rawSegment.text !== "string") {
+                return `${path}.text must be a string`;
+            }
+
+            const timeStart = rawSegment.time_start;
+            const timeEnd = rawSegment.time_end;
+            if (typeof timeStart !== "number" || !Number.isFinite(timeStart)) {
+                return `${path}.time_start must be a finite number`;
+            }
+            if (typeof timeEnd !== "number" || !Number.isFinite(timeEnd)) {
+                return `${path}.time_end must be a finite number`;
+            }
+            const flatIndex = textSegments.length;
+            textSegments.push({
+                text: rawSegment.text,
+                time_start: timeStart,
+                time_end: timeEnd,
+                playable: timeEnd > timeStart,
+                flatIndex,
+                outerIndex,
+                childIndex,
+                groupIndex,
+            });
+            return "";
+        };
+
+        for (const [outerIndex, rawEntry] of rawTextSegments.entries()) {
+            if (!Array.isArray(rawEntry)) {
+                const error = addLeaf(rawEntry, outerIndex, null, null);
+                if (error) {
+                    return error;
+                }
+                continue;
+            }
+
+            if (rawEntry.length === 0) {
+                return `text_segments[${outerIndex}] must not be an empty list`;
+            }
+
+            const groupIndex = textSegmentGroups.length;
+            const startIndex = textSegments.length;
+            for (const [childIndex, rawSegment] of rawEntry.entries()) {
+                const error = addLeaf(rawSegment, outerIndex, childIndex, groupIndex);
+                if (error) {
+                    return error;
+                }
+            }
+            const endIndex = textSegments.length;
+            textSegmentGroups.push({
+                groupIndex,
+                outerIndex,
+                startIndex,
+                endIndex,
+                leafCount: endIndex - startIndex,
+            });
+        }
+
+        return { textSegments, textSegmentGroups };
     }
 
     static decodeLegacyRawText(rawTextBase64) {

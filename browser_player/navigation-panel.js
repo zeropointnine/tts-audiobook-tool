@@ -125,11 +125,12 @@ class NavigationPanel {
         if (index < 0 || index >= this.textSegments.length) {
             return false;
         }
-        const duration =  this.textSegments[index]["time_end"] - this.textSegments[index]["time_start"];
-        if (!(duration > 0)) {
-            return false
+        const segment = this.textSegments[index];
+        if (typeof segment.playable === "boolean") {
+            return segment.playable;
         }
-        return true;
+        const duration = segment["time_end"] - segment["time_start"];
+        return duration > 0;
     }
 
     removeIndex(indexValue) {

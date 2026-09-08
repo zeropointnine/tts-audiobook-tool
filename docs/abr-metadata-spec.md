@@ -313,12 +313,14 @@ Important notes:
 - a consumer may use section ranges as separate text blocks only when the ranges are
   contiguous, non-empty, ordered, and together cover the complete flattened leaf sequence;
   otherwise text display should fall back to one flat block
-- for flat payloads, the current browser navigation panel exposes section navigation only
-  when more than one valid section is present and targets the first playable segment in each section
+- the browser navigation panel exposes section navigation only when more than one valid
+  section is present and targets the first playable leaf in each section
+- because one inline group cannot span separate section text blocks, the browser falls
+  back to one text block if a section boundary bisects a nested group
 - normal concat mirrors the project's section list without filtering empty sections, so
-  a project containing an empty section can produce `start_index == end_index`; for flat
-  payloads, the current browser retains that descriptor for navigation normalization but
-  disables it when no playable segment exists
+  a project containing an empty section can produce `start_index == end_index`; the
+  browser retains that descriptor for navigation normalization but disables it when no
+  playable leaf exists
 
 If missing, consumers should treat it as an empty list.
 
@@ -343,8 +345,9 @@ The concat producer applies these rules per phrase group:
   one-item subdivision remains a singleton nested list
 - generated audio with a missing, invalid, or empty timing sidecar retains one ordinary
   top-level segment object for the original flattened phrase group
-- a group with no generated audio retains the existing behavior: its known constituent
-  phrases are emitted as separate top-level zero-timed objects, not as a nested list
+- a group with no generated audio is emitted as a nested list of its known constituent
+  phrases, each zero-timed; the browser player renders such groups as no-audio segment
+  groups
 - when phrase subdivision is disabled, every phrase group is one top-level segment object
 
 A bookmark on a subdivided phrase is moved to the first resulting leaf. Bookmark and
@@ -395,11 +398,13 @@ The browser player rejects the payload unless it is a JSON object with a non-emp
 - `sections` defaulting to `[]`; malformed or out-of-bounds section entries are dropped
 - `project_snapshot` defaulting to `{}`
 
-The browser does not currently validate the fields inside each `text_segments` item
-before downstream code uses `text`, `time_start`, and `time_end`. It has not yet been
-updated to traverse version 4 nested entries, so current browser playback should be
-considered compatible only with flat `text_segments` payloads. Browser support for the
-new shape is intentionally outside this revision of the producer and Python reader.
+The browser accepts both legacy flat arrays and version 4 mixed flat/nested arrays. It
+normalizes them once into a flat leaf sequence plus ranges describing explicitly nested
+groups. Playback, bookmarks, sections, navigation, and persisted identity all use flat
+leaf indices. The browser rejects empty or deeper-nested groups and malformed timed
+segment leaves before downstream code renders them. Grouping topology is intentionally
+excluded from persisted identity, so equivalent flat and nested representations retain
+compatible bookmark and playback state.
 
 ### Python app reader expectations
 
@@ -443,8 +448,8 @@ An ABR payload should satisfy the following:
   list of timed segment objects; nested lists cannot contain further lists
 - every timed segment object has:
   - `text` as a string
-  - `time_start` as a number
-  - `time_end` as a number
+  - `time_start` as a finite number
+  - `time_end` as a finite number
 - the conceptual flattened sequence contains at least one leaf
 - `bookmarks`, if present, is an array of integer flattened-leaf indices
 - `has_section_break_audio`, if present, is a boolean
@@ -476,10 +481,10 @@ follow the stricter interpretation above.
 - File naming such as `.abr.flac` or `.abr.m4b` is a project convention, not part of the metadata spec itself.
 - Version 1 ABR files do not contain `project_snapshot`; missing `version` should be interpreted as version 1.
 - Version 2 ABR files do not contain `sections`.
-- Versions 1–3 use only flat `text_segments`; the version 4 Python reader accepts and
-  preserves both the legacy flat shape and the new mixed shape.
-- Existing version 3/browser consumers are not expected to understand nested version 4
-  entries until they receive an explicit consumer update.
+- Versions 1–3 use only flat `text_segments`; current Python and browser readers accept
+  both the legacy flat shape and the new mixed shape. The Python reader preserves nesting
+  when round-tripping, while the browser normalizes to flat leaves plus group ranges.
+- Browser-player versions predating ABR v4 support do not understand nested entries.
 - The browser player's localStorage identity rules are documented separately in `docs/browser-player-identity.md`.
 
 ---

@@ -766,15 +766,34 @@ html, body {
     position:relative;
 }
 
+.textSegment {
+    /* Lives on the base class (not span.highlight) so the transition also
+       applies when the highlight class is removed, fading out smoothly. */
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.segmentGroup {
+    display: inline;
+    padding: 0.1em 0;
+    border-radius: 3px;
+    transition: background-color 0.3s ease-out;
+}
+.segmentGroup,
+span.highlight {
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+}
+.segmentGroup.groupHighlight {
+    background-color: var(--color-segment-group-current);
+}
+
 span.highlight {
     background-color: var(--color-segment-highlight);
     color: var(--color-text);
     padding: 0.1em 0;
     border-radius: 3px;
-    transition: background-color 0.3s ease, color 0.3s ease;
 
     display: inline;
-    box-decoration-break: clone;
 }
 [data-player-status="pause"] span.highlight {
     background-color: var(--color-segment-hover);
@@ -813,6 +832,13 @@ span.bookmark.highlight::before {
 
 @media (pointer: fine) {
     /* hover effect only when is pointer device */
+    .textHolder .segmentGroup.hasAudio:hover {
+        background-color: var(--color-segment-group-hover);
+    }
+    .textHolder .segmentGroup.noAudio:hover {
+        background-color: var(--color-segment-group-noaudio-hover);
+    }
+
     .textHolder span.hasAudio:hover {
         background-color: var(--color-segment-hover);
         padding: 0.1em 0;
@@ -826,10 +852,19 @@ span.bookmark.highlight::before {
     }
 
     .textHolder span.noAudio:hover {
-        background-color: var(--color-bg);
+        background-color: var(--color-segment-noaudio-hover);
         padding: 0.1em 0;
         border-radius: 3px;
         cursor: pointer;
+    }
+
+    /* Nested children use the standard segment hover tint while their
+       containing generated-phrase group keeps the subtler background above. */
+    .textHolder .segmentGroup > .textSegment.hasAudio:hover {
+        background-color: var(--color-segment-hover);
+    }
+    .textHolder .segmentGroup > .textSegment.highlight:hover {
+        background-color: var(--color-segment-highlight);
     }
 }
 

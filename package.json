@@ -7,7 +7,8 @@
     "lint": "eslint .",
     "lint:js": "eslint browser_player eslint.config.mjs",
     "lint:css": "eslint browser_player/*.css",
-    "lint:json": "eslint . --ext .json"
+    "lint:json": "eslint . --ext .json",
+    "test:browser": "node --test tests/browser_player_*.test.mjs"
   },
   "devDependencies": {
     "@eslint/css": "^0.6.0",

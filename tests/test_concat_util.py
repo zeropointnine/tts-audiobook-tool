@@ -52,12 +52,21 @@ def test_subdivided_metadata_preserves_phrases_for_missing_audio_groups() -> Non
         bookmark_indices=[1],
     )
 
-    assert [segment.text for segment in segments] == [
+    assert len(segments) == 2
+    first_group = segments[0]
+    second_group = segments[1]
+    assert isinstance(first_group, list)
+    assert isinstance(second_group, list)
+    assert [segment.text for segment in first_group] == [
         "First phrase, ",
         "second phrase. ",
-        "Third phrase.\n\n",
     ]
-    assert all(segment.time_start == 0.0 and segment.time_end == 0.0 for segment in segments)
+    assert [segment.text for segment in second_group] == ["Third phrase.\n\n"]
+    assert all(
+        segment.time_start == 0.0 and segment.time_end == 0.0
+        for group in (first_group, second_group)
+        for segment in group
+    )
     assert bookmarks == [2]
     assert group_start_indices == [0, 2]
 
@@ -94,12 +103,16 @@ def test_subdivided_metadata_nests_valid_sidecars_and_keeps_flat_leaf_indices() 
             bookmark_indices=[0, 1],
         )
 
-    assert len(segments) == 3
+    assert len(segments) == 2
     assert isinstance(segments[0], list)
     assert [segment.text for segment in segments[0]] == ["First phrase, ", "second phrase. "]
     assert segments[0][-1].time_end == 3.0
-    assert isinstance(segments[1], TimedPhrase)
-    assert isinstance(segments[2], TimedPhrase)
+    assert isinstance(segments[1], list)
+    assert [segment.text for segment in segments[1]] == ["Missing one, ", "missing two."]
+    assert all(
+        segment.time_start == 0.0 and segment.time_end == 0.0
+        for segment in segments[1]
+    )
     assert bookmarks == [0, 2]
     assert group_start_indices == [0, 2]
 

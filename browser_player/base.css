@@ -15,7 +15,13 @@
 
     /* Highlight colors (orange) */
     --color-segment-highlight: #ffaa4488;
-    --color-segment-hover: #ffaa4433;
+    --color-segment-hover: color-mix(in srgb, var(--color-segment-highlight) 60%, transparent);
+    --color-segment-group-current: color-mix(in srgb, var(--color-segment-highlight) 25%, transparent);
+    --color-segment-group-hover: color-mix(in srgb, var(--color-segment-highlight) 25%, transparent);
+    /* Dim bases carry their own alpha, so mix percentages are boosted to
+       compensate: effective alphas land around 28% / 14% in light mode. */
+    --color-segment-noaudio-hover: color-mix(in srgb, var(--color-text-dimmer) 45%, transparent);
+    --color-segment-group-noaudio-hover: color-mix(in srgb, var(--color-text-dimmer) 25%, transparent);
 }
 :root {
     @media (max-width: 600px) {
@@ -51,23 +57,18 @@
     --color-shadow: rgba(0, 0, 0, 0.33);
 
     --color-segment-highlight: #ffaa4466;
-    --color-segment-hover: #ffaa4433;
 }
 
 [data-segment-colors="blue"] {
     --color-segment-highlight: #4444ff55;
-    --color-segment-hover: #4444ff20;
 }
 [data-segment-colors="blue"][data-theme="dark"] {
     --color-segment-highlight: #8888ff80;
-    --color-segment-hover: #8888ff40;
 }
 
 [data-segment-colors="red"] {
     --color-segment-highlight: #ffbbff;
-    --color-segment-hover: #ffbbff60;
 }
 [data-segment-colors="red"][data-theme="dark"] {
     --color-segment-highlight: #603060ff;
-    --color-segment-hover: #60306066;
 }

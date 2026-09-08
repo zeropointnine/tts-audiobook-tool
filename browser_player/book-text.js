@@ -49,10 +49,13 @@ class BookText {
 
         // Internal state
         this.textSegments = [];
+        this.textSegmentGroups = [];
         this.audioIndices = []; // text segment indices that "have audio"
+        this.isAudioTimelineOrdered = true;
         this.segmentMap = {}; // key = textSegment index, value = audioIndicies index or null -- ONE MORE level of indirection
         
         this.spans = [];
+        this.segmentGroupSpans = [];
         this.currentIndex = -1; // the current segment index
         this.directSelections = [];
         this.hasAdvancedOnce = false;
@@ -62,22 +65,30 @@ class BookText {
     /**
      * Initialize the controller with text segments.
      * 
-     * `textSegments` is an array of objects with text, time_start, time_end.
-     * time_start and time_end are monotonically increasing, 
-     * with the exception that that they can both be 0.0.
+     * `textSegments` is the normalized flat leaf sequence. `textSegmentGroups`
+     * contains half-open ranges for ABR entries that were explicitly nested.
+     * time_start and time_end are monotonically increasing,
+     * with the exception that they can both be 0.0.
      */
-    init(textSegments, addSectionDividers = false, sections = []) {
+    init(textSegments, addSectionDividers = false, sections = [], textSegmentGroups = []) {
         
         this.textSegments = textSegments;
+        this.textSegmentGroups = Array.isArray(textSegmentGroups) ? textSegmentGroups : [];
         this.currentIndex = -1;
         this.directSelections = [];
         this.hasAdvancedOnce = false;
 
         // Init 'derived' data structures
         this.audioIndices = [];
+        this.isAudioTimelineOrdered = true;
+        let previousAudioEnd = -Infinity;
         for (const [i, segment] of this.textSegments.entries()) {
-            if (segment["time_start"] > 0.0 || segment["time_end"] > 0.0) {
+            if (BookText._isPlayableSegment(segment)) {
                 this.audioIndices.push(i)
+                if (segment.time_start < previousAudioEnd) {
+                    this.isAudioTimelineOrdered = false;
+                }
+                previousAudioEnd = Math.max(previousAudioEnd, segment.time_end);
             }
         }
         this.segmentMap = {}
@@ -103,8 +114,11 @@ class BookText {
         this.textHolder.innerHTML = "";
         this.textHolder.style.display = "none";
         this.spans = [];
+        this.segmentGroupSpans = [];
         this.textSegments = [];
+        this.textSegmentGroups = [];
         this.audioIndices = [];
+        this.isAudioTimelineOrdered = true;
         this.segmentMap = {};
         this.currentIndex = -1;
         this.directSelections = [];
@@ -141,37 +155,48 @@ class BookText {
      * @returns {number} Segment index or -1 if not found
      */
     getSegmentIndexBySeconds(seconds) {
-        if (this.textSegments.length == 0) {
+        if (this.audioIndices.length === 0) {
             return -1;
         }
 
-        const baseIndex = Math.max(this.currentIndex, 0);
-
-        let delta = 0;
-        while (true) {
-            const indexInc = baseIndex + delta;
-            const indexDec = baseIndex - delta;
-
-            const oob = (indexInc >= this.textSegments.length && indexDec < 0);
-            if (oob) {
-                return -1;
+        // The overwhelmingly common poll-loop case needs no search.
+        if (this.currentIndex >= 0) {
+            const current = this.textSegments[this.currentIndex];
+            if (seconds >= current.time_start && seconds < current.time_end) {
+                return this.currentIndex;
             }
-
-            if (indexDec >= 0) {
-                const segment = this.textSegments[indexDec];
-                if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
-                    return indexDec;
-                }
-            }
-            if (indexInc < this.textSegments.length) {
-                const segment = this.textSegments[indexInc];
-                if (seconds >= segment["time_start"] && seconds < segment["time_end"]) {
-                    return indexInc;
-                }
-            }
-
-            delta += 1;
         }
+
+        // Valid producer timelines are ordered and use the fast binary path.
+        // Preserve permissive legacy behavior for unusual overlapping or
+        // non-monotonic metadata rather than returning a misleading result.
+        if (!this.isAudioTimelineOrdered) {
+            for (const segmentIndex of this.audioIndices) {
+                const segment = this.textSegments[segmentIndex];
+                if (seconds >= segment.time_start && seconds < segment.time_end) {
+                    return segmentIndex;
+                }
+            }
+            return -1;
+        }
+
+        let lo = 0;
+        let hi = this.audioIndices.length - 1;
+        while (lo <= hi) {
+            const mid = Math.floor((lo + hi) / 2);
+            const segmentIndex = this.audioIndices[mid];
+            const segment = this.textSegments[segmentIndex];
+
+            if (seconds < segment.time_start) {
+                hi = mid - 1;
+            } else if (seconds >= segment.time_end) {
+                lo = mid + 1;
+            } else {
+                return segmentIndex;
+            }
+        }
+
+        return -1;
     }
 
     /**
@@ -353,17 +378,18 @@ class BookText {
      */
     handleTextClick(event) {
 
-        const clickedSpan = event.target;
-
-        const isSegment = (clickedSpan.tagName === 'SPAN' && clickedSpan.id.startsWith("segment-"));
-        if (!isSegment) {
+        const target = event.target;
+        const clickedSpan = target instanceof Element
+            ? target.closest(".textSegment[data-segment-index]")
+            : null;
+        if (!clickedSpan || !this.textHolder.contains(clickedSpan)) {
             return -1;
         }
 
-        const segmentIndex = parseInt(clickedSpan.id.split("-")[1]);
+        const segmentIndex = Number(clickedSpan.dataset.segmentIndex);
         const segment = this.textSegments[segmentIndex];
 
-        if (segment["time_start"] == 0 && segment["time_end"] == 0) {
+        if (!segment || !BookText._isPlayableSegment(segment)) {
             return -1;
         }
 
@@ -412,19 +438,18 @@ class BookText {
     }
 
     /**
-     * Remove highlight from a range of spans around the given index
-     * @param {number} i - Center index
+     * Remove the leaf and containing-group highlights for an index.
+     * @param {number} i - Flat leaf index
      */
     unhighlightByIndex(i) {
         if (i < 0) {
             return;
         }
-        const a = Math.max(i - 20, 0);
-        const b = Math.min(i + 20, this.textSegments.length - 1);
-        for (let j = a; j <= b; j++) {
-            if (this.spans[j]) {
-                this.spans[j].classList.remove("highlight");
-            }
+        if (this.spans[i]) {
+            this.spans[i].classList.remove("highlight");
+        }
+        if (this.segmentGroupSpans[i]) {
+            this.segmentGroupSpans[i].classList.remove("groupHighlight");
         }
     }
 
@@ -442,61 +467,133 @@ class BookText {
     // ========================================
 
     /**
-     * Build DOM from text segments
+     * Build DOM from normalized flat leaves and nested-entry group ranges.
      * @param {boolean} addSectionDividers - Whether to add section break markers
-     * @param {Array} sections - Section ranges over the flat text segment array
+     * @param {Array} sections - Section ranges over the flat leaf sequence
      * @private
      */
     _populateText(addSectionDividers, sections = []) {
 
         const sectionRanges = this._getDisplaySectionRanges(sections);
-        let contentHtml = '';
+        const groupsByStartIndex = new Map();
+        for (const group of this.textSegmentGroups) {
+            groupsByStartIndex.set(group.startIndex, group);
+        }
 
+        this.spans = new Array(this.textSegments.length);
+        this.segmentGroupSpans = new Array(this.textSegments.length).fill(null);
+
+        const fragment = document.createDocumentFragment();
         for (const [sectionIndex, section] of sectionRanges.entries()) {
-            contentHtml += `<pre class="textHolder" data-section-index="${sectionIndex}">`;
+            const textBlock = document.createElement("pre");
+            textBlock.className = "textHolder";
+            textBlock.dataset.sectionIndex = sectionIndex;
 
-            for (let i = section.startIndex; i < section.endIndex; i++) {
-                const segment = this.textSegments[i];
-
-                const o = BookText._splitTextSegment(segment.text);
-
-                if (o["before"]) {
-                    contentHtml += Util.escapeHtml(o["before"]);
-                }
-
-                const hasAudio = segment["time_start"] > 0.0 || segment["time_end"] > 0.0;
-                const className = hasAudio ? "hasAudio" : "noAudio";
-                const spanString = `<span id="segment-${i}" class="${className}">${Util.escapeHtml(o["content"])}</span>`;
-                contentHtml += spanString;
-
-                if (o["after"]) {
-                    if (addSectionDividers) {
-                        const numLfs = o["after"].split('\n').length - 1;
-                        if (numLfs >= 3) {
-                            contentHtml += "<br>&nbsp;<hr><br>";
-                        } else {
-                            contentHtml += Util.escapeHtml(o["after"]);
-                        }
-                    } else {
-                        contentHtml += Util.escapeHtml(o["after"]);
-                    }
+            let i = section.startIndex;
+            while (i < section.endIndex) {
+                const group = groupsByStartIndex.get(i);
+                if (group && group.endIndex <= section.endIndex) {
+                    this._appendSegmentGroup(textBlock, group, addSectionDividers);
+                    i = group.endIndex;
+                } else {
+                    this._appendFlatSegment(textBlock, i, addSectionDividers);
+                    i += 1;
                 }
             }
 
-            contentHtml += "</pre>";
+            fragment.appendChild(textBlock);
         }
 
-        this.textHolder.innerHTML = contentHtml;
+        this.textHolder.replaceChildren(fragment);
         this.textHolder.classList.toggle("multipleTextHolders", sectionRanges.length > 1);
         this.textHolder.style.display = "block";
         for (const textBlock of this.textHolder.querySelectorAll(".textHolder")) {
             textBlock.style.display = "block";
         }
+    }
 
-        this.spans = [];
-        for (let i = 0; i < this.textSegments.length; i++) {
-            this.spans[i] = document.getElementById("segment-" + i);
+    _appendFlatSegment(textBlock, index, addSectionDividers) {
+        const split = BookText._splitTextSegment(this.textSegments[index].text);
+        this._appendText(textBlock, split.before);
+        textBlock.appendChild(this._makeSegmentSpan(index, split.content));
+        this._appendTrailingText(textBlock, split.after, addSectionDividers);
+    }
+
+    _appendSegmentGroup(textBlock, group, addSectionDividers) {
+        const firstIndex = group.startIndex;
+        const lastIndex = group.endIndex - 1;
+        const splits = [];
+        for (let i = firstIndex; i <= lastIndex; i++) {
+            splits.push(BookText._splitTextSegment(this.textSegments[i].text));
         }
+
+        // Keep surrounding structural whitespace outside the inline group. All
+        // separators between child leaves remain inside and receive group tint.
+        this._appendText(textBlock, splits[0].before);
+
+        const groupSpan = document.createElement("span");
+        const groupHasAudio = this.textSegments
+            .slice(firstIndex, lastIndex + 1)
+            .some(BookText._isPlayableSegment);
+        groupSpan.className = `segmentGroup ${groupHasAudio ? "hasAudio" : "noAudio"}`;
+        groupSpan.dataset.groupIndex = group.groupIndex;
+        groupSpan.dataset.groupStart = group.startIndex;
+        groupSpan.dataset.groupEnd = group.endIndex;
+        groupSpan.dataset.leafCount = group.leafCount;
+
+        for (let i = firstIndex; i <= lastIndex; i++) {
+            const split = splits[i - firstIndex];
+            if (i > firstIndex) {
+                this._appendText(groupSpan, split.before);
+            }
+
+            groupSpan.appendChild(this._makeSegmentSpan(i, split.content));
+            this.segmentGroupSpans[i] = groupSpan;
+
+            if (i < lastIndex) {
+                // Section-divider markup is block content and must not be put
+                // inside an inline group. Valid producer data does not place a
+                // structural divider between children of one generated phrase.
+                this._appendText(groupSpan, split.after);
+            }
+        }
+
+        textBlock.appendChild(groupSpan);
+        this._appendTrailingText(textBlock, splits.at(-1).after, addSectionDividers);
+    }
+
+    _makeSegmentSpan(index, content) {
+        const segment = this.textSegments[index];
+        const span = document.createElement("span");
+        span.id = `segment-${index}`;
+        span.className = `textSegment ${BookText._isPlayableSegment(segment) ? "hasAudio" : "noAudio"}`;
+        span.dataset.segmentIndex = index;
+        span.textContent = content;
+        this.spans[index] = span;
+        return span;
+    }
+
+    _appendText(parent, text) {
+        if (text) {
+            parent.appendChild(document.createTextNode(text));
+        }
+    }
+
+    _appendTrailingText(parent, text, addSectionDividers) {
+        if (!text) {
+            return;
+        }
+
+        const numLfs = text.split('\n').length - 1;
+        if (!addSectionDividers || numLfs < 3) {
+            this._appendText(parent, text);
+            return;
+        }
+
+        parent.appendChild(document.createElement("br"));
+        parent.appendChild(document.createTextNode("\u00a0"));
+        parent.appendChild(document.createElement("hr"));
+        parent.appendChild(document.createElement("br"));
     }
 
     _getDisplaySectionRanges(sections) {
@@ -526,6 +623,26 @@ class BookText {
             return [{ startIndex: 0, endIndex: this.textSegments.length }];
         }
 
+        // One inline group cannot span sibling <pre> text blocks. Producer data
+        // aligns these boundaries, but malformed/third-party metadata should
+        // still preserve group rendering by falling back to one text block.
+        const sectionBoundaries = ranges.slice(0, -1).map((range) => range.endIndex);
+        let boundaryIndex = 0;
+        for (const group of this.textSegmentGroups) {
+            while (
+                boundaryIndex < sectionBoundaries.length
+                && sectionBoundaries[boundaryIndex] <= group.startIndex
+            ) {
+                boundaryIndex += 1;
+            }
+            if (
+                boundaryIndex < sectionBoundaries.length
+                && sectionBoundaries[boundaryIndex] < group.endIndex
+            ) {
+                return [{ startIndex: 0, endIndex: this.textSegments.length }];
+            }
+        }
+
         return ranges;
     }
 
@@ -537,6 +654,9 @@ class BookText {
     _highlightSpan(index) {
         if (index >= 0 && this.spans[index]) {
             this.spans[index].classList.add("highlight");
+        }
+        if (index >= 0 && this.segmentGroupSpans[index]) {
+            this.segmentGroupSpans[index].classList.add("groupHighlight");
         }
     }
 
@@ -571,6 +691,18 @@ class BookText {
         if (this.onPlay) {
             await this.onPlay();
         }
+    }
+
+    static _isPlayableSegment(segment) {
+        if (!segment) {
+            return false;
+        }
+        if (typeof segment.playable === "boolean") {
+            return segment.playable;
+        }
+        return Number.isFinite(segment.time_start)
+            && Number.isFinite(segment.time_end)
+            && segment.time_end > segment.time_start;
     }
 
     static _splitTextSegment(text) {

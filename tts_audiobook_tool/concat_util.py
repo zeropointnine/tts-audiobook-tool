@@ -769,7 +769,8 @@ def make_subdivided_timed_phrases(
     """
     Break timed PhraseGroups into their constituent phrases. Valid forced-alignment
     sidecars are preserved as nested lists in ABR metadata. Groups without audio
-    retain the existing flat constituent-phrase behavior with zeroed timings.
+    are likewise emitted as nested lists of zero-timed constituent phrases so the
+    browser player can render them as no-audio segment groups.
 
     The first four arguments are parallel lists.
 
@@ -805,11 +806,13 @@ def make_subdivided_timed_phrases(
                 leaf_count += 1
                 continue
 
+            missing_phrases: list[TimedPhrase] = []
             for phrase_index, phrase in enumerate(phrase_group.phrases):
                 if phrase_index == 0:
                     add_to_new_bookmark_indices("first-missing-audio-phrase", phrase.presentable_text)
-                new_timed_phrases.append(TimedPhrase.make_using(phrase, 0.0, 0.0))
-                leaf_count += 1
+                missing_phrases.append(TimedPhrase.make_using(phrase, 0.0, 0.0))
+            new_timed_phrases.append(missing_phrases)
+            leaf_count += len(missing_phrases)
             continue
 
         subdivided_items_json_path = get_segment_stt_info_path(sound_path)

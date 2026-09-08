@@ -303,7 +303,12 @@ class App {
         // Init book text (heavy operation)
         const addSectionDividers = (appMetadata.hasBreakAudio === true);
         const textSegments = appMetadata.textSegments;
-        this.bookText.init(textSegments, addSectionDividers, appMetadata.sections || []);
+        this.bookText.init(
+            textSegments,
+            addSectionDividers,
+            appMetadata.sections || [],
+            appMetadata.textSegmentGroups || [],
+        );
         this.bookText.showFileName(fileName)
         this.updateCurrentTitle(appMetadata.title);
 
