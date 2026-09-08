@@ -49,21 +49,24 @@ from tts_audiobook_tool.system_support.ansi import Ansi
 
 
 class FilterType(tuple[str, str], Enum):
-    ALL = "Show all lines", "all"
-    UNGENERATED = "Show ungenerated lines", "ungenerated"
-    GENERATED = "Show generated lines", "generated"
+    ALL = "Show all lines", ""
+    UNGENERATED = (
+        "Show ungenerated lines",
+        "Showing ungenerated lines",
+    )
+    GENERATED = "Show generated lines", "Showing generated lines"
     GENERATED_WITH_ERRORS = (
         "Show generated lines with any word errors",
-        "generated w/ errors",
+        "Showing lines with word errors",
     )
-    FAILED = "Show generated lines flagged as Failed", "generated/failed"
+    FAILED = "Show generated lines flagged as Failed", "Showing failed lines"
 
     @property
     def menu_label(self) -> str:
         return self.value[0]
 
     @property
-    def value_label(self) -> str:
+    def status_label(self) -> str:
         return self.value[1]
 
 
@@ -174,21 +177,14 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             loading_state_text="...",
         )
 
-    def make_filter_status_ansi(self) -> str:
-        """Return the active-filter suffix displayed in the editor header."""
-        if self.filter_type == FilterType.ALL:
-            return ""
-        return f" (currently: {COL_ACCENT}{self.filter_type.value_label}{COL_DIM})"
-
     def make_editor_header_lines(self) -> list[str]:
-        """Build header copy that reflects the active line filter."""
+        """Build the editor's fixed instruction header."""
 
-        filter_status = self.make_filter_status_ansi()
         return [
             f"{COL_ACCENT}Generate - Select lines / review sound segments",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",
             f"{COL_DIM}- Select multiple lines: [SHIFT] + navigation keys  - [CTRL-A] Select all  - [M] Enter manually",
-            f"{COL_DIM}- Press [{COL_ACCENT}SPACE{COL_DIM}] to queue or unqueue lines  - [F] Filter lines{filter_status}",
+            f"{COL_DIM}- Press [{COL_ACCENT}SPACE{COL_DIM}] to queue or unqueue lines  - [F] Filter lines",
             f"{COL_DIM}- Sound segments: [P] Play  [X] Delete sound  [Q] Quick gen  [I] Info",
             f"{COL_DIM}- Press [ESC] to close",
         ]
@@ -200,7 +196,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         self.original_queued_indices = queued_indices & set(self.all_phrase_indices)
         self.staged_queued_indices = set(self.original_queued_indices)
         self.refresh_phrase_classifications()
-        self.update_queued_status()
+        self.update_pinned_status()
         self.content_initialized_at = perf_counter()
         return self.get_filtered_phrase_indices()
 
@@ -242,18 +238,33 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             return
         self.action_play_sound()
 
-    def update_queued_status(self) -> None:
-        """Show how many ungenerated lines are currently queued."""
+    def update_pinned_status(self) -> None:
+        """Show the active filter and number of queued ungenerated lines."""
+        filter_status = ""
+        if self.filter_type != FilterType.ALL:
+            filtered_line_count = len(
+                {
+                    FilterType.UNGENERATED: self.ungenerated_indices,
+                    FilterType.GENERATED: self.generated_indices,
+                    FilterType.GENERATED_WITH_ERRORS: self.generated_with_errors_indices,
+                    FilterType.FAILED: self.failed_indices,
+                }[self.filter_type]
+            )
+            filter_status = f"{self.filter_type.status_label} ({filtered_line_count})"
+
         all_text = (
             " (all)"
             if self.ungenerated_indices
             and self.queued_ungenerated_count == len(self.ungenerated_indices)
             else ""
         )
-        status_text = (
+        queued_status = (
             f"{self.queued_ungenerated_count} lines queued for generation{all_text}"
         )
-        self.set_pinned_status(right=status_text)
+        self.set_pinned_status(
+            left=filter_status,
+            right=queued_status,
+        )
 
     @property
     def find_label_text(self) -> str:
@@ -536,7 +547,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
 
         changed_indices = self.mutate_selected_items(set_flag, reflow=False)
         if changed_indices:
-            self.update_queued_status()
+            self.update_pinned_status()
 
     def action_toggle_queued(self) -> None:
         """Toggle selected ungenerated rows and clear generated rows' flags."""
@@ -582,7 +593,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
         selected_phrase_index = self.highlighted_content_line_index()
         old_items_by_id = self.visible_items_by_id()
         self.filter_type = filter_type
-        self.update_header(self.make_editor_header_lines())
+        self.update_pinned_status()
         phrase_indices = self.get_filtered_phrase_indices()
         selected_item_index = self.item_index_for_phrase(selected_phrase_index)
         self.replace_filtered_phrase_indices(
@@ -837,7 +848,7 @@ class GenerateEditor(ContentTextualApp[GenerateEditorResult]):
             old_items_by_id,
             phrase_indices,
         )
-        self.update_queued_status()
+        self.update_pinned_status()
 
     def apply_staged_queue_to_project(self) -> None:
         """Apply the staged queue to the project's in-memory generation range."""

@@ -629,14 +629,16 @@ def test_queue_toggle_refreshes_only_selected_rows_without_reflow() -> None:
     run(exercise())
 
 
-def test_queue_status_update_does_not_rescan_segment_state() -> None:
+def test_pinned_status_update_does_not_rescan_segment_state() -> None:
     app, project = make_app(1_000, set())
     project.sound_segments.best_item_call_count = 0
+    app.filter_type = FilterType.UNGENERATED
     app.queued_ungenerated_count = 400
 
-    app.update_queued_status()
+    app.update_pinned_status()
 
     assert project.sound_segments.best_item_call_count == 0
+    assert app.pinned_status.left == "Showing ungenerated lines (1000)"
     assert app.pinned_status.right == "400 lines queued for generation"
 
 
@@ -767,8 +769,11 @@ def test_filter_dialog_escape_cancels_without_changing_display() -> None:
     run(exercise())
 
 
-def test_number_selection_applies_each_filter_and_updates_header() -> None:
+def test_number_selection_applies_each_filter_and_updates_pinned_status() -> None:
     app, project = make_app(6, {1, 2, 3, 4})
+    project.phrase_groups = [
+        make_phrase_group(f"Line {index + 1}") for index in range(6)
+    ]
     project.sound_segments.sound_segments_map[1][0].num_errors = 2
     project.sound_segments.sound_segments_map[2][0].num_errors = 0
     project.sound_segments.sound_segments_map[3][0].num_errors = -1
@@ -776,32 +781,45 @@ def test_number_selection_applies_each_filter_and_updates_header() -> None:
     project.sound_segments.failed_segment_files.add("segment-4.flac")
 
     expected_filters = [
-        ("2", FilterType.UNGENERATED, [0, 5]),
-        ("3", FilterType.GENERATED, [1, 2, 3, 4]),
-        ("4", FilterType.GENERATED_WITH_ERRORS, [1, 4]),
-        ("5", FilterType.FAILED, [4]),
-        ("1", FilterType.ALL, [0, 1, 2, 3, 4, 5]),
+        (
+            "2",
+            FilterType.UNGENERATED,
+            [0, 5],
+            "Showing ungenerated lines (2)",
+        ),
+        (
+            "3",
+            FilterType.GENERATED,
+            [1, 2, 3, 4],
+            "Showing generated lines (4)",
+        ),
+        (
+            "4",
+            FilterType.GENERATED_WITH_ERRORS,
+            [1, 4],
+            "Showing lines with word errors (2)",
+        ),
+        ("5", FilterType.FAILED, [4], "Showing failed lines (1)"),
+        ("1", FilterType.ALL, [0, 1, 2, 3, 4, 5], ""),
     ]
 
     async def exercise() -> None:
-        async with app.run_test() as pilot:
-            filter_header = app.query_one("#header-line-3", Static)
-            assert str(filter_header.render()).endswith("[F] Filter lines")
-            assert "(currently:" not in str(filter_header.render())
+        with patch.object(generate_editor_module.L, "d"):
+            async with app.run_test() as pilot:
+                filter_header = app.query_one("#header-line-3", Static)
+                status_left = app.query_one("#status-left", Static)
+                status_right = app.query_one("#status-right", Static)
+                assert str(filter_header.render()).endswith("[F] Filter lines")
+                assert str(status_left.render()) == ""
 
-            for key, filter_type, phrase_indices in expected_filters:
-                await pilot.press("f", key)
-                assert not isinstance(app.screen, FilterDialog)
-                assert app.filter_type == filter_type
-                assert app.phrase_indices == phrase_indices
-                rendered_header = str(filter_header.render())
-                if filter_type == FilterType.ALL:
-                    assert rendered_header.endswith("[F] Filter lines")
-                    assert "(currently:" not in rendered_header
-                else:
-                    assert rendered_header.endswith(
-                        f"[F] Filter lines (currently: {filter_type.value_label})"
-                    )
+                for key, filter_type, phrase_indices, expected_status in expected_filters:
+                    await pilot.press("f", key)
+                    assert not isinstance(app.screen, FilterDialog)
+                    assert app.filter_type == filter_type
+                    assert app.phrase_indices == phrase_indices
+                    assert str(filter_header.render()).endswith("[F] Filter lines")
+                    assert str(status_left.render()) == expected_status
+                    assert str(status_right.render()) == "0 lines queued for generation"
 
     run(exercise())
 
