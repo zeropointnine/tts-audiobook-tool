@@ -58,7 +58,10 @@ def hard_reset_request_from_generation_update(
     if isinstance(update, GenerationTimedOut):
         return HardResetRequest(
             HardResetCause.GENERATION_TIMEOUT,
-            make_gen_timeout_message(update.timeout_seconds),
+            make_gen_timeout_message(
+                update.timeout_seconds,
+                is_remote=update.is_remote,
+            ),
         )
     if isinstance(update, ModelUnhealthy):
         return HardResetRequest(HardResetCause.MODEL_UNHEALTHY, update.reason)

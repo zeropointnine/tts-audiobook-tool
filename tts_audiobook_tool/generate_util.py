@@ -19,7 +19,7 @@ from tts_audiobook_tool.generation_events import (
     GenerationStats,
     ModelUnhealthy,
 )
-from tts_audiobook_tool.gen_timeout_util import GenTimeoutTracker
+from tts_audiobook_tool.gen_timeout_util import make_backend_gen_timeout_tracker
 from tts_audiobook_tool.project_support.project_util import ProjectUtil
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.segment_transcript_util import SegmentTranscriptUtil
@@ -221,9 +221,9 @@ class GenerateUtil:
         last_voice: int | None = None
 
         # The first gen may be dominated by model warm-up or download time,
-        # so it alone is exempt from the GEN_TIMEOUT watchdog.
-        # Note, we are keeping this even for sgl-omni mode
-        gen_timeout_tracker = GenTimeoutTracker()
+        # so it alone is exempt from the watchdog. SGL-Omni uses a more
+        # generous outer deadline as a last-resort client-worker backstop.
+        gen_timeout_tracker = make_backend_gen_timeout_tracker()
 
         while True:
 

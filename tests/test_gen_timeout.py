@@ -14,6 +14,7 @@ from tts_audiobook_tool.generation_events import GenerationEvents, GenerationTim
 from tts_audiobook_tool.gen_timeout_util import (
     GenTimeoutTracker,
     gen_timeout_scope,
+    make_backend_gen_timeout_tracker,
     make_gen_timeout_message,
 )
 from tts_audiobook_tool.state import State
@@ -85,6 +86,32 @@ def test_make_gen_timeout_message_cites_the_cap_value() -> None:
     assert "180s" in message
     assert "reset" in message
     assert "was reset" not in message
+
+
+def test_sgl_timeout_uses_remote_wording_and_backend_deadline(
+    monkeypatch,
+    capsys,
+) -> None:
+    from tts_audiobook_tool.tts import Tts
+
+    assert gen_timeout_util.SGL_OMNI_GEN_TIMEOUT == 330
+    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: True))
+    monkeypatch.setattr(gen_timeout_util, "SGL_OMNI_GEN_TIMEOUT", 0.2)
+    events: list[GenerationTimedOut] = []
+    tracker = make_backend_gen_timeout_tracker()
+
+    with GenerationEvents.using_sink(events.append):
+        with tracker.scope():
+            pass  # first generation remains exempt
+        with tracker.scope() as guard:
+            time.sleep(0.5)
+
+    assert guard.did_time_out
+    assert events == [GenerationTimedOut(timeout_seconds=0.2, is_remote=True)]
+    assert (
+        "Remote generation timed out; recycling client worker"
+        in capsys.readouterr().out
+    )
 
 
 def test_tracker_exempts_first_gen_only() -> None:

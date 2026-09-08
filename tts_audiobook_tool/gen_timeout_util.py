@@ -55,8 +55,14 @@ class GenTimeoutGuard:
     did_time_out: bool = False
 
 
-def make_gen_timeout_message(timeout_seconds: float) -> str:
-    """Single source of the gen-timeout feedback text, citing the cap value."""
+def make_gen_timeout_message(
+    timeout_seconds: float,
+    *,
+    is_remote: bool = False,
+) -> str:
+    """Return backend-appropriate generation-timeout feedback."""
+    if is_remote:
+        return "Remote generation timed out; recycling client worker"
     return (
         f"TTS inference exceeded GEN_TIMEOUT ({timeout_seconds:g}s); "
         "generation loop aborted; model-worker hard reset required"
@@ -64,7 +70,11 @@ def make_gen_timeout_message(timeout_seconds: float) -> str:
 
 
 @contextmanager
-def gen_timeout_scope(timeout_seconds: float | None = None) -> Iterator[GenTimeoutGuard]:
+def gen_timeout_scope(
+    timeout_seconds: float | None = None,
+    *,
+    is_remote: bool = False,
+) -> Iterator[GenTimeoutGuard]:
     """
     Watch one generation step (one TTS inference call) for GEN_TIMEOUT.
 
@@ -87,9 +97,12 @@ def gen_timeout_scope(timeout_seconds: float | None = None) -> Iterator[GenTimeo
             return
         guard.did_time_out = True
         printt()
-        printt(f"{COL_ERROR}{make_gen_timeout_message(timeout)}")
+        printt(
+            f"{COL_ERROR}{make_gen_timeout_message(timeout, is_remote=is_remote)}"
+        )
         emit_context.run(
-            GenerationEvents.emit, GenerationTimedOut(timeout_seconds=timeout)
+            GenerationEvents.emit,
+            GenerationTimedOut(timeout_seconds=timeout, is_remote=is_remote),
         )
 
     thread = threading.Thread(target=watchdog, name="gen-timeout-watchdog", daemon=True)
@@ -114,8 +127,15 @@ class GenTimeoutTracker:
     step is "first"), so a run with retries shares it across all of them.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        timeout_seconds: float | None = None,
+        *,
+        is_remote: bool = False,
+    ) -> None:
         self._did_first_gen = False
+        self._timeout_seconds = timeout_seconds
+        self._is_remote = is_remote
 
     @contextmanager
     def scope(self, timeout_seconds: float | None = None) -> Iterator[GenTimeoutGuard]:
@@ -124,5 +144,25 @@ class GenTimeoutTracker:
             self._did_first_gen = True
             yield GenTimeoutGuard()
             return
-        with gen_timeout_scope(timeout_seconds) as guard:
+        effective_timeout = (
+            self._timeout_seconds if timeout_seconds is None else timeout_seconds
+        )
+        with gen_timeout_scope(
+            effective_timeout,
+            is_remote=self._is_remote,
+        ) as guard:
             yield guard
+
+
+def make_backend_gen_timeout_tracker() -> GenTimeoutTracker:
+    """Create a tracker with the current backend's timeout policy."""
+    # Import lazily to avoid pulling the TTS model registry into this low-level
+    # watchdog module during import initialization.
+    from tts_audiobook_tool.tts import Tts
+
+    if Tts.is_sgl_mode():
+        return GenTimeoutTracker(
+            timeout_seconds=SGL_OMNI_GEN_TIMEOUT,
+            is_remote=True,
+        )
+    return GenTimeoutTracker()

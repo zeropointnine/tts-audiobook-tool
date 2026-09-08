@@ -42,13 +42,16 @@ class GenerationStats:
 
 @dataclass(frozen=True)
 class GenerationTimedOut:
-    """One generation step exceeded the GEN_TIMEOUT cap.
+    """One generation step exceeded its outer watchdog deadline.
 
     Emitted from a watchdog thread while the inference call is still in
     flight; the recipient should abort the run and reset the model worker.
+    ``is_remote`` distinguishes SGL-Omni client containment from recovery of
+    a locally hosted model.
     """
 
     timeout_seconds: float
+    is_remote: bool = False
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,10 @@ from tts_audiobook_tool.generate_util import (
     make_consecutive_model_errors_reset_message,
     make_oom_reset_message,
 )
-from tts_audiobook_tool.gen_timeout_util import GenTimeoutTracker
+from tts_audiobook_tool.gen_timeout_util import (
+    GenTimeoutTracker,
+    make_backend_gen_timeout_tracker,
+)
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_support.interrupts import Interrupts
@@ -148,8 +151,9 @@ def _start_impl(
     consecutive_model_errors = 0
     max_consecutive_model_errors = 5
     # The first gen of the run may be dominated by model warm-up or download
-    # time, so it alone is exempt from the GEN_TIMEOUT watchdog.
-    gen_timeout_tracker = GenTimeoutTracker()
+    # time, so it alone is exempt from the watchdog. SGL-Omni uses a more
+    # generous outer deadline as a last-resort client-worker backstop.
+    gen_timeout_tracker = make_backend_gen_timeout_tracker()
 
     start_index, end_index = line_range
     start_index -= 1
@@ -396,7 +400,7 @@ def generate_full_flow(
     """
 
     if gen_timeout_tracker is None:
-        gen_timeout_tracker = GenTimeoutTracker()
+        gen_timeout_tracker = make_backend_gen_timeout_tracker()
 
     Interrupts().set("generating")
 

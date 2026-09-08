@@ -14,6 +14,13 @@ def test_generation_reset_updates_map_to_explicit_causes() -> None:
     assert timeout is not None
     assert timeout.cause is HardResetCause.GENERATION_TIMEOUT
     assert "GEN_TIMEOUT" in timeout.reason
+    remote_timeout = hard_reset_request_from_generation_update(
+        GenerationTimedOut(330.0, is_remote=True)
+    )
+    assert remote_timeout is not None
+    assert remote_timeout.reason == (
+        "Remote generation timed out; recycling client worker"
+    )
     assert unhealthy == HardResetRequest(HardResetCause.MODEL_UNHEALTHY, "bad model")
     assert hard_reset_request_from_generation_update(object()) is None
 
