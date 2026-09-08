@@ -28,7 +28,12 @@ from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
+from tts_audiobook_tool.app_types.app_metadata import (
+    AppMetadata,
+    AppMetadataSection,
+    AppMetadataTextSegment,
+    count_app_metadata_text_segment_leaves,
+)
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
@@ -347,12 +352,13 @@ class ConcatUtil:
         # [4] App metadata (final file)
 
         phrases = [item[0] for item in phrases_and_paths]
-        timed_phrases = TimedPhrase.make_list_using(phrases, durations)
+        base_timed_phrases = TimedPhrase.make_list_using(phrases, durations)
+        timed_phrases: list[AppMetadataTextSegment] = list(base_timed_phrases)
         phrase_to_text_segment_start_indices = list(range(len(timed_phrases)))
         if state.project.subdivide_phrases:
             file_paths = [item[1] for item in phrases_and_paths]
             timed_phrases, bookmark_indices, phrase_to_text_segment_start_indices = make_subdivided_timed_phrases(
-                timed_phrases=timed_phrases,
+                timed_phrases=base_timed_phrases,
                 phrase_groups=state.project.phrase_groups,
                 sound_paths=file_paths,
                 sound_durations=durations,
@@ -363,7 +369,7 @@ class ConcatUtil:
             index_start=index_start,
             index_end=index_end,
             phrase_to_text_segment_start_indices=phrase_to_text_segment_start_indices,
-            text_segment_count=len(timed_phrases),
+            text_segment_count=count_app_metadata_text_segment_leaves(timed_phrases),
         )
         app_meta = AppMetadata(
             timed_phrases=timed_phrases,
@@ -759,34 +765,34 @@ def make_subdivided_timed_phrases(
         sound_paths: list[str],
         sound_durations: list[float],
         bookmark_indices: list[int]
-    ) -> tuple[ list[TimedPhrase], list[int], list[int] ]:
+    ) -> tuple[list[AppMetadataTextSegment], list[int], list[int]]:
     """
-    Breaks timed PhraseGroups into their constituent phrases. Groups with audio
-    use forced-alignment timings from their sidecar JSON; groups without audio
-    retain their original phrase boundaries with zeroed timings.
+    Break timed PhraseGroups into their constituent phrases. Valid forced-alignment
+    sidecars are preserved as nested lists in ABR metadata. Groups without audio
+    retain the existing flat constituent-phrase behavior with zeroed timings.
 
     The first four arguments are parallel lists.
 
-    Returns updated timed_phrases, bookmark_indices, and the starting text
-    segment index corresponding to each original PhraseGroup.
+    Returns updated timed_phrases, flattened-leaf bookmark indices, and the
+    flattened-leaf starting index corresponding to each original PhraseGroup.
     """
 
     if not (len(timed_phrases) == len(phrase_groups) == len(sound_paths) == len(sound_durations)):
         raise ValueError("lists must have same lengths")
 
-    new_timed_phrases: list[TimedPhrase] = []
+    new_timed_phrases: list[AppMetadataTextSegment] = []
     new_bookmark_indices: list[int] = []
     phrase_to_text_segment_start_indices: list[int] = []
+    leaf_count = 0
 
     for i in range(0, len(timed_phrases)):
-        phrase_to_text_segment_start_indices.append(len(new_timed_phrases))
+        phrase_to_text_segment_start_indices.append(leaf_count)
 
         def add_to_new_bookmark_indices(debug_reason: str, debug_text: str) -> None:
             if i in bookmark_indices:
-                new_bookmark_index = len(new_timed_phrases)
-                new_bookmark_indices.append(new_bookmark_index)
+                new_bookmark_indices.append(leaf_count)
                 if False:
-                    print("added", new_bookmark_index, "new len", len(new_bookmark_indices), debug_reason, debug_text)
+                    print("added", leaf_count, "new len", len(new_bookmark_indices), debug_reason, debug_text)
 
         original_timed_phrase = timed_phrases[i]
         sound_path = sound_paths[i]
@@ -796,12 +802,14 @@ def make_subdivided_timed_phrases(
             if not phrase_group.phrases:
                 add_to_new_bookmark_indices("no-time-segment", original_timed_phrase.presentable_text)
                 new_timed_phrases.append(original_timed_phrase)
+                leaf_count += 1
                 continue
 
             for phrase_index, phrase in enumerate(phrase_group.phrases):
                 if phrase_index == 0:
                     add_to_new_bookmark_indices("first-missing-audio-phrase", phrase.presentable_text)
                 new_timed_phrases.append(TimedPhrase.make_using(phrase, 0.0, 0.0))
+                leaf_count += 1
             continue
 
         subdivided_items_json_path = get_segment_stt_info_path(sound_path)
@@ -809,37 +817,36 @@ def make_subdivided_timed_phrases(
             L.w(f"Missing segment timing/STT sidecar JSON: {subdivided_items_json_path}")
             add_to_new_bookmark_indices("no-subdivided-json", original_timed_phrase.presentable_text)
             new_timed_phrases.append(original_timed_phrase)
+            leaf_count += 1
             continue
 
         parse_result = SegmentTranscriptUtil.load_timed_phrases(subdivided_items_json_path)
-        if isinstance(parse_result, str):
-            # File/parse error; use original item
+        if isinstance(parse_result, str) or not parse_result:
+            # File/parse error or empty data; use original item.
             add_to_new_bookmark_indices("parse-error", original_timed_phrase.presentable_text)
             new_timed_phrases.append(original_timed_phrase)
+            leaf_count += 1
             continue
-        else:
-            subdivided_timed_phrases = parse_result
+        subdivided_timed_phrases = parse_result
 
-        # Finally, do subdivision action
+        # Finally, do subdivision action.
+        updated_subdivisions: list[TimedPhrase] = []
         offset = original_timed_phrase.time_start
         for subdivided_index, item in enumerate(subdivided_timed_phrases):
-
             if subdivided_index == 0:
                 add_to_new_bookmark_indices("first-subdivision", item.presentable_text)
-
-            if subdivided_index == 0:
                 time_start = offset
             else:
                 time_start = offset + subdivided_timed_phrases[subdivided_index - 1].time_end
             time_end = offset + item.time_end
+            updated_subdivisions.append(TimedPhrase(item.text, time_start, time_end))
 
-            updated_item = TimedPhrase(item.text, time_start, time_end)
-            new_timed_phrases.append(updated_item)
-
-        # Set last item's time_end using the duration of the source audio clip
-        # rather than the transcription end word timestamp
-        # (prevents discontinuities in segment selectedness across boundaries, which looks distracting)
-        new_timed_phrases[-1].time_end = sound_durations[i] + offset
+        # Set the last item's time_end using the duration of the source audio clip
+        # rather than the transcription end word timestamp. This prevents
+        # discontinuities in segment selectedness across boundaries.
+        updated_subdivisions[-1].time_end = sound_durations[i] + offset
+        new_timed_phrases.append(updated_subdivisions)
+        leaf_count += len(updated_subdivisions)
 
     return new_timed_phrases, new_bookmark_indices, phrase_to_text_segment_start_indices
 

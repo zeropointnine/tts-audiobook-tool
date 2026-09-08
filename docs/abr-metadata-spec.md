@@ -92,26 +92,33 @@ The embedded value is a JSON object.
 ```json
 {
   "title": "Example Book",
-  "version": 3,
-  "bookmarks": [0, 12, 31],
+  "version": 4,
+  "bookmarks": [0, 1],
   "text_segments": [
     {
       "text": "Chapter 1",
       "time_start": 0.0,
       "time_end": 2.35
     },
-    {
-      "text": "It was a bright cold day in April.",
-      "time_start": 2.35,
-      "time_end": 6.92
-    }
+    [
+      {
+        "text": "It was a bright cold day ",
+        "time_start": 2.35,
+        "time_end": 4.80
+      },
+      {
+        "text": "in April.",
+        "time_start": 4.80,
+        "time_end": 6.92
+      }
+    ]
   ],
   "has_section_break_audio": true,
   "sections": [
     {
       "title": "Chapter 1",
       "start_index": 0,
-      "end_index": 2
+      "end_index": 3
     }
   ],
   "project_snapshot": {
@@ -145,18 +152,23 @@ Notes:
 
 Integer ABR metadata version.
 
-Current value:
+Version history:
 
-- `2`: includes `project_snapshot`
-- `3`: includes structural `sections` metadata
+- `1`: original timed-text and bookmark payload; a missing version implies version 1
+- `2`: adds `project_snapshot`
+- `3`: adds structural `sections` metadata
+- `4` (current): allows one-level nested lists in `text_segments` to preserve phrase subdivisions
 
 Backward compatibility rule:
 
 - if `version` is missing, the file should be treated as ABR version `1`
 - ABR version `1` means there is no `project_snapshot`
+- version 4 readers should continue accepting the flat `text_segments` shape written by versions 1–3
 
-Version `3` adds `sections`, which provide structural overlay ranges over the flat
-`text_segments` array. They do not convert ABR into a nested per-section document model.
+Version `3` added `sections`, which provide structural overlay ranges over the
+conceptually flattened `text_segments` leaves. They do not create a nested per-section
+document model. Version `4` nesting represents subdivisions within a generated phrase,
+not book sections.
 
 ### `project_snapshot` (optional)
 
@@ -181,13 +193,17 @@ Important notes:
 The exact field set tracks `ProjectSerializationUtil.to_project_json_dict()`. It is a
 settings snapshot rather than a complete project backup. In particular, the project
 book and its sections/phrase groups are not part of this object; synchronized text and
-section ranges are carried separately by `text_segments` and `sections`.
+section ranges are carried separately by `text_segments` and `sections`; subdivision
+nesting does not represent project section structure.
 
 ### `text_segments` (required)
 
-Array of timed text items.
+Non-empty array of timed text entries. Each top-level entry is either:
 
-Each item has the form:
+1. one timed segment object, or
+2. a non-empty list of timed segment objects representing subdivisions of one generated phrase
+
+A timed segment object has the form:
 
 ```json
 {
@@ -197,31 +213,41 @@ Each item has the form:
 }
 ```
 
+Only one nesting level is allowed. Nested lists cannot contain other lists.
+
 Semantics:
 
-- `text`: text displayed by the player for that segment
-- `time_start`: segment start time in seconds, or `0` when the segment has no playable audio in this ABR file
-- `time_end`: segment end time in seconds, or `0` when the segment has no playable audio in this ABR file
+- `text`: text displayed for that leaf segment
+- `time_start`: leaf start time in seconds, or `0` when the leaf has no playable audio in this ABR file
+- `time_end`: leaf end time in seconds, or `0` when the leaf has no playable audio in this ABR file
+- a nested list records that its leaves subdivide the same generated phrase; it does not represent a book section
+
+The **conceptual flattened sequence** used elsewhere in this specification is obtained by
+traversing `text_segments` from left to right and replacing each nested list with its
+children in order. Segment ordering, bookmarks, section ranges, and playable-span logic
+all use this leaf sequence. Consequently, a v4 bookmark or section index is not
+necessarily a direct index into the outer JSON array.
 
 Notes:
 
-- This is the only field the browser player currently treats as required.
 - `text` is presentation text, not a normalized token stream.
 - `text_segments` represents the full audiobook text segment sequence, not only the rendered/exported audio span.
 - Segment timing is derived from concatenated export timing, not from container chapter metadata.
-- Some segments may have `time_start = 0` and `time_end = 0` when no playable audio exists for that item in this ABR file.
-- Zero-timed segments can be outside the rendered/exported range, missing generated audio, or non-verbal/formatting-related text.
+- Some leaves may have `time_start = 0` and `time_end = 0` when no playable audio exists for that item in this ABR file.
+- Zero-timed leaves can be outside the rendered/exported range, missing generated audio, or non-verbal/formatting-related text.
+- Flat arrays remain valid in version 4 and are the only shape written by versions 1–3.
 
 ### `bookmarks` (optional, recommended)
 
 Array of integers.
 
-Each integer is an index into `text_segments`.
+Each integer is an index into the conceptual flattened leaf sequence of `text_segments`.
 
 Semantics:
 
-- bookmark `0` means the first text segment
-- bookmark `12` means the thirteenth text segment
+- bookmark `0` means the first leaf segment
+- bookmark `12` means the thirteenth leaf segment
+- a bookmark on a generated phrase that was subdivided points to its first child leaf
 
 The browser player uses these as initial embedded bookmarks. They can seed the player bookmark state if no local bookmark state already exists.
 
@@ -274,25 +300,25 @@ Each item has the form:
 Semantics:
 
 - `title`: human-readable section title, possibly empty
-- `start_index`: inclusive index into `text_segments`
-- `end_index`: exclusive index into `text_segments`
+- `start_index`: inclusive index into the conceptual flattened leaf sequence
+- `end_index`: exclusive index into the conceptual flattened leaf sequence
 
 Important notes:
 
-- `sections` is an overlay on the flat `text_segments` array
+- `sections` is an overlay on the flattened leaf sequence, not the outer JSON array
 - it is intended for reader/player structure and navigation
-- it does not imply a nested per-section text payload format
+- nested `text_segments` lists represent phrase subdivisions, not sections
 - current concat exports emit all project book sections, including split exports where
-  sections outside the playable output range contain only zero-timed text segments
-- the browser uses section ranges as separate text blocks only when the ranges are
-  contiguous, non-empty, ordered, and together cover all of `text_segments`; otherwise
-  text display falls back to one flat block
-- the navigation panel exposes section navigation only when more than one valid section
-  is present and targets the first playable segment in each section
+  sections outside the playable output range contain only zero-timed text segment leaves
+- a consumer may use section ranges as separate text blocks only when the ranges are
+  contiguous, non-empty, ordered, and together cover the complete flattened leaf sequence;
+  otherwise text display should fall back to one flat block
+- for flat payloads, the current browser navigation panel exposes section navigation only
+  when more than one valid section is present and targets the first playable segment in each section
 - normal concat mirrors the project's section list without filtering empty sections, so
-  a project containing an empty section can produce `start_index == end_index`; the
-  browser retains that descriptor for navigation normalization but disables it when no
-  playable segment exists, and flat text-block rendering falls back as described above
+  a project containing an empty section can produce `start_index == end_index`; for flat
+  payloads, the current browser retains that descriptor for navigation normalization but
+  disables it when no playable segment exists
 
 If missing, consumers should treat it as an empty list.
 
@@ -306,18 +332,25 @@ At export time:
 2. it renders playable audio in project order; entries outside the selected split-export
    range and entries with no generated audio keep a duration of zero
 3. the complete duration list is converted into timed phrases
-4. if phrase subdivision is enabled, the timed phrases may be replaced with finer-grained segments based on adjacent JSON alignment metadata
+4. if phrase subdivision is enabled, entries with valid adjacent JSON alignment metadata
+   are replaced by a nested list of finer-grained timed leaves
 
 So the ABR payload carries the full text sequence plus the exported playback timeline where playable audio exists.
 
-Subdivision is attempted only for entries with a sound path. If an entry has no sound,
-its alignment sidecar is missing, or its sidecar cannot be parsed, the original segment
-is retained. A bookmark on a subdivided phrase is moved to the first resulting segment.
+The concat producer applies these rules per phrase group:
 
-This distinction matters because bookmark and section indices refer to the full
-`text_segments` array actually written into the file, while playback position
-restoration and navigability depend on the subset of segments with positive-duration
-timing.
+- generated audio with a valid, non-empty timing sidecar becomes a nested list; a valid
+  one-item subdivision remains a singleton nested list
+- generated audio with a missing, invalid, or empty timing sidecar retains one ordinary
+  top-level segment object for the original flattened phrase group
+- a group with no generated audio retains the existing behavior: its known constituent
+  phrases are emitted as separate top-level zero-timed objects, not as a nested list
+- when phrase subdivision is disabled, every phrase group is one top-level segment object
+
+A bookmark on a subdivided phrase is moved to the first resulting leaf. Bookmark and
+section indices retain flattened-leaf numbering regardless of the outer JSON shape.
+Playback position restoration and navigability depend on the subset of leaves with
+positive-duration timing.
 
 The enhance flow follows a different production path: it segments imported text and
 aligns those segments to a transcription of an existing audio file. Unmatched segments
@@ -363,8 +396,10 @@ The browser player rejects the payload unless it is a JSON object with a non-emp
 - `project_snapshot` defaulting to `{}`
 
 The browser does not currently validate the fields inside each `text_segments` item
-before downstream code uses `text`, `time_start`, and `time_end`. Writers must therefore
-still follow the stricter schema in this document.
+before downstream code uses `text`, `time_start`, and `time_end`. It has not yet been
+updated to traverse version 4 nested entries, so current browser playback should be
+considered compatible only with flat `text_segments` payloads. Browser support for the
+new shape is intentionally outside this revision of the producer and Python reader.
 
 ### Python app reader expectations
 
@@ -372,21 +407,24 @@ still follow the stricter schema in this document.
 
 - defaults missing `title`, `version`, `bookmarks`, `has_section_break_audio`,
   `project_snapshot`, and `sections`
-- rejects an invalid `title`, `version`, top-level collection type,
-  `project_snapshot`, or section descriptor
+- accepts legacy flat arrays and version 4 mixed flat/nested arrays
+- preserves subdivision nesting when loaded metadata is serialized again
+- rejects empty nested lists, deeper nesting, malformed segment objects, an invalid
+  `title`, `version`, top-level collection type, `project_snapshot`, or section descriptor
 - converts bookmark values with Python `int()` but does not range-check them
 - does not currently enforce a boolean type for `has_section_break_audio`
 - validates section indices as non-negative integers with `end_index >= start_index`,
-  but does not check `end_index` against the number of text segments
+  but does not check `end_index` against the number of flattened leaves
 
 ### Recommended writer behavior
 
 Writers producing ABR-compatible files should:
 
 - write `title` when known, using `""` when no title is available
-- write `version` explicitly as `3` for the current format
+- write `version` explicitly as `4` for the current format
 - always include `text_segments`
-- ensure `bookmarks`, if present, contain valid indices into `text_segments`
+- use nesting only for non-empty, one-level subdivision lists
+- ensure `bookmarks`, if present, contain valid flattened-leaf indices
 - write `has_section_break_audio` explicitly as a boolean
 - write `sections` when structural section information is known
 - write `project_snapshot` as the project settings snapshot when such data exists
@@ -401,20 +439,26 @@ An ABR payload should satisfy the following:
 - `title`, if present, is a string and may be empty
 - `version`, if present, is an integer >= 1
 - `text_segments` exists and is a non-empty array
-- every `text_segments` item has:
+- every top-level `text_segments` entry is either a timed segment object or a non-empty
+  list of timed segment objects; nested lists cannot contain further lists
+- every timed segment object has:
   - `text` as a string
   - `time_start` as a number
   - `time_end` as a number
-- `bookmarks`, if present, is an array of integers
+- the conceptual flattened sequence contains at least one leaf
+- `bookmarks`, if present, is an array of integer flattened-leaf indices
 - `has_section_break_audio`, if present, is a boolean
 - `sections`, if present, is an array of objects with string `title` and integer
   `start_index`/`end_index` values where
-  `0 <= start_index < end_index <= text_segments.length`
+  `0 <= start_index <= end_index <= flattened_leaf_count`; non-empty ranges
+  (`start_index < end_index`) are recommended, but empty ranges are permitted because
+  the normal concat producer preserves empty project sections (see the `sections` notes
+  above)
 - `raw_text`, if present in legacy files, may be ignored by consumers
 - `project_snapshot`, if present, is an object
 
-For full browser text-block support, section ranges should additionally be ordered,
-contiguous, non-overlapping, non-empty, and cover the complete `text_segments` array.
+For full structured text-block support, section ranges should additionally be ordered,
+contiguous, non-overlapping, non-empty, and cover the complete flattened leaf sequence.
 The normal concat producer can preserve empty project sections as empty ranges, while
 the enhance producer filters empty ranges. The current browser-side and Python parsers
 are intentionally permissive in different areas, but new third-party writers should
@@ -432,6 +476,10 @@ follow the stricter interpretation above.
 - File naming such as `.abr.flac` or `.abr.m4b` is a project convention, not part of the metadata spec itself.
 - Version 1 ABR files do not contain `project_snapshot`; missing `version` should be interpreted as version 1.
 - Version 2 ABR files do not contain `sections`.
+- Versions 1–3 use only flat `text_segments`; the version 4 Python reader accepts and
+  preserves both the legacy flat shape and the new mixed shape.
+- Existing version 3/browser consumers are not expected to understand nested version 4
+  entries until they receive an explicit consumer update.
 - The browser player's localStorage identity rules are documented separately in `docs/browser-player-identity.md`.
 
 ---
@@ -441,7 +489,7 @@ follow the stricter interpretation above.
 ```json
 {
   "title": "Hello World",
-  "version": 3,
+  "version": 4,
   "bookmarks": [0],
   "text_segments": [
     {
@@ -469,6 +517,8 @@ ABR metadata is:
 - used primarily by the browser player for synchronized text and bookmarks
 - extended in version 2 to also carry `project_snapshot` for project settings import
 - extended in version 3 to also carry structural `sections` overlay metadata
+- extended in version 4 to preserve generated-phrase subdivisions as one-level nested lists
+- indexed for bookmarks and sections through its conceptual flattened leaf sequence
 - optionally mirrored during concat into a standalone debug JSON sidecar for inspection
 
 The most important compatibility contract is the combination of:

@@ -62,6 +62,69 @@ def test_subdivided_metadata_preserves_phrases_for_missing_audio_groups() -> Non
     assert group_start_indices == [0, 2]
 
 
+def test_subdivided_metadata_nests_valid_sidecars_and_keeps_flat_leaf_indices() -> None:
+    groups = [
+        PhraseGroup([
+            Phrase("First phrase, ", Reason.PHRASE),
+            Phrase("second phrase. ", Reason.SENTENCE),
+        ]),
+        PhraseGroup([
+            Phrase("Missing one, ", Reason.PHRASE),
+            Phrase("missing two.", Reason.SENTENCE),
+        ]),
+    ]
+    timed_groups = [
+        TimedPhrase(groups[0].text, 0.0, 3.0),
+        TimedPhrase(groups[1].text, 0.0, 0.0),
+    ]
+    sidecar_path = MagicMock()
+    sidecar_path.exists.return_value = True
+    sidecar_segments = [
+        TimedPhrase("First phrase, ", 0.0, 1.0),
+        TimedPhrase("second phrase. ", 1.0, 2.5),
+    ]
+
+    with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
+         patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load_timed_phrases", return_value=sidecar_segments):
+        segments, bookmarks, group_start_indices = make_subdivided_timed_phrases(
+            timed_phrases=timed_groups,
+            phrase_groups=groups,
+            sound_paths=["generated.flac", ""],
+            sound_durations=[3.0, 0.0],
+            bookmark_indices=[0, 1],
+        )
+
+    assert len(segments) == 3
+    assert isinstance(segments[0], list)
+    assert [segment.text for segment in segments[0]] == ["First phrase, ", "second phrase. "]
+    assert segments[0][-1].time_end == 3.0
+    assert isinstance(segments[1], TimedPhrase)
+    assert isinstance(segments[2], TimedPhrase)
+    assert bookmarks == [0, 2]
+    assert group_start_indices == [0, 2]
+
+
+def test_subdivided_metadata_keeps_parse_failure_as_flat_segment() -> None:
+    group = PhraseGroup([Phrase("Original group.", Reason.SENTENCE)])
+    original = TimedPhrase(group.text, 0.0, 2.0)
+    sidecar_path = MagicMock()
+    sidecar_path.exists.return_value = True
+
+    with patch("tts_audiobook_tool.concat_util.get_segment_stt_info_path", return_value=sidecar_path), \
+         patch("tts_audiobook_tool.concat_util.SegmentTranscriptUtil.load_timed_phrases", return_value="bad sidecar"):
+        segments, bookmarks, group_start_indices = make_subdivided_timed_phrases(
+            timed_phrases=[original],
+            phrase_groups=[group],
+            sound_paths=["generated.flac"],
+            sound_durations=[2.0],
+            bookmark_indices=[0],
+        )
+
+    assert segments == [original]
+    assert bookmarks == [0]
+    assert group_start_indices == [0]
+
+
 @pytest.mark.parametrize("reason", [Reason.SPACE_BREAK, Reason.SECTION_BREAK])
 def test_concatenate_does_not_append_break_effect_to_final_segment(reason: Reason) -> None:
     sound = Sound(np.zeros(48000, dtype=np.float32), 48000)

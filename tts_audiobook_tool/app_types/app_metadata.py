@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TypeAlias
 
 from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
@@ -44,14 +45,76 @@ class AppMetadataSection(NamedTuple):
             result.append(section)
         return result
 
+AppMetadataTextSegment: TypeAlias = TimedPhrase | list[TimedPhrase]
+AppMetadataTextSegmentDict: TypeAlias = dict | list[dict]
+
+
+def app_metadata_text_segments_to_dicts(
+    items: list[AppMetadataTextSegment],
+) -> list[AppMetadataTextSegmentDict]:
+    result: list[AppMetadataTextSegmentDict] = []
+    for item in items:
+        if isinstance(item, list):
+            result.append(TimedPhrase.timed_phrases_to_dicts(item))
+        else:
+            result.append(TimedPhrase.to_dict(item))
+    return result
+
+
+def _app_metadata_dict_to_timed_phrase(item: dict) -> TimedPhrase | str:
+    text = item.get("text")
+    if not isinstance(text, str):
+        return f"Bad type for text: {type(text)}"
+    for field_name in ("time_start", "time_end"):
+        value = item.get(field_name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return f"Bad type for {field_name}: {type(value)}"
+    try:
+        return TimedPhrase(**item)
+    except Exception as e:
+        return f"Error with dict {json.dumps(item)} - {e}"
+
+
+def app_metadata_dicts_to_text_segments(
+    items: list,
+) -> list[AppMetadataTextSegment] | str:
+    result: list[AppMetadataTextSegment] = []
+    for index, item in enumerate(items):
+        if isinstance(item, list):
+            if not item:
+                return f"Nested text_segments list at index {index} is empty"
+            children: list[TimedPhrase] = []
+            for child_index, child in enumerate(item):
+                if not isinstance(child, dict):
+                    return f"Bad item in nested text_segments list at index {index}"
+                phrase = _app_metadata_dict_to_timed_phrase(child)
+                if isinstance(phrase, str):
+                    return f"Error in text_segments item at {index}[{child_index}]: {phrase}"
+                children.append(phrase)
+            result.append(children)
+        elif isinstance(item, dict):
+            phrase = _app_metadata_dict_to_timed_phrase(item)
+            if isinstance(phrase, str):
+                return f"Error in text_segments item at index {index}: {phrase}"
+            result.append(phrase)
+        else:
+            return f"Bad text_segments item at index {index}: {type(item)}"
+    return result
+
+
+def count_app_metadata_text_segment_leaves(items: list[AppMetadataTextSegment]) -> int:
+    return sum(len(item) if isinstance(item, list) else 1 for item in items)
+
+
 class AppMetadata(NamedTuple):
     """
     Metadata of the app-generated audio file.
     Plus serialization util functions.
     """
 
-    # The list of Phrases that make up the audiobook text, including timing info
-    timed_phrases: list[TimedPhrase]
+    # The Phrases that make up the audiobook text, including timing info.
+    # A nested list preserves the children of one subdivided generated phrase.
+    timed_phrases: list[AppMetadataTextSegment]
 
     # Human-readable book title, possibly empty
     title: str
@@ -79,7 +142,7 @@ class AppMetadata(NamedTuple):
             "title": self.title,
             "version": self.version,
             "bookmarks": sorted(set(self.bookmark_indices)),
-            "text_segments": TimedPhrase.timed_phrases_to_dicts(self.timed_phrases),
+            "text_segments": app_metadata_text_segments_to_dicts(self.timed_phrases),
             "has_section_break_audio": bool(self.has_break_audio),
             "project_snapshot": self.project_snapshot,
             "sections": AppMetadataSection.list_to_dicts(self.sections),
@@ -118,7 +181,7 @@ class AppMetadata(NamedTuple):
             return f"Bad type for 'text_segments': {type(phrase_dicts)}"
         if not phrase_dicts:
             return f"text_segments list is empty"
-        result = TimedPhrase.dicts_to_timed_phrases(phrase_dicts)
+        result = app_metadata_dicts_to_text_segments(phrase_dicts)
         if isinstance(result, str):
             return result
         timed_phrases = result

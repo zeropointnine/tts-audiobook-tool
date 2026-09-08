@@ -24,7 +24,7 @@ class TestAppMetadata(unittest.TestCase):
         meta = AppMetadata(
             timed_phrases=[TimedPhrase.make_using(Phrase("One.", Reason.SENTENCE), 0.0, 1.0)],
             title="Example Book",
-            version=3,
+            version=4,
             bookmark_indices=[0],
             raw_text="One.",
             has_break_audio=False,
@@ -44,6 +44,56 @@ class TestAppMetadata(unittest.TestCase):
         self.assertEqual(payload["title"], "Example Book")
         self.assertNotIn("raw_text", payload)
         self.assertEqual(payload["sections"][0]["title"], "Chapter 1")
+
+    def test_app_metadata_round_trip_preserves_mixed_nested_segments(self):
+        nested_singleton = [TimedPhrase("Nested singleton.", 1.0, 2.0)]
+        nested_pair = [
+            TimedPhrase("Nested one, ", 2.0, 2.5),
+            TimedPhrase("nested two.", 2.5, 3.0),
+        ]
+        meta = AppMetadata(
+            timed_phrases=[TimedPhrase("Flat.", 0.0, 1.0), nested_singleton, nested_pair],
+            title="Nested",
+            version=4,
+            bookmark_indices=[0, 2],
+            raw_text="",
+            has_break_audio=False,
+            project_snapshot={},
+            sections=[AppMetadataSection(title="All", start_index=0, end_index=4)],
+        )
+
+        json_string = meta.to_json_string()
+        payload = json.loads(json_string)
+        self.assertIsInstance(payload["text_segments"][0], dict)
+        self.assertEqual(len(payload["text_segments"][1]), 1)
+        self.assertEqual(len(payload["text_segments"][2]), 2)
+
+        result = AppMetadata.get_from_json_string(json_string)
+        self.assertIsInstance(result, AppMetadata)
+        assert isinstance(result, AppMetadata)
+        self.assertIsInstance(result.timed_phrases[0], TimedPhrase)
+        self.assertIsInstance(result.timed_phrases[1], list)
+        self.assertIsInstance(result.timed_phrases[2], list)
+        assert isinstance(result.timed_phrases[1], list)
+        self.assertEqual(result.timed_phrases[1][0].text, "Nested singleton.")
+        self.assertEqual(json.loads(result.to_json_string())["text_segments"], payload["text_segments"])
+
+    def test_app_metadata_rejects_invalid_nested_segments(self):
+        segment = {"text": "Hello.", "time_start": 0.0, "time_end": 1.0}
+        invalid_values = [
+            [[]],
+            [[[segment]]],
+            [["not an object"]],
+            [[{"text": 123, "time_start": 0.0, "time_end": 1.0}]],
+        ]
+
+        for text_segments in invalid_values:
+            with self.subTest(text_segments=text_segments):
+                result = AppMetadata.get_from_json_string(json.dumps({
+                    "version": 4,
+                    "text_segments": text_segments,
+                }))
+                self.assertIsInstance(result, str)
 
     def test_app_metadata_parses_legacy_raw_text_and_missing_sections(self):
         payload = {
@@ -84,7 +134,7 @@ class TestAppMetadata(unittest.TestCase):
         meta = AppMetadata(
             timed_phrases=[TimedPhrase.make_using(Phrase("One.", Reason.SENTENCE), 0.0, 1.0)],
             title="Example Book",
-            version=3,
+            version=4,
             bookmark_indices=[0],
             raw_text="One.",
             has_break_audio=False,
@@ -103,7 +153,7 @@ class TestAppMetadata(unittest.TestCase):
             # test_app_metadata_round_trip_preserves_sections; this test pins
             # the fields only this file adds beyond that.
             payload = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["version"], 3)
+            self.assertEqual(payload["version"], 4)
             self.assertEqual(payload["text_segments"], [{"text": "One.", "time_start": 0.0, "time_end": 1.0}])
             self.assertEqual(payload["project_snapshot"], {"voice": "test"})
 
@@ -210,6 +260,7 @@ class TestAppMetadata(unittest.TestCase):
                 metadata="meta",
             )
             save_to_mp4_mock.assert_called_once()
+            self.assertEqual(save_to_mp4_mock.call_args.args[0].version, 4)
             self.assertEqual(save_to_mp4_mock.call_args.args[1], stem_path + " [chaptermeta].m4b")
             self.assertEqual(save_to_mp4_mock.call_args.args[2], stem_path + ".abr.m4b")
 

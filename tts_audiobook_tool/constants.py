@@ -105,7 +105,8 @@ APP_META_MP4_TAG = "audiobook-data"
 # - 1: original timed text/bookmark payload; missing version implies 1
 # - 2: adds project_snapshot
 # - 3: adds structural sections metadata for reader/player navigation
-ABR_VERSION = 3
+# - 4: preserves phrase subdivisions as nested text_segments lists
+ABR_VERSION = 4
 PROJECT_SPEC_VERSION = 2
 
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
