@@ -787,6 +787,13 @@ span.highlight {
     background-color: var(--color-segment-group-current);
 }
 
+/* Developer kill-switch set at app init (DISABLE_SEGMENT_GROUP_COLORS in app.js) */
+[data-segment-group-colors="off"] .segmentGroup.groupHighlight,
+[data-segment-group-colors="off"] .textHolder .segmentGroup.hasAudio:hover,
+[data-segment-group-colors="off"] .textHolder .segmentGroup.noAudio:hover {
+    background-color: transparent;
+}
+
 span.highlight {
     background-color: var(--color-segment-highlight);
     color: var(--color-text);

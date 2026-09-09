@@ -1,5 +1,9 @@
 "use strict";
 
+// Developer toggle: when true, segment-group highlight/hover tints are
+// suppressed at init by setting a root attribute the CSS reacts to.
+const DISABLE_SEGMENT_GROUP_COLORS = false;
+
 class App {
 
     // DOM Elements
@@ -28,7 +32,7 @@ class App {
     file = null;
     url = null;
     fileId = null;
-    metaBookmarkIndices = []; 
+    metaBookmarkIndices = [];
     isStarted = false;
     isLoading = false;
     loadRequestId = 0;
@@ -50,6 +54,10 @@ class App {
         // Controllers
         this.storageController = new StorageController();
         this.rootAttributer = new RootAttributer(document.documentElement, this.storageController)
+
+        if (DISABLE_SEGMENT_GROUP_COLORS) {
+            document.documentElement.setAttribute("data-segment-group-colors", "off");
+        }
 
         const volume = this.storageController.loadVolume();
         if (volume !== null) {
@@ -166,10 +174,10 @@ class App {
      * Resets page state to that of being freshly loaded
      */
     reset(dontAddHelp = false, preserveAudio = false) {
-    
+
         clearInterval(this.pollIntervalId);
         this.pollIntervalId = -1;
-        
+
         if (!preserveAudio) {
             this.audio.src = "";
             this.audio.load();
@@ -189,7 +197,7 @@ class App {
         }
 
         this.header.clearHelp();
-        this.header.githubButton.style.display = "block"; 
+        this.header.githubButton.style.display = "block";
         const lastFileName = this.storageController.loadLastOpened();
         this.header.showLastFileName(lastFileName);
         if (!dontAddHelp) {
@@ -200,7 +208,7 @@ class App {
         this.updateCurrentTitle(null);
         this.bookText.clear();
 
-        this.overlayManager.hideNavigationPanelButton();        
+        this.overlayManager.hideNavigationPanelButton();
     }
 
     async loadAudioFileOrUrl(pFile, pUrl) {
@@ -291,14 +299,14 @@ class App {
         });
         cl("positionId", appMetadata.identity.positionId);
         cl("bookmarkId", appMetadata.identity.textId);
-        
+
         const fileName = file ? file.name : url;
         this.storageController.saveLastOpened(fileName);
 
         this.syncAddressBar(url);
 
         this.header.hideLastFileName();
-        this.header.githubButton.style.display = "none"; 
+        this.header.githubButton.style.display = "none";
 
         // Init book text (heavy operation)
         const addSectionDividers = (appMetadata.hasBreakAudio === true);
@@ -441,7 +449,7 @@ class App {
             // will not behave correctly (it would remain "stuck")
             offset = 0.05; // ... is probably a sufficient offset unless audio is encoded with vbr
         }
-        this.audio.currentTime = seconds + offset; 
+        this.audio.currentTime = seconds + offset;
     }
 
     onAudioError(e) {
@@ -453,7 +461,7 @@ class App {
 
     onVisibilityChange() {
         if (document.visibilityState === 'visible') {
-            if (Util.isTouchDevice()) { 
+            if (Util.isTouchDevice()) {
                 this.zombieChecker.check();
             }
         }
@@ -619,5 +627,5 @@ class App {
 }
 
 function cl(...rest) {
-    console.log(...rest); 
+    console.log(...rest);
 }
