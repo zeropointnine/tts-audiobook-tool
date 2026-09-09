@@ -386,6 +386,7 @@ Supported outcomes (alignment actions):
 
 - `match_direct` — exact match
 - `match_homophone` — homophone match (English only)
+- `match_equivalent` — word/phrase equivalence match (see below and `docs/word-equivalence.md`)
 - `uncommon_pass_1` — 1 source word ↔ 1 transcript word free pass for uncommon source words
 - `uncommon_pass_2` — 1 source word ↔ 2 transcript words free pass for uncommon source words
 - `skip_source` — deletion (`d:word`)
@@ -404,7 +405,18 @@ The comparison layer is intentionally more permissive than raw string equality.
 
 This allows some pronunciation-equivalent English mismatches to count as matches.
 
-#### 2. Language-specific whitelist behavior
+#### 2. Word/phrase equivalence matching
+
+`WordEquivalence` (`tts_audiobook_tool/text_ops/word_equivalence.py`) declares
+per-language equivalence groups of variants (single words or multi-word
+phrases) that the DP alignment treats as zero-cost matches, eg `all right` ↔
+`alright` or `toward` ↔ `towards`. This covers cases that neither spacing
+repair nor Double Metaphone can align.
+
+For the data model, curation policy, language-code handling, and validator
+integration details, see `docs/word-equivalence.md`.
+
+#### 3. Language-specific whitelist behavior
 
 **Files:**
 
@@ -429,13 +441,18 @@ Language variants are normalized to a base code first:
 - `es-ES` -> `es`
 - `es-MX` -> `es`
 
+The normalization also accepts ISO 639-2 codes and full names (`eng`,
+`English` -> `en`) via a shared alias table mirrored in
+`WordEquivalence._LANGUAGE_ALIASES`, so both subsystems resolve language
+codes identically. For details see `docs/word-equivalence.md`.
+
 That normalization happens in `Whitelist.normalize_language_code()`. The active
 project language is then synced into the whitelist singleton via
 `Whitelist().set_language_code(self.project.language_code)` when `State.project` is set.
 
 The `Whitelist.supports_language(language_code)` method is used by `is_uncommon_word()` to determine whether wildcard behavior is available for the current language. If the active language is unsupported, `supports_language()` returns `False` and the uncommon-word wildcard behavior is disabled entirely.
 
-#### 3. Uncommon-word free passes
+#### 4. Uncommon-word free passes
 
 The `is_uncommon_word()` function inside `get_word_error_alignment()` checks:
 
@@ -649,6 +666,7 @@ For one generated segment, the practical comparison flow is:
 10. Normalize transcript text with the same shared rules **plus source-guided spacing repair** (English).
 11. Compare normalized word sequences using dynamic-programming alignment.
 12. Apply language-appropriate comparison allowances where appropriate:
+    - word/phrase equivalence matching for languages with equivalence data (currently English)
     - English homophone matching
     - whitelist-based uncommon-word wildcard passes for supported languages (currently English and Spanish)
 13. Count failures (word errors plus any truncation +1 penalty) and compare against the threshold derived from normalized source word count.

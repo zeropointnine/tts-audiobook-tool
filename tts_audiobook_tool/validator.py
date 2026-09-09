@@ -1,11 +1,12 @@
 from __future__ import annotations
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 from tts_audiobook_tool.app_types import Sound, Strictness, Word
 from tts_audiobook_tool.model_manager import ModelManager
 from tts_audiobook_tool.text_ops.whitelist import Whitelist
+from tts_audiobook_tool.text_ops.word_equivalence import WordEquivalence
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
@@ -327,6 +328,8 @@ class Validator:
 
         For en, source word not found in dictionary are treated as "wildcards" (plus potentially one extra word)
         For en, homophones are treated as matches.
+        For languages with equivalence data, declared word/phrase equivalents
+        are treated as matches (see WordEquivalence).
         
         Word error codes:
             "d:word" (Deletion - word in source missing from transcript)
@@ -365,6 +368,9 @@ class Validator:
             elif action == "match_homophone":
                 if verbose:
                     print(f"{word_info} -> homophone match")
+            elif action == "match_equivalent":
+                if verbose:
+                    print(f"{word_info} -> equivalence match")
             elif action == "uncommon_pass_1":
                 if verbose:
                     print(f"{word_info} -> no match but giving it a free pass because source word is uncommon")
@@ -417,6 +423,31 @@ class Validator:
         n = len(source_words)
         m = len(transcript_words)
 
+        # Bounds the phrase-equivalence window search (eg "all right" <-> "alright").
+        # 0 means the language has no equivalence data.
+        max_equivalence_len = WordEquivalence.max_phrase_length(language_code)
+        equivalence_lookup: Mapping[str, frozenset[str]] = WordEquivalence.get_lookup(language_code)
+        if max_equivalence_len == 0:
+            equivalence_lookup = {}
+
+        def build_phrase_tables(words: list[str]) -> dict[tuple[int, int], str]:
+            """
+            Precomputes joined phrase strings for every (start, length) window,
+            so the per-cell equivalence scan avoids repeated string joins.
+            """
+            tables = {}
+            for start in range(len(words)):
+                for length in range(1, max_equivalence_len + 1):
+                    if start + length <= len(words):
+                        tables[(start, length)] = " ".join(words[start:start+length])
+            return tables
+
+        source_phrase_tables: dict[tuple[int, int], str] = {}
+        transcript_phrase_tables: dict[tuple[int, int], str] = {}
+        if equivalence_lookup:
+            source_phrase_tables = build_phrase_tables(source_words)
+            transcript_phrase_tables = build_phrase_tables(transcript_words)
+
         # dp[i][j] stores min failures to align source[:i] and transcript[:j]
         dp: list[list[float]] = [[float('inf')] * (m + 1) for _ in range(n + 1)]
         # parent[i][j] stores (prev_i, prev_j, action_description)
@@ -435,19 +466,12 @@ class Validator:
                     t_word = transcript_words[j-1]
                     
                     matches = is_match(s_word, t_word)
-                    is_uncommon = is_uncommon_word(s_word)
-                    
+
                     if matches:
                         cost = dp[i-1][j-1] + 0
                         if cost < dp[i][j]:
                             dp[i][j] = cost
                             parent[i][j] = (i-1, j-1, "match_direct" if s_word == t_word else "match_homophone")
-                    elif is_uncommon:
-                        # Free pass 1-to-1
-                        cost = dp[i-1][j-1] + 0
-                        if cost < dp[i][j]:
-                            dp[i][j] = cost
-                            parent[i][j] = (i-1, j-1, "uncommon_pass_1")
                     else:
                         # Substitution (Mismatch) -> Cost 1
                         cost = dp[i-1][j-1] + 1
@@ -455,10 +479,43 @@ class Validator:
                             dp[i][j] = cost
                             parent[i][j] = (i-1, j-1, "mismatch_sub")
 
-                # 2. Uncommon Match 1-to-2
+                # 2. Word/phrase equivalence match
+                # Aligns a window of up to `max_equivalence_len` source words
+                # against a window of up to `max_equivalence_len` transcript
+                # words when the joined phrases are declared equivalents
+                # (eg source "alright" <-> transcript "all right").
+                # Direct matches keep precedence, while equivalence matches run
+                # before uncommon-word passes so diagnostics report the specific
+                # reason for a zero-cost phrase match.
+                if equivalence_lookup and source_phrase_tables and transcript_phrase_tables:
+                    for s_len in range(1, min(max_equivalence_len, i) + 1):
+                        s_group = equivalence_lookup.get(source_phrase_tables[(i-s_len, s_len)])
+                        if s_group is None:
+                            # Rare in practice: most windows have no equivalence data
+                            continue
+                        for t_len in range(1, min(max_equivalence_len, j) + 1):
+                            if equivalence_lookup.get(transcript_phrase_tables[(j-t_len, t_len)]) is s_group:
+                                cost = dp[i-s_len][j-t_len] + 0
+                                if cost < dp[i][j]:
+                                    dp[i][j] = cost
+                                    parent[i][j] = (i-s_len, j-t_len, "match_equivalent")
+
+                # 2b. Uncommon Matches
+                # These run after equivalence matching so a declared equivalent
+                # receives the more specific alignment action at the same cost.
+                if i > 0 and j > 0:
+                    s_word = source_words[i-1]
+                    if is_uncommon_word(s_word):
+                        # Free pass 1-to-1
+                        cost = dp[i-1][j-1] + 0
+                        if cost < dp[i][j]:
+                            dp[i][j] = cost
+                            parent[i][j] = (i-1, j-1, "uncommon_pass_1")
+
                 if i > 0 and j > 1:
                     s_word = source_words[i-1]
                     if is_uncommon_word(s_word):
+                        # Free pass 1-to-2
                         cost = dp[i-1][j-2] + 0
                         if cost < dp[i][j]:
                             dp[i][j] = cost

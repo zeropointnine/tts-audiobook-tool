@@ -393,7 +393,7 @@ class SegmentTranscriptUtil:
         for step in path:
             if step.action == "match_direct":
                 parts.append(step.source_text)
-            elif step.action in ["match_homophone", "uncommon_pass_1", "uncommon_pass_2"]:
+            elif step.action in ["match_homophone", "match_equivalent", "uncommon_pass_1", "uncommon_pass_2"]:
                 parts.append(f"{COL_DIM}<{COL_DEFAULT}{step.source_text}{COL_DIM}>{Ansi.RESET}")
             elif step.action == "mismatch_sub":
                 parts.append(f"{COL_DIM}[=/=: {COL_ERROR}{step.source_text}/{step.transcript_text}{COL_DIM}]{Ansi.RESET}")

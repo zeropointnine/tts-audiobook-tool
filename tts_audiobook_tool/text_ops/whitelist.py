@@ -55,12 +55,22 @@ class Whitelist:
             # Note, extant file is a requirement. No catching of exception.
             return set(file.read().splitlines())
 
+    # Mirrors WordEquivalence._LANGUAGE_ALIASES so BCP-47 / ISO 639-2 / full-name
+    # language codes normalize identically everywhere.
+    _LANGUAGE_ALIASES: dict[str, str] = {
+        "english": "en",
+        "eng": "en",
+        "spanish": "es",
+        "spa": "es",
+    }
+
     @staticmethod
     def normalize_language_code(language_code: str) -> str:
         code = language_code.strip().lower()
         if not code:
             return ""
-        return code.split("-", 1)[0]
+        base = code.replace("_", "-").split("-", 1)[0]
+        return Whitelist._LANGUAGE_ALIASES.get(base, base)
 
     @staticmethod
     def supports_language(language_code: str) -> bool:
