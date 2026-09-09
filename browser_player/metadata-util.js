@@ -4,6 +4,10 @@
  */
 class MetadataUtil {
 
+    // Highest ABR metadata spec version this player understands. Files
+    // declaring a newer version are rejected before any field validation.
+    static MAX_SUPPORTED_ABR_VERSION = 4;
+
     static async loadAppMetadata(file, url) {
 
         const FLAC_FIELD = "TTS_AUDIOBOOK_TOOL"
@@ -54,6 +58,16 @@ class MetadataUtil {
 
         if (!rawMetadata || typeof rawMetadata !== "object" || Array.isArray(rawMetadata)) {
             return "Couldn't parse metadata"
+        }
+
+        // Reject newer-spec files before touching any other field, so unknown
+        // future shapes can't trigger parse/validation errors first.
+        if (Number.isInteger(rawMetadata["version"])
+            && rawMetadata["version"] > MetadataUtil.MAX_SUPPORTED_ABR_VERSION) {
+            return `This file uses ABR metadata version ${rawMetadata["version"]},`
+                + ` which is newer than this player supports`
+                + ` (up to version ${MetadataUtil.MAX_SUPPORTED_ABR_VERSION}).`
+                + ` Please update the browser player.`;
         }
 
         const textSegmentResult = MetadataUtil.normalizeTextSegments(rawMetadata["text_segments"]);

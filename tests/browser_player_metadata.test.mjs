@@ -100,6 +100,28 @@ test("validates sections against flattened leaf count", () => {
     assert.deepEqual(plain(result.sections), [{ title: "Valid", start_index: 0, end_index: 2 }]);
 });
 
+test("rejects metadata versions newer than the player supports", () => {
+    const tooNew = {
+        version: MetadataUtil.MAX_SUPPORTED_ABR_VERSION + 1,
+        text_segments: "some future shape that would fail validation",
+    };
+    const result = MetadataUtil.normalizeAppMetadata(tooNew);
+
+    assert.equal(typeof result, "string");
+    assert.match(result, /newer than this player supports/);
+    assert.match(result, new RegExp(`version ${MetadataUtil.MAX_SUPPORTED_ABR_VERSION}`));
+});
+
+test("accepts metadata at the maximum supported version", () => {
+    const result = MetadataUtil.normalizeAppMetadata({
+        version: MetadataUtil.MAX_SUPPORTED_ABR_VERSION,
+        text_segments: [segment("One. ", 0, 1)],
+    });
+
+    assert.notEqual(typeof result, "string");
+    assert.equal(result.version, MetadataUtil.MAX_SUPPORTED_ABR_VERSION);
+});
+
 test("rejects malformed nested and timed-segment entries", () => {
     const invalidCases = [
         { raw: [], expected: "missing required field" },

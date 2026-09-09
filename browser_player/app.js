@@ -270,6 +270,9 @@ class App {
                 URL.revokeObjectURL(preparedAudioSrc);
             }
             const errorMessage = appMetadata || "No tts-audiobook-tool metadata found";
+            // Return the page to a fresh-load "inert" state (no poll loop,
+            // cleared audio/book text/overlays) before surfacing the error.
+            this.reset();
             alert(errorMessage);
             this.syncAddressBar(null);
             return;
