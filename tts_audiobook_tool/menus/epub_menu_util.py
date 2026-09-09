@@ -58,27 +58,31 @@ class EpubMenuUtil:
             language_code: str,
             dialog_segmentation: bool = False,
     ) -> EpubImportResult | None:
+        """
+        Returns successful import result
+        Else prints, prompts, and returns None
+        """
+        result = None
         try:
-            printt(f"{COL_DIM_ITALICS}Importing epub file... ")
-            return EpubExtractor.import_epub(
+            print(f"{COL_DIM_ITALICS}Importing epub file... ", end="", flush=True)
+            result = EpubExtractor.import_epub(
                 epub_path=epub_path,
                 max_words=max_words,
                 segmentation_strategy=segmentation_strategy,
                 language_code=language_code,
                 dialog_segmentation=dialog_segmentation,
             )
+            print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
         except ImportError as e:
-            printt()
+            print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
             ask.ask_error(str(e))
-            return None
         except Exception as e:
-            printt()
+            print(f"\r{Ansi.ERASE_REST_OF_LINE}", end="", flush=True)
             ask.ask_error(f"Error importing EPUB: {e}")
-            return None
+        return result
 
     @staticmethod
     def print_import_info(epub_import_result: EpubImportResult) -> None:
-        printt()
         printt(f"{COL_ACCENT}EPUB import info:{COL_DEFAULT}")
         for warning in epub_import_result.significant_warnings:
             printt(f"- {warning}")

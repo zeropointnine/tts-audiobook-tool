@@ -46,13 +46,13 @@ class TextMenu:
 
             items = []
             items.append(
-                MenuItem("Import from EPUB file", on_set_text, data="epub"),
+                MenuItem("Import from EPUB file", on_select_import, data="epub"),
             )
             items.append(
-                MenuItem("Import from text file", on_set_text, data="import"),
+                MenuItem("Import from text file", on_select_import, data="text"),
             )
             items.append(
-                MenuItem("Manually enter text", on_set_text, data="manual"),
+                MenuItem("Manually enter text", on_select_import, data="manual"),
             )
             items.append(
                 MenuItem(
@@ -274,7 +274,19 @@ class TextMenu:
 
 # ---
 
-def on_set_text(state: State, item: MenuItem) -> bool:
+def on_select_import(state: State, item: MenuItem) -> bool:
+
+    # Print pseudo-menu heading
+    match item.data:
+        case "text":
+            heading = "Import from text file"
+        case "epub":
+            heading = "Import from EPUB file"
+        case "manual":
+            heading = "Manually enter text"
+        case _:
+            raise Exception("Bad value")
+    MenuUtil.print_screen_heading(state, heading)
 
     num_files = state.project.sound_segments.num_generated()
     if num_files > 0:
@@ -289,7 +301,7 @@ def on_set_text(state: State, item: MenuItem) -> bool:
 
     match item.data:
 
-        case "import":
+        case "text":
             phrase_groups, raw_text, title = ask_phrase_groups.get_from_text_file(
                 state.project.max_words,
                 state.project.segmentation_strategy,

@@ -67,7 +67,6 @@ class ToolsMenu:
         if epub_import_result is None:
             return
         if not epub_import_result.raw_text.strip():
-            printt()
             ask.ask_enter_to_continue("No text found in EPUB.")
             return
 
