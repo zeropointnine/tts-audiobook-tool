@@ -112,6 +112,7 @@ PROJECT_SPEC_VERSION = 2
 AAC_SUFFIXES = [".m4a", ".m4b", ".mp4"]
 
 COL_ACCENT = Ansi.hex("ffaa44")
+COL_HIGHLIGHT = COL_ACCENT # used for actionable/highlighted labels
 COL_ORANGE = Ansi.hex("ff8800")
 COL_ERROR = Ansi.hex("ff0000")
 COL_GRAY = Ansi.hex("808080")

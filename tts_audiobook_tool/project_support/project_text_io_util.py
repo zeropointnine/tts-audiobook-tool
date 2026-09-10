@@ -64,9 +64,11 @@ class ProjectTextIOUtil:
 
         project.book = book
         ProjectBookUtil.sync_flat_text_from_book(project)
+        # Text-dependent settings: the new source text no longer matches these.
         project.markers = set()
         project.generate_range_string = ""
         project.realtime_line_range = None
+        project.word_substitutions = {}
         ProjectTextIOUtil.save_book(project)
         project.save()
 
@@ -104,9 +106,11 @@ class ProjectTextIOUtil:
 
         project.book = book
         ProjectBookUtil.sync_flat_text_from_book(project)
+        # Text-dependent settings: the new source text no longer matches these.
         project.markers = set()
         project.generate_range_string = ""
         project.realtime_line_range = None
+        project.word_substitutions = {}
         ProjectTextIOUtil.save_book(project)
         project.save()
 

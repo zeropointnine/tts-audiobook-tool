@@ -104,8 +104,10 @@ variants (`en-US`, `en_GB`), ISO 639-2 codes (`eng`), and common full names
 prevents a region- or name-qualified project language code from silently
 disabling the feature.
 
-The same alias table is mirrored in `Whitelist._LANGUAGE_ALIASES` so both
-subsystems normalize language codes identically everywhere.
+The alias table and base-code rule live in one place,
+`tts_audiobook_tool/text_ops/language_util.py`
+(`language_util.normalize_language_code()`). Both `WordEquivalence` and
+`Whitelist` delegate to it, so the two subsystems cannot drift apart.
 
 Languages without equivalence data are fully supported: lookup returns an
 empty mapping and `max_phrase_length()` returns `0`.

@@ -43,6 +43,10 @@ class StubPhraseGroup:
     presentable_text: str
     voice_index: int = -1
 
+    @property
+    def presentable_text_lf_ansi(self) -> str:
+        return self.presentable_text
+
 
 @dataclass
 class StubSoundSegment:

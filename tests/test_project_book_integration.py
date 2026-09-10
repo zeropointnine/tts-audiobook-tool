@@ -754,6 +754,7 @@ class TestProjectBookIntegration(unittest.TestCase):
     def test_set_phrase_groups_and_save_clears_markers_for_plain_text_import(self):
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
+            project.word_substitutions = {"Ariekei": "AriaKay"}
             ProjectTextIOUtil.set_phrase_groups_and_save(
                 project,
                 phrase_groups=[self.make_phrase_group("One."), self.make_phrase_group("Two.")],
@@ -764,10 +765,14 @@ class TestProjectBookIntegration(unittest.TestCase):
                 title="source-file",
                 text_source_kind="plain_text",
             )
+            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
+                project_payload = json.load(file)
 
         self.assertEqual(project.book.text_source_kind, "plain_text")
         self.assertEqual(project.book.title, "source-file")
         self.assertEqual(project.markers, set())
+        self.assertEqual(project.word_substitutions, {})
+        self.assertEqual(project_payload["word_substitutions_json_string"], "{}")
 
     def test_set_phrase_groups_chapters_and_save_creates_epub_book_sections(self):
         phrase_groups = [
@@ -778,6 +783,7 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir)
+            project.word_substitutions = {"Ariekei": "AriaKay"}
             ProjectTextIOUtil.set_phrase_groups_chapters_and_save(
                 project,
                 phrase_groups=phrase_groups,
@@ -790,10 +796,14 @@ class TestProjectBookIntegration(unittest.TestCase):
                 title="Example Book",
                 section_titles=["Chapter 1", "Chapter 2"],
             )
+            with open(os.path.join(project_dir, PROJECT_JSON_FILE_NAME), "r", encoding="utf-8") as file:
+                project_payload = json.load(file)
 
         self.assertEqual(project.book.title, "Example Book")
         self.assertEqual(project.book.text_source_kind, "epub")
         self.assertEqual(project.markers, set())
+        self.assertEqual(project.word_substitutions, {})
+        self.assertEqual(project_payload["word_substitutions_json_string"], "{}")
         self.assertEqual(project.applied_dialog_segmentation, True)
         self.assertEqual(project.book.segmentation_settings.dialog_segmentation, True)
         self.assertEqual([section.title for section in project.book.sections], ["Chapter 1", "Chapter 2"])

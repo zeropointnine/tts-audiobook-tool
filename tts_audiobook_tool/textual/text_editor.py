@@ -48,8 +48,6 @@ from tts_audiobook_tool.textual.textual_shared import (
 )
 
 
-SHOW_NEWLINE_CHARS = True
-
 _HEADER_LINES_DEFAULT = [
     f"{COL_ACCENT}View/edit text",
     f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]  - [CTRL-F] Find text",

@@ -4,7 +4,6 @@ from pathlib import Path
 from rich.text import Text
 from textual.widgets import Button, Input, OptionList, Static, TextArea
 
-import tts_audiobook_tool.textual.text_editor as text_editor_module
 from tts_audiobook_tool.app_types import BookSection, SegmentationStrategy
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.project import Project
@@ -74,17 +73,6 @@ def test_phrase_rows_show_line_feeds_as_dim_nonbreaking_tokens() -> None:
     assert plain_text == "00001  One↵\N{NO-BREAK SPACE}↵\N{NO-BREAK SPACE}Two Three."
     assert "\n" not in plain_text
     assert app.find_text_strings(0) == ["00001", "One Two Three."]
-
-
-def test_phrase_rows_use_original_presentable_text_when_newline_chars_hidden(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(text_editor_module, "SHOW_NEWLINE_CHARS", False)
-    app = make_loaded_editor(
-        make_project([BookSection(phrase_groups=[make_phrase_group("One.\n\nTwo.")])])
-    )
-
-    assert str(app.format_line(0)) == "00001  One. Two."
 
 
 def test_multiple_sections_add_ordered_headers_and_global_phrase_ordinals() -> None:

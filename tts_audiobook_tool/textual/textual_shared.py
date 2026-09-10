@@ -18,6 +18,7 @@ from textual.widgets.option_list import Option
 
 
 STYLE_ACCENT = "#ffaa44"
+STYLE_HIGHLIGHT = STYLE_ACCENT
 STYLE_ERROR = "#ff0000"
 STYLE_DIM = "#888888"
 STYLE_OK = "#00ff00"

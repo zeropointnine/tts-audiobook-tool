@@ -37,6 +37,22 @@ def test_language_change_normalizes_and_shows_tolerance_hint(
     assert hint_calls == [(prefs, HINT_TOLERANCE_FIRST_CLASS, True)]
 
 
+@pytest.mark.parametrize("entered_code", ["en-US", "EN", "eng", "es-MX", "spa"])
+def test_language_change_shows_tolerance_hint_for_first_class_aliases(
+    monkeypatch, entered_code: str
+) -> None:
+    project = SaveableProject(language_code="fr", strictness=Strictness.LOW)
+    prefs = object()
+    state = cast(State, SimpleNamespace(project=project, prefs=prefs))
+    hint_calls: list[tuple[object, object, bool]] = []
+
+    stub_language_prompt(monkeypatch, entered_code, hint_calls)
+
+    on_language(state, MenuItem("Language", lambda *_: None))
+
+    assert hint_calls == [(prefs, HINT_TOLERANCE_FIRST_CLASS, True)]
+
+
 @pytest.mark.parametrize("entered_code", ["", "123", "fr"])
 def test_language_change_does_not_show_tolerance_hint_when_not_saved_to_en_or_es(
     monkeypatch, entered_code: str

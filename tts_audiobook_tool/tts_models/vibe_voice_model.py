@@ -137,7 +137,8 @@ class VibeVoiceModel(VibeVoiceBaseModel):
         super().clear_stream_state()
         self.audio_streamer = None
 
-    def massage_for_inference(self, text: str) -> str:
+    @classmethod
+    def massage_for_inference(cls, text: str) -> str:
         text = super().massage_for_inference(text)
         # Required speaker tag
         text = f"{SPEAKER_TAG}{text}"

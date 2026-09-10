@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.whitelist_util_en import WhitelistUtilEn
 from tts_audiobook_tool.text_ops.whitelist_util_es import WhitelistUtilEs
 
@@ -25,6 +26,10 @@ class Whitelist:
 
     _instance: "Whitelist | None" = None
 
+    # The "first-class" languages: those with a bundled common-words dictionary.
+    # They back uncommon-word detection, the "Word error tolerance" hints, and
+    # the uncommon-words inspector. Add a language here (plus its word list) to
+    # promote it to first-class.
     LANGUAGES = {
         "en": "whitelist_english.txt",
         "es": "whitelist_spanish.txt",
@@ -55,25 +60,18 @@ class Whitelist:
             # Note, extant file is a requirement. No catching of exception.
             return set(file.read().splitlines())
 
-    # Mirrors WordEquivalence._LANGUAGE_ALIASES so BCP-47 / ISO 639-2 / full-name
-    # language codes normalize identically everywhere.
-    _LANGUAGE_ALIASES: dict[str, str] = {
-        "english": "en",
-        "eng": "en",
-        "spanish": "es",
-        "spa": "es",
-    }
-
     @staticmethod
     def normalize_language_code(language_code: str) -> str:
-        code = language_code.strip().lower()
-        if not code:
-            return ""
-        base = code.replace("_", "-").split("-", 1)[0]
-        return Whitelist._LANGUAGE_ALIASES.get(base, base)
+        """Base lowercase language code; see `language_util.normalize_language_code`."""
+        return language_util.normalize_language_code(language_code)
 
     @staticmethod
     def supports_language(language_code: str) -> bool:
+        """
+        True when `language_code` is a first-class language (see `LANGUAGES`).
+        Accepts BCP-47 / ISO 639-2 / full-name codes (eg "en-US", "eng"),
+        normalizing first, so callers need not pre-normalize the project code.
+        """
         code = Whitelist.normalize_language_code(language_code)
         return code in Whitelist.LANGUAGES
 

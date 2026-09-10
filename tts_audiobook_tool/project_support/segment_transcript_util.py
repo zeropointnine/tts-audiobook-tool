@@ -29,6 +29,20 @@ class SegmentTranscriptUtil:
     EXCEPTION_WORD_ERROR_SENTINEL = ValidationFindings.LEGACY_INVALID_SCORE
 
     @staticmethod
+    def make_inference_prompt(project: Project, source: str) -> str:
+        """
+        Returns the final text handed to the active TTS model for `source`:
+        project word substitutions, then generic prompt normalization, then
+        the model-specific massage (see `TtsBaseModel.prepare_text_for_inference`).
+
+        The sidecar stores this so a segment records what the model was
+        actually asked to say, which may differ from `source` (the project
+        text the validator compares against the transcript).
+        """
+        from tts_audiobook_tool.tts import Tts
+        return Tts.get_class().prepare_text_for_inference(project, source)
+
+    @staticmethod
     def from_validation_result(
             project: Project,
             phrase_group: PhraseGroup,
@@ -36,8 +50,8 @@ class SegmentTranscriptUtil:
             validation_result: TranscriptResult
     ) -> SegmentTranscriptData:
 
-        prompt = phrase_group.as_flattened_phrase().text
         source = phrase_group.as_flattened_phrase().text
+        prompt = SegmentTranscriptUtil.make_inference_prompt(project, source)
         transcript = Transcriber.get_flat_text_from_words(validation_result.transcript_words)
         normalized_source, normalized_transcript = TextNormalizer.normalize_source_and_transcript(
             source, transcript, project.language_code

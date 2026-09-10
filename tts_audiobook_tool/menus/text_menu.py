@@ -2,17 +2,17 @@ from tts_audiobook_tool.app_support import app_text, hints
 from tts_audiobook_tool.app_types import SegmentationStrategy, VoiceSelectMode
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.project_support.project_util import ProjectUtil
+from tts_audiobook_tool.text_ops import language_util
 from tts_audiobook_tool.text_ops.epub_extractor import EpubExtractor, EpubImportResult
 from tts_audiobook_tool.text_ops.dialog_segmenter import (
     DIALOG_VOICE_INDEX,
 )
+from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
 from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_ops.whitelist import Whitelist
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentAppCompleted,
     EditorSaveFailed,
@@ -20,6 +20,7 @@ from tts_audiobook_tool.textual.content_textual_app import (
     run_content_textual_app,
 )
 from tts_audiobook_tool.textual.text_editor import TextEditor
+from tts_audiobook_tool.textual.word_substitutions_app import WordSubstitutionsApp
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -95,7 +96,7 @@ class TextMenu:
         if isinstance(run_result.result, EditorSaveFailed):
             ask.ask_error(run_result.result.error)
         elif isinstance(run_result.result, EditorSaved):
-            print_feedback("Saved changes", long_pause=True)
+            ... # No need to print feedback here
 
     @staticmethod
     def segmentation_settings_menu(state: State) -> None:
@@ -184,43 +185,25 @@ class TextMenu:
         )
 
     @staticmethod
+    def edit_word_substitutions(state: State) -> bool:
+        """Run the word-substitutions editor, exit the menu if save succeeded."""
+        run_result = run_content_textual_app(WordSubstitutionsApp(state.project))
+        if not isinstance(run_result, ContentAppCompleted):
+            ask.ask_error(run_result.message)
+            return False
+        if isinstance(run_result.result, EditorSaveFailed):
+            ask.ask_error(run_result.result.error)
+            return False
+        # EditorSaved: exit word-substitutions menu and go up one level
+        return True
+
+    @staticmethod
     def word_substitutions_menu(state: State) -> None:
 
-        def on_enter(_, __) -> None:
-            inp = ask.ask_input(SUBSTITUTIONS_ASK_DESC, lower=False)
-            if not inp:
-                return
-            # Add curlies
-            if not inp.startswith("{"):
-                inp = "{" + inp
-            if not inp.endswith("}"):
-                inp = inp + "}"
-            result = ProjectUtil.parse_word_substitutions_json_string(inp)
-            if isinstance(result, str):
-                ask.ask_error(result)
-                return
-            if result == state.project.word_substitutions:
-                return
-            state.project.word_substitutions = result
-            state.project.save()
-            print_feedback("Word substitutions set")
-            return
-
-        def on_clear(_, __) -> None:
-            state.project.word_substitutions = {}
-            state.project.save()
-            print_feedback("Cleared")
-
-        def on_print(_, __) -> None:
-            MenuUtil.print_screen_heading(state, "Print")
-            s = str(state.project.word_substitutions)
-            printt(s)
-            printt()
-            ask.ask_enter_to_continue()
-            return
-
         def on_inspect(_, __) -> None:
-            MenuUtil.print_screen_heading(state, "Uncommon words", subheading=UNCOMMON_WORDS_DESC)
+            normed_lang = language_util.normalize_language_code(state.project.language_code)
+            subheading = UNCOMMON_WORDS_DESC.replace("%1", normed_lang)
+            MenuUtil.print_screen_heading(state, "Uncommon words", subheading=subheading)
 
             # Make list of project text words (unfiltered, still including whitespace)
             all_words_raw = []
@@ -234,32 +217,23 @@ class TextMenu:
             else:
                 for i in range(0, min(len(items), 25)):
                     item = items[i]
-                    word_str = f"{COL_DEFAULT}{item[0]}"
                     num_str = f"{COL_DIM}{str(item[1]).rjust(3)}"
-                    instances_str = f"{COL_DEFAULT}{', '.join(item[2])}"
+                    instances_str = f"{COL_DEFAULT}{' | '.join(item[2])}"
                     print(f"{num_str}  {instances_str}")
             printt()
             ask.ask_enter_to_continue()
 
         def items_maker(_) -> list[MenuItem]:
-            items = []
-            # Enter items
-            verb = "Replace" if state.project.word_substitutions else "Enter"
-            items.append( MenuItem(f"{verb} word substitutions", on_enter) )
-            # Clear items
-            if state.project.word_substitutions:
-                items.append(MenuItem("Clear", on_clear))
-            # Print uncommon words
+            items = [
+                MenuItem(
+                    make_edit_substitutions_label,
+                    lambda _, __: TextMenu.edit_word_substitutions(state),
+                )
+            ]
+            # Only first-class languages (with a common-words dictionary) have
+            # anything to inspect; supports_language handles code normalization
             if Whitelist.supports_language(state.project.language_code) and state.project.phrase_groups:
                 items.append(MenuItem("Inspect project text for uncommon words", on_inspect))
-            # Print items
-            if state.project.word_substitutions:
-                num_subst = len(state.project.word_substitutions)
-                value = f"{num_subst} {make_noun('item', 'items', num_subst)}" if num_subst > 0 else "none"
-                label = f"Print {make_currently_string(value)}"
-                items.append(
-                    MenuItem(label, on_print, superlabel=" ", superlabel_no_blank_line=True)
-                )
             return items
 
         MenuUtil.menu(
@@ -289,9 +263,29 @@ def on_select_import(state: State, item: MenuItem) -> bool:
     MenuUtil.print_screen_heading(state, heading)
 
     num_files = state.project.sound_segments.num_generated()
-    if num_files > 0:
-        # First confirm
-        s = f"Replacing project text will cause all {COL_ERROR}{num_files} {COL_DEFAULT}previously generated sound segment files to be deleted.\n"
+    num_markers = len(state.project.markers)
+    num_substitutions = len(state.project.word_substitutions)
+    if num_files > 0 or num_markers > 0 or num_substitutions > 0:
+        # Confirm before discarding text-dependent project settings
+        parts: list[str] = []
+        if num_files > 0:
+            files_noun = make_noun("file", "files", num_files)
+            parts.append(
+                f"{COL_ERROR}{num_files}{COL_DEFAULT} generated sound segment {files_noun}"
+            )
+        if num_markers > 0:
+            marker_label = app_text.get_section_marker_label(
+                state.project, is_title_case=False, is_singular=(num_markers == 1)
+            )
+            parts.append(f"{COL_ERROR}{num_markers}{COL_DEFAULT} {marker_label}")
+        if num_substitutions > 0:
+            substitution_label = make_noun(
+                "word substitution", "word substitutions", num_substitutions
+            )
+            parts.append(
+                f"{COL_ERROR}{num_substitutions}{COL_DEFAULT} {substitution_label}"
+            )
+        s = f"Replacing project text will discard {' and '.join(parts)}.\n"
         s += "Are you sure? "
         if not ask.ask_confirm(s):
             return False
@@ -455,6 +449,11 @@ def on_ask_max_size(state: State, _) -> None:
         is_int=True
     )
 
+def make_edit_substitutions_label(state: State) -> str:
+    count = len(state.project.word_substitutions)
+    return f"Edit word substitutions {make_currently_string(count, value_prefix='items: ')}"
+
+
 def make_subst_label(state: State) -> str:
     num_subst = len(state.project.word_substitutions)
     if num_subst > 0:
@@ -480,18 +479,15 @@ For single-voice narration, leave this off to preserve natural flow.
 """
 
 SUBSTITUTIONS_DESC = \
-f"""List of words to be replaced in the TTS prompt at inference-time.
-Useful for helping the model pronounce proper names, neologisms, etc.
-more accurately. {COL_DIM}(Requires some trial and error){COL_DEFAULT}
-"""
+f"""Word pairs that get swapped into the text before it is sent to the TTS model.
+Good for fixing mispronounced names and unusual words.
 
-SUBSTITUTIONS_ASK_DESC = \
-f"""Enter substitutions list. Use this format:
-{COL_DIM_ITALICS}{{"Ariekei": "AriaKay", "kilohour": "kilo hour"}}
-
+{COL_DIM}Eg, mapping "Nguyen" to "win" so the model pronounces it correctly.
+Works best with a bit of experimentation.
 """
 
 UNCOMMON_WORDS_DESC = \
 f"""Words in the project text not found in the app's
-English \"common words\" dictionary, sorted by frequency.
+%1 \"common words\" dictionary, sorted by frequency.
 """
+

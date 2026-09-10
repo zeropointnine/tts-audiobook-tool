@@ -209,6 +209,24 @@ def test_segment_sidecar_writes_v3_validation_and_loads_it_directly() -> None:
     assert loaded.findings.invalid_reason == ValidationInvalidReason.MUSIC_DETECTED
 
 
+def test_segment_sidecar_records_word_substituted_inference_prompt() -> None:
+    words = make_words("wucha", "got")
+    result = WordErrorResult(make_sound(1.0), words, num_words=2, threshold=0)
+    with patch("tts_audiobook_tool.tts.Tts.get_type", return_value=TtsModelType.NONE):
+        project = Project.model_validate(
+            {"language_code": "en", "word_substitutions": {"woddaya": "wucha"}}
+        )
+    phrase_group = PhraseGroup([Phrase("Woddaya got", Reason.SENTENCE)])
+
+    info = SegmentTranscriptUtil.from_validation_result(project, phrase_group, 0, result)
+
+    # Source (validation reference) stays the project text; prompt records what
+    # the model was actually asked to say.
+    assert info.source == "Woddaya got"
+    assert info.prompt == "Wucha got"
+    assert SegmentTranscriptUtil.to_dict(info)["prompt"] == "Wucha got"
+
+
 def test_segment_sidecar_loads_v2_validation_fields() -> None:
     payload = {
         "version": 2,

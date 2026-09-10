@@ -219,19 +219,25 @@ class TtsBaseModel(ABC):
         """
         pass
 
-    def massage_for_inference(self, text: str) -> str:
+    @classmethod
+    def massage_for_inference(cls, text: str) -> str:
         """
         Applies text transformations from `TtsModelSpec.substitutions` (usually single character punctuation)
         to address any model-specific idiosyncrasies, etc.
 
         Concrete class may want to override-and-super with extra logic, as needed.
+
+        Implemented as a classmethod (rather than an instance method) so the
+        prompt pipeline can be evaluated without instantiating/loading a model
+        (eg, to record the exact inference prompt alongside generated audio).
         """
 
-        for before, after in self.INFO.substitutions:
+        for before, after in cls.INFO.substitutions:
             text = text.replace(before, after)
         return text
 
-    def prepare_text_for_inference(self, project: Project, text: str) -> str:
+    @classmethod
+    def prepare_text_for_inference(cls, project: Project, text: str) -> str:
         """
         Standard pre-inference text pipeline applied to any string before
         handing it to generate(). Order matters:
@@ -239,6 +245,9 @@ class TtsBaseModel(ABC):
           2. Generic prompt normalization (numbers->words, ellipsis cleanup,
              optional un-all-caps per model)
           3. Model-specific massage_for_inference (overridable per model)
+
+        Class-level so callers can compute the final inference prompt text
+        without a live model instance. Calling it on an instance still works.
         """
         from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
         text = PromptNormalizer.apply_prompt_word_substitutions(
@@ -247,9 +256,9 @@ class TtsBaseModel(ABC):
         text = PromptNormalizer.normalize_prompt(
             text=text,
             language_code=project.language_code,
-            un_all_caps=self.INFO.un_all_caps,
+            un_all_caps=cls.INFO.un_all_caps,
         )
-        text = self.massage_for_inference(text)
+        text = cls.massage_for_inference(text)
         return text
 
     def get_device_type(self) -> DeviceType | None:

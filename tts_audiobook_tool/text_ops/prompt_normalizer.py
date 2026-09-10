@@ -2,6 +2,7 @@ import re
 from num2words import num2words
 
 from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.text_ops import language_util
 
 class PromptNormalizer:
     """
@@ -71,6 +72,11 @@ class PromptNormalizer:
     def apply_prompt_word_substitutions(
         prompt: str, substitutions: dict[str, str], language_code: str
     ) -> str:
+
+        # Normalize first so alias/region codes (eg "en-US", "eng") reach the
+        # English noun-suffix rule, matching how the whitelist and word
+        # equivalence subsystems resolve language codes
+        language_code = language_util.normalize_language_code(language_code)
 
         prompt_raw_words_original = app_text.get_words(prompt)
         prompt_raw_words = []

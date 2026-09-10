@@ -187,7 +187,7 @@ def on_language(state: State, __: MenuItem) -> None:
         normalizer=lambda value: value.strip().lower(),
     )
     Whitelist().set_language_code(state.project.language_code)
-    if did_save and state.project.language_code in ("en", "es"):
+    if did_save and Whitelist.supports_language(state.project.language_code):
         hints.show_hint_if_necessary(
             state.prefs,
             HINT_TOLERANCE_FIRST_CLASS,

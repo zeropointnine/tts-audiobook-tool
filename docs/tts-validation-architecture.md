@@ -125,6 +125,8 @@ This is related to the comparison flow only in the broad sense that both start f
 
 So the validation source text is structurally tied to the same flattened `PhraseGroup` text that enters generation, but the later WER comparison should not be thought of as comparing against the fully massaged inference prompt string.
 
+The segment sidecar does keep both values for post-hoc inspection: `source` is the flattened project text (the validation reference), and `prompt` records the fully massaged inference prompt produced by `SegmentTranscriptUtil.make_inference_prompt()` (`TtsBaseModel.prepare_text_for_inference()`).
+
 ### 3. Generated audio is post-processed before transcription
 
 Still in `GenerateUtil.generate()`, the raw model output is cleaned up before any STT step:
@@ -442,11 +444,13 @@ Language variants are normalized to a base code first:
 - `es-MX` -> `es`
 
 The normalization also accepts ISO 639-2 codes and full names (`eng`,
-`English` -> `en`) via a shared alias table mirrored in
-`WordEquivalence._LANGUAGE_ALIASES`, so both subsystems resolve language
-codes identically. For details see `docs/word-equivalence.md`.
+`English` -> `en`) via a shared alias table in
+`tts_audiobook_tool/text_ops/language_util.py`, so both subsystems resolve
+language codes identically. For details see `docs/word-equivalence.md`.
 
-That normalization happens in `Whitelist.normalize_language_code()`. The active
+That normalization happens in `language_util.normalize_language_code()`, which
+`Whitelist.normalize_language_code()` and
+`WordEquivalence.normalize_language_code()` both delegate to. The active
 project language is then synced into the whitelist singleton via
 `Whitelist().set_language_code(self.project.language_code)` when `State.project` is set.
 

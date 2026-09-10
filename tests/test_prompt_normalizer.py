@@ -77,6 +77,23 @@ def test_prompt_word_substitutions_en(source: str, expected: str) -> None:
     assert result == expected
 
 
+@pytest.mark.parametrize("language_code", ["en-US", "en_GB", "eng", "English"])
+def test_prompt_word_substitutions_accepts_first_class_language_aliases(
+    language_code: str,
+) -> None:
+    result = PromptNormalizer.apply_prompt_word_substitutions(
+        "It is five kilohours away", PROMPT_WORD_SUBSTITUTIONS, language_code
+    )
+    assert result == "It is five kilo hours away"
+
+
+def test_prompt_word_substitutions_skips_suffixes_for_other_languages() -> None:
+    result = PromptNormalizer.apply_prompt_word_substitutions(
+        "It is five kilohours away", PROMPT_WORD_SUBSTITUTIONS, "fr"
+    )
+    assert result == "It is five kilohours away"
+
+
 @pytest.mark.parametrize(
     ("source", "expected"),
     [

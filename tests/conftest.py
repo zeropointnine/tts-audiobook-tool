@@ -1,11 +1,26 @@
+import logging
 import os
 import tempfile
 
 import pytest
 
 from tts_audiobook_tool.app_support import app_paths
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+
+@pytest.fixture(autouse=True)
+def initialize_app_logger():
+    """Ensure ``L.logger`` exists.
+
+    Production calls ``L.init()`` during app startup; tests that exercise code
+    paths which log (directly or via ``call_after_refresh``) would otherwise
+    fail on the unset attribute.
+    """
+    if getattr(L, "logger", None) is None:
+        L.logger = logging.getLogger("tests")
+    yield
 
 
 @pytest.fixture(autouse=True)

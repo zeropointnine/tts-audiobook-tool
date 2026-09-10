@@ -707,6 +707,11 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
+**2026-09-10**
+
+- New full-screen interface for `Text > Word substitutions`
+- Player now highlights both the full TTS prompt and the subdivided phrase currently playing within it
+
 **2026-09-01**
 
 - Added support for [**dots.tts**](https://github.com/studio-dots-ai/dots.tts).

@@ -206,7 +206,6 @@ def _start_impl(
         printt(f"{COL_DIM_ITALICS}{phrase_group.presentable_text}")
         printt()
 
-        # TODO: make dynamic - if "estimated gen time" < buffer duration x ~2 x max_retries...
         has_runway = (stream is not None and stream.buffer_duration >= (REQUIRED_SECONDS_PER_RETRY * state.project.max_retries))
 
         sound_opt, did_interrupt, consecutive_model_errors = generate_full_flow(

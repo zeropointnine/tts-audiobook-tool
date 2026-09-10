@@ -306,13 +306,18 @@ class ContentTextualApp(App[EditorClosed | EditorResultT], Generic[EditorResultT
         """Yield optional panel widgets without coupling the shell to their types."""
         yield from ()
 
+    def compose_content_top(self) -> ComposeResult:
+        """Yield optional widgets above the shared list within the content column."""
+        yield from ()
+
     def compose_content_bottom_panel(self) -> ComposeResult:
         """Yield optional widgets below the shared list within the content column."""
         yield from ()
 
     def compose_content_main(self) -> Vertical:
-        """Build the shared list, empty-state pane, and optional bottom panel."""
+        """Build the optional top widgets, shared list, empty-state pane, and bottom panel."""
         return Vertical(
+            *self.compose_content_top(),
             NonWrappingOptionList(
                 *(
                     Option(self.format_line(index), id=self.option_id(index))

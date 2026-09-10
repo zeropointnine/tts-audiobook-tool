@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import MappingProxyType
 from typing import Mapping
 
+from tts_audiobook_tool.text_ops import language_util
+
 
 class WordEquivalence:
     """
@@ -60,30 +62,10 @@ class WordEquivalence:
     # Cached mappings are read-only so callers cannot corrupt process-global data.
     _LOOKUP: dict[str, Mapping[str, frozenset[str]]] = {}
 
-    # Common full names and ISO 639-2 codes -> primary 2-letter code.
-    # Keeps equivalence (and whitelist parity) from being silently disabled by a
-    # region/script/name-qualified project language code.
-    _LANGUAGE_ALIASES: dict[str, str] = {
-        "english": "en",
-        "eng": "en",
-        "spanish": "es",
-        "spa": "es",
-    }
-
     @staticmethod
     def normalize_language_code(language_code: str) -> str:
-        """Returns the base, lowercase language code (eg ``en-US`` -> ``en``).
-
-        Accepts BCP-47 region/script variants (``en-US``, ``en_GB``), ISO 639-2
-        three-letter codes (``eng``), and common full names (``English``), so a
-        region- or name-qualified project code does not silently disable the
-        equivalence feature.
-        """
-        code = language_code.strip().lower()
-        if not code:
-            return ""
-        base = code.replace("_", "-").split("-", 1)[0]
-        return WordEquivalence._LANGUAGE_ALIASES.get(base, base)
+        """Base lowercase language code; see `language_util.normalize_language_code`."""
+        return language_util.normalize_language_code(language_code)
 
     @classmethod
     def supports_language(cls, language_code: str) -> bool:
