@@ -11,6 +11,7 @@ import time
 import traceback
 import uuid
 from collections import deque
+from contextlib import nullcontext
 from multiprocessing.context import BaseContext
 from typing import Any, Callable, TextIO
 
@@ -29,25 +30,27 @@ from tts_audiobook_tool.model_worker_protocol import (
     GenerationSettings,
     GenerationTerminalStatus,
     GenerationUpdate,
-    InspectTtsCommand,
     GetModelStateCommand,
+    InspectTtsCommand,
     LavaSrProbed,
     ModelsCleared,
     ModelStateReported,
     ModelStateSnapshot,
-    OuteSpeakerCreated,
-    TtsInspected,
     ModelWorkerCommand,
     ModelWorkerEvent,
+    OuteSpeakerCreated,
+    ProbeLavaSrCommand,
     RealTimePlaybackCommand,
     RealTimePlaybackFinished,
     RealTimePlaybackTerminalStatus,
     RealTimePlaybackUpdate,
-    ProbeLavaSrCommand,
     ResetChatSessionCommand,
     ShutdownCommand,
     SynthesizeChatCommand,
     TranscribeAudioCommand,
+    TtsInspected,
+    TtsPreviewCommand,
+    TtsPreviewFinished,
     UpsampleFileCommand,
     WorkerCommandFailed,
     WorkerExited,
@@ -58,6 +61,13 @@ from tts_audiobook_tool.model_worker_protocol import (
 
 WORKER_START_TIMEOUT_SECONDS = 20.0
 WORKER_SHUTDOWN_TIMEOUT_SECONDS = 5.0
+
+# Preview inferences completed in this worker process. Lives only in the worker
+# (the parent never runs _run_tts_preview_command) and exists so the first
+# preview of a process can be exempted from the GEN_TIMEOUT watchdog: that call
+# is the one that may still load, compile, or download the model. See
+# _should_watch_preview_inference().
+_preview_inferences_this_process = 0
 
 
 class ModelWorkerUnavailable(RuntimeError):
@@ -258,7 +268,14 @@ class _WorkerOutputCapture:
 
 
 def _make_worker_state(
-    command: GenerateCommand | RealTimePlaybackCommand | InspectTtsCommand | CreateOuteSpeakerCommand | SynthesizeChatCommand,
+    command: (
+        GenerateCommand
+        | TtsPreviewCommand
+        | RealTimePlaybackCommand
+        | InspectTtsCommand
+        | CreateOuteSpeakerCommand
+        | SynthesizeChatCommand
+    ),
 ) -> Any:
     from tts_audiobook_tool.app_types import SttConfig, SttVariant
     from tts_audiobook_tool.prefs import Prefs
@@ -362,6 +379,144 @@ def _run_generate_command(
         interrupts.set_external_event(None)
         if state is not None:
             state.project.kill()
+
+
+def _should_watch_preview_inference() -> bool:
+    """Whether the upcoming preview inference must be GEN_TIMEOUT-watched.
+
+    A preview makes exactly one inference per command, so the generation path's
+    "first step of the run is exempt" rule has no later step to fall back on
+    here; this call decides instead. The watchdog is skipped only when the call
+    may legitimately include model setup that is allowed to outlast the cap:
+
+    - the first preview inference of this worker process (fresh process: model
+      load, compile, or download), or
+    - no model instance is resident yet (eg after `Options > Unload models`, so
+      this call has to load the model itself).
+
+    Every other preview inference runs against an already-loaded, already-
+    warmed model, so a stall there is a real hang.
+    """
+    from tts_audiobook_tool.tts import Tts
+
+    if _preview_inferences_this_process == 0:
+        return False
+    return Tts.get_instance_if_exists() is not None
+
+
+def _run_tts_preview_command(
+    command: TtsPreviewCommand,
+    event_queue: Any,
+    cancellation_event: Any,
+) -> None:
+    """Generate one processed preview sound without validation or persistence."""
+    global _preview_inferences_this_process
+
+    import numpy as np
+
+    from tts_audiobook_tool.app_support.interrupts import Interrupts
+    from tts_audiobook_tool.generation_events import GenerationEvent, GenerationEvents
+    from tts_audiobook_tool.gen_timeout_util import (
+        backend_gen_timeout_scope,
+        get_backend_gen_timeout,
+        make_gen_timeout_message,
+    )
+    from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+    from tts_audiobook_tool.tts import Tts
+
+    state = None
+    interrupts = Interrupts()
+    interrupts.set_external_event(cancellation_event)
+
+    def relay(update: GenerationEvent) -> None:
+        # Same channel as the generation command: the watchdog emits from a
+        # helper thread while the inference is still in flight, and the parent
+        # answers GenerationTimedOut/ModelUnhealthy by hard-resetting the worker.
+        event_queue.put(GenerationUpdate(command.operation_id, update))
+
+    try:
+        # The worker state is built first: it applies the command's prefs and
+        # the on-disk project to the Tts statics, so the model-residency probe
+        # below checks the type this command will actually use.
+        state = _make_worker_state(command)
+        Tts.clear_continuation()
+        Tts.reset_voice_selection_index()
+        watch_inference = _should_watch_preview_inference()
+        timeout_scope = (
+            backend_gen_timeout_scope() if watch_inference else nullcontext()
+        )
+        with GenerationEvents.using_sink(relay), timeout_scope as guard:
+            result = SoundPipeline.generate_processed_using_project(
+                state.project,
+                [command.prompt],
+                force_random_seed=True,
+                apply_word_substitutions=command.apply_word_substitutions,
+            )
+        # Counted once the inference returns, whatever its result: the model ran,
+        # so the process's setup grace is spent. A call that raises (eg a failed
+        # project load) leaves the count untouched and stays exempt next time.
+        _preview_inferences_this_process += 1
+        did_time_out = guard is not None and guard.did_time_out
+        if did_time_out:
+            # The watchdog already reported the timeout and requested the hard
+            # reset; this event only matters if that reset has not preempted
+            # the operation yet (inference can return while the worker is being
+            # torn down).
+            timeout_seconds, is_remote = get_backend_gen_timeout()
+            status = GenerationTerminalStatus.FAILED
+            sound = None
+            message = make_gen_timeout_message(timeout_seconds, is_remote=is_remote)
+        elif cancellation_event.is_set():
+            status = GenerationTerminalStatus.CANCELLED
+            sound = None
+            message = ""
+        elif isinstance(result, str):
+            status = GenerationTerminalStatus.FAILED
+            sound = None
+            message = result
+        elif not result or result[0].data.size == 0:
+            status = GenerationTerminalStatus.FAILED
+            sound = None
+            message = "Model output is empty"
+        elif bool(np.isnan(result[0].data).any()):
+            # Mirrors the audiobook generation flow, which discards NaN output
+            # rather than letting it reach the listener.
+            status = GenerationTerminalStatus.FAILED
+            sound = None
+            message = "Model outputted NaN"
+        else:
+            status = GenerationTerminalStatus.COMPLETED
+            sound = result[0]
+            message = ""
+        event_queue.put(
+            TtsPreviewFinished(
+                operation_id=command.operation_id,
+                status=status,
+                sound=sound,
+                message=message,
+            )
+        )
+    except Exception as exception:
+        traceback.print_exc()
+        event_queue.put(
+            TtsPreviewFinished(
+                operation_id=command.operation_id,
+                status=GenerationTerminalStatus.FAILED,
+                message=f"{type(exception).__name__}: {exception}",
+            )
+        )
+    finally:
+        try:
+            Tts.clear_continuation()
+        finally:
+            interrupts.clear()
+            interrupts.set_external_event(None)
+            # The cancellation event is intentionally NOT cleared here,
+            # matching _run_generate_command: only submit_* clears it before
+            # enqueueing the next command, so a late cancel from the parent
+            # stays observable until the next submit resets it.
+            if state is not None:
+                state.project.kill()
 
 
 def _run_realtime_playback_command(
@@ -497,6 +652,10 @@ def _model_worker_main(
             return
         if isinstance(command, GenerateCommand):
             _run_generate_command(command, event_queue, cancellation_event)
+            tracker.set("")
+            continue
+        if isinstance(command, TtsPreviewCommand):
+            _run_tts_preview_command(command, event_queue, cancellation_event)
             tracker.set("")
             continue
         if isinstance(command, RealTimePlaybackCommand):
@@ -1005,6 +1164,47 @@ class ModelWorker:
                 batch_size=batch_size,
                 is_regen=is_regen,
                 settings=settings,
+            )
+            cancellation_event = cls._cancellation_event
+            command_queue = cls._command_queue
+            assert cancellation_event is not None and command_queue is not None
+            cancellation_event.clear()
+            cls._active_operation_id = operation_id
+            command_queue.put(command)
+            return operation_id
+
+    @classmethod
+    def submit_tts_preview(
+        cls,
+        *,
+        state: Any,
+        prompt: str,
+        apply_word_substitutions: bool = False,
+    ) -> str:
+        """Submit one non-persistent TTS preview prompt."""
+        error = cls.start()
+        if error:
+            raise ModelWorkerUnavailable(error)
+        with cls._lock:
+            if cls._active_operation_id is not None:
+                raise RuntimeError("Model worker is already processing a command")
+            operation_id = uuid.uuid4().hex
+            prefs = state.prefs
+            sgl_type = prefs.sgl_omni_type
+            settings = GenerationSettings(
+                stt_variant_id=prefs.stt_variant.id,
+                stt_config_id=prefs.stt_config.id,
+                tts_force_cpu=prefs.tts_force_cpu,
+                sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
+                sgl_omni_url=prefs.sgl_omni_url,
+                save_debug_files=prefs.save_debug_files,
+            )
+            command = TtsPreviewCommand(
+                operation_id=operation_id,
+                project_dir=state.project.dir_path,
+                settings=settings,
+                prompt=prompt,
+                apply_word_substitutions=apply_word_substitutions,
             )
             cancellation_event = cls._cancellation_event
             command_queue = cls._command_queue
@@ -1544,6 +1744,7 @@ class ModelWorker:
             event,
             (
                 GenerationFinished,
+                TtsPreviewFinished,
                 RealTimePlaybackFinished,
                 ModelsCleared,
                 ChatSessionReset,

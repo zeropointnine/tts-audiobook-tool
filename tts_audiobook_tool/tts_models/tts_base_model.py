@@ -146,7 +146,9 @@ class TtsBaseModel(ABC):
         receive fully-resolved concrete values.
 
         :param prompts:
-            List of one or more prompts to process
+            List of one or more prompts already prepared by
+            `Tts.generate_using_project`. Implementations must pass these to
+            the backend unchanged rather than running text preparation again.
         :param force_random_seed:
             Is ignored if implementation does not support seed
         :param on_stream_chunk:
@@ -237,22 +239,31 @@ class TtsBaseModel(ABC):
         return text
 
     @classmethod
-    def prepare_text_for_inference(cls, project: Project, text: str) -> str:
+    def prepare_text_for_inference(
+        cls,
+        project: Project,
+        text: str,
+        *,
+        apply_word_substitutions: bool = True,
+    ) -> str:
         """
         Standard pre-inference text pipeline applied to any string before
         handing it to generate(). Order matters:
-          1. Project word substitutions (case/plural-aware)
+          1. Project word substitutions (case/plural-aware), when enabled
           2. Generic prompt normalization (numbers->words, ellipsis cleanup,
              optional un-all-caps per model)
           3. Model-specific massage_for_inference (overridable per model)
 
         Class-level so callers can compute the final inference prompt text
         without a live model instance. Calling it on an instance still works.
+        Word substitutions may be disabled for diagnostic prompts which must
+        pronounce both the source and replacement forms literally.
         """
         from tts_audiobook_tool.text_ops.prompt_normalizer import PromptNormalizer
-        text = PromptNormalizer.apply_prompt_word_substitutions(
-            text, project.word_substitutions, project.language_code
-        )
+        if apply_word_substitutions:
+            text = PromptNormalizer.apply_prompt_word_substitutions(
+                text, project.word_substitutions, project.language_code
+            )
         text = PromptNormalizer.normalize_prompt(
             text=text,
             language_code=project.language_code,

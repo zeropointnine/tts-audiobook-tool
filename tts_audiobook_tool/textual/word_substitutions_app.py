@@ -8,9 +8,15 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.widgets import OptionList, Rule, Static
+from textual.timer import Timer
 
+from tts_audiobook_tool import readiness
+from tts_audiobook_tool.app_types import Sound
 from tts_audiobook_tool.constants import COL_ACCENT, COL_DIM
-from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual.alert_dialog import AlertDialog
 from tts_audiobook_tool.textual.content_textual_app import (
     ContentTextualApp,
     EditorSaveFailed,
@@ -25,6 +31,13 @@ from tts_audiobook_tool.util import make_error_string
 
 NO_ITEMS_LABEL = "No items currently"
 ADD_ITEM_LABEL = "Add item"
+
+
+def make_word_substitution_preview_prompt(
+    original: str, substitution: str
+) -> str:
+    """Build the literal diagnostic prompt spoken by the preview action."""
+    return f"Original word: {original}. Substitute word: {substitution}"
 
 
 @dataclass(frozen=True)
@@ -45,6 +58,20 @@ class WordSubstitutionSentinel:
 
 
 WordSubstitutionListItem = WordSubstitutionItem | WordSubstitutionSentinel
+
+
+@dataclass(frozen=True)
+class WordSubstitutionPreviewRequested:
+    """Generate a diagnostic pronunciation preview, then reopen this editor."""
+
+    original: str
+    substitution: str
+    staged_items: tuple[tuple[str, str], ...]
+
+
+WordSubstitutionsResult = (
+    WordSubstitutionPreviewRequested | EditorSaved | EditorSaveFailed
+)
 
 
 def fit_cell(
@@ -142,7 +169,7 @@ class WordSubstitutionTableRow:
         yield self.render_line(options.max_width)
 
 
-class WordSubstitutionsApp(ContentTextualApp[EditorSaved | EditorSaveFailed]):
+class WordSubstitutionsApp(ContentTextualApp[WordSubstitutionsResult]):
     """Edit the project's inference-time word substitutions as a table."""
 
     CSS = ContentTextualApp.CSS + """
@@ -162,18 +189,33 @@ class WordSubstitutionsApp(ContentTextualApp[EditorSaved | EditorSaveFailed]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         *ContentTextualApp.BINDINGS,
+        Binding("q", "quick_preview", show=False),
         Binding("x", "delete_item", show=False),
     ]
 
-    def __init__(self, project: Project) -> None:
+    def __init__(
+        self,
+        state: State,
+        *,
+        staged: dict[str, str] | None = None,
+        restore_original: str | None = None,
+        preview_sound: Sound | None = None,
+    ) -> None:
+        self.state = state
+        project = state.project
         self.original = dict(project.word_substitutions)
-        self.staged = dict(project.word_substitutions)
+        self.staged = dict(project.word_substitutions if staged is None else staged)
         self.list_items: list[WordSubstitutionListItem] = self.make_list_items()
+        self.restore_original = restore_original
+        self.preview_sound = preview_sound
+        self.preview_sound_id = ""
+        self.preview_status_timer: Timer | None = None
         header_lines = [
             f"{COL_ACCENT}Edit word substitutions",
             f"{COL_DIM}- Navigation keys: [UP], [DOWN], [PAGE UP/DOWN], [HOME/END]"
             f"  - [CTRL-F] Find text",
             f"{COL_DIM}- [{COL_ACCENT}ENTER{COL_DIM}] Edit or add item"
+            f"  - [{COL_ACCENT}Q{COL_DIM}] Preview pronunciation"
             f"  - [{COL_ACCENT}X{COL_DIM}] Delete item"
             f"  - [{COL_ACCENT}ESC{COL_DIM}] Finish",
         ]
@@ -183,6 +225,23 @@ class WordSubstitutionsApp(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             phrase_indices=list(range(len(self.list_items))),
             empty_state_text=NO_ITEMS_LABEL,
             multi_select_enabled=False,
+        )
+        restore_index = self.item_index_for_original(restore_original)
+        if restore_index is not None:
+            self.replace_phrase_indices(range(len(self.list_items)), restore_index)
+
+    def item_index_for_original(self, original: str | None) -> int | None:
+        """Return the backing row index for a stable substitution key."""
+        if original is None:
+            return None
+        return next(
+            (
+                index
+                for index, item in enumerate(self.list_items)
+                if isinstance(item, WordSubstitutionItem)
+                and item.original == original
+            ),
+            None,
         )
 
     def make_list_items(self) -> list[WordSubstitutionListItem]:
@@ -265,6 +324,98 @@ class WordSubstitutionsApp(ContentTextualApp[EditorSaved | EditorSaveFailed]):
             self.staged.pop(result.previous_original, None)
         self.staged[result.original] = result.substitution
         self.rebuild_rows(result.original)
+
+    def action_quick_preview(self) -> None:
+        """Request a literal pronunciation preview for the highlighted pair."""
+        if self.find_active or self.selected_index is None:
+            return
+        # Unhandled keys bubble from a modal screen (save-changes alert,
+        # blocker alert) up to the app's bindings; without this guard "q"
+        # would bypass an open save/discard decision or stack alerts.
+        if len(self.screen_stack) > 1:
+            return
+        item = self.list_items[self.phrase_indices[self.selected_index]]
+        if not isinstance(item, WordSubstitutionItem):
+            return
+        blocker_text = readiness.get_tts_preview_blocker_text(
+            self.state, verbose=True
+        )
+        if blocker_text:
+            self.push_screen(
+                AlertDialog(title="Cannot generate audio", copy=blocker_text)
+            )
+            return
+        self.exit(
+            WordSubstitutionPreviewRequested(
+                original=item.original,
+                substitution=item.substitution,
+                staged_items=tuple(self.staged.items()),
+            )
+        )
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        restore_index = self.item_index_for_original(self.restore_original)
+        if restore_index is not None:
+            self.query_one("#line-list", OptionList).highlighted = restore_index
+        if self.preview_sound is not None:
+            self.call_after_refresh(self.play_restored_preview)
+
+    def update_preview_playback_status(self) -> None:
+        """Clear the preview status after its asynchronous playback finishes."""
+        if (
+            self.preview_sound_id
+            and PlaySoundUtil.current_sound_id() != self.preview_sound_id
+        ):
+            self.preview_sound_id = ""
+            if self.preview_status_timer is not None:
+                self.preview_status_timer.stop()
+                self.preview_status_timer = None
+            self.update_selection_status()
+
+    def play_restored_preview(self) -> None:
+        """Autoplay a completed preview for the row that requested it.
+
+        Playback is keyed to the requested row, not the current selection:
+        the user may move the highlight between the editor reopening and
+        this callback running, and silently dropping the audio would be
+        confusing. The status line names the row either way.
+        """
+        sound = self.preview_sound
+        self.preview_sound = None
+        restore_original = self.restore_original
+        self.restore_original = None
+        if sound is None:
+            return
+        sound = SoundPipeline.prepare_generated_sound_for_playback(
+            sound,
+            high_shelf=self.project.get_high_shelf(),
+            limit_silence_gaps=self.project.limit_silence_gaps,
+            limit_silence_gaps_duration=self.project.limit_silence_gaps_duration,
+        )
+        self.preview_sound_id = PlaySoundUtil.play_sound_async(sound)
+        self.preview_status_timer = self.set_interval(
+            0.1,
+            self.update_preview_playback_status,
+        )
+        label = (
+            f"Playing pronunciation preview: {restore_original}"
+            if restore_original is not None
+            else "Playing pronunciation preview"
+        )
+        self.set_selected_status(right=label)
+
+    def on_unmount(self) -> None:
+        """Stop preview playback owned by this editor when it closes."""
+        if (
+            self.preview_sound_id
+            and PlaySoundUtil.current_sound_id() == self.preview_sound_id
+        ):
+            PlaySoundUtil.stop_sound_async()
+        self.preview_sound_id = ""
+        if self.preview_status_timer is not None:
+            self.preview_status_timer.stop()
+            self.preview_status_timer = None
 
     def action_delete_item(self) -> None:
         """Delete the highlighted substitution; sentinel rows are not deletable."""

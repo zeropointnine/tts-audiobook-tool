@@ -45,11 +45,11 @@ from tts_audiobook_tool.textual.worker_app import (
     ConsoleLineAssembler,
     WorkerTextualApp,
     _split_pending_control,
+    session_failure_result,
     worker_app_css,
 )
 from tts_audiobook_tool.worker_reset import (
     HardResetCause,
-    HardResetRequest,
     hard_reset_request_from_generation_update,
     perform_hard_reset,
 )
@@ -157,12 +157,6 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         self.transcript = transcript
         self.progress = GenerationProgress(0, len(indices), len(indices))
         self.stats: GenerationStats | None = None
-        # True once a generation that should return on its own reaches its
-        # terminal summary: the app then exits immediately, without waiting
-        # for ENTER. That covers any quick generation that completed (it
-        # returns to the editor) and a completed regular generation with
-        # gen_auto_concat enabled (it proceeds to concatenation).
-        self.auto_continue = False
 
     def compose_header(self) -> ComposeResult:
         # (bottom prompt row removed; its trigger points are retained in
@@ -309,7 +303,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             lines.append(
                 f"Transcript: {text_util.make_terminal_hyperlink(result.transcript_path, is_file=True)}"
             )
-        if self.auto_continue:
+        if self.auto_exit:
             # A regular generation proceeds to concatenation. Quick generation
             # instead returns directly to the editor without displaying a
             # misleading concatenation handoff.
@@ -319,18 +313,22 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             lines.extend(["", f"Press {util.make_hotkey_string('ENTER')} to continue"])
         return lines
 
-    def _pre_terminal_summary(self, result: GenerationModalResult) -> None:
-        # Quick generation returns immediately only when its one item needs no
-        # attention. A generated segment tagged as failed (excess word errors),
-        # or an item that exhausted generation retries, keeps the result open
-        # for review just like an interrupted job.
+    def should_auto_exit(self, result: GenerationModalResult) -> bool:
+        """Quick generation that completed cleanly returns to the editor.
+
+        The one item it generated needs no review. A generated segment tagged
+        as failed (excess word errors), or an item that exhausted generation
+        retries, keeps the result open for review just like an interrupted
+        job. A completed regular generation instead proceeds to concatenation
+        when that is enabled.
+        """
         quick_return = self.is_regen and result.completed_cleanly
         regular_auto_concat = (
             not self.is_regen
             and result.completed
             and self.state.project.gen_auto_concat
         )
-        self.auto_continue = quick_return or regular_auto_concat
+        return quick_return or regular_auto_concat
 
     def _post_terminal_summary(self, result: GenerationModalResult) -> None:
         statuses_that_alert = {
@@ -345,10 +343,9 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         if (result.status in statuses_that_alert or reset_should_alert) and not self.is_regen:
             app_support.play_done_sound()
 
-        if self.auto_continue:
-            # Return immediately, with no ceremony and no ENTER wait, so the
-            # caller's flow (editor reopen or concatenation) continues.
-            self.action_continue()
+        # Return immediately, with no ceremony and no ENTER wait, so the
+        # caller's flow (editor reopen or concatenation) continues.
+        super()._post_terminal_summary(result)
 
     @property
     def prompt_mode(self) -> PromptMode:
@@ -356,7 +353,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         interrupt hint, the kill-process hint while the worker waits for a
         safe boundary, and the continue hint once the job has stopped."""
         if self.terminal_result is not None:
-            if self.auto_continue:
+            if self.auto_exit:
                 return "auto_return" if self.is_regen else "auto_continue"
             return "finished"
         if self.cancel_pending:
@@ -576,7 +573,6 @@ def run_generation_app(
         make_generation_transcript_path(state.project.dir_path),
         enabled=state.prefs.save_gen_log,
     )
-    app: GenerationApp | None = None
     try:
         start_error = ModelWorker.start()
         if start_error:
@@ -601,47 +597,35 @@ def run_generation_app(
             return result
 
         app = GenerationApp(state, indices, batch_size, is_regen, transcript)
+
+        def make_failure_result(
+            message: str, reset_cause: HardResetCause | None
+        ) -> GenerationModalResult:
+            return GenerationModalResult(
+                GenerationTerminalStatus.FAILED,
+                _read_persisted_range_string(state),
+                transcript.path,
+                message,
+                hard_reset_cause=reset_cause,
+            )
+
         try:
             result = app.run(inline=False)
         except Exception as exception:
-            if app.terminal_result is not None:
-                result = app.terminal_result
-            else:
-                message = f"{type(exception).__name__}: {exception}"
-                reset_cause = None
-                if app.operation_id is not None:
-                    reset_cause = HardResetCause.INTERFACE_FAILURE
-                    message = perform_hard_reset(
-                        HardResetRequest(reset_cause, message)
-                    ).message
-                result = GenerationModalResult(
-                    GenerationTerminalStatus.FAILED,
-                    _read_persisted_range_string(state),
-                    transcript.path,
-                    message,
-                    hard_reset_cause=reset_cause,
-                )
+            result = session_failure_result(
+                app,
+                make_failure_result,
+                f"{type(exception).__name__}: {exception}",
+            )
             _reconcile_generation_result(state, result)
             _present_console_result(state, result, transcript, is_regen)
             return result
         if result is None:
-            if app.terminal_result is not None:
-                result = app.terminal_result
-            else:
-                message = "Generation interface closed without a result"
-                reset_cause = None
-                if app.operation_id is not None:
-                    reset_cause = HardResetCause.INTERFACE_FAILURE
-                    message = perform_hard_reset(
-                        HardResetRequest(reset_cause, message)
-                    ).message
-                result = GenerationModalResult(
-                    GenerationTerminalStatus.FAILED,
-                    _read_persisted_range_string(state),
-                    transcript.path,
-                    message,
-                    hard_reset_cause=reset_cause,
-                )
+            result = session_failure_result(
+                app,
+                make_failure_result,
+                "Generation interface closed without a result",
+            )
         _reconcile_generation_result(state, result)
         if result.status == GenerationTerminalStatus.FAILED and app.terminal_result is None:
             _present_console_result(state, result, transcript, is_regen)

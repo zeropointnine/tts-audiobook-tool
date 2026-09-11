@@ -5,11 +5,15 @@ import threading
 import time
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
+import tts_audiobook_tool.model_worker as model_worker_module
+from tts_audiobook_tool import gen_timeout_util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
-from tts_audiobook_tool.app_types import Book, BookSection, SttVariant
+from tts_audiobook_tool.app_types import Book, BookSection, Sound, SttVariant
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
+from tts_audiobook_tool.generation_events import GenerationEvents, GenerationTimedOut
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.model_worker import (
     ModelWorker,
@@ -21,16 +25,22 @@ from tts_audiobook_tool.model_worker_protocol import (
     ConsoleFlush,
     ConsoleOutput,
     GenerationFinished,
+    GenerationSettings,
     GenerationTerminalStatus,
+    GenerationUpdate,
     InspectTtsCommand,
     TtsInspected,
+    TtsPreviewCommand,
+    TtsPreviewFinished,
     WorkerExited,
     WorkerStatus,
 )
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
 from tts_audiobook_tool.state import State
+from tts_audiobook_tool.tts import Tts
 
 
 def _drain_until_terminal(operation_id: str, timeout: float = 20.0):
@@ -433,6 +443,352 @@ def test_worker_reports_its_own_empty_model_inventory() -> None:
     assert snapshot.stt_loaded is False
     assert snapshot.yamnet_loaded is False
     assert snapshot.lava_sr_loaded is False
+
+
+def test_submit_tts_preview_queues_prompt_project_and_settings(
+    tmp_path, monkeypatch
+) -> None:
+    project = Project(dir_path=str(tmp_path))
+    prefs = Prefs(project_dir=str(tmp_path), stt_variant=SttVariant.DISABLED)
+    state = SimpleNamespace(project=project, prefs=prefs)
+    commands: list[object] = []
+
+    class CommandQueue:
+        def put(self, command: object) -> None:
+            commands.append(command)
+
+    class CancellationEvent:
+        def __init__(self) -> None:
+            self.clear_calls = 0
+
+        def clear(self) -> None:
+            self.clear_calls += 1
+
+    cancellation_event = CancellationEvent()
+    monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
+    monkeypatch.setattr(ModelWorker, "_command_queue", CommandQueue())
+    monkeypatch.setattr(ModelWorker, "_cancellation_event", cancellation_event)
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+
+    operation_id = ModelWorker.submit_tts_preview(
+        state=state,
+        prompt="Original word: Ariekei. Substitute word: AriaKay",
+        apply_word_substitutions=False,
+    )
+
+    assert len(commands) == 1
+    command = commands[0]
+    assert isinstance(command, TtsPreviewCommand)
+    assert command.operation_id == operation_id
+    assert command.project_dir == str(tmp_path)
+    assert command.prompt == (
+        "Original word: Ariekei. Substitute word: AriaKay"
+    )
+    assert command.apply_word_substitutions is False
+    assert command.settings.stt_variant_id == SttVariant.DISABLED.id
+    assert cancellation_event.clear_calls == 1
+    assert ModelWorker.is_busy()
+
+
+def test_tts_preview_finished_releases_worker_busy_state(monkeypatch) -> None:
+    sound = Sound(np.zeros(8, dtype=np.float32), 24_000)
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", "preview-job")
+
+    ModelWorker._observe_event(
+        TtsPreviewFinished(
+            "preview-job",
+            GenerationTerminalStatus.COMPLETED,
+            sound=sound,
+        )
+    )
+
+    assert not ModelWorker.is_busy()
+
+
+def test_run_tts_preview_returns_processed_sound_without_word_substitutions(
+    monkeypatch,
+) -> None:
+    sound = Sound(np.zeros(8, dtype=np.float32), 24_000)
+    generated: list[tuple[object, list[str], bool, bool]] = []
+    events: list[object] = []
+    project = SimpleNamespace(kill=lambda: None)
+    state = SimpleNamespace(project=project)
+
+    class CancellationEvent:
+        def is_set(self) -> bool:
+            return False
+
+        def clear(self) -> None:
+            pass
+
+    class EventQueue:
+        def put(self, event: object) -> None:
+            events.append(event)
+
+    command = TtsPreviewCommand(
+        operation_id="preview-job",
+        project_dir="/project",
+        settings=GenerationSettings("disabled", "cpu", False, None, "", False),
+        prompt="Original word: foo. Substitute word: bar",
+        apply_word_substitutions=False,
+    )
+    monkeypatch.setattr(
+        model_worker_module, "_make_worker_state", lambda _command: state
+    )
+    monkeypatch.setattr(Tts, "clear_continuation", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        Tts, "reset_voice_selection_index", staticmethod(lambda: None)
+    )
+    # This test covers the unwatched path (a call that may still load the
+    # model); the watchdog itself is covered separately.
+    monkeypatch.setattr(
+        model_worker_module, "_should_watch_preview_inference", lambda: False
+    )
+    monkeypatch.setattr(
+        SoundPipeline,
+        "generate_processed_using_project",
+        staticmethod(
+            lambda passed_project, prompts, force_random_seed=False,
+            apply_word_substitutions=True: (
+                generated.append(
+                    (
+                        passed_project,
+                        prompts,
+                        force_random_seed,
+                        apply_word_substitutions,
+                    )
+                )
+                or [sound]
+            )
+        ),
+    )
+
+    model_worker_module._run_tts_preview_command(
+        command, EventQueue(), CancellationEvent()
+    )
+
+    assert generated == [
+        (
+            project,
+            ["Original word: foo. Substitute word: bar"],
+            True,
+            False,
+        )
+    ]
+    assert len(events) == 1
+    event = events[0]
+    assert isinstance(event, TtsPreviewFinished)
+    assert event.status is GenerationTerminalStatus.COMPLETED
+    assert event.sound is sound
+
+
+def test_run_tts_preview_rejects_nan_output(monkeypatch) -> None:
+    """NaN audio must fail the preview instead of reaching the listener."""
+    data = np.zeros(8, dtype=np.float32)
+    data[3] = np.nan
+    sound = Sound(data, 24_000)
+    project = SimpleNamespace(kill=lambda: None)
+    state = SimpleNamespace(project=project)
+
+    class CancellationEvent:
+        def is_set(self) -> bool:
+            return False
+
+        def clear(self) -> None:
+            pass
+
+    class EventQueue:
+        def __init__(self) -> None:
+            self.events: list[object] = []
+
+        def put(self, event: object) -> None:
+            self.events.append(event)
+
+    command = TtsPreviewCommand(
+        operation_id="preview-job",
+        project_dir="/project",
+        settings=GenerationSettings("disabled", "cpu", False, None, "", False),
+        prompt="Original word: foo. Substitute word: bar",
+        apply_word_substitutions=False,
+    )
+    monkeypatch.setattr(
+        model_worker_module, "_make_worker_state", lambda _command: state
+    )
+    monkeypatch.setattr(Tts, "clear_continuation", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        Tts, "reset_voice_selection_index", staticmethod(lambda: None)
+    )
+    monkeypatch.setattr(
+        model_worker_module, "_should_watch_preview_inference", lambda: False
+    )
+    monkeypatch.setattr(
+        SoundPipeline,
+        "generate_processed_using_project",
+        staticmethod(lambda *_args, **_kwargs: [sound]),
+    )
+
+    event_queue = EventQueue()
+    model_worker_module._run_tts_preview_command(
+        command, event_queue, CancellationEvent()
+    )
+
+    event = event_queue.events[0]
+    assert isinstance(event, TtsPreviewFinished)
+    assert event.status is GenerationTerminalStatus.FAILED
+    assert event.sound is None
+    assert event.message == "Model outputted NaN"
+
+
+def _make_preview_command() -> TtsPreviewCommand:
+    return TtsPreviewCommand(
+        operation_id="preview-job",
+        project_dir="/project",
+        settings=GenerationSettings("disabled", "cpu", False, None, "", False),
+        prompt="Original word: foo. Substitute word: bar",
+        apply_word_substitutions=False,
+    )
+
+
+class _PreviewCancellationEvent:
+    def is_set(self) -> bool:
+        return False
+
+    def clear(self) -> None:
+        pass
+
+
+class _PreviewEventQueue:
+    def __init__(self) -> None:
+        self.events: list[object] = []
+
+    def put(self, event: object) -> None:
+        self.events.append(event)
+
+
+def _install_preview_state(monkeypatch) -> None:
+    project = SimpleNamespace(kill=lambda: None)
+    monkeypatch.setattr(
+        model_worker_module,
+        "_make_worker_state",
+        lambda _command: SimpleNamespace(project=project),
+    )
+    monkeypatch.setattr(Tts, "clear_continuation", staticmethod(lambda: None))
+    monkeypatch.setattr(
+        Tts, "reset_voice_selection_index", staticmethod(lambda: None)
+    )
+
+
+def test_should_watch_preview_inference_exempts_model_setup_calls(monkeypatch) -> None:
+    """Only a call that cannot be doing model setup is watched."""
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+    monkeypatch.setattr(model_worker_module, "_preview_inferences_this_process", 0)
+    monkeypatch.setattr(
+        Tts, "get_instance_if_exists", staticmethod(lambda: object())
+    )
+
+    # First preview of the worker process: may load/compile/download the model.
+    assert model_worker_module._should_watch_preview_inference() is False
+
+    monkeypatch.setattr(model_worker_module, "_preview_inferences_this_process", 3)
+    # A resident model means the upcoming call is pure inference.
+    assert model_worker_module._should_watch_preview_inference() is True
+
+    # No resident model (eg after `Options > Unload models`): this call has to
+    # load it, so it keeps the exemption.
+    monkeypatch.setattr(Tts, "get_instance_if_exists", staticmethod(lambda: None))
+    assert model_worker_module._should_watch_preview_inference() is False
+
+
+def test_run_tts_preview_relays_generation_events_as_generation_updates(
+    monkeypatch,
+) -> None:
+    """The watchdog's events must reach the parent as GenerationUpdate."""
+    _install_preview_state(monkeypatch)
+    monkeypatch.setattr(
+        model_worker_module, "_should_watch_preview_inference", lambda: False
+    )
+    sound = Sound(np.zeros(8, dtype=np.float32), 24_000)
+
+    def fake_generate(*_args: object, **_kwargs: object) -> list[Sound]:
+        # Stands in for the watchdog thread: the sink installed by the command
+        # is what carries the event to the parent.
+        GenerationEvents.emit(GenerationTimedOut(timeout_seconds=180.0))
+        return [sound]
+
+    monkeypatch.setattr(
+        SoundPipeline, "generate_processed_using_project", staticmethod(fake_generate)
+    )
+
+    event_queue = _PreviewEventQueue()
+    model_worker_module._run_tts_preview_command(
+        _make_preview_command(), event_queue, _PreviewCancellationEvent()
+    )
+
+    assert event_queue.events[0] == GenerationUpdate(
+        "preview-job", GenerationTimedOut(timeout_seconds=180.0)
+    )
+    assert isinstance(event_queue.events[1], TtsPreviewFinished)
+
+
+def test_run_tts_preview_reports_a_watchdog_timeout(monkeypatch, capsys) -> None:
+    """A watched preview that outlives GEN_TIMEOUT fails and asks for a reset."""
+    _install_preview_state(monkeypatch)
+    monkeypatch.setattr(
+        model_worker_module, "_should_watch_preview_inference", lambda: True
+    )
+    monkeypatch.setattr(gen_timeout_util, "GEN_TIMEOUT", 0.2)
+    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: False))
+
+    def slow_generate(*_args: object, **_kwargs: object) -> list[Sound]:
+        time.sleep(0.6)
+        return [Sound(np.zeros(8, dtype=np.float32), 24_000)]
+
+    monkeypatch.setattr(
+        SoundPipeline, "generate_processed_using_project", staticmethod(slow_generate)
+    )
+
+    event_queue = _PreviewEventQueue()
+    model_worker_module._run_tts_preview_command(
+        _make_preview_command(), event_queue, _PreviewCancellationEvent()
+    )
+
+    updates = [
+        event
+        for event in event_queue.events
+        if isinstance(event, GenerationUpdate)
+    ]
+    assert updates == [GenerationUpdate("preview-job", GenerationTimedOut(0.2))]
+    finished = event_queue.events[-1]
+    assert isinstance(finished, TtsPreviewFinished)
+    assert finished.status is GenerationTerminalStatus.FAILED
+    assert finished.sound is None
+    assert "GEN_TIMEOUT" in finished.message
+    assert "reset" in finished.message
+    assert "GEN_TIMEOUT" in capsys.readouterr().out
+
+
+def test_run_tts_preview_counts_inferences_for_the_watchdog(monkeypatch) -> None:
+    """Each completed preview advances the process-local inference count."""
+    _install_preview_state(monkeypatch)
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+    monkeypatch.setattr(model_worker_module, "_preview_inferences_this_process", 0)
+    monkeypatch.setattr(
+        model_worker_module, "_should_watch_preview_inference", lambda: False
+    )
+    monkeypatch.setattr(
+        SoundPipeline,
+        "generate_processed_using_project",
+        staticmethod(
+            lambda *_args, **_kwargs: [Sound(np.zeros(8, dtype=np.float32), 24_000)]
+        ),
+    )
+
+    for _ in range(2):
+        model_worker_module._run_tts_preview_command(
+            _make_preview_command(), _PreviewEventQueue(), _PreviewCancellationEvent()
+        )
+
+    assert model_worker_module._preview_inferences_this_process == 2
 
 
 def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:

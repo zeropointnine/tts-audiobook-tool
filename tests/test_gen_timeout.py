@@ -13,6 +13,7 @@ from tts_audiobook_tool.generate_util import GenerateUtil
 from tts_audiobook_tool.generation_events import GenerationEvents, GenerationTimedOut
 from tts_audiobook_tool.gen_timeout_util import (
     GenTimeoutTracker,
+    backend_gen_timeout_scope,
     gen_timeout_scope,
     make_backend_gen_timeout_tracker,
     make_gen_timeout_message,
@@ -112,6 +113,45 @@ def test_sgl_timeout_uses_remote_wording_and_backend_deadline(
         "Remote generation timed out; recycling client worker"
         in capsys.readouterr().out
     )
+
+
+def test_backend_gen_timeout_scope_is_armed_on_its_first_call(monkeypatch) -> None:
+    """Single-shot callers get no first-call exemption (unlike the tracker)."""
+    monkeypatch.setattr(gen_timeout_util, "GEN_TIMEOUT", 0.2)
+    events: list[GenerationTimedOut] = []
+
+    with GenerationEvents.using_sink(events.append):
+        with backend_gen_timeout_scope() as guard:
+            time.sleep(0.5)
+
+    assert guard.did_time_out
+    assert events == [GenerationTimedOut(timeout_seconds=0.2)]
+
+
+def test_backend_gen_timeout_scope_uses_the_sgl_policy(monkeypatch) -> None:
+    from tts_audiobook_tool.tts import Tts
+
+    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: True))
+    monkeypatch.setattr(gen_timeout_util, "SGL_OMNI_GEN_TIMEOUT", 0.2)
+    events: list[GenerationTimedOut] = []
+
+    with GenerationEvents.using_sink(events.append):
+        with backend_gen_timeout_scope() as guard:
+            time.sleep(0.5)
+
+    assert guard.did_time_out
+    assert events == [GenerationTimedOut(timeout_seconds=0.2, is_remote=True)]
+    # The tracker and the single-shot scope share one policy source.
+    assert gen_timeout_util.get_backend_gen_timeout() == (0.2, True)
+
+
+def test_get_backend_gen_timeout_uses_the_local_policy(monkeypatch) -> None:
+    from tts_audiobook_tool.tts import Tts
+
+    monkeypatch.setattr(Tts, "is_sgl_mode", staticmethod(lambda: False))
+    monkeypatch.setattr(gen_timeout_util, "GEN_TIMEOUT", 123.0)
+
+    assert gen_timeout_util.get_backend_gen_timeout() == (123.0, False)
 
 
 def test_tracker_exempts_first_gen_only() -> None:

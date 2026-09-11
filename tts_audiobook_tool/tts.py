@@ -414,6 +414,7 @@ class Tts:
             print_generation_request: bool = False,
             print_params: bool = False,
             voice_selection_index: int | None = None,
+            apply_word_substitutions: bool = True,
     ):
         """
         All app-level TTS generation goes through this function.
@@ -424,7 +425,9 @@ class Tts:
 
         This keeps audiobook generation, realtime playback, server/API usage,
         and LLM chat consistent wrt prompt normalization and model-specific
-        transforms such as VibeVoice speaker tagging.
+        transforms such as VibeVoice speaker tagging. Diagnostic callers may
+        disable only project word substitutions while retaining the rest of
+        the preparation pipeline.
         """
         instance = Tts.get_instance()
         if voice_selection_index is None:
@@ -436,7 +439,14 @@ class Tts:
             f"has_on_stream_chunk={on_stream_chunk is not None} has_on_stream_end={on_stream_end is not None}"
         )
 
-        prepared_prompts = [instance.prepare_text_for_inference(project, prompt) for prompt in prompts]
+        prepared_prompts = [
+            instance.prepare_text_for_inference(
+                project,
+                prompt,
+                apply_word_substitutions=apply_word_substitutions,
+            )
+            for prompt in prompts
+        ]
         kwargs = {
             "on_stream_chunk": on_stream_chunk,
             "on_stream_end": on_stream_end if on_stream_end is not None else project.on_stream_end,

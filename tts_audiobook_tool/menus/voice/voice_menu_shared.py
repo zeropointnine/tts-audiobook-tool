@@ -83,15 +83,25 @@ class VoiceMenuShared:
             case TtsModelType.POCKET:
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
+
             case TtsModelType.QWEN3TTS:
-                printt(f"{COL_DIM_ITALICS}Initializing TTS model...")
-                printt()
+                # Special case: Qwen voice menu requires loaded model
+                snapshot, _ = ModelWorker.get_model_state_blocking()
+                already_loaded = (
+                    snapshot is not None
+                    and snapshot.tts_loaded
+                    and snapshot.tts_type_id == Tts.get_type().value.id
+                )
+                if not already_loaded:
+                    printt(f"{COL_DIM_ITALICS}Initializing TTS model...")
+                    printt()
                 inspection, error = ModelWorker.inspect_tts_blocking(state)
                 if error or inspection is None:
                     ask.ask_error(error or "Couldn't inspect Qwen3-TTS model")
                     return
                 from tts_audiobook_tool.menus.voice.voice_qwen3_menu import VoiceQwen3Menu
                 VoiceQwen3Menu.menu(state, inspection)
+
             case TtsModelType.QWEN3TTS_SERVER:
                 from tts_audiobook_tool.menus.voice import VoiceQwen3ServerMenu
                 VoiceQwen3ServerMenu.menu(state)

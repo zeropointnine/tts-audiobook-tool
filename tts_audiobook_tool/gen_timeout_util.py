@@ -25,7 +25,9 @@ so an in-flight inference stays armed until it finishes or times out.
 
 The very first inference of a run is exempt (``GenTimeoutTracker``): it may
 legitimately spend far longer than the cap on first-run model warm-up, lazy
-loading, or a model download.
+loading, or a model download. Single-shot callers (the diagnostic TTS preview)
+use the always-armed ``backend_gen_timeout_scope()`` instead and decide that
+exemption for themselves.
 """
 
 from __future__ import annotations
@@ -154,15 +156,47 @@ class GenTimeoutTracker:
             yield guard
 
 
-def make_backend_gen_timeout_tracker() -> GenTimeoutTracker:
-    """Create a tracker with the current backend's timeout policy."""
+def get_backend_gen_timeout() -> tuple[float, bool]:
+    """
+    Return ``(timeout_seconds, is_remote)`` for the active backend.
+
+    Local backends use ``GEN_TIMEOUT``; SGL-Omni inference is remote, so it
+    gets a more generous last-resort client deadline and remote wording. Both
+    values are read at call time so tests can patch them.
+    """
     # Import lazily to avoid pulling the TTS model registry into this low-level
     # watchdog module during import initialization.
     from tts_audiobook_tool.tts import Tts
 
     if Tts.is_sgl_mode():
-        return GenTimeoutTracker(
-            timeout_seconds=SGL_OMNI_GEN_TIMEOUT,
-            is_remote=True,
-        )
-    return GenTimeoutTracker()
+        return SGL_OMNI_GEN_TIMEOUT, True
+    return GEN_TIMEOUT, False
+
+
+def make_backend_gen_timeout_tracker() -> GenTimeoutTracker:
+    """Create a tracker with the current backend's timeout policy."""
+    timeout_seconds, is_remote = get_backend_gen_timeout()
+    return GenTimeoutTracker(
+        timeout_seconds=timeout_seconds,
+        is_remote=is_remote,
+    )
+
+
+@contextmanager
+def backend_gen_timeout_scope() -> Iterator[GenTimeoutGuard]:
+    """
+    Watch one *single-shot* generation step for GEN_TIMEOUT.
+
+    A ``GenTimeoutTracker`` exempts the first step of a run, because that step
+    may legitimately carry first-run model warm-up, lazy loading, or a
+    download. Callers that make exactly one inference per call (the diagnostic
+    TTS preview) have no "later step" to fall back on, so this scope is always
+    armed; those callers decide the exemption themselves, from what they know
+    about whether the upcoming call can still include model setup.
+    """
+    timeout_seconds, is_remote = get_backend_gen_timeout()
+    with gen_timeout_scope(
+        timeout_seconds=timeout_seconds,
+        is_remote=is_remote,
+    ) as guard:
+        yield guard

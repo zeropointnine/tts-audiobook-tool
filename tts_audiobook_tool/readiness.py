@@ -38,6 +38,18 @@ def get_generate_blocker_text(state: State, verbose=False, is_realtime_playback=
     return format_issues(items, verbose)
 
 
+def get_tts_preview_blocker_text(state: State, verbose: bool = False) -> str:
+    """Return model/voice blockers for an explicit preview prompt.
+
+    Unlike audiobook generation, a preview supplies its own text and therefore
+    does not require imported project phrase groups.
+    """
+    from tts_audiobook_tool.tts import Tts
+
+    items = Tts.get_class().get_blocking_issues(state.project, None)
+    return format_issues(items, verbose)
+
+
 def get_chat_blockers(state: State) -> list[ReadinessIssue]:
     """Returns blocking issues that prevent chat from starting."""
     errors = [] 

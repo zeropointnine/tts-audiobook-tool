@@ -477,7 +477,7 @@ def test_quick_generation_auto_returns_without_concatenation_message() -> None:
     app._pre_terminal_summary(result)
     app.terminal_result = result
 
-    assert app.auto_continue
+    assert app.auto_exit
     assert app.prompt_mode == "auto_return"
     assert app.terminal_summary_extra_lines(result) == []
 
@@ -498,7 +498,7 @@ def test_quick_generation_auto_returns_without_auto_concat() -> None:
     app._pre_terminal_summary(result)
     app.terminal_result = result
 
-    assert app.auto_continue
+    assert app.auto_exit
     assert app.prompt_mode == "auto_return"
     assert app.terminal_summary_extra_lines(result) == []
 
@@ -522,7 +522,7 @@ def test_quick_generation_failed_item_still_waits_for_enter() -> None:
     app._pre_terminal_summary(result)
     app.terminal_result = result
 
-    assert not app.auto_continue
+    assert not app.auto_exit
     assert app.prompt_mode == "finished"
     assert app.terminal_label(result) == "Generation completed."
     assert any("ENTER" in line for line in app.terminal_summary_extra_lines(result))
@@ -549,7 +549,7 @@ def test_quick_generation_interrupted_still_waits_for_enter() -> None:
         app._pre_terminal_summary(result)
         app.terminal_result = result
 
-        assert not app.auto_continue
+        assert not app.auto_exit
         assert app.prompt_mode == "finished"
         # The banner is only suppressed for completions: interrupted quick
         # generations still announce why they stopped.
@@ -574,7 +574,7 @@ def test_regular_generation_still_waits_for_enter_without_auto_concat() -> None:
     app._pre_terminal_summary(result)
     app.terminal_result = result
 
-    assert not app.auto_continue
+    assert not app.auto_exit
     assert app.prompt_mode == "finished"
     # Regular generation always shows the completion banner.
     assert app.terminal_label(result) == "Generation completed."
@@ -652,7 +652,7 @@ def test_quick_generation_app_exits_without_enter_keypress(
             await pilot.pause(0.3)
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.COMPLETED
-            assert app.auto_continue
+            assert app.auto_exit
 
     try:
         run(exercise())
@@ -755,7 +755,7 @@ def test_generation_app_auto_continues_when_auto_concat_enabled(monkeypatch, tmp
             await pilot.pause(0.3)
             assert app.terminal_result is not None
             assert app.terminal_result.status == GenerationTerminalStatus.COMPLETED
-            assert app.auto_continue
+            assert app.auto_exit
 
     try:
         run(exercise())
@@ -1229,3 +1229,56 @@ def test_interface_failure_cleanup_reports_worker_restart_failure(
     assert "RuntimeError: interface exploded" in result.message
     assert "replacement worker failed to start" in result.message
     assert result.hard_reset_cause is HardResetCause.INTERFACE_FAILURE
+
+
+def test_interface_failure_reuses_the_sessions_own_result(
+    monkeypatch, tmp_path
+) -> None:
+    """A session that recorded a result before failing is not re-classified.
+
+    The session already presented its own outcome, so the runner returns it
+    as-is and leaves the (now idle) worker alone instead of hard-resetting it.
+    """
+    state = cast(
+        State,
+        SimpleNamespace(
+            project=SimpleNamespace(
+                dir_path=str(tmp_path),
+                generate_range_string="all",
+            ),
+            prefs=SimpleNamespace(save_gen_log=False),
+        ),
+    )
+    reset_calls: list[None] = []
+    own_result = GenerationModalResult(
+        GenerationTerminalStatus.CANCELLED, "", "", "session outcome"
+    )
+
+    def failing_run(app, **_kwargs):
+        app.operation_id = "job"
+        app.terminal_result = own_result
+        raise RuntimeError("interface exploded after the summary")
+
+    monkeypatch.setattr(ModelWorker, "start", staticmethod(lambda: ""))
+    monkeypatch.setattr(
+        ModelWorker,
+        "reset",
+        staticmethod(lambda: reset_calls.append(None) or ""),
+    )
+    monkeypatch.setattr(generation_app_module, "can_textual", lambda: True)
+    monkeypatch.setattr(GenerationApp, "run", failing_run)
+    monkeypatch.setattr(
+        generation_app_module,
+        "_reconcile_generation_result",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        generation_app_module,
+        "_present_console_result",
+        lambda *_args: None,
+    )
+
+    result = run_generation_app(state, {0}, 1, False)
+
+    assert result is own_result
+    assert reset_calls == []

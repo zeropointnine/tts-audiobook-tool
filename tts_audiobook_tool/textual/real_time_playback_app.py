@@ -38,11 +38,11 @@ from tts_audiobook_tool.textual.textual_shared import can_textual
 from tts_audiobook_tool.textual.worker_app import (
     FINAL_OUTPUT_SETTLE_SECONDS,
     WorkerTextualApp,
+    session_failure_result,
     worker_app_css,
 )
 from tts_audiobook_tool.worker_reset import (
     HardResetCause,
-    HardResetRequest,
     hard_reset_request_from_generation_update,
     perform_hard_reset,
 )
@@ -255,10 +255,16 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         ]
 
     def _pre_terminal_summary(self, result: RealTimePlaybackModalResult) -> None:
+        super()._pre_terminal_summary(result)
         self.waiting_for_continue = False
         self._record_buffer_duration(0.0)
 
     def _post_terminal_summary(self, result: RealTimePlaybackModalResult) -> None:
+        # The base owns the automatic-exit path, which this session does not
+        # use (its exit follows the worker's continue handshake). The deferred
+        # exit below is this app's own: it lets the frozen header and the
+        # audio teardown settle before the screen closes.
+        super()._post_terminal_summary(result)
         if self.exit_after_terminal:
             self.set_timer(0.05, lambda: self.exit(result))
 
@@ -496,6 +502,16 @@ def _present_console_result(result: RealTimePlaybackModalResult) -> None:
         print(result.message)
 
 
+def _make_realtime_failure(
+    message: str, reset_cause: HardResetCause | None
+) -> RealTimePlaybackModalResult:
+    return RealTimePlaybackModalResult(
+        RealTimePlaybackTerminalStatus.FAILED,
+        message,
+        hard_reset_cause=reset_cause,
+    )
+
+
 def run_real_time_playback_modal(
     state: State,
     phrase_groups: list[PhraseGroup],
@@ -521,37 +537,25 @@ def run_real_time_playback_modal(
     try:
         result = app.run(inline=False)
     except Exception as exception:
-        if app.terminal_result is not None:
-            return app.terminal_result
-        message = f"{type(exception).__name__}: {exception}"
-        reset_cause = None
-        if app.operation_id is not None:
-            reset_cause = HardResetCause.INTERFACE_FAILURE
-            message = perform_hard_reset(
-                HardResetRequest(reset_cause, message)
-            ).message
-        result = RealTimePlaybackModalResult(
-            RealTimePlaybackTerminalStatus.FAILED,
-            message,
-            hard_reset_cause=reset_cause,
+        # A session that recorded its own terminal result has already
+        # presented it; only a synthesized failure needs console output.
+        reported = app.terminal_result is not None
+        result = session_failure_result(
+            app,
+            _make_realtime_failure,
+            f"{type(exception).__name__}: {exception}",
         )
-        _present_console_result(result)
+        if not reported:
+            _present_console_result(result)
         return result
     if result is not None:
         return result
-    if app.terminal_result is not None:
-        return app.terminal_result
-    message = "Realtime playback interface closed without a result"
-    reset_cause = None
-    if app.operation_id is not None:
-        reset_cause = HardResetCause.INTERFACE_FAILURE
-        message = perform_hard_reset(
-            HardResetRequest(reset_cause, message)
-        ).message
-    result = RealTimePlaybackModalResult(
-        RealTimePlaybackTerminalStatus.FAILED,
-        message,
-        hard_reset_cause=reset_cause,
+    reported = app.terminal_result is not None
+    result = session_failure_result(
+        app,
+        _make_realtime_failure,
+        "Realtime playback interface closed without a result",
     )
-    _present_console_result(result)
+    if not reported:
+        _present_console_result(result)
     return result

@@ -18,6 +18,9 @@ from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
 )
+from tts_audiobook_tool.textual.word_substitutions_app import (
+    WordSubstitutionPreviewRequested,
+)
 
 
 def make_state() -> State:
@@ -686,9 +689,74 @@ def test_inspect_uncommon_words_reports_none_found(monkeypatch, capsys) -> None:
     assert "None found" in strip_ansi_codes(capsys.readouterr().out)
 
 
+def test_edit_word_substitutions_previews_then_reopens_with_staged_state(
+    monkeypatch,
+) -> None:
+    state = make_state()
+    constructed: list[tuple[State, dict[str, object]]] = []
+    run_results = iter(
+        [
+            ContentAppCompleted(
+                WordSubstitutionPreviewRequested(
+                    "Ariekei",
+                    "AriaKay",
+                    (("Ariekei", "AriaKay"), ("other", "value")),
+                )
+            ),
+            ContentAppCompleted(EditorSaved()),
+        ]
+    )
+    preview_calls: list[tuple[State, str]] = []
+    sound = object()
+
+    def make_editor(passed_state: State, **kwargs):
+        constructed.append((passed_state, kwargs))
+        return object()
+
+    monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", make_editor)
+    monkeypatch.setattr(
+        text_menu_module,
+        "run_content_textual_app",
+        lambda _: next(run_results),
+    )
+    monkeypatch.setattr(
+        text_menu_module,
+        "run_tts_preview_app",
+        lambda passed_state, prompt: (
+            preview_calls.append((passed_state, prompt))
+            or SimpleNamespace(completed=True, sound=sound)
+        ),
+    )
+
+    assert TextMenu.edit_word_substitutions(state) is True
+    assert preview_calls == [
+        (state, "Original word: Ariekei. Substitute word: AriaKay")
+    ]
+    assert constructed == [
+        (
+            state,
+            {
+                "staged": None,
+                "restore_original": None,
+                "preview_sound": None,
+            },
+        ),
+        (
+            state,
+            {
+                "staged": {"Ariekei": "AriaKay", "other": "value"},
+                "restore_original": "Ariekei",
+                "preview_sound": sound,
+            },
+        ),
+    ]
+
+
 def test_edit_word_substitutions_returns_true_on_saved(monkeypatch) -> None:
     errors: list[str] = []
-    monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", lambda _: object())
+    monkeypatch.setattr(
+        text_menu_module, "WordSubstitutionsApp", lambda *_args, **_kwargs: object()
+    )
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
@@ -702,7 +770,9 @@ def test_edit_word_substitutions_returns_true_on_saved(monkeypatch) -> None:
 
 def test_edit_word_substitutions_reports_save_failure(monkeypatch) -> None:
     errors: list[str] = []
-    monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", lambda _: object())
+    monkeypatch.setattr(
+        text_menu_module, "WordSubstitutionsApp", lambda *_args, **_kwargs: object()
+    )
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",
@@ -717,7 +787,9 @@ def test_edit_word_substitutions_reports_save_failure(monkeypatch) -> None:
 
 def test_edit_word_substitutions_reports_launch_failure(monkeypatch) -> None:
     errors: list[str] = []
-    monkeypatch.setattr(text_menu_module, "WordSubstitutionsApp", lambda _: object())
+    monkeypatch.setattr(
+        text_menu_module, "WordSubstitutionsApp", lambda *_args, **_kwargs: object()
+    )
     monkeypatch.setattr(
         text_menu_module,
         "run_content_textual_app",

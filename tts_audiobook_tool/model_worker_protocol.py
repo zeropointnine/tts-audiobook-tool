@@ -67,6 +67,17 @@ class GenerateCommand:
 
 
 @dataclass(frozen=True)
+class TtsPreviewCommand:
+    """Generate one diagnostic prompt without saving a project segment."""
+
+    operation_id: str
+    project_dir: str
+    settings: GenerationSettings
+    prompt: str
+    apply_word_substitutions: bool = False
+
+
+@dataclass(frozen=True)
 class RealTimePlaybackCommand:
     operation_id: str
     project_dir: str
@@ -163,6 +174,7 @@ class ShutdownCommand:
 
 ModelWorkerCommand = (
     GenerateCommand
+    | TtsPreviewCommand
     | RealTimePlaybackCommand
     | ClearModelsCommand
     | ResetChatSessionCommand
@@ -213,6 +225,14 @@ class GenerationFinished:
     operation_id: str
     status: GenerationTerminalStatus
     remaining_range_string: str
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class TtsPreviewFinished:
+    operation_id: str
+    status: GenerationTerminalStatus
+    sound: object | None = None
     message: str = ""
 
 
@@ -324,6 +344,7 @@ ModelWorkerEvent = (
     | ConsoleFlush
     | GenerationUpdate
     | GenerationFinished
+    | TtsPreviewFinished
     | RealTimePlaybackUpdate
     | RealTimePlaybackFinished
     | ModelsCleared

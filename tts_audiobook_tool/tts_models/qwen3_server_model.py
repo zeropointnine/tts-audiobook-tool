@@ -54,7 +54,7 @@ class Qwen3ServerModel(Qwen3ServerBaseModel):
         payloads = []
         for prompt in prompts:
             payload = {
-                "input": self.prepare_text_for_inference(project, prompt),
+                "input": prompt,
                 "stream": is_streaming,
                 "temperature": temperature,
                 "top_p": top_p,

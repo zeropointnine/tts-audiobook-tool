@@ -12,8 +12,9 @@ from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import duration_string
 
-# The bottom header line shows a prompt driven by the app. Quick generation
-# uses auto_return to leave the line blank while returning to the editor.
+# The bottom header line shows a prompt driven by the app. The quick
+# generation and quick preview sessions use auto_return to leave the line
+# blank while returning to their editor.
 PromptMode = Literal[
     "default", "cancel_pending", "finished", "auto_continue", "auto_return"
 ]

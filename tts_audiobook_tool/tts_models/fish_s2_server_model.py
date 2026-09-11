@@ -54,7 +54,7 @@ class FishS2ServerModel(FishS2ServerBaseModel):
 
             # Rem, sgl-omni fish s2 does NOT support seed
             payload = {
-                "input": self.prepare_text_for_inference(project, prompt),
+                "input": prompt,
                 "stream": is_streaming,
                 "temperature": temperature,
                 "top_p": top_p,

@@ -60,7 +60,7 @@ class Zonos2ServerModel(Zonos2ServerBaseModel):
             max_new_tokens = min(200 + (len(prompt.split()) * 40), 4096)
 
             payload = {
-                "input": self.prepare_text_for_inference(project, prompt),
+                "input": prompt,
                 "stream": is_streaming,
                 "max_new_tokens": max_new_tokens,
                 "top_k": top_k,

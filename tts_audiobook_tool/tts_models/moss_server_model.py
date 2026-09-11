@@ -45,7 +45,7 @@ class MossServerModel(MossServerBaseModel):
         for prompt in prompts:
 
             payload = {
-                "input": self.prepare_text_for_inference(project, prompt),
+                "input": prompt,
                 "stream": False,
                 "temperature": temperature,
                 "audio_top_p": audio_top_p,

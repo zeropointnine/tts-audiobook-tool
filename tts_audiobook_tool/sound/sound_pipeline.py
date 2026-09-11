@@ -138,17 +138,26 @@ class SoundPipeline:
         project: Project,
         prompts: list[str],
         force_random_seed: bool = False,
+        *,
+        apply_word_substitutions: bool = True,
     ) -> list[Sound] | str:
         """
         Non-streaming TTS generation paired with app-standard generated-sound
         post-processing.
 
         Returns processed sounds, including zero-length sounds for fully silent
-        outputs. Callers decide how to report silence.
+        outputs. Callers decide how to report silence. Diagnostic prompts may
+        disable project word substitutions without bypassing other inference
+        text preparation.
         """
         from tts_audiobook_tool.tts import Tts
 
-        result = Tts.generate_using_project(project, prompts, force_random_seed)
+        result = Tts.generate_using_project(
+            project,
+            prompts,
+            force_random_seed,
+            apply_word_substitutions=apply_word_substitutions,
+        )
         if isinstance(result, str):
             return result
 
@@ -213,7 +222,8 @@ class SoundPipeline:
     ) -> Sound:
         """
         Applies interactive playback shaping to freshly generated audio.
-        Used by: realtime playback, server non-streaming, and voice chat flows.
+        Used by: realtime playback, server non-streaming, voice chat, and the
+        word-substitutions pronunciation preview.
 
         - Limit silence gaps (optional)
         - Resample to 48k if not already

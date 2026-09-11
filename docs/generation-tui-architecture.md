@@ -33,11 +33,11 @@ A hard reset terminates the worker process and starts a fresh one. Before forced
 
 The protocol in `model_worker_protocol.py` consists of small frozen dataclasses sent through two multiprocessing queues:
 
-- main -> worker: `GenerateCommand`, `ClearModelsCommand`, `ShutdownCommand`
-- worker -> main: `WorkerReady`, `ConsoleOutput`, `ConsoleFlush`, `GenerationUpdate`, `GenerationFinished`, `ModelsCleared`, `WorkerCommandFailed`, `WorkerStopped`
+- main -> worker: `GenerateCommand`, `TtsPreviewCommand`, `ClearModelsCommand`, `ShutdownCommand`
+- worker -> main: `WorkerReady`, `ConsoleOutput`, `ConsoleFlush`, `GenerationUpdate`, `GenerationFinished`, `TtsPreviewFinished`, `ModelsCleared`, `WorkerCommandFailed`, `WorkerStopped`
 - main-synthesized: `WorkerExited` — never sent by the worker; the main process synthesizes it when a client drainer detects that the worker process has died
 
-`GenerationUpdate.update` is typed as the `GenerationEvent` union from `generation_events.py` (`GenerationPhase | GenerationStarted | GenerationProgress | GenerationStats | GenerationTimedOut | ModelUnhealthy`); consumers dispatch on it with `isinstance` instead of parsing console text. The optional sink around `generate_files()` lives in a `contextvar` so the active sink cannot leak between threads or operations.
+`GenerationUpdate.update` is typed as the `GenerationEvent` union from `generation_events.py` (`GenerationPhase | GenerationStarted | GenerationProgress | GenerationStats | GenerationTimedOut | ModelUnhealthy`); consumers dispatch on it with `isinstance` instead of parsing console text. The optional sink around `generate_files()` lives in a `contextvar` so the active sink cannot leak between threads or operations. The diagnostic TTS preview installs the same sink for its single inference, so a `GenerationTimedOut`/`ModelUnhealthy` raised there reaches its session through the same event type and the same reset path.
 
 ## Worker lifecycle
 
@@ -75,6 +75,8 @@ In the generation screen:
 3. In SGL-Omni backend mode the hard reset is not offered — inference is remote and the worker holds no local TTS model memory — so additional Ctrl-C presses are ignored and the session waits for the cooperative cancel.
 
 The UI remains responsive while a blocking inference call finishes. The hard-reset action runs on a Textual thread worker so process termination does not block rendering. The GEN_TIMEOUT watchdog remains the automatic hang backstop in both backend modes; it is what actually recovers a wedged worker in SGL-Omni mode, where no manual dump exists.
+
+The diagnostic TTS preview (`TtsPreviewApp`) is a third worker session and follows the same rules, with one difference in how the watchdog's run-scoped exemption is applied. `GenTimeoutTracker` exempts the first generation step of a run because that step may carry model warm-up, lazy loading, or a download; a preview makes exactly one inference per command, so there is no later step to arm. `_should_watch_preview_inference()` decides per call instead, and `backend_gen_timeout_scope()` supplies the always-armed scope: the first preview inference of a worker process, and any preview whose model instance is not resident (eg after `Options > Unload models`), run unwatched; every other preview inference runs armed and can therefore trigger the same hard reset as a generation run.
 
 Every reset request carries an explicit `HardResetCause` (`USER_ESCALATION`, `GENERATION_TIMEOUT`, `MODEL_UNHEALTHY`, `INTERFACE_FAILURE`; see `worker_reset.py`), so alert/policy behavior is derived from the cause rather than inferred from message text. Trigger text states that a reset is *required* rather than claiming it succeeded; the terminal summary appends any replacement-startup error reported by `ModelWorker.reset()`.
 

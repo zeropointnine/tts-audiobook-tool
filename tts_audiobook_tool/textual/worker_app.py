@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Callable, ClassVar, Generic, Protocol, TypeVar
 
 from textual import events
 from textual.app import App, ComposeResult
@@ -233,7 +233,8 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
     summary flow. Concrete apps supply the session-specific pieces through
     class variables (the divider and output ids, the header refresh rate)
     and small hooks (job submission, session-event dispatch, update
-    handling, terminal result and summary formatting, header rendering).
+    handling, terminal result and summary formatting, automatic exit,
+    header rendering).
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -270,6 +271,9 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         self.reset_outcome: HardResetOutcome | None = None
         self.finishing = False
         self.terminal_result: ResultT | None = None
+        # Set by ``_pre_terminal_summary`` from ``should_auto_exit``: whether
+        # this result ends the session on its own instead of waiting for ENTER.
+        self.auto_exit = False
         # Ctrl+F opens the bottom find bar over the log; typing edits the
         # query, Enter submits it (next match), Shift+Enter goes back. While
         # find owns focus, the session's Enter/CTRL-C bindings are disabled in
@@ -593,10 +597,29 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         self._post_terminal_summary(result)
 
     def _pre_terminal_summary(self, result: ResultT) -> None:
-        """Reset session-specific state before the result is recorded."""
+        """Reset session-specific state before the result is recorded, and
+        record whether the result ends the session on its own."""
+        self.auto_exit = self.should_auto_exit(result)
+
+    def should_auto_exit(self, result: ResultT) -> bool:
+        """Whether this terminal result leaves the screen on its own instead
+        of waiting for the user to press ENTER.
+
+        The quick-generation and quick-preview sessions override this: both
+        reopen their editor on a clean completion rather than waiting for a
+        keypress. A session that returns True must render a prompt mode that
+        reflects the automatic exit and must not print an ENTER hint.
+
+        Realtime playback does not participate: its exit follows a worker
+        continue handshake, not a completion predicate.
+        """
+        return False
 
     def _post_terminal_summary(self, result: ResultT) -> None:
-        """Run session-specific effects after the summary is rendered."""
+        """Run session-specific effects after the summary is rendered, and
+        leave immediately when the result needs no review."""
+        if self.auto_exit:
+            self.action_continue()
 
     def _suppress_terminal_summary_ui(self) -> bool:
         """Whether the summary must not touch the on-screen UI or header."""
@@ -796,3 +819,31 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         """Dismiss find mode for clicks anywhere outside its text input."""
         if self.find_active and event.widget is not self.query_one("#find-input", Input):
             self.close_find()
+
+
+def session_failure_result(
+    app: WorkerTextualApp[ResultT],
+    make_result: Callable[[str, HardResetCause | None], ResultT],
+    message: str,
+) -> ResultT:
+    """Classify a worker session that raised or returned no result.
+
+    Returns the session's own terminal result when it recorded one before
+    failing, so a caller never re-derives an outcome the session already
+    presented. Otherwise the failure is attributed to the interface and the
+    model worker is hard-reset first: the interface died while its worker was
+    mid-job, and leaving it running would strand the inference and its
+    resident model memory.
+
+    ``make_result`` builds the caller's own failure result, because each
+    session type has its own result dataclass (generation additionally
+    carries the remaining range and the transcript path). The caller decides
+    how the result is presented; this helper only classifies it.
+    """
+    if app.terminal_result is not None:
+        return app.terminal_result
+    reset_cause: HardResetCause | None = None
+    if app.operation_id is not None:
+        reset_cause = HardResetCause.INTERFACE_FAILURE
+        message = perform_hard_reset(HardResetRequest(reset_cause, message)).message
+    return make_result(message, reset_cause)

@@ -1,10 +1,19 @@
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import cast
+from unittest.mock import patch
 
+import numpy as np
 from rich.text import Text
 from textual.widgets import Input, OptionList, Rule, Static
 
+from tts_audiobook_tool.app_types import HighShelfEq, Sound
+from tts_audiobook_tool.constants import APP_SAMPLE_RATE
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.sound.play_sound_util import PlaySoundUtil
+from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual.alert_dialog import AlertDialog
 from tts_audiobook_tool.textual.content_textual_app import (
     EditorSaveFailed,
     EditorSaved,
@@ -17,9 +26,11 @@ from tts_audiobook_tool.textual.word_substitutions_app import (
     ADD_ITEM_LABEL,
     NO_ITEMS_LABEL,
     WordSubstitutionItem,
+    WordSubstitutionPreviewRequested,
     WordSubstitutionSentinel,
     WordSubstitutionsApp,
     fit_cell,
+    make_word_substitution_preview_prompt,
 )
 from tts_audiobook_tool.textual.word_substitutions_dialog import (
     WordSubstitutionEdit,
@@ -34,10 +45,17 @@ class StubWordSubstitutionsProject:
     word_substitutions: dict[str, str] = field(default_factory=dict)
     save_error: str = ""
     save_calls: int = 0
+    # Playback-shaping inputs read by the preview autoplay path.
+    high_shelf: HighShelfEq = HighShelfEq.DISABLED
+    limit_silence_gaps: bool = False
+    limit_silence_gaps_duration: float = 0.5
 
     def save(self) -> str:
         self.save_calls += 1
         return self.save_error
+
+    def get_high_shelf(self) -> HighShelfEq:
+        return self.high_shelf
 
 
 def make_app(
@@ -47,7 +65,8 @@ def make_app(
     project = StubWordSubstitutionsProject(
         dict(values or {}), save_error=save_error
     )
-    app = WordSubstitutionsApp(cast(Project, project))
+    state = cast(State, SimpleNamespace(project=cast(Project, project)))
+    app = WordSubstitutionsApp(state)
     return app, project
 
 
@@ -310,6 +329,160 @@ def test_pressing_x_on_sentinel_rows_deletes_nothing() -> None:
             await pilot.pause()
             assert app.staged == {}
             assert str(app.query_one("#status-left", Static).render()) == ""
+
+    run(exercise())
+
+
+def test_preview_prompt_uses_both_literal_row_values() -> None:
+    assert make_word_substitution_preview_prompt("Ariekei", "AriaKay") == (
+        "Original word: Ariekei. Substitute word: AriaKay"
+    )
+
+
+def test_pressing_q_requests_preview_and_carries_unsaved_staged_state() -> None:
+    app, project = make_app({"apple": "a", "zebra": "z"})
+    app.handle_dialog_result(WordSubstitutionEdit("apple", "ay"))
+
+    async def exercise() -> None:
+        with patch(
+            "tts_audiobook_tool.textual.word_substitutions_app."
+            "readiness.get_tts_preview_blocker_text",
+            return_value="",
+        ):
+            async with app.run_test() as pilot:
+                await pilot.press("q")
+                await pilot.pause()
+
+    run(exercise())
+    assert project.save_calls == 0
+    assert app.return_value == WordSubstitutionPreviewRequested(
+        original="apple",
+        substitution="ay",
+        staged_items=(("apple", "ay"), ("zebra", "z")),
+    )
+
+
+def test_pressing_q_on_sentinel_rows_does_nothing() -> None:
+    app, _ = make_app()
+
+    async def exercise() -> None:
+        async with app.run_test() as pilot:
+            # No preview sound restored: the playback-status poll stays off.
+            assert app.preview_status_timer is None
+            await pilot.press("q")
+            await pilot.pause()
+            assert app.is_running is True
+            assert app.return_value is None
+
+            await pilot.press("down", "q")
+            await pilot.pause()
+            assert app.is_running is True
+            assert app.return_value is None
+
+    run(exercise())
+
+
+def test_preview_blocker_keeps_editor_open() -> None:
+    app, _ = make_app({"apple": "ay"})
+
+    async def exercise() -> None:
+        with patch(
+            "tts_audiobook_tool.textual.word_substitutions_app."
+            "readiness.get_tts_preview_blocker_text",
+            return_value="Choose a voice",
+        ):
+            async with app.run_test() as pilot:
+                await pilot.press("q")
+                await pilot.pause()
+                assert app.is_running is True
+                assert isinstance(app.screen, AlertDialog)
+                assert app.screen.copy == "Choose a voice"
+
+                # "q" must not fire while the modal alert is open: it would
+                # otherwise stack another alert or bypass the dialog.
+                await pilot.press("q")
+                await pilot.pause()
+                assert app.is_running is True
+                assert app.return_value is None
+                assert len(app.screen_stack) == 2
+
+    run(exercise())
+
+
+def test_restored_preview_selects_row_and_autoplays_in_memory_sound() -> None:
+    project = StubWordSubstitutionsProject({"apple": "a", "Banana": "b"})
+    state = cast(State, SimpleNamespace(project=cast(Project, project)))
+    sound = Sound(np.zeros(2_400, dtype=np.float32), 24_000)
+    app = WordSubstitutionsApp(
+        state,
+        restore_original="Banana",
+        preview_sound=sound,
+    )
+
+    async def exercise() -> None:
+        with (
+            patch.object(
+                PlaySoundUtil, "play_sound_async", return_value="preview-id"
+            ) as play,
+            patch.object(
+                PlaySoundUtil, "current_sound_id", return_value="preview-id"
+            ),
+            patch.object(PlaySoundUtil, "stop_sound_async", return_value=True),
+        ):
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                assert app.selected_index == 1
+                # Playback receives the app-shaped sound, not the raw model
+                # output: playback shaping resamples to the app sample rate.
+                played = play.call_args.args[0]
+                assert played is not sound
+                assert played.sr == APP_SAMPLE_RATE
+                assert len(played.data) == 2 * len(sound.data)
+                assert app.preview_sound is None
+                assert app.preview_sound_id == "preview-id"
+                # The playback-status poll is installed lazily with playback.
+                assert app.preview_status_timer is not None
+
+    run(exercise())
+
+
+def test_restored_preview_shapes_playback_with_project_settings() -> None:
+    """The preview applies interactive playback shaping like the other paths."""
+    project = StubWordSubstitutionsProject(
+        {"apple": "a"},
+        high_shelf=HighShelfEq.MODERATE,
+        limit_silence_gaps=True,
+        limit_silence_gaps_duration=1.25,
+    )
+    state = cast(State, SimpleNamespace(project=cast(Project, project)))
+    sound = Sound(np.zeros(240, dtype=np.float32), 24_000)
+    app = WordSubstitutionsApp(state, preview_sound=sound)
+    shaped = Sound(np.zeros(480, dtype=np.float32), APP_SAMPLE_RATE)
+
+    async def exercise() -> None:
+        with (
+            patch.object(
+                SoundPipeline,
+                "prepare_generated_sound_for_playback",
+                return_value=shaped,
+            ) as prepare,
+            patch.object(
+                PlaySoundUtil, "play_sound_async", return_value="preview-id"
+            ) as play,
+            patch.object(
+                PlaySoundUtil, "current_sound_id", return_value="preview-id"
+            ),
+            patch.object(PlaySoundUtil, "stop_sound_async", return_value=True),
+        ):
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                prepare.assert_called_once_with(
+                    sound,
+                    high_shelf=HighShelfEq.MODERATE,
+                    limit_silence_gaps=True,
+                    limit_silence_gaps_duration=1.25,
+                )
+                play.assert_called_once_with(shaped)
 
     run(exercise())
 
