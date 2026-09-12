@@ -21,6 +21,7 @@ from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import DeviceType, Hint
 from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.tts_models.chatterbox_api_detect import ChatterboxApiDetect
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 # This pulls in some dependencies we would ideally first like to test for the existence of,
@@ -103,7 +104,7 @@ class Start:
         if not self.is_server:
             self.exit_on_missing_ffmpeg_exe()
         self.exit_on_missing_ffmpeg_libs()
-        self.exit_on_chatterbox_python_version()
+        self.exit_on_incompatible_chatterbox_package()
         self.exit_on_missing_new_packages()
 
         self.show_startup_hints()
@@ -224,12 +225,13 @@ class Start:
                 printt(COL_ERROR + FfmpegUtil.SHARED_LIBS_MISSING_MESSAGE)
                 exit(1)
 
-    def exit_on_chatterbox_python_version(self) -> None:
-        # Chatterbox special case, Python v3.11, legacy guard
-        if Tts.get_type() == TtsModelType.CHATTERBOX:
-            if sys.version_info.major > 3 or (sys.version_info.major == 3 and sys.version_info.minor > 11):
-                hints.show_hint(HINT_CHATTERBOX_PYTHON_DOWNGRADE)
-                exit(1)
+    def exit_on_incompatible_chatterbox_package(self) -> None:
+        if (
+            Tts.get_type() == TtsModelType.CHATTERBOX
+            and not ChatterboxApiDetect.has_required_v3_features()
+        ):
+            hints.print_hint(HINT_CHATTERBOX_PACKAGE_UPDATE)
+            exit(1)
 
     def exit_on_missing_new_packages(self) -> None:
 

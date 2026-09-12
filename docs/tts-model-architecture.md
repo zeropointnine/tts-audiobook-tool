@@ -80,7 +80,6 @@ Key fields of `TtsModelSpec` most relevant to integration:
 | `local_torch_devices` | Supported torch device types for local inference (empty for server variants and models that don't take a device) |
 | `file_tag` | Short identifier used in generated filenames (e.g. `"glm"`, `"chatterbox"`) |
 | `default_output_sample_rate` | Native/default output sample rate; used directly by static-rate models and as the fallback for dynamically configured models |
-| `max_words_default` / `max_words_reco_range` | App-recommended segment length settings for the model |
 | `voice_target_attr` | Name of the `Project` attribute that stores the voice clone filename (empty if not applicable) |
 | `requires_voice` | Whether generation is blocked without a voice clone |
 | `voice_transcript_attr` | Name of the `Project` attribute for the voice clone transcript (empty = not needed) |
@@ -122,6 +121,7 @@ Defines the interface all models must satisfy:
 - `kill() -> None` — abstract; nulls out internal model references to aid garbage collection
 - `generate_using_project(project, prompts, force_random_seed, on_stream_chunk, on_stream_end, voice_selection_index) -> list[Sound] | str` — abstract; the main generation entry point (stream callbacks only used when `INFO.can_stream`)
 - `get_output_sample_rate(project, instance) -> int` — concrete classmethod returning `INFO.default_output_sample_rate`; GLM overrides it to return the project-configurable `glm_sr`
+- `get_max_words_range_reco(project, instance) -> tuple[int, int, str]` — concrete classmethod returning the app-recommended max-words-per-segment range for the model plus an optional rationale string (empty by default); the range default comes from the global constants (`MAX_WORDS_PER_SEGMENT_RECO_RANGE`), and models with model-specific recommendations override it with their own class constants (currently GLM, Higgs V2, IndexTTS2, Oute, Chatterbox, VibeVoice, and the NONE placeholder)
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
 - `prepare_text_for_inference(project, text) -> str` — concrete; the full pre-inference pipeline: project word substitutions → generic prompt normalization (incl. `un_all_caps`) → `massage_for_inference`
 - `clear_stream_state()` / `clear_continuation()` — concrete hooks for streaming and rolling-continuation state
@@ -140,7 +140,6 @@ Classmethods and helpers with default implementations (override when the default
 - `get_missing_voice_file_issue(project, voice_file_name_attr) -> ReadinessIssue | None`
 - `should_trim_trailing_token_noise(project, instance) -> bool`
 - `can_hallucinate_music(project, instance) -> bool`
-- `get_strictness_warning(strictness, project, instance) -> str`
 
 ### Level 2 — `AbcBaseModel(TtsBaseModel)`
 

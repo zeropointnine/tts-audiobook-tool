@@ -168,8 +168,8 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
         case TtsModelType.CHATTERBOX:
             from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
             from tts_audiobook_tool.tts_models.chatterbox_model import ChatterboxModel
-            # Project default: the first enum member (multilingual)
-            return ChatterboxModel(ChatterboxType.MULTILINGUAL, DeviceType.CUDA), None
+            # Project default: Chatterbox Multilingual V3
+            return ChatterboxModel(ChatterboxType.MULTILINGUAL_V3, DeviceType.CUDA), None
 
         case TtsModelType.FISH_S1:
             from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel

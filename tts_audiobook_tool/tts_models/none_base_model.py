@@ -15,6 +15,8 @@ class NoneBaseModel(TtsBaseModel):
 
     INFO = TtsModelType.NONE.value
 
+    MAX_WORDS_PER_SEGMENT_RECO_RANGE = (0, 0)
+
     def set_voice_clone(self, path: str) -> None:
         ...
 

@@ -9,9 +9,13 @@ from tts_audiobook_tool.menus.project_menu import ProjectMenu
 from tts_audiobook_tool.menus.tools_menu import ToolsMenu
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.constants_hints import HINT_SGL_OMNI_URL
+from tts_audiobook_tool.constants_hints import (
+    HINT_CHATTERBOX_MULTILINGUAL_V3,
+    HINT_SGL_OMNI_URL,
+)
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.menus.text_menu import TextMenu
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -90,9 +94,19 @@ class MainMenu:
             # The SGL-Omni URL hint may only appear the first time the main menu is shown
             is_first_show = not state.has_shown_main_menu
             state.mark_main_menu_shown()
+            if not is_first_show:
+                return
+
             if (
-                is_first_show
-                and Tts.is_sgl_mode()
+                Tts.get_type() == TtsModelType.CHATTERBOX
+                and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL_V2
+            ):
+                hints.show_hint_if_necessary(
+                    state.prefs, HINT_CHATTERBOX_MULTILINGUAL_V3
+                )
+
+            if (
+                Tts.is_sgl_mode()
                 and not state.prefs.sgl_omni_url
                 and not SglOmniUtil.get_model_id()
             ):

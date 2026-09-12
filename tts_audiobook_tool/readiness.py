@@ -26,7 +26,7 @@ def get_generate_blockers(state: State, is_realtime_audiobook: bool=False) -> li
                 ReadinessIssue("text", "Text must be imported into the project")
             )
 
-    model_errors = Tts.get_class().get_blocking_issues(state.project, None) 
+    model_errors = Tts.get_class().get_blocking_issues(state.project, None)
     if model_errors:
         items.extend(model_errors)
 
@@ -52,13 +52,13 @@ def get_tts_preview_blocker_text(state: State, verbose: bool = False) -> str:
 
 def get_chat_blockers(state: State) -> list[ReadinessIssue]:
     """Returns blocking issues that prevent chat from starting."""
-    errors = [] 
-    
+    errors = []
+
     # Hotkeys
     if not ask.can_hotkey:
         errors.append(ReadinessIssue("terminal hotkey support", "Terminal does not have hotkey capabilities"))
 
-    # Microphone 
+    # Microphone
     sound_input_error = SoundInputDeviceInfo.get_check_error()
     if sound_input_error:
         errors.append(ReadinessIssue("microphone", sound_input_error))
@@ -74,7 +74,7 @@ def get_chat_blockers(state: State) -> list[ReadinessIssue]:
 
     # TTS Model generation readiness
     from tts_audiobook_tool.tts import Tts
-    model_errors = Tts.get_class().get_blocking_issues(state.project, None) 
+    model_errors = Tts.get_class().get_blocking_issues(state.project, None)
     if model_errors:
         errors.extend(model_errors)
 
@@ -90,7 +90,7 @@ def format_issues(issues: list[ReadinessIssue], verbose=False) -> str:
     if not issues:
         return ""
     if len(issues) == 1:
-        if verbose: 
+        if verbose:
             return issues[0].verbose
         else:
             return f"requires {issues[0].short}"

@@ -52,7 +52,7 @@ class FakeChatterbox:
 def make_model() -> ChatterboxModel:
     model = ChatterboxModel.__new__(ChatterboxModel)
     model._device_type = DeviceType.CPU
-    model._model_type = ChatterboxType.MULTILINGUAL
+    model._model_type = ChatterboxType.MULTILINGUAL_V3
     model._chatterbox = FakeChatterbox()
     return model
 
@@ -61,7 +61,7 @@ def generate(model: ChatterboxModel, voice_path: str):
     return model.generate(
         text="Test sentence.",
         voice_path=voice_path,
-        repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML,
+        repetition_penalty=ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML_V3,
         seed=1,
         exaggeration=ChatterboxBaseModel.DEFAULT_EXAGGERATION,
         cfg=ChatterboxBaseModel.DEFAULT_CFG,
@@ -164,3 +164,50 @@ def test_chatterbox_no_voice_path_bypasses_cache(tmp_path):
     # The lazy cache attribute is only created on first use
     assert getattr(model, "_voice_clone_cache", None) in (None, {})
     assert model._chatterbox.conds is None
+
+
+@pytest.mark.parametrize(
+    ("model_type", "expected_t3_model"),
+    [
+        (ChatterboxType.MULTILINGUAL_V2, "v2"),
+        (ChatterboxType.MULTILINGUAL_V3, "v3"),
+    ],
+)
+def test_multilingual_loader_receives_checkpoint_selector(
+    monkeypatch, model_type, expected_t3_model
+):
+    calls = []
+
+    class FakeMultilingualLoader:
+        @classmethod
+        def from_pretrained(cls, **kwargs):
+            calls.append(kwargs)
+            return FakeChatterbox()
+
+    monkeypatch.setattr(
+        "tts_audiobook_tool.tts_models.chatterbox_model.ChatterboxMultilingualTTS",
+        FakeMultilingualLoader,
+    )
+
+    ChatterboxModel(model_type, DeviceType.CPU)
+
+    assert calls == [{"device": "cpu", "t3_model": expected_t3_model}]
+
+
+def test_turbo_loader_does_not_receive_multilingual_selector(monkeypatch):
+    calls = []
+
+    class FakeTurboLoader:
+        @classmethod
+        def from_pretrained(cls, **kwargs):
+            calls.append(kwargs)
+            return FakeChatterbox()
+
+    monkeypatch.setattr(
+        "tts_audiobook_tool.tts_models.chatterbox_model.ChatterboxTurboTTS",
+        FakeTurboLoader,
+    )
+
+    ChatterboxModel(ChatterboxType.TURBO, DeviceType.CPU)
+
+    assert calls == [{"device": "cpu"}]

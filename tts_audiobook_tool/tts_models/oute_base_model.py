@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tts_audiobook_tool.app_types import Strictness, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
@@ -20,6 +20,8 @@ class OuteBaseModel(TtsBaseModel):
     INFO = TtsModelType.OUTE.value
 
     DEFAULT_TEMPERATURE = 0.4 # from model library code
+
+    MAX_WORDS_PER_SEGMENT_RECO_RANGE = (40, 40)
 
     def create_speaker(self, path: str) -> dict | str:
         ...
@@ -79,9 +81,3 @@ class OuteBaseModel(TtsBaseModel):
         its in-memory voice dict.
         """
         return super().get_missing_voice_file_issue(project, "oute_voice_file_name")
-
-    @classmethod
-    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
-        if strictness.level >= Strictness.HIGH.level:
-            return "Not recommended with current TTS model"
-        return ""

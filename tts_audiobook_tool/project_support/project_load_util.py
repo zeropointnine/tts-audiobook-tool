@@ -179,6 +179,7 @@ class ProjectLoadUtil:
             ('fish_temperature', 'fish_s1_temperature'),
             ('fish_seed', 'fish_s1_seed'),
             ('higgs_v3_voice_text', 'higgs_v3_voice_transcript'),
+            ('chatterbox_ml_repetition_penalty', 'chatterbox_ml_v2_repetition_penalty'),
         ]:
             if new not in d and old in d:
                 d[new] = d.pop(old)

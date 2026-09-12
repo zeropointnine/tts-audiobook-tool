@@ -1,12 +1,16 @@
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.constants_hints import HINT_SGL_OMNI_URL
+from tts_audiobook_tool.constants_hints import (
+    HINT_CHATTERBOX_MULTILINGUAL_V3,
+    HINT_SGL_OMNI_URL,
+)
 from tts_audiobook_tool.menus.main_menu import MainMenu, get_heading_tts_text
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.tts import Tts
+from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 from tts_audiobook_tool.util import COL_ERROR
 
@@ -46,6 +50,49 @@ def test_main_menu_on_shown_marks_main_menu_shown(monkeypatch):
         restore_tts_and_sgl_state(saved)
 
     assert marks == [True]
+
+
+def test_main_menu_on_shown_shows_v3_hint_for_chatterbox_v2(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    state = None
+    try:
+        Tts._type = TtsModelType.CHATTERBOX
+        Tts._backend_mode = TtsBackendKind.LOCAL
+        state = make_state()
+        state.project.chatterbox_type = ChatterboxType.MULTILINGUAL_V2
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == [(state.prefs, HINT_CHATTERBOX_MULTILINGUAL_V3)]
+
+
+def test_main_menu_on_shown_skips_v3_hint_for_chatterbox_v3(monkeypatch):
+    saved = preserve_tts_and_sgl_state()
+    hint_calls = []
+    try:
+        Tts._type = TtsModelType.CHATTERBOX
+        Tts._backend_mode = TtsBackendKind.LOCAL
+        state = make_state()
+        state.project.chatterbox_type = ChatterboxType.MULTILINGUAL_V3
+        state.mark_main_menu_shown = lambda: None  # type: ignore[method-assign]
+        monkeypatch.setattr(
+            hints, "show_hint_if_necessary",
+            lambda prefs, hint, **kwargs: hint_calls.append((prefs, hint)),
+        )
+
+        _capture_and_invoke_on_shown(monkeypatch, state)
+    finally:
+        restore_tts_and_sgl_state(saved)
+
+    assert hint_calls == []
 
 
 def test_main_menu_on_shown_shows_sgl_omni_url_hint_when_offline_and_unset(monkeypatch):

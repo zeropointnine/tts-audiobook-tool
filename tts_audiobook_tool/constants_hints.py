@@ -109,16 +109,21 @@ f"""The currently installed version of torch may be incompatible with faster-whi
 Either downgrade your version of torch (see README file), or change the Whisper
 device to CPU ({COL_ACCENT}Options > Whisper config > CPU{COL_DEFAULT}).""")
 
-HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE = """The project's source text word count per segment (%1)
-exceeds the application's recommended range for the current TTS model (%2).
-Make sure this is what you want before generating audio."""
+HINT_CHATTERBOX_MULTILINGUAL_V3 = Hint(
+    "chatterbox_multilingual_v3",
+    "Chatterbox Multilingual V3 is now available",
+"""This project's model is currently set to Chatterbox Multilingual V2.
+The newer version, V3, offers improved accuracy.
+Consider selecting "Chatterbox-Multilingual V3" under Voice settings."""
+)
 
-HINT_CHATTERBOX_PYTHON_DOWNGRADE = Hint(
-    "chatterbox_python_downgrade",
-    "The app's requirements for Chatterbox have changed",
-"""To run the Chatterbox model, the app now requires a virtual environment running Python 3.11 (which is a downgrade).
-Please re-install your Chatterbox-specific virtual environment using Python v3.11 by following the procedure described in the README.
-You could also choose to roll back to a previous commit if you do not care about the most recent updates..."""
+HINT_CHATTERBOX_PACKAGE_UPDATE = Hint(
+    "",
+    "Chatterbox is out of date",
+"""From your Chatterbox virtual environment, please run:
+
+pip uninstall chatterbox-tts
+pip install -r requirements-chatterbox.txt"""
 )
 
 HINT_VALIDATION_UNSUPPORTED_LANGUAGE = Hint(

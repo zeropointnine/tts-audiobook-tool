@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import os
 from typing import Any, Callable, TYPE_CHECKING
 
-from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, Strictness, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import DeviceType, Sound, StreamChunkCallback, StreamEndCallback, VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
@@ -280,6 +280,40 @@ class TtsBaseModel(ABC):
     # Class methods - these are not instance-dependent, and in some cases are "instance-optional"
 
     @classmethod
+    def get_max_words_range_reco(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> tuple[int, int, str]:
+        """
+        The app's recommended max-words-per-segment range (min, max) for the model,
+        plus an optional identifier used for disambiguation
+        (eg, "Chatterbox Multilingual V2" as opposed to any Chatterbox model).
+
+        Defaults to the global constant. Models with model/configuration-specific
+        recommendations should override this method.
+        """
+        return MAX_WORDS_PER_SEGMENT_RECO_RANGE
+
+    @classmethod
+    def get_max_words_exceed_warning(cls, project: Project) -> str:
+        """
+        Returns warning text when the project's applied max words per segment
+        exceeds the model's recommended maximum, else "".
+        """
+        reco = cls.get_max_words_range_reco(project)
+        limit = reco[1]
+        if limit <= 0:
+            return ""
+        if project.applied_max_words <= limit:
+            return ""
+
+        name = reco[2] or cls.INFO.ui.get("proper_name") or cls.INFO.id
+        return (
+            f"{Ansi.ITALICS}Source text's max word length ({project.applied_max_words})"
+            f" exceeds {name} recommended model limit ({limit})\n"
+            f"{Ansi.ITALICS}Output accuracy may be degraded"
+        )
+
+    @classmethod
     def get_output_sample_rate(
             cls, project: Project, instance: TtsBaseModel | None = None
     ) -> int:
@@ -319,9 +353,18 @@ class TtsBaseModel(ABC):
     def get_warning_issues(self, project: Project) -> list[str]:
         """ Returns warning info based on the state of `project` and `self` """
 
+        warnings = []
+
         # Default implementation returns random voice warning if any
         warning = self._get_standard_random_voice_reason(project)
-        return [warning] if warning else []
+        if warning:
+            warnings.append(warning)
+
+        max_words_warning = self.get_max_words_exceed_warning(project)
+        if max_words_warning:
+            warnings.append(max_words_warning)
+
+        return warnings
 
     @classmethod
     def get_voice_tag(cls, project: Project) -> str:
@@ -466,19 +509,6 @@ class TtsBaseModel(ABC):
 
         # Voice is not required, and no voice file specified
         return "Note: Generated voices may vary because no voice reference has been configured."
-
-    @classmethod
-    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
-        """
-        Reason why the given validation `strictness` is discouraged, if any
-        """
-        return TtsBaseModel.default_strictness_warning_reason(strictness, project)
-
-    @staticmethod
-    def default_strictness_warning_reason(strictness: Strictness, project: Project) -> str:
-        if strictness.level >= Strictness.HIGH.level and project.language_code != "en":
-            return f"Not recommended when language code != en"
-        return ""
 
 _PARAMS_PRINT_BLACKLIST = [
     "TtsBaseModel", "self", "print_params",

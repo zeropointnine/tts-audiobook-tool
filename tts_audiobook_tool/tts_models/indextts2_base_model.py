@@ -22,6 +22,12 @@ class IndexTts2BaseModel(TtsBaseModel):
     DEFAULT_TOP_K = 30
 
     @classmethod
+    def get_max_words_range_reco(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> tuple[int, int, str]:
+        return (40, 60, "")
+
+    @classmethod
     def get_blocking_issues(
             cls, project: Project, instance: TtsBaseModel | None
     ) -> list[ReadinessIssue]:

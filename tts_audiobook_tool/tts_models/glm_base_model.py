@@ -9,10 +9,15 @@ else:
     Project = object
 
 class GlmBaseModel(TtsBaseModel):
-    
+
     INFO = TtsModelType.GLM.value
-    
     SAMPLE_RATES = [24000, 32000]
+
+    @classmethod
+    def get_max_words_range_reco(
+            cls, project: Project, instance: TtsBaseModel | None = None
+    ) -> tuple[int, int, str]:
+        return (40, 60, "")
 
     @classmethod
     def get_output_sample_rate(
@@ -27,7 +32,7 @@ class GlmBaseModel(TtsBaseModel):
             sr = cls.INFO.default_output_sample_rate
         return sr
 
-    @classmethod 
+    @classmethod
     def get_menu_text(
         cls, project: Project, instance: TtsBaseModel | None = None
     ) -> str:

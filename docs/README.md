@@ -1,6 +1,6 @@
 # Supporting documentation
 
-This directory contains supporting documentation for `tts-audiobook-tool`. These documents are machine-generated and are intended to make the app's design easier to understand, extend, and revisit over time.
+This directory contains supporting documentation for `tts-audiobook-tool`. These documents are machine-generated and are intended to make the app's design and individual 'subsystems' easier to ingest, reason about, and revisit over time. That motivation applies equally to human contributors and machines: the docs are meant to provide useful, structured context for both developers and LLM-based tools working on the codebase.
 
 The collection is intentionally mixed in scope. Some files describe conventional architectural concerns, while others capture focused notes on specific subsystems, design and implementation details, or experimental features. As a result, these docs should be read as both contributor-facing design context and a looser set of working notes about how different parts of the app fit together.
 

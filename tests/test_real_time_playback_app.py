@@ -513,13 +513,11 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         "get_instance",
         lambda: SimpleNamespace(get_warning_issues=lambda project: None),
     )
-    heading_calls: list[tuple[list[int], bool]] = []
+    heading_calls: list[list[int]] = []
     monkeypatch.setattr(
         real_time_playback.GenerateUtil,
         "print_batch_heading",
-        lambda indices, voice_index=None, show_divider=True: heading_calls.append(
-            (indices, show_divider)
-        ),
+        lambda indices, voice_index=None: heading_calls.append(indices),
     )
 
     state = cast(
@@ -555,7 +553,7 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
         )
 
     assert result.status is real_time_playback.RealTimePlaybackRunStatus.COMPLETED
-    assert heading_calls == [([0], False), ([1], True)]
+    assert heading_calls == [[0], [1]]
     buffer_idx = next(
         i for i, e in enumerate(received) if isinstance(e, RealTimePlaybackBuffer)
     )

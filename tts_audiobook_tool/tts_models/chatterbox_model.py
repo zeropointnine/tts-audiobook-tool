@@ -30,10 +30,6 @@ class ChatterboxModel(ChatterboxBaseModel):
     # retaining several voices at once costs only a few MB of RAM per voice.
     RETAINS_MULTIPLE_VOICE_CLONES = True
 
-    # Layer indices hooked by chatterbox's AlignmentStreamAnalyzer (see
-    # `_strip_alignment_analyzer_hooks`).
-    _ALIGNED_ATTN_LAYER_INDICES = (9, 12, 13)
-
     def __init__(self, model_type: ChatterboxType, device: DeviceType):
 
         self._device_type = device
@@ -43,14 +39,16 @@ class ChatterboxModel(ChatterboxBaseModel):
         multilingual_loader: Any = ChatterboxMultilingualTTS
         turbo_loader: Any = ChatterboxTurboTTS
 
-        match self._model_type:
-            case ChatterboxType.MULTILINGUAL:
-                # Pass the normalized device string instead of torch.device(...).
-                # Upstream Chatterbox checks for values like "cpu" and "mps"
-                # before deciding whether to remap CUDA-saved checkpoints to CPU.
-                self._chatterbox = multilingual_loader.from_pretrained(device=device_value)
-            case ChatterboxType.TURBO:
-                self._chatterbox = turbo_loader.from_pretrained(device=device_value)
+        if self._model_type.is_multilingual:
+            # Pass the normalized device string instead of torch.device(...).
+            # Upstream Chatterbox checks for values like "cpu" and "mps"
+            # before deciding whether to remap CUDA-saved checkpoints to CPU.
+            self._chatterbox = multilingual_loader.from_pretrained(
+                device=device_value,
+                t3_model=self._model_type.multilingual_t3_model,
+            )
+        else:
+            self._chatterbox = turbo_loader.from_pretrained(device=device_value)
 
         if device == DeviceType.CUDA:
             ChatterboxModel._use_gpu_watermarker(self._chatterbox, device_value)
@@ -86,53 +84,6 @@ class ChatterboxModel(ChatterboxBaseModel):
     def kill(self) -> None:
         self.clear_voice_clone_cache()
         self._chatterbox = None # type: ignore
-
-    @classmethod
-    def _strip_alignment_analyzer_hooks(cls, chatterbox: Any) -> None:
-        """
-        Removes stale AlignmentStreamAnalyzer forward hooks from the T3
-        transformer.
-
-        Chatterbox Multilingual creates a fresh AlignmentStreamAnalyzer for
-        every generate() call, and each one registers a forward hook on three
-        attention layers of the T3 transformer. The hook handles are discarded
-        and the hooks are never removed, so every generated segment leaves
-        three live hooks plus an orphaned analyzer (retaining CPU tensors)
-        attached to the model. This grows worker RSS by several MB per
-        generated segment for the lifetime of the model, and the stale hooks
-        copy attention maps to the CPU on every subsequent decode step
-        (progressively slowing generation). Chatterbox Turbo does not use the
-        analyzer and is unaffected.
-
-        Removing the hooks drops the last reference to each orphaned analyzer,
-        making it collectable. Hooks belonging to the in-flight generation
-        are never stripped this way: this is only called after generate()
-        has returned. (Upstream bug; revisit if chatterbox fixes it.)
-        """
-        try:
-            from chatterbox.models.t3.inference.alignment_stream_analyzer import AlignmentStreamAnalyzer # type: ignore
-            tfmr = chatterbox.t3.tfmr
-        except Exception:
-            return
-
-        for layer_idx in cls._ALIGNED_ATTN_LAYER_INDICES:
-            try:
-                self_attn = tfmr.layers[layer_idx].self_attn
-            except Exception:
-                continue
-            hooks = getattr(self_attn, "_forward_hooks", None)
-            if not hooks:
-                continue
-            for handle_id, hook in list(hooks.items()):
-                if getattr(hook, "__name__", "") != "attention_forward_hook":
-                    continue
-                cells = [
-                    cell.cell_contents
-                    for cell in (getattr(hook, "__closure__", None) or [])
-                ]
-                if not any(isinstance(cell, AlignmentStreamAnalyzer) for cell in cells):
-                    continue
-                hooks.pop(handle_id, None)
 
     def _create_voice_clone(self, source_path: str) -> Any:
         """
@@ -217,17 +168,22 @@ class ChatterboxModel(ChatterboxBaseModel):
         language_id = ""
         repetition_penalty: float
         turbo_top_k: int | None = None
-        match self._model_type:
-            case ChatterboxType.MULTILINGUAL:
-                language_id = project.language_code
-                repetition_penalty = ChatterboxModel._resolve_setting(
-                    project.chatterbox_ml_repetition_penalty, ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
-                )
-            case ChatterboxType.TURBO:
-                turbo_top_k = None if project.chatterbox_turbo_top_k == -1 else project.chatterbox_turbo_top_k
-                repetition_penalty = ChatterboxModel._resolve_setting(
-                    project.chatterbox_turbo_repetition_penalty, ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
-                )
+        if self._model_type.is_multilingual:
+            language_id = project.language_code
+            ml_repetition_penalty = (
+                project.chatterbox_ml_v2_repetition_penalty
+                if self._model_type == ChatterboxType.MULTILINGUAL_V2
+                else project.chatterbox_ml_v3_repetition_penalty
+            )
+            repetition_penalty = ChatterboxModel._resolve_setting(
+                ml_repetition_penalty,
+                ChatterboxBaseModel.default_repetition_penalty(self._model_type),
+            )
+        else:
+            turbo_top_k = None if project.chatterbox_turbo_top_k == -1 else project.chatterbox_turbo_top_k
+            repetition_penalty = ChatterboxModel._resolve_setting(
+                project.chatterbox_turbo_repetition_penalty, ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO
+            )
 
         # Randomize seed here so that generate() receives a concrete value
         seed = -1 if force_random_seed else project.chatterbox_seed
@@ -302,24 +258,16 @@ class ChatterboxModel(ChatterboxBaseModel):
         dic["top_p"] = top_p
         dic["repetition_penalty"] = repetition_penalty
 
-        match self._model_type:
-            case ChatterboxType.MULTILINGUAL:
-                if language_id:
-                    dic["language_id"] = language_id
-                dic["exaggeration"] = exaggeration
-                dic["cfg_weight"] = cfg
-            case ChatterboxType.TURBO:
-                if turbo_top_k is not None:
-                    dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
+        if self._model_type.is_multilingual:
+            if language_id:
+                dic["language_id"] = language_id
+            dic["exaggeration"] = exaggeration
+            dic["cfg_weight"] = cfg
+        elif turbo_top_k is not None:
+            dic["top_k"] = turbo_top_k # rem, multilingual does not support this param
 
         try:
-            try:
-                data = self._chatterbox.generate(text, **dic)
-            finally:
-                # Strip this generation's analyzer hooks before returning, so
-                # they don't accumulate on the transformer across calls.
-                if self._model_type == ChatterboxType.MULTILINGUAL:
-                    ChatterboxModel._strip_alignment_analyzer_hooks(self._chatterbox)
+            data = self._chatterbox.generate(text, **dic)
             data = data.cpu().numpy().squeeze()
             return Sound(data, self.INFO.default_output_sample_rate)
         except Exception as e:

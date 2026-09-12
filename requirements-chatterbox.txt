@@ -2,7 +2,8 @@
 # Use Python 3.11
 #################
 
-chatterbox-tts==0.1.7
+# Pinned commit supporting Chatterbox Multilingual V3.
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@65b18437192794391a0308a8f705b1e33e633948
 
 # App dependencies
 faster-whisper==1.2.1; sys_platform != 'darwin' or platform_machine != 'arm64'

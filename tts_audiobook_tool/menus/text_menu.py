@@ -470,7 +470,9 @@ def on_ask_max_size(state: State, _) -> None:
     MenuUtil.print_screen_heading(state, "Max words per segment")
 
     printt("On text import, this is the maximum number of words to be used for a single text segment.")
-    printt(f"Recommended range for current model: {COL_ACCENT}{TtsModelType.recommended_range_string(Tts.get_type().value)}")
+
+    reco = Tts.get_class().get_max_words_range_reco(state.project)
+    printt(f"Recommended range: {COL_ACCENT}{TtsModelType.recommended_range_string(reco)}")
     printt()
 
     ask.ask_number_and_save(

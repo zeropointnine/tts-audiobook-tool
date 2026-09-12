@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from tts_audiobook_tool.app_types import Strictness, VoiceDisplayInfo
+from tts_audiobook_tool.app_types import VoiceDisplayInfo
 from tts_audiobook_tool.app_types import ReadinessIssue
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
@@ -67,7 +67,7 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
         return errors
 
     def get_warning_issues(self, project: Project) -> list[str]:
-        warnings = []
+        warnings = super().get_warning_issues(project)
         if not ProjectVoiceUtil.get_primary_voice_value(project, TtsModelType.VIBEVOICE) and not project.vibevoice_lora_target:
             warning = "Model may generate random voices because no voice sample or lora has been defined"
             warnings.append(warning)
@@ -117,22 +117,14 @@ class VibeVoiceBaseModel(TtsBaseModel, ABC):
 
         return VoiceDisplayInfo(status_prefix, menu_prefix, value)
 
-    @classmethod
-    def get_strictness_warning(cls, strictness: Strictness, project: Project, instance: TtsBaseModel | None) -> str:
+# ---
 
-        if strictness.level != Strictness.HIGH.level:
-            # Rationale for not showing warning for zero-tolerance setting is that
-            # it should be tacitly understood that this is out of the norm
-            return ""
+def is_15b(project: Project) -> bool:
+    # Best-guess using target value only
+    target = project.vibevoice_target.lower()
+    if not target:
+        return True # 1.5B is the default
+    if "1.5b" in target or "15b" in target:
+        return True
+    return False
 
-        if project.vibevoice_lora_target:
-            # Assumption being made here that the LoRA is of decent quality
-            # and will therefore have much better accuracy than zero-shot
-            return ""
-
-        if "7b" in project.vibevoice_target.lower():
-            # Assumption is that model is the 7B variety, which is much less flakey than 1.5B
-            return ""
-
-        WARNING = "Not recommended with VibeVoice 1.5B model (when not using LoRA)"
-        return WARNING

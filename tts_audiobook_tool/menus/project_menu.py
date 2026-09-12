@@ -4,15 +4,12 @@ from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
-from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.system_support.platforms import open_directory
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.state import State
@@ -112,18 +109,6 @@ class ProjectMenu:
 
         state.set_existing_project(dir)
 
-        # Show over-default-max-words hint
-        max_count = ProjectBookUtil.get_book_segmentation_settings(state.project).max_words_per_segment
-        # TODO: Not doing this for now: ... or PhraseGroup.get_max_num_words(state.project.phrase_groups)
-        reco_range: tuple[int, int] = Tts.get_type().value.max_words_reco_range
-        if max_count > reco_range[1] and Tts.get_type() != TtsModelType.NONE:
-            message = HINT_MAX_WORDS_OVER_DEFAULT_MESSAGE
-            message = message.replace("%1", str(max_count))
-            reco_str = TtsModelType.recommended_range_string(Tts.get_type().value)
-            message = message.replace("%2", reco_str)
-            hint = Hint("", "FYI", message)
-            hints.show_hint(hint, and_prompt=True)
-
         return True
 
 # ---
@@ -138,7 +123,7 @@ def on_language(state: State, __: MenuItem) -> None:
     required_model_languages = []
 
     # Chatterbox Multilingual special case
-    if Tts.get_type() == TtsModelType.CHATTERBOX and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+    if Tts.get_type() == TtsModelType.CHATTERBOX and state.project.chatterbox_type.is_multilingual:
         inspection, error = ModelWorker.inspect_tts_blocking(state)
         if error or inspection is None:
             ask.ask_error(error or "Couldn't inspect Chatterbox model")

@@ -199,10 +199,7 @@ def _start_impl(
         phrase = phrase_group.as_flattened_phrase()
 
         printt()
-        GenerateUtil.print_batch_heading(
-            indices=[index],
-            show_divider=index != start_index,
-        )
+        GenerateUtil.print_batch_heading(indices=[index])
         printt(f"{COL_DIM_ITALICS}{phrase_group.presentable_text}")
         printt()
 

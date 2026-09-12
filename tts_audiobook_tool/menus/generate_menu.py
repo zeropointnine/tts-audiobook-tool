@@ -29,7 +29,6 @@ from tts_audiobook_tool.textual.generate_editor import (
 from tts_audiobook_tool.textual.generation_app import run_generation_app
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.util import *
-from tts_audiobook_tool.text_ops.whitelist import Whitelist
 
 class GenerateMenu:
 
@@ -86,7 +85,7 @@ class GenerateMenu:
 
             items = []
             # Generate
-            items.append(MenuItem(make_start_label,lambda _, __: do_generate(state)))
+            items.append(MenuItem(make_start_label, lambda _, __: do_generate(state)))
 
             items.append(
                 MenuItem(
@@ -267,24 +266,20 @@ class GenerateMenu:
             state.project.save()
             print_feedback(f"Word error tolerance set to:", state.project.strictness.label)
 
-        warning_high = Tts.get_class().get_strictness_warning(Strictness.HIGH, state.project, None)
-
-        if not Whitelist.supports_language(state.project.language_code):
-            low_desc = f"{Ansi.ITALICS}Highly recommended when language is not {list(Whitelist.LANGUAGES.keys())}"
-            medium_desc = ""
-            high_desc = ""
-            intolerant_desc = ""
-        else:
-            low_desc = (
-                "Allows for more word errors without triggering a regeneration.\n"
-                "      Segments pass unless notably off.")
-            medium_desc = "Balanced. Reasonable choice for most TTS models and most languages."
-            high_desc = warning_high if warning_high else "Strict; segments with minor word errors will be flagged for regeneration."
-            intolerant_desc = (
-                "Segments with even one word error are flagged for regeneration.\n"
-                "      Will trigger frequent regenerations due to false positives, but yields best net accuracy.\n"
-                "      For the time and compute unconstrained only."
-            )
+        low_desc = (
+            "Allows for more word errors without triggering a regeneration.\n"
+            "      Segments pass unless notably off.")
+        medium_desc = "Balanced. Reasonable choice for most TTS models and most languages."
+        high_desc = (
+            "Even low occurrences of word errors will be flagged for regeneration.\n"
+            "      Recommended for project+model+language configurations that have proven\n"
+            "      to yield high accuracy output."
+        )
+        intolerant_desc = (
+            f"Segments with {Ansi.ITALICS}any{Ansi.ITALICS_OFF} word errors are flagged for regeneration.\n"
+            "      Triggers frequently due to false positives, but yields best net accuracy.\n"
+            "      For the time and compute unconstrained only."
+        )
 
         MenuUtil.options_menu(
             state=state,
@@ -298,17 +293,13 @@ class GenerateMenu:
             subheading=STRICTNESS_DESC,
             breadcrumb="Word error tolerance",
         )
+        # TODO: revisit assigning default_value - Strictness.get_recommended_default(state.project.language_code)
 
 def make_tolerance_label(state: State) -> str:
-    label = make_menu_label(
+    return make_menu_label(
         label="Word error tolerance",
         value=state.project.strictness.label
     )
-    warning = Tts.get_class().get_strictness_warning(state.project.strictness, state.project, None)
-    if warning:
-        # Add red asterisk
-        label += f"{COL_ERROR}*"
-    return label
 
 def count_out_of_range_voice_indices(
         phrase_groups: list[PhraseGroup],

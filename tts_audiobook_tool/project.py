@@ -166,7 +166,8 @@ class Project(BaseModel):
     chatterbox_exaggeration: float = -1
     chatterbox_top_p: float = -1
     chatterbox_turbo_top_k: int = -1
-    chatterbox_ml_repetition_penalty: float = -1
+    chatterbox_ml_v2_repetition_penalty: float = -1
+    chatterbox_ml_v3_repetition_penalty: float = -1
     chatterbox_turbo_repetition_penalty: float = -1
     chatterbox_seed: int = -1
 

@@ -124,7 +124,6 @@ class GenerateUtil:
 
         GenerationEvents.emit(GenerationPhase("Preparing models"))
 
-        skip_divider_flag = Tts.instance_exists()
         warm_up_result = ModelManager.warm_up_models(state)
         if warm_up_result.should_stop:
             app_support.print_warm_up_result_stop(warm_up_result)
@@ -285,9 +284,7 @@ class GenerateUtil:
             GenerateUtil.print_batch_heading(
                 indices=indices,
                 voice_index=sub.voice_selection_index,
-                show_divider=not skip_divider_flag,
             )
-            skip_divider_flag = False
 
             # Generate and validate
             gen_start_time = time.time()
@@ -966,7 +963,6 @@ class GenerateUtil:
     def print_batch_heading(
         indices: list[int],
         voice_index: int | None = None,
-        show_divider: bool = True,
     ) -> None:
 
         line_noun = make_noun("line", "lines", len(indices))
@@ -980,8 +976,7 @@ class GenerateUtil:
         if voice_index is not None:
             processing_string += f" {COL_DIM}(voice {voice_index + 1}){COL_DEFAULT}"
 
-        if show_divider:
-            printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")
+        printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")
         printt(f"{processing_string}")
         printt()
 

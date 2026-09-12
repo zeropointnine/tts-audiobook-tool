@@ -43,10 +43,6 @@ class TtsModelSpec(NamedTuple):
     file_tag: str
     # The model's native/default sound output sample rate
     default_output_sample_rate: int
-    # The app's recommended max-words-per-segment for the model
-    max_words_default: int
-    # The app's recommended max-words-per-segment range (min, max)
-    max_words_reco_range: tuple[int, int]
 
     # Project attribute of voice clone file name (when applicable)
     voice_target_attr: str
@@ -102,8 +98,6 @@ class TtsModelType(Enum):
         local_torch_devices = [],
         file_tag="",
         default_output_sample_rate=0,
-        max_words_default=0,
-        max_words_reco_range=(0, 0),
         voice_target_attr="",
         requires_voice=False,
         voice_transcript_attr="",
@@ -133,8 +127,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="chatterbox",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 40),
         voice_target_attr="chatterbox_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="",
@@ -166,8 +158,6 @@ class TtsModelType(Enum):
         local_torch_devices=[DeviceType.CUDA, DeviceType.CPU],
         file_tag="dots",
         default_output_sample_rate=48_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="dots_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="dots_voice_transcript",
@@ -200,8 +190,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="s1-mini",
         default_output_sample_rate=44_100,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="fish_s1_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="fish_s1_voice_transcript",
@@ -233,8 +221,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="s2-pro",
         default_output_sample_rate=44_100,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="fish_s2_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="fish_s2_voice_transcript",
@@ -266,8 +252,6 @@ class TtsModelType(Enum):
         local_torch_devices = [],
         file_tag="s2-pro",
         default_output_sample_rate=44_100,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="fish_s2_voice_file_name", # shares same value as local Fish S2
         requires_voice=False,
         voice_transcript_attr="fish_s2_voice_transcript", # shares same value as local Fish S2
@@ -303,8 +287,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA], # cuda-only atm
         file_tag="glm",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 40),
         voice_target_attr="glm_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="glm_voice_transcript",
@@ -338,8 +320,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="higgs_v2",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 40),
         voice_target_attr="higgs_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="higgs_voice_transcript",
@@ -371,8 +351,6 @@ class TtsModelType(Enum):
         local_torch_devices = [],
         file_tag="higgs_v3",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="higgs_v3_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="higgs_v3_voice_transcript",
@@ -407,8 +385,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="indextts2",
         default_output_sample_rate=22_050,
-        max_words_default=40,
-        max_words_reco_range=(40, 60),
         voice_target_attr="indextts2_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
@@ -441,8 +417,6 @@ class TtsModelType(Enum):
         local_torch_devices = [], # does not take in a device as a parameters
         file_tag="mira",
         default_output_sample_rate=48_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="mira_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
@@ -476,8 +450,6 @@ class TtsModelType(Enum):
         local_torch_devices=[DeviceType.CUDA, DeviceType.CPU],
         file_tag="moss",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="moss_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="moss_voice_transcript",
@@ -511,8 +483,6 @@ class TtsModelType(Enum):
         local_torch_devices=[],
         file_tag="moss",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="moss_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="moss_voice_transcript",
@@ -548,8 +518,6 @@ class TtsModelType(Enum):
         local_torch_devices=[],
         file_tag="moss",
         default_output_sample_rate=48_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="moss_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="moss_voice_transcript",
@@ -585,8 +553,6 @@ class TtsModelType(Enum):
         local_torch_devices=[DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="omnivoice",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="omnivoice_voice_file_name",
         requires_voice=False, # supports Voice Design and Auto Voice without ref_audio
         voice_transcript_attr="omnivoice_voice_transcript", # Preempts OmniVoice from using internal Whisper instance for transcription
@@ -618,8 +584,6 @@ class TtsModelType(Enum):
         local_torch_devices = [], # not applicable
         file_tag="oute",
         default_output_sample_rate=44_100,
-        max_words_default=40,
-        max_words_reco_range=(40, 40),
         voice_target_attr="oute_voice_json", # rem, special case, is not a sound file
         requires_voice=True,
         voice_transcript_attr="",
@@ -652,8 +616,6 @@ class TtsModelType(Enum):
         local_torch_devices=[DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="pocket",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="pocket_voice_file_name",
         requires_voice=True,
         voice_transcript_attr="",
@@ -686,8 +648,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="qwen3",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="qwen3_voice_file_name",
         requires_voice=True, # this applies to 'base' model type only
         voice_transcript_attr="qwen3_voice_transcript",
@@ -719,8 +679,6 @@ class TtsModelType(Enum):
         local_torch_devices=[],
         file_tag="qwen3",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="qwen3_voice_file_name", # shares same value as local qwen3tts
         voice_transcript_attr="qwen3_voice_transcript", # shares same value as local qwen3tts
         requires_voice=True, # Note, this diverges from the local version
@@ -754,8 +712,6 @@ class TtsModelType(Enum):
         local_torch_devices = [DeviceType.CUDA, DeviceType.MPS, DeviceType.CPU],
         file_tag="vibevoice",
         default_output_sample_rate=24_000,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
         voice_target_attr="vibevoice_voice_file_name",
         requires_voice=False,
         voice_transcript_attr="",
@@ -789,8 +745,6 @@ class TtsModelType(Enum):
         local_torch_devices=[],
         file_tag="zonos2",
         default_output_sample_rate=44_100,
-        max_words_default=40,
-        max_words_reco_range=(40, 80),
 
         # Must disambiguate against (future) zonos2_voice_file_name attribute
         # due to server lack of support for transcript
@@ -832,11 +786,14 @@ class TtsModelType(Enum):
         return TtsModelType.NONE
 
     @staticmethod
-    def recommended_range_string(info: TtsModelSpec) -> str:
-        if info.max_words_reco_range[1] == info.max_words_reco_range[0]:
-            return f"up to {info.max_words_reco_range[1]}"
+    def recommended_range_string(range: tuple[int, int, str]) -> str:
+        if range[1] == range[0]:
+            s = f"up to {range[1]}"
         else:
-            return f"{info.max_words_reco_range[0]}-{info.max_words_reco_range[1]}"
+            s = f"{range[0]}-{range[1]}"
+        if range[2]:
+            s += f" ({range[2]})"
+        return s
 
     @staticmethod
     @cache

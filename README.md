@@ -146,6 +146,11 @@ Windows CUDA support (unlike the other models, we must use torch 2.6/cu124 here)
     pip uninstall -y torch torchaudio
     pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 
+Note: To upgrade an environment with an old version of the chatterbox-tts package, do the following:
+
+    pip uninstall chatterbox-tts
+    pip install -r requirements-chatterbox.txt
+
 ## Virtual environment for dots.tts
 
 > **ℹ️ Note:**
@@ -663,12 +668,12 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 
 ### Inference speeds, expectations
 
-Listed below are some anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note how CUDA inference speeds on Linux are usually significantly faster than on Windows.
+Listed below are some anecdotal TTS inference speeds. The app adopts each respective model's reference inference implementation logic as much as possible. Note how CUDA inference speeds on Linux are typically significantly faster than on Windows.
 
 | TTS Model               | Setup                | Speed           | Notes |
 | ----------------------- | -------------------- | --------------- | ----- |
-| Chatterbox Multilingual | RTX 4090, Windows    | ~190% realtime  |
-| Chatterbox Multilingual | GTX 3080 Ti, Windows | ~130% realtime  |
+| Chatterbox Multilingual | RTX 4090, Windows    | ~200% realtime  |
+| Chatterbox Multilingual | GTX 3080 Ti, Linux   | ~250% realtime  |
 | Chatterbox Multilingual | Macbook Pro M1 (MPS) | 20-35% realtime |
 | Chatterbox Turbo        | GTX 3080 Ti, Linux   | 500%+ realtime  |
 | Chatterbox Turbo        | Macbook Pro M1       | ~70% realtime   |
@@ -706,6 +711,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-09-12**
+
+- Added support for *Chatterbox Multilingual V3* which addresses the serious shortcomings of the V2 model. After updating, the app may prompt you to update the virtual environment.
 
 **2026-09-10**
 

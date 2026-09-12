@@ -29,7 +29,7 @@ class VoiceChatterboxMenu:
                 ) 
             )
 
-            if state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+            if state.project.chatterbox_type.is_multilingual:
                 items.append( 
                     MenuUtil.make_number_item(
                         state=state, 
@@ -44,7 +44,7 @@ class VoiceChatterboxMenu:
                     )
                 )
 
-            if state.project.chatterbox_type == ChatterboxType.MULTILINGUAL:
+            if state.project.chatterbox_type.is_multilingual:
                 items.append( 
                     MenuUtil.make_number_item(
                         state=state, 
@@ -85,15 +85,19 @@ class VoiceChatterboxMenu:
                 )
 
             # Repetition penalty - using separate values for each variant
-            match state.project.chatterbox_type:
-                case ChatterboxType.MULTILINGUAL:
-                    qual = "Multilingual"
-                    attr = "chatterbox_ml_repetition_penalty"
-                    default_value = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_ML
-                case ChatterboxType.TURBO:
-                    qual = "Turbo"
-                    attr = "chatterbox_turbo_repetition_penalty"
-                    default_value = ChatterboxBaseModel.DEFAULT_REPETITION_PENALTY_TURBO            
+            if state.project.chatterbox_type.is_multilingual:
+                qual = state.project.chatterbox_type.label.removeprefix("Chatterbox-")
+                attr = (
+                    "chatterbox_ml_v2_repetition_penalty"
+                    if state.project.chatterbox_type == ChatterboxType.MULTILINGUAL_V2
+                    else "chatterbox_ml_v3_repetition_penalty"
+                )
+            else:
+                qual = "Turbo"
+                attr = "chatterbox_turbo_repetition_penalty"
+            default_value = ChatterboxBaseModel.default_repetition_penalty(
+                state.project.chatterbox_type
+            )
             rep_min = REPETITION_PENALTY_MIN_DEFAULT
             rep_max = REPETITION_PENALTY_MAX_DEFAULT
 

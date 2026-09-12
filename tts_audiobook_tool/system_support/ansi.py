@@ -44,6 +44,7 @@ class Ansi:
 
     BOLD: str = "\x1b[1m"
     ITALICS: str = "\x1b[3m"
+    ITALICS_OFF: str = "\x1b[23m"
     STRIKETHROUGH: str = "\x1b[9m"
 
     @staticmethod
