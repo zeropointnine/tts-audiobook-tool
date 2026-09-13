@@ -52,11 +52,11 @@ class TestDialogSegmenter(unittest.TestCase):
         )
 
     def test_supports_mixed_double_quote_glyphs(self):
-        groups = segment_one('First “Hello." Then "Goodbye.” End.')
+        groups = segment_one('He said “Hello." Then she said "Goodbye.” End.')
 
         self.assertEqual(
             [group.text for group in groups],
-            ["First ", '“Hello." ', "Then ", '"Goodbye.” ', "End."],
+            ["He said ", '“Hello." ', "Then she said ", '"Goodbye.” ', "End."],
         )
 
     def test_keeps_adjacent_punctuation_and_boundary_whitespace_with_quote(self):
@@ -69,13 +69,13 @@ class TestDialogSegmenter(unittest.TestCase):
 
     def test_assigns_voice_to_multiple_supported_quotes_and_attached_punctuation(self):
         groups = DialogSegmenter.segment_groups(
-            [make_group('He asked, "Ready")?! Then “Go.” Finally.')],
+            [make_group('He asked, "Ready")?! Then he said “Go.” Finally.')],
             dialog_voice_index=1,
         )
 
         self.assertEqual(
             [group.text for group in groups],
-            ["He asked, ", '"Ready")?! ', "Then ", "“Go.” ", "Finally."],
+            ["He asked, ", '"Ready")?! ', "Then he said ", "“Go.” ", "Finally."],
         )
         self.assertEqual(
             [group.voice_index for group in groups],
@@ -97,15 +97,35 @@ class TestDialogSegmenter(unittest.TestCase):
 
         self.assertEqual([group.text for group in groups], [text])
 
+    def test_ignores_capitalized_quote_complementing_preceding_word(self):
+        for text in (
+            'The band was playing "Fly Me to the Moon."',
+            'The play is titled "Hamlet."',
+            'His favorite was \u201cCrime and Punishment.\u201d',
+            'She hummed "somewhere over the rainbow" all day.',
+        ):
+            with self.subTest(text=text):
+                groups = segment_one(text)
+
+                self.assertEqual([group.text for group in groups], [text])
+
+    def test_accepts_comma_less_quote_after_attribution_verb(self):
+        groups = segment_one('He said "Hello." Then she left.')
+
+        self.assertEqual(
+            [group.text for group in groups],
+            ["He said ", '"Hello." ', "Then she left."],
+        )
+
     def test_accepts_lowercase_quote_longer_than_three_words(self):
         groups = segment_one(
-            'He called it “a phrase with several ordinary words” yesterday.'
+            'He insisted “a phrase with several ordinary words” yesterday.'
         )
 
         self.assertEqual(
             [group.text for group in groups],
             [
-                "He called it ",
+                "He insisted ",
                 "“a phrase with several ordinary words” ",
                 "yesterday.",
             ],
@@ -174,14 +194,14 @@ class TestDialogSegmenter(unittest.TestCase):
         self.assertEqual([group.text for group in groups], [text])
 
     def test_unmatched_quote_does_not_hide_later_well_formed_pair(self):
-        text = 'He typed " without closing, then "Hello." Afterwards.'
+        text = 'He said " without closing, then said "Hello." Afterwards.'
 
         groups = segment_one(text)
 
         self.assertEqual(
             [group.text for group in groups],
             [
-                'He typed " without closing, then ',
+                'He said " without closing, then said ',
                 '"Hello." ',
                 "Afterwards.",
             ],
@@ -212,7 +232,7 @@ class TestDialogSegmenter(unittest.TestCase):
 
     def test_spans_existing_groups_without_combining_them(self):
         original_groups = [
-            make_group('Before "This spans ', voice_index=4),
+            make_group('He said, "This spans ', voice_index=4),
             make_group("several existing ", voice_index=5),
             make_group('segments." After.', voice_index=6),
         ]
@@ -222,7 +242,7 @@ class TestDialogSegmenter(unittest.TestCase):
         self.assertEqual(
             [group.text for group in groups],
             [
-                "Before ",
+                "He said, ",
                 '"This spans ',
                 "several existing ",
                 'segments." ',
@@ -284,7 +304,7 @@ class TestDialogSegmenter(unittest.TestCase):
 
     def test_assigns_voice_sample_two_to_dialog_fragments(self):
         original_group = make_group(
-            'Before "Hello." After.',
+            'He said, "Hello." After.',
             voice_index=4,
         )
 
@@ -295,7 +315,7 @@ class TestDialogSegmenter(unittest.TestCase):
 
         self.assertEqual(
             [group.text for group in groups],
-            ["Before ", '"Hello." ', "After."],
+            ["He said, ", '"Hello." ', "After."],
         )
         self.assertEqual([group.voice_index for group in groups], [4, 1, 4])
         self.assertEqual(original_group.voice_index, 4)
@@ -315,7 +335,7 @@ class TestDialogSegmenter(unittest.TestCase):
 
     def test_assigns_dialog_voice_across_existing_groups(self):
         original_groups = [
-            make_group('Before "This spans ', voice_index=4),
+            make_group('He said, "This spans ', voice_index=4),
             make_group("several existing ", voice_index=5),
             make_group('segments." After.', voice_index=6),
         ]
@@ -435,13 +455,13 @@ class TestPhraseQuoteEnd(unittest.TestCase):
 
     def test_long_lowercase_quote_before_lowercase_continuation(self):
         groups = segment_one(
-            'He called it "a terrible mistake indeed" she had never forgiven him for.'
+            'He insisted "a terrible mistake indeed" she had never forgiven him for.'
         )
 
         self.assertEqual(
             self.phrase_reasons(groups),
             [
-                [("He called it ", Reason.PHRASE)],
+                [("He insisted ", Reason.PHRASE)],
                 [('"a terrible mistake indeed" ', Reason.PHRASE_QUOTE_END)],
                 [("she had never forgiven him for.", Reason.SENTENCE)],
             ],

@@ -34,7 +34,7 @@ Detected dialog may therefore span multiple existing segments. The opening segme
 For example, these existing segments:
 
 ```text
-Before "This spans 
+He said, "This spans 
 several existing 
 segments." After.
 ```
@@ -42,7 +42,7 @@ segments." After.
 become:
 
 ```text
-Before 
+He said, 
 "This spans 
 several existing 
 segments." 
@@ -109,7 +109,7 @@ Both paragraphs are detected as dialog; `he said.` after the closing quote is no
 
 ## Dialog qualification
 
-A paired quote is not automatically treated as dialog. It must contain verbalizable content and then satisfy either the capitalization rule or one of the structural dialog signals below. The rules deliberately favor accepting probable dialog; the narrow rejection case is a short lowercase inline quote without any dialog signal.
+A paired quote is not automatically treated as dialog. It must contain verbalizable content, must not be a quoted complement of a preceding non-attribution word, and then satisfy either the capitalization rule or one of the structural dialog signals below. The rules deliberately favor accepting probable dialog; the narrow rejection cases are a short lowercase inline quote without any dialog signal, and a quote that directly complements a preceding word.
 
 ### Verbalizable content
 
@@ -120,6 +120,25 @@ This is ignored:
 ```text
 I was all like: "?!!"
 ```
+
+### Quoted complements of the preceding word
+
+A quote is not treated as dialog when the nearest preceding non-whitespace character before the opening quote mark is a letter or digit, with no punctuation between, and the word ending there is not a whitelisted English attribution verb. Only spaces and tabs are skipped when looking back — never a line break, so a paragraph-leading quote is never affected by what the previous paragraph ends with.
+
+Such an unpunctuated quote is a grammatical complement of the preceding word — a title or named work after "playing", "read", "titled", or a plain copula — rather than spoken dialog:
+
+```text
+The band was playing "Fly Me to the Moon."
+The play is titled "Hamlet."
+```
+
+Properly typeset dialog is always set off from the preceding sentence by punctuation: a comma (`She said, "Yes."`), a colon, a dash, or sentence-ending punctuation (`He turned. "Go away."`), or it begins the paragraph. The attribution-verb exemption (case-insensitive stem match against the same English verb list used for attribution continuation) keeps comma-less attributions dialog:
+
+```text
+He said "Hello."
+```
+
+This rejection applies before both the capitalization rule and the lowercase structural signals, so it also filters long lowercase quoted titles that would otherwise qualify by word count. Its verb exemption is English-only; in other languages an unpunctuated quote after any word is treated as non-dialog.
 
 ### Capitalized first meaningful letter
 
@@ -150,7 +169,7 @@ thought Alice to herself, “after such a fall as this ...”
 He shouted “go!”
 ```
 
-A quote is ignored as probable non-dialog only when it lacks all of those signals and has no more than three verbalizable words. This continues to ignore short inline emphasis, labels, and scare quotes such as:
+A quote that is not a quoted complement (see above) is ignored as probable non-dialog only when it lacks all of those signals and has no more than three verbalizable words. This continues to ignore short inline emphasis, labels, and scare quotes such as:
 
 ```text
 That was "too much" for me.
@@ -336,7 +355,7 @@ The examples above omit boundary whitespace from the visual presentation. The un
 
 The lowercase dialog signals reduce false negatives for dialog continuations, brief replies, and writing systems or content without an uppercase opening. Because the rules intentionally favor likely dialog, long quoted labels or lowercase quoted passages near dialog-like punctuation may occasionally be assigned the dialog voice.
 
-Conversely, capitalization alone cannot prove that text is dialog. Capitalized labels, titles, interface terms, and quoted names may still be treated as dialog. Short lowercase inline quotes remain unassigned only when they have no structural dialog signal.
+Conversely, capitalization alone cannot prove that text is dialog. Capitalized quoted titles, interface terms, and quoted names are filtered when they complement a preceding word (the `playing "Fly Me to the Moon."` pattern), but may still be treated as dialog when they follow a comma, colon, dash, or sentence end. Short lowercase inline quotes remain unassigned only when they have no structural dialog signal.
 
 ### Paragraph-local pairing with chained extension
 
@@ -372,7 +391,7 @@ The capital-letter heuristic could be adapted for scripts without letter case or
 
 ### Stronger dialog classification
 
-Additional grammatical hints could distinguish spoken dialog from titles, labels, scare quotes, and quoted terminology. More aggressive classification would improve some cases but would also be less predictable and introduce new false positives.
+Additional grammatical hints could distinguish spoken dialog from titles, labels, scare quotes, and quoted terminology. The preceding-word complement rule already handles the common `playing "Title."` pattern; further classification would improve some cases but would also be less predictable and introduce new false positives.
 
 ### Additional quote conventions
 

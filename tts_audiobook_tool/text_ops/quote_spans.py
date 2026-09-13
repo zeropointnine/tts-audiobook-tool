@@ -122,7 +122,9 @@ def find_paragraph_chained_quote_spans(
     paragraph. A paragraph whose leading opening quote has no closing quote
     in that paragraph opens (or continues) a chained context; the chain ends
     at the first paragraph that contains a closing quote, and is abandoned
-    when a paragraph does not begin with an opening quote mark.
+    when a paragraph does not begin with an opening quote mark (although a
+    speech may also begin mid-paragraph, after leading narration, via an
+    unmatched opening quote).
 
     A speech paragraph may also hold complete quote pairs earlier in the
     paragraph and still end with an unmatched opening quote (the speech
@@ -194,8 +196,16 @@ def find_paragraph_chained_quote_spans(
 
         else:
             # A paragraph that does not begin with an opening quote mark
-            # (narration, a new speaker, a heading) ends the speech.
-            pending_opening_index = None
+            # (narration, a new speaker, a heading) ends the speech. Such a
+            # paragraph may still hold an unmatched opening quote (a speech
+            # begun mid-paragraph after some narration) that opens a new
+            # chained context.
+            pending_opening_index = _first_unmatched_opening(
+                text,
+                paragraph_start,
+                paragraph_end,
+                enabled,
+            )
 
         paragraph_start = paragraph_end
 

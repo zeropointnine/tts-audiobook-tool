@@ -215,6 +215,19 @@ class DialogSegmenter:
         if not app_text.is_vocalizable(content):
             return False
 
+        # A quote that follows a word with no intervening punctuation (only a
+        # space, at most) is a quoted complement of that word — a title,
+        # label, or name after words like "playing", "read", "titled" —
+        # rather than dialog. Properly typeset dialog is always set off by a
+        # comma, colon, dash, sentence-ending punctuation, or a paragraph
+        # start; the attribution-verb exemption keeps comma-less
+        # attributions such as `He said "Hello."` accepted.
+        if DialogSegmenter._follows_non_attribution_word(
+            text,
+            opening_quote_index,
+        ):
+            return False
+
         for char in content:
             if unicodedata.category(char).startswith("L"):
                 if char.isupper():
@@ -246,6 +259,32 @@ class DialogSegmenter:
             return True
 
         return "?" in content or "!" in content
+
+    @staticmethod
+    def _follows_non_attribution_word(
+        text: str,
+        opening_quote_index: int,
+    ) -> bool:
+        """
+        Whether the opening quote at `opening_quote_index` follows, after at
+        most spaces or tabs (never a line break, so a paragraph-leading quote
+        is unaffected), a letter or digit with no intervening punctuation, and
+        the word ending there is not a whitelisted English attribution verb
+        (case-insensitive STARTS-WITH stem match, as in
+        _continues_with_name_verb).
+        """
+        index = opening_quote_index - 1
+        while index >= 0 and text[index] in " \t":
+            index -= 1
+        if index < 0 or not text[index].isalnum():
+            return False
+
+        start = index
+        while start > 0 and text[start - 1].isalnum():
+            start -= 1
+
+        word = text[start:opening_quote_index].lower()
+        return not any(word.startswith(stem) for stem in _ATTRIBUTION_VERBS_EN)
 
     @staticmethod
     def _end_after_attached_punctuation(
