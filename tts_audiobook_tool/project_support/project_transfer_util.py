@@ -39,11 +39,6 @@ class ProjectTransferUtil:
         'book',
         # Serialized as word_substitutions_json_string for backwards compatibility.
         'word_substitutions',
-        # Legacy compatibility fields used while loading older projects.
-        'applied_strategy',
-        'applied_max_words',
-        'applied_language_code',
-        'applied_dialog_segmentation',
     }
 
     @staticmethod

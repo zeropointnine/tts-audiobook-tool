@@ -8,6 +8,12 @@ def make_project() -> Project:
     return Project(dir_path="")
 
 
+def set_book_max_words(project: Project, max_words: int) -> None:
+    project.book.segmentation_settings = project.book.segmentation_settings._replace(
+        max_words_per_segment=max_words
+    )
+
+
 def preserve_tts_state():
     return {
         "had_tts_type": hasattr(Tts, "_type"),
@@ -28,9 +34,9 @@ def test_no_warning_when_at_or_below_reco_max():
         # GLM reco is (40, 60, "")
         Tts._type = TtsModelType.GLM
         project = make_project()
-        project.applied_max_words = 60
+        set_book_max_words(project, 60)
         assert Tts.get_class().get_max_words_exceed_warning(project) == ""
-        project.applied_max_words = 40
+        set_book_max_words(project, 40)
         assert Tts.get_class().get_max_words_exceed_warning(project) == ""
     finally:
         restore_tts_state(saved)
@@ -42,7 +48,7 @@ def test_warning_uses_proper_name_when_no_disambiguator():
         # GLM reco max is 60
         Tts._type = TtsModelType.GLM
         project = make_project()
-        project.applied_max_words = 80
+        set_book_max_words(project, 80)
 
         result = Tts.get_class().get_max_words_exceed_warning(project)
         assert result.startswith(f"{Ansi.ITALICS}Source text's max word length (80)")
@@ -58,7 +64,7 @@ def test_warning_prefers_disambiguator_name(monkeypatch):
     try:
         Tts._type = TtsModelType.GLM
         project = make_project()
-        project.applied_max_words = 80
+        set_book_max_words(project, 80)
 
         cls = Tts.get_class()
         monkeypatch.setattr(
@@ -80,7 +86,7 @@ def test_no_warning_for_model_without_reco():
         # NONE model reco is (0, 0, "")
         Tts._type = TtsModelType.NONE
         project = make_project()
-        project.applied_max_words = 80
+        set_book_max_words(project, 80)
         assert Tts.get_class().get_max_words_exceed_warning(project) == ""
     finally:
         restore_tts_state(saved)
@@ -92,7 +98,7 @@ def test_base_get_warning_issues_includes_max_words_warning(monkeypatch):
         # GLM reco max is 60
         Tts._type = TtsModelType.GLM
         project = make_project()
-        project.applied_max_words = 80
+        set_book_max_words(project, 80)
 
         cls = Tts.get_class()
         monkeypatch.setattr(

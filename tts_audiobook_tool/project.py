@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, model_validator
 
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
-from tts_audiobook_tool.app_types import Book, BookSection, BookSegmentationSettings, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
+from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
@@ -58,12 +58,7 @@ class Project(BaseModel):
 
     @phrase_groups.setter
     def phrase_groups(self, value: list[PhraseGroup]) -> None:
-        settings = self.book.segmentation_settings if self.book.sections else BookSegmentationSettings(
-            language_code=self.applied_language_code,
-            max_words_per_segment=self.applied_max_words,
-            strategy=self.applied_strategy or BookSegmentationSettings().strategy,
-            dialog_segmentation=self.applied_dialog_segmentation,
-        )
+        settings = self.book.segmentation_settings
         self.book = Book(
             sections=[BookSection(phrase_groups=value)],
             title=self.book.title,
@@ -115,15 +110,6 @@ class Project(BaseModel):
     max_words: int = MAX_WORDS_PER_SEGMENT_DEFAULT
     dialog_segmentation: bool = False
     word_substitutions: dict[str, str] = Field(default_factory=dict)
-
-    # The segmentation strategy used to create the PhraseGroups from the source text
-    applied_strategy: SegmentationStrategy | None = None
-    # The max words per segment value used to create the PhraseGroups from the source text
-    applied_max_words: int = 0
-    # The language code used to create the PhraseGroups from the source text (ie, for pysbd)
-    applied_language_code: str = ""
-    # The dialog segmentation setting used to create the PhraseGroups from the source text
-    applied_dialog_segmentation: bool = False
 
     # Generation-range sentinels:
     # - empty string means "all items" for compatibility reasons

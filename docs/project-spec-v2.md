@@ -231,10 +231,12 @@ These older flat-text fields may still be present in legacy projects:
 - `applied_language_code`
 - `applied_strategy`
 - `applied_max_words`
+- `applied_dialog_segmentation`
 
-These are still read for compatibility, especially when reconstructing a `Book`
-from legacy phrase-group data, but they are not part of the preferred canonical
-saved shape once `book.v2` text data is available.
+These keys are still read directly from legacy serialized dictionaries, especially
+when reconstructing a `Book` from legacy phrase-group data. They are folded into
+`Book.segmentation_settings`; they are no longer attributes on the current `Project`
+model and are not part of the canonical saved shape.
 
 ### Voice-clone fields use hybrid string/list serialization
 
@@ -303,6 +305,7 @@ Legacy segmentation fields are folded into `BookSegmentationSettings`:
 - `applied_language_code`
 - `applied_strategy`
 - `applied_max_words`
+- `applied_dialog_segmentation`
 
 This means older flat projects can still be used through the newer structured
 book model.
@@ -369,6 +372,7 @@ It also notes whether legacy flat compatibility fields are present, especially:
 - `applied_language_code`
 - `applied_strategy`
 - `applied_max_words`
+- `applied_dialog_segmentation`
 
 ### Step 2: detect where the text currently lives
 
@@ -464,10 +468,9 @@ This covers:
 ### 3. Already using `book.v2`, but still carrying stale legacy fields
 
 If text is already stored as `book.v2` but `project.json` still contains old
-`applied_*` fields, the loader re-saves the project. The fields are not removed
-by any explicit deletion: `ProjectSerializationUtil.to_project_json_dict`
-simply never serializes them, so the rewritten `project.json` no longer
-contains them.
+`applied_*` fields, the loader consumes and removes those keys from the parse dictionary,
+then re-saves the project. `ProjectSerializationUtil.to_project_json_dict` never
+serializes them, so the rewritten `project.json` no longer contains them.
 
 This keeps the persisted project shape canonical even if the project had already
 partly migrated in an earlier app version.
@@ -500,8 +503,8 @@ This split is the defining feature of project spec v2.
   migrated to `book.v2`
 - bare-list `project_text.json` payloads are migrated to `book.v2`
 - legacy `chapter_indices` is rewritten as `markers`
-- stale `applied_language_code`, `applied_strategy`, and `applied_max_words`
-  are removed from canonical `project.json`
+- stale `applied_language_code`, `applied_strategy`, `applied_max_words`, and
+  `applied_dialog_segmentation` are removed from canonical `project.json`
 - projects loaded from legacy flat phrase groups still preserve flat
   compatibility behavior in memory
 - legacy single-string voice values load as lists and round-trip back to the

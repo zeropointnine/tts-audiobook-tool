@@ -46,21 +46,22 @@ class SegmentationInfoDialog(ModalScreen[None]):
         self.project = project
 
     def compose(self) -> ComposeResult:
+        settings = self.project.book.segmentation_settings
         info_lines = [
             "The text was originally imported using the following segmentation settings:",
             "",
-            f"{COL_DIM}Max words per segment:{COL_DEFAULT} {self.project.applied_max_words}",
+            f"{COL_DIM}Max words per segment:{COL_DEFAULT} {settings.max_words_per_segment}",
             (
                 f"{COL_DIM}Segmentation strategy:{COL_DEFAULT} "
-                f"{ self.project.applied_strategy.label if self.project.applied_strategy else 'unknown' }"
+                f"{settings.strategy.label}"
             ),
             (
                 f"{COL_DIM}Dialog segmentation:{COL_DEFAULT} "
-                f"{self.project.applied_dialog_segmentation}"
+                f"{settings.dialog_segmentation}"
             ),
             (
                 f"{COL_DIM}Language code:{COL_DEFAULT} "
-                f"{self.project.applied_language_code or '(none)'}"
+                f"{settings.language_code or '(none)'}"
             ),
         ]
         yield Vertical(

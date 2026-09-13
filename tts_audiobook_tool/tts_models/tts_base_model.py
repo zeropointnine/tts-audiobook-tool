@@ -296,19 +296,20 @@ class TtsBaseModel(ABC):
     @classmethod
     def get_max_words_exceed_warning(cls, project: Project) -> str:
         """
-        Returns warning text when the project's applied max words per segment
+        Returns warning text when the book's segmentation max words per segment
         exceeds the model's recommended maximum, else "".
         """
         reco = cls.get_max_words_range_reco(project)
         limit = reco[1]
         if limit <= 0:
             return ""
-        if project.applied_max_words <= limit:
+        max_words = project.book.segmentation_settings.max_words_per_segment
+        if max_words <= limit:
             return ""
 
         name = reco[2] or cls.INFO.ui.get("proper_name") or cls.INFO.id
         return (
-            f"{Ansi.ITALICS}Source text's max word length ({project.applied_max_words})"
+            f"{Ansi.ITALICS}Source text's max word length ({max_words})"
             f" exceeds {name} recommended model limit ({limit})\n"
             f"{Ansi.ITALICS}Output accuracy may be degraded"
         )

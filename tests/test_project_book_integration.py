@@ -10,7 +10,6 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
-from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
 from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
 from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
@@ -72,21 +71,63 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.segmentation_settings.language_code, "en")
         self.assertEqual(project.book.segmentation_settings.strategy, SegmentationStrategy.MULTI_SENTENCE)
         self.assertEqual(project.book.segmentation_settings.max_words_per_segment, 80)
-        self.assertEqual(project.applied_dialog_segmentation, True)
         self.assertEqual(project.book.segmentation_settings.dialog_segmentation, True)
+        self.assertFalse(hasattr(project, "applied_language_code"))
+        self.assertFalse(hasattr(project, "applied_strategy"))
+        self.assertFalse(hasattr(project, "applied_max_words"))
+        self.assertFalse(hasattr(project, "applied_dialog_segmentation"))
         self.assertEqual(project.phrase_groups, phrase_groups)
         self.assertEqual(project.markers, {2})
         self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [3])
 
-    def test_project_to_dict_excludes_legacy_applied_fields(self):
+    def test_project_accepts_but_does_not_materialize_legacy_applied_fields(self):
         project = Project.model_validate({
             "applied_language_code": "en",
             "applied_strategy": "multi",
             "applied_max_words": 80,
+            "applied_dialog_segmentation": True,
         })
 
         payload = ProjectSerializationUtil.to_project_json_dict(project)
 
+        for field_name in (
+            "applied_language_code",
+            "applied_strategy",
+            "applied_max_words",
+            "applied_dialog_segmentation",
+        ):
+            self.assertFalse(hasattr(project, field_name))
+        self.assertNotIn("applied_language_code", payload)
+        self.assertNotIn("applied_strategy", payload)
+        self.assertNotIn("applied_max_words", payload)
+        self.assertNotIn("applied_dialog_segmentation", payload)
+
+    def test_project_model_validate_prefers_book_over_legacy_applied_fields(self):
+        book = Book(
+            sections=[BookSection(phrase_groups=[self.make_phrase_group("One.")])],
+            segmentation_settings=BookSegmentationSettings(
+                language_code="es",
+                max_words_per_segment=42,
+                strategy=SegmentationStrategy.MAX_LEN,
+                dialog_segmentation=False,
+            ),
+        )
+
+        project = Project.model_validate({
+            "book": book,
+            # Legacy flat fields disagree with the book on every value; they must be ignored.
+            "applied_language_code": "en",
+            "applied_strategy": "multi",
+            "applied_max_words": 80,
+            "applied_dialog_segmentation": True,
+        })
+
+        self.assertEqual(project.book.segmentation_settings.language_code, "es")
+        self.assertEqual(project.book.segmentation_settings.max_words_per_segment, 42)
+        self.assertEqual(project.book.segmentation_settings.strategy, SegmentationStrategy.MAX_LEN)
+        self.assertEqual(project.book.segmentation_settings.dialog_segmentation, False)
+
+        payload = ProjectSerializationUtil.to_project_json_dict(project)
         self.assertNotIn("applied_language_code", payload)
         self.assertNotIn("applied_strategy", payload)
         self.assertNotIn("applied_max_words", payload)
@@ -419,20 +460,25 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.moss_delay_top_k, -1)
         self.assertEqual(project.moss_local_top_k, -1)
 
-    def test_get_book_segmentation_settings_falls_back_to_legacy_fields_without_book_sections(self):
+    def test_phrase_groups_setter_preserves_canonical_book_segmentation_settings(self):
+        canonical_settings = BookSegmentationSettings(
+            language_code="en",
+            max_words_per_segment=80,
+            strategy=SegmentationStrategy.MULTI_SENTENCE,
+            dialog_segmentation=True,
+        )
         project = Project.model_validate({
+            "book": Book(sections=[], segmentation_settings=canonical_settings),
+            # Stale legacy values must not replace canonical book settings.
             "applied_language_code": "es",
-            "applied_strategy": "max_len",
             "applied_max_words": 42,
-            "applied_dialog_segmentation": True,
+            "applied_strategy": "max_len",
+            "applied_dialog_segmentation": False,
         })
 
-        settings = ProjectBookUtil.get_book_segmentation_settings(project)
+        project.phrase_groups = [self.make_phrase_group("One.")]
 
-        self.assertEqual(settings.language_code, "es")
-        self.assertEqual(settings.strategy, SegmentationStrategy.MAX_LEN)
-        self.assertEqual(settings.max_words_per_segment, 42)
-        self.assertEqual(settings.dialog_segmentation, True)
+        self.assertEqual(project.book.segmentation_settings, canonical_settings)
 
     def test_project_loads_legacy_project_text_as_book_and_preserves_flat_compatibility(self):
         phrase_groups = [self.make_phrase_group("One."), self.make_phrase_group("Two.")]
@@ -601,7 +647,6 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir, book=book)
-            ProjectBookUtil.sync_flat_text_from_book(project)
             err = ProjectTextIOUtil.save_book(project)
             if not err:
                 err = project.save()
@@ -654,7 +699,6 @@ class TestProjectBookIntegration(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as project_dir:
             project = Project(dir_path=project_dir, book=book, chapter_mode=SectionMarkerMode.BOOKMARKS)
-            ProjectBookUtil.sync_flat_text_from_book(project)
 
             err = project.save()
             self.assertEqual(err, "")
@@ -705,8 +749,7 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.book.text_source_kind, "manual")
         self.assertEqual(project.book.title, "Manual Title")
         self.assertEqual(project.book.audio_source_kind, "generated")
-        self.assertEqual(project.applied_max_words, 50)
-        self.assertEqual(project.applied_dialog_segmentation, True)
+        self.assertEqual(project.book.segmentation_settings.max_words_per_segment, 50)
         self.assertEqual(project.book.segmentation_settings.dialog_segmentation, True)
         self.assertEqual(payload["book"]["segmentation_settings"]["dialog_segmentation"], True)
         self.assertEqual(project.markers, set())
@@ -749,7 +792,7 @@ class TestProjectBookIntegration(unittest.TestCase):
             [group.voice_index for group in reloaded.phrase_groups],
             [-1, 1, -1],
         )
-        self.assertTrue(reloaded.applied_dialog_segmentation)
+        self.assertTrue(reloaded.book.segmentation_settings.dialog_segmentation)
 
     def test_set_phrase_groups_and_save_clears_markers_for_plain_text_import(self):
         with tempfile.TemporaryDirectory() as project_dir:
@@ -804,7 +847,6 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(project.markers, set())
         self.assertEqual(project.word_substitutions, {})
         self.assertEqual(project_payload["word_substitutions_json_string"], "{}")
-        self.assertEqual(project.applied_dialog_segmentation, True)
         self.assertEqual(project.book.segmentation_settings.dialog_segmentation, True)
         self.assertEqual([section.title for section in project.book.sections], ["Chapter 1", "Chapter 2"])
         self.assertEqual([len(section.phrase_groups) for section in project.book.sections], [2, 1])

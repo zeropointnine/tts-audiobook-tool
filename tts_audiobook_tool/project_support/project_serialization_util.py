@@ -18,7 +18,6 @@ from tts_audiobook_tool.app_types import (
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.dots_base_model import (
@@ -226,16 +225,6 @@ class ProjectSerializationUtil:
 
         normalize_bool('dialog_segmentation', False)
 
-        s = d.get('applied_strategy', '')
-        d['applied_strategy'] = SegmentationStrategy.from_id(s)
-
-        i = d.get('applied_max_words', 0)
-        if not (i >= 0):
-            i = 0
-        d['applied_max_words'] = i
-
-        normalize_bool('applied_dialog_segmentation', False)
-
         s = d.get('generate_range', '')
         if isinstance(s, str):
             normalized_range = s.strip().lower()
@@ -266,16 +255,41 @@ class ProjectSerializationUtil:
         if 'markers' in d:
             d['marker_indices'] = d.pop('markers')
 
-        legacy_settings = BookSegmentationSettings(
-            language_code=d.get('applied_language_code', ''),
-            max_words_per_segment=d.get('applied_max_words', 0),
-            strategy=d.get('applied_strategy') or BookSegmentationSettings().strategy,
-            dialog_segmentation=d.get('applied_dialog_segmentation', False),
+        raw_legacy_language = d.pop('applied_language_code', '')
+        legacy_language = raw_legacy_language if isinstance(raw_legacy_language, str) else ''
+
+        raw_legacy_max_words = d.pop('applied_max_words', 0)
+        legacy_max_words = (
+            raw_legacy_max_words
+            if isinstance(raw_legacy_max_words, int)
+            and not isinstance(raw_legacy_max_words, bool)
+            and raw_legacy_max_words >= 0
+            else 0
         )
-        book = d.get('book')
-        if isinstance(book, Book):
-            ProjectBookUtil.sync_parse_dict_legacy_segmentation_from_book(d)
-        elif d.get('phrase_groups'):
+
+        raw_legacy_strategy = d.pop('applied_strategy', '')
+        legacy_strategy = (
+            raw_legacy_strategy
+            if isinstance(raw_legacy_strategy, SegmentationStrategy)
+            else SegmentationStrategy.from_id(raw_legacy_strategy)
+            if isinstance(raw_legacy_strategy, str)
+            else None
+        )
+
+        raw_legacy_dialog_segmentation = d.pop('applied_dialog_segmentation', False)
+        legacy_dialog_segmentation = (
+            raw_legacy_dialog_segmentation
+            if isinstance(raw_legacy_dialog_segmentation, bool)
+            else False
+        )
+
+        legacy_settings = BookSegmentationSettings(
+            language_code=legacy_language,
+            max_words_per_segment=legacy_max_words,
+            strategy=legacy_strategy or BookSegmentationSettings().strategy,
+            dialog_segmentation=legacy_dialog_segmentation,
+        )
+        if not isinstance(d.get('book'), Book) and d.get('phrase_groups'):
             d['book'] = Book(
                 sections=[BookSection(phrase_groups=d.get('phrase_groups', []))],
                 segmentation_settings=legacy_settings,

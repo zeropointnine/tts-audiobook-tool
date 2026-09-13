@@ -49,36 +49,6 @@ class ProjectBookUtil:
         )
 
     @staticmethod
-    def sync_parse_dict_legacy_segmentation_from_book(d: dict) -> None:
-        book = d.get('book')
-        if not isinstance(book, Book):
-            return
-        settings = book.segmentation_settings
-        d['applied_language_code'] = settings.language_code
-        d['applied_max_words'] = settings.max_words_per_segment
-        d['applied_strategy'] = settings.strategy
-        d['applied_dialog_segmentation'] = settings.dialog_segmentation
-
-    @staticmethod
-    def sync_flat_text_from_book(project: Project) -> None:
-        settings = project.book.segmentation_settings
-        super(type(project), project).__setattr__('applied_language_code', settings.language_code)
-        super(type(project), project).__setattr__('applied_max_words', settings.max_words_per_segment)
-        super(type(project), project).__setattr__('applied_strategy', settings.strategy)
-        super(type(project), project).__setattr__('applied_dialog_segmentation', settings.dialog_segmentation)
-
-    @staticmethod
-    def get_book_segmentation_settings(project: Project) -> BookSegmentationSettings:
-        if project.book.sections:
-            return project.book.segmentation_settings
-        return BookSegmentationSettings(
-            language_code=project.applied_language_code,
-            max_words_per_segment=project.applied_max_words,
-            strategy=project.applied_strategy or BookSegmentationSettings().strategy,
-            dialog_segmentation=project.applied_dialog_segmentation,
-        )
-
-    @staticmethod
     def get_flat_phrase_groups(project: Project) -> list[PhraseGroup]:
         return project.book.phrase_groups
 

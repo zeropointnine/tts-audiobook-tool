@@ -425,17 +425,18 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         return app_text.get_word_count(text)
 
     def is_edit_word_count_valid(self, word_count: int) -> bool:
-        """Return whether edited text satisfies the project's applied limit."""
-        return 0 < word_count <= self.project.applied_max_words
+        """Return whether edited text satisfies the book's segmentation limit."""
+        max_words = self.project.book.segmentation_settings.max_words_per_segment
+        return 0 < word_count <= max_words
 
     def make_edit_word_count_text(self, word_count: int) -> Text:
         """Format the live word count, highlighting an invalid current count."""
         count_color = (
             COL_DIM if self.is_edit_word_count_valid(word_count) else COL_ERROR
         )
+        max_words = self.project.book.segmentation_settings.max_words_per_segment
         return Text.from_ansi(
-            f"{COL_DIM}Words: {count_color}{word_count}{COL_DIM}/"
-            f"{self.project.applied_max_words}"
+            f"{COL_DIM}Words: {count_color}{word_count}{COL_DIM}/{max_words}"
         )
 
     def refresh_edit_word_count(self) -> int:
@@ -580,8 +581,8 @@ class TextEditor(ContentTextualApp[EditorSaved | EditorSaveFailed]):
         result = self.edit_session.update_phrase_group_text(
             item_id=item_id,
             new_text=edited_text,
-            max_words=self.project.applied_max_words,
-            pysbd_lang=self.project.applied_language_code,
+            max_words=self.project.book.segmentation_settings.max_words_per_segment,
+            pysbd_lang=self.project.book.segmentation_settings.language_code,
         )
 
         # Apply the mutation to update list_items and refresh the UI

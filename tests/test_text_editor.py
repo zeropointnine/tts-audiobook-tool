@@ -35,6 +35,12 @@ def make_loaded_editor(project: Project) -> TextEditor:
     return app
 
 
+def set_book_max_words(project: Project, max_words: int) -> None:
+    project.book.segmentation_settings = project.book.segmentation_settings._replace(
+        max_words_per_segment=max_words
+    )
+
+
 def test_single_section_lists_only_phrase_groups() -> None:
     project = make_project(
         [
@@ -709,7 +715,7 @@ def test_edit_mode_keeps_the_default_header() -> None:
 
 def test_edit_panel_shows_header_help_and_four_row_input() -> None:
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -799,7 +805,7 @@ def _word_count_span_colors(content: Text) -> dict[str, str]:
 def test_word_count_updates_live_using_canonical_counting() -> None:
     """The counter initializes and updates live with canonical word counting."""
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -822,7 +828,7 @@ def test_word_count_updates_live_using_canonical_counting() -> None:
 def test_word_count_marks_zero_as_error() -> None:
     """A zero-word edit renders the count in the error color."""
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 3
+    set_book_max_words(project, 3)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -845,7 +851,7 @@ def test_word_count_marks_zero_as_error() -> None:
 def test_word_count_shows_zero_for_non_vocalizable_text() -> None:
     """Non-vocalizable text reports 0 words and blocks Enter until fixed."""
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -876,7 +882,7 @@ def test_word_count_shows_zero_for_non_vocalizable_text() -> None:
 def test_word_count_marks_over_limit_and_ignores_enter() -> None:
     """Over-limit text renders the count in the error color and Enter is ignored."""
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 3
+    set_book_max_words(project, 3)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -905,9 +911,9 @@ def test_word_count_marks_over_limit_and_ignores_enter() -> None:
 
 
 def test_word_count_accepts_exact_limit() -> None:
-    """Exactly applied_max_words is valid and commits the edit."""
+    """Exactly the book's segmentation limit is valid and commits the edit."""
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 3
+    set_book_max_words(project, 3)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -934,10 +940,12 @@ def test_word_count_accepts_exact_limit() -> None:
 
 def test_i_opens_segmentation_info_dialog() -> None:
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 80
-    project.applied_strategy = SegmentationStrategy.MULTI_SENTENCE
-    project.applied_dialog_segmentation = True
-    project.applied_language_code = "en"
+    project.book.segmentation_settings = project.book.segmentation_settings._replace(
+        max_words_per_segment=80,
+        strategy=SegmentationStrategy.MULTI_SENTENCE,
+        dialog_segmentation=True,
+        language_code="en",
+    )
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -972,10 +980,12 @@ def test_i_opens_segmentation_info_dialog() -> None:
 
 def test_info_dialog_shows_none_for_missing_language_code() -> None:
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 42
-    project.applied_strategy = SegmentationStrategy.SENTENCE_PLUS
-    project.applied_dialog_segmentation = False
-    project.applied_language_code = ""
+    project.book.segmentation_settings = project.book.segmentation_settings._replace(
+        max_words_per_segment=42,
+        strategy=SegmentationStrategy.SENTENCE_PLUS,
+        dialog_segmentation=False,
+        language_code="",
+    )
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -992,7 +1002,6 @@ def test_info_dialog_shows_none_for_missing_language_code() -> None:
 
 def test_info_dialog_dismisses_on_any_key() -> None:
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_strategy = SegmentationStrategy.SENTENCE_PLUS
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1051,7 +1060,7 @@ def test_edit_simple_line() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1090,7 +1099,7 @@ def test_edit_multiline_text() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1162,7 +1171,7 @@ def test_edit_cancel_with_escape() -> None:
 def test_edit_rejects_empty_text() -> None:
     """Test 4: Empty text is rejected and the editor stays open.
 
-    Zero words are invalid under the applied_max_words requirement, so Enter
+    Zero words are invalid under the book's segmentation limit, so Enter
     must be ignored: the edit remains active, nothing is staged, and the
     original text is untouched.
     """
@@ -1175,7 +1184,7 @@ def test_edit_rejects_empty_text() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1243,7 +1252,7 @@ def test_edit_creates_has_changes() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1269,7 +1278,7 @@ def test_edit_preserves_voice_index() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1294,7 +1303,7 @@ def test_edit_single_line_without_terminal_punct_uses_canonical_reason() -> None
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1322,7 +1331,7 @@ def test_edit_confirm_without_changes_is_noop() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1361,7 +1370,7 @@ def test_edit_confirm_mixed_line_endings_is_noop() -> None:
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1385,8 +1394,10 @@ def test_edit_confirm_mixed_line_endings_is_noop() -> None:
 def test_edit_uses_canonical_segmentation() -> None:
     """Confirming an edit re-creates phrases with the canonical segmenter."""
     project = make_project([BookSection(phrase_groups=[make_phrase_group("One.")])])
-    project.applied_max_words = 80
-    project.applied_language_code = "en"
+    set_book_max_words(project, 80)
+    project.book.segmentation_settings = project.book.segmentation_settings._replace(
+        language_code="en"
+    )
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1412,7 +1423,7 @@ def test_edit_preserves_original_trailing_break() -> None:
     project = make_project(
         [BookSection(phrase_groups=[make_phrase_group("One.\n\n")])]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
 
     async def exercise() -> None:
@@ -1470,7 +1481,7 @@ def test_finish_confirm_commit_edit_uses_narrow_invalidation(monkeypatch) -> Non
             )
         ]
     )
-    project.applied_max_words = 80
+    set_book_max_words(project, 80)
     app = make_loaded_editor(project)
     commits: list[tuple[object, object]] = []
 
