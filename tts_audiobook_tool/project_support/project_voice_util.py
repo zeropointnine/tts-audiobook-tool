@@ -6,10 +6,9 @@ from typing import TYPE_CHECKING
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
-from tts_audiobook_tool.constants import OUTE_DEFAULT_VOICE_JSON_FILE_PATH, PROJECT_VOICE_SUBDIR
+from tts_audiobook_tool.constants import PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.tts_models.oute_util import OuteUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
 
@@ -133,24 +132,6 @@ class ProjectVoiceUtil:
         voices = ProjectVoiceUtil.get_voice_values(project, tts_model_type)
         transcripts = ProjectVoiceUtil.get_voice_transcript_values(project, tts_model_type)
         return [(voice, transcripts[i] if i < len(transcripts) else "") for i, voice in enumerate(voices)]
-
-    @staticmethod
-    def load_oute_voice_json(project: Project) -> None:
-        voice_path = os.path.join(project.dir_path, project.oute_voice_file_name)
-        if not project.oute_voice_file_name or not os.path.exists(voice_path):
-            result = OuteUtil.load_oute_voice_json(OUTE_DEFAULT_VOICE_JSON_FILE_PATH)
-            if isinstance(result, str):
-                from tts_audiobook_tool import ask
-                ask.ask_error(result)
-            else:
-                project.set_oute_voice_and_save(result, "default")
-        else:
-            result = OuteUtil.load_oute_voice_json(voice_path)
-            if isinstance(result, str):
-                printt(f"Problem loading Oute voice json file {project.oute_voice_file_name}: {result}")
-                printt()
-            else:
-                project.oute_voice_json = result
 
     @staticmethod
     def get_used_voice_file_names(project: Project, exclude_attr: str) -> set[str]:

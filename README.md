@@ -20,7 +20,6 @@
 - [MiraTTS](https://github.com/ysharma3501/MiraTTS)
 - [MOSS-TTS (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) (either locally or via SGL-Omni)
 - [OmniVoice](https://github.com/k2-fsa/OmniVoice)
-- [Oute TTS](https://github.com/edwko/OuteTTS)
 - [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (either locally or via SGL-Omni)
 - [VibeVoice](https://github.com/microsoft/VibeVoice)
@@ -70,7 +69,7 @@ All examples use the same source text and the same 15-second voice clone sample 
 | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2.abr.m4a) | [IndexTTS2](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-indextts2-plus-emo.abr.m4a) (w/ add'l emotional guidance sample) |
 | [MiraTTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-mira.abr.m4a) | [MOSS-TTS v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-v1.5.abr.m4a) |
 | [MOSS-TTS-Local-Transformer-v1.5](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-moss-local-transformer-v1.5.abr.m4a) | [OmniVoice](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-omnivoice.abr.m4a) |
-| [Oute](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-oute.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) |
+| [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket.abr.m4a) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) |
 | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-upscaled.abr.m4a) (LavaSRv2 48k upsample) | [Pocket TTS](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-pocket-stuart-bell.abr.m4a) (predefined voice: stuart_bell) |
 | [Qwen3-TTS-1.7B-Base](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-qwen3-12hz-1.7b-base.abr.m4a) | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b.abr.m4a) |
 | [VibeVoice 1.5B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-1.5b-lora-klett.abr.m4a) (LoRA example) ([LoRA link](https://huggingface.co/vibevoice-community/klett)) | [VibeVoice 7B](https://zeropointnine.github.io/tts-audiobook-tool/browser_player/?url=https://zeropointnine.github.io/tts-audiobook-tool-sample-output/waves-vibevoice-7b.abr.m4a) |
@@ -438,42 +437,6 @@ Install [Flash Attention](#installing-flash-attention) if using CUDA (optional b
 
 Note that because Microsoft famously removed the source code from their github repository, we pull from an archived, third-party fork, [vibevoice-community](https://github.com/vibevoice-community/VibeVoice).
 
-## Virtual environment for Oute TTS:
-
-Initialize a **Python v3.12** virtual environment named "venv-oute":
-
-    python -m venv venv-oute # linux/mac
-    C:\path\to\python3.12\python.exe -m venv venv-oute # windows
-
-Activate the virtual environment:
-
-    source venv-oute/bin/activate # linux/mac
-    venv-oute\Scripts\activate.bat # windows
-
-Install dependencies:
-
-    pip install -r requirements-oute.txt
-
-
-### Oute TTS model configuration
-
-Running the app optimally with Oute TTS requires extra steps due to the way the model supports multiple backends, model sizes and quantizations. You will need to review and hand-edit the source file **`config_oute.py`** accordingly.
-
-The [OuteTTS Github project page](https://github.com/edwko/OuteTTS) documents these various options. But here are initial recommendations:
-
-**CUDA:**
-
-Prefer the *ExLllama2* backend if possible: `backend=outetts.Backend.EXL2` (See the example Oute config in `config_oute.py`). However, this requires installing:
-- exllama2 library (`pip install exllamav2`)
-- [Flash Attention](#installing-flash-attention)
-
-Alternatively, `Backend.HF` is also hardware accelerated but slower. Flash Attention is optional in this case.
-
-**Mac with Apple silicon:**
-
-Use `Backend.LLAMACPP`.
-
-
 ## Virtual environment for SGL-Omni server
 
 > **ℹ️ Note:**
@@ -631,10 +594,6 @@ Zero-shot voice cloning is a first-class feature, supported for all models.
 - Inference steps
 - Speed, CFG, seed
 
-**Oute TTS**
-
-- Temperature
-
 **Pocket TTS**
 
 - Selectable language models (english, french_241, german_241, italian, portuguese, spanish_241)
@@ -700,7 +659,6 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 | GLM-TTS                 | GTX 3080 Ti, Linux   | 200%+ realtime  |
 | MiraTTS                 | GTX 3080 Ti, Linux   | 3000% realtime (yes really) | batch size=10
 | MiraTTS                 | GTX 3080 Ti, Linux   | 800% realtime   | batch size=1
-| Oute                    | GTX 3080 Ti, Windows | ~90% realtime   | using `outetts.Backend.EXL2`
 | VibeVoice-Large 7B      | RTX 4090, Windows    | 600%+ realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 1000% realtime  | batch size=10, default steps
 | VibeVoice 1.5B          | GTX 3080 Ti, Linux   | 200%+ realtime  | batch size=1, default steps
@@ -711,6 +669,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-09-13**
+
+- Removed support for the Oute TTS model. The last commit where Oute support still exists is [121029d](https://github.com/zeropointnine/tts-audiobook-tool/commit/121029d05d0d054c8f3dbfe59cda2eec268e9180).
 
 **2026-09-12**
 
@@ -1013,11 +975,11 @@ Also added LLM chat **custom system prompts** for Higgs V3 and Fish S2 Pro, whic
 
 - Loudness normalization is now being applied correctly (on the final audio file instead of per audio segment)
 
-- Better detection of undesired repeating phrases (Oute especially)
+- Better detection of undesired repeating phrases
 
 - Better detection and fix for spooky Chatterbox noises at the end of prompts
 
-- Short 1-2 word sentences now get grouped with adjacent sentences to mitigate Chatterbox and Oute's issues with short prompts
+- Short 1-2 word sentences now get grouped with adjacent sentences to mitigate Chatterbox's issues with short prompts
 
 - Streamlined handling of audio data throughout
 

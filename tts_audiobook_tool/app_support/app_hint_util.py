@@ -70,10 +70,6 @@ def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
     if not is_server and not is_long_path_enabled():
         hints.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
 
-    # Oute
-    if Tts.get_type() == TtsModelType.OUTE:
-        hints.show_hint_if_necessary(prefs, HINT_OUTE_CONFIG, and_prompt=True)
-
     # SGL-Omni is a venv-level capability: in a local-mode venv without a
     # TTS model, saved SGL-Omni settings cannot be used here
     if (

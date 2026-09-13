@@ -22,7 +22,6 @@ class AppUtil {
             "waves-indextts2": "waves-indextts2.abr.m4a",
             "waves-indextts2-plus-emo": "waves-indextts2-plus-emo.abr.m4a",
             "waves-mira": "waves-mira.abr.m4a",
-            "waves-oute": "waves-oute.abr.m4a",
             "waves-s1-mini": "waves-s1-mini.abr.m4a",
             "waves-vibevoice-1.5b": "waves-vibevoice-1.5b.abr.m4a",
             "waves-vibevoice-1.5b-lora-klett": "waves-vibevoice-1.5b-lora-klett.abr.m4a",

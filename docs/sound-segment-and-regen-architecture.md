@@ -42,7 +42,7 @@ Filenames are constructed by `SoundSegmentUtil.make_file_name()` (`sound_segment
 |-----|---------|-------------|
 | `[idx]` | `[00024]` | 1-based index, zero-padded to 5 digits |
 | `[hash]` | `[3ae0f21b9de65a3c]` | Hash of `"{index} {segment_text}"` — used to detect if source text has changed since generation |
-| `[model]` | `[vibevoice]` | TTS model file tag (e.g., `chatterbox`, `oute`, `fish_s1`, `higgs`, `mira`, `qwen3tts`, `pocket`, `vibevoice`, `indextts2`, `glm`) |
+| `[model]` | `[vibevoice]` | TTS model file tag (e.g., `chatterbox`, `fish_s1`, `higgs`, `mira`, `qwen3tts`, `pocket`, `vibevoice`, `indextts2`, `glm`) |
 | `[voice]` | `[sy_even_if_ch1_c]` | Voice tag derived from the voice file name used for cloning |
 | `[{num_errors}]` | `[5]` | Number of word errors detected during validation (optional — only present for `WordErrorResult` and `MusicFailResult`) |
 | `{text_preview}` | `With_Lord_knows_what_s_beyond` | First ~50 characters of the segment text, sanitized for filesystem safety |

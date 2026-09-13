@@ -20,7 +20,6 @@ from tts_audiobook_tool.system_support.browser import (
     launch_player_with_chromium,
 )
 from tts_audiobook_tool.tts import Tts
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 
 class ConcatMenu:
@@ -217,7 +216,6 @@ class ConcatMenu:
             on_select=on_select,
             sublabels=[item.value.description for item in NormalizationType],
             subheading=LOUDNORM_SUBHEADING,
-            hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelType.OUTE else None
         )
 
     @staticmethod
@@ -298,7 +296,6 @@ class ConcatMenu:
             default_value=False,
             on_select=on_select,
             subheading=SUBDIVIDE_SUBHEADING,
-            hint=HINT_OUTE_LOUD_NORM if Tts.get_type() == TtsModelType.OUTE else None
         )
 
     @staticmethod

@@ -15,7 +15,6 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         'chatterbox_voice_file_name': ['primary-a.flac', 'shared.flac'],
         'mira_voice_file_name': ['primary-b.flac', 'shared.flac'],
         'indextts2_emo_voice_file_name': 'emotion.flac',
-        'oute_voice_file_name': 'oute-voice.json',
         'fish_s2_voice_file_name': ['fish-s2.flac'],
         'fish_s2_server_voice_target': ['server-target.flac'],
         'higgs_v3_voice_file_name': ['higgs-v3.flac'],
@@ -34,7 +33,6 @@ def test_make_supporting_project_file_names_collects_project_local_voice_files(t
         PROJECT_TEXT_FILE_NAME,
         PROJECT_TEXT_RAW_FILE_NAME,
         PROJECT_TEXT_EPUB_FILE_NAME,
-        'oute-voice.json',
         'primary-a.flac',
         'shared.flac',
         'fish-s2.flac',
@@ -59,7 +57,6 @@ def test_copy_supporting_project_files_copies_all_discovered_voice_files_and_rep
         dir_path=str(source_dir),
         chatterbox_voice_file_name=['voice-a.flac', 'voice-b.flac', 'missing.flac'],
         indextts2_emo_voice_file_name='emotion.flac',
-        oute_voice_file_name='oute-voice.json',
     )
     contents = {
         PROJECT_TEXT_FILE_NAME: b'project text',
@@ -68,7 +65,6 @@ def test_copy_supporting_project_files_copies_all_discovered_voice_files_and_rep
         'voice-a.flac': b'voice a',
         'voice-b.flac': b'voice b',
         'emotion.flac': b'emotion voice',
-        'oute-voice.json': b'{"voice": "oute"}',
     }
     for file_name, content in contents.items():
         (source_dir / file_name).write_bytes(content)

@@ -207,7 +207,7 @@ def create_model(model_type: TtsModelType) -> tuple[TtsBaseModel, str | None]:
         case _:
             raise SystemExit(
                 f"The local model detected in this venv ({model_type.value.id}) "
-                "is not supported by this script: IndexTTS2/Oute/VibeVoice "
+                "is not supported by this script: IndexTTS2/VibeVoice "
                 "are not part of the voice clone cache work"
             )
 

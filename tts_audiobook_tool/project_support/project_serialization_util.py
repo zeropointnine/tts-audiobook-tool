@@ -732,9 +732,6 @@ class ProjectSerializationUtil:
 
             "none_voice_file_name": project.none_voice_file_name,
 
-            "oute_voice_file_name": project.oute_voice_file_name,
-            "oute_temperature": project.oute_temperature,
-
             "chatterbox_type": project.chatterbox_type.id,
             "chatterbox_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.chatterbox_voice_file_name),
             "chatterbox_temperature": project.chatterbox_temperature,

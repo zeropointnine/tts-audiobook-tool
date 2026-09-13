@@ -137,9 +137,6 @@ class ProjectLoadUtil:
                 return err
             L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
 
-        if Tts.get_type() == TtsModelType.OUTE:
-            ProjectVoiceUtil.load_oute_voice_json(project)
-
         did_clear_invalid_voice_files = ProjectVoiceUtil.verify_voice_files_exist(project)
 
         if pending_warnings or did_clear_invalid_voice_files:

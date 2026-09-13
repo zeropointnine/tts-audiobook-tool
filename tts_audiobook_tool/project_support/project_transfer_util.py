@@ -30,8 +30,6 @@ class ProjectTransferUtil:
     PROJECT_SETTINGS_TRANSFER_SKIP = {
         'dir_path',
         'sound_segments',
-        # Runtime-loaded from oute_voice_file_name after the supporting JSON file is copied.
-        'oute_voice_json',
     }
 
     PROJECT_SETTINGS_TRANSFER_EXTRA_FIELDS = {
@@ -120,7 +118,7 @@ class ProjectTransferUtil:
             PROJECT_TEXT_EPUB_FILE_NAME,
         ]
 
-        file_attrs = ['oute_voice_file_name']
+        file_attrs = []
         for model_info in TtsModelType:
             voice_target_attr = model_info.value.voice_target_attr
             if voice_target_attr.endswith('_voice_file_name') and voice_target_attr not in file_attrs:

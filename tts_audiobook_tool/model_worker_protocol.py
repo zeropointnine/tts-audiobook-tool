@@ -118,14 +118,6 @@ class TranscribeAudioCommand:
 
 
 @dataclass(frozen=True)
-class CreateOuteSpeakerCommand:
-    operation_id: str
-    project_dir: str
-    settings: GenerationSettings
-    source_path: str
-
-
-@dataclass(frozen=True)
 class InspectTtsCommand:
     operation_id: str
     project_dir: str
@@ -180,7 +172,6 @@ ModelWorkerCommand = (
     | ResetChatSessionCommand
     | SynthesizeChatCommand
     | TranscribeAudioCommand
-    | CreateOuteSpeakerCommand
     | InspectTtsCommand
     | GetModelStateCommand
     | ProbeLavaSrCommand
@@ -279,12 +270,6 @@ class ChatSynthesisFinished:
 
 
 @dataclass(frozen=True)
-class OuteSpeakerCreated:
-    operation_id: str
-    voice: dict[str, object]
-
-
-@dataclass(frozen=True)
 class AudioTranscribed:
     operation_id: str
     segments: tuple[object, ...]
@@ -352,7 +337,6 @@ ModelWorkerEvent = (
     | ChatSessionReset
     | ChatAudioChunk
     | ChatSynthesisFinished
-    | OuteSpeakerCreated
     | AudioTranscribed
     | TtsInspected
     | LavaSrProbed

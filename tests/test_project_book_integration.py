@@ -346,18 +346,6 @@ class TestProjectBookIntegration(unittest.TestCase):
         self.assertEqual(payload["fish_s2_voice_file_name"], ["one.flac", "two.flac"])
         self.assertEqual(payload["fish_s2_voice_transcript"], ["one", "two"])
 
-    def test_project_to_dict_keeps_oute_voice_json_as_dict(self):
-        voice_json = {"speaker": "default"}
-        project = Project.model_validate({
-            "oute_voice_json": voice_json,
-        })
-
-        payload = ProjectSerializationUtil.to_project_json_dict(project)
-
-        self.assertEqual(project.oute_voice_json, voice_json)
-        self.assertNotIsInstance(project.oute_voice_json, list)
-        self.assertNotIn("oute_voice_json", payload)
-
     def test_project_normalizes_qwen3_server_concurrent_requests(self):
         project = Project.model_validate({
             "qwen3_server_concurrent_requests": 0,

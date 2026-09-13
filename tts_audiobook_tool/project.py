@@ -141,10 +141,6 @@ class Project(BaseModel):
     # Placeholder attribute used when no TTS model exists
     none_voice_file_name: str = "" 
 
-    oute_voice_file_name: str = ""
-    oute_voice_json: dict = Field(default_factory=dict)
-    oute_temperature: float = -1
-
     chatterbox_type: ChatterboxType = list(ChatterboxType)[0]
     chatterbox_voice_file_name: list[str] = Field(default_factory=list)
     chatterbox_temperature: float = -1
@@ -349,17 +345,6 @@ class Project(BaseModel):
 
         L.d(f"Saved {PROJECT_JSON_FILE_NAME}: {file_path}")
         return ""
-
-    def set_oute_voice_and_save(self, voice_dict: dict, dest_file_stem: str) -> None:
-        file_name = dest_file_stem + ".json"
-        err = save_json(voice_dict, os.path.join(self.dir_path, file_name))
-        if err:
-            from tts_audiobook_tool import ask
-            ask.ask_error(err)
-            return
-        self.oute_voice_file_name = file_name
-        self.oute_voice_json = voice_dict
-        self.save()
 
     @property
     def sound_segments_path(self) -> str:

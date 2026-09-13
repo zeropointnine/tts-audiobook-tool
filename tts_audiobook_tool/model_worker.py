@@ -24,7 +24,6 @@ from tts_audiobook_tool.model_worker_protocol import (
     ClearModelsCommand,
     ConsoleFlush,
     ConsoleOutput,
-    CreateOuteSpeakerCommand,
     GenerateCommand,
     GenerationFinished,
     GenerationSettings,
@@ -38,7 +37,6 @@ from tts_audiobook_tool.model_worker_protocol import (
     ModelStateSnapshot,
     ModelWorkerCommand,
     ModelWorkerEvent,
-    OuteSpeakerCreated,
     ProbeLavaSrCommand,
     RealTimePlaybackCommand,
     RealTimePlaybackFinished,
@@ -273,7 +271,6 @@ def _make_worker_state(
         | TtsPreviewCommand
         | RealTimePlaybackCommand
         | InspectTtsCommand
-        | CreateOuteSpeakerCommand
         | SynthesizeChatCommand
     ),
 ) -> Any:
@@ -811,29 +808,6 @@ def _model_worker_main(
                         f"{type(exception).__name__}: {exception}",
                     )
                 )
-            tracker.set("")
-            continue
-        if isinstance(command, CreateOuteSpeakerCommand):
-            state = None
-            try:
-                from tts_audiobook_tool.tts import Tts
-
-                state = _make_worker_state(command)
-                result = Tts.get_oute().create_speaker(command.source_path)
-                if isinstance(result, str):
-                    raise RuntimeError(result)
-                event_queue.put(OuteSpeakerCreated(command.operation_id, result))
-            except Exception as exception:
-                traceback.print_exc()
-                event_queue.put(
-                    WorkerCommandFailed(
-                        command.operation_id,
-                        f"{type(exception).__name__}: {exception}",
-                    )
-                )
-            finally:
-                if state is not None:
-                    state.project.kill()
             tracker.set("")
             continue
         if isinstance(command, InspectTtsCommand):
@@ -1511,46 +1485,6 @@ class ModelWorker:
         return None, result if isinstance(result, str) else "Unexpected transcription response"
 
     @classmethod
-    def create_oute_speaker_blocking(
-        cls,
-        state: Any,
-        source_path: str,
-    ) -> tuple[dict[str, object] | None, str]:
-        error = cls.start()
-        if error:
-            return None, error
-        prefs = state.prefs
-        sgl_type = prefs.sgl_omni_type
-        settings = GenerationSettings(
-            stt_variant_id=prefs.stt_variant.id,
-            stt_config_id=prefs.stt_config.id,
-            tts_force_cpu=prefs.tts_force_cpu,
-            sgl_omni_type_id=(None if sgl_type is None else sgl_type.value.id),
-            sgl_omni_url=prefs.sgl_omni_url,
-            save_debug_files=prefs.save_debug_files,
-        )
-        with cls._lock:
-            if cls._active_operation_id is not None:
-                return None, "Model worker is busy"
-            operation_id = uuid.uuid4().hex
-            cls._active_operation_id = operation_id
-            if cls._command_queue is None:
-                cls._active_operation_id = None
-                return None, "Model worker is unavailable"
-            cls._command_queue.put(
-                CreateOuteSpeakerCommand(
-                    operation_id,
-                    state.project.dir_path,
-                    settings,
-                    source_path,
-                )
-            )
-        result = cls._wait_for_blocking_result(operation_id, OuteSpeakerCreated)
-        if isinstance(result, OuteSpeakerCreated):
-            return result.voice, ""
-        return None, result if isinstance(result, str) else "Unexpected Oute response"
-
-    @classmethod
     def inspect_tts_blocking(cls, state: Any) -> tuple[TtsInspected | None, str]:
         from tts_audiobook_tool.tts import Tts
 
@@ -1672,13 +1606,12 @@ class ModelWorker:
         operation_id: str,
         success_type: type[ModelsCleared]
             | type[ChatSessionReset]
-            | type[OuteSpeakerCreated]
             | type[AudioTranscribed]
             | type[TtsInspected]
             | type[ModelStateReported]
             | type[LavaSrProbed]
             | type[AudioFileUpsampled],
-    ) -> ModelsCleared | ChatSessionReset | OuteSpeakerCreated | AudioTranscribed | TtsInspected | ModelStateReported | LavaSrProbed | AudioFileUpsampled | str:
+    ) -> ModelsCleared | ChatSessionReset | AudioTranscribed | TtsInspected | ModelStateReported | LavaSrProbed | AudioFileUpsampled | str:
         deferred: list[ModelWorkerEvent] = []
         try:
             while True:
@@ -1748,7 +1681,6 @@ class ModelWorker:
                 RealTimePlaybackFinished,
                 ModelsCleared,
                 ChatSessionReset,
-                OuteSpeakerCreated,
                 AudioTranscribed,
                 TtsInspected,
                 ModelStateReported,

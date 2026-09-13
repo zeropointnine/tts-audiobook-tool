@@ -7,12 +7,6 @@ HINT_LONG_PATHS = Hint(
     "App relies on pretty long filenames, so be sure to use\nshort directory paths when creating new projects"
 )
 
-HINT_OUTE_CONFIG = Hint(
-    "oute_config",
-    "This appears to be your first time running the application using the Oute TTS model",
-    "As a reminder, you'll want to review and adjust the settings\nin the file \"config_oute.py\" for optimal performance."
-)
-
 HINT_TKINTER = Hint(
     "tkinter",
     "tkinter not installed",
@@ -36,12 +30,6 @@ HINT_MULTIPLE_MP3S = Hint(
     "multiple_mp3s",
     "Multiple MP3 files?",
     "If you want to combine multiple MP3 files in a directory,\nthis can be done from the Tools/Options menu"
-)
-
-HINT_OUTE_LOUD_NORM = Hint(
-    "oute_loud_norm",
-    "Tip",
-    "Oute generations can have considerable variance in loudness.\nConsider using \"stronger.\""
 )
 
 HINT_FISH_S1_FIRST_COMPILE = Hint(

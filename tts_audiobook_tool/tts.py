@@ -25,7 +25,6 @@ from tts_audiobook_tool.tts_models.moss_server_base_model import MossServerBaseM
 from tts_audiobook_tool.tts_models.moss_server_model import MossDelayServerModel, MossLocalServerModel
 from tts_audiobook_tool.tts_models.none_base_model import NoneBaseModel
 from tts_audiobook_tool.tts_models.pocket_base_model import PocketBaseModel
-from tts_audiobook_tool.tts_models.oute_base_model import OuteBaseModel
 from tts_audiobook_tool.tts_models.qwen3_base_model import Qwen3BaseModel
 from tts_audiobook_tool.tts_models.qwen3_server_base_model import Qwen3ServerBaseModel
 from tts_audiobook_tool.tts_models.tts_base_model import TtsBaseModel
@@ -73,7 +72,6 @@ class Tts:
     _moss_delay_server: MossServerBaseModel | None = None
     _moss_local_server: MossServerBaseModel | None = None
     _omnivoice: OmniVoiceBaseModel | None = None
-    _oute: OuteBaseModel | None = None
     _pocket: PocketBaseModel | None = None
     _qwen3: Qwen3BaseModel | None = None
     _qwen3tts_server: Qwen3ServerBaseModel | None = None
@@ -383,7 +381,6 @@ class Tts:
             Tts._moss_delay_server,
             Tts._moss_local_server,
             Tts._omnivoice,
-            Tts._oute,
             Tts._pocket,
             Tts._qwen3,
             Tts._qwen3tts_server,
@@ -676,15 +673,6 @@ class Tts:
         return Tts._omnivoice
 
     @staticmethod
-    def get_oute() -> OuteBaseModel:
-        require_model_owner("TTS")
-        if not Tts._oute:
-            from tts_audiobook_tool.tts_models.oute_model import OuteModel
-            Tts._oute = OuteModel()
-            printt()
-        return Tts._oute
-
-    @staticmethod
     def get_pocket() -> PocketBaseModel:
         require_model_owner("TTS")
         if not Tts._pocket:
@@ -873,7 +861,6 @@ Tts._MODEL_REGISTRY = {
     TtsModelType.MOSS_DELAY_SERVER: (MossDelayServerModel, Tts.get_moss_delay_server, "_moss_delay_server"),
     TtsModelType.MOSS_LOCAL_SERVER: (MossLocalServerModel, Tts.get_moss_local_server, "_moss_local_server"),
     TtsModelType.OMNIVOICE: (OmniVoiceBaseModel, Tts.get_omnivoice, "_omnivoice"),
-    TtsModelType.OUTE: (OuteBaseModel, Tts.get_oute, "_oute"),
     TtsModelType.POCKET: (PocketBaseModel, Tts.get_pocket, "_pocket"),
     TtsModelType.QWEN3TTS: (Qwen3BaseModel, Tts.get_qwen3, "_qwen3"),
     TtsModelType.QWEN3TTS_SERVER: (Qwen3ServerBaseModel, Tts.get_qwen3tts_server, "_qwen3tts_server"),

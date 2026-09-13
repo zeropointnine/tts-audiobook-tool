@@ -281,9 +281,11 @@ class GenerateUtil:
                     eta_seconds=eta_seconds,
                 )
             )
+            skip_divider_flag = Tts.instance_exists()
             GenerateUtil.print_batch_heading(
                 indices=indices,
                 voice_index=sub.voice_selection_index,
+                show_divider=not skip_divider_flag,
             )
 
             # Generate and validate
@@ -963,6 +965,7 @@ class GenerateUtil:
     def print_batch_heading(
         indices: list[int],
         voice_index: int | None = None,
+        show_divider: bool = True,
     ) -> None:
 
         line_noun = make_noun("line", "lines", len(indices))
@@ -976,7 +979,8 @@ class GenerateUtil:
         if voice_index is not None:
             processing_string += f" {COL_DIM}(voice {voice_index + 1}){COL_DEFAULT}"
 
-        printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")
+        if show_divider:
+            printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")
         printt(f"{processing_string}")
         printt()
 

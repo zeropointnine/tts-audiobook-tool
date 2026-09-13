@@ -556,37 +556,6 @@ class TtsModelType(Enum):
         ]
     )
 
-    OUTE = TtsModelSpec(
-        id="oute",
-        backend_kind=TtsBackendKind.LOCAL,
-        sgl_omni_model_id_substring="",
-        local_module_test="outetts",
-        local_torch_devices = [], # not applicable
-        file_tag="oute",
-        default_output_sample_rate=44_100,
-        voice_target_attr="oute_voice_json", # rem, special case, is not a sound file
-        requires_voice=True,
-        voice_transcript_attr="",
-        extra_file_attrs=[],
-        batch_size_attr="",
-        can_stream=False,
-        requires_ffmpeg_libs=False,
-        un_all_caps=False, # TODO: check this
-        requirements_file_name="requirements-oute.txt",
-        ui = {
-            "proper_name": "Oute TTS",
-            "short_name": "Oute",
-            "voice_path_console": "Enter voice clone audio clip file path (up to 15s): ",
-            "voice_path_requestor": "Select voice clone audio clip (up to 15s)",
-            "project_links": ["https://github.com/edwko/OuteTTS", "https://huggingface.co/OuteAI"]
-        },
-        output_filters=[],
-        substitutions=[
-            # fyi u2500 = "box drawing light horizontal". have seen it in the wild used as an em-dash.
-            ("\u2014", ", "), ("\u2500", ", ")
-        ]
-    )
-
     POCKET = TtsModelSpec(
         id="pocket",
         backend_kind=TtsBackendKind.LOCAL,

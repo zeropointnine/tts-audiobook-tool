@@ -174,10 +174,6 @@ class ProjectNewMenu:
     @staticmethod
     def print_missing_supporting_files_warning(missing_paths: list[str]) -> None:
 
-        # Special case: Oute, not worth reasoning through this
-        if len(missing_paths) == 1 and "default.json" in missing_paths[0]:
-            missing_paths = []
-
         if not missing_paths:
             return
 

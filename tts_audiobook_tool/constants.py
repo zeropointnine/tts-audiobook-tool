@@ -55,9 +55,6 @@ SEED_MAX = 2**32 - 1
 
 CTRANSLATE_REQUIRED_CUDNN_VERSION = 91002
 
-OUTE_DEFAULT_VOICE_JSON_FILE_NAME = "en-female-1-neutral.json"
-OUTE_DEFAULT_VOICE_JSON_FILE_PATH = os.path.join(package_dir, ASSETS_DIR_NAME, OUTE_DEFAULT_VOICE_JSON_FILE_NAME)
-
 CHAT_SYSTEM_PROMPTS = [
     ("chat_system_prompt_default.txt", "Default system prompt"),
     ("chat_system_prompt_higgs_v3.txt", "System prompt showcasing Higgs V3 \"control tokens\" feature"),

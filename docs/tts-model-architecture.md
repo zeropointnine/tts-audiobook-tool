@@ -30,7 +30,6 @@ requirements-indextts2.txt
 requirements-mira.txt
 requirements-moss.txt
 requirements-omnivoice.txt
-requirements-oute.txt
 requirements-pocket.txt
 requirements-qwen3tts.txt
 requirements-vibevoice.txt
@@ -59,7 +58,6 @@ The corresponding virtual environments (e.g. `venv-chatterbox`, `venv-fish-s1`, 
 
 When implementing a new local model, create `requirements-<newmodel>.txt` first and validate it in isolation before wiring anything into the app. Copy the app dependencies block from `requirements-base.txt` (or an existing model file) and adjust `torch`/`torchaudio` versions only if the model library requires it.
 
-When studying pre-existing model implementations, avoid Oute, which departs from the standard pattern in several ways (e.g. its "voice" is a JSON file, not an audio sample).
 
 ---
 
@@ -120,7 +118,7 @@ Defines the interface all models must satisfy:
 - `kill() -> None` — abstract; nulls out internal model references to aid garbage collection
 - `generate_using_project(project, prompts, force_random_seed, on_stream_chunk, on_stream_end, voice_selection_index) -> list[Sound] | str` — abstract; the main generation entry point (stream callbacks only used when `INFO.can_stream`)
 - `get_output_sample_rate(project, instance) -> int` — concrete classmethod returning `INFO.default_output_sample_rate`; GLM overrides it to return the project-configurable `glm_sr`
-- `get_max_words_range_reco(project, instance) -> tuple[int, int, str]` — concrete classmethod returning the app-recommended max-words-per-segment range for the model plus an optional rationale string (empty by default); the range default comes from the global constants (`MAX_WORDS_PER_SEGMENT_RECO_RANGE`), and models with model-specific recommendations override it with their own class constants (currently GLM, Higgs V2, IndexTTS2, Oute, Chatterbox, VibeVoice, and the NONE placeholder)
+- `get_max_words_range_reco(project, instance) -> tuple[int, int, str]` — concrete classmethod returning the app-recommended max-words-per-segment range for the model plus an optional rationale string (empty by default); the range default comes from the global constants (`MAX_WORDS_PER_SEGMENT_RECO_RANGE`), and models with model-specific recommendations override it with their own class constants (currently GLM, Higgs V2, IndexTTS2, Chatterbox, VibeVoice, and the NONE placeholder)
 - `massage_for_inference(text) -> str` — concrete; applies `INFO.substitutions`; subclasses may override-and-super
 - `prepare_text_for_inference(project, text) -> str` — concrete; the full pre-inference pipeline: project word substitutions → generic prompt normalization (incl. `un_all_caps`) → `massage_for_inference`
 - `clear_stream_state()` / `clear_continuation()` — concrete hooks for streaming and rolling-continuation state
@@ -206,7 +204,6 @@ The machinery is shared; the *contents* are not.
 Server variants (SGL-Omni) do no local inference and keep no clone cache. Three local models are not part of the mechanism, each for a different reason:
 
 - **IndexTTS2** — the library's `infer()` already caches the derived voice intermediates (speaker embedding, style, prompt condition, reference mel) internally, keyed by path string only (no mtime/size check), so a tool-side cache would be redundant for single-voice runs. Multi-voice coexistence is unreachable from the tool: the library cache is a single slot that fully evicts on every voice switch, and `infer()` only accepts a path string — adopting it would require forking the `indextts` package, for a gain limited to multi-voice runs (the model supports no batching, so alternating lines re-derive the voice every line).
-- **Oute** — its "voice" is a JSON speaker preset, not a raw audio file, so there is no audio clone to prepare or cache.
 - **VibeVoice** — the library API accepts the raw voice file path and re-reads and re-tokenizes the reference clip inside `processor()` on every call; it exposes no prepared voice-clone artifact for the tool to precompute and reuse (voice tokens are fused with the text inside the processor, and passing pre-loaded audio data previously caused inference issues). The per-call overhead is negligible relative to segment generation, and VibeVoice retains no voice state between calls, so a cache would buy nothing.
 
 Fake-library tests for the mechanism live in `tests/test_<model>_voice_clone_cache.py` (one per local model with a cache), each `importorskip`-gated on its model's library so the full suite stays runnable in `venv-base`.
@@ -235,7 +232,6 @@ menus/voice/
   voice_moss_server_menu.py
   voice_moss_shared.py       # options shared between local MOSS and MOSS server
   voice_omnivoice_menu.py
-  voice_oute_menu.py
   voice_pocket_menu.py
   voice_qwen3_menu.py
   voice_qwen3_server_menu.py
@@ -302,7 +298,7 @@ Export the new menu class.
 
 Add Pydantic field definitions for any new voice filename, transcript, seed, or other model-specific settings on the `Project` class. The voice filename and transcript attributes must match the names given in the model's `TtsModelSpec` (`voice_target_attr`, `voice_transcript_attr`).
 
-Voice set/clear is no longer a per-model `match` block in `Project`: `ProjectVoiceUtil.set_voice_and_save()` / `clear_voice_and_save()` ([project_voice_util.py](tts_audiobook_tool/project_support/project_voice_util.py)) apply changes generically via `setattr` using the spec's attribute names. Only true special cases need explicit branches there (e.g. IndexTTS2's secondary emotion clip, Pocket's predefined-voice reset, Oute's JSON voice). Consequently, a mismatched or missing attribute name will surface at save time rather than failing loudly at dispatch.
+Voice set/clear is no longer a per-model `match` block in `Project`: `ProjectVoiceUtil.set_voice_and_save()` / `clear_voice_and_save()` ([project_voice_util.py](tts_audiobook_tool/project_support/project_voice_util.py)) apply changes generically via `setattr` using the spec's attribute names. Only true special cases need explicit branches there (e.g. IndexTTS2's secondary emotion clip, and Pocket's predefined-voice reset). Consequently, a mismatched or missing attribute name will surface at save time rather than failing loudly at dispatch.
 
 ### SGL-Omni variants (server mode only)
 

@@ -77,9 +77,6 @@ class VoiceMenuShared:
             case TtsModelType.OMNIVOICE:
                 from tts_audiobook_tool.menus.voice import VoiceOmniVoiceMenu
                 VoiceOmniVoiceMenu.menu(state)
-            case TtsModelType.OUTE:
-                from tts_audiobook_tool.menus.voice import VoiceOuteMenu
-                VoiceOuteMenu.menu(state)
             case TtsModelType.POCKET:
                 from tts_audiobook_tool.menus.voice import VoicePocketMenu
                 VoicePocketMenu.menu(state)
@@ -158,7 +155,6 @@ class VoiceMenuShared:
         """
 
         if not tts_type.value.voice_target_attr:
-            # Rem, we do not save raw voice sound file for Oute
             raise ValueError(f"Unsupported tts type for this operation {tts_type}")
 
         if tts_type.value.voice_transcript_attr:
