@@ -22,7 +22,7 @@ from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.app_types import DeviceType, Hint
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.tts_models.chatterbox_api_detect import ChatterboxApiDetect
-from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 # This pulls in some dependencies we would ideally first like to test for the existence of,
 # but can't be helped
@@ -107,7 +107,13 @@ class Start:
         self.exit_on_incompatible_chatterbox_package()
         self.exit_on_missing_new_packages()
 
-        self.show_startup_hints()
+        if self.is_server:
+            from tts_audiobook_tool.app_support import app_hint_util
+            from tts_audiobook_tool.prefs import Prefs
+            temp_prefs = Prefs.load(save_if_dirty=False)
+            app_hint_util.show_shared_startup_hints(temp_prefs, is_server=True)
+            # ... else, gets triggered on main menu first time shown
+
         self.apply_project_override()
         self.init_logging()
         self.start_app_or_server()
@@ -285,39 +291,6 @@ class Start:
             new_packages.append("peft")
 
         return new_packages
-
-    def show_startup_hints(self) -> None:
-        """ Shows various one-time startup messages (which are not blockers) """
-
-        # TODO: compare hash of current requirements file with saved hash, and if different, message user
-        #   and reconcile this addition with 'hard requirement' messaging below etc
-
-        from tts_audiobook_tool.prefs import Prefs
-        temp_prefs = Prefs.load(save_if_dirty=False)
-
-        # Tkinter (must do concrete import to test for tkinter functionality)
-        if not self.is_server and not does_import_test_pass("tkinter"):
-            hints.show_hint_if_necessary(temp_prefs, HINT_TKINTER, and_prompt=True)
-
-        # Long paths on Windows
-        if not self.is_server and not is_long_path_enabled():
-            hints.show_hint_if_necessary(temp_prefs, HINT_LONG_PATHS, and_prompt=True)
-
-        # Oute
-        if Tts.get_type() == TtsModelType.OUTE:
-            hints.show_hint_if_necessary(temp_prefs, HINT_OUTE_CONFIG, and_prompt=True)
-
-        # SGL-Omni is a venv-level capability: in a local-mode venv without a
-        # TTS model, saved SGL-Omni settings cannot be used here
-        if (
-            Tts.get_backend_mode() == TtsBackendKind.LOCAL
-            and Tts.get_type() == TtsModelType.NONE
-            and (
-                temp_prefs.sgl_omni_type is not None
-                or temp_prefs.sgl_omni_url != ""
-            )
-        ):
-            hints.show_hint_if_necessary(temp_prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
     def init_logging(self) -> None:
         app_support.init_logging()

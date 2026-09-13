@@ -157,16 +157,14 @@ def test_set_sgl_omni_type_in_local_mode_stores_but_does_not_resolve(monkeypatch
 
 def _show_startup_hints(monkeypatch, prefs):
     """
-    Runs Start.show_startup_hints() against a controlled prefs instance and
-    records which hint keys would be shown (both the one-shot and direct
-    show paths), without any real prompting.
+    Runs app_hint_util.show_startup_hints() against a controlled prefs
+    instance and records which hint keys would be shown (both the one-shot
+    and direct show paths), without any real prompting.
     """
+    from tts_audiobook_tool.app_support import app_hint_util
     from tts_audiobook_tool.app_support import hints as hints_module
-    from tts_audiobook_tool.prefs import Prefs
-    from tts_audiobook_tool.start import Start
 
     shown = []
-    monkeypatch.setattr(Prefs, "load", staticmethod(lambda save_if_dirty=True: prefs))
     monkeypatch.setattr(
         hints_module, "show_hint_if_necessary",
         lambda p, h, **kw: (shown.append(h.key), True)[1],
@@ -176,10 +174,7 @@ def _show_startup_hints(monkeypatch, prefs):
         lambda h, **kw: (shown.append(h.key), True)[1],
     )
 
-    start = object.__new__(Start)
-    start.is_server = False
-
-    start.show_startup_hints()
+    app_hint_util.show_shared_startup_hints(prefs, is_server=False)
     return shown
 
 

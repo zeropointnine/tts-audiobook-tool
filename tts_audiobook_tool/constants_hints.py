@@ -120,7 +120,7 @@ Consider selecting "Chatterbox-Multilingual V3" under Voice settings."""
 HINT_CHATTERBOX_PACKAGE_UPDATE = Hint(
     "",
     "Chatterbox is out of date",
-"""From your Chatterbox virtual environment, please run:
+"""From your Chatterbox virtual environment, run these two lines:
 
 pip uninstall chatterbox-tts
 pip install -r requirements-chatterbox.txt"""

@@ -12,7 +12,7 @@ from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.system_support.gpu_caps_util import GpuCapsUtil
 from tts_audiobook_tool.tts_models.moss_base_model import MossConfigs
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind, TtsModelType
 
 """
 Hints related to 'high level app flow'
@@ -52,6 +52,39 @@ def show_pre_inference_hints(prefs: Prefs, project: Project) -> bool:
                 hints.show_hint(HINT_LINUX_CUDNN_VERSION, and_prompt=True)
 
     return can_continue
+
+def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
+    """
+    Shows one-time informational startup messages which are not blockers
+    that are relevant to both app mode and server mode.
+    """
+
+    from tts_audiobook_tool.tts import Tts
+    from tts_audiobook_tool.util import does_import_test_pass, is_long_path_enabled
+
+    # Tkinter (must do concrete import to test for tkinter functionality)
+    if not is_server and not does_import_test_pass("tkinter"):
+        hints.show_hint_if_necessary(prefs, HINT_TKINTER, and_prompt=True)
+
+    # Long paths on Windows
+    if not is_server and not is_long_path_enabled():
+        hints.show_hint_if_necessary(prefs, HINT_LONG_PATHS, and_prompt=True)
+
+    # Oute
+    if Tts.get_type() == TtsModelType.OUTE:
+        hints.show_hint_if_necessary(prefs, HINT_OUTE_CONFIG, and_prompt=True)
+
+    # SGL-Omni is a venv-level capability: in a local-mode venv without a
+    # TTS model, saved SGL-Omni settings cannot be used here
+    if (
+        Tts.get_backend_mode() == TtsBackendKind.LOCAL
+        and Tts.get_type() == TtsModelType.NONE
+        and (
+            prefs.sgl_omni_type is not None
+            or prefs.sgl_omni_url != ""
+        )
+    ):
+        hints.show_hint_if_necessary(prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
 def show_player_hint(prefs: Prefs) -> None:
 

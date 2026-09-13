@@ -63,10 +63,6 @@ def _make_project_text(state: State) -> str:
     else:
         text = COL_ERROR + "required"
 
-    language_code = state.project.language_code.strip()
-    if state.project.dir_path and language_code:
-        text += f" {QUALIFIER_COLOR}({language_code})"
-
     return text
 
 def _make_local_tts_text(
@@ -131,6 +127,9 @@ def _make_text_text(state: State) -> str:
         return COL_ERROR + "required"
     num_generated = state.project.sound_segments.num_generated()
     text = f"{total_lines} lines"
+    language_code = state.project.book.segmentation_settings.language_code.strip()
+    if language_code:
+        text += f", {language_code}"
     qual_color = COL_DIM if num_generated > 0 else COL_ERROR
     text += f" {qual_color}({num_generated} generated)"
     return text

@@ -7,7 +7,7 @@ from tts_audiobook_tool.menus.options_menu import OptionsMenu
 from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.project_menu import ProjectMenu
 from tts_audiobook_tool.menus.tools_menu import ToolsMenu
-from tts_audiobook_tool.app_support import hints
+from tts_audiobook_tool.app_support import app_hint_util, hints
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
@@ -77,7 +77,7 @@ class MainMenu:
             items.append(
                 MenuItem(
                     "Options", lambda _, __: OptionsMenu.menu(state), hotkey="o",
-                    superlabel="Options and tools"                    
+                    superlabel="Options and tools"
                 )
             )
             items.append(
@@ -91,11 +91,14 @@ class MainMenu:
             return items
 
         def on_shown() -> None:
-            # The SGL-Omni URL hint may only appear the first time the main menu is shown
+            # These hints may only appear the first time the main menu is shown
             is_first_show = not state.has_shown_main_menu
             state.mark_main_menu_shown()
             if not is_first_show:
                 return
+
+            # One-time informational startup hints (tkinter, long paths, etc)
+            app_hint_util.show_shared_startup_hints(state.prefs, is_server=False)
 
             if (
                 Tts.get_type() == TtsModelType.CHATTERBOX
@@ -126,7 +129,7 @@ class MainMenu:
 # ---
 
 def get_heading_tts_text(state: State) -> str:
-    
+
     s = Tts.get_class().get_menu_text(state.project, None)
     if not Tts.is_sgl_mode():
         return s
