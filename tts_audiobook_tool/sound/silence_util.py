@@ -19,20 +19,15 @@ class SilenceGapTrim:
 class SilenceUtil:
 
     @staticmethod
-    def trim_silence_ends(sound, end_only=False) -> tuple[Sound, float, float]:
+    def trim_silence_ends(sound) -> tuple[Sound, float, float]:
         """
         Returns trimmed Sound and the start and end times of the trim
         """
         start, end = SilenceUtil.get_start_and_end_silence(sound)
         if not start and not end:
             return Sound( np.copy(sound.data), sound.sr ), 0.0, sound.duration
-        if end_only and not end:
-            return Sound( np.copy(sound.data), sound.sr ), 0.0, sound.duration
 
-        if end_only:
-            start = 0
-        else:
-            start = start or 0
+        start = start or 0
         end = end or sound.duration
         if start >= end:
             # Entirely silent input; nothing left after trimming

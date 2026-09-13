@@ -56,11 +56,6 @@ class TtsModelSpec(NamedTuple):
     batch_size_attr: str
     # Whether the model supports streaming chunk callbacks
     can_stream: bool
-    # Should semantic trim at end of last word
-    # Doing so is generally redundant and risks unintended partial cropping of end of last word
-    # due to whisper timing imprecision, but can do more good than harm if model rly likes to
-    # hallucinate past the end of teh prompt (eg, for Chatterbox)
-    semantic_trim_last: bool
     # Does the model require FFmpeg shared libraries (dll/so/dylib), not just the ffmpeg executable
     # In practice, this is usually because the model depends on TorchCodec
     requires_ffmpeg_libs: bool
@@ -104,7 +99,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt", # only meaningful in SGL-Omni mode ("server not configured"); in local mode this state means "no TTS model in the venv" and consumers presenting a file for it are mode-aware (see Tts.get_requirements_file_name())
@@ -133,7 +127,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=True,
         requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-chatterbox.txt",
@@ -164,7 +157,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=True,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-dots.txt",
@@ -196,7 +188,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # Does well with all caps, but still worse than normal case
         requirements_file_name="requirements-fish-s1.txt",
@@ -227,7 +218,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-fish-s2.txt",
@@ -258,7 +248,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="fish_s2_server_concurrent_requests",
         can_stream=True,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -293,7 +282,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-glm.txt",
@@ -326,7 +314,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-higgs-v2.txt",
@@ -357,7 +344,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="higgs_v3_batch_size",
         can_stream=True,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -391,7 +377,6 @@ class TtsModelType(Enum):
         extra_file_attrs=["indextts2_emo_voice_file_name"],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-indextts2.txt",
@@ -423,7 +408,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="mira_batch_size",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # falls down badly with all caps phrases
         requirements_file_name="requirements-mira.txt",
@@ -456,7 +440,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="moss_batch_size",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=True,
         un_all_caps=False,
         requirements_file_name="requirements-moss.txt",
@@ -489,7 +472,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="moss_batch_size",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -524,7 +506,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="moss_batch_size",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -559,7 +540,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # slightly more error-prone when all-caps
         requirements_file_name="requirements-omnivoice.txt",
@@ -590,7 +570,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False, # TODO: check this
         requirements_file_name="requirements-oute.txt",
@@ -622,7 +601,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="",
         can_stream=True,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-pocket.txt",
@@ -654,7 +632,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="qwen3_batch_size",
         can_stream=False,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True, # is only slightly more error-prone when all-caps
         requirements_file_name="requirements-qwen3tts.txt",
@@ -685,7 +662,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="qwen3_server_concurrent_requests",
         can_stream=False, # DOES NOT stream in practice even though claims to in sgl-omni qwen3tts docs, 2026-06
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-sgl-omni.txt",
@@ -718,7 +694,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="vibevoice_batch_size",
         can_stream=True,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=True,
         requirements_file_name="requirements-vibevoice.txt",
@@ -755,7 +730,6 @@ class TtsModelType(Enum):
         extra_file_attrs=[],
         batch_size_attr="zonos2_server_concurrent_requests",
         can_stream=True,
-        semantic_trim_last=False,
         requires_ffmpeg_libs=False,
         un_all_caps=False,
         requirements_file_name="requirements-sgl-omni.txt",

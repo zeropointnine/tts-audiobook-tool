@@ -10,7 +10,6 @@ from tts_audiobook_tool.text_ops.word_equivalence import WordEquivalence
 from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_extra_util import SoundExtraUtil
 from tts_audiobook_tool.sound.sound_util import SoundUtil
-from tts_audiobook_tool.stt import Stt
 from tts_audiobook_tool.text_ops.text_normalizer import TextNormalizer
 from tts_audiobook_tool.app_support import app_text
 from tts_audiobook_tool.util import *
@@ -116,10 +115,6 @@ class Validator:
             language_code,
         )
         
-        # TODO: Disabled. Too unreliable. No good workarounds.
-        # if trimmed_result and Tts.get_type().value.semantic_trim_last:            
-        #    trimmed_result = Validator.make_trimmed_result_end_only(trimmed_result)
-
         if trimmed_result:
             delta = word_error_result.sound.duration - trimmed_result.sound.duration
             if delta <= 0.1:
@@ -136,9 +131,8 @@ class Validator:
     ) -> TrimmedResult | None:
         """
         """
-        from tts_audiobook_tool.tts import Tts
-        if word_error_result.num_errors == 0 and not Tts.get_type().value.semantic_trim_last:
-            return None 
+        if word_error_result.num_errors == 0:
+            return None
 
         normalized_source = TextNormalizer.normalize_source(source, language_code)
         source_word_count = app_text.get_word_count(normalized_source, vocalizable_only=True)
@@ -208,69 +202,6 @@ class Validator:
             )
 
         return None
-
-    @staticmethod
-    def make_trimmed_result_end_only(trimmed_result: TrimmedResult) -> TrimmedResult | None:
-        """
-        Trims sound from the end of the sound, based on the end time of the last word in the transcript.
-
-        Due to Whisper word time imprecision, should only be applied to TTS output that exhibits frequent
-        "appended" hallucinations (ie, Chatterbox).
-        """
-        
-        # Whisper word end time is usually 200+ ms too soon, and sometimes much more than that
-        # Trying to be extra-conservative here
-        OFFSET = 0.3
-
-        sound = trimmed_result.sound
-        
-        end = trimmed_result.transcript_words[-1].end
-        end += OFFSET
-        if end + 0.1 >= sound.duration:
-            return trimmed_result
-        
-        end = SoundExtraUtil.get_local_minima(sound, end)
-
-        new_sound = SoundUtil.trim(sound, 0, end)
-        new_sound = SilenceUtil.trim_silence_ends(new_sound, end_only=True)[0]
-
-        # Even after adding 'offset' above, we may have landed in-between phonemes/syllables/words, so
-        if not Validator._is_last_word_match(trimmed_result.sound, trimmed_result.transcript_words[-1].word):
-            return None
-
-        # Clamp word end times
-        for word in trimmed_result.transcript_words:
-            word.end = min(word.end, end)
-
-        result = TrimmedResult(
-            sound=new_sound,
-            transcript_words=trimmed_result.transcript_words,
-            start_time=trimmed_result.start_time, end_time=end, 
-            original_duration=trimmed_result.original_duration
-        )
-        return result
-    
-    @staticmethod
-    def _is_last_word_match(sound: Sound, last_word: str) -> bool:
-        """
-        Returns True if the transcribed last word of the passed-in (trimmed) Sound matches `last_word`,
-        and has a high enough probability.
-        TODO: Unverified
-        """
-        transcribed_words = Transcriber.transcribe_to_words(sound, "", Stt.get_variant(), Stt.get_config()) # yek 
-        if isinstance(transcribed_words, str):
-            return False
-        if not transcribed_words:
-            return False
-        
-        last_word = TextNormalizer.normalize_common(last_word)
-        transcribed_last = transcribed_words[-1]
-        transcribed_last_word = TextNormalizer.normalize_common(transcribed_last.word)
-        if transcribed_last_word != last_word:
-            return False
-        if transcribed_last.probability < 0.66:
-            return False
-        return True
 
     @staticmethod
     def compute_threshold(num_words: int, strictness: Strictness) -> int:

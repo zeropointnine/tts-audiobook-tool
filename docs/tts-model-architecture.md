@@ -86,7 +86,6 @@ Key fields of `TtsModelSpec` most relevant to integration:
 | `extra_file_attrs` | Additional `Project` attributes for model-specific saved files (e.g. IndexTTS2 emotion clip) |
 | `batch_size_attr` | Name of the `Project` field for batch size (or concurrent requests for SGL-Omni variants); empty string means no batch support |
 | `can_stream` | Whether the model supports streaming chunk callbacks |
-| `semantic_trim_last` | Whether to run semantic trim at the end of the last word |
 | `requires_ffmpeg_libs` | Whether the model requires FFmpeg shared libraries, not just the executable (usually because of TorchCodec) |
 | `un_all_caps` | Force lowercase on all-caps prompts; set for models that perform poorly on them |
 | `requirements_file_name` | The `requirements-<model>.txt` filename for this model |

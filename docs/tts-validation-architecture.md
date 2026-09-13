@@ -585,7 +585,7 @@ One important nuance is that a non-zero-error transcript does not always stay a 
 
 The method:
 
-1. returns early if the result already has zero word errors and the model spec does not request `semantic_trim_last`,
+1. returns early if the result already has zero word errors,
 2. normalizes the source and computes the normalized transcript,
 3. computes the transcript word overage relative to the normalized source word count (no trimming is attempted when the transcript is shorter than the source),
 4. slides a source-length window across the transcribed words,
