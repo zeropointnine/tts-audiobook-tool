@@ -7,7 +7,7 @@ import os
 import threading
 from typing import Callable
 
-from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, StreamEndCallback
+from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, StreamEndCallback, VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Reason
 
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
@@ -428,7 +428,13 @@ class Tts:
         """
         instance = Tts.get_instance()
         if voice_selection_index is None:
-            voice_selection_index = Tts.get_next_voice_selection_index()
+            # Rotate voices only in auto-advance mode; user-defined and
+            # disabled modes always use the first voice when the caller does
+            # not pass an explicit index (e.g. LLM chat synthesis).
+            if project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE:
+                voice_selection_index = Tts.get_next_voice_selection_index()
+            else:
+                voice_selection_index = 0
         L.i(
             f"Tts.generate_using_project dispatch: type={Tts._type.value.id} "
             f"instance={type(instance).__name__} prompts={len(prompts)} "
