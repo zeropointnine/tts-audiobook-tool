@@ -241,3 +241,11 @@ To generate dialog using a different voice from the narrator/default:
 (1) Make sure to add a second voice clone and
 (2) Set Voice selection mode to User-defined."""
 )
+
+HINT_LLM_API_KEY_REMOVED = Hint(
+    "llm_api_key_removed",
+    "LLM API key storage changed",
+    """The LLM api key stored in the app preferences has been removed.
+You will need to specify an environment variable holding the value
+of your API key in: Options > LLM Settings"""
+)

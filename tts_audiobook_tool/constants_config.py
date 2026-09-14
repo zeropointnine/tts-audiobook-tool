@@ -38,6 +38,10 @@ CHAT_INPUT_MODES = (
 )
 PREFS_DEFAULT_CHAT_INPUT_MODE = CHAT_INPUT_MODE_MIC_IMMEDIATE
 
+# Environment variable read at request time to obtain the LLM API key.
+# The prefs file stores only this variable's name, never the key itself.
+PREFS_DEFAULT_LLM_API_KEY_ENV_VAR = "OPEN_AI_KEY"
+
 # Max seconds one TTS-inference step ("generate and validate batch") may take
 # before the generation loop aborts and the model worker is reset.
 GEN_TIMEOUT = 180

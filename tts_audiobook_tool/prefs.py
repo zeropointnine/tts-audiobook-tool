@@ -28,7 +28,7 @@ class Prefs(Saveable):
             sgl_omni_url: str = "",
             aac_bitrate: str = AAC_BITRATE_DEFAULT,
             llm_url: str = "",
-            llm_api_key: str = "",
+            llm_api_key_env_var: str = PREFS_DEFAULT_LLM_API_KEY_ENV_VAR,
             llm_model: str = "",
             llm_system_prompt: str = "",
             system_prompt_preset: str = CHAT_SYSTEM_PROMPTS[0][0],
@@ -56,7 +56,11 @@ class Prefs(Saveable):
         
         self._aac_bitrate = aac_bitrate
         self._llm_url = llm_url
-        self._llm_api_key = llm_api_key
+        self._llm_api_key_env_var = llm_api_key_env_var
+
+        # Transitory, not persisted: set by load() when an insecure legacy
+        # API key value was found and scrubbed from the prefs file.
+        self.legacy_llm_api_key_removed = False
         self._llm_model = llm_model
         self._llm_system_prompt = llm_system_prompt
         self._system_prompt_preset = system_prompt_preset
@@ -258,10 +262,17 @@ class Prefs(Saveable):
             llm_url = ""
             dirty = True
 
-        # Back-compat: support legacy key "api_key"
-        llm_api_key = prefs_dict.get("llm_api_key", prefs_dict.get("api_key", ""))
-        if not isinstance(llm_api_key, str):
-            llm_api_key = ""
+        # Name of the environment variable read at request time for the API key.
+        llm_api_key_env_var = prefs_dict.get("llm_api_key_env_var", PREFS_DEFAULT_LLM_API_KEY_ENV_VAR)
+        if not isinstance(llm_api_key_env_var, str) or not llm_api_key_env_var:
+            llm_api_key_env_var = PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
+            dirty = True
+
+        # Insecure legacy values ("llm_api_key", older "api_key") are no longer
+        # stored. They are scrubbed from the file via the immediate re-save;
+        # the warning to the user is deferred to the first main-menu show.
+        had_legacy_llm_api_key = bool(prefs_dict.get("llm_api_key", prefs_dict.get("api_key", "")))
+        if had_legacy_llm_api_key:
             dirty = True
 
         llm_model = prefs_dict.get("llm_model", "")
@@ -362,7 +373,7 @@ class Prefs(Saveable):
             sgl_omni_url=sgl_omni_url,
             aac_bitrate=aac_bitrate,
             llm_url=llm_url,
-            llm_api_key=llm_api_key,
+            llm_api_key_env_var=llm_api_key_env_var,
             llm_model=llm_model,
             llm_system_prompt=llm_system_prompt,
             system_prompt_preset=system_prompt_preset,
@@ -377,6 +388,7 @@ class Prefs(Saveable):
             save_gen_log=save_gen_log,
             hints=hint_prefs,
         )
+        prefs.legacy_llm_api_key_removed = had_legacy_llm_api_key
 
         # This removed preference must be cleaned during startup even when the
         # caller suppresses ordinary default/validation normalization.
@@ -495,11 +507,21 @@ class Prefs(Saveable):
 
     @property
     def llm_api_key(self) -> str:
-        return self._llm_api_key
+        """
+        API key value, resolved from the configured environment variable at
+        read time. Empty string when the variable is unset (or set to "").
+        """
+        if self._llm_api_key_env_var:
+            return os.environ.get(self._llm_api_key_env_var, "")
+        return ""
 
-    @llm_api_key.setter
-    def llm_api_key(self, value: str) -> None:
-        self._llm_api_key = value
+    @property
+    def llm_api_key_env_var(self) -> str:
+        return self._llm_api_key_env_var
+
+    @llm_api_key_env_var.setter
+    def llm_api_key_env_var(self, value: str) -> None:
+        self._llm_api_key_env_var = value
 
     @property
     def llm_model(self) -> str:
@@ -604,7 +626,7 @@ class Prefs(Saveable):
                 "sgl_omni_url": self._sgl_omni_url,
                 "aac_bitrate": self._aac_bitrate,
                 "llm_url": self._llm_url,
-                "llm_api_key": self._llm_api_key,
+                "llm_api_key_env_var": self._llm_api_key_env_var,
                 "llm_model": self._llm_model,
                 "llm_system_prompt": self._llm_system_prompt,
                 "system_prompt_preset": self._system_prompt_preset,

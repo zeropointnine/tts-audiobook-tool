@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
+from tts_audiobook_tool.constants_config import PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
 from tts_audiobook_tool.prefs import PREFS_FILE_NAME, Prefs
 
 
@@ -308,3 +309,110 @@ def test_sgl_omni_url_round_trips_empty(
     payload = json.loads(destination.read_text(encoding="utf-8"))
     assert payload["sgl_omni_url"] == ""
     assert Prefs.load().sgl_omni_url == ""
+
+
+def test_llm_api_key_env_var_defaults_and_saves_no_secret(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs()
+    assert prefs.llm_api_key_env_var == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
+
+    monkeypatch.setenv(PREFS_DEFAULT_LLM_API_KEY_ENV_VAR, "sk-test-123")
+    assert prefs.llm_api_key == "sk-test-123"
+
+    assert prefs.save() == ""
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    assert payload["llm_api_key_env_var"] == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
+    assert "llm_api_key" not in payload
+    assert "api_key" not in payload
+
+
+def test_llm_api_key_env_var_round_trips(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs()
+    prefs.llm_api_key_env_var = "MY_PROVIDER_KEY"
+    assert prefs.save() == ""
+
+    monkeypatch.delenv("MY_PROVIDER_KEY", raising=False)
+    loaded = Prefs.load()
+    assert loaded.llm_api_key_env_var == "MY_PROVIDER_KEY"
+    assert loaded.llm_api_key == ""
+
+    monkeypatch.setenv("MY_PROVIDER_KEY", "sk-456")
+    assert loaded.llm_api_key == "sk-456"
+
+
+def test_legacy_plaintext_api_key_is_scrubbed_with_warning(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(
+        json.dumps({"llm_api_key": "sk-666", "llm_url": "https://keep.example"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    # The user warning is deferred to the first main-menu show, not printed here
+    assert capsys.readouterr().out == ""
+    assert prefs.legacy_llm_api_key_removed is True
+    normalized = json.loads(destination.read_text(encoding="utf-8"))
+    assert "llm_api_key" not in normalized
+    assert "api_key" not in normalized
+    assert normalized["llm_url"] == "https://keep.example"
+    assert normalized["llm_api_key_env_var"] == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
+    monkeypatch.delenv(PREFS_DEFAULT_LLM_API_KEY_ENV_VAR, raising=False)
+    assert prefs.llm_api_key == ""
+
+
+def test_legacy_llm_api_key_removed_flag_defaults_false(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    assert Prefs().legacy_llm_api_key_removed is False
+    assert Prefs.load().legacy_llm_api_key_removed is False
+
+
+def test_legacy_plaintext_api_key_older_name_is_scrubbed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(json.dumps({"api_key": "sk-old"}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    Prefs.load()
+
+    normalized = json.loads(destination.read_text(encoding="utf-8"))
+    assert "api_key" not in normalized
+    assert "llm_api_key" not in normalized
+
+
+def test_invalid_llm_api_key_env_var_is_normalized_to_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(json.dumps({"llm_api_key_env_var": 42}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    assert prefs.llm_api_key_env_var == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
+    normalized = json.loads(destination.read_text(encoding="utf-8"))
+    assert normalized["llm_api_key_env_var"] == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR

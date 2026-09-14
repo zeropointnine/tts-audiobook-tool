@@ -12,6 +12,7 @@ from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
+    HINT_LLM_API_KEY_REMOVED,
     HINT_SGL_OMNI_URL,
 )
 from tts_audiobook_tool.tts import Tts
@@ -98,6 +99,9 @@ class MainMenu:
             if is_first_show:
                 # One-time informational startup hints (tkinter, long paths, etc)
                 app_hint_util.show_shared_startup_hints(state.prefs, is_server=False)
+
+                if state.prefs.legacy_llm_api_key_removed:
+                    hints.show_hint_if_necessary(state.prefs, HINT_LLM_API_KEY_REMOVED)
 
                 if (
                     Tts.get_type() == TtsModelType.CHATTERBOX

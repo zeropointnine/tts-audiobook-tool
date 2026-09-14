@@ -1,6 +1,8 @@
 import json
+import re
 
 from tts_audiobook_tool import ask
+from tts_audiobook_tool.constants_config import PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.util import *
@@ -32,14 +34,19 @@ class LlmSettingsMenu:
             if prefs.llm_url:
                 items.append(MenuItem("Clear LLM endpoint URL", lambda _, __: LlmSettingsMenu.clear_llm_url(state)))
 
+            def api_key_label(_: State) -> str:
+                label = make_menu_label("Environment variable with API key", prefs.llm_api_key_env_var)
+                status = ellipsize(prefs.llm_api_key, 9) if prefs.llm_api_key else f"{COL_ERROR}no value{COL_DIM}"
+                return f"{label} {COL_DIM}({status}{COL_DIM})"
+
             items.append(
                 MenuItem(
-                    lambda _: make_menu_label("API key", ellipsize(prefs.llm_api_key, 9)) if prefs.llm_api_key else f"API key {required}",
+                    api_key_label,
                     lambda _, __: LlmSettingsMenu.api_key_menu(state)
                 )
             )
-            if prefs.llm_api_key:
-                items.append(MenuItem("Clear API key", lambda _, __: LlmSettingsMenu.clear_api_key(state)))
+            if prefs.llm_api_key_env_var != PREFS_DEFAULT_LLM_API_KEY_ENV_VAR:
+                items.append(MenuItem("Clear API key environment variable", lambda _, __: LlmSettingsMenu.clear_api_key(state)))
 
             items.append(
                 MenuItem(
@@ -96,16 +103,21 @@ class LlmSettingsMenu:
     def api_key_menu(state: State) -> None:
 
         def validator(value: str) -> str:
-            if not value.strip():
-                return "Value cannot be empty"
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+                return "Must be a valid environment variable name"
             return ""
 
+        prompt = (
+            f"Enter the name of the environment variable which stores the value of your LLM API key\n"
+            f"{COL_DIM}Default is \"{PREFS_DEFAULT_LLM_API_KEY_ENV_VAR}\""
+        )
         ask.ask_string_and_save(
             state.prefs,
-            "Enter API key:",
-            "llm_api_key",
-            "Set API key to:",
-            validator=validator
+            prompt,
+            "llm_api_key_env_var",
+            "Set API key environment variable to:",
+            validator=validator,
+            normalizer=lambda value: value.strip()
         )
 
     @staticmethod
@@ -116,9 +128,9 @@ class LlmSettingsMenu:
 
     @staticmethod
     def clear_api_key(state: State) -> None:
-        state.prefs.llm_api_key = ""
+        state.prefs.llm_api_key_env_var = PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
         state.prefs.save()
-        print_feedback("Cleared LLM token")
+        print_feedback("Reset API key environment variable to default")
 
     @staticmethod
     def llm_model_menu(state: State) -> None:
