@@ -1,8 +1,11 @@
 import builtins
-import sys
 from types import SimpleNamespace
 
 import pytest
+from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.history import DummyHistory
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output import DummyOutput
 
 from tts_audiobook_tool import ask, ask_advanced
 from tts_audiobook_tool.ask_advanced import AskAdvanced
@@ -17,65 +20,126 @@ class _TTY:
         return self._is_tty
 
 
-@pytest.mark.parametrize("platform", ["linux", "darwin"])
-def test_ask_advanced_prefills_readline_and_places_cursor_at_end(
-    monkeypatch, platform
+def _run_prompt(data: bytes, prefill: str = "prefilled") -> str:
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(data)
+        return ask_advanced._ask_with_prompt_toolkit(
+            "",
+            prefill,
+            prompt_input=pipe_input,
+            prompt_output=DummyOutput(),
+        )
+
+
+def test_ask_advanced_accepts_selected_prefill_unchanged():
+    assert _run_prompt(b"\r") == "prefilled"
+
+
+def test_ask_advanced_content_replaces_selected_prefill():
+    assert _run_prompt(b"X\r") == "X"
+
+
+@pytest.mark.parametrize("key", [b"\x7f", b"\x1b[3~"])
+def test_ask_advanced_delete_key_removes_selected_prefill(key):
+    assert _run_prompt(key + b"\r") == ""
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [(b"\x1b[H", "Xprefilled"), (b"\x1b[F", "prefilledX")],
+)
+def test_ask_advanced_home_and_end_collapse_selection(key, expected):
+    assert _run_prompt(key + b"X\r") == expected
+
+
+def test_ask_advanced_bracketed_paste_replaces_selected_prefill():
+    assert _run_prompt(b"\x1b[200~PASTE\x1b[201~\r") == "PASTE"
+
+
+def test_ask_advanced_bracketed_paste_inserts_after_collapsed_selection():
+    assert (
+        _run_prompt(b"\x1b[F\x1b[200~PASTE\x1b[201~\r")
+        == "prefilledPASTE"
+    )
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        b"\x1b[A",
+        b"\x1b[B",
+        b"\x1b[5~",
+        b"\x1b[6~",
+        b"\x10",
+        b"\x0e",
+        b"\x12",
+        b"\x13",
+    ],
+)
+def test_ask_advanced_history_keys_are_inert(key):
+    assert _run_prompt(key + b"X\r") == "X"
+
+
+def test_ask_advanced_escape_cancels():
+    assert _run_prompt(b"\x1b") == ""
+
+
+def test_ask_advanced_ctrl_c_cancels():
+    assert _run_prompt(b"\x03") == ""
+
+
+def test_ask_advanced_ctrl_d_preserves_eof_behavior_for_empty_input():
+    with pytest.raises(EOFError):
+        _run_prompt(b"\x04", prefill="")
+
+
+def test_ask_advanced_accepts_content_with_empty_prefill():
+    assert _run_prompt(b"value\r", prefill="") == "value"
+
+
+def test_ask_advanced_configures_plain_ansi_prompt_without_extra_features(
+    monkeypatch,
 ):
-    inserted = []
-    hooks = []
-    prompts = []
-    readline = SimpleNamespace()
+    captured = {}
 
-    def set_startup_hook(hook):
-        readline.hook = hook
-        hooks.append(hook)
+    class FakePromptSession:
+        @classmethod
+        def __class_getitem__(cls, item):
+            return cls
 
-    def fake_input(prompt=""):
-        prompts.append(prompt)
-        readline.hook()
-        return "edited value"
+        def __init__(self, message, **kwargs):
+            captured["message"] = message
+            captured["kwargs"] = kwargs
+            self.app = SimpleNamespace(ttimeoutlen=None)
 
-    readline.set_startup_hook = set_startup_hook
-    readline.insert_text = inserted.append
-    readline.hook = None
+        def prompt(self, **kwargs):
+            captured["prompt_kwargs"] = kwargs
+            return "result"
 
-    monkeypatch.setattr(ask_advanced.sys, "platform", platform)
-    monkeypatch.setattr(ask_advanced.sys, "stdin", _TTY(True))
-    monkeypatch.setattr(ask_advanced.sys, "stdout", _TTY(True))
-    monkeypatch.setitem(sys.modules, "readline", readline)
-    monkeypatch.setattr(builtins, "input", fake_input)
+    monkeypatch.setattr(ask_advanced, "PromptSession", FakePromptSession)
 
     assert (
-        AskAdvanced.ask("Prompt: ", prefill="prefilled")
-        == "edited value"
+        ask_advanced._ask_with_prompt_toolkit("\x1b[31mPrompt: ", "prefilled")
+        == "result"
     )
-    assert inserted == ["prefilled"]
-    assert prompts == ["Prompt: "]
-    assert callable(hooks[0])
-    assert hooks[-1] is None
 
-
-def test_readline_hook_is_cleared_when_input_raises(monkeypatch):
-    hooks = []
-    readline = SimpleNamespace(insert_text=lambda value: None)
-
-    def set_startup_hook(hook):
-        hooks.append(hook)
-
-    def fake_input(prompt=""):
-        raise EOFError
-
-    readline.set_startup_hook = set_startup_hook
-    monkeypatch.setattr(ask_advanced.sys, "stdin", _TTY(True))
-    monkeypatch.setattr(ask_advanced.sys, "stdout", _TTY(True))
-    monkeypatch.setitem(sys.modules, "readline", readline)
-    monkeypatch.setattr(builtins, "input", fake_input)
-
-    with pytest.raises(EOFError):
-        ask_advanced._ask_with_readline("", "prefilled")
-
-    assert callable(hooks[0])
-    assert hooks[-1] is None
+    message = captured["message"]
+    kwargs = captured["kwargs"]
+    assert isinstance(message, ANSI)
+    assert message.value == "\x1b[31mPrompt: "
+    assert isinstance(kwargs["history"], DummyHistory)
+    assert kwargs["complete_while_typing"] is False
+    assert kwargs["validate_while_typing"] is False
+    assert kwargs["enable_history_search"] is False
+    assert kwargs["enable_system_prompt"] is False
+    assert kwargs["enable_suspend"] is False
+    assert kwargs["enable_open_in_editor"] is False
+    assert kwargs["mouse_support"] is False
+    assert kwargs["multiline"] is False
+    assert kwargs["reserve_space_for_menu"] == 0
+    assert kwargs["style"].get_attrs_for_style_str("class:selected").reverse
+    assert captured["prompt_kwargs"]["default"] == "prefilled"
+    assert captured["prompt_kwargs"]["set_exception_handler"] is False
 
 
 def test_ask_advanced_falls_back_to_input_without_tty(monkeypatch):
@@ -85,7 +149,6 @@ def test_ask_advanced_falls_back_to_input_without_tty(monkeypatch):
         prompts.append(prompt)
         return "plain input"
 
-    monkeypatch.setattr(ask_advanced.sys, "platform", "linux")
     monkeypatch.setattr(ask_advanced.sys, "stdin", _TTY(False))
     monkeypatch.setattr(ask_advanced.sys, "stdout", _TTY(False))
     monkeypatch.setattr(builtins, "input", fake_input)
@@ -256,77 +319,10 @@ def test_ask_string_and_save_does_not_save_unchanged_value(
     assert saves == []
 
 
-def test_windows_initial_line_displays_prefill_and_flushes(monkeypatch):
+def test_ask_advanced_cancel_clears_only_current_input(monkeypatch):
     writes = []
     stdout = SimpleNamespace(
-        write=writes.append,
-        flush=lambda: writes.append("<flush>"),
-    )
-    monkeypatch.setattr(ask_advanced.sys, "stdout", stdout)
-
-    ask_advanced._write_windows_initial_line("Prompt: ", "prefilled")
-
-    assert writes == ["Prompt: prefilled", "<flush>"]
-
-
-def test_ask_advanced_uses_windows_console_reader(monkeypatch):
-    calls = []
-
-    def fake_windows_reader(prompt, prefill):
-        calls.append((prompt, prefill))
-        return "edited value"
-
-    monkeypatch.setattr(ask_advanced.sys, "platform", "win32")
-    monkeypatch.setattr(
-        ask_advanced, "_ask_with_windows_console", fake_windows_reader
-    )
-
-    assert AskAdvanced.ask("Prompt: ", "prefilled") == "edited value"
-    assert calls == [("Prompt: ", "prefilled")]
-
-
-def test_posix_input_temporarily_overrides_and_restores_sigint_handler(
-    monkeypatch,
-):
-    def swallowed_sigint(signum, frame):
-        return None
-
-    installed_handler = swallowed_sigint
-    installed = []
-
-    def fake_getsignal(signum):
-        assert signum == ask_advanced.signal.SIGINT
-        return installed_handler
-
-    def fake_signal(signum, handler):
-        nonlocal installed_handler
-        assert signum == ask_advanced.signal.SIGINT
-        installed_handler = handler
-        installed.append(handler)
-
-    def interrupt_from_readline(prompt, prefill):
-        installed_handler(ask_advanced.signal.SIGINT, None)
-        raise AssertionError("SIGINT handler did not interrupt input")
-
-    monkeypatch.setattr(ask_advanced.signal, "getsignal", fake_getsignal)
-    monkeypatch.setattr(ask_advanced.signal, "signal", fake_signal)
-    monkeypatch.setattr(ask_advanced, "_ask_with_readline", interrupt_from_readline)
-
-    with pytest.raises(KeyboardInterrupt):
-        ask_advanced._ask_with_posix_interruptible_input("Prompt: ", "prefilled")
-
-    assert installed == [
-        ask_advanced.signal.default_int_handler,
-        swallowed_sigint,
-    ]
-
-
-@pytest.mark.parametrize("platform", ["linux", "darwin"])
-def test_ask_advanced_posix_ctrl_c_cancels_only_current_input(
-    monkeypatch, platform
-):
-    writes = []
-    stdout = SimpleNamespace(
+        isatty=lambda: True,
         write=writes.append,
         flush=lambda: writes.append("<flush>"),
     )
@@ -334,28 +330,10 @@ def test_ask_advanced_posix_ctrl_c_cancels_only_current_input(
     def interrupt_input(prompt, prefill):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(ask_advanced.sys, "platform", platform)
-    monkeypatch.setattr(ask_advanced.sys, "stdout", stdout)
-    monkeypatch.setattr(ask_advanced, "_ask_with_readline", interrupt_input)
-
-    assert AskAdvanced.ask("Prompt: ", "prefilled") == ""
-    assert writes == ["\n", "<flush>"]
-
-
-def test_ask_advanced_windows_ctrl_c_cancels_only_current_input(monkeypatch):
-    writes = []
-    stdout = SimpleNamespace(
-        write=writes.append,
-        flush=lambda: writes.append("<flush>"),
-    )
-
-    def interrupt_input(prompt, prefill):
-        raise KeyboardInterrupt
-
-    monkeypatch.setattr(ask_advanced.sys, "platform", "win32")
+    monkeypatch.setattr(ask_advanced.sys, "stdin", _TTY(True))
     monkeypatch.setattr(ask_advanced.sys, "stdout", stdout)
     monkeypatch.setattr(
-        ask_advanced, "_ask_with_windows_console", interrupt_input
+        ask_advanced, "_ask_with_prompt_toolkit", interrupt_input
     )
 
     assert AskAdvanced.ask("Prompt: ", "prefilled") == ""

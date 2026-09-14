@@ -57,3 +57,31 @@ def test_package_update_hint_uninstalls_before_requirements_install():
     assert uninstall_command in hint_text
     assert install_command in hint_text
     assert hint_text.index(uninstall_command) < hint_text.index(install_command)
+
+
+def test_startup_new_package_blocker_includes_prompt_toolkit():
+    packages = object.__new__(start_module.Start).get_new_packages()
+
+    assert "prompt_toolkit" in packages
+
+
+def test_startup_blocks_when_prompt_toolkit_is_missing(monkeypatch):
+    start = object.__new__(start_module.Start)
+    printed = []
+
+    monkeypatch.setattr(start, "get_new_packages", lambda: ["prompt_toolkit"])
+    monkeypatch.setattr("importlib.util.find_spec", lambda package: None)
+    monkeypatch.setattr(
+        start_module.Tts,
+        "get_requirements_file_name",
+        lambda: "requirements-base.txt",
+    )
+    monkeypatch.setattr(start_module.hints, "print_hint", printed.append)
+
+    with pytest.raises(SystemExit) as exc:
+        start.exit_on_missing_new_packages()
+
+    assert exc.value.code == 1
+    assert len(printed) == 1
+    assert "prompt_toolkit" in printed[0].text
+    assert "pip install -r requirements-base.txt" in printed[0].text

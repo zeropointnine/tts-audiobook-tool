@@ -1,17 +1,37 @@
-import signal
 import sys
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.application import get_app
+from prompt_toolkit.enums import EditingMode
+from prompt_toolkit.filters import has_selection
+from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.history import DummyHistory
+from prompt_toolkit.input import Input
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+from prompt_toolkit.keys import Keys
+from prompt_toolkit.output import Output
+from prompt_toolkit.styles import Style
+
+
+_SELECTION_STYLE = Style.from_dict({"selected": "reverse"})
+_ESCAPE_SEQUENCE_TIMEOUT_SECONDS = 0.05
+_HISTORY_KEYS = (
+    "up",
+    "down",
+    "pageup",
+    "pagedown",
+    "c-p",
+    "c-n",
+    "c-r",
+    "c-s",
+)
 
 
 class AskAdvanced:
     @staticmethod
     def ask(message: str = "", prefill: str = "") -> str:
-        """
-        Behave like input(), but with editable pre-filled text.
-
-        - Linux and macOS: Uses readline
-        - Windows: Uses the native console line editor through ReadConsoleW
-        - Else: Falls back to input()
-        """
+        """Behave like input(), with editable, initially selected prefill text."""
         if not isinstance(message, str):
             raise TypeError("prompt must be a string")
 
@@ -23,19 +43,16 @@ class AskAdvanced:
                 character < " " or character == "\x7f"
                 for character in prefill
             ):
-                # Cannot display embedded terminal controls in prefill text
+                # Cannot safely display embedded terminal controls in prefill text.
                 return input(message)
 
-            if sys.platform in {"linux", "darwin"}:
-                return _ask_with_posix_interruptible_input(message, prefill)
+            if not (_is_tty(sys.stdin) and _is_tty(sys.stdout)):
+                return input(message)
 
-            if sys.platform == "win32":
-                return _ask_with_windows_console(message, prefill)
-
-            return input(message)
+            return _ask_with_prompt_toolkit(message, prefill)
         except KeyboardInterrupt:
             # Cancel only the active text input; Ctrl-C outside AskAdvanced
-            # retains its normal interrupt behavior.
+            # retains its normal interrupt behavior. Escape uses this path too.
             sys.stdout.write("\n")
             sys.stdout.flush()
             return ""
@@ -48,176 +65,83 @@ def _is_tty(stream: object) -> bool:
         return False
 
 
-def _ask_with_posix_interruptible_input(
-    prompt: str, prefilled_input: str
+def _create_key_bindings() -> KeyBindings:
+    bindings = KeyBindings()
+
+    def ignore_history_key(event: KeyPressEvent) -> None:
+        """Keep history navigation/search keys inert for input()-style prompts."""
+
+    for key in _HISTORY_KEYS:
+        bindings.add(key)(ignore_history_key)
+
+    @bindings.add(Keys.BracketedPaste, filter=has_selection)
+    def replace_selection_with_paste(event: KeyPressEvent) -> None:
+        data = event.data.replace("\r\n", "\n").replace("\r", "\n")
+        event.current_buffer.cut_selection()
+        event.current_buffer.insert_text(data)
+
+    @bindings.add("escape")
+    @bindings.add("c-c")
+    @bindings.add(Keys.SIGINT)
+    def cancel(event: KeyPressEvent) -> None:
+        event.current_buffer.text = ""
+        # Return normally instead of raising through prompt-toolkit's event
+        # loop. This avoids invoking its asynchronous exception renderer while
+        # the loop is shutting down (which can emit an un-awaited coroutine
+        # warning on Python 3.11).
+        event.app.exit(result="", style="class:aborting")
+
+    return bindings
+
+
+def _ask_with_prompt_toolkit(
+    prompt: str,
+    prefilled_input: str,
+    *,
+    prompt_input: Input | None = None,
+    prompt_output: Output | None = None,
 ) -> str:
-    """Temporarily make SIGINT cancel input even if the app normally eats it."""
-    try:
-        previous_handler = signal.getsignal(signal.SIGINT)
-        signal.signal(signal.SIGINT, signal.default_int_handler)
-    except (OSError, ValueError):
-        # Signal handlers can only be changed from Python's main thread.
-        return _ask_with_readline(prompt, prefilled_input)
-
-    try:
-        return _ask_with_readline(prompt, prefilled_input)
-    finally:
-        signal.signal(signal.SIGINT, previous_handler)
-
-
-def _ask_with_readline(prompt: str, prefilled_input: str) -> str:
-    if not (_is_tty(sys.stdin) and _is_tty(sys.stdout)):
-        return input(prompt)
-
-    try:
-        import readline
-    except ImportError:
-        return input(prompt)
-
-    if not all(hasattr(readline, name) for name in ("insert_text", "set_startup_hook")):
-        return input(prompt)
-
-    def insert_prefill() -> None:
-        readline.insert_text(prefilled_input)
-
-    readline.set_startup_hook(insert_prefill)
-    try:
-        return input(prompt)
-    finally:
-        # readline has no public getter with which to preserve an existing hook.
-        readline.set_startup_hook(None)
-
-
-def _write_windows_initial_line(prompt: str, prefilled_input: str) -> None:
-    # nInitialChars preserves text in ReadConsoleW's edit buffer, but the
-    # console does not initially echo those preserved characters. Write them
-    # first so its physical cursor matches the logical edit cursor.
-    sys.stdout.write(prompt + prefilled_input)
-    sys.stdout.flush()
-
-
-def _ask_with_windows_console(prompt: str, prefilled_input: str) -> str:
-    """Read an editable prefilled line with Windows' native console editor."""
-    if not (_is_tty(sys.stdin) and _is_tty(sys.stdout)):
-        return input(prompt)
-
-    try:
-        import ctypes
-        import msvcrt
-        from ctypes import wintypes
-    except (ImportError, AttributeError):
-        return input(prompt)
-
-    enable_processed_input = 0x0001
-    enable_line_input = 0x0002
-    enable_echo_input = 0x0004
-    enable_virtual_terminal_input = 0x0200
-    error_operation_aborted = 995
-    ctrl_z = "\x1a"
-
-    class _ConsoleReadControl(ctypes.Structure):
-        _fields_ = [
-            ("nLength", wintypes.ULONG),
-            ("nInitialChars", wintypes.ULONG),
-            ("dwCtrlWakeupMask", wintypes.ULONG),
-            ("dwControlKeyState", wintypes.ULONG),
-        ]
-
-    try:
-        win_dll = getattr(ctypes, "WinDLL")
-        get_last_error = getattr(ctypes, "get_last_error")
-        get_osfhandle = getattr(msvcrt, "get_osfhandle")
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        input_handle = wintypes.HANDLE(get_osfhandle(sys.stdin.fileno()))
-    except (AttributeError, OSError, ValueError):
-        return input(prompt)
-
-    get_console_mode = kernel32.GetConsoleMode
-    get_console_mode.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
-    get_console_mode.restype = wintypes.BOOL
-
-    set_console_mode = kernel32.SetConsoleMode
-    set_console_mode.argtypes = (wintypes.HANDLE, wintypes.DWORD)
-    set_console_mode.restype = wintypes.BOOL
-
-    read_console = kernel32.ReadConsoleW
-    read_console.argtypes = (
-        wintypes.HANDLE,
-        wintypes.LPVOID,
-        wintypes.DWORD,
-        ctypes.POINTER(wintypes.DWORD),
-        ctypes.POINTER(_ConsoleReadControl),
+    """Read one prompt-toolkit line with selected prefilled text."""
+    session = PromptSession[str](
+        ANSI(prompt),
+        editing_mode=EditingMode.EMACS,
+        multiline=False,
+        complete_while_typing=False,
+        validate_while_typing=False,
+        enable_history_search=False,
+        enable_system_prompt=False,
+        enable_suspend=False,
+        enable_open_in_editor=False,
+        completer=None,
+        auto_suggest=None,
+        reserve_space_for_menu=0,
+        mouse_support=False,
+        history=DummyHistory(),
+        key_bindings=_create_key_bindings(),
+        style=_SELECTION_STYLE,
+        input=prompt_input,
+        output=prompt_output,
     )
-    read_console.restype = wintypes.BOOL
+    session.app.ttimeoutlen = _ESCAPE_SEQUENCE_TIMEOUT_SECONDS
 
-    input_mode = wintypes.DWORD()
-    if not get_console_mode(input_handle, ctypes.byref(input_mode)):
-        return input(prompt)
+    def select_prefill() -> None:
+        if not prefilled_input:
+            return
 
-    original_input_mode = input_mode.value
-    reading_input_mode = (
-        original_input_mode
-        | enable_processed_input
-        | enable_line_input
-        | enable_echo_input
-    ) & ~enable_virtual_terminal_input
+        buffer = get_app().current_buffer
+        buffer.cursor_position = 0
+        buffer.start_selection()
+        selection = buffer.selection_state
+        if selection is None:
+            return
+        selection.enter_shift_mode()
+        buffer.cursor_position = len(buffer.text)
 
-    # ReadConsoleW counts UTF-16 code units rather than Python code points.
-    initial_chars = len(prefilled_input.encode("utf-16-le")) // 2
-    # A generously sized buffer preserves normal interactive use while ensuring
-    # nInitialChars is strictly less than nNumberOfCharsToRead as required.
-    buffer_capacity = max(65536, initial_chars + 4096)
-    buffer = ctypes.create_unicode_buffer(buffer_capacity)
-    if initial_chars:
-        ctypes.memmove(
-            buffer,
-            ctypes.c_wchar_p(prefilled_input),
-            initial_chars * ctypes.sizeof(ctypes.c_wchar),
-        )
-
-    control = _ConsoleReadControl()
-    control.nLength = ctypes.sizeof(control)
-    control.nInitialChars = initial_chars
-    # Make Ctrl-Z complete the read so it can retain input()'s EOF behavior.
-    control.dwCtrlWakeupMask = 1 << ord(ctrl_z)
-    control.dwControlKeyState = 0
-    chars_read = wintypes.DWORD()
-
-    mode_changed = False
-    try:
-        if reading_input_mode != original_input_mode:
-            if not set_console_mode(input_handle, reading_input_mode):
-                return input(prompt)
-            mode_changed = True
-
-        _write_windows_initial_line(prompt, prefilled_input)
-
-        succeeded = read_console(
-            input_handle,
-            buffer,
-            buffer_capacity,
-            ctypes.byref(chars_read),
-            ctypes.byref(control),
-        )
-        last_error = get_last_error()
-        if last_error == error_operation_aborted:
-            raise KeyboardInterrupt
-        if not succeeded:
-            raise OSError(last_error, "ReadConsoleW failed")
-
-        value = ctypes.wstring_at(buffer, chars_read.value)
-        if value.endswith(ctrl_z):
-            value = value[:-1]
-            if not value:
-                raise EOFError
-
-        if value.endswith("\r\n"):
-            return value[:-2]
-        if value.endswith(("\r", "\n")):
-            return value[:-1]
-        if not value:
-            raise EOFError
-        return value
-    finally:
-        if mode_changed:
-            set_console_mode(input_handle, original_input_mode)
+    return session.prompt(
+        default=prefilled_input,
+        pre_run=select_prefill,
+        # A one-line library prompt should not replace the host process's
+        # asyncio exception handler. prompt-toolkit's handler can itself try
+        # to schedule a coroutine after loop shutdown on Python 3.11.
+        set_exception_handler=False,
+    )
