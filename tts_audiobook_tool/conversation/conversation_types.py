@@ -1,11 +1,26 @@
 from __future__ import annotations
 
-import queue
-import threading
 from dataclasses import dataclass
-from typing import Literal
+from enum import Enum
 
 from tts_audiobook_tool.app_types import SegmentationStrategy
+
+
+class ChatInputMode(Enum):
+    MIC_IMMEDIATE = "mic_immediate"
+    MIC_ENTER = "mic_enter"
+    TEXT = "text"
+
+    @property
+    def id(self) -> str:
+        return self.value
+
+    @staticmethod
+    def from_id(s: str) -> ChatInputMode | None:
+        for item in ChatInputMode:
+            if s == item.id:
+                return item
+        return None
 
 
 @dataclass(frozen=True)
@@ -16,46 +31,30 @@ class ChunkingConfig:
 
 
 @dataclass(frozen=True)
-class UiOp:
-    kind: Literal["render", "println", "clear", "commit_render", "stop"]
-    text: str = ""
-    count: int = 0
+class ResponseSnapshot:
+    spoken_segments: tuple[tuple[str, int, int], ...] = ()
+    pending_sentences: tuple[str, ...] = ()
+    render_buffer: str = "..."
+    play_position_samples: int = 0
+    playback_done: bool = False
+    llm_content_received: bool = False
+    interrupted: bool = False
+
+    @property
+    def text(self) -> str:
+        parts = [text for text, _start, _end in self.spoken_segments]
+        parts.extend(self.pending_sentences)
+        if self.render_buffer and self.render_buffer not in ("...", "(thinking...)"):
+            parts.append(self.render_buffer)
+        return "".join(parts)
 
 
-class QueuedStream:
-    """
-    Stdio replacement that routes line-buffered writes to a ui_queue as
-    'println' ops, so every print from every thread is serialized through
-    the single ui_worker — no more raw writes racing with our cursor model.
-    Per-thread mute() discards writes (used to silence TTS inference spam).
-    """
-    def __init__(self, real: object, ui_queue: "queue.Queue[UiOp]") -> None:
-        self._real = real
-        self._ui_queue = ui_queue
-        self._local = threading.local()
+@dataclass(frozen=True)
+class ResponseResult:
+    text: str
+    interrupted: bool = False
+    error: str = ""
 
-    def mute(self) -> None:
-        self._local.muted = True
-
-    def unmute(self) -> None:
-        self._local.muted = False
-
-    def write(self, data: str) -> int:
-        if not data:
-            return 0
-        if getattr(self._local, "muted", False):
-            return len(data)
-        buf = getattr(self._local, "buffer", "") + data
-        while "\n" in buf:
-            line, _, buf = buf.partition("\n")
-            self._ui_queue.put(UiOp(kind="println", text=line))
-        self._local.buffer = buf
-        return len(data)
-
-    def flush(self) -> None:
-        # Partial-line output stays buffered until a newline arrives. Most
-        # producers terminate lines, so this is fine in practice.
-        pass
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._real, name)
+    @property
+    def has_content(self) -> bool:
+        return bool(self.text)

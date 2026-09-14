@@ -167,6 +167,20 @@ def test_pause_discards_audio_until_resume(monkeypatch) -> None:
     assert len(results) == 1
 
 
+def test_pause_times_out_and_raises_when_stt_never_finishes() -> None:
+    rt = make_transcriber(lambda segments, audio: None)
+    rt.PAUSE_POLL_INTERVAL_S = 0.01
+    rt.PAUSE_TIMEOUT_S = 0.03
+    rt._transcription_idle.clear()  # simulate an in-flight, wedged STT call
+
+    with pytest.raises(RuntimeError, match="in-flight STT"):
+        rt.pause()
+
+    # The mic stays paused after the timeout: audio arriving meanwhile is
+    # dropped rather than transcribed by the possibly-still-stuck worker.
+    assert rt.is_paused
+
+
 def test_audio_callback_stops_when_stop_requested(monkeypatch) -> None:
     import sounddevice as sd
 
@@ -198,6 +212,56 @@ def test_audio_callback_enqueues_first_channel_copy() -> None:
     indata[0, 0] = 99.0  # the queued copy must not track the source
     assert queued[0] == 0.0
     assert rt._audio_queue.empty()
+
+
+def test_audio_callback_publishes_clamped_rms_dbfs_and_flush_resets_it() -> None:
+    rt = make_transcriber(lambda segments, audio: None)
+    indata = np.full((BLOCKS, 1), 0.5, dtype=np.float32)
+
+    rt._audio_callback(indata, BLOCKS, None, None)
+
+    assert rt.latest_input_level_db == pytest.approx(-6.0206, abs=0.001)
+    rt.flush()
+    assert rt.latest_input_level_db is None
+
+    rt._audio_callback(np.zeros((BLOCKS, 1), dtype=np.float32), BLOCKS, None, None)
+    assert rt.latest_input_level_db == -99.0
+    rt._audio_callback(np.full((BLOCKS, 1), 2.0, dtype=np.float32), BLOCKS, None, None)
+    assert rt.latest_input_level_db == 0.0
+
+
+def test_level_updates_while_processing_thread_is_blocked_in_stt(monkeypatch) -> None:
+    entered_stt = threading.Event()
+    release_stt = threading.Event()
+
+    def transcribe(_prefs, _data, **_kwargs):
+        entered_stt.set()
+        assert release_stt.wait(5.0)
+        return SimpleNamespace(segments=()), ""
+
+    monkeypatch.setattr(module.ModelWorker, "transcribe_audio_blocking", transcribe)
+    monkeypatch.setattr(
+        module,
+        "Transcriber",
+        SimpleNamespace(prepare_sound_for_whisper=lambda sound: sound),
+    )
+    rt = make_transcriber(lambda segments, audio: None)
+    thread = threading.Thread(target=rt._processing_loop, daemon=True)
+    rt._worker_thread = thread
+    thread.start()
+    rt._audio_queue.put(loud_block())
+    rt._audio_queue.put(silent_block())
+
+    assert entered_stt.wait(5.0)
+    rt._audio_callback(
+        np.full((BLOCKS, 1), 0.25, dtype=np.float32), BLOCKS, None, None
+    )
+    assert rt.latest_input_level_db == pytest.approx(-12.0412, abs=0.001)
+
+    release_stt.set()
+    _wait_queue_drained(rt)
+    rt.stop()
+    assert not thread.is_alive()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="pthread_sigmask is POSIX-only")

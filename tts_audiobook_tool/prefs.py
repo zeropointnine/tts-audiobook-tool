@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
+from tts_audiobook_tool.conversation.conversation_types import ChatInputMode
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
@@ -36,7 +37,8 @@ class Prefs(Saveable):
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
-            chat_input_mode: str = PREFS_DEFAULT_CHAT_INPUT_MODE,
+            chat_input_mode: ChatInputMode = PREFS_DEFAULT_CHAT_INPUT_MODE,
+            chat_echo_override: bool = PREFS_DEFAULT_CHAT_ECHO_OVERRIDE,
             chat_save: bool = PROJECT_DEFAULT_CHAT_SAVE,
             chat_save_mic: bool = PROJECT_DEFAULT_CHAT_SAVE_MIC,
             save_debug_files: bool = False,
@@ -68,7 +70,11 @@ class Prefs(Saveable):
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
-        self._chat_input_mode = chat_input_mode if chat_input_mode in CHAT_INPUT_MODES else PREFS_DEFAULT_CHAT_INPUT_MODE
+        if not isinstance(chat_input_mode, ChatInputMode):
+            parsed = ChatInputMode.from_id(chat_input_mode) if isinstance(chat_input_mode, str) else None
+            chat_input_mode = parsed or PREFS_DEFAULT_CHAT_INPUT_MODE
+        self._chat_input_mode = chat_input_mode
+        self._chat_echo_override = chat_echo_override
         self._chat_save = chat_save
         self._chat_save_mic = chat_save_mic
         self._save_debug_files = save_debug_files
@@ -334,9 +340,18 @@ class Prefs(Saveable):
             dirty = True
 
         # Chat input mode
-        chat_input_mode = prefs_dict.get("chat_input_mode", PREFS_DEFAULT_CHAT_INPUT_MODE)
-        if not isinstance(chat_input_mode, str) or chat_input_mode not in CHAT_INPUT_MODES:
+        s = prefs_dict.get("chat_input_mode", PREFS_DEFAULT_CHAT_INPUT_MODE.id)
+        chat_input_mode = ChatInputMode.from_id(s) if isinstance(s, str) else None
+        if chat_input_mode is None:
             chat_input_mode = PREFS_DEFAULT_CHAT_INPUT_MODE
+            dirty = True
+
+        # Chat echo override
+        chat_echo_override = prefs_dict.get(
+            "chat_echo_override", PREFS_DEFAULT_CHAT_ECHO_OVERRIDE
+        )
+        if not isinstance(chat_echo_override, bool):
+            chat_echo_override = PREFS_DEFAULT_CHAT_ECHO_OVERRIDE
             dirty = True
 
         # Chat save
@@ -382,6 +397,7 @@ class Prefs(Saveable):
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
             chat_input_mode=chat_input_mode,
+            chat_echo_override=chat_echo_override,
             chat_save=chat_save,
             chat_save_mic=chat_save_mic,
             save_debug_files=save_debug_files,
@@ -584,14 +600,23 @@ class Prefs(Saveable):
         self._last_text_dir = value
 
     @property
-    def chat_input_mode(self) -> str:
+    def chat_input_mode(self) -> ChatInputMode:
         return self._chat_input_mode
 
     @chat_input_mode.setter
-    def chat_input_mode(self, value: str) -> None:
-        if value not in CHAT_INPUT_MODES:
-            value = PREFS_DEFAULT_CHAT_INPUT_MODE
+    def chat_input_mode(self, value: ChatInputMode) -> None:
+        if not isinstance(value, ChatInputMode):
+            parsed = ChatInputMode.from_id(value) if isinstance(value, str) else None
+            value = parsed or PREFS_DEFAULT_CHAT_INPUT_MODE
         self._chat_input_mode = value
+
+    @property
+    def chat_echo_override(self) -> bool:
+        return self._chat_echo_override
+
+    @chat_echo_override.setter
+    def chat_echo_override(self, value: bool) -> None:
+        self._chat_echo_override = value
 
     @property
     def chat_save(self) -> bool:
@@ -634,7 +659,8 @@ class Prefs(Saveable):
                 "last_voice_dir": self._last_voice_dir,
                 "last_project_dir": self._last_project_dir,
                 "last_text_dir": self._last_text_dir,
-                "chat_input_mode": self._chat_input_mode,
+                "chat_input_mode": self._chat_input_mode.id,
+                "chat_echo_override": self._chat_echo_override,
                 "chat_save": self._chat_save,
                 "chat_save_mic": self._chat_save_mic,
                 "save_debug_files": self._save_debug_files,

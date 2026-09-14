@@ -106,7 +106,6 @@ def test_text_import_shows_tolerance_hint_for_first_class_language(
         SimpleNamespace(
             project=project,
             prefs=prefs,
-            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=(1, 2)),
         ),
     )
 
@@ -197,7 +196,6 @@ def test_text_import_does_not_show_tolerance_hint_for_other_language(monkeypatch
         SimpleNamespace(
             project=project,
             prefs=object(),
-            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=None),
         ),
     )
     monkeypatch.setattr(
@@ -254,7 +252,6 @@ def test_text_import_shows_dialog_voice_hint_when_dialog_segmentation_enabled(
         SimpleNamespace(
             project=project,
             prefs=object(),
-            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=None),
         ),
     )
     monkeypatch.setattr(
@@ -340,7 +337,6 @@ def test_import_summary_reports_dialog_preassignments_without_changing_mode(
         SimpleNamespace(
             project=project,
             prefs=object(),
-            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=None),
         ),
     )
 
@@ -462,7 +458,6 @@ def run_manual_import(
         SimpleNamespace(
             project=project,
             prefs=object(),
-            real_time=SimpleNamespace(custom_phrase_groups=[], project_text_line_range=None),
         ),
     )
     on_select_import(state, MenuItem("Import", lambda *_: None, data="manual"))

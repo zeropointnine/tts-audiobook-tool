@@ -7,6 +7,7 @@ import os
 
 from tts_audiobook_tool.app_types import HighShelfEq, SegmentationStrategy
 from tts_audiobook_tool.constants import MAX_WORDS_PER_SEGMENT_MAX
+from tts_audiobook_tool.conversation.conversation_types import ChatInputMode
 
 DEV = os.getenv("TTS_AUDIOBOOK_TOOL_DEV", "").lower() in ("true", "1", "yes") and True
 
@@ -28,15 +29,8 @@ PROJECT_BATCH_SIZE_DEFAULT = 1
 PROJECT_BATCH_SIZE_MAX = 99
 PROJECT_CONCURRENT_REQUESTS_MAX = 16
 
-CHAT_INPUT_MODE_MIC_IMMEDIATE = "mic_immediate"
-CHAT_INPUT_MODE_MIC_ENTER = "mic_enter"
-CHAT_INPUT_MODE_TEXT = "text"
-CHAT_INPUT_MODES = (
-    CHAT_INPUT_MODE_MIC_IMMEDIATE,
-    CHAT_INPUT_MODE_MIC_ENTER,
-    CHAT_INPUT_MODE_TEXT,
-)
-PREFS_DEFAULT_CHAT_INPUT_MODE = CHAT_INPUT_MODE_MIC_IMMEDIATE
+PREFS_DEFAULT_CHAT_INPUT_MODE = ChatInputMode.MIC_IMMEDIATE
+PREFS_DEFAULT_CHAT_ECHO_OVERRIDE = False
 
 # Environment variable read at request time to obtain the LLM API key.
 # The prefs file stores only this variable's name, never the key itself.

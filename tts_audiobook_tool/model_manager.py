@@ -23,17 +23,32 @@ class ModelManager:
 
 
     @staticmethod
-    def warm_up_models(state: State, skip_yamnet: bool=False) -> ModelWarmUpResult:
-        require_model_owner("model registry")
+    def warm_up_models(
+        state: State,
+        skip_yamnet: bool = False,
+        want_stt: bool | None = None,
+    ) -> ModelWarmUpResult:
         """Reconcile process-local models with the models required by state.
 
         Presence and desired state are deliberately separate: an already-loaded
         model is retained when it is still wanted and cleared when it is not.
         In the interactive application this method is called only inside the
         model worker process.
+
+        ``want_stt`` optionally overrides the state-derived STT requirement:
+        generation and realtime playback want STT whenever it is not skipped
+        (the default), while LLM chat passes False for ordinary text input and
+        True for microphone input or explicit output phrase alignment. In every
+        case the request is still suppressed when ``Stt.should_skip`` reports a
+        reason.
         """
 
-        want_stt = not bool(Stt.should_skip(state))
+        require_model_owner("model registry")
+        want_stt_from_state = not bool(Stt.should_skip(state))
+        if want_stt is None:
+            want_stt = want_stt_from_state
+        else:
+            want_stt = want_stt and want_stt_from_state
         need_tts = not Tts.instance_exists()
         need_stt = want_stt and not Stt.has_instance()
 
@@ -42,7 +57,10 @@ class ModelManager:
         if skip_yamnet:
             ModelManager.clear_yamnet_detector()
 
-        if need_tts and need_stt:
+        # TTS loading emits no init line of its own, so the banner covers it
+        # whether or not STT is also being warmed (a cold text-input chat loads
+        # only TTS). STT-only warm-ups print their own model init line.
+        if need_tts:
             print_init("Warming up models...")
 
         Interrupts().set("model init")

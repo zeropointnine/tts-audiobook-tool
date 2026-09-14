@@ -111,6 +111,19 @@ class GlmModel(GlmBaseModel):
         self.llm = None
         self.flow = None
 
+    def release_inference_memory(self) -> None:
+        """Return GLM's unused PyTorch blocks after an idle chat synthesis.
+
+        GLM and faster-whisper use different CUDA allocators in the same model
+        worker. Keeping PyTorch's peak temporary cache reserved after a TTS
+        chunk can leave too little headroom for the next interaction even
+        though all live GLM tensors fit, so trim only the unused cache while
+        retaining model weights and the prepared voice clone.
+        """
+        from tts_audiobook_tool.app_support import app_memory
+
+        app_memory.gc_ram_vram()
+
     def _create_voice_clone(self, source_path: str, transcript: str) -> GlmVoiceClone:
         """
         Prepares the voice prompt for the given voice file: text
@@ -437,7 +450,6 @@ def generate_long(
     use_phoneme=False,
 ):
     outputs = []
-    full_mels = []
     output_token_list = []
     uttid = text_info[0]
     syn_text = text_info[1]
@@ -496,6 +508,11 @@ def generate_long(
             speech_feat=speech_feat,
             embedding=embedding
         )
+        # The mel is an on-device intermediate. The chat/audiobook callers use
+        # only waveform audio, so retaining every split's mel and concatenating
+        # them at the end needlessly raises peak VRAM. Drop it before the next
+        # split instead.
+        del full_mel
 
         # Update Cache
         if cache is not None:
@@ -504,13 +521,10 @@ def generate_long(
             cache_speech_token.append(token_list_res)
 
         outputs.append(output)
-        if full_mel is not None:
-            full_mels.append(full_mel)
 
     tts_speech = torch.concat(outputs, dim=1)
-    tts_mel = torch.concat(full_mels, dim=-1) if full_mels else None
 
-    return tts_speech, tts_mel, output_token_list, text_tn_dict
+    return tts_speech, None, output_token_list, text_tn_dict
 
 
 def load_models(

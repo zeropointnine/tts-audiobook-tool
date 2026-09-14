@@ -15,6 +15,7 @@ from contextlib import nullcontext
 from multiprocessing.context import BaseContext
 from typing import Any, Callable, TextIO
 
+from tts_audiobook_tool.l import L
 from tts_audiobook_tool.model_worker_protocol import (
     AudioFileUpsampled,
     AudioTranscribed,
@@ -66,6 +67,12 @@ WORKER_SHUTDOWN_TIMEOUT_SECONDS = 5.0
 # is the one that may still load, compile, or download the model. See
 # _should_watch_preview_inference().
 _preview_inferences_this_process = 0
+
+ConsoleEventHandler = Callable[[ConsoleOutput | ConsoleFlush], None]
+
+
+def discard_console_output(_event: ConsoleOutput | ConsoleFlush) -> None:
+    """Consume model-worker console events without touching the terminal."""
 
 
 class ModelWorkerUnavailable(RuntimeError):
@@ -265,6 +272,99 @@ class _WorkerOutputCapture:
             os.close(read_fd)
 
 
+# Worker-side project cache for LLM chat synthesis. Chat fires one
+# SynthesizeChatCommand per sentence, and each command otherwise reloads
+# project.json (plus the multi-megabyte project text payload when the
+# book is stored externally). The cache reuses the loaded Project across
+# sentences and reloads only when project.json changes on disk.
+_chat_project_cache: tuple[str, int, int, Any] | None = None
+
+
+def _get_or_load_chat_project(command: SynthesizeChatCommand) -> Any:
+    global _chat_project_cache
+
+    import os
+
+    from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME
+    from tts_audiobook_tool.project_support.project_load_util import ProjectLoadUtil
+
+    project_json_path = os.path.join(command.project_dir, PROJECT_JSON_FILE_NAME)
+    try:
+        stat = os.stat(project_json_path)
+    except OSError as exception:
+        return f"Error loading project settings: {exception}"
+
+    cached = _chat_project_cache
+    if (
+        cached is not None
+        and cached[0] == command.project_dir
+        and cached[1] == stat.st_mtime_ns
+        and cached[2] == stat.st_size
+    ):
+        return cached[3]
+
+    if cached is not None:
+        cached[3].kill()
+        _chat_project_cache = None
+
+    project = ProjectLoadUtil.load_using_dir_path(
+        command.project_dir,
+        prompt_on_warnings=False,
+    )
+    if isinstance(project, str):
+        return project
+    _chat_project_cache = (
+        command.project_dir,
+        stat.st_mtime_ns,
+        stat.st_size,
+        project,
+    )
+    return project
+
+
+def _make_chat_worker_state(command: SynthesizeChatCommand) -> Any:
+    """
+    Like _make_worker_state, but reuses a cached Project across chat
+    sentences while project.json on disk is unchanged.
+    """
+    from tts_audiobook_tool.app_types import SttConfig, SttVariant
+    from tts_audiobook_tool.prefs import Prefs
+    from tts_audiobook_tool.state import State
+    from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+    stt_variant = SttVariant.get_by_id(command.settings.stt_variant_id)
+    stt_config = SttConfig.from_id(command.settings.stt_config_id)
+    if stt_variant is None or stt_config is None:
+        raise ValueError("Generation settings contain an unsupported STT configuration")
+    sgl_type = (
+        None
+        if command.settings.sgl_omni_type_id is None
+        else TtsModelType.get_by_id(command.settings.sgl_omni_type_id)
+    )
+    prefs = Prefs(
+        project_dir=command.project_dir,
+        stt_variant=stt_variant,
+        stt_config=stt_config,
+        tts_force_cpu=command.settings.tts_force_cpu,
+        sgl_omni_type=sgl_type,
+        sgl_omni_url=command.settings.sgl_omni_url,
+        save_debug_files=command.settings.save_debug_files,
+    )
+
+    state = State.for_worker(prefs)
+    project = _get_or_load_chat_project(command)
+    if isinstance(project, str):
+        raise RuntimeError(project)
+    try:
+        state.project = project
+    except BaseException:
+        # Only kill when the project is not the retained cache value.
+        if not (_chat_project_cache and _chat_project_cache[3] is project):
+            project.kill()
+        raise
+    return state
+
+
 def _make_worker_state(
     command: (
         GenerateCommand
@@ -316,6 +416,43 @@ def _make_worker_state(
         project.kill()
         raise
     return state
+
+
+def _release_chat_synthesis_state() -> None:
+    """Clear per-call TTS state after a chat inference has unwound."""
+    from tts_audiobook_tool.tts import Tts
+
+    model = Tts.get_instance_if_exists()
+    if model is None:
+        return
+    model.clear_stream_state()
+    # GLM overrides this hook to return unused PyTorch allocator blocks before
+    # faster-whisper or the next synthesis uses the shared CUDA device.
+    model.release_inference_memory()
+
+
+def _load_chat_models(state: Any, *, warm_stt: bool) -> Any:
+    """Worker-side model load for LLM chat initialization.
+
+    Delegates to the same ModelManager.warm_up_models business logic as
+    generation, so chat and generation emit identical init messaging
+    ("Warming up models...", "Initializing faster-whisper model ...") and
+    reconcile the model registry the same way. Chat never validates audio,
+    so YAMNet is skipped. warm_stt is True when microphone input or explicit
+    assistant-output phrase alignment needs STT; ordinary text input passes
+    False. Raises on load failure; the caller reports it as a failed command.
+    """
+    from tts_audiobook_tool.model_manager import ModelManager
+    from tts_audiobook_tool.tts import Tts
+
+    result = ModelManager.warm_up_models(
+        state, skip_yamnet=True, want_stt=warm_stt
+    )
+    if result.should_stop:
+        raise RuntimeError(
+            "Model warm-up was interrupted" if result.did_interrupt else result.error
+        )
+    return Tts.get_instance()
 
 
 def _run_generate_command(
@@ -551,10 +688,13 @@ def _run_realtime_playback_command(
         )
         if isinstance(phrase_groups, str):
             raise ValueError(phrase_groups)
-        with GenerationEvents.using_sink(relay), RealTimePlaybackEvents.using_sink(
-            lambda update: event_queue.put(
-                RealTimePlaybackUpdate(command.operation_id, update)
-            )
+        with (
+            GenerationEvents.using_sink(relay),
+            RealTimePlaybackEvents.using_sink(
+                lambda update: event_queue.put(
+                    RealTimePlaybackUpdate(command.operation_id, update)
+                )
+            ),
         ):
             run_result = start(
                 state=state,
@@ -693,7 +833,7 @@ def _model_worker_main(
                 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
                 from tts_audiobook_tool.tts import Tts
 
-                state = _make_worker_state(command)
+                state = _make_chat_worker_state(command)
                 interrupts = Interrupts()
                 interrupts.set_external_event(cancellation_event)
                 if command.streaming:
@@ -733,17 +873,21 @@ def _model_worker_main(
             finally:
                 try:
                     from tts_audiobook_tool.app_support.interrupts import Interrupts
-                    from tts_audiobook_tool.tts import Tts
 
-                    model = Tts.get_instance_if_exists()
-                    if model is not None:
-                        model.clear_stream_state()
+                    # Inference has fully returned here. Give models with large
+                    # transient allocator caches a safe handoff point before
+                    # STT or the next TTS chunk uses the shared CUDA device.
+                    _release_chat_synthesis_state()
                     Interrupts().clear()
                     Interrupts().set_external_event(None)
                 except Exception:
                     traceback.print_exc()
                 if state is not None:
-                    state.project.kill()
+                    # Keep the chat-cached Project alive for the next
+                    # sentence; only non-cached projects are torn down.
+                    project = state.project
+                    if not (_chat_project_cache and _chat_project_cache[3] is project):
+                        project.kill()
                 cancellation_event.clear()
             tracker.set("")
             continue
@@ -769,9 +913,7 @@ def _model_worker_main(
                     or command.language in whisper.supported_languages
                 )
                 if not language_supported:
-                    event_queue.put(
-                        AudioTranscribed(command.operation_id, (), False)
-                    )
+                    event_queue.put(AudioTranscribed(command.operation_id, (), False))
                 else:
                     with Stt.inference_lock:
                         raw_segments, _ = whisper.transcribe(
@@ -819,7 +961,10 @@ def _model_worker_main(
                 # The project on disk can intentionally lag the interactive
                 # state while a custom model or adapter is being validated.
                 Tts.set_model_params(command.model_params)
-                instance = Tts.get_instance()
+                if command.warm_models:
+                    instance = _load_chat_models(state, warm_stt=command.warm_stt)
+                else:
+                    instance = Tts.get_instance()
                 device_type = instance.get_device_type()
                 device = device_type.value if device_type is not None else ""
                 blocking_issues = tuple(
@@ -845,9 +990,7 @@ def _model_worker_main(
                     instance, "supported_languages_multi", None
                 )
                 if callable(supported_languages_multi):
-                    metadata["supported_languages_multi"] = (
-                        supported_languages_multi()
-                    )
+                    metadata["supported_languages_multi"] = supported_languages_multi()
                 event_queue.put(
                     TtsInspected(
                         command.operation_id,
@@ -948,9 +1091,7 @@ def _model_worker_main(
 
                 # LavaSR has exclusive use of worker model memory during concat.
                 ModelManager.clear_all_models(except_lava_sr=True)
-                upsampler = ModelManager.get_lava_sr_upsampler(
-                    isolate_cuda=False
-                )
+                upsampler = ModelManager.get_lava_sr_upsampler(isolate_cuda=False)
                 if upsampler is None:
                     raise RuntimeError("LavaSR v2 upsampler is not installed")
                 sound = SoundFileUtil.load(command.source_path)
@@ -1017,7 +1158,7 @@ class ModelWorker:
     _lock = threading.RLock()
 
     @classmethod
-    def start(cls) -> str:
+    def start(cls, console_handler: ConsoleEventHandler | None = None) -> str:
         with cls._lock:
             if cls.is_alive():
                 return ""
@@ -1043,7 +1184,7 @@ class ModelWorker:
             cls._status = WorkerStatus.STARTING
 
         deadline = time.monotonic() + WORKER_START_TIMEOUT_SECONDS
-        startup_output: list[ConsoleOutput] = []
+        startup_output: list[ConsoleOutput | ConsoleFlush] = []
         while time.monotonic() < deadline:
             if not process.is_alive():
                 try:
@@ -1061,14 +1202,14 @@ class ModelWorker:
                 with cls._lock:
                     cls._status = WorkerStatus.RUNNING
                 for output in startup_output:
-                    cls._write_console_output(output)
+                    cls._dispatch_console_event(output, console_handler)
                 return ""
-            if isinstance(event, ConsoleOutput):
+            if isinstance(event, (ConsoleOutput, ConsoleFlush)):
                 startup_output.append(event)
                 continue
             if isinstance(event, WorkerCommandFailed):
                 for output in startup_output:
-                    cls._write_console_output(output)
+                    cls._dispatch_console_event(output, console_handler)
                 with cls._lock:
                     cls._force_stop_process(process)
                     cls._discard_process_state()
@@ -1076,7 +1217,7 @@ class ModelWorker:
             cls._pending_events.append(event)
 
         for output in startup_output:
-            cls._write_console_output(output)
+            cls._dispatch_console_event(output, console_handler)
         process_exited = not process.is_alive()
         with cls._lock:
             cls._force_stop_process(process)
@@ -1084,6 +1225,12 @@ class ModelWorker:
         if process_exited:
             return cls._with_log_hint("Model worker process exited during startup.")
         return "Model worker did not become ready"
+
+    @classmethod
+    def _start_with_console_handler(
+        cls, console_handler: ConsoleEventHandler | None
+    ) -> str:
+        return cls.start() if console_handler is None else cls.start(console_handler)
 
     @classmethod
     def is_alive(cls) -> bool:
@@ -1276,7 +1423,9 @@ class ModelWorker:
             except queue.Empty:
                 with cls._lock:
                     if cls._note_worker_death(queue_failed=False):
-                        events.extend(cls._take_pending_events(max_events - len(events)))
+                        events.extend(
+                            cls._take_pending_events(max_events - len(events))
+                        )
                 break
             except (EOFError, OSError, ValueError):
                 with cls._lock:
@@ -1355,9 +1504,12 @@ class ModelWorker:
 
     @classmethod
     def reset_chat_session_blocking(
-        cls, *, reset_voice_selection: bool = True
+        cls,
+        *,
+        reset_voice_selection: bool = True,
+        console_handler: ConsoleEventHandler | None = None,
     ) -> str:
-        error = cls.start()
+        error = cls._start_with_console_handler(console_handler)
         if error:
             return error
         with cls._lock:
@@ -1371,7 +1523,14 @@ class ModelWorker:
             cls._command_queue.put(
                 ResetChatSessionCommand(operation_id, reset_voice_selection)
             )
-        result = cls._wait_for_blocking_result(operation_id, ChatSessionReset)
+        t0 = time.monotonic()
+        result = cls._wait_for_blocking_result_with_handler(
+            operation_id, ChatSessionReset, console_handler
+        )
+        L.i(
+            f"[worker] reset_chat_session_blocking finished in {time.monotonic() - t0:.1f}s:"
+            f" {'ok' if not isinstance(result, str) else result}"
+        )
         return result if isinstance(result, str) else ""
 
     @classmethod
@@ -1384,8 +1543,13 @@ class ModelWorker:
         streaming: bool,
         on_chunk: Callable[[Any], None] | None = None,
         interrupt_event: threading.Event | None = None,
+        console_handler: ConsoleEventHandler | None = None,
     ) -> tuple[Any | None, str]:
-        error = cls.start()
+        t0 = time.monotonic()
+        L.i(
+            f"[worker] chat synthesis start: streaming={streaming} chars={len(text)}"
+        )
+        error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
         prefs = state.prefs
@@ -1421,27 +1585,41 @@ class ModelWorker:
             )
 
         deferred: list[ModelWorkerEvent] = []
+        wait_logged = time.monotonic()
         try:
             while True:
                 if interrupt_event is not None and interrupt_event.is_set():
                     cls.request_cancel(operation_id)
                 event = cls.get_event(timeout=0.1)
                 if event is None:
+                    now = time.monotonic()
+                    if now - wait_logged > 30.0:
+                        L.w(f"[worker] chat synthesis still waiting after {now - t0:.0f}s")
+                        wait_logged = now
                     continue
                 if getattr(event, "operation_id", None) != operation_id:
                     deferred.append(event)
                     continue
-                if isinstance(event, ConsoleOutput):
-                    cls._write_console_output(event)
+                if isinstance(event, (ConsoleOutput, ConsoleFlush)):
+                    cls._dispatch_console_event(event, console_handler)
                 elif isinstance(event, ChatAudioChunk):
                     if on_chunk is not None:
                         on_chunk(event.data)
                 elif isinstance(event, ChatSynthesisFinished):
+                    L.i(
+                        f"[worker] chat synthesis finished in {time.monotonic() - t0:.1f}s:"
+                        f" {'ok' if not event.error else event.error}"
+                    )
                     return event.sound, event.error
                 elif isinstance(event, WorkerCommandFailed):
+                    L.w(f"[worker] chat synthesis command failed: {event.message}")
                     return None, event.message
                 elif isinstance(event, WorkerExited):
-                    return None, event.message or "Model worker exited during chat synthesis"
+                    L.w(f"[worker] worker exited during chat synthesis: {event.message}")
+                    return (
+                        None,
+                        event.message or "Model worker exited during chat synthesis",
+                    )
         finally:
             with cls._lock:
                 cls._pending_events.extendleft(reversed(deferred))
@@ -1456,8 +1634,9 @@ class ModelWorker:
         word_timestamps: bool = False,
         stt_variant_id: str | None = None,
         stt_config_id: str | None = None,
+        console_handler: ConsoleEventHandler | None = None,
     ) -> tuple[AudioTranscribed | None, str]:
-        error = cls.start()
+        error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
         prefs = getattr(state, "prefs", state)
@@ -1479,16 +1658,27 @@ class ModelWorker:
                     word_timestamps,
                 )
             )
-        result = cls._wait_for_blocking_result(operation_id, AudioTranscribed)
+        result = cls._wait_for_blocking_result_with_handler(
+            operation_id, AudioTranscribed, console_handler
+        )
         if isinstance(result, AudioTranscribed):
             return result, ""
-        return None, result if isinstance(result, str) else "Unexpected transcription response"
+        return None, result if isinstance(
+            result, str
+        ) else "Unexpected transcription response"
 
     @classmethod
-    def inspect_tts_blocking(cls, state: Any) -> tuple[TtsInspected | None, str]:
+    def inspect_tts_blocking(
+        cls,
+        state: Any,
+        *,
+        console_handler: ConsoleEventHandler | None = None,
+        warm_models: bool = False,
+        warm_stt: bool = False,
+    ) -> tuple[TtsInspected | None, str]:
         from tts_audiobook_tool.tts import Tts
 
-        error = cls.start()
+        error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
         prefs = state.prefs
@@ -1515,12 +1705,18 @@ class ModelWorker:
                     state.project.dir_path,
                     settings,
                     Tts.get_model_params_using_project(state.project),
+                    warm_models,
+                    warm_stt,
                 )
             )
-        result = cls._wait_for_blocking_result(operation_id, TtsInspected)
+        result = cls._wait_for_blocking_result_with_handler(
+            operation_id, TtsInspected, console_handler
+        )
         if isinstance(result, TtsInspected):
             return result, ""
-        return None, result if isinstance(result, str) else "Unexpected TTS inspection response"
+        return None, result if isinstance(
+            result, str
+        ) else "Unexpected TTS inspection response"
 
     @classmethod
     def get_model_state_blocking(cls) -> tuple[ModelStateSnapshot | None, str]:
@@ -1555,7 +1751,9 @@ class ModelWorker:
         result = cls._wait_for_blocking_result(operation_id, LavaSrProbed)
         if isinstance(result, LavaSrProbed):
             return result.available, ""
-        return False, result if isinstance(result, str) else "Unexpected LavaSR probe response"
+        return False, result if isinstance(
+            result, str
+        ) else "Unexpected LavaSR probe response"
 
     @classmethod
     def upsample_file_blocking(
@@ -1601,34 +1799,73 @@ class ModelWorker:
             return operation_id, ""
 
     @classmethod
+    def _wait_for_blocking_result_with_handler(
+        cls,
+        operation_id: str,
+        success_type: Any,
+        console_handler: ConsoleEventHandler | None,
+    ) -> Any:
+        if console_handler is None:
+            return cls._wait_for_blocking_result(operation_id, success_type)
+        return cls._wait_for_blocking_result(
+            operation_id, success_type, console_handler
+        )
+
+    @classmethod
     def _wait_for_blocking_result(
         cls,
         operation_id: str,
         success_type: type[ModelsCleared]
-            | type[ChatSessionReset]
-            | type[AudioTranscribed]
-            | type[TtsInspected]
-            | type[ModelStateReported]
-            | type[LavaSrProbed]
-            | type[AudioFileUpsampled],
-    ) -> ModelsCleared | ChatSessionReset | AudioTranscribed | TtsInspected | ModelStateReported | LavaSrProbed | AudioFileUpsampled | str:
+        | type[ChatSessionReset]
+        | type[AudioTranscribed]
+        | type[TtsInspected]
+        | type[ModelStateReported]
+        | type[LavaSrProbed]
+        | type[AudioFileUpsampled],
+        console_handler: ConsoleEventHandler | None = None,
+    ) -> (
+        ModelsCleared
+        | ChatSessionReset
+        | AudioTranscribed
+        | TtsInspected
+        | ModelStateReported
+        | LavaSrProbed
+        | AudioFileUpsampled
+        | str
+    ):
+        with cls._lock:
+            track_operation_identity = cls._active_operation_id == operation_id
         deferred: list[ModelWorkerEvent] = []
         try:
             while True:
+                # A hard reset invalidates the in-flight operation before it
+                # starts the replacement worker. Check that identity before
+                # reading so this old blocking waiter cannot consume the new
+                # worker's startup event and race its start() caller. Direct
+                # helper tests may supply events without installing an active
+                # operation, so only track calls that began with one.
+                with cls._lock:
+                    if (
+                        track_operation_identity
+                        and cls._active_operation_id != operation_id
+                    ):
+                        return "Model worker operation was cancelled"
                 event = cls.get_event(timeout=0.1)
                 if event is None:
                     continue
                 if getattr(event, "operation_id", None) != operation_id:
                     deferred.append(event)
                     continue
-                if isinstance(event, ConsoleOutput):
-                    cls._write_console_output(event)
+                if isinstance(event, (ConsoleOutput, ConsoleFlush)):
+                    cls._dispatch_console_event(event, console_handler)
                 elif isinstance(event, success_type):
                     return event
                 elif isinstance(event, WorkerCommandFailed):
                     return event.message
                 elif isinstance(event, WorkerExited):
-                    return event.message or "Model worker exited during blocking command"
+                    return (
+                        event.message or "Model worker exited during blocking command"
+                    )
         finally:
             with cls._lock:
                 cls._pending_events.extendleft(reversed(deferred))
@@ -1716,9 +1953,7 @@ class ModelWorker:
         cls._pending_events.append(
             WorkerExited(
                 operation_id=cls._active_operation_id or "",
-                message=cls._with_log_hint(
-                    "Model worker process exited unexpectedly."
-                ),
+                message=cls._with_log_hint("Model worker process exited unexpectedly."),
             )
         )
         cls._active_operation_id = None
@@ -1757,6 +1992,15 @@ class ModelWorker:
         if not log_path:
             return message
         return f"{message} Worker log: {log_path}"
+
+    @classmethod
+    def _dispatch_console_event(
+        cls, event: ConsoleOutput | ConsoleFlush, handler: ConsoleEventHandler | None
+    ) -> None:
+        if handler is not None:
+            handler(event)
+        elif isinstance(event, ConsoleOutput):
+            cls._write_console_output(event)
 
     @staticmethod
     def _write_console_output(event: ConsoleOutput) -> None:

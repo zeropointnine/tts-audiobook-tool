@@ -35,6 +35,7 @@ from tts_audiobook_tool.model_worker_protocol import (
     WorkerCommandFailed,
     WorkerExited,
 )
+from tts_audiobook_tool.textual.textual_shared import TEXTUAL_SCROLLBAR_CSS
 from tts_audiobook_tool.textual.worker_content import WorkerLog, WorkerLogContentArea
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.worker_reset import (
@@ -123,6 +124,7 @@ def worker_app_css(divider_id: str) -> str:
         (
             WORKER_APP_SCREEN_CSS,
             WORKER_APP_FIND_CSS,
+            TEXTUAL_SCROLLBAR_CSS,
             "    # User CSS overrides the `Rule.-horizontal` DEFAULT_CSS margins (1 row",
             "    # above and below the divider), so the divider block is exactly 1 row.",
             f"    #{divider_id} {{ color: #888888; margin: 0; }}",

@@ -117,10 +117,10 @@ class VoiceDotsMenu:
     def target_submenu(state: State) -> None:
         targets = DotsBaseModel.PRESET_REPO_IDS
         sublabels = [
-            "Full flow-matching (post-trained); configurable NFE (default 10) and CFG 1.2.",
-            "MeanFlow-distilled student of SOAR; few-step (NFE 4), lower latency; CFG fused.",
-            "Distilled, fixed two-step sCM sampling (NFE 2, CFG 0).",
-            "Distilled, fixed one-step sampling (NFE 1, CFG 0).",
+            "Full flow-matching (post-trained); configurable NFE and CFG 1.2",
+            "MeanFlow-distilled student of SOAR; 4 steps, no CFG",
+            "Distilled, fixed two-step sCM sampling; 2 steps, no CFG",
+            "Distilled, fixed one-step sampling; 1 step, no CFG",
         ]
 
         def on_select(target: str) -> None:

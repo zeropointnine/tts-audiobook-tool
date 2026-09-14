@@ -3,32 +3,19 @@ from __future__ import annotations
 import os
 import queue
 import re
-import sys
 import threading
 import time
-import unicodedata
-from typing import Callable
+from typing import Callable, Protocol
 
 import numpy as np
 
-from tts_audiobook_tool.system_support.ansi import Ansi
-from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant
+from tts_audiobook_tool.app_types import Sound, SttConfig, SttVariant
 from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.conversation.console_session import (
-    ConsoleSession,
-    KEY_CTRL_C,
-    KEY_DEL,
-    KEY_DEL2,
-    KEY_ENTER,
-    KEY_FWDDEL,
-    KEY_LEFT,
-    KEY_RIGHT,
-)
-from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, QueuedStream, UiOp
+from tts_audiobook_tool.conversation.conversation_types import ChunkingConfig, ResponseSnapshot
 from tts_audiobook_tool.app_types.force_align_util import ForceAlignUtil
 from tts_audiobook_tool.conversation.llm_session import LlmSession
 from tts_audiobook_tool.l import L
-from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker import ModelWorker, discard_console_output
 from tts_audiobook_tool.text_ops.phrase_segmenter import PhraseSegmenter
 from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
 from tts_audiobook_tool.app_types.phrase import Reason
@@ -39,392 +26,16 @@ from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.sound.sound_device_stream import SoundDeviceStream
-from tts_audiobook_tool.system_support.terminal import get_terminal_width
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.transcriber import Transcriber
 from tts_audiobook_tool.util import make_error_string
 
 
-class Ui:
-    """
-    Single-thread terminal UI dispatcher.
+class ResponseUi(Protocol):
+    """Minimal UI-neutral sink used by the response engine."""
 
-    Serializes all stdout writes through one worker thread so cursor-relative
-    renders never race with line-buffered prints from other threads. Public
-    methods enqueue ops; the worker drains the queue and coalesces consecutive
-    renders into the latest one before painting.
-    """
-
-    ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
-
-    def __init__(self, real_stdout: object) -> None:
-        self.real_stdout = real_stdout
-        self.queue: queue.Queue[UiOp] = queue.Queue()
-        self.thread: threading.Thread | None = None
-        # Producer-side dedupe: drop render calls whose display text is
-        # identical to the last enqueued one within a short window. Worker-side
-        # coalescing handles in-flight bursts; this stops pointless enqueues
-        # during the 50ms ticker + dense on_chunk calls.
-        self.dedupe_text: str | None = None
-        self.dedupe_time: float = 0.0
-        self.dedupe_lock = threading.Lock()
-
-    def start(self) -> None:
-        if self.thread is not None:
-            return
-        self.thread = threading.Thread(target=self.worker, daemon=True)
-        self.thread.start()
-
-    def stop(self) -> None:
-        if self.thread is None:
-            return
-        self.queue.put(UiOp(kind="stop"))
-        self.queue.join()
-        self.thread.join(timeout=1.0)
-        self.thread = None
-
-    def render(self, display: str) -> None:
-        now = time.monotonic()
-        with self.dedupe_lock:
-            if display == self.dedupe_text and now - self.dedupe_time < 0.016:
-                return
-            self.dedupe_text = display
-            self.dedupe_time = now
-        self.queue.put(UiOp(kind="render", text=display))
-
-    def println(self, text: str = "") -> None:
-        self.queue.put(UiOp(kind="println", text=text))
-
-    def clear(self) -> None:
-        with self.dedupe_lock:
-            self.dedupe_text = None
-            self.dedupe_time = 0.0
-        self.queue.put(UiOp(kind="clear"))
-
-    def commit_render(self, extra_blank_lines: int = 0) -> None:
-        with self.dedupe_lock:
-            self.dedupe_text = None
-            self.dedupe_time = 0.0
-        self.queue.put(UiOp(kind="commit_render", count=extra_blank_lines))
-
-    def wait_idle(self) -> None:
-        self.queue.join()
-
-    def worker(self) -> None:
-        current_render_lines = 0
-        pending_op: UiOp | None = None
-        while True:
-            if pending_op is None:
-                op = self.queue.get()
-                task_done_count = 1
-            else:
-                op = pending_op
-                pending_op = None
-                task_done_count = 1
-            try:
-                if op.kind == "stop":
-                    return
-                if op.kind == "clear":
-                    clear_seq = Ui.make_clear_seq(current_render_lines)
-                    if clear_seq:
-                        self.real_stdout.write(clear_seq) # type: ignore
-                        self.real_stdout.flush() # type: ignore
-                    current_render_lines = 0
-                elif op.kind == "render":
-                    latest_render = op
-                    while True:
-                        try:
-                            queued_op = self.queue.get_nowait()
-                        except queue.Empty:
-                            break
-                        if queued_op.kind == "render":
-                            latest_render = queued_op
-                            task_done_count += 1
-                            continue
-                        pending_op = queued_op
-                        break
-
-                    display = latest_render.text
-                    if not display:
-                        clear_seq = Ui.make_clear_seq(current_render_lines)
-                        if clear_seq:
-                            self.real_stdout.write(clear_seq) # type: ignore
-                            self.real_stdout.flush() # type: ignore
-                        current_render_lines = 0
-                        continue
-                    new_lines = Ui.count_display_lines(display)
-                    clear_seq = Ui.make_clear_seq(current_render_lines)
-                    # End with \r so the cursor parks at column 1 of the last
-                    # rendered row. make_clear_seq matches this invariant.
-                    self.real_stdout.write(clear_seq + display + "\r") # type: ignore
-                    self.real_stdout.flush() # type: ignore
-                    current_render_lines = new_lines
-                elif op.kind == "println":
-                    clear_seq = Ui.make_clear_seq(current_render_lines)
-                    self.real_stdout.write(clear_seq + op.text + "\n") # type: ignore
-                    self.real_stdout.flush() # type: ignore
-                    current_render_lines = 0
-                elif op.kind == "commit_render":
-                    # Cursor is at col 1 of the last rendered row; advance
-                    # past it so subsequent output doesn't overwrite it.
-                    if current_render_lines > 0:
-                        self.real_stdout.write("\n") # type: ignore
-                    if op.count > 0:
-                        self.real_stdout.write("\n" * op.count) # type: ignore
-                    self.real_stdout.flush() # type: ignore
-                    current_render_lines = 0
-            finally:
-                for _ in range(task_done_count):
-                    self.queue.task_done()
-
-    @staticmethod
-    def make_clear_seq(num_lines: int) -> str:
-        # Renders leave the cursor at column 1 of the *last* rendered row (we
-        # end each render with \r, not \n). To clear a region of N rows we
-        # therefore only need to move up N-1 rows and clear downward. Ending
-        # on the last row rather than the line below avoids a phantom-row
-        # off-by-one when the final line happens to fill the terminal width
-        # exactly.
-        if num_lines <= 0:
-            return ""
-        if num_lines == 1:
-            return "\r\033[J"
-        return f"\033[{num_lines - 1}A\r\033[J"
-
-    @staticmethod
-    def term_cols() -> int:
-        return get_terminal_width()
-
-    @staticmethod
-    def display_width(s: str) -> int:
-        # Approximate display columns. Treats East Asian Wide / Fullwidth as 2,
-        # combining marks and most control chars as 0, everything else as 1.
-        # Doesn't fully model regional-indicator / skin-tone emoji sequences,
-        # but those are rare in conversational LLM output.
-        width = 0
-        for ch in s:
-            if unicodedata.combining(ch):
-                continue
-            cat = unicodedata.category(ch)
-            if cat.startswith("C"):
-                continue
-            if unicodedata.east_asian_width(ch) in ("W", "F"):
-                width += 2
-            else:
-                width += 1
-        return width
-
-    @staticmethod
-    def count_display_lines(text: str) -> int:
-        plain = Ui.ANSI_RE.sub("", text)
-        cols = Ui.term_cols()
-        total = 0
-        for line in plain.split("\n"):
-            w = Ui.display_width(line)
-            total += max(1, (w + cols - 1) // cols)
-        return max(1, total)
-
-
-class PromptBuilder:
-    """
-    Owns one user-prompt input concern: receive transcriptions, render the
-    editable prompt line, dispatch keys, return the assembled prompt on Enter.
-    Long-lived for the whole conversation; build() drives one input turn and
-    is called in a loop by Conversation.
-    """
-
-    def __init__(
-        self,
-        ui: Ui,
-        console: ConsoleSession,
-        ctrl_c_requested: threading.Event,
-        stt_immediate: bool = False,
-    ) -> None:
-        self.ui = ui
-        self.console = console
-        self.ctrl_c_requested = ctrl_c_requested
-        self.stt_immediate = stt_immediate
-        self.chunk_queue: queue.Queue[tuple[str, np.ndarray | None]] = queue.Queue()
-        self.prompt_chunks: list[str] = []
-        self.prompt_chunk_audios: list[np.ndarray | None] = []
-        self.selected_idx: int | None = None
-        self.mic_paused = False
-        self.finalized_mic_audio: np.ndarray | None = None
-
-    def on_transcription(self, segments: list[Segment], audio: np.ndarray | None = None) -> None:
-        if self.mic_paused:
-            return
-        text = " ".join(s.text.strip() for s in segments).strip()
-        if text:
-            self.chunk_queue.put((text, np.copy(audio) if audio is not None else None))
-
-    def take_finalized_mic_audio(self) -> np.ndarray | None:
-        audio = self.finalized_mic_audio
-        self.finalized_mic_audio = None
-        return audio
-
-    def resume(self) -> None:
-        self.mic_paused = False
-
-    def build(self) -> str:
-        """
-        Run one input turn. Returns the assembled prompt on Enter, with the
-        finalized prompt line already committed to the UI and internal state
-        reset for the response turn (mic_paused=True, chunks cleared, queue
-        drained). Raises KeyboardInterrupt if Ctrl-C was requested.
-        """
-        self.render()
-        while True:
-            if self.ctrl_c_requested.is_set():
-                raise KeyboardInterrupt
-
-            updated = False
-            while not self.chunk_queue.empty():
-                chunk, audio = self.chunk_queue.get_nowait()
-                self.prompt_chunks.append(chunk)
-                self.prompt_chunk_audios.append(audio)
-                self.selected_idx = len(self.prompt_chunks) - 1
-                updated = True
-
-            if updated:
-                self.render()
-                if self.stt_immediate and self.prompt_chunks:
-                    assembled = " ".join(self.prompt_chunks)
-                    self.commit_finalized_prompt(assembled)
-                    return assembled
-
-            key = self.console.read_key()
-            if key is None:
-                time.sleep(0.02)
-                continue
-            if key == KEY_CTRL_C:
-                self.ctrl_c_requested.set()
-                raise KeyboardInterrupt
-
-            if key == KEY_LEFT:
-                if self.prompt_chunks:
-                    self.selected_idx = (
-                        len(self.prompt_chunks) - 1
-                        if self.selected_idx is None
-                        else max(0, self.selected_idx - 1)
-                    )
-            elif key == KEY_RIGHT:
-                if self.selected_idx is not None:
-                    self.selected_idx = min(self.selected_idx + 1, len(self.prompt_chunks) - 1)
-            elif key in (KEY_DEL, KEY_DEL2, KEY_FWDDEL):
-                if self.selected_idx is not None and self.prompt_chunks:
-                    self.prompt_chunks.pop(self.selected_idx)
-                    self.prompt_chunk_audios.pop(self.selected_idx)
-                    if not self.prompt_chunks:
-                        self.selected_idx = None
-                    else:
-                        self.selected_idx = min(self.selected_idx, len(self.prompt_chunks) - 1)
-                elif self.prompt_chunks:
-                    self.prompt_chunks.pop()
-                    self.prompt_chunk_audios.pop()
-            elif key == KEY_ENTER and self.prompt_chunks:
-                assembled = " ".join(self.prompt_chunks)
-                self.commit_finalized_prompt(assembled)
-                return assembled
-
-            self.render()
-
-    def commit_finalized_prompt(self, assembled: str) -> None:
-        audio_chunks = [audio for audio in self.prompt_chunk_audios if audio is not None and audio.size > 0]
-        if audio_chunks:
-            finalized_audio = np.concatenate(audio_chunks)
-            self.finalized_mic_audio = SoundUtil.normalize(finalized_audio)
-        else:
-            self.finalized_mic_audio = None
-        self.ui.println(f"> {COL_DIM}{assembled}{Ansi.RESET}")
-        self.ui.println()
-        self.prompt_chunks.clear()
-        self.prompt_chunk_audios.clear()
-        self.selected_idx = None
-        self.mic_paused = True
-        while not self.chunk_queue.empty():
-            self.chunk_queue.get_nowait()
-
-    def render(self) -> None:
-        parts: list[str] = []
-        for i, chunk in enumerate(self.prompt_chunks):
-            if i == self.selected_idx:
-                parts.append(f"{COL_MEDIUM}{Ansi.ITALICS}{chunk}{Ansi.RESET}")
-            else:
-                parts.append(f"{COL_DIM}{chunk}{Ansi.RESET}")
-        content = " ".join(parts) if parts else f"{COL_OK}{Ansi.ITALICS}Speak into the mic... {COL_DIM}(Ctrl-C to exit){Ansi.RESET}"
-        self.ui.render(f"> {content}")
-
-
-class MuteCurrentThreadOutput:
-    """
-    Context manager that suppresses output from the current thread for the
-    duration of the `with` block. Mutes any QueuedStream installed on
-    sys.stdout/sys.stderr, and redirects fd 2 to /dev/null to silence native
-    code that writes directly to the stderr file descriptor. Python logging is
-    intentionally left alone so app diagnostics still reach the log file.
-    """
-
-    def __init__(self, real_stderr: object, fd2_redirect_lock: threading.Lock) -> None:
-        self.real_stderr = real_stderr
-        self.fd2_redirect_lock = fd2_redirect_lock
-        self.muted: list[QueuedStream] = []
-        self.saved_stderr_fd: int | None = None
-        self.devnull_fd: int | None = None
-
-    def __enter__(self) -> None:
-
-        for name in ("stdout", "stderr"):
-            stream = getattr(sys, name)
-            if isinstance(stream, QueuedStream):
-                stream.mute()
-                self.muted.append(stream)
-
-        # Some TTS backends emit directly to the process stderr file
-        # descriptor from native code, bypassing Python's sys.stderr and
-        # logging entirely. Temporarily redirect fd 2 to /dev/null around
-        # inference to suppress that.
-        self.fd2_redirect_lock.acquire()
-        try:
-            self.real_stderr.flush() # type: ignore
-        except Exception:
-            pass
-        try:
-            self.saved_stderr_fd = os.dup(2)
-            self.devnull_fd = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(self.devnull_fd, 2)
-        except Exception:
-            if self.devnull_fd is not None:
-                os.close(self.devnull_fd)
-                self.devnull_fd = None
-            if self.saved_stderr_fd is not None:
-                os.close(self.saved_stderr_fd)
-                self.saved_stderr_fd = None
-            self.fd2_redirect_lock.release()
-            raise
-
-    def __exit__(self, *_: object) -> None:
-        try:
-            if self.saved_stderr_fd is not None:
-                try:
-                    self.real_stderr.flush() # type: ignore
-                except Exception:
-                    pass
-                os.dup2(self.saved_stderr_fd, 2)
-        finally:
-            if self.devnull_fd is not None:
-                os.close(self.devnull_fd)
-                self.devnull_fd = None
-            if self.saved_stderr_fd is not None:
-                os.close(self.saved_stderr_fd)
-                self.saved_stderr_fd = None
-            if self.fd2_redirect_lock.locked():
-                self.fd2_redirect_lock.release()
-
-        for stream in self.muted:
-            stream.unmute()
-        self.muted.clear()
+    def println(self, text: str = "") -> None: ...
 
 
 class ConversationStreamingTts:
@@ -435,7 +46,6 @@ class ConversationStreamingTts:
         reason: Reason,
         sound_stream: SoundDeviceStream,
         interrupt_requested: threading.Event,
-        response_aborted: threading.Event,
         on_segment_range: Callable[[int, int], None] | None = None,
     ) -> tuple[tuple[int, int] | None, Sound | None, str | None]:
         """
@@ -449,9 +59,13 @@ class ConversationStreamingTts:
         project = state.project
         sample_rate = Tts.get_class().get_output_sample_rate(project)
         if sound_stream.sample_rate != sample_rate:
-            return None, None, (
-                f"Streaming sample rate mismatch: output stream={sound_stream.sample_rate}, "
-                f"tts={sample_rate}"
+            return (
+                None,
+                None,
+                (
+                    f"Streaming sample rate mismatch: output stream={sound_stream.sample_rate}, "
+                    f"tts={sample_rate}"
+                ),
             )
 
         stream_start: int | None = None
@@ -461,7 +75,7 @@ class ConversationStreamingTts:
 
         def append_chunk(data: np.ndarray) -> None:
             nonlocal stream_start, stream_end, speech_end
-            if interrupt_requested.is_set() or response_aborted.is_set():
+            if interrupt_requested.is_set():
                 return
             saved_chunks.append(np.copy(data))
             start, end = sound_stream.add_data(data)
@@ -469,12 +83,16 @@ class ConversationStreamingTts:
                 stream_start = start
             stream_end = end
             speech_end = end
-            if on_segment_range is not None and stream_start is not None and speech_end is not None:
+            if (
+                on_segment_range is not None
+                and stream_start is not None
+                and speech_end is not None
+            ):
                 on_segment_range(stream_start, speech_end)
 
         def on_stream_end() -> None:
             nonlocal stream_start, stream_end
-            if interrupt_requested.is_set() or response_aborted.is_set():
+            if interrupt_requested.is_set():
                 return
 
             # Streaming path intentionally appends only silence here. We do not
@@ -502,6 +120,7 @@ class ConversationStreamingTts:
             streaming=True,
             on_chunk=append_chunk,
             interrupt_event=interrupt_requested,
+            console_handler=discard_console_output,
         )
         if not error:
             on_stream_end()
@@ -517,7 +136,7 @@ class ConversationStreamingTts:
         return (stream_start, speech_end), saved_sound, None
 
 
-class ResponseSession:
+class _ResponseEngine:
     """
     Handles one LLM→TTS response turn. Construct fresh per Enter-press.
     Owns all per-turn threading state. The sound_stream is injected by
@@ -525,20 +144,19 @@ class ResponseSession:
     """
 
     RESPONSE_PLACEHOLDER = "..."
+    REASONING_PLACEHOLDER = "(thinking...)"
 
     def __init__(
         self,
-        ui: Ui,
-        llm: LlmSession,
+        ui: ResponseUi,
+        llm: LlmSession | None,
         state: State,
         chunking_config: ChunkingConfig,
         stt_variant: SttVariant,
         stt_config: SttConfig,
-        real_stderr: object,
-        fd2_redirect_lock: threading.Lock,
-        ctrl_c_requested: threading.Event,
         sound_stream: SoundDeviceStream,
         phrase_stt_enabled: bool = True,
+        echo_override: bool = False,
     ) -> None:
         self.ui = ui
         self.llm = llm
@@ -548,52 +166,172 @@ class ResponseSession:
         self.chunking_config = chunking_config
         self.stt_variant = stt_variant
         self.stt_config = stt_config
-        self.real_stderr = real_stderr
-        self.fd2_redirect_lock = fd2_redirect_lock
-        self.ctrl_c_requested = ctrl_c_requested
         self.phrase_stt_enabled = phrase_stt_enabled
+        self.echo_override = echo_override
         self.sound_stream: SoundDeviceStream = sound_stream
         self.user_input_sound: Sound | None = None
 
-    def run(self, assembled: str, user_input_sound: Sound | None = None) -> None:
-        # Each Enter-press/LLM response turn is its own rolling-continuation
-        # context. Continuation may still bridge generated chunks within this
-        # turn, but must not leak across independent turns.
-        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-
-        self.user_input_sound = user_input_sound
+        # Per-turn threading state is created at construction, not in run(),
+        # so an interrupt requested before run() (or during construction
+        # races) persists into the turn instead of being wiped by run().
+        self.state_lock = threading.Lock()
         self.tts_q: queue.Queue[tuple[str, Reason] | None] = queue.Queue()
-        self.tts_buffer = ""
-        self.render_buffer = ResponseSession.RESPONSE_PLACEHOLDER
+        self.interrupt_requested = threading.Event()
         self.spoken_segments: list[tuple[str, int, int]] = []
         self.saved_turn_sounds: list[Sound] = []
         self.pending_sentences: list[str] = []
-        self.state_lock = threading.Lock()
-        self.render_lock = threading.Lock()
-        self.last_render_key: tuple | None = None
+        self.tts_buffer = ""
+        self.render_buffer = _ResponseEngine.RESPONSE_PLACEHOLDER
         self.playback_done = False
         self.worker: threading.Thread | None = None
-        self.render_stop = threading.Event()
-        self.interrupt_requested = threading.Event()
-        self.response_aborted = threading.Event()
         self.llm_content_received = False
         self.first_audio_latency_logged = False
         self.output_turn_tts_started_at: float | None = None
         self.output_turn_tts_mode: str | None = None
         self.output_turn_tts_preview_text: str = ""
 
+    def snapshot(self) -> ResponseSnapshot:
+        """Read immutable turn state before, during, or after run().
+
+        The engine owns synchronization of its text state. Playback position
+        and lifecycle flags are sampled independently, not atomically with text.
+        """
+        with self.state_lock:
+            segments = tuple(self.spoken_segments)
+            pending = tuple(self.pending_sentences)
+            render_buffer = self.render_buffer
+            received = self.llm_content_received
+        return ResponseSnapshot(
+            spoken_segments=segments,
+            pending_sentences=pending,
+            render_buffer=render_buffer,
+            play_position_samples=self.sound_stream.play_position_samples,
+            playback_done=self.playback_done,
+            llm_content_received=received,
+            interrupted=self.interrupt_requested.is_set(),
+        )
+
+    def request_interrupt(self) -> None:
+        """Request cooperative cancellation from any thread, even before run().
+
+        Repeated requests are safe. A pre-run request survives turn startup.
+        The engine stops generation now and clears buffered playback only when
+        the turn settles; in-flight TTS inference cannot be interrupted.
+        """
+        self._signal_interrupt()
+
+    def _signal_interrupt(self) -> None:
+        """Single interrupt primitive: stop the LLM and the TTS worker.
+
+        Idempotent and safe from any thread at any point of the turn
+        lifecycle, including before run(). Covers, in one place, what used
+        to be five separate mechanisms: the interrupt event, the tts_q
+        poison pill, and the HTTP stream cancellation.
+
+        The playback buffer is deliberately NOT cleared here: a turn with a
+        TTS inference already in flight cannot converge until that inference
+        finishes (the model call is uninterruptible), so the session would
+        sit in its waiting state in silence if the audio stopped now. Queued
+        audio keeps playing; the buffer is cleared by _settle_interrupted_turn()
+        once the turn has actually converged, which is also when the session
+        returns to input (in microphone mode, capture cannot resume over
+        assistant audio, so the clear must precede the resume).
+        """
+        self.interrupt_requested.set()
+        # Poison-pill the TTS worker: drain queued sentences so a blocked
+        # get() unblocks and a mid-synthesis worker finds an empty queue.
+        while True:
+            try:
+                self.tts_q.get_nowait()
+            except queue.Empty:
+                break
+        self.tts_q.put(None)
+        if self.llm is not None:
+            self.llm.cancel_active_request()
+
+    def _settle_interrupted_turn(self) -> None:
+        """Converge an interrupted/failed turn once generation has returned.
+
+        Re-signs the interrupt and waits for in-flight synthesis to finish
+        before clearing playback. Terminal reset must not race an active model
+        operation, and no TTS worker may enqueue audio after the clear.
+        """
+        self._signal_interrupt()
+        if self.worker is not None and self.worker.ident is not None:
+            self.worker.join()
+        self.sound_stream.clear_buffer()
+
+    def _reset_chat_session(self, phase: str) -> None:
+        """Reset continuation state without changing the selected voice.
+
+        Start/end resets isolate turns; recovery resets allow subsequent chunks
+        to proceed after a TTS failure. Failed resets remain visible in logs.
+        """
+        error = ModelWorker.reset_chat_session_blocking(
+            reset_voice_selection=False, console_handler=discard_console_output
+        )
+        if error:
+            L.w(f"[chat] engine: {phase} reset failed: {error}")
+
+    def run(self, assembled: str, user_input_sound: Sound | None = None) -> None:
+        """Own terminal cleanup for every outcome, including startup failures."""
+        try:
+            self._run_turn(assembled, user_input_sound)
+        except BaseException:
+            self._settle_interrupted_turn()
+            raise
+        finally:
+            self.playback_done = True
+            self._reset_chat_session("turn-end")
+
+    def _run_turn(self, assembled: str, user_input_sound: Sound | None) -> None:
+        # Each Enter-press/LLM response turn is its own rolling-continuation
+        # context. Continuation may still bridge generated chunks within this
+        # turn, but must not leak across independent turns.
+        t0 = time.monotonic()
+        L.i("[chat] engine: turn start, resetting chat session")
+        self._reset_chat_session("turn-start")
+
+        # Reset per-turn content state. The interrupt event, lock, and queue
+        # live from construction and are intentionally left untouched so a
+        # pre-run interrupt (including its poison pill) survives into the
+        # turn.
+        self.user_input_sound = user_input_sound
+        with self.state_lock:
+            self.tts_buffer = ""
+            self.render_buffer = _ResponseEngine.RESPONSE_PLACEHOLDER
+            self.spoken_segments = []
+            self.pending_sentences = []
+            self.llm_content_received = False
+        self.saved_turn_sounds = []
+        self.playback_done = False
+        self.first_audio_latency_logged = False
+        self.output_turn_tts_started_at = None
+        self.output_turn_tts_mode = None
+        self.output_turn_tts_preview_text = ""
+
         self.worker = threading.Thread(target=self.tts_worker, daemon=True)
         self.worker.start()
-        ticker = threading.Thread(target=self.render_ticker, daemon=True)
-        ticker.start()
-        self.render_response()
 
         llm_failed = False
-        response_cancelled = False
-        llm_completed = False
         try:
-            self.llm.send(assembled, on_chunk=self.on_chunk, interrupt_event=self.interrupt_requested)
-            llm_completed = True
+            if self.echo_override:
+                L.i(f"[chat] engine: echoing input ({len(assembled)} chars)")
+                self.on_chunk(assembled)
+            else:
+                if self.llm is None:
+                    raise RuntimeError("LLM session is unavailable")
+                L.i(f"[chat] engine: sending LLM request ({len(assembled)} chars)")
+                self.llm.send(
+                    assembled,
+                    on_chunk=self.on_chunk,
+                    interrupt_event=self.interrupt_requested,
+                    on_reasoning=self.on_reasoning_chunk,
+                )
+            L.i(
+                f"[chat] engine: response text ready in {time.monotonic() - t0:.1f}s,"
+                f" flushing {len(self.pending_sentences)} pending chunk(s) to TTS"
+            )
 
             final_text = ""
             with self.state_lock:
@@ -606,39 +344,35 @@ class ResponseSession:
                 self.tts_q.put((final_text, Reason.SENTENCE))
             self.tts_q.put(None)
             self.worker.join()
-            while not self.sound_stream.is_playback_complete and not self.interrupt_requested.is_set():
+            L.i(f"[chat] engine: TTS worker done in {time.monotonic() - t0:.1f}s, waiting for playback")
+            wait_logged = time.monotonic()
+            while (
+                not self.sound_stream.is_playback_complete
+                and not self.interrupt_requested.is_set()
+            ):
                 time.sleep(0.02)
-        except KeyboardInterrupt:
-            self.ctrl_c_requested.clear()
-            response_cancelled = True
-            self.interrupt_requested.set()
-            if not llm_completed:
-                self.rollback_interrupted_llm_user_turn(assembled)
+                now = time.monotonic()
+                if now - wait_logged > 10.0:
+                    L.w(f"[chat] engine: playback still incomplete after {now - t0:.1f}s")
+                    wait_logged = now
         except Exception as e:
             llm_failed = True
+            L.e(f"[chat] engine: LLM turn failed: {make_error_string(e)}")
             with self.state_lock:
                 self.pending_sentences.clear()
                 self.tts_buffer = ""
                 self.render_buffer = ""
-            self.ui.clear()
             self.ui.println(f"[LLM error: {make_error_string(e)}]")
 
-        was_interrupted = self.interrupt_requested.is_set() or response_cancelled
-
+        was_interrupted = self.interrupt_requested.is_set()
         if llm_failed or was_interrupted:
-            self.abort_response(ticker)
-        else:
-            self.render_stop.set()
-            ticker.join(timeout=1.0)
+            L.i(f"[chat] engine: aborting response (failed={llm_failed}, interrupted={was_interrupted})")
+            self._settle_interrupted_turn()
 
         self.playback_done = True
-        self.last_render_key = None
-        self.render_response(force=True)
-        self.ui.commit_render(1)
-        self.ui.wait_idle()
         if not llm_failed and not was_interrupted:
             self.save_chat_output_if_needed()
-        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
+        L.i(f"[chat] engine: turn complete in {time.monotonic() - t0:.1f}s")
 
     def tts_worker(self) -> None:
         while True:
@@ -646,14 +380,13 @@ class ResponseSession:
             if item is None:
                 break
             text, reason = item
-            if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
+            if self.interrupt_requested.is_set():
+                # Cancellation cleanup belongs to run(), after this worker exits.
                 continue
             if not text.strip():
                 with self.state_lock:
                     if self.pending_sentences and self.pending_sentences[0] == text:
                         self.pending_sentences.pop(0)
-                self.render_response()
                 continue
             try:
                 if self.output_turn_tts_started_at is None:
@@ -666,7 +399,10 @@ class ResponseSession:
 
                     def on_segment_range(start: int, end: int) -> None:
                         nonlocal streamed_segment_idx, first_audio_callback_registered
-                        if not first_audio_callback_registered and not self.first_audio_latency_logged:
+                        if (
+                            not first_audio_callback_registered
+                            and not self.first_audio_latency_logged
+                        ):
                             first_audio_callback_registered = True
                             self.output_turn_tts_mode = "streaming"
                             if not self.output_turn_tts_preview_text:
@@ -676,41 +412,50 @@ class ResponseSession:
                                 self.log_tts_first_audio_latency,
                             )
                         with self.state_lock:
-                            if self.pending_sentences and self.pending_sentences[0] == text:
+                            if (
+                                self.pending_sentences
+                                and self.pending_sentences[0] == text
+                            ):
                                 self.pending_sentences.pop(0)
                             if streamed_segment_idx is None:
                                 self.spoken_segments.append((text, start, end))
                                 streamed_segment_idx = len(self.spoken_segments) - 1
                             else:
-                                self.spoken_segments[streamed_segment_idx] = (text, start, end)
-                        self.render_response()
+                                self.spoken_segments[streamed_segment_idx] = (
+                                    text,
+                                    start,
+                                    end,
+                                )
 
-                    with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                        stream_range, saved_sound, err = ConversationStreamingTts.generate_to_sound_stream(
+                    stream_range, saved_sound, err = (
+                        ConversationStreamingTts.generate_to_sound_stream(
                             state=self.state,
                             text=text,
                             reason=reason,
                             sound_stream=self.sound_stream,
                             interrupt_requested=self.interrupt_requested,
-                            response_aborted=self.response_aborted,
                             on_segment_range=on_segment_range,
                         )
+                    )
 
-                    if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-                        with self.state_lock:
-                            if self.pending_sentences and self.pending_sentences[0] == text:
-                                self.pending_sentences.pop(0)
+                    if self.interrupt_requested.is_set():
+                        # Keep the active sentence in the response snapshot.
+                        # It was received from the LLM even though its TTS work
+                        # was interrupted before completing.
                         continue
 
                     if err is not None:
-                        ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-                        if not self.response_aborted.is_set():
-                            self.ui.println(f"{COL_ERROR}[TTS error: {err}]{COL_DEFAULT}")
+                        self._reset_chat_session("TTS recovery")
+                        if not self.interrupt_requested.is_set():
+                            self.ui.println(
+                                f"[TTS error: {err}]"
+                            )
                         with self.state_lock:
-                            if self.pending_sentences and self.pending_sentences[0] == text:
+                            if (
+                                self.pending_sentences
+                                and self.pending_sentences[0] == text
+                            ):
                                 self.pending_sentences.pop(0)
-                        self.render_response()
                         continue
 
                     assert stream_range is not None
@@ -723,51 +468,52 @@ class ResponseSession:
                         if streamed_segment_idx is None:
                             self.spoken_segments.append((text, start, end))
                         else:
-                            self.spoken_segments[streamed_segment_idx] = (text, start, end)
-                    self.render_response()
+                            self.spoken_segments[streamed_segment_idx] = (
+                                text,
+                                start,
+                                end,
+                            )
                     continue
 
                 self.log_tts_inference_start(mode="non-streaming", text=text)
-                with MuteCurrentThreadOutput(self.real_stderr, self.fd2_redirect_lock):
-                    result, tts_error = ModelWorker.synthesize_chat_blocking(
-                        self.state,
-                        text,
-                        reason,
-                        streaming=False,
-                        interrupt_event=self.interrupt_requested,
-                    )
-                if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-                    with self.state_lock:
-                        if self.pending_sentences and self.pending_sentences[0] == text:
-                            self.pending_sentences.pop(0)
+                result, tts_error = ModelWorker.synthesize_chat_blocking(
+                    self.state,
+                    text,
+                    reason,
+                    streaming=False,
+                    interrupt_event=self.interrupt_requested,
+                    console_handler=discard_console_output,
+                )
+                if self.interrupt_requested.is_set():
+                    # Preserve the accepted LLM text for the final transcript;
+                    # only its audio generation was interrupted.
                     continue
                 if tts_error or result is None:
-                    if not self.response_aborted.is_set():
-                        self.ui.println(f"{COL_ERROR}[TTS error: {tts_error}]{COL_DEFAULT}")
+                    if not self.interrupt_requested.is_set():
+                        self.ui.println(
+                            f"[TTS error: {tts_error}]"
+                        )
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
-                    self.render_response()
                     continue
                 sound = result[0]
-                if self.interrupt_requested.is_set() or self.response_aborted.is_set():
-                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-                    with self.state_lock:
-                        if self.pending_sentences and self.pending_sentences[0] == text:
-                            self.pending_sentences.pop(0)
+                if self.interrupt_requested.is_set():
+                    # Preserve the accepted LLM text for the final transcript;
+                    # only its audio generation was interrupted.
                     continue
-                
+
                 if sound.data.size == 0:
-                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-                    if not self.response_aborted.is_set():
-                        self.ui.println(f"{COL_ERROR}[TTS error: empty/silent output]{COL_DEFAULT}")
+                    self._reset_chat_session("TTS recovery")
+                    if not self.interrupt_requested.is_set():
+                        self.ui.println(
+                            "[TTS error: empty/silent output]"
+                        )
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
-                    self.render_response()
                     continue
-                
+
                 sound = SoundPipeline.prepare_generated_sound_for_playback(
                     sound,
                     high_shelf=self.project.get_high_shelf(),
@@ -782,7 +528,7 @@ class ResponseSession:
                 )
                 self.saved_turn_sounds.append(sound)
 
-                if not self.interrupt_requested.is_set() and not self.response_aborted.is_set():
+                if not self.interrupt_requested.is_set():
                     start, end = self.sound_stream.add_data(sound.data)
                     if not self.first_audio_latency_logged:
                         self.output_turn_tts_mode = "non-streaming"
@@ -793,27 +539,23 @@ class ResponseSession:
                             self.log_tts_first_audio_latency,
                         )
                     is_first_tts_chunk = not self.spoken_segments
-                    spoken_segments = self.make_spoken_segments(text, sound, start, end, is_first_tts_chunk)
+                    spoken_segments = self.make_spoken_segments(
+                        text, sound, start, end, is_first_tts_chunk
+                    )
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
                         self.spoken_segments.extend(spoken_segments)
-                    self.render_response()
-                else:
-                    ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
+                # On interruption, preserve accepted text; run() owns cleanup.
+
+            except Exception as e:
+                interrupted = self.interrupt_requested.is_set()
+                if not interrupted:
+                    self._reset_chat_session("TTS recovery")
+                    self.ui.println(f"[TTS exception: {e}]")
                     with self.state_lock:
                         if self.pending_sentences and self.pending_sentences[0] == text:
                             self.pending_sentences.pop(0)
-                    self.render_response()
-                     
-            except Exception as e:
-                ModelWorker.reset_chat_session_blocking(reset_voice_selection=False)
-                if not self.response_aborted.is_set():
-                    self.ui.println(f"[TTS exception: {e}]")
-                with self.state_lock:
-                    if self.pending_sentences and self.pending_sentences[0] == text:
-                        self.pending_sentences.pop(0)
-                self.render_response()
 
     def log_tts_first_audio_latency(self) -> None:
         if self.first_audio_latency_logged or self.output_turn_tts_started_at is None:
@@ -832,111 +574,59 @@ class ResponseSession:
         preview = re.sub(r"\s+", " ", text).strip()
         if len(preview) > 80:
             preview = preview[:80] + "..."
-        L.i(
-            f"TTS inference start ({mode}) | chars={len(text)} | text='{preview}'"
-        )
+        L.i(f"TTS inference start ({mode}) | chars={len(text)} | text='{preview}'")
 
-    def render_response(self, force: bool = False) -> None:
-        
-        if self.response_aborted.is_set() and not force:
+    def on_reasoning_chunk(self, delta: str) -> None:
+        """Show a thinking indicator while a reasoning model works before content."""
+        del delta
+        if self.interrupt_requested.is_set():
             return
-        
-        with self.render_lock:
-            with self.state_lock:
-                segs = list(self.spoken_segments)
-                pending = list(self.pending_sentences)
-                buf = self.render_buffer
-            pos = self.sound_stream.play_position_samples
-            active_idx = None if self.playback_done else next(
-                (i for i, (_, start, end) in enumerate(segs) if start <= pos < end),
-                None,
-            )
-            render_key = (
-                active_idx,
-                tuple(text for text, _, _ in segs),
-                tuple(pending),
-                buf,
-            )
-            if render_key == self.last_render_key:
+        with self.state_lock:
+            if self.llm_content_received:
                 return
-            self.last_render_key = render_key
-            parts = []
-            for i, (text, _, end) in enumerate(segs):
-                display_text = ResponseSession.make_display_text(text)
-                if end <= pos:
-                    parts.append(f"{COL_DIM}{display_text}{Ansi.RESET}")
-                elif i == active_idx:
-                    parts.append(f"{COL_ACCENT}{display_text}{Ansi.RESET}")
-                else:
-                    parts.append(f"{COL_DIM}{display_text}{Ansi.RESET}")
-            for i, text in enumerate(pending):
-                display_text = ResponseSession.make_display_text(text)
-                if force or i > 0:
-                    parts.append(f"{COL_DIM}{display_text}{Ansi.RESET}")
-                else:
-                    parts.append(f"{COL_MEDIUM}{Ansi.ITALICS}{display_text}{Ansi.RESET}")
-            if buf:
-                parts.append(f"{COL_DIM}{ResponseSession.make_display_text(buf)}{Ansi.RESET}")
-            content = "".join(parts)
-            display = f"{COL_ACCENT}>{Ansi.RESET} {content}" if content else ""
-            if display:
-                self.ui.render(display)
-            else:
-                self.ui.clear()
+            if self.render_buffer != _ResponseEngine.REASONING_PLACEHOLDER:
+                L.i("[chat] engine: reasoning phase started, showing thinking indicator")
+            self.render_buffer = _ResponseEngine.REASONING_PLACEHOLDER
 
     def on_chunk(self, delta: str) -> None:
-        if self.interrupt_requested.is_set() or self.response_aborted.is_set():
+        if self.interrupt_requested.is_set():
             return
 
         to_send: list[tuple[str, Reason]] = []
         use_streaming_tts = Tts.get_info().can_stream and self.project.streaming_chat
         with self.state_lock:
-            if not self.llm_content_received and self.render_buffer == ResponseSession.RESPONSE_PLACEHOLDER:
+            if not self.llm_content_received:
+                L.i(f"[chat] engine: first LLM content received ({len(delta)} chars)")
+            if (
+                not self.llm_content_received
+                and self.render_buffer == _ResponseEngine.RESPONSE_PLACEHOLDER
+            ):
                 self.render_buffer = ""
             self.llm_content_received = True
-            complete_chunks, self.tts_buffer, self.render_buffer = ResponseSession.consume_tts_delta(
-                tts_buffer=self.tts_buffer,
-                delta=delta,
-                config=self.chunking_config,
-                has_pending_sentences=bool(self.pending_sentences),
-                has_spoken_segments=bool(self.spoken_segments),
-                allow_first_chunk_latency_split=not use_streaming_tts,
+            complete_chunks, self.tts_buffer, self.render_buffer = (
+                _ResponseEngine.consume_tts_delta(
+                    tts_buffer=self.tts_buffer,
+                    delta=delta,
+                    config=self.chunking_config,
+                    has_pending_sentences=bool(self.pending_sentences),
+                    has_spoken_segments=bool(self.spoken_segments),
+                    allow_first_chunk_latency_split=not use_streaming_tts,
+                )
             )
             for s, reason in complete_chunks:
                 self.pending_sentences.append(s)
                 to_send.append((s, reason))
             if to_send:
                 self.render_buffer = ""
-        self.render_response()
         for s, reason in to_send:
             self.tts_q.put((s, reason))
 
-    def render_ticker(self) -> None:
-        while not self.render_stop.wait(0.05):
-            self.render_response()
-
-    def abort_response(self, ticker: threading.Thread) -> None:
-        self.interrupt_requested.set()
-        self.response_aborted.set()
-        while not self.tts_q.empty():
-            try:
-                self.tts_q.get_nowait()
-            except queue.Empty:
-                break
-        self.tts_q.put(None)
-        self.sound_stream.clear_buffer()
-        self.render_stop.set()
-        ticker.join(timeout=1.0)
-        if self.worker is not None:
-            self.worker.join(timeout=0.1)
-
-    def rollback_interrupted_llm_user_turn(self, message: str) -> None:
-        with self.llm.history_lock:
-            if self.llm.history and self.llm.history[-1] == {"role": "user", "content": message}:
-                self.llm.history.pop()
-
     def save_chat_output_if_needed(self) -> None:
-        if not self.prefs.chat_save or not self.project.dir_path or not self.saved_turn_sounds:
+        if (
+            not self.prefs.chat_save
+            or not self.project.dir_path
+            or not self.saved_turn_sounds
+        ):
             return
 
         dir_path = os.path.join(self.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
@@ -957,11 +647,15 @@ class ResponseSession:
         timestamp = SoundSegmentUtil.make_timestamp_string()
         model = Tts.get_info().file_tag
         voice = Tts.get_class().get_voice_tag(self.project)
-        text = " "+ app_text.sanitize_for_filename(self.render_response_text()[:50])
+        text = " " + app_text.sanitize_for_filename(self.render_response_text()[:50])
         return f"[{timestamp}] [chat] [{model}] [{voice}]{text}.flac"
 
     def save_chat_mic_input_if_needed(self, assembled: str) -> None:
-        if not self.prefs.chat_save_mic or not self.project.dir_path or self.user_input_sound is None:
+        if (
+            not self.prefs.chat_save_mic
+            or not self.project.dir_path
+            or self.user_input_sound is None
+        ):
             return
 
         dir_path = os.path.join(self.project.dir_path, PROJECT_CHAT_OUTPUT_SUBDIR)
@@ -985,7 +679,14 @@ class ResponseSession:
             parts.extend(self.pending_sentences)
             if self.tts_buffer.strip():
                 parts.append(self.tts_buffer)
-            elif self.render_buffer.strip() and self.render_buffer != ResponseSession.RESPONSE_PLACEHOLDER:
+            elif (
+                self.render_buffer.strip()
+                and self.render_buffer
+                not in (
+                    _ResponseEngine.RESPONSE_PLACEHOLDER,
+                    _ResponseEngine.REASONING_PLACEHOLDER,
+                )
+            ):
                 parts.append(self.render_buffer)
         return " ".join(part.strip() for part in parts if part.strip())
 
@@ -998,7 +699,9 @@ class ResponseSession:
         is_first_tts_chunk: bool = False,
     ) -> list[tuple[str, int, int]]:
         if self.phrase_stt_enabled and not is_first_tts_chunk:
-            phrase_segments = self.make_phrase_spoken_segments(text, sound, stream_start, stream_end)
+            phrase_segments = self.make_phrase_spoken_segments(
+                text, sound, stream_start, stream_end
+            )
             if phrase_segments:
                 return phrase_segments
         return [(text, stream_start, stream_end)]
@@ -1028,12 +731,17 @@ class ResponseSession:
                 self.stt_variant,
                 self.stt_config,
                 self.state,
+                console_handler=discard_console_output,
             )
             if isinstance(words, str) or not words:
                 return []
 
-            timed_phrases = ForceAlignUtil.make_timed_phrases(phrases, words, sound.duration)
-            return self.timed_phrases_to_spoken_segments(timed_phrases, sound.sr, stream_start, stream_end)
+            timed_phrases = ForceAlignUtil.make_timed_phrases(
+                phrases, words, sound.duration
+            )
+            return self.timed_phrases_to_spoken_segments(
+                timed_phrases, sound.sr, stream_start, stream_end
+            )
         except Exception:
             return []
 
@@ -1085,27 +793,35 @@ class ResponseSession:
         return text.replace("\r\n", "\n").replace("\r", "\n")
 
     @staticmethod
-    def segment_text_to_chunks(text: str, config: ChunkingConfig) -> list[tuple[str, Reason]]:
+    def segment_text_to_chunks(
+        text: str, config: ChunkingConfig
+    ) -> list[tuple[str, Reason]]:
         groups = PhraseGrouper.text_to_groups(
             text=text,
             max_words=config.max_words,
             strategy=config.strategy,
             pysbd_lang=config.language_code,
         )
-        return [(group.text, group.last_reason) for group in groups if group.text.strip()]
+        return [
+            (group.text, group.last_reason) for group in groups if group.text.strip()
+        ]
 
     @staticmethod
-    def extract_complete_chunks(text: str, config: ChunkingConfig) -> tuple[list[tuple[str, Reason]], str]:
-        sentences = PhraseSegmenter.string_to_sentence_strings(text, config.language_code)
+    def extract_complete_chunks(
+        text: str, config: ChunkingConfig
+    ) -> tuple[list[tuple[str, Reason]], str]:
+        sentences = PhraseSegmenter.string_to_sentence_strings(
+            text, config.language_code
+        )
         if len(sentences) < 2:
             return [], text
         complete_text = "".join(sentences[:-1])
         remainder = sentences[-1]
-        return ResponseSession.segment_text_to_chunks(complete_text, config), remainder
+        return _ResponseEngine.segment_text_to_chunks(complete_text, config), remainder
 
     @staticmethod
     def make_stable_chunk_preview(text: str, config: ChunkingConfig) -> str:
-        chunks = ResponseSession.segment_text_to_chunks(text, config)
+        chunks = _ResponseEngine.segment_text_to_chunks(text, config)
         if len(chunks) >= 2:
             return "".join(t for t, _ in chunks[:-1])
         return ""
@@ -1134,7 +850,9 @@ class ResponseSession:
         """
         next_buffer = tts_buffer + delta
         full_buffer = next_buffer
-        to_send, next_buffer = ResponseSession.extract_complete_chunks(next_buffer, config)
+        to_send, next_buffer = _ResponseEngine.extract_complete_chunks(
+            next_buffer, config
+        )
 
         is_first_chunk = not has_pending_sentences and not has_spoken_segments
 
@@ -1163,10 +881,10 @@ class ResponseSession:
                     cumulative_text += phrases[i].text
                     cumulative_words += phrases[i].num_words
                     if cumulative_words >= 5:
-                        remainder = "".join(p.text for p in phrases[i + 1:])
+                        remainder = "".join(p.text for p in phrases[i + 1 :])
                         if remainder.strip():
                             return [(cumulative_text, phrases[i].reason)], remainder, ""
                         break
 
-        render_buffer = ResponseSession.make_stable_chunk_preview(next_buffer, config)
+        render_buffer = _ResponseEngine.make_stable_chunk_preview(next_buffer, config)
         return [], next_buffer, render_buffer

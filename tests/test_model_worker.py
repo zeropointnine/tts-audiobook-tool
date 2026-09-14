@@ -87,6 +87,44 @@ def test_spawned_model_worker_can_hard_reset() -> None:
     assert ModelWorker._process is not first_process
 
 
+def test_blocking_wait_stops_when_hard_reset_invalidates_operation(
+    monkeypatch,
+) -> None:
+    operation_id = "initializing"
+    entered_get_event = threading.Event()
+    release_get_event = threading.Event()
+    get_event_calls = 0
+    result: list[object] = []
+
+    def fake_get_event(timeout: float = 0.1):
+        nonlocal get_event_calls
+        get_event_calls += 1
+        entered_get_event.set()
+        release_get_event.wait(1.0)
+        return None
+
+    monkeypatch.setattr(ModelWorker, "get_event", staticmethod(fake_get_event))
+    ModelWorker._active_operation_id = operation_id
+    waiter = threading.Thread(
+        target=lambda: result.append(
+            ModelWorker._wait_for_blocking_result(operation_id, TtsInspected)
+        )
+    )
+    waiter.start()
+    assert entered_get_event.wait(1.0)
+
+    # reset() clears the operation before starting its replacement. The old
+    # waiter must return without polling that replacement worker's queue.
+    with ModelWorker._lock:
+        ModelWorker._active_operation_id = None
+    release_get_event.set()
+    waiter.join(1.0)
+
+    assert not waiter.is_alive()
+    assert result == ["Model worker operation was cancelled"]
+    assert get_event_calls == 1
+
+
 def test_sigterm_exits_worker_gracefully() -> None:
     """SIGTERM must unwind the worker so its atexit finalizers run.
 
@@ -415,7 +453,6 @@ def test_state_for_worker_mirrors_init_attribute_set() -> None:
     # worker State behaves like the main process' State for property access.
     assert set(vars(state)) == {
         "_project",
-        "real_time",
         "_prefs",
         "dont_show_scan_message",
         "has_shown_main_menu",
@@ -829,4 +866,192 @@ def test_inspect_tts_queues_unsaved_model_params(tmp_path, monkeypatch) -> None:
     command = commands[0]
     assert isinstance(command, InspectTtsCommand)
     assert command.model_params["vibevoice_lora_path"] == project.vibevoice_lora_target
+    assert command.warm_models is False
+    assert command.warm_stt is False
+
+
+def test_inspect_tts_chat_warm_up_flags_are_carried(tmp_path, monkeypatch) -> None:
+    """Mic-input chat asks the worker to run the shared warm-up and to warm STT."""
+    monkeypatch.setattr(L, "d", lambda *_: None)
+    project = Project(dir_path=str(tmp_path))
+    assert project.save() == ""
+    state = SimpleNamespace(
+        project=project,
+        prefs=Prefs(project_dir=str(tmp_path), stt_variant=SttVariant.LARGE_V3),
+    )
+    commands: list[object] = []
+
+    class CommandQueue:
+        def put(self, command: object) -> None:
+            commands.append(command)
+
+    def wait_for_result(cls, operation_id, _expected_type):
+        cls._active_operation_id = None
+        return TtsInspected(operation_id, "vibevoice")
+
+    monkeypatch.setattr(ModelWorker, "start", classmethod(lambda cls: ""))
+    monkeypatch.setattr(ModelWorker, "_command_queue", CommandQueue())
+    monkeypatch.setattr(ModelWorker, "_active_operation_id", None)
+    monkeypatch.setattr(
+        ModelWorker,
+        "_wait_for_blocking_result",
+        classmethod(wait_for_result),
+    )
+
+    _ = ModelWorker.inspect_tts_blocking(state, warm_models=True, warm_stt=True)
+
+    command = commands[0]
+    assert isinstance(command, InspectTtsCommand)
+    assert command.warm_models is True
+    assert command.warm_stt is True
+
+
+def test_release_chat_synthesis_state_clears_callbacks_and_transient_memory(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+    model = SimpleNamespace(
+        clear_stream_state=lambda: calls.append("stream"),
+        release_inference_memory=lambda: calls.append("memory"),
+    )
+    monkeypatch.setattr(Tts, "get_instance_if_exists", staticmethod(lambda: model))
+
+    model_worker_module._release_chat_synthesis_state()
+
+    assert calls == ["stream", "memory"]
+
+
+def test_load_chat_models_delegates_to_shared_warm_up(monkeypatch) -> None:
+    """Worker chat warm-up routes through ModelManager.warm_up_models, so it
+    emits the generation flow's init messaging: the "Warming up models..."
+    banner whenever the (silent) TTS load is needed - including a cold
+    text-input chat - and the STT init line only when STT is actually
+    created for microphone input."""
+    import tts_audiobook_tool.model_manager as model_manager_module
+    import tts_audiobook_tool.stt as stt_module
+
+    state = SimpleNamespace(project=None, prefs=None)
+
+    def run_case(
+        *,
+        tts_resident: bool,
+        stt_resident: bool,
+        warm_stt: bool,
+        skip_reason: str,
+    ) -> tuple[list[str], list[str]]:
+        messages: list[str] = []
+        calls: list[str] = []
+        monkeypatch.setattr(
+            Tts, "instance_exists", staticmethod(lambda: tts_resident)
+        )
+        monkeypatch.setattr(
+            Tts, "get_instance", staticmethod(lambda: "tts-instance")
+        )
+        monkeypatch.setattr(
+            stt_module.Stt, "has_instance", staticmethod(lambda: stt_resident)
+        )
+        monkeypatch.setattr(
+            stt_module.Stt, "should_skip", staticmethod(lambda _state: skip_reason)
+        )
+        monkeypatch.setattr(
+            stt_module.Stt,
+            "eager_warm_up_for_inference",
+            staticmethod(lambda: calls.append("stt-warm") or None),
+        )
+        # warm_up_models imports print_init from util into its own namespace.
+        monkeypatch.setattr(
+            model_manager_module, "print_init", lambda s: messages.append(s)
+        )
+        instance = model_worker_module._load_chat_models(state, warm_stt=warm_stt)
+        assert instance == "tts-instance"
+        return messages, calls
+
+    # Cold mic-mode chat: TTS and STT both load -> banner, then STT warm-up.
+    messages, calls = run_case(
+        tts_resident=False, stt_resident=False, warm_stt=True, skip_reason=""
+    )
+    assert messages == ["Warming up models..."]
+    assert calls == ["stt-warm"]
+
+    # TTS already resident: no banner, STT still warms up (its own line).
+    messages, calls = run_case(
+        tts_resident=True, stt_resident=False, warm_stt=True, skip_reason=""
+    )
+    assert messages == []
+    assert calls == ["stt-warm"]
+
+    # Both resident: nothing happens.
+    messages, calls = run_case(
+        tts_resident=True, stt_resident=True, warm_stt=True, skip_reason=""
+    )
+    assert messages == []
+    assert calls == []
+
+    # Cold text-mode chat: STT is never touched, but the silent TTS load is
+    # still announced.
+    messages, calls = run_case(
+        tts_resident=False, stt_resident=False, warm_stt=False, skip_reason=""
+    )
+    assert messages == ["Warming up models..."]
+    assert calls == []
+
+    # Text-mode chat with TTS already resident: nothing to announce.
+    messages, calls = run_case(
+        tts_resident=True, stt_resident=False, warm_stt=False, skip_reason=""
+    )
+    assert messages == []
+    assert calls == []
+
+    # Mic mode but STT skipped by config: TTS banner only, no STT warm-up.
+    messages, calls = run_case(
+        tts_resident=False,
+        stt_resident=False,
+        warm_stt=True,
+        skip_reason="Whisper disabled",
+    )
+    assert messages == ["Warming up models..."]
+    assert calls == []
+
+
+def test_load_chat_models_reports_warm_up_failure(monkeypatch) -> None:
+    """A failed shared warm-up surfaces as a command failure, not a silent
+    partial load."""
+    import tts_audiobook_tool.model_manager as model_manager_module
+    from tts_audiobook_tool.app_types import ModelWarmUpResult
+
+    state = SimpleNamespace(project=None, prefs=None)
+    monkeypatch.setattr(
+        model_manager_module.ModelManager,
+        "warm_up_models",
+        staticmethod(lambda *args, **kwargs: ModelWarmUpResult(error="boom")),
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        model_worker_module._load_chat_models(state, warm_stt=True)
+
+
+def test_blocking_wait_routes_output_and_flush_to_handler(monkeypatch) -> None:
+    events = iter(
+        [
+            ConsoleOutput("chat-op", "stdout", "loading\r"),
+            ConsoleFlush("chat-op", "stdout"),
+            TtsInspected("chat-op", "tts"),
+        ]
+    )
+    monkeypatch.setattr(
+        ModelWorker,
+        "get_event",
+        classmethod(lambda cls, timeout=None: next(events)),
+    )
+    handled: list[ConsoleOutput | ConsoleFlush] = []
+
+    result = ModelWorker._wait_for_blocking_result(
+        "chat-op", TtsInspected, handled.append
+    )
+
+    assert isinstance(result, TtsInspected)
+    assert handled == [
+        ConsoleOutput("chat-op", "stdout", "loading\r"),
+        ConsoleFlush("chat-op", "stdout"),
+    ]
 

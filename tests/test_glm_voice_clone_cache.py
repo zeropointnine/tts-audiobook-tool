@@ -182,3 +182,51 @@ def test_glm_requires_voice_path(tmp_path, monkeypatch):
     )
     assert getattr(model, "_voice_clone_cache", None) in (None, {})
     assert calls == []
+
+
+def test_glm_releases_unused_allocator_cache_at_idle_boundary(monkeypatch):
+    from tts_audiobook_tool.app_support import app_memory
+
+    calls: list[str] = []
+    monkeypatch.setattr(app_memory, "gc_ram_vram", lambda: calls.append("released"))
+
+    make_model().release_inference_memory()
+
+    assert calls == ["released"]
+
+
+def test_generate_long_does_not_retain_or_return_unused_full_mels():
+    class SplittingTextFrontend(FakeTextFrontend):
+        def split_by_len(self, text: str):
+            return ["first", "second"]
+
+    def fake_llm_forward(**_kwargs):
+        return [1, 2, 3]
+
+    def fake_flow_forward(**_kwargs):
+        return torch.zeros(1, 20), torch.ones(1, 80, 10)
+
+    frontend = FakeFrontend()
+    tts_speech, tts_mel, output_tokens, _ = glm_model.generate_long(
+        frontend=frontend,
+        text_frontend=SplittingTextFrontend(),
+        llm=object(),
+        flow=object(),
+        text_info=["0", "first second"],
+        cache={
+            "cache_text": ["prompt"],
+            "cache_text_token": [torch.ones(1, 2, dtype=torch.int64)],
+            "cache_speech_token": [[1, 2]],
+            "use_cache": True,
+        },
+        device="cpu",
+        embedding=torch.zeros(192),
+        flow_prompt_token=torch.ones(1, 2, dtype=torch.int32),
+        speech_feat=torch.ones(1, 2, 80),
+        local_llm_forward=fake_llm_forward,
+        local_flow_forward=fake_flow_forward,
+    )
+
+    assert tts_speech.shape == (1, 40)
+    assert tts_mel is None
+    assert output_tokens == [1, 2, 3, 1, 2, 3]

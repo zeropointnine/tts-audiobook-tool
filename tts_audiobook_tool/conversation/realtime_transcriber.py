@@ -1,4 +1,5 @@
 import collections
+import math
 import queue
 import signal
 from contextlib import contextmanager
@@ -13,7 +14,7 @@ from tts_audiobook_tool.app_types import Segment, Sound
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker import ModelWorker, discard_console_output
 from tts_audiobook_tool.transcriber import Transcriber
 
 
@@ -28,6 +29,13 @@ class RealtimeTranscriber:
     """
 
     BLOCKSIZE = 1024  # frames per PortAudio callback (~64ms at 16kHz)
+
+    # pause() waits for an in-flight STT call to finish; poll at this
+    # interval while waiting, and give up (raising, so the turn fails
+    # loudly) after this total timeout instead of hanging the whole
+    # session on a wedged worker RPC.
+    PAUSE_POLL_INTERVAL_S = 5.0
+    PAUSE_TIMEOUT_S = 60.0
 
     def __init__(
         self,
@@ -45,6 +53,7 @@ class RealtimeTranscriber:
         peak_silence_ratio: float = 0.6,
         pre_speech_pad_s: float = 0.5,
         on_chunk_dispatched: Callable[[float], None] | None = None,
+        on_error: Callable[[str], None] | None = None,
         debug_vad: bool = False,
         debug_vad_interval_s: float = 0.5,
     ):
@@ -64,6 +73,7 @@ class RealtimeTranscriber:
         self.debug_vad = debug_vad
         self.debug_vad_interval_s = debug_vad_interval_s
         self.on_chunk_dispatched = on_chunk_dispatched
+        self.on_error = on_error
 
         self._audio_queue: queue.Queue[np.ndarray | None] = queue.Queue()
         self._stop_event = threading.Event()
@@ -73,6 +83,20 @@ class RealtimeTranscriber:
         self._transcription_idle.set()
         self._stream: sd.InputStream | None = None
         self._worker_thread: threading.Thread | None = None
+        # A lock-free latest-value mailbox for the UI. The PortAudio callback
+        # must never wait for the Textual thread, and replacing a float object
+        # is atomic under the CPython GIL.
+        self._latest_input_rms: float | None = None
+
+    @property
+    def latest_input_level_db(self) -> float | None:
+        """Return the latest microphone block's RMS level in clamped dBFS."""
+        rms = self._latest_input_rms
+        if rms is None:
+            return None
+        if not math.isfinite(rms) or rms <= 0.0:
+            return -99.0
+        return max(-99.0, min(0.0, 20.0 * math.log10(rms)))
 
     def start(self) -> None:
         if self._worker_thread and self._worker_thread.is_alive():
@@ -86,18 +110,23 @@ class RealtimeTranscriber:
         )
         self._worker_thread.start()
 
-        with block_sigint_during_stream_start():
-            self._stream = sd.InputStream(
-                samplerate=WHISPER_SAMPLERATE,
-                channels=1,
-                dtype=np.float32,
-                blocksize=self.BLOCKSIZE,
-                callback=self._audio_callback,
-            )
-            self._stream.start()
+        try:
+            with block_sigint_during_stream_start():
+                self._stream = sd.InputStream(
+                    samplerate=WHISPER_SAMPLERATE,
+                    channels=1,
+                    dtype=np.float32,
+                    blocksize=self.BLOCKSIZE,
+                    callback=self._audio_callback,
+                )
+                self._stream.start()
+        except Exception:
+            self.stop()
+            raise
 
     def stop(self) -> None:
         self._stop_event.set()
+        self._latest_input_rms = None
         if self._stream:
             self._stream.stop()
             self._stream.close()
@@ -105,7 +134,8 @@ class RealtimeTranscriber:
         self._audio_queue.put(None)  # unblock worker
         if self._worker_thread:
             self._worker_thread.join(timeout=10)
-            self._worker_thread = None
+            if not self._worker_thread.is_alive():
+                self._worker_thread = None
 
     @property
     def is_running(self) -> bool:
@@ -113,6 +143,7 @@ class RealtimeTranscriber:
 
     def flush(self) -> None:
         """Discard all buffered mic audio and reset processing state."""
+        self._latest_input_rms = None
         while not self._audio_queue.empty():
             try:
                 self._audio_queue.get_nowait()
@@ -129,26 +160,55 @@ class RealtimeTranscriber:
         with a transcribe started elsewhere (e.g. the response-turn phrase
         timing path) on the same shared faster-whisper model — concurrent
         access to one CTranslate2 model segfaults natively.
+
+        Raises RuntimeError when an in-flight transcribe fails to finish
+        within PAUSE_TIMEOUT_S (e.g. the model worker was hard-reset under
+        the call): a wedged RPC would otherwise hang the turn before it
+        even starts, leaving the app in RESPONDING with no key-based
+        escape.
         """
         self._paused_event.set()
         self.flush()
-        self._transcription_idle.wait()
+        deadline = time.monotonic() + self.PAUSE_TIMEOUT_S
+        waited = 0.0
+        while not self._transcription_idle.wait(timeout=self.PAUSE_POLL_INTERVAL_S):
+            waited += self.PAUSE_POLL_INTERVAL_S
+            if time.monotonic() >= deadline:
+                L.e(
+                    "[chat] transcriber: pause gave up after "
+                    f"{waited:.0f}s waiting for in-flight STT"
+                )
+                raise RuntimeError(
+                    "Transcriber stuck: in-flight STT did not finish within "
+                    f"{self.PAUSE_TIMEOUT_S:.0f}s"
+                )
+            L.w(
+                f"[chat] transcriber: pause still waiting for in-flight STT ({waited:.0f}s)"
+            )
+        L.i("[chat] transcriber: paused")
 
     def resume(self) -> None:
         """Resume mic audio capture/processing with fresh state."""
         self.flush()
         self._paused_event.clear()
+        L.i("[chat] transcriber: resumed")
 
     @property
     def is_paused(self) -> bool:
         return self._paused_event.is_set()
 
-    def _audio_callback(self, indata: np.ndarray, frames: int, time, status: sd.CallbackFlags) -> None:
+    def _audio_callback(
+        self, indata: np.ndarray, frames: int, time, status: sd.CallbackFlags
+    ) -> None:
         if self._stop_event.is_set():
             raise sd.CallbackStop
         if self._paused_event.is_set():
             return
-        self._audio_queue.put_nowait(indata[:, 0].copy())
+        chunk = indata[:, 0].copy()
+        # Publish from the PortAudio cadence (~15.6 Hz) rather than from the
+        # processing loop, which is intentionally blocked during Whisper STT.
+        self._latest_input_rms = float(np.sqrt(np.mean(chunk**2)))
+        self._audio_queue.put_nowait(chunk)
 
     def _processing_loop(self) -> None:
         buffer = np.array([], dtype=np.float32)
@@ -160,9 +220,13 @@ class RealtimeTranscriber:
         min_samples = int(self.min_chunk_duration_s * WHISPER_SAMPLERATE)
         max_samples = int(self.max_chunk_duration_s * WHISPER_SAMPLERATE)
         pre_speech_pad_samples = int(self.pre_speech_pad_s * WHISPER_SAMPLERATE)
-        noise_window_blocks = max(1, int(self.noise_window_s * WHISPER_SAMPLERATE / self.BLOCKSIZE))
+        noise_window_blocks = max(
+            1, int(self.noise_window_s * WHISPER_SAMPLERATE / self.BLOCKSIZE)
+        )
         min_noise_blocks = max(3, int(0.3 * WHISPER_SAMPLERATE / self.BLOCKSIZE))
-        recent_rms: collections.deque[float] = collections.deque(maxlen=noise_window_blocks)
+        recent_rms: collections.deque[float] = collections.deque(
+            maxlen=noise_window_blocks
+        )
         last_debug_at = 0.0
 
         def recent_noise_floor() -> float:
@@ -199,7 +263,7 @@ class RealtimeTranscriber:
 
             buffer = np.concatenate((buffer, chunk))
 
-            rms = float(np.sqrt(np.mean(chunk ** 2)))
+            rms = float(np.sqrt(np.mean(chunk**2)))
             noise_floor = recent_noise_floor()
 
             # Confirm that the buffer actually contains speech rather than a
@@ -209,7 +273,9 @@ class RealtimeTranscriber:
             # ratio can miss them entirely.
             has_noise_history = len(recent_rms) >= min_noise_blocks
             speech_start_threshold = max(
-                self.silence_threshold if has_noise_history else self.silence_threshold * 1.25,
+                self.silence_threshold
+                if has_noise_history
+                else self.silence_threshold * 1.25,
                 noise_floor * self.speech_start_noise_ratio,
             )
             if not speech_detected and rms >= speech_start_threshold:
@@ -238,10 +304,10 @@ class RealtimeTranscriber:
                 silence_samples = 0
 
             should_dispatch = (
-                (speech_detected and silence_samples >= silence_samples_needed
-                 and len(buffer) >= min_samples)
-                or (speech_detected and len(buffer) >= max_samples)
-            )
+                speech_detected
+                and silence_samples >= silence_samples_needed
+                and len(buffer) >= min_samples
+            ) or (speech_detected and len(buffer) >= max_samples)
 
             if self.debug_vad:
                 now = time.perf_counter()
@@ -288,12 +354,15 @@ class RealtimeTranscriber:
     def _transcribe_and_callback(self, audio: np.ndarray) -> None:
         self._transcription_idle.clear()
         try:
-            prepared_sound = Transcriber.prepare_sound_for_whisper(Sound(audio, WHISPER_SAMPLERATE))
+            prepared_sound = Transcriber.prepare_sound_for_whisper(
+                Sound(audio, WHISPER_SAMPLERATE)
+            )
             transcription, error = ModelWorker.transcribe_audio_blocking(
                 self.prefs,
                 prepared_sound.data,
                 word_timestamps=self.word_timestamps,
                 language=self.language,
+                console_handler=discard_console_output,
             )
             if error or transcription is None:
                 raise RuntimeError(error or "Worker transcription failed")
@@ -301,11 +370,17 @@ class RealtimeTranscriber:
             if segments_list:
                 self.on_transcription(segments_list, np.copy(prepared_sound.data))  # type: ignore[arg-type]
         except Exception as e:
-            print(f"RealtimeTranscriber transcription error: {e}")
+            message = f"RealtimeTranscriber transcription error: {e}"
+            if self.on_error is not None:
+                self.on_error(message)
+            else:
+                print(message)
         finally:
             self._transcription_idle.set()
 
+
 # ---
+
 
 @contextmanager
 def block_sigint_during_stream_start() -> Iterator[None]:

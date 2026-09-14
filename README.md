@@ -3,27 +3,31 @@
 - [Description](#description)
 - [Installation](#installation)
 - [Usage notes](#usage-notes)
-- [Update highlights](#update-highlights)
+- [Update highlights](#update-highlights)b
 
 # Description
 
-`tts-audiobook-tool` is a generative-AI audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models:
+`tts-audiobook-tool` is an audiobook creation tool focused on high-quality output, supporting a growing list of text-to-speech models.
 
-- [Chatterbox (Multilingual, Turbo)](https://github.com/resemble-ai/chatterbox)
-- [dots.tts](https://github.com/studio-dots-ai/dots.tts)
-- [Fish Speech S2-Pro)](https://github.com/fishaudio/fish-speech) (either locally or via SGL-Omni)
-- [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech)
-- [GLM-TTS](https://github.com/zai-org/GLM-TTS)
-- [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
-- [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) (via SGL-Omni)
-- [IndexTTS2](https://github.com/index-tts/index-tts)
-- [MiraTTS](https://github.com/ysharma3501/MiraTTS)
-- [MOSS-TTS (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) (either locally or via SGL-Omni)
-- [OmniVoice](https://github.com/k2-fsa/OmniVoice)
-- [Pocket TTS](https://github.com/kyutai-labs/pocket-tts)
-- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (either locally or via SGL-Omni)
-- [VibeVoice](https://github.com/microsoft/VibeVoice)
-- [ZONOS2](https://github.com/Zyphra/ZONOS2) (via SGL-Omni)
+Audio generation is performed locally (via dedicated virtual environment installs) or via [SGL-Omni](https://github.com/sgl-project/sglang-omni), a server you can run on the same computer or elsewhere.
+
+| TTS model | Local | SGL-Omni |
+| --- | :---: | :---: |
+| [Chatterbox (Multilingual V3, Turbo)](https://github.com/resemble-ai/chatterbox) | ✅ | |
+| [dots.tts](https://github.com/studio-dots-ai/dots.tts) | ✅ | |
+| [Fish Speech S2-Pro](https://github.com/fishaudio/fish-speech) | ✅ | ✅ |
+| [Fish Speech S1-mini](https://github.com/fishaudio/fish-speech) | ✅ | |
+| [GLM-TTS](https://github.com/zai-org/GLM-TTS) | ✅ | |
+| [Higgs Audio V2](https://github.com/boson-ai/higgs-audio) | ✅ | |
+| [Higgs Audio V3](https://github.com/boson-ai/higgs-audio) | | ✅ |
+| [IndexTTS2](https://github.com/index-tts/index-tts) | ✅ | |
+| [MiraTTS](https://github.com/ysharma3501/MiraTTS) | ✅ | |
+| [MOSS-TTS (Delay, Local)](https://github.com/OpenMOSS/MOSS-TTS) | ✅ | ✅ |
+| [OmniVoice](https://github.com/k2-fsa/OmniVoice) | ✅ | |
+| [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) | ✅ | |
+| [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) | ✅ | ✅ |
+| [VibeVoice](https://github.com/microsoft/VibeVoice) | ✅ | |
+| [ZONOS2](https://github.com/Zyphra/ZONOS2) | | ✅ |
 
 The app employs various techniques to make the nondeterministic output of generative text-to-speech models reliable enough for bulk long-form speech synthesis. For example:
 
@@ -670,9 +674,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 # Update highlights
 
-**2026-09-13**
+**2026-09-15**
 
-- Removed support for the Oute TTS model. The last commit where Oute support still exists is [121029d](https://github.com/zeropointnine/tts-audiobook-tool/commit/121029d05d0d054c8f3dbfe59cda2eec268e9180).
+- Reworked **LLM Chat** feature, which is now uses a full-screen interface. Also added "echo mode" and then removed the custom text source option from "Realtime playback".
+- Removed Oute TTS model. The last commit with Oute support is [121029d](https://github.com/zeropointnine/tts-audiobook-tool/commit/121029d05d0d054c8f3dbfe59cda2eec268e9180).
 
 **2026-09-12**
 

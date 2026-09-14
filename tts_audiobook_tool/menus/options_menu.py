@@ -17,7 +17,19 @@ class OptionsMenu:
     def menu(state: State) -> None:
 
         def on_unload(_: State, __: MenuItem) -> None:
-            reset_error = ModelWorker.unload_models_blocking()
+            # All local models live inside the worker process, so a dead
+            # worker guarantees nothing is loaded; a live worker can be
+            # queried for its resident model inventory.
+            if not ModelWorker.is_alive():
+                print_feedback("No models to unload")
+                return
+            snapshot, state_error = ModelWorker.get_model_state_blocking()
+            if snapshot is not None and not snapshot.any_loaded:
+                print_feedback("No models to unload")
+                return
+            # If the state query failed (eg, worker busy), fall through and
+            # attempt the unload anyway.
+            reset_error = state_error or ModelWorker.unload_models_blocking()
             if reset_error:
                 ask.ask_error(reset_error)
             else:

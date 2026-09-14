@@ -423,6 +423,24 @@ def test_base_css_contains_shared_and_app_specific_rules() -> None:
     assert "#line-list" in ContentTextualApp.CSS
 
 
+def test_shared_css_styles_all_scrollbars_dim() -> None:
+    from tts_audiobook_tool.textual.textual_shared import (
+        STYLE_DIM,
+        TEXTUAL_SHARED_CSS,
+        TEXTUAL_SCROLLBAR_CSS,
+    )
+    from tts_audiobook_tool.textual.worker_app import worker_app_css
+
+    # The single scrollbar-color definition is derived from STYLE_DIM...
+    assert f"scrollbar-color: {STYLE_DIM};" in TEXTUAL_SCROLLBAR_CSS
+    assert f"scrollbar-color-hover: {STYLE_DIM};" in TEXTUAL_SCROLLBAR_CSS
+    assert f"scrollbar-color-active: {STYLE_DIM};" in TEXTUAL_SCROLLBAR_CSS
+    # ...and both CSS paths include it: the shared stylesheet and the
+    # worker apps, which deliberately do not load TEXTUAL_SHARED_CSS.
+    assert TEXTUAL_SCROLLBAR_CSS in TEXTUAL_SHARED_CSS
+    assert TEXTUAL_SCROLLBAR_CSS in worker_app_css("generation-divider")
+
+
 def test_hanging_indent_ignores_non_printing_ansi_prefix_characters() -> None:
     prefix = "\x1b[31mLabel:\x1b[0m "
     text = HangingIndentText.from_ansi(

@@ -65,6 +65,12 @@ class SoundDeviceStream:
         self.last_dac_consumed: int = 0
         self.last_audio_dac_end: float = 0.0
 
+        # DAC end time of audio scheduled before the most recent
+        # clear_buffer(): frames PortAudio already consumed still play out
+        # after the buffer drop, so silence detection must consider this
+        # tail even though the internal buffer is empty.
+        self.cleared_audio_dac_end: float = 0.0
+
         # A lock is crucial to ensure thread-safe access to the buffer from both the
         # main thread (adding data) and the audio callback thread (consuming data).
         self.lock = threading.Lock()
@@ -222,8 +228,15 @@ class SoundDeviceStream:
         0 again until the next callback fires, and resets
         total_samples_added so sample indices from add_data() restart
         from 0 for the next response.
+
+        Audio the device already consumed keeps playing until its DAC end
+        time; that deadline is remembered in cleared_audio_dac_end so
+        is_playback_complete stays False until the tail is actually heard.
         """
         with self.lock:
+            self.cleared_audio_dac_end = max(
+                self.cleared_audio_dac_end, self.last_audio_dac_end
+            )
             self.buffer = np.array([], dtype=np.float32)
             self.total_samples_added = 0
             self.last_dac_time = float('inf')
@@ -325,7 +338,8 @@ class SoundDeviceStream:
         """
         True once the last audio sample has actually been heard — i.e. the
         internal buffer is empty AND the stream clock has passed the DAC end
-        time of the last chunk.  Use this instead of buffer_duration + sleep
+        time of the last chunk, including any tail left scheduled by a
+        clear_buffer().  Use this instead of buffer_duration + sleep
         to wait for playback to truly finish.
         """
         stream = self.stream
@@ -333,7 +347,7 @@ class SoundDeviceStream:
             return True
         with self.lock:
             buf_empty = len(self.buffer) == 0
-            dac_end = self.last_audio_dac_end
+            dac_end = max(self.last_audio_dac_end, self.cleared_audio_dac_end)
         try:
             return buf_empty and stream.time >= dac_end
         except sd.PortAudioError:

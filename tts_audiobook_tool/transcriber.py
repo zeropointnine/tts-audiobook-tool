@@ -1,4 +1,4 @@
-from typing import Iterable, TYPE_CHECKING # type: ignore
+from typing import Iterable, TYPE_CHECKING  # type: ignore
 
 import librosa
 import numpy as np
@@ -7,7 +7,7 @@ from tts_audiobook_tool.app_types import Segment, Sound, SttConfig, SttVariant, 
 from tts_audiobook_tool.constants import WHISPER_SAMPLERATE
 from tts_audiobook_tool.sound.sound_util import SoundUtil
 from tts_audiobook_tool.model_runtime import ModelRuntimeRole, current_role
-from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker import ConsoleEventHandler, ModelWorker
 from tts_audiobook_tool.stt import Stt
 
 from tts_audiobook_tool.util import make_error_string
@@ -23,14 +23,15 @@ class Transcriber:
     helpers for flattening transcript words into display text or JSON-friendly
     data.
     """
-    
+
     @staticmethod
     def transcribe_to_words(
-            sound: Sound,
-            language_code: str,
-            stt_variant: SttVariant = SttVariant.LARGE_V3,
-            stt_config: SttConfig = SttConfig.CUDA_FLOAT16,
-            state: object | None = None,
+        sound: Sound,
+        language_code: str,
+        stt_variant: SttVariant = SttVariant.LARGE_V3,
+        stt_config: SttConfig = SttConfig.CUDA_FLOAT16,
+        state: object | None = None,
+        console_handler: ConsoleEventHandler | None = None,
     ) -> list[Word] | str:
         """
         All whisper transcription should be done through here.
@@ -52,6 +53,7 @@ class Transcriber:
                 word_timestamps=True,
                 stt_variant_id=stt_variant.id,
                 stt_config_id=stt_config.id,
+                console_handler=console_handler,
             )
             if error or result is None:
                 return error or "Worker transcription failed"
@@ -61,6 +63,7 @@ class Transcriber:
                     sound.data,
                     language=None,
                     word_timestamps=True,
+                    console_handler=console_handler,
                 )
                 if error or result is None:
                     return error or "Worker transcription failed"
@@ -75,7 +78,11 @@ class Transcriber:
 
         try:
             with Stt.inference_lock:
-                segments, _ = Stt.get_whisper().transcribe(audio=sound.data, word_timestamps=True, language=language_code or None)
+                segments, _ = Stt.get_whisper().transcribe(
+                    audio=sound.data,
+                    word_timestamps=True,
+                    language=language_code or None,
+                )
 
                 # Convert generator to concrete list (does the actual inference)
                 segments = list(segments)
@@ -121,11 +128,13 @@ class Transcriber:
         Returns join'ed word.words.
         Rem, this is well formatted, retaining punctuation and capitalizations.
         """
-        text = " ".join( [word.word.strip() for word in words] )
+        text = " ".join([word.word.strip() for word in words])
         return text
 
     @staticmethod
-    def get_flat_text_filtered_by_probability(words: list[Word], min_probability: float) -> str:
+    def get_flat_text_filtered_by_probability(
+        words: list[Word], min_probability: float
+    ) -> str:
         """
         Returns joined words, but only the high-confidence ones.
         For use with voice clone transcription, where it's better to omit words entirely
@@ -137,12 +146,14 @@ class Transcriber:
             words = [word for word in words if word.probability >= min_probability]
             text = Transcriber.get_flat_text_from_words(words)
         return text
-    
+
     @staticmethod
-    def words_to_json(words: list[Word], include_probability: bool=False) -> list[dict]:
+    def words_to_json(
+        words: list[Word], include_probability: bool = False
+    ) -> list[dict]:
         results = []
         for word in words:
-            d = { "start": word.start, "end": word.end, "word": word.word }
+            d = {"start": word.start, "end": word.end, "word": word.word}
             if include_probability:
                 d["probability"] = word.probability
             results.append(d)
@@ -156,4 +167,3 @@ class Transcriber:
         data = np.clip(data, -1.0, 1.0)
         data = librosa.resample(data, orig_sr=sound.sr, target_sr=WHISPER_SAMPLERATE)
         return Sound(data, WHISPER_SAMPLERATE)
-    

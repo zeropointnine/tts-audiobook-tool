@@ -1,6 +1,15 @@
-from tts_audiobook_tool.conversation.conversation import ConversationStatic
+import os
+
+from tts_audiobook_tool.conversation.chat_config import (
+    get_chat_input_mode_label,
+    get_resolved_system_prompt,
+    get_system_prompt_label,
+    get_system_prompt_preset_label,
+)
+from tts_audiobook_tool.conversation.conversation_types import ChatInputMode
+from tts_audiobook_tool.textual.conversation_app import run_conversation_app
 from tts_audiobook_tool import ask, text_util
-from tts_audiobook_tool.constants import ASSETS_DIR_NAME, CHAT_SYSTEM_PROMPTS, package_dir
+from tts_audiobook_tool.constants import CHAT_SYSTEM_PROMPTS
 from tts_audiobook_tool.constants_hints import *
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool import readiness
@@ -10,7 +19,6 @@ from tts_audiobook_tool.util import *
 
 
 class ChatMenu:
-
     @staticmethod
     def menu(state: State) -> None:
 
@@ -22,31 +30,39 @@ class ChatMenu:
             return label
 
         subheading = (
-            f"{COL_DIM}Interactive chat with a configured LLM where each assistant reply is\n"
+            f"Interactive chat with a configured LLM where each assistant reply is\n"
             "generated as speech using the current TTS model and voice settings.\n"
         )
+
+        def start_conversation(_: State, __: MenuItem) -> None:
+            run_conversation_app(state)
 
         def make_items(_: State) -> list[MenuItem]:
 
             items = [
-                MenuItem(make_start_label, lambda _, __: ConversationStatic.start(state)),
-
+                MenuItem(make_start_label, start_conversation),
                 MenuItem(
-                    lambda _: make_menu_label("Input mode", ChatMenu.get_chat_input_mode_label_value(state)),
-                    lambda _, __: ChatMenu.input_mode_menu(state),
-                    superlabel="Options"
+                    lambda _: make_menu_label(
+                        "Input mode", ChatMenu.get_chat_input_mode_label_value(state)
+                    ),
+                    lambda _, __: ChatMenu.input_mode_menu(state)
                 ),
-
                 MenuItem(
-                    lambda _: make_menu_label("LLM system prompt", ChatMenu.get_system_prompt_label_value(state)),
+                    lambda _: make_menu_label(
+                        "LLM system prompt",
+                        ChatMenu.get_system_prompt_label_value(state),
+                    ),
                     lambda _, __: ChatMenu.system_prompt_menu(state),
-                )
+                    superlabel="Options",
+                ),
             ]
 
             if Tts.get_info().can_stream:
                 items.append(
                     MenuItem(
-                        lambda _: make_menu_label("Streaming", state.project.streaming_chat, True),
+                        lambda _: make_menu_label(
+                            "Streaming", state.project.streaming_chat, True
+                        ),
                         lambda _, __: ChatMenu.streaming_menu(state),
                     )
                 )
@@ -54,15 +70,17 @@ class ChatMenu:
             items.append(
                 MenuItem(
                     lambda _: make_menu_label("Save output", state.prefs.chat_save),
-                    lambda _, __: ChatMenu.save_menu(state)
+                    lambda _, __: ChatMenu.save_menu(state),
                 )
             )
 
             if state.prefs.chat_save:
                 items.append(
                     MenuItem(
-                        lambda _: make_menu_label("Save mic input as well", state.prefs.chat_save_mic),
-                        lambda _, __: ChatMenu.save_mic_menu(state)
+                        lambda _: make_menu_label(
+                            "Save mic input as well", state.prefs.chat_save_mic
+                        ),
+                        lambda _, __: ChatMenu.save_mic_menu(state),
                     )
                 )
 
@@ -70,7 +88,7 @@ class ChatMenu:
 
         MenuUtil.menu(
             state,
-            f"LLM voice chat {COL_DIM}(experimental){COL_DEFAULT}",
+            f"LLM voice chat",
             make_items,
             subheading=subheading,
             hint=HINT_LLM_CHAT,
@@ -80,7 +98,10 @@ class ChatMenu:
     @staticmethod
     def input_mode_menu(state: State) -> None:
 
-        def on_select(value: str) -> None:
+        def select_input_mode(_: State, item: MenuItem) -> None:
+            value = item.data
+            if not isinstance(value, ChatInputMode) or value == state.prefs.chat_input_mode:
+                return
             state.prefs.chat_input_mode = value
             state.prefs.save()
             print_feedback(
@@ -88,23 +109,62 @@ class ChatMenu:
                 ChatMenu.get_chat_input_mode_label_value(state),
             )
 
+        mode_items = [
+            (
+                "Microphone, submit immediately after silence",
+                ChatInputMode.MIC_IMMEDIATE,
+            ),
+            ("Microphone, submit by pressing ENTER", ChatInputMode.MIC_ENTER),
+            ("Text input", ChatInputMode.TEXT),
+        ]
+        items: list[MenuItem] = []
+        for label, mode in mode_items:
+            if mode == PREFS_DEFAULT_CHAT_INPUT_MODE:
+                label += f" {COL_DIM}(default)"
+            if mode == state.prefs.chat_input_mode:
+                label += f" {COL_ACCENT}(selected)"
+            items.append(MenuItem(label, select_input_mode, data=mode))
+
+        echo_label = (
+            "Echo text only (no LLM) "
+            + make_currently_string(
+                state.prefs.chat_echo_override,
+                default=PREFS_DEFAULT_CHAT_ECHO_OVERRIDE,
+            )
+        )
+        items.append(
+            MenuItem(
+                echo_label,
+                lambda _, __: ChatMenu.echo_override_menu(state),
+                superlabel=" ", superlabel_no_blank_line=True
+            )
+        )
+
+        MenuUtil.menu(
+            state=state,
+            heading="Input mode",
+            items=items,
+            one_shot=True,
+            breadcrumb="Input mode",
+        )
+
+    @staticmethod
+    def echo_override_menu(state: State) -> None:
+
+        def on_select(value: bool) -> None:
+            state.prefs.chat_echo_override = value
+            state.prefs.save()
+            print_feedback("Echo text only (no LLM) set to:", value)
+
         MenuUtil.options_menu(
             state=state,
-            heading_text="LLM chat input mode",
-            labels=[
-                "Microphone (submit immediately after silence)",
-                "Microphone (submit by pressing ENTER)",
-                "Text input",
-            ],
-            values=[
-                CHAT_INPUT_MODE_MIC_IMMEDIATE,
-                CHAT_INPUT_MODE_MIC_ENTER,
-                CHAT_INPUT_MODE_TEXT,
-            ],
-            current_value=state.prefs.chat_input_mode,
-            default_value=PREFS_DEFAULT_CHAT_INPUT_MODE,
+            heading_text="Echo text only (no LLM)",
+            labels=["True", "False"],
+            values=[True, False],
+            current_value=state.prefs.chat_echo_override,
+            default_value=PREFS_DEFAULT_CHAT_ECHO_OVERRIDE,
             on_select=on_select,
-            breadcrumb="Input mode",
+            breadcrumb="Echo text only",
         )
 
     @staticmethod
@@ -211,28 +271,27 @@ class ChatMenu:
         def item_maker(_: State) -> list[MenuItem]:
             edit_label = make_menu_label(
                 "Edit custom system prompt",
-                ellipsize(state.prefs.llm_system_prompt, 40) or "none"
+                ellipsize(state.prefs.llm_system_prompt, 40) or "none",
             )
 
             items: list[MenuItem] = [
                 MenuItem(
                     lambda _: make_menu_label(
                         "System prompt preset",
-                        ChatMenu.get_system_prompt_preset_label_value(state)
+                        ChatMenu.get_system_prompt_preset_label_value(state),
                     ),
-                    lambda _, __: ChatMenu.system_prompt_preset_menu(state)
+                    lambda _, __: ChatMenu.system_prompt_preset_menu(state),
                 ),
                 MenuItem(
-                    edit_label,
-                    lambda _, __: ChatMenu.llm_system_prompt_menu(state)
-                )
+                    edit_label, lambda _, __: ChatMenu.llm_system_prompt_menu(state)
+                ),
             ]
 
             if state.prefs.llm_system_prompt or state.prefs.system_prompt_preset:
                 items.append(
                     MenuItem(
                         "Clear system prompt",
-                        lambda _, __: ChatMenu.clear_system_prompt(state)
+                        lambda _, __: ChatMenu.clear_system_prompt(state),
                     )
                 )
 
@@ -240,17 +299,13 @@ class ChatMenu:
                 MenuItem(
                     "Print current system prompt",
                     lambda _, __: ChatMenu.print_current_system_prompt(state),
-                    superlabel=" ", superlabel_no_blank_line=True
+                    superlabel=" ", superlabel_no_blank_line=True,
                 )
             )
 
             return items
 
-        MenuUtil.menu(
-            state,
-            "System prompt",
-            item_maker
-        )
+        MenuUtil.menu(state, "System prompt", item_maker)
 
     @staticmethod
     def system_prompt_preset_menu(state: State) -> None:
@@ -258,7 +313,10 @@ class ChatMenu:
         def on_select(value: str) -> None:
             state.prefs.system_prompt_preset = value
             state.prefs.save()
-            print_feedback("Set LLM system prompt preset to:", ChatMenu.get_system_prompt_preset_label_value(state))
+            print_feedback(
+                "Set LLM system prompt preset to:",
+                ChatMenu.get_system_prompt_preset_label_value(state),
+            )
 
         labels = ["None"] + [label for _, label in CHAT_SYSTEM_PROMPTS]
         values = [""] + [file_name for file_name, _ in CHAT_SYSTEM_PROMPTS]
@@ -292,32 +350,19 @@ class ChatMenu:
 
     @staticmethod
     def get_system_prompt_label_value(state: State) -> str:
-        prefs = state.prefs
-        if prefs.system_prompt_preset:
-            return ChatMenu.get_system_prompt_preset_label_value(state)
-        return ellipsize(prefs.llm_system_prompt, 50) or "none"
+        return get_system_prompt_label(state)
 
     @staticmethod
     def get_chat_input_mode_label_value(state: State) -> str:
-        value = state.prefs.chat_input_mode
-        if value == CHAT_INPUT_MODE_TEXT:
-            return "text"
-        return "microphone"
+        label = get_chat_input_mode_label(state.prefs.chat_input_mode)
+        if state.prefs.chat_echo_override:
+            label += ", echo only"
+        return label
 
     @staticmethod
     def get_system_prompt_preset_label_value(state: State) -> str:
-        preset = state.prefs.system_prompt_preset
-        if not preset:
-            return "none"
-        for file_name, label in CHAT_SYSTEM_PROMPTS:
-            if file_name == preset:
-                return label
-        return preset
+        return get_system_prompt_preset_label(state.prefs.system_prompt_preset)
 
     @staticmethod
     def get_resolved_system_prompt(state: State) -> str:
-        if state.prefs.system_prompt_preset:
-            file_name = state.prefs.system_prompt_preset
-            file_path = os.path.join(package_dir, ASSETS_DIR_NAME, file_name)
-            return text_util.load_text_file(file_path)
-        return state.prefs.llm_system_prompt.strip()
+        return get_resolved_system_prompt(state)

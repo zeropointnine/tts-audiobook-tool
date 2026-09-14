@@ -497,7 +497,7 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
     monkeypatch.setattr(
         real_time_playback.readiness,
         "get_generate_blocker_text",
-        lambda state, verbose=False, is_realtime_playback=False: None,
+        lambda state, verbose=False: None,
     )
     monkeypatch.setattr(
         real_time_playback.app_memory,
@@ -570,6 +570,196 @@ def test_start_impl_emits_segment_text_with_sample_range(monkeypatch) -> None:
     assert (event.start_sample, event.end_sample) == (0, 48000)
     assert event.played_samples == 0
     assert streams[0].shut_downs == 1
+
+
+def test_start_impl_submits_completed_sound_when_cancelled_during_generation(
+    monkeypatch,
+) -> None:
+    """A cooperative cancel (one CTRL-C) arriving mid-generation stops the
+    run, but the in-flight generation had completed: its sound is submitted
+    to the output buffer (where it plays while the session waits for Enter)
+    instead of being discarded."""
+
+    class FakeStream:
+        def __init__(self) -> None:
+            self.total = 0
+            self.shut_downs = 0
+
+        def start(self) -> bool:
+            return True
+
+        def add_data(self, data: np.ndarray) -> tuple[int, int]:
+            start = self.total
+            self.total += len(data)
+            return start, self.total
+
+        @property
+        def buffer_duration(self) -> float:
+            return 1.0
+
+        @property
+        def played_samples(self) -> int:
+            return 0
+
+        def shut_down(self) -> None:
+            self.shut_downs += 1
+
+    streams: list[FakeStream] = []
+
+    def fake_stream_factory() -> FakeStream:
+        stream = FakeStream()
+        streams.append(stream)
+        return stream
+
+    sound = SimpleNamespace(
+        data=np.zeros(48000, dtype=np.float32),
+        duration=1.0,
+        sr=48000,
+    )
+
+    # The cancel request (as the worker signals a single CTRL-C from the
+    # parent) arrives while the second generation is in flight; that
+    # generation still completes.
+    cancel_event = threading.Event()
+
+    def fake_generate_full_flow(
+        state,
+        phrase_groups,
+        index,
+        has_runway,
+        consecutive_model_errors=0,
+        max_consecutive_model_errors=5,
+        gen_timeout_tracker=None,
+    ):
+        if index == 1:
+            cancel_event.set()
+        did_interrupt = Interrupts().did_interrupt
+        # generate_full_flow() clears Interrupts at the end; the external
+        # cancel event intentionally stays set until the next submit.
+        Interrupts().clear()
+        return sound, did_interrupt, consecutive_model_errors
+
+    tracker_calls: list[int] = []
+
+    class FakeBreakEffectTracker:
+        def __init__(self, section_start_indices, *, start_group_index=0) -> None:
+            ...
+
+        def next_break_effect(self, index, reason, effects_enabled, is_final):
+            tracker_calls.append(index)
+            return None
+
+    monkeypatch.setattr(real_time_playback, "SoundDeviceStream", fake_stream_factory)
+    monkeypatch.setattr(
+        real_time_playback, "generate_full_flow", fake_generate_full_flow
+    )
+    monkeypatch.setattr(
+        real_time_playback.SoundPipeline,
+        "prepare_generated_sound_for_playback",
+        lambda sound, high_shelf, limit_silence_gaps, limit_silence_gaps_duration: sound,
+    )
+    monkeypatch.setattr(real_time_playback, "BreakEffectTracker", FakeBreakEffectTracker)
+    monkeypatch.setattr(
+        real_time_playback.ProjectBookUtil,
+        "get_section_start_indices",
+        lambda project: [],
+    )
+    monkeypatch.setattr(
+        real_time_playback.ModelManager,
+        "warm_up_models",
+        lambda state: SimpleNamespace(
+            should_stop=False, error=None, did_interrupt=False
+        ),
+    )
+    monkeypatch.setattr(
+        real_time_playback.readiness,
+        "get_generate_blocker_text",
+        lambda state, verbose=False: None,
+    )
+    monkeypatch.setattr(
+        real_time_playback.app_memory,
+        "show_vram_memory_warning_if_necessary",
+        lambda: False,
+    )
+    monkeypatch.setattr(real_time_playback.Tts, "clear_continuation", lambda: None)
+    monkeypatch.setattr(
+        real_time_playback.Tts, "reset_voice_selection_index", lambda: None
+    )
+    monkeypatch.setattr(
+        real_time_playback.Tts,
+        "get_instance",
+        lambda: SimpleNamespace(get_warning_issues=lambda project: None),
+    )
+    monkeypatch.setattr(
+        real_time_playback.GenerateUtil,
+        "print_batch_heading",
+        lambda indices, voice_index=None: None,
+    )
+
+    state = cast(
+        State,
+        SimpleNamespace(
+            prefs=SimpleNamespace(stt_variant=SttVariant.DISABLED),
+            project=SimpleNamespace(
+                max_retries=0,
+                limit_silence_gaps=False,
+                limit_silence_gaps_duration=0.5,
+                use_break_sound_effect=False,
+                reason_pauses=SimpleNamespace(get_pause_for=lambda reason: 0.0),
+                get_high_shelf=lambda: 0,
+                realtime_save=False,
+            ),
+        ),
+    )
+    phrase_groups = [
+        PhraseGroup([Phrase(f"Segment {i}.", Reason.SENTENCE)], voice_index=0)
+        for i in range(3)
+    ]
+    Interrupts().clear()
+    Interrupts().set_external_event(cancel_event)
+    try:
+        continue_event = threading.Event()
+        continue_event.set()
+
+        received: list = []
+        with RealTimePlaybackEvents.using_sink(received.append):
+            result = real_time_playback.start(
+                state,
+                phrase_groups,
+                (1, 3),
+                continue_event=continue_event,
+            )
+    finally:
+        Interrupts().set_external_event(None)
+        Interrupts().clear()
+
+    # The run ends as a cancellation, with the interrupted segment's sound in
+    # the buffer: both completed generations were submitted, the third was
+    # never generated.
+    assert result.status is real_time_playback.RealTimePlaybackRunStatus.CANCELLED
+    assert len(streams) == 1
+    assert streams[0].total == 2 * 48000
+    assert streams[0].shut_downs == 1
+
+    segments = [e for e in received if isinstance(e, RealTimePlaybackSegmentText)]
+    assert [(e.index, e.start_sample, e.end_sample) for e in segments] == [
+        (0, 0, 48000),
+        (1, 48000, 96000),
+    ]
+
+    # The terminating segment got no trailing break effect or pause, and the
+    # tracker was only advanced for the segment that did get one.
+    assert tracker_calls == [0]
+
+    # The run stopped before generating the third segment, so there is no
+    # final Progress(total, total); it ends at AwaitingContinue(interrupted).
+    progress = [e for e in received if isinstance(e, RealTimePlaybackProgress)]
+    assert [(e.processed, e.total) for e in progress] == [(0, 3), (1, 3)]
+    awaiting = [
+        e for e in received if isinstance(e, RealTimePlaybackAwaitingContinue)
+    ]
+    assert len(awaiting) == 1
+    assert awaiting[0].interrupted is True
 
 
 def test_gen_timeout_update_hard_resets_worker_even_with_cancel_pending(

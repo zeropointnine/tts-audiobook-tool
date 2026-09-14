@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
-from tts_audiobook_tool.app_types import RealTimeMenuState
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.project import Project
@@ -34,8 +33,6 @@ class State:
 
         self.prefs = Prefs.load()
 
-        self.real_time = RealTimeMenuState()
-
         self._project = None # type: ignore
 
         if not self.prefs.project_dir:
@@ -65,7 +62,6 @@ class State:
         state.dont_show_scan_message = False
         state.has_shown_main_menu = False
         state.pending_model_mismatch_name = ""
-        state.real_time = RealTimeMenuState()
         state.prefs = prefs
         return state
 
@@ -86,7 +82,6 @@ class State:
         # Sync static values
         Tts.set_model_params_using_project(self.project)
         Whitelist().set_language_code(self.project.language_code)
-        self.real_time.project_text_line_range = self.project.realtime_line_range
 
         # Detect a mismatch between the project's previous model and the
         # current runtime model; the main menu displays the FYI hint once.
@@ -197,4 +192,3 @@ class State:
         self.prefs.project_dir = ""
         self.prefs.save()
         self.project = Project(dir_path="")
-        self.real_time = RealTimeMenuState()

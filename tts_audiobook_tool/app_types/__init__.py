@@ -562,14 +562,6 @@ class Hint:
 
 # ---
 
-class RealTimeMenuState:
-    """ Values related to the real-time playback feature """
-    custom_phrase_groups: list[PhraseGroup] = [] # ie, PhraseGroups
-    custom_text_line_range: tuple[int, int] | None = None
-    project_text_line_range: tuple[int, int] | None = None
-
-# ---
-
 class SoundSegment(NamedTuple):
     """
     Contains the extracted data from the tags from a sound segment filename

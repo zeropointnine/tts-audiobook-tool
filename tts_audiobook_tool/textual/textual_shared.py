@@ -29,6 +29,20 @@ OptionReconcileItem = tuple[str, Any, bool]
 """An option ID, optional replacement prompt, and whether its height may change."""
 
 
+# Single source of truth for scrollbar colors across all Textual apps.
+# Appended to TEXTUAL_SHARED_CSS and injected into worker apps' CSS, since
+# the worker apps deliberately do not load the shared stylesheet. The
+# universal selector reaches every scrollable widget, including modal
+# dialogs; CSS variables like $col-dim are scoped per-stylesheet and so
+# cannot be referenced from other widgets' DEFAULT_CSS.
+TEXTUAL_SCROLLBAR_CSS = f"""\
+* {{
+    scrollbar-color: {STYLE_DIM};
+    scrollbar-color-hover: {STYLE_DIM};
+    scrollbar-color-active: {STYLE_DIM};
+}}
+"""
+
 TEXTUAL_SHARED_CSS = """\
 $col-accent: #ffaa44;
 $col-error: #ff0000;
@@ -64,7 +78,7 @@ Screen:ansi.-screen-suspended {
     margin: 0;
     color: $col-dim;
 }
-"""
+""" + TEXTUAL_SCROLLBAR_CSS
 
 
 CONTENT_TEXTUAL_APP_CSS = """\

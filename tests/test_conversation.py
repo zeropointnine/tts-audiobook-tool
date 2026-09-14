@@ -1,236 +1,22 @@
-import io
-import os
-import queue
 import threading
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from tts_audiobook_tool import app_support, readiness
-import tts_audiobook_tool.conversation.conversation as conversation_module
-from tts_audiobook_tool.app_support import app_memory
 from tts_audiobook_tool.app_types.phrase import Reason
-from tts_audiobook_tool.conversation.conversation import Conversation
-from tts_audiobook_tool.conversation.conversation_internals import (
-    ConversationStreamingTts,
-    MuteCurrentThreadOutput,
+from tts_audiobook_tool.conversation.conversation import ConversationRuntime
+from tts_audiobook_tool.conversation.conversation_types import (
+    ChatInputMode,
+    ChunkingConfig,
+    ResponseResult,
 )
-from tts_audiobook_tool.conversation.conversation_types import QueuedStream
-from tts_audiobook_tool.model_manager import ModelManager
+from tts_audiobook_tool.conversation.prompt_draft import PromptSubmission
+from tts_audiobook_tool.conversation.response_session import ConversationStreamingTts
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.tts import Tts
-
-
-def make_conversation(
-        chat_input_mode: str,
-        stt_immediate: bool | None = None,
-) -> Conversation:
-    state = SimpleNamespace(
-        prefs=SimpleNamespace(chat_input_mode=chat_input_mode),
-        project=SimpleNamespace(language_code="en"),
-    )
-    return Conversation(state, stt_immediate=stt_immediate)
-
-
-def test_init_text_input_mode() -> None:
-    conv = make_conversation("text")
-
-    assert conv.is_text_input is True
-    assert conv.stt_immediate is False
-
-
-def test_init_mic_modes_derive_stt_immediate() -> None:
-    assert make_conversation("mic_immediate").stt_immediate is True
-    assert make_conversation("mic_enter").stt_immediate is False
-
-
-def test_init_explicit_stt_immediate_overrides_mode() -> None:
-    conv = make_conversation("text", stt_immediate=True)
-
-    assert conv.stt_immediate is True
-
-
-def test_preflight_fails_and_reports_blockers(monkeypatch) -> None:
-    feedback: list[str] = []
-    monkeypatch.setattr(
-        readiness, "get_chat_blockers",
-        lambda state: [SimpleNamespace(verbose="need a model", brief="no model")],
-    )
-    monkeypatch.setattr(conversation_module.ask, "ask_error", feedback.append)
-
-    state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
-    assert Conversation._run_preflight_checks(state) is False
-    assert feedback == ["need a model"]
-
-
-def test_preflight_fails_when_pre_inference_hints_block(monkeypatch) -> None:
-    monkeypatch.setattr(readiness, "get_chat_blockers", lambda state: [])
-    monkeypatch.setattr(
-        "tts_audiobook_tool.conversation.conversation.app_hint_util.show_pre_inference_hints",
-        lambda prefs, project: False,
-    )
-    warm_up_spy = []
-    monkeypatch.setattr(
-        ModelManager, "warm_up_models",
-        lambda state, skip_yamnet=False: warm_up_spy.append(True)
-        or SimpleNamespace(should_stop=False),
-    )
-
-    state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
-    assert Conversation._run_preflight_checks(state) is False
-    assert warm_up_spy == []  # no warm-up after hint block
-
-
-def test_preflight_stops_on_worker_model_error(monkeypatch) -> None:
-    monkeypatch.setattr(readiness, "get_chat_blockers", lambda state: [])
-    monkeypatch.setattr(
-        "tts_audiobook_tool.conversation.conversation.app_hint_util.show_pre_inference_hints",
-        lambda prefs, project: True,
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "inspect_tts_blocking",
-        lambda state: (None, "oom"),
-    )
-    feedback: list = []
-    monkeypatch.setattr(conversation_module.ask, "ask_error", feedback.append)
-    state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
-    assert Conversation._run_preflight_checks(state) is False
-    assert feedback == ["oom"]
-
-
-def test_preflight_fails_on_model_blockers_after_warm_up(monkeypatch) -> None:
-    monkeypatch.setattr(readiness, "get_chat_blockers", lambda state: [])
-    monkeypatch.setattr(
-        "tts_audiobook_tool.conversation.conversation.app_hint_util.show_pre_inference_hints",
-        lambda prefs, project: True,
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "inspect_tts_blocking",
-        lambda state: (SimpleNamespace(blocking_issues=("bad model detail",)), ""),
-    )
-    feedback: list = []
-    monkeypatch.setattr(conversation_module.ask, "ask_error", feedback.append)
-
-    state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
-    assert Conversation._run_preflight_checks(state) is False
-    assert feedback == ["bad model detail"]
-
-
-def test_preflight_success(monkeypatch) -> None:
-    monkeypatch.setattr(readiness, "get_chat_blockers", lambda state: [])
-    monkeypatch.setattr(
-        "tts_audiobook_tool.conversation.conversation.app_hint_util.show_pre_inference_hints",
-        lambda prefs, project: True,
-    )
-    monkeypatch.setattr(
-        ModelWorker,
-        "inspect_tts_blocking",
-        lambda state: (SimpleNamespace(blocking_issues=()), ""),
-    )
-
-    state = SimpleNamespace(prefs=SimpleNamespace(), project=SimpleNamespace())
-    assert Conversation._run_preflight_checks(state) is True
-
-
-def _make_started_conversation(chat_input_mode: str = "mic_immediate") -> Conversation:
-    conv = make_conversation(chat_input_mode)
-    conv.ctrl_c_requested = threading.Event()
-    conv.in_response = False
-    conv.exiting = False
-    return conv
-
-
-def test_on_sigint_sets_event_while_idle_in_mic_mode() -> None:
-    conv = _make_started_conversation("mic_immediate")
-
-    conv.on_sigint()
-
-    assert conv.ctrl_c_requested.is_set()
-    assert conv.exiting is False
-
-
-def test_on_sigint_raises_keyboard_interrupt_during_response() -> None:
-    conv = _make_started_conversation("mic_immediate")
-    conv.in_response = True
-
-    with pytest.raises(KeyboardInterrupt):
-        conv.on_sigint()
-
-
-def test_on_sigint_raises_keyboard_interrupt_in_text_mode() -> None:
-    conv = _make_started_conversation("text")
-
-    with pytest.raises(KeyboardInterrupt):
-        conv.on_sigint()
-
-
-def test_on_sigint_is_noop_when_exiting() -> None:
-    conv = _make_started_conversation("text")
-    conv.exiting = True
-
-    conv.on_sigint()  # must not raise even in text mode
-
-    assert conv.ctrl_c_requested.is_set()
-
-
-def test_build_prompt_dispatches_by_input_mode() -> None:
-    conv = make_conversation("text")
-    conv.build_text_prompt = lambda: "typed prompt"
-    assert conv.build_prompt() == "typed prompt"
-
-    conv_mic = make_conversation("mic_immediate")
-    conv_mic.prompt_builder = None
-    with pytest.raises(RuntimeError, match="prompt builder"):
-        conv_mic.build_prompt()
-
-    conv_mic.prompt_builder = SimpleNamespace(build=lambda: "built prompt")
-    assert conv_mic.build_prompt() == "built prompt"
-
-
-def test_build_text_prompt_reads_strips_and_manages_cursor(monkeypatch) -> None:
-    conv = make_conversation("text")
-    conv.ui = SimpleNamespace(wait_idle=lambda: None)
-    conv.real_stdout = io.StringIO()
-    monkeypatch.setattr("builtins.input", lambda: "  hi there  \n")
-
-    assert conv.build_text_prompt() == "hi there"
-    assert "> " in conv.real_stdout.getvalue()
-
-
-def test_build_text_prompt_eof_raises_keyboard_interrupt(monkeypatch) -> None:
-    conv = make_conversation("text")
-    conv.ui = SimpleNamespace(wait_idle=lambda: None)
-    conv.real_stdout = io.StringIO()
-
-    def raise_eof() -> str:
-        raise EOFError
-
-    monkeypatch.setattr("builtins.input", raise_eof)
-
-    with pytest.raises(KeyboardInterrupt):
-        conv.build_text_prompt()
-
-
-def test_run_main_loop_skips_empty_text_input(monkeypatch) -> None:
-    conv = make_conversation("text")
-    prompts = iter(["", "real prompt"])
-    monkeypatch.setattr(conv, "build_prompt", lambda: next(prompts))
-    turns: list[str] = []
-
-    def fake_turn(assembled: str) -> None:
-        turns.append(assembled)
-        raise StopIteration
-
-    monkeypatch.setattr(conv, "run_response_turn", fake_turn)
-
-    with pytest.raises(StopIteration):
-        conv.run_main_loop()
-
-    assert turns == ["real prompt"]
+from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 
 class FakeSoundStream:
@@ -246,7 +32,268 @@ class FakeSoundStream:
         return start, self._offset
 
 
-def _patch_tts_for_streaming(monkeypatch, sample_rate: int, generate_side_effect) -> SimpleNamespace:
+class FakeCloseResource:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def request_interrupt(self) -> None:
+        self.calls += 1
+
+    def stop(self) -> None:
+        self.calls += 1
+
+    def shut_down(self) -> None:
+        self.calls += 1
+
+    def clear(self) -> None:
+        self.calls += 1
+
+
+def test_cancel_initialization_marks_closing_hard_resets_and_cleans_resources(
+    monkeypatch,
+) -> None:
+    state = SimpleNamespace(
+        prefs=SimpleNamespace(chat_input_mode=ChatInputMode.TEXT),
+        project=SimpleNamespace(),
+    )
+    runtime = ConversationRuntime(state)  # type: ignore[arg-type]
+    response = FakeCloseResource()
+    transcriber = FakeCloseResource()
+    sound_stream = FakeCloseResource()
+    llm = FakeCloseResource()
+    runtime.active_response = response  # type: ignore[assignment]
+    runtime.transcriber = transcriber  # type: ignore[assignment]
+    runtime.sound_stream = sound_stream  # type: ignore[assignment]
+    runtime.llm = llm  # type: ignore[assignment]
+    runtime.initialized = True
+    reset_saw_closing: list[bool] = []
+
+    def fake_reset() -> str:
+        reset_saw_closing.append(runtime.closing)
+        return "replacement failed"
+
+    monkeypatch.setattr(ModelWorker, "reset", staticmethod(fake_reset))
+    monkeypatch.setattr(
+        ModelWorker,
+        "reset_chat_session_blocking",
+        staticmethod(
+            lambda **_: (_ for _ in ()).throw(
+                AssertionError("ordinary close reset ran")
+            )
+        ),
+    )
+
+    assert runtime.cancel_initialization() == "replacement failed"
+    assert reset_saw_closing == [True]
+    assert not runtime.initialized
+    assert runtime.active_response is None
+    assert runtime.transcriber is None
+    assert runtime.sound_stream is None
+    assert runtime.llm is None
+    assert response.calls == 1
+    assert transcriber.calls == 1
+    assert sound_stream.calls == 1
+    assert llm.calls == 1
+
+    # Cancellation and the later unmount close are both idempotent.
+    assert runtime.cancel_initialization() == ""
+    runtime.close()
+    assert reset_saw_closing == [True]
+
+
+def test_create_response_uses_project_max_words(monkeypatch) -> None:
+    import tts_audiobook_tool.conversation.conversation as conversation_module
+
+    project = Project.model_validate({"max_words": 73})
+    state = SimpleNamespace(
+        prefs=SimpleNamespace(
+            chat_input_mode=ChatInputMode.TEXT,
+            chat_echo_override=True,
+            stt_variant="test",
+            stt_config={},
+        ),
+        project=project,
+    )
+    runtime = ConversationRuntime(state)  # type: ignore[arg-type]
+    runtime.initialized = True
+    runtime.sound_stream = object()  # type: ignore[assignment]
+    captured: dict[str, object] = {}
+
+    def fake_response_session(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(conversation_module, "ResponseSession", fake_response_session)
+
+    runtime.create_response()
+
+    chunking_config = captured["chunking_config"]
+    assert isinstance(chunking_config, ChunkingConfig)
+    assert chunking_config.max_words == 73
+    # Generated assistant audio must not be sent back through Whisper by
+    # default. Text chat does not warm STT, and the redundant output alignment
+    # can otherwise load it after the first TTS chunk and exhaust VRAM later.
+    assert captured["phrase_stt_enabled"] is False
+
+
+@pytest.mark.parametrize(
+    ("tts_type", "expected"),
+    [(TtsModelType.GLM, False), (TtsModelType.POCKET, True)],
+)
+def test_create_response_disables_redundant_output_stt_only_for_glm_mic_chat(
+    monkeypatch, tts_type: TtsModelType, expected: bool
+) -> None:
+    import tts_audiobook_tool.conversation.conversation as conversation_module
+
+    project = Project.model_validate({})
+    state = SimpleNamespace(
+        prefs=SimpleNamespace(
+            chat_input_mode=ChatInputMode.MIC_IMMEDIATE,
+            chat_echo_override=True,
+            stt_variant="test",
+            stt_config={},
+        ),
+        project=project,
+    )
+    runtime = ConversationRuntime(state)  # type: ignore[arg-type]
+    runtime.initialized = True
+    runtime.sound_stream = object()  # type: ignore[assignment]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(Tts, "get_type", staticmethod(lambda: tts_type))
+    monkeypatch.setattr(
+        conversation_module,
+        "ResponseSession",
+        lambda **kwargs: captured.update(kwargs) or SimpleNamespace(),
+    )
+
+    runtime.create_response()
+
+    assert captured["phrase_stt_enabled"] is expected
+
+
+class FakeMicTranscriber:
+    def __init__(self, log: list[str]) -> None:
+        self.log = log
+
+    def pause(self) -> None:
+        self.log.append("pause")
+
+    def flush(self) -> None:
+        self.log.append("flush")
+
+    def resume(self) -> None:
+        self.log.append("resume")
+
+
+class FakeDrainingStream:
+    """Output stream whose cleared tail falls silent after N polls."""
+
+    def __init__(self, log: list[str], complete_after_polls: int) -> None:
+        self.log = log
+        self.polls = 0
+        self.complete_after_polls = complete_after_polls
+        self.output_latency = 0.0
+
+    @property
+    def is_playback_complete(self) -> bool:
+        self.polls += 1
+        complete = self.polls > self.complete_after_polls
+        if complete and "drain_done" not in self.log:
+            self.log.append("drain_done")
+        return complete
+
+
+class FakeTurnResponse:
+    def __init__(self, interrupted: bool) -> None:
+        self.interrupted = interrupted
+
+    def run(self, text: str, user_input_sound: object = None) -> ResponseResult:
+        return ResponseResult("partial reply", interrupted=self.interrupted)
+
+
+def make_mic_runtime(log: list[str], stream: FakeDrainingStream) -> ConversationRuntime:
+    state = SimpleNamespace(
+        prefs=SimpleNamespace(chat_input_mode=ChatInputMode.MIC_IMMEDIATE),
+        project=SimpleNamespace(),
+    )
+    runtime = ConversationRuntime(state)  # type: ignore[arg-type]
+    runtime.transcriber = FakeMicTranscriber(log)  # type: ignore[assignment]
+    runtime.sound_stream = stream  # type: ignore[assignment]
+    return runtime
+
+
+def test_interrupted_response_waits_for_output_tail_before_mic_resume(
+    monkeypatch,
+) -> None:
+    import tts_audiobook_tool.conversation.conversation as conversation_module
+
+    monkeypatch.setattr(conversation_module, "OUTPUT_TAIL_SETTLE_MARGIN_S", 0.0)
+    log: list[str] = []
+    stream = FakeDrainingStream(log, complete_after_polls=1)
+    runtime = make_mic_runtime(log, stream)
+
+    result = runtime.run_response(
+        FakeTurnResponse(interrupted=True),  # type: ignore[arg-type]
+        PromptSubmission("hello"),
+    )
+
+    assert result.interrupted is True
+    # The mic only reopens after the interrupted playback's tail has drained.
+    assert log == ["pause", "drain_done", "flush", "resume"]
+    assert stream.polls == 2
+
+
+def test_completed_response_resumes_mic_without_tail_wait() -> None:
+    log: list[str] = []
+    stream = FakeDrainingStream(log, complete_after_polls=0)
+    runtime = make_mic_runtime(log, stream)
+
+    result = runtime.run_response(
+        FakeTurnResponse(interrupted=False),  # type: ignore[arg-type]
+        PromptSubmission("hello"),
+    )
+
+    assert result.interrupted is False
+    # The engine already waited for playback; the existing double flush is
+    # kept and no tail drain is added.
+    assert log == ["pause", "flush", "flush", "resume"]
+    assert stream.polls == 0
+
+
+def test_stuck_transcriber_pause_fails_turn_but_still_resumes_mic(
+    monkeypatch,
+) -> None:
+    import tts_audiobook_tool.conversation.conversation as conversation_module
+
+    class StuckPauseTranscriber(FakeMicTranscriber):
+        def pause(self) -> None:
+            self.log.append("pause")
+            raise RuntimeError(
+                "Transcriber stuck: in-flight STT did not finish within 60s"
+            )
+
+    monkeypatch.setattr(conversation_module, "OUTPUT_TAIL_SETTLE_MARGIN_S", 0.0)
+    log: list[str] = []
+    stream = FakeDrainingStream(log, complete_after_polls=0)
+    runtime = make_mic_runtime(log, stream)
+    runtime.transcriber = StuckPauseTranscriber(log)  # type: ignore[assignment]
+    response = FakeTurnResponse(interrupted=True)
+    runtime.active_response = response  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="Transcriber stuck"):
+        runtime.run_response(
+            response,  # type: ignore[arg-type]
+            PromptSubmission("hello"),
+        )
+
+    # The turn fails loudly, but the response slot is freed and the mic is
+    # flushed and resumed, so the session stays usable for the next turn.
+    assert log == ["pause", "drain_done", "flush", "resume"]
+    assert runtime.active_response is None
+
+
+def _patch_tts_for_streaming(monkeypatch, sample_rate: int, generate_side_effect):
     spies = SimpleNamespace(synthesis_calls=0)
 
     def fake_synthesize(_state, _text, _reason, *, on_chunk=None, **_kwargs):
@@ -269,23 +316,18 @@ def test_streaming_tts_reports_sample_rate_mismatch(monkeypatch) -> None:
     monkeypatch.setattr(Tts, "get_class", staticmethod(lambda: fake_tts_class))
     project = Project.model_validate({})
 
-    def must_not_generate(*args, **kwargs):
-        raise AssertionError("generate should not run on sample rate mismatch")
-
-    monkeypatch.setattr(Tts, "generate_using_project", must_not_generate)
-
-    result = ConversationStreamingTts.generate_to_sound_stream(
-        state=SimpleNamespace(project=project),
-        text="hello",
-        reason=Reason.SENTENCE,
-        sound_stream=FakeSoundStream(24000),
-        interrupt_requested=threading.Event(),
-        response_aborted=threading.Event(),
+    stream_range, saved_sound, error = (
+        ConversationStreamingTts.generate_to_sound_stream(
+            state=SimpleNamespace(project=project),
+            text="hello",
+            reason=Reason.SENTENCE,
+            sound_stream=FakeSoundStream(24000),
+            interrupt_requested=threading.Event(),
+        )
     )
 
-    stream_range, saved_sound, err = result
     assert stream_range is None and saved_sound is None
-    assert "48000" in err and "24000" in err  # type: ignore[union-attr]
+    assert error is not None and "48000" in error and "24000" in error
 
 
 def test_streaming_tts_streams_chunks_and_saves_combined_sound(monkeypatch) -> None:
@@ -301,21 +343,20 @@ def test_streaming_tts_streams_chunks_and_saves_combined_sound(monkeypatch) -> N
     )
     project = Project.model_validate({})
 
-    stream_range, saved_sound, err = ConversationStreamingTts.generate_to_sound_stream(
-        state=SimpleNamespace(project=project),
-        text="hello",
-        reason=Reason.SENTENCE,
-        sound_stream=FakeSoundStream(24000),
-        interrupt_requested=threading.Event(),
-        response_aborted=threading.Event(),
+    stream_range, saved_sound, error = (
+        ConversationStreamingTts.generate_to_sound_stream(
+            state=SimpleNamespace(project=project),
+            text="hello",
+            reason=Reason.SENTENCE,
+            sound_stream=FakeSoundStream(24000),
+            interrupt_requested=threading.Event(),
+        )
     )
 
-    assert err is None
-    assert stream_range is not None
-    assert stream_range[0] == 0
-    assert stream_range[1] >= 150  # speech plus any appended reason pause
-    assert saved_sound is not None
-    assert saved_sound.data.size >= 150
+    assert error is None
+    assert stream_range is not None and stream_range[0] == 0
+    assert stream_range[1] >= 150
+    assert saved_sound is not None and saved_sound.data.size >= 150
     assert spies.synthesis_calls == 1
 
 
@@ -325,17 +366,18 @@ def test_streaming_tts_propagates_generation_error(monkeypatch) -> None:
     )
     project = Project.model_validate({})
 
-    stream_range, saved_sound, err = ConversationStreamingTts.generate_to_sound_stream(
-        state=SimpleNamespace(project=project),
-        text="hello",
-        reason=Reason.SENTENCE,
-        sound_stream=FakeSoundStream(24000),
-        interrupt_requested=threading.Event(),
-        response_aborted=threading.Event(),
+    stream_range, saved_sound, error = (
+        ConversationStreamingTts.generate_to_sound_stream(
+            state=SimpleNamespace(project=project),
+            text="hello",
+            reason=Reason.SENTENCE,
+            sound_stream=FakeSoundStream(24000),
+            interrupt_requested=threading.Event(),
+        )
     )
 
     assert (stream_range, saved_sound) == (None, None)
-    assert err == "model exploded"
+    assert error == "model exploded"
     assert spies.synthesis_calls == 1
 
 
@@ -345,54 +387,16 @@ def test_streaming_tts_reports_when_no_audio_was_streamed(monkeypatch) -> None:
     )
     project = Project.model_validate({})
 
-    stream_range, saved_sound, err = ConversationStreamingTts.generate_to_sound_stream(
-        state=SimpleNamespace(project=project),
-        text="hello",
-        reason=Reason.SENTENCE,
-        sound_stream=FakeSoundStream(24000),
-        interrupt_requested=threading.Event(),
-        response_aborted=threading.Event(),
+    stream_range, saved_sound, error = (
+        ConversationStreamingTts.generate_to_sound_stream(
+            state=SimpleNamespace(project=project),
+            text="hello",
+            reason=Reason.SENTENCE,
+            sound_stream=FakeSoundStream(24000),
+            interrupt_requested=threading.Event(),
+        )
     )
 
     assert (stream_range, saved_sound) == (None, None)
-    assert err == "No streamed audio output"
+    assert error == "No streamed audio output"
     assert spies.synthesis_calls == 1
-
-
-@pytest.mark.skipif(os.name != "posix", reason="fd redirection is POSIX-only")
-def test_mute_current_thread_output_mutes_streams_and_restores_fd2() -> None:
-    import sys
-
-    inner = io.StringIO()
-    q: "queue.Queue" = queue.Queue()
-    real_stdout = QueuedStream(inner, q)
-    real_stderr = io.StringIO()
-    old_stdout, old_stderr = sys.stdout, sys.stderr
-    sys.stdout, sys.stderr = real_stdout, real_stderr
-    try:
-        fd_stat_before = os.fstat(2)  # whatever pytest points fd 2 at
-        lock = threading.Lock()
-        with MuteCurrentThreadOutput(real_stderr, lock):
-            print("hidden line")
-            assert q.empty()  # muted: nothing enqueued
-            # fd 2 is redirected: it must no longer be the original descriptor
-            assert (os.fstat(2).st_dev, os.fstat(2).st_ino) != (
-                fd_stat_before.st_dev, fd_stat_before.st_ino
-            )
-        assert not lock.locked()
-
-        # fd 2 is restored to the exact descriptor it had before
-        assert (os.fstat(2).st_dev, os.fstat(2).st_ino) == (
-            fd_stat_before.st_dev, fd_stat_before.st_ino
-        )
-
-        print("visible line")
-        ops = []
-        while True:
-            try:
-                ops.append(q.get_nowait())
-            except queue.Empty:
-                break
-        assert [op.text for op in ops] == ["visible line"]
-    finally:
-        sys.stdout, sys.stderr = old_stdout, old_stderr

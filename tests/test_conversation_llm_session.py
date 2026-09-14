@@ -68,6 +68,17 @@ def test_anthropic_requires_max_tokens() -> None:
         )
 
 
+def test_system_prompt_is_immutable_session_configuration() -> None:
+    llm = make_openai_llm(system_prompt="captured")
+
+    assert llm.system_prompt == "captured"
+    with pytest.raises(AttributeError):
+        llm.system_prompt = "changed"  # type: ignore[misc]
+    assert llm.build_openai_payload([])["messages"] == [
+        {"role": "system", "content": "captured"}
+    ]
+
+
 def test_build_openai_payload_includes_system_prompt_and_params() -> None:
     llm = make_openai_llm(system_prompt="sys", temperature=0.2, max_tokens=77,
                           extra_params={"reasoning_effort": "high"})
@@ -227,6 +238,43 @@ def test_send_interrupt_after_content_returns_partial_reply(monkeypatch) -> None
     ]
 
 
+def test_send_openai_streaming_empty_reply_rolls_back_user_message(
+    monkeypatch,
+) -> None:
+    llm = make_openai_llm()
+    # Reasoning-only stream: no content deltas, no interrupt.
+    lines = sse('{"choices": [{"delta": {"reasoning_content": "hmm"}}]}', done=True)
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *args, **kwargs: make_response(lines=lines),
+    )
+
+    reply = llm.send("Hi", on_chunk=lambda _chunk: None)
+
+    assert reply == ""
+    # No empty assistant message may be appended: it would be rejected by
+    # the Anthropic API on the next request.
+    assert llm.history == []
+
+
+def test_send_anthropic_thinking_only_reply_rolls_back_user_message(
+    monkeypatch,
+) -> None:
+    llm = make_anthropic_llm()
+    # Non-streaming response whose content blocks carry no text at all.
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *args, **kwargs: make_response(
+            {"content": [{"type": "thinking", "thinking": "let me think"}]}
+        ),
+    )
+
+    reply = llm.send("Hi")
+
+    assert reply == ""
+    assert llm.history == []
+
+
 def test_send_anthropic_non_stream_extracts_text_blocks(monkeypatch) -> None:
     llm = make_anthropic_llm()
     content = [
@@ -288,3 +336,98 @@ def test_clear_empties_history() -> None:
     llm.clear()
 
     assert llm.history == []
+
+
+def test_cancel_active_request_closes_blocked_stream_and_rolls_back_empty_turn(
+    monkeypatch,
+) -> None:
+    llm = make_openai_llm()
+    response = make_response()
+    iterating = threading.Event()
+    released = threading.Event()
+
+    def blocked_lines(*args, **kwargs):
+        iterating.set()
+        assert released.wait(timeout=2.0)
+        raise OSError("stream closed")
+        yield  # pragma: no cover
+
+    response.iter_lines.side_effect = blocked_lines
+    response.close.side_effect = released.set
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *args, **kwargs: response,
+    )
+    replies: list[str] = []
+    thread = threading.Thread(
+        target=lambda: replies.append(llm.send("Hi", on_chunk=lambda _: None))
+    )
+    thread.start()
+    assert iterating.wait(timeout=1.0)
+
+    llm.cancel_active_request()
+    thread.join(timeout=2.0)
+
+    assert not thread.is_alive()
+    assert replies == [""]
+    assert llm.history == []
+    assert response.close.call_count >= 1
+
+def test_send_openai_streaming_ignores_empty_choices_usage_chunk(
+    monkeypatch,
+) -> None:
+    llm = make_openai_llm()
+    lines = sse(
+        '{"choices": [{"delta": {"content": "Hi"}}]}',
+        '{"choices": [], "usage": {"total_tokens": 42}}',
+    )
+    chunks: list[str] = []
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    reply = llm.send("hello", on_chunk=chunks.append)
+
+    assert reply == "Hi"
+    assert chunks == ["Hi"]
+    assert llm.history[-1] == {"role": "assistant", "content": "Hi"}
+
+
+def test_send_openai_streaming_ignores_error_and_unparseable_lines(
+    monkeypatch,
+) -> None:
+    llm = make_openai_llm()
+    lines = [
+        "data: {not json at all",
+        'data: {"error": {"message": "transient upstream error"}}',
+        'data: {"choices": [{"delta": {"content": "OK"}}]}',
+    ]
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    reply = llm.send("hello", on_chunk=lambda _t: None)
+
+    assert reply == "OK"
+    assert llm.history[-1] == {"role": "assistant", "content": "OK"}
+
+
+def test_send_openai_streaming_tolerates_missing_delta_object(
+    monkeypatch,
+) -> None:
+    llm = make_openai_llm()
+    # Some providers send a final chunk with finish_reason and no delta.
+    lines = sse(
+        '{"choices": [{"delta": {"content": "Hey"}}]}',
+        '{"choices": [{"finish_reason": "stop"}]}',
+    )
+    monkeypatch.setattr(
+        "tts_audiobook_tool.conversation.llm_session.requests.post",
+        lambda *a, **k: make_response(lines=lines),
+    )
+
+    reply = llm.send("hello", on_chunk=lambda _t: None)
+
+    assert reply == "Hey"

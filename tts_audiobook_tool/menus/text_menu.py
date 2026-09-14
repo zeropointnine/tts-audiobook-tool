@@ -414,9 +414,6 @@ def on_select_import(state: State, item: MenuItem) -> bool:
             text_source_kind=text_source_kind,
         )
 
-    if not state.real_time.custom_phrase_groups:
-        state.real_time.project_text_line_range = None
-
     num_text_lines = len(phrase_groups)
     if epub_import_result:
         raw_text_path = os.path.join(state.project.dir_path, PROJECT_TEXT_RAW_FILE_NAME)

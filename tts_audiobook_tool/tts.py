@@ -107,6 +107,16 @@ class Tts:
             Tts._voice_auto_advance_counter = 0
 
     @staticmethod
+    def get_voice_value_count(project) -> int:
+        """Number of configured voice samples for the active TTS model type."""
+        info = Tts.get_info()
+        if not info.voice_target_attr:
+            return 0
+
+        from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
+        return len(ProjectVoiceUtil.get_voice_values(project, Tts.get_type()))
+
+    @staticmethod
     def get_voice_tag_for_selection_index(project, voice_selection_index: int) -> str:
         info = Tts.get_info()
         if not info.voice_target_attr:
@@ -428,10 +438,15 @@ class Tts:
         """
         instance = Tts.get_instance()
         if voice_selection_index is None:
-            # Rotate voices only in auto-advance mode; user-defined and
-            # disabled modes always use the first voice when the caller does
-            # not pass an explicit index (e.g. LLM chat synthesis).
-            if project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE:
+            # Rotate voices only in auto-advance mode with more than one
+            # voice sample configured; every other condition (including
+            # single-voice auto-advance, e.g. LLM chat synthesis) always
+            # uses the first voice when the caller does not pass an
+            # explicit index.
+            if (
+                project.voice_select_mode == VoiceSelectMode.AUTO_ADVANCE
+                and Tts.get_voice_value_count(project) > 1
+            ):
                 voice_selection_index = Tts.get_next_voice_selection_index()
             else:
                 voice_selection_index = 0

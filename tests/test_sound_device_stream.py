@@ -58,3 +58,31 @@ def test_played_plus_buffer_equals_total_added() -> None:
 
     stream.add_data(np.zeros(50, dtype=np.float32))
     assert stream.played_samples + len(stream.buffer) == 48050
+
+
+def test_clear_buffer_keeps_scheduled_tail_for_silence_detection() -> None:
+    stream = SoundDeviceStream(sample_rate=48000)
+    stream.add_data(np.zeros(8192, dtype=np.float32))
+
+    # One full callback consumes the chunk; it is audible until the DAC end
+    # time of this chunk (~10.171s at 48kHz).
+    _callback(stream, dac_time=10.0)
+
+    stream.clear_buffer()
+    assert len(stream.buffer) == 0
+
+    # The dropped chunk's frames are still scheduled at the device, so
+    # playback is not complete until the stream clock passes the tail.
+    stream.stream = cast(sd.OutputStream, SimpleNamespace(time=10.1))
+    assert stream.is_playback_complete is False
+    stream.stream = cast(sd.OutputStream, SimpleNamespace(time=10.2))
+    assert stream.is_playback_complete is True
+
+
+def test_clear_buffer_without_scheduled_audio_is_immediately_silent() -> None:
+    stream = SoundDeviceStream(sample_rate=48000)
+    stream.stream = cast(sd.OutputStream, SimpleNamespace(time=5.0))
+
+    stream.clear_buffer()
+
+    assert stream.is_playback_complete is True

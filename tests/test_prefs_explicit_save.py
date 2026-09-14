@@ -55,6 +55,35 @@ def test_compound_prefs_change_is_persisted_with_one_explicit_save(
     assert payload["system_prompt_preset"] == ""
 
 
+def test_chat_echo_override_defaults_false_and_round_trips(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(tmp_path / PREFS_FILE_NAME)))
+
+    assert Prefs().chat_echo_override is False
+
+    prefs = Prefs(chat_echo_override=True)
+    prefs.save()
+    payload = json.loads((tmp_path / PREFS_FILE_NAME).read_text(encoding="utf-8"))
+    assert payload["chat_echo_override"] is True
+    assert Prefs.load().chat_echo_override is True
+
+
+def test_chat_echo_override_invalid_value_is_normalized_to_false(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(json.dumps({"chat_echo_override": "yes"}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    assert prefs.chat_echo_override is False
+    assert json.loads(destination.read_text(encoding="utf-8"))["chat_echo_override"] is False
+
+
 def test_save_gen_log_defaults_false_and_round_trips(
     tmp_path: Path,
     monkeypatch,

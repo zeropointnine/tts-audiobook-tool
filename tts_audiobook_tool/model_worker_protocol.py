@@ -123,6 +123,16 @@ class InspectTtsCommand:
     project_dir: str
     settings: GenerationSettings
     model_params: dict[str, object]
+    # LLM chat only: run the shared generation-style warm-up
+    # (ModelManager.warm_up_models) instead of a bare TTS load, so chat emits
+    # the same init output and reconciles the model registry the same way.
+    # Ordinary inspections (voice/project menus) leave this False and load TTS
+    # exactly as before, without touching STT or YAMNet.
+    warm_models: bool = False
+    # Meaningful only with warm_models: also warm up STT when the chat input
+    # mode is the microphone, so the STT model's init output happens at init
+    # time (relayed to the chat UI) instead of on the first transcription.
+    warm_stt: bool = False
 
 
 @dataclass(frozen=True)

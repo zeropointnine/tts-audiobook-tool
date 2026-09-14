@@ -221,6 +221,16 @@ class TtsBaseModel(ABC):
         """
         pass
 
+    def release_inference_memory(self) -> None:
+        """Release model-specific transient inference memory when idle.
+
+        Called after a chat synthesis command has fully returned. Persistent
+        model weights and reusable model state must remain loaded. Models whose
+        accelerator allocator can retain large temporary blocks may override
+        this hook; the default deliberately does nothing.
+        """
+        pass
+
     @classmethod
     def massage_for_inference(cls, text: str) -> str:
         """

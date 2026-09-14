@@ -1,5 +1,4 @@
 from tts_audiobook_tool import ask, text_util
-from tts_audiobook_tool import ask_phrase_groups
 from tts_audiobook_tool.app_support import app_hint_util
 from tts_audiobook_tool.menus.menu_util import MenuItem, MenuUtil
 from tts_audiobook_tool.text_ops.range_string_util import RangeStringUtil
@@ -23,14 +22,6 @@ class RealTimePlaybackMenu:
             else:
                 return label
 
-        def make_text_label(_) -> str:
-            if state.real_time.custom_phrase_groups:
-                num = len(state.real_time.custom_phrase_groups)
-                value = f"custom text, {num} {make_noun('line', 'lines', num)}"
-            else:
-                value = "project text"
-            return make_menu_label("Text source", value)
-
         def make_range_label(_) -> str:
             line_range = get_active_line_range(state)
             if line_range:
@@ -42,7 +33,6 @@ class RealTimePlaybackMenu:
         # Menu
         items = [
             MenuItem(make_start_label, lambda _, __: do_start(state)),
-            MenuItem(make_text_label, lambda _, __: RealTimePlaybackMenu.text_menu(state)),
             MenuItem(
                 make_range_label, lambda _, __: RealTimePlaybackMenu.ask_line_range(state),
                 superlabel="Options"
@@ -63,10 +53,7 @@ class RealTimePlaybackMenu:
     @staticmethod
     def ask_line_range(state: State) -> None:
 
-        if state.real_time.custom_phrase_groups:
-            phrase_groups = state.real_time.custom_phrase_groups
-        else:
-            phrase_groups = state.project.phrase_groups
+        phrase_groups = state.project.phrase_groups
         length = len(phrase_groups)
 
         s = f"Enter line range {COL_DIM}(eg, \"5-15\"; \"50\" for 50 to end; or \"all\")"
@@ -84,13 +71,9 @@ class RealTimePlaybackMenu:
         if result == (0, 0):
             result = None
 
-        if state.real_time.custom_phrase_groups:
-            state.real_time.custom_text_line_range = result
-        else:
-            state.real_time.project_text_line_range = result
-            if result != state.project.realtime_line_range:
-                state.project.realtime_line_range = result
-                state.project.save()
+        if result != state.project.realtime_line_range:
+            state.project.realtime_line_range = result
+            state.project.save()
 
         # Print feedback
         is_all = result is None or (result[0] == 1 and result[1] == len(phrase_groups))
@@ -102,51 +85,6 @@ class RealTimePlaybackMenu:
             if result[1] == len(phrase_groups):
                 value += " (end)"
         print_feedback("Line range set:", value)
-
-    @staticmethod
-    def text_menu(state: State) -> None: # type: ignore
-
-        # 1
-        def on_project(_: State, __: MenuItem) -> bool:
-            if state.real_time.custom_phrase_groups or state.real_time.custom_text_line_range or state.real_time.project_text_line_range:
-                state.real_time.custom_phrase_groups = []
-                state.real_time.custom_text_line_range = None
-                state.real_time.project_text_line_range = None
-                if state.project.realtime_line_range is not None:
-                    state.project.realtime_line_range = None
-                    state.project.save()
-            print_feedback("Text source set to", "project")
-            return True
-
-        project_item = MenuItem("Use project text", on_project)
-
-        # 2, 3
-        def on_custom(_: State, item: MenuItem) -> bool:
-            printt("Note, custom text source does not persist.")
-            if item.data == "file":
-                phrase_groups, __, ___ = ask_phrase_groups.get_from_text_file(
-                    state.project.max_words,
-                    state.project.segmentation_strategy,
-                    pysbd_language=state.project.language_code,
-                    prefs=state.prefs,
-                    dialog_segmentation=state.project.dialog_segmentation
-                )
-            else:
-                phrase_groups, __ = ask_phrase_groups.get_from_std_in(
-                    state.project.max_words, state.project.segmentation_strategy, pysbd_language=state.project.language_code,
-                    dialog_segmentation=state.project.dialog_segmentation)
-            if phrase_groups:
-                state.real_time.custom_phrase_groups = phrase_groups
-                state.real_time.custom_text_line_range = None
-                print_feedback("Text source set to: custom", f"{len(phrase_groups)} {make_noun('line', 'lines', len(phrase_groups))}")
-            return bool(phrase_groups)
-
-        custom_file_item = MenuItem("Custom text - from text file", on_custom, data="file")
-        custom_manual_item = MenuItem("Custom text - manual input", on_custom, data="manual")
-
-        # Menu
-        items = [project_item, custom_file_item, custom_manual_item]
-        MenuUtil.menu(state, "Text source", items, breadcrumb="Text source")
 
     @staticmethod
     def save_menu(state: State) -> None:
@@ -180,26 +118,15 @@ class RealTimePlaybackMenu:
 # ---
 
 def get_active_line_range(state: State) -> tuple[int, int] | None:
-    if state.real_time.custom_phrase_groups:
-        line_range = state.real_time.custom_text_line_range
-    else:
-        line_range = state.real_time.project_text_line_range
-
+    line_range = state.project.realtime_line_range
     if line_range == (0, 0):
         return None
     return line_range
 
 def do_start(state: State) -> None:
 
-    if state.real_time.custom_phrase_groups:
-        text_groups = state.real_time.custom_phrase_groups
-        line_range = state.real_time.custom_text_line_range
-    else:
-        text_groups = state.project.phrase_groups
-        line_range = state.real_time.project_text_line_range
-
-    if line_range == (0, 0):
-        line_range = None
+    text_groups = state.project.phrase_groups
+    line_range = get_active_line_range(state)
 
     if not text_groups:
         print_feedback("No text segments specified")
@@ -232,5 +159,5 @@ REAL_TIME_SUBHEADING = (
     'Uses the same quality checks as the normal audiobook creation workflow,\n'
     'except for loudness normalization and generative upsampling.\n\n'
     'Uninterrupted playback requires inference to be faster-than-realtime.\n'
-    'Validation/retry logic activates when buffered audio exceeds 60 seconds.\n'
+    'Validation/retry activates when there is 60 seconds of buffered audio.\n'
 )

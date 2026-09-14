@@ -125,7 +125,7 @@ def _start_impl(
         return RealTimePlaybackRunResult(status, warm_up_result.error or "")
 
     # Do model readiness check now that model instance exists
-    err = readiness.get_generate_blocker_text(state, verbose=True, is_realtime_playback=True)
+    err = readiness.get_generate_blocker_text(state, verbose=True)
     if err:
         ask.ask_error(err)
         return RealTimePlaybackRunResult(RealTimePlaybackRunStatus.FAILED, err)
@@ -219,12 +219,18 @@ def _start_impl(
             # Ctrl-C handling for the outer realtime loop and buffer-throttle sleep.
             Interrupts().set("generating")
         if did_interrupt:
-            # Interrupt during generation takes priority even if this segment
-            # still produced a sound; break before the throttle sleep so the
-            # flag cannot be clobbered (generate_full_flow() already cleared
-            # the Interrupts state).
-            Tts.clear_continuation()
-            break
+            # The run must stop before the throttle sleep so the flag cannot
+            # be clobbered (generate_full_flow() already cleared the
+            # Interrupts state). If this segment still produced a sound, the
+            # generation had completed before the interrupt was observed, so
+            # its audio is complete: fall through and submit it to the stream
+            # like any other segment, then stop at the interrupt check after
+            # the submit; the run ends, but the audio plays out of the buffer
+            # while the session waits for Enter. With no sound there is
+            # nothing to submit, so break now.
+            if sound_opt is None:
+                Tts.clear_continuation()
+                break
         if not sound_opt:
             printt(f"{COL_ERROR}Couldn't generate sound{COL_DIM}, continuing to next segment")
             printt()
@@ -244,8 +250,11 @@ def _start_impl(
             trimmed_ms = (original_duration - sound.duration) * 1000
             L.d(f"Trimmed: Duration {original_duration:.3f}s -> {sound.duration:.3f}s (trimmed {trimmed_ms:.0f}ms)")
 
-        # Add appended sound
-        if index == end_index:
+        # Add appended sound. The trailing break effect or silence pause only
+        # separates this segment from the next one, so a run that stops after
+        # this segment (end of range, or a pending interrupt) submits neither;
+        # skipping the call also leaves the tracker unadvanced, as before.
+        if index == end_index or did_interrupt:
             appended_sound = None
         else:
             break_effect = break_effect_tracker.next_break_effect(
@@ -308,8 +317,9 @@ def _start_impl(
                 )
             )
 
-        # Pick up an interrupt pressed during sound prep or the buffer print
-        # so we stop before throttling playback further.
+        # Pick up an interrupt pressed during sound prep or the buffer print,
+        # or honor one already pending from generation above: stop before
+        # throttling playback further.
         did_interrupt = did_interrupt or Interrupts().did_interrupt
         if did_interrupt:
             Tts.clear_continuation()

@@ -50,6 +50,67 @@ def test_warm_up_clears_disabled_stt_without_skipping_tts_reconciliation() -> No
     get_tts.assert_called_once_with()
 
 
+def test_warm_up_banner_announces_silent_tts_load_for_text_chat() -> None:
+    """Text-input chat wants no STT, but a cold TTS load is still announced.
+
+    TTS loading emits no model init line of its own, so without the banner a
+    cold text chat would sit silent while the model loads.
+    """
+    state = SimpleNamespace(project=SimpleNamespace())
+    with patch.object(Stt, "should_skip", return_value=False), patch.object(
+        Tts, "instance_exists", return_value=False
+    ), patch.object(Stt, "has_instance", return_value=False), patch.object(
+        Tts, "get_instance", return_value=object()
+    ), patch.object(Stt, "clear_stt_model") as clear_stt, patch.object(
+        Stt, "eager_warm_up_for_inference"
+    ) as warm_stt, patch.object(ModelManager, "clear_yamnet_detector"), patch(
+        "tts_audiobook_tool.model_manager.print_init"
+    ) as print_init:
+        result = ModelManager.warm_up_models(state, skip_yamnet=True, want_stt=False)
+
+    assert not result.should_stop
+    clear_stt.assert_called_once_with()
+    warm_stt.assert_not_called()
+    print_init.assert_called_once_with("Warming up models...")
+
+
+def test_warm_up_want_stt_override_is_suppressed_by_should_skip() -> None:
+    """An explicit STT request still yields to a configuration skip reason."""
+    state = SimpleNamespace(project=SimpleNamespace())
+    with patch.object(Stt, "should_skip", return_value="Whisper disabled"), patch.object(
+        Tts, "instance_exists", return_value=False
+    ), patch.object(Stt, "has_instance", return_value=False), patch.object(
+        Tts, "get_instance", return_value=object()
+    ), patch.object(Stt, "clear_stt_model") as clear_stt, patch.object(
+        Stt, "eager_warm_up_for_inference"
+    ) as warm_stt, patch.object(ModelManager, "clear_yamnet_detector"), patch(
+        "tts_audiobook_tool.model_manager.print_init"
+    ) as print_init:
+        result = ModelManager.warm_up_models(state, skip_yamnet=True, want_stt=True)
+
+    assert not result.should_stop
+    clear_stt.assert_called_once_with()
+    warm_stt.assert_not_called()
+    print_init.assert_called_once_with("Warming up models...")
+
+
+def test_warm_up_is_silent_when_models_are_resident() -> None:
+    """Already-warm models produce no init output."""
+    state = SimpleNamespace(project=SimpleNamespace())
+    with patch.object(Stt, "should_skip", return_value=False), patch.object(
+        Tts, "instance_exists", return_value=True
+    ), patch.object(Stt, "has_instance", return_value=True), patch.object(
+        Tts, "get_instance", return_value=object()
+    ), patch.object(Stt, "eager_warm_up_for_inference") as warm_stt, patch.object(
+        ModelManager, "clear_yamnet_detector"
+    ), patch("tts_audiobook_tool.model_manager.print_init") as print_init:
+        result = ModelManager.warm_up_models(state, skip_yamnet=True)
+
+    assert not result.should_stop
+    warm_stt.assert_not_called()
+    print_init.assert_not_called()
+
+
 def test_clear_all_models_is_best_effort() -> None:
     calls: list[str] = []
 
