@@ -215,6 +215,24 @@ def test_build_text_prompt_eof_raises_keyboard_interrupt(monkeypatch) -> None:
         conv.build_text_prompt()
 
 
+def test_run_main_loop_skips_empty_text_input(monkeypatch) -> None:
+    conv = make_conversation("text")
+    prompts = iter(["", "real prompt"])
+    monkeypatch.setattr(conv, "build_prompt", lambda: next(prompts))
+    turns: list[str] = []
+
+    def fake_turn(assembled: str) -> None:
+        turns.append(assembled)
+        raise StopIteration
+
+    monkeypatch.setattr(conv, "run_response_turn", fake_turn)
+
+    with pytest.raises(StopIteration):
+        conv.run_main_loop()
+
+    assert turns == ["real prompt"]
+
+
 class FakeSoundStream:
     def __init__(self, sample_rate: int) -> None:
         self.sample_rate = sample_rate

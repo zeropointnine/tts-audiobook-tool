@@ -225,6 +225,9 @@ class Conversation:
     def run_main_loop(self) -> None:
         while True:
             assembled = self.build_prompt()
+            if self.is_text_input and not assembled:
+                # Bare Enter must not spend an LLM response turn on "".
+                continue
             self.run_response_turn(assembled)
 
     def build_prompt(self) -> str:
