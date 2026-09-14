@@ -30,6 +30,7 @@ class State:
         # menu has been drawn once.
         self.dont_show_scan_message = True
         self.has_shown_main_menu = False
+        self.pending_model_mismatch_name = ""
 
         self.prefs = Prefs.load()
 
@@ -63,6 +64,7 @@ class State:
         state._project = None  # type: ignore[assignment]
         state.dont_show_scan_message = False
         state.has_shown_main_menu = False
+        state.pending_model_mismatch_name = ""
         state.real_time = RealTimeMenuState()
         state.prefs = prefs
         return state
@@ -85,6 +87,38 @@ class State:
         Tts.set_model_params_using_project(self.project)
         Whitelist().set_language_code(self.project.language_code)
         self.real_time.project_text_line_range = self.project.realtime_line_range
+
+        # Detect a mismatch between the project's previous model and the
+        # current runtime model; the main menu displays the FYI hint once.
+        from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+        name = ""
+        previous_model_type = value.current_model_type
+        if (
+            previous_model_type != TtsModelType.NONE
+            and previous_model_type != Tts.get_type()
+            and Tts.get_type() != TtsModelType.NONE
+        ):
+            name = previous_model_type.value.ui.get("proper_name", "")
+        self.pending_model_mismatch_name = name
+
+    def take_model_mismatch_name(self) -> str:
+        """
+        Returns the pending model-mismatch hint name, or "" if none, and
+        treats displaying the hint as acknowledgement so it is not repeated
+        every time the unchanged project is opened outside its previous
+        model's venv.
+        """
+        from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
+
+        name = self.pending_model_mismatch_name
+        self.pending_model_mismatch_name = ""
+        if name:
+            self.project.current_model_type = TtsModelType.NONE
+            err = self.project.save(stamp_runtime_model=False)
+            if err:
+                ask.ask_error(err)
+        return name
 
     def mark_main_menu_shown(self) -> None:
         if self.has_shown_main_menu:

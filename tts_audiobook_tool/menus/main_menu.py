@@ -8,6 +8,7 @@ from tts_audiobook_tool.menus.generate_menu import GenerateMenu
 from tts_audiobook_tool.menus.project_menu import ProjectMenu
 from tts_audiobook_tool.menus.tools_menu import ToolsMenu
 from tts_audiobook_tool.app_support import app_hint_util, hints
+from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.app_support.sgl_omni_util import SglOmniUtil
 from tts_audiobook_tool.constants_hints import (
     HINT_CHATTERBOX_MULTILINGUAL_V3,
@@ -94,26 +95,26 @@ class MainMenu:
             # These hints may only appear the first time the main menu is shown
             is_first_show = not state.has_shown_main_menu
             state.mark_main_menu_shown()
-            if not is_first_show:
-                return
+            if is_first_show:
+                # One-time informational startup hints (tkinter, long paths, etc)
+                app_hint_util.show_shared_startup_hints(state.prefs, is_server=False)
 
-            # One-time informational startup hints (tkinter, long paths, etc)
-            app_hint_util.show_shared_startup_hints(state.prefs, is_server=False)
+                if (
+                    Tts.get_type() == TtsModelType.CHATTERBOX
+                    and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL_V2
+                ):
+                    hints.show_hint_if_necessary(
+                        state.prefs, HINT_CHATTERBOX_MULTILINGUAL_V3
+                    )
 
-            if (
-                Tts.get_type() == TtsModelType.CHATTERBOX
-                and state.project.chatterbox_type == ChatterboxType.MULTILINGUAL_V2
-            ):
-                hints.show_hint_if_necessary(
-                    state.prefs, HINT_CHATTERBOX_MULTILINGUAL_V3
-                )
+                if (
+                    Tts.is_sgl_mode()
+                    and not state.prefs.sgl_omni_url
+                    and not SglOmniUtil.get_model_id()
+                ):
+                    hints.show_hint_if_necessary(state.prefs, HINT_SGL_OMNI_URL)
 
-            if (
-                Tts.is_sgl_mode()
-                and not state.prefs.sgl_omni_url
-                and not SglOmniUtil.get_model_id()
-            ):
-                hints.show_hint_if_necessary(state.prefs, HINT_SGL_OMNI_URL)
+            show_model_mismatch_hint(state)
 
         heading = text_util.make_terminal_hyperlink(APP_URL, APP_NAME)
         MenuUtil.menu(
@@ -203,6 +204,22 @@ def on_chat(state: State, _: MenuItem) -> None:
 def on_quit(_: State, __: MenuItem):
     print_feedback("State saved.", extra_line=False, skip_pause=True)
     exit(0)
+
+def show_model_mismatch_hint(state: State) -> None:
+    mismatch_name = state.take_model_mismatch_name()
+    if not mismatch_name:
+        return
+    hints.show_hint(
+        Hint(
+            key="",
+            heading="FYI",
+            text=(
+                f"This project was last used with the {mismatch_name} model,\n"
+                "which differs from the model currently in use."
+            )
+        ),
+        and_prompt=False
+    )
 
 REQUIRES_PROJECT = "Requires a project"
 REQUIRES_TTS_MODEL = "Requires TTS model"

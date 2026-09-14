@@ -419,6 +419,7 @@ def test_state_for_worker_mirrors_init_attribute_set() -> None:
         "_prefs",
         "dont_show_scan_message",
         "has_shown_main_menu",
+        "pending_model_mismatch_name",
     }
     assert state.project is None
     assert state.dont_show_scan_message is False

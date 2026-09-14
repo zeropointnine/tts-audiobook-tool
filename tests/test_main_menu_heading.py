@@ -20,6 +20,7 @@ def make_state() -> State:
     state._prefs = Prefs()
     state._project = Project(dir_path="")
     state.has_shown_main_menu = False
+    state.pending_model_mismatch_name = ""
     return state
 
 

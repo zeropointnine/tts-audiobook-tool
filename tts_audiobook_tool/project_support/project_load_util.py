@@ -5,15 +5,13 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from tts_audiobook_tool.app_support import hints
-from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, Hint, SegmentationStrategy
+from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, SegmentationStrategy
 from tts_audiobook_tool.app_types.book_serialization import BOOK_FORMAT, book_from_project_text_json_dict, get_project_text_format
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
 from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
-from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import printt
 
 if TYPE_CHECKING:
@@ -84,31 +82,6 @@ class ProjectLoadUtil:
         except Exception as e:
             return f"Failed to parse project: {e}"
 
-        from tts_audiobook_tool.tts import Tts
-
-        previous_model_type = project.current_model_type
-        proper_name = previous_model_type.value.ui.get("proper_name")
-        warned_model_mismatch = False
-        if (
-            prompt_on_warnings
-            and previous_model_type != TtsModelType.NONE
-            and previous_model_type != Tts.get_type()
-            and Tts.get_type != TtsModelType.NONE
-            and proper_name
-        ):
-            hints.show_hint(
-                Hint(
-                    key="",
-                    heading="FYI",
-                    text=(
-                        f"This project was last used with the {proper_name} model,\n"
-                        "which differs from the model currently in use."
-                    )
-                ),
-                and_prompt=True
-            )
-            warned_model_mismatch = True
-
         if inline_text_source:
             err = ProjectTextIOUtil.save_book(project)
             if not err:
@@ -145,14 +118,6 @@ class ProjectLoadUtil:
                 printt(warning)
             if prompt_on_warnings:
                 ask.ask_enter_to_continue()
-
-        if warned_model_mismatch:
-            # Treat displaying the mismatch warning as acknowledgement so it is not repeated
-            # every time the unchanged project is opened outside its previous model's venv.
-            project.current_model_type = TtsModelType.NONE
-            err = project.save(stamp_runtime_model=False)
-            if err:
-                return err
 
         return project
 
