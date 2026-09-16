@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import TYPE_CHECKING, Any
 
 from tts_audiobook_tool.app_types import (
@@ -19,6 +20,7 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.reason_pauses import ReasonPauseTypes
+from tts_audiobook_tool.tts_models.auk_server_base_model import AuKServerBaseModel
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxType
 from tts_audiobook_tool.tts_models.dots_base_model import (
     DotsBaseModel,
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
 
 class ProjectSerializationUtil:
     VOICE_LIST_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+        "auk_voice_file_name": (),
+        "auk_voice_transcript": (),
         "chatterbox_voice_file_name": (),
         "dots_voice_file_name": (),
         "dots_voice_transcript": (),
@@ -119,7 +123,11 @@ class ProjectSerializationUtil:
         ) -> int:
             raw_value = d.get(key, default)
             valid_types = (int, float) if allow_float else (int,)
-            if not isinstance(raw_value, valid_types):
+            if (
+                isinstance(raw_value, bool)
+                or not isinstance(raw_value, valid_types)
+                or (isinstance(raw_value, float) and not math.isfinite(raw_value))
+            ):
                 value = default
                 is_valid = False
             else:
@@ -452,6 +460,22 @@ class ProjectSerializationUtil:
             seed = -1
         d['fish_s1_seed'] = seed
 
+        normalize_int('auk_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_CONCURRENT_REQUESTS_MAX, warn=True)
+
+        value = d.get('auk_speed', AuKServerBaseModel.SPEED_DEFAULT)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not AuKServerBaseModel.SPEED_MIN
+            <= value
+            <= AuKServerBaseModel.SPEED_MAX
+        ):
+            value = AuKServerBaseModel.SPEED_DEFAULT
+            add_warning('auk_speed', value)
+        d['auk_speed'] = float(value)
+
+        normalize_int('auk_seed', -1, min_value=-1, max_value=SEED_MAX, warn=True)
+
         normalize_bool('fish_s2_compile_enabled', True)
         normalize_int('fish_s2_rolling_cont', 0, min_value=0, max_value=3, warn=True)
         normalize_int('fish_s2_server_concurrent_requests', 1, min_value=1, max_value=PROJECT_BATCH_SIZE_MAX, warn=True)
@@ -731,6 +755,12 @@ class ProjectSerializationUtil:
             "voice_select_mode": project.voice_select_mode.id,
 
             "none_voice_file_name": project.none_voice_file_name,
+
+            "auk_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.auk_voice_file_name),
+            "auk_voice_transcript": ProjectSerializationUtil.serialize_voice_list_value(project.auk_voice_transcript),
+            "auk_server_concurrent_requests": project.auk_server_concurrent_requests,
+            "auk_speed": project.auk_speed,
+            "auk_seed": project.auk_seed,
 
             "chatterbox_type": project.chatterbox_type.id,
             "chatterbox_voice_file_name": ProjectSerializationUtil.serialize_voice_list_value(project.chatterbox_voice_file_name),

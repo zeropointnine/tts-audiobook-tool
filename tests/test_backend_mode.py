@@ -227,7 +227,7 @@ def test_catalog_helpers_classify_by_backend_kind():
     sgl_items = TtsModelType.get_sgl_omni_items()
 
     assert len(local_items) == 13
-    assert len(sgl_items) == 6
+    assert len(sgl_items) == 8
     assert set(local_items) | set(sgl_items) == set(TtsModelType) - {TtsModelType.NONE}
     assert all(item.value.backend_kind == TtsBackendKind.LOCAL for item in local_items)
     assert all(item.value.backend_kind == TtsBackendKind.SGL_OMNI for item in sgl_items)

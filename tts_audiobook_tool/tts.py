@@ -10,6 +10,8 @@ from typing import Callable
 from tts_audiobook_tool.app_types import DeviceType, StreamChunkCallback, StreamEndCallback, VoiceSelectMode
 from tts_audiobook_tool.app_types.phrase import Reason
 
+from tts_audiobook_tool.tts_models.auk_server_base_model import AuKServerBaseModel
+from tts_audiobook_tool.tts_models.auk_server_model import AuKBaseServerModel, AuKFlashServerModel
 from tts_audiobook_tool.tts_models.chatterbox_base_model import ChatterboxBaseModel, ChatterboxType
 from tts_audiobook_tool.tts_models.dots_base_model import DotsBaseModel
 from tts_audiobook_tool.tts_models.fish_s1_base_model import FishS1BaseModel
@@ -58,6 +60,8 @@ class Tts:
 
     _type: TtsModelType
 
+    _auk_server: AuKServerBaseModel | None = None
+    _auk_flash_server: AuKServerBaseModel | None = None
     _chatterbox: ChatterboxBaseModel | None = None
     _dots: DotsBaseModel | None = None
     _fish_s1: FishS1BaseModel | None = None
@@ -377,6 +381,8 @@ class Tts:
     def instance_exists() -> bool:
         require_model_owner("TTS")
         items = [
+            Tts._auk_server,
+            Tts._auk_flash_server,
             Tts._chatterbox,
             Tts._dots,
             Tts._fish_s1,
@@ -512,6 +518,22 @@ class Tts:
         if entry is None or not entry[2]:
             return None
         return getattr(Tts, entry[2])
+
+    @staticmethod
+    def get_auk_server() -> AuKServerBaseModel:
+        require_model_owner("TTS")
+        if not Tts._auk_server:
+            Tts._auk_server = AuKBaseServerModel()
+            printt()
+        return Tts._auk_server
+
+    @staticmethod
+    def get_auk_flash_server() -> AuKServerBaseModel:
+        require_model_owner("TTS")
+        if not Tts._auk_flash_server:
+            Tts._auk_flash_server = AuKFlashServerModel()
+            printt()
+        return Tts._auk_flash_server
 
     @staticmethod
     def get_chatterbox() -> ChatterboxBaseModel:
@@ -868,6 +890,8 @@ class InstanceDisplayInfo:
 #    name of the Tts class attribute holding the live instance)
 # Built after the class body so the factory static methods are available.
 Tts._MODEL_REGISTRY = {
+    TtsModelType.AUK_SERVER: (AuKBaseServerModel, Tts.get_auk_server, "_auk_server"),
+    TtsModelType.AUK_FLASH_SERVER: (AuKFlashServerModel, Tts.get_auk_flash_server, "_auk_flash_server"),
     TtsModelType.CHATTERBOX: (ChatterboxBaseModel, Tts.get_chatterbox, "_chatterbox"),
     TtsModelType.DOTS: (DotsBaseModel, Tts.get_dots, "_dots"),
     TtsModelType.FISH_S1: (FishS1BaseModel, Tts.get_fish_s1, "_fish_s1"),

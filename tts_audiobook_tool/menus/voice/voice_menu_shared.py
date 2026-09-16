@@ -35,6 +35,12 @@ class VoiceMenuShared:
         Simply delegates to the correct model-specific voice menu
         """
         match Tts.get_type():
+            case TtsModelType.AUK_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceAuKServerMenu
+                VoiceAuKServerMenu.menu(state, TtsModelType.AUK_SERVER)
+            case TtsModelType.AUK_FLASH_SERVER:
+                from tts_audiobook_tool.menus.voice import VoiceAuKServerMenu
+                VoiceAuKServerMenu.menu(state, TtsModelType.AUK_FLASH_SERVER)
             case TtsModelType.CHATTERBOX:
                 from tts_audiobook_tool.menus.voice import VoiceChatterboxMenu
                 VoiceChatterboxMenu.menu(state)

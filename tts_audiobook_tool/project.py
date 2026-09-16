@@ -141,6 +141,12 @@ class Project(BaseModel):
     # Placeholder attribute used when no TTS model exists
     none_voice_file_name: str = "" 
 
+    auk_voice_file_name: list[str] = Field(default_factory=list)
+    auk_voice_transcript: list[str] = Field(default_factory=list)
+    auk_server_concurrent_requests: int = 1
+    auk_speed: float = 1.0
+    auk_seed: int = -1
+
     chatterbox_type: ChatterboxType = list(ChatterboxType)[0]
     chatterbox_voice_file_name: list[str] = Field(default_factory=list)
     chatterbox_temperature: float = -1

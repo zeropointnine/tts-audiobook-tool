@@ -362,6 +362,7 @@ def print_about_model(state: State) -> None:
 
     for link in ui.get("project_links", []):
         printt(text_util.make_terminal_hyperlink(link))
+    printt()
     printt(f"{COL_DIM}Use of this model is governed by the model's own license.")
     printt()
     ask.ask_enter_to_continue()

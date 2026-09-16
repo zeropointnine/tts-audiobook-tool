@@ -113,6 +113,71 @@ class TtsModelType(Enum):
         substitutions=[]
     )
 
+    AUK_SERVER = TtsModelSpec(
+        id="server_auk",
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        # Generic AuK match. The longer AuK-Flash substring below wins when both match.
+        sgl_omni_model_id_substring="auk",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="auk",
+        default_output_sample_rate=24_000,
+        voice_target_attr="auk_voice_file_name",
+        requires_voice=True,
+        voice_transcript_attr="auk_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="auk_server_concurrent_requests",
+        can_stream=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui={
+            "proper_name": "AuK",
+            "short_name": "AuK",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": [
+                "https://github.com/Tencent-Hunyuan/AuK",
+                "https://huggingface.co/tencent/AuK",
+                "https://sgl-project.github.io/sglang-omni/cookbook/auk.html",
+            ],
+        },
+        output_filters=[],
+        substitutions=[],
+    )
+
+    AUK_FLASH_SERVER = TtsModelSpec(
+        id="server_auk_flash",
+        backend_kind=TtsBackendKind.SGL_OMNI,
+        sgl_omni_model_id_substring="auk-flash",
+        local_module_test="",
+        local_torch_devices=[],
+        file_tag="auk",
+        default_output_sample_rate=24_000,
+        voice_target_attr="auk_voice_file_name",
+        requires_voice=True,
+        voice_transcript_attr="auk_voice_transcript",
+        extra_file_attrs=[],
+        batch_size_attr="auk_server_concurrent_requests",
+        can_stream=False,
+        requires_ffmpeg_libs=False,
+        un_all_caps=False,
+        requirements_file_name="requirements-sgl-omni.txt",
+        ui={
+            "proper_name": "AuK-Flash",
+            "short_name": "AuK-Flash",
+            "voice_path_console": "Enter voice clone audio clip file path: ",
+            "voice_path_requestor": "Select voice clone audio clip",
+            "project_links": [
+                "https://github.com/Tencent-Hunyuan/AuK",
+                "https://huggingface.co/tencent/AuK-Flash",
+                "https://sgl-project.github.io/sglang-omni/cookbook/auk.html",
+            ],
+        },
+        output_filters=[],
+        substitutions=[],
+    )
+
     CHATTERBOX = TtsModelSpec(
         id="chatterbox",
         backend_kind=TtsBackendKind.LOCAL,
