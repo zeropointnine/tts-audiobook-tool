@@ -134,8 +134,8 @@ class TtsModelType(Enum):
         ui={
             "proper_name": "AuK",
             "short_name": "AuK",
-            "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip",
+            "voice_path_console": "Enter voice clone audio clip file path (~5s recommended): ",
+            "voice_path_requestor": "Select voice clone audio clip (~5s recommended)",
             "project_links": [
                 "https://github.com/Tencent-Hunyuan/AuK",
                 "https://huggingface.co/tencent/AuK",
@@ -166,8 +166,8 @@ class TtsModelType(Enum):
         ui={
             "proper_name": "AuK-Flash",
             "short_name": "AuK-Flash",
-            "voice_path_console": "Enter voice clone audio clip file path: ",
-            "voice_path_requestor": "Select voice clone audio clip",
+            "voice_path_console": "Enter voice clone audio clip file path (~5s recommended): ",
+            "voice_path_requestor": "Select voice clone audio clip (~5s recommended)",
             "project_links": [
                 "https://github.com/Tencent-Hunyuan/AuK",
                 "https://huggingface.co/tencent/AuK-Flash",

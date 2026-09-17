@@ -43,7 +43,10 @@ from tts_audiobook_tool.textual.real_time_playback_app import (
 from tts_audiobook_tool.textual.real_time_playback_header import (
     RealTimePlaybackSourceText,
 )
-from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
+from tts_audiobook_tool.textual.worker_content import (
+    WorkerLogContentArea,
+    _SeparatorLine,
+)
 from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsBackendKind
 from tts_audiobook_tool.worker_reset import HardResetCause
@@ -83,6 +86,85 @@ def test_app_source_band_is_framed_below_the_shared_divider(monkeypatch) -> None
             assert len(app.query(Rule)) == 2
             # 2-line text area plus the 1-line closing rule.
             assert band.size == Size(80, 3)
+
+    run(exercise())
+
+
+def test_realtime_progress_promotes_batch_divider_to_full_width_rule(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda: []))
+
+    async def exercise() -> None:
+        app = RealTimePlaybackApp(make_state(), [], None)
+        async with app.run_test(size=(70, 16)) as pilot:
+            await pilot.pause()
+            # Prior output so the first segment heading is not the first
+            # content in the log; the divider is then promoted.
+            app._feed_console(["decoding audio"], "")
+            app._handle_update(RealTimePlaybackProgress(0, 1, 0))
+            # Realtime emits a deliberate blank line before its heading.
+            app._feed_console(["", "-------", "Processing line 1"], "")
+            await pilot.pause()
+
+            log = app.query_one(WorkerLogContentArea).worker_log
+            width = log.scrollable_content_region.width
+            assert log._lines[0].text.plain == "decoding audio"
+            assert log._lines[1].text.plain == ""
+            assert log._lines[2].text.plain == "-------"
+            assert log._lines[2].row_text(width, 0).plain == ("- " * ((width + 1) // 2))[:width]
+            assert log._lines[3].text.plain == "Processing line 1"
+
+    run(exercise())
+
+
+def test_realtime_awaiting_continue_places_closing_divider_before_prompt(
+    monkeypatch,
+) -> None:
+    """The end of the batch loop inserts the closing rule ahead of the
+    trailing continue prompt, and the terminal summary does not add another."""
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda: []))
+
+    async def exercise() -> None:
+        app = RealTimePlaybackApp(make_state(), [], None)
+        async with app.run_test(size=(70, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+
+            app._handle_update(RealTimePlaybackStarted(1, 0, 0))
+            app._handle_update(RealTimePlaybackProgress(0, 1, 0))
+            app._feed_console(
+                ["-------", "Processing line 1", "Saved: 00001.flac"], ""
+            )
+            await pilot.pause()
+
+            app._handle_update(RealTimePlaybackAwaitingContinue(3.0, False))
+            await pilot.pause()
+
+            lines = [line.text.plain for line in log._lines]
+            separator_index = next(
+                index
+                for index, line in enumerate(log._lines)
+                if isinstance(line, _SeparatorLine)
+            )
+            assert lines[separator_index - 1] == "Saved: 00001.flac"
+            assert "Press" in lines[separator_index + 2]
+            assert "to finish" in lines[separator_index + 2]
+
+            separators = [
+                line for line in log._lines if isinstance(line, _SeparatorLine)
+            ]
+            assert len(separators) == 1
 
     run(exercise())
 

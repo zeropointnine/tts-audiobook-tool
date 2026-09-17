@@ -17,6 +17,7 @@ from tts_audiobook_tool.model_worker_protocol import (
 )
 from tts_audiobook_tool.generation_events import (
     GenerationProgress,
+    GenerationRunEnded,
     GenerationStarted,
     GenerationTimedOut,
     ModelUnhealthy,
@@ -24,7 +25,10 @@ from tts_audiobook_tool.generation_events import (
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual import generation_app as generation_app_module
 from tts_audiobook_tool.textual import worker_app as worker_app_module
-from tts_audiobook_tool.textual.worker_content import WorkerLogContentArea
+from tts_audiobook_tool.textual.worker_content import (
+    WorkerLogContentArea,
+    _SeparatorLine,
+)
 from tts_audiobook_tool.textual.generation_app import (
     ConsoleLineAssembler,
     GenerationApp,
@@ -333,6 +337,158 @@ def test_generation_app_finalizes_on_worker_exited(monkeypatch, tmp_path) -> Non
             await pilot.press("enter")
         assert app.return_value is not None
         assert app.return_value.status == GenerationTerminalStatus.FAILED
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_progress_promotes_batch_divider_to_full_width_rule(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, False, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(70, 16)) as pilot:
+            await pilot.pause()
+            # Pre-batch output (model warm-up) so the heading is not the
+            # first content in the log; the divider is then promoted.
+            app._feed_console(["worker output"], "")
+            app._handle_update(
+                GenerationProgress(
+                    processed=0,
+                    remaining=1,
+                    total=1,
+                    current_indices=(0,),
+                )
+            )
+            app._feed_console(["-------", "Processing line 1"], "")
+            await pilot.pause()
+
+            log = app.query_one(WorkerLogContentArea).worker_log
+            width = log.scrollable_content_region.width
+            assert log._lines[0].text.plain == "worker output"
+            assert log._lines[1].text.plain == "-------"
+            assert log._lines[1].row_text(width, 0).plain == ("- " * ((width + 1) // 2))[:width]
+            assert log._lines[2].text.plain == "Processing line 1"
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_run_end_places_closing_divider_before_summary(
+    monkeypatch, tmp_path
+) -> None:
+    """The run-end event promotes the summary block's dash line to the
+    closing rule, and the terminal summary does not add a second one."""
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, False, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(70, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+
+            # First (and only) batch: its heading divider is omitted because
+            # it is the log's first visible content.
+            app._handle_update(
+                GenerationProgress(
+                    processed=0, remaining=1, total=1, current_indices=(0,)
+                )
+            )
+            app._feed_console(
+                ["-------", "Processing line 1", "Saved: 00001.flac"], ""
+            )
+            await pilot.pause()
+
+            # The batch loop ends; the trailing summary block follows.
+            app._handle_update(GenerationRunEnded())
+            app._feed_console(["------", "Elapsed: 1.2s", "Lines saved: 1 (all)"], "")
+            await pilot.pause()
+
+            lines = [line.text.plain for line in log._lines]
+            assert lines == [
+                "Processing line 1",
+                "Saved: 00001.flac",
+                "------",
+                "Elapsed: 1.2s",
+                "Lines saved: 1 (all)",
+                "",
+            ]
+            width = log.scrollable_content_region.width
+            assert log._lines[2].row_text(width, 0).plain == (
+                "- " * ((width + 1) // 2)
+            )[:width]
+
+            # The terminal summary must not place a second closing rule.
+            app._show_terminal_summary(
+                GenerationModalResult(
+                    GenerationTerminalStatus.COMPLETED, "none", transcript.path
+                )
+            )
+            await pilot.pause()
+            separators = [
+                line for line in log._lines if isinstance(line, _SeparatorLine)
+            ]
+            assert len(separators) == 1
+
+    try:
+        run(exercise())
+    finally:
+        transcript.close()
+
+
+def test_generation_worker_exit_places_closing_divider_without_run_end_event(
+    monkeypatch, tmp_path
+) -> None:
+    """A path that never emits the run-end event (a dead worker) still gets a
+    closing rule from the terminal-summary safety net."""
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_generation",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda **_: []))
+
+    transcript = GenerationTranscript(str(tmp_path / "generation.log"))
+    app = GenerationApp(make_state(), {0}, 1, False, transcript)
+
+    async def exercise() -> None:
+        async with app.run_test(size=(70, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one(WorkerLogContentArea).worker_log
+            app._feed_console(["Processing line 1", "Saved: 00001.flac"], "")
+            await pilot.pause()
+
+            app._on_worker_exit(WorkerExited("job", "worker died"))
+            await pilot.pause()
+
+            lines = [line.text.plain for line in log._lines]
+            separator_index = next(
+                index
+                for index, line in enumerate(log._lines)
+                if isinstance(line, _SeparatorLine)
+            )
+            assert lines[separator_index - 1] == "Saved: 00001.flac"
+            assert "worker died" in "\n".join(lines[separator_index + 1 :])
 
     try:
         run(exercise())

@@ -33,6 +33,18 @@ class GenerationProgress:
 
 
 @dataclass(frozen=True)
+class GenerationRunEnded:
+    """The batch loop has ended; any trailing run info follows.
+
+    Emitted once per run, after the final batch and immediately before the
+    trailing summary block, so consumers can place a closing boundary rule
+    between the last batch's output and that info. It is emitted for
+    interrupted and errored runs too; a quick generation that completed
+    cleanly prints no summary, so nothing visible follows it.
+    """
+
+
+@dataclass(frozen=True)
 class GenerationStats:
     generation_seconds: float
     audio_seconds: float
@@ -70,6 +82,7 @@ GenerationEvent = (
     GenerationPhase
     | GenerationStarted
     | GenerationProgress
+    | GenerationRunEnded
     | GenerationStats
     | GenerationTimedOut
     | ModelUnhealthy

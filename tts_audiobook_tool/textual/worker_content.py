@@ -30,6 +30,7 @@ from textual.containers import Vertical
 from textual.strip import Strip
 
 from .reflow_log import ReflowLog, _Line
+from .textual_shared import STYLE_DIM
 
 # Cap on retained history, in logical (pre-wrap) lines.
 #
@@ -39,6 +40,30 @@ from .reflow_log import ReflowLog, _Line
 # per-line wrapping keeps any single line from consuming unbounded
 # memory.
 VISIBLE_HISTORY_LINES = 50_000
+
+
+class _SeparatorLine(_Line):
+    """One semantic rule row in the otherwise text-based log document.
+
+    The original finite dash line is retained in ``text`` for logical-line
+    bookkeeping and find support, but the visible stroke is materialized at
+    the log's live content width.  Consequently the rule follows resizes
+    without becoming a child widget of its own.
+    """
+
+    __slots__ = ()
+
+    def row_count(self, width: int) -> int:
+        return 1
+
+    def row_text(self, width: int, row: int) -> Text:
+        # ReflowLog calls Text.render() directly. A Text object's base style is
+        # applied by Rich's outer console-rendering pipeline, so it would be
+        # lost on this path; an explicit span survives direct rendering.
+        stroke = ("- " * ((width + 1) // 2))[:width]
+        text = Text(stroke)
+        text.stylize(STYLE_DIM)
+        return text
 
 
 class WorkerLog(ReflowLog):
@@ -96,6 +121,61 @@ class WorkerLog(ReflowLog):
         # Logical line index of the active find match, or None when find is
         # not showing a result. ``_style_row`` reverse-videos that line.
         self.highlight_line_index: int | None = None
+        # Structured progress arrives immediately before a batch heading. It
+        # arms conversion of that heading's finite console divider into a
+        # semantic rule row; unrelated dashed output remains ordinary text.
+        self._separator_expected = False
+
+    # -- separators ---------------------------------------------------------
+
+    def expect_separator(self) -> None:
+        """Promote the next printed all-dash console line to a full-width rule.
+
+        Used for batch-heading dividers and for the run-end summary block,
+        both of which already print a finite dash rule in the console stream.
+        Blank console lines may precede the divider (realtime playback emits
+        one deliberately). The rule is omitted when nothing visible has been
+        written to the log yet, so a heading can begin the scrolling area
+        instead of being separated from nothing.
+
+        The decision is made when the divider line actually arrives, so
+        output printed between the structured batch event and the heading
+        (for example a warning) still counts as prior output.
+        """
+        self._separator_expected = True
+
+    def append_separator(self) -> None:
+        """Append a full-width rule to the document tail right now.
+
+        Unlike `expect_separator`, this inserts a rule that the console
+        stream does not already provide (for example the realtime
+        await-continue boundary). The current line is committed first,
+        exactly like an app line, and the call is a no-op when the log
+        would still be empty afterwards, so a rule can never be the first
+        thing in the scrolling area.
+        """
+        current = self._lines[-1] if self._lines else None
+        current_text = current.text.plain if current is not None else ""
+        keep_current = bool(current_text) and not self._is_filtered_console_line(
+            current_text
+        )
+        has_visible_output = any(
+            line.text.plain.strip() for line in self._lines[:-1]
+        )
+        if not has_visible_output and not keep_current:
+            return
+        # Inserting a rule now supersedes any pending promotion: a stale
+        # expectation must not later swallow an unrelated dash line.
+        self._separator_expected = False
+        self._mutate_tail(
+            keep_current=keep_current,
+            new_tail=[_SeparatorLine(Text("")), ""],
+        )
+
+    @staticmethod
+    def _is_separator_source(line: _Line) -> bool:
+        plain = line.text.plain
+        return len(plain) >= 3 and all(character == "-" for character in plain)
 
     # -- find support -------------------------------------------------------
 
@@ -159,9 +239,33 @@ class WorkerLog(ReflowLog):
                 # No change: the current line already holds the live
                 # text (the common case for repeated flushes).
                 return
-        retained = [
-            line for line in completed if not self._is_filtered_console_line(line)
-        ]
+        retained: list[str | _Line] = []
+        # Only committed history counts as prior output: the live tail line
+        # is dropped by the tail mutation below, so it can never precede the
+        # batch heading.
+        has_visible_output = any(
+            line.text.plain.strip() for line in self._lines[:-1]
+        )
+        for text in completed:
+            if self._is_filtered_console_line(text):
+                continue
+            line = self._make_line(text)
+            if self._separator_expected:
+                if self._is_separator_source(line):
+                    self._separator_expected = False
+                    if has_visible_output:
+                        retained.append(_SeparatorLine(line.text))
+                    # The divider is dropped when the batch heading is the
+                    # first visible content in the scrolling area.
+                    continue
+                plain = line.text.plain.strip()
+                if plain and plain.startswith(("Processing line ", "Processing lines ")):
+                    # Defensive: the heading arrived without its expected
+                    # divider, so a later unrelated rule must not convert.
+                    self._separator_expected = False
+            if line.text.plain.strip():
+                has_visible_output = True
+            retained.append(line)
         self._mutate_tail(keep_current=False, new_tail=[*retained, live])
 
     def append_application_lines(self, lines: list[str]) -> None:
@@ -191,6 +295,7 @@ class WorkerLog(ReflowLog):
         a bar, commits the bar to history at that moment), so the
         assembler's remaining line adds nothing here.
         """
+        self._separator_expected = False
         current = self._lines[-1] if self._lines else None
         current_text = current.text.plain if current is not None else ""
         if current_text:
@@ -201,6 +306,7 @@ class WorkerLog(ReflowLog):
 
     def clear(self) -> Self:
         """Clear the document, leaving a fresh empty current line."""
+        self._separator_expected = False
         super().clear()
         self._lines.append(_Line(Text("")))
         if self._size_known:
@@ -210,12 +316,15 @@ class WorkerLog(ReflowLog):
 
     # -- tail mutation ------------------------------------------------------
 
-    def _mutate_tail(self, *, keep_current: bool, new_tail: list[str]) -> None:
+    def _mutate_tail(
+        self, *, keep_current: bool, new_tail: list[str | _Line]
+    ) -> None:
         """Replace the document tail and resync the layout bookkeeping.
 
         The current line is dropped or committed to history per
         `keep_current`; the `new_tail` lines are appended, and the last
-        of them becomes the new current line.
+        of them becomes the new current line. Callers may pass an already
+        constructed semantic line alongside ordinary strings.
         """
         lines = self._lines
         dropped = 0
@@ -223,7 +332,10 @@ class WorkerLog(ReflowLog):
             lines.pop()
             dropped = 1
         pre_len = len(lines)
-        lines.extend([self._make_line(text) for text in new_tail])
+        lines.extend(
+            item if isinstance(item, _Line) else self._make_line(item)
+            for item in new_tail
+        )
         self._trim_overflow(pre_len)
         # The tail objects are new, and the dropped object may get its
         # address reused; the generation bump keeps a reused id from
@@ -350,6 +462,14 @@ class WorkerLogContentArea(Vertical):
     @property
     def worker_log(self) -> WorkerLog:
         return self.query_one(".worker-log", WorkerLog)
+
+    def expect_separator(self) -> None:
+        """Arm semantic rendering of the next printed console divider."""
+        self.worker_log.expect_separator()
+
+    def append_separator(self) -> None:
+        """Append a full-width rule to the log's document tail."""
+        self.worker_log.append_separator()
 
     def feed(self, completed: list[str], live: str) -> None:
         """Feed one console chunk into the document's current line."""

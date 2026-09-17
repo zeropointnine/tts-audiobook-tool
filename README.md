@@ -449,7 +449,7 @@ Note that because Microsoft famously removed the source code from their github r
 The app supports server-based TTS inference using SGL-Omni. Install instructions can be found [here](https://sgl-project.github.io/sglang-omni/get_started/installation.html). Note that SGL-Omni is typically installed using Docker (especially on Windows). You may also need to perform additional per-model install steps as described in their docs.
 
 The following models served through SGL-Omni are supported:
-- [**AuK / AuK-Flash**](https://sgl-project.github.io/sglang-omni/cookbook/auk.html)
+- [**AuK / AuK-Flash**](https://sgl-project.github.io/sglang-omni/cookbook/auk.html) (24GB VRAM recommended)
 - [**Fish S2 Pro**](https://sgl-project.github.io/sglang-omni/cookbook/fishaudio_s2_pro.html) (24GB VRAM recommended)
 - [**Higgs Audio V3**](https://sgl-project.github.io/sglang-omni/cookbook/higgs_tts.html) (24GB VRAM recommended)
 - [**MOSS-TTS v1.5**](https://sgl-project.github.io/sglang-omni/cookbook/moss_tts.html) (>24GB VRAM required)

@@ -59,9 +59,8 @@ def test_clean_quick_generation_retries_then_omits_metrics_summary(monkeypatch) 
     assert not any("Elapsed:" in text for text in output)
     assert not any("Lines saved:" in text for text in output)
     assert print_batch_heading.call_args_list == [
-        # No TTS instance exists in this harness, so even the first batch
-        # heading keeps its leading divider (see print_batch_heading usage of
-        # skip_divider_flag = Tts.instance_exists()).
+        # Every batch and retry emits a textual divider. Textual worker logs
+        # promote it to a semantic full-width rule; console output keeps it.
         call(indices=[0], voice_index=None, show_divider=True),
         call(indices=[0], voice_index=None, show_divider=True),
         call(indices=[0], voice_index=None, show_divider=True),

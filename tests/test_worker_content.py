@@ -17,7 +17,12 @@ from textual.events import Resize
 from textual.geometry import Size
 
 from tts_audiobook_tool.text_util import make_terminal_hyperlink
-from tts_audiobook_tool.textual.worker_content import WorkerLog, WorkerLogContentArea
+from tts_audiobook_tool.textual.textual_shared import STYLE_DIM
+from tts_audiobook_tool.textual.worker_content import (
+    WorkerLog,
+    WorkerLogContentArea,
+    _SeparatorLine,
+)
 
 
 class _HostApp(App[None]):
@@ -239,6 +244,146 @@ def test_long_line_wraps_and_reflows_on_resize() -> None:
             assert width > 40
             assert log.virtual_size.height == expected_rows(width)
             assert doc_lines(log) == [word]
+
+    run(exercise())
+
+
+def test_expected_batch_divider_is_full_width_and_reflows_on_resize() -> None:
+    """Only an armed batch-heading divider becomes a semantic rule row.
+
+    The row is materialized at the current log width, while an unrelated
+    dashed console line remains finite text.
+    """
+
+    async def exercise() -> None:
+        app = _HostApp()
+        async with app.run_test(size=(40, 12)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            area.feed(["warm up done"], "")
+            area.expect_separator()
+            area.feed(["", "-------", "Processing line 1"], "")
+            area.feed(["-----"], "")
+            await pilot.pause()
+
+            assert doc_lines(log) == [
+                "warm up done",
+                "",
+                "-------",
+                "Processing line 1",
+                "-----",
+                "",
+            ]
+            separator = log._lines[2]
+            ordinary_dashes = log._lines[4]
+            narrow_width = log.scrollable_content_region.width
+            assert separator.row_count(narrow_width) == 1
+            separator_text = separator.row_text(narrow_width, 0)
+            assert separator_text.plain == ("- " * ((narrow_width + 1) // 2))[:narrow_width]
+            assert separator_text.spans
+            assert separator_text.spans[0].style == STYLE_DIM
+            assert ordinary_dashes.row_text(narrow_width, 0).plain == "-----"
+
+            app.post_message(
+                Resize(Size(90, 12), Size(90, 12), Size(90, 12))
+            )
+            await pilot.pause(0.05)
+            wide_width = log.scrollable_content_region.width
+            assert wide_width > narrow_width
+            assert separator.row_count(wide_width) == 1
+            assert separator.row_text(wide_width, 0).plain == ("- " * ((wide_width + 1) // 2))[:wide_width]
+            assert ordinary_dashes.row_text(wide_width, 0).plain == "-----"
+
+    run(exercise())
+
+
+def test_first_batch_heading_omits_the_separator() -> None:
+    """A batch heading that is the first visible content in the scrolling
+    area must not be preceded by a rule (there is nothing to separate it
+    from); later batches still get one."""
+
+    async def exercise() -> None:
+        app = _HostApp()
+        async with app.run_test(size=(50, 12)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            # First batch: blank line and heading only. The divider is dropped.
+            area.expect_separator()
+            area.feed(["", "-------", "Processing line 1"], "")
+            await pilot.pause()
+            assert doc_lines(log) == ["", "Processing line 1", ""]
+
+            # Second batch: the log now holds content, so its divider is
+            # promoted to a full-width rule.
+            area.expect_separator()
+            area.feed(["", "-------", "Processing line 2"], "")
+            await pilot.pause()
+            assert doc_lines(log) == [
+                "",
+                "Processing line 1",
+                "",
+                "-------",
+                "Processing line 2",
+                "",
+            ]
+            assert isinstance(log._lines[3], _SeparatorLine)
+
+    run(exercise())
+
+
+def test_missing_expected_divider_does_not_convert_later_dashes() -> None:
+    """The first nonblank mismatch cancels the batch-divider expectation."""
+
+    async def exercise() -> None:
+        app = _HostApp()
+        async with app.run_test(size=(50, 10)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            area.expect_separator()
+            area.feed(["Processing line 1", "--------"], "")
+            await pilot.pause()
+
+            width = log.scrollable_content_region.width
+            assert doc_lines(log) == ["Processing line 1", "--------", ""]
+            assert log._lines[1].row_text(width, 0).plain == "--------"
+
+    run(exercise())
+
+
+def test_append_separator_inserts_a_rule_after_visible_content() -> None:
+    """An inserted rule commits the live line like an app line and is a no-op
+    while the log would still be empty."""
+
+    async def exercise() -> None:
+        app = _HostApp()
+        async with app.run_test(size=(40, 10)) as pilot:
+            area = app.query_one(WorkerLogContentArea)
+            log = area.worker_log
+            await pilot.pause()
+
+            # Nothing visible yet: no rule (it would be the first row).
+            area.append_separator()
+            assert doc_lines(log) == [""]
+
+            # A committed line plus an in-progress live line: the rule lands
+            # after both, committing the live line first.
+            area.feed(["worker line"], "")
+            area.feed([], "bar 50%")
+            area.append_separator()
+            await pilot.pause()
+            assert doc_lines(log) == ["worker line", "bar 50%", "", ""]
+            assert isinstance(log._lines[2], _SeparatorLine)
+
+            width = log.scrollable_content_region.width
+            assert log._lines[2].row_text(width, 0).plain == (
+                "- " * ((width + 1) // 2)
+            )[:width]
 
     run(exercise())
 

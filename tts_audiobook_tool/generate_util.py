@@ -15,6 +15,7 @@ from tts_audiobook_tool.generation_events import (
     GenerationEvents,
     GenerationPhase,
     GenerationProgress,
+    GenerationRunEnded,
     GenerationStarted,
     GenerationStats,
     ModelUnhealthy,
@@ -281,11 +282,10 @@ class GenerateUtil:
                     eta_seconds=eta_seconds,
                 )
             )
-            skip_divider_flag = Tts.instance_exists()
             GenerateUtil.print_batch_heading(
                 indices=indices,
                 voice_index=sub.voice_selection_index,
-                show_divider=not skip_divider_flag,
+                show_divider=True,
             )
 
             # Generate and validate
@@ -596,6 +596,10 @@ class GenerateUtil:
             and num_failed == 0
             and num_errored == 0
         )
+        # The batch loop is over: publish the run-end boundary before the
+        # trailing summary block (whose first line is a dash rule that a
+        # Textual consumer promotes to a full-width closing divider).
+        GenerationEvents.emit(GenerationRunEnded())
         if not quick_generation_completed_cleanly:
             printt(message)
 

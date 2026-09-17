@@ -24,6 +24,7 @@ from tts_audiobook_tool.constants import (
 from tts_audiobook_tool.generation_events import (
     GenerationPhase,
     GenerationProgress,
+    GenerationRunEnded,
     GenerationStarted,
     GenerationStats,
 )
@@ -198,7 +199,13 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         elif isinstance(update, GenerationStarted):
             self.progress = GenerationProgress(0, update.total, update.total)
         elif isinstance(update, GenerationProgress):
+            if update.current_indices:
+                self._expect_separator()
             self.progress = update
+        elif isinstance(update, GenerationRunEnded):
+            # No further batches: the run's closing rule precedes the trailing
+            # summary block, whose header line is already a dash rule.
+            self._arm_trailing_divider()
         elif isinstance(update, GenerationStats):
             self.stats = update
         self._update_header()

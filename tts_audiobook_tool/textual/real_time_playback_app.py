@@ -160,6 +160,8 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
             self.spoken_segments = []
             self.play_anchor = None
         elif isinstance(update, RealTimePlaybackProgress):
+            if update.current_index is not None:
+                self._expect_separator()
             self.processed = update.processed
             self.total = update.total
         elif isinstance(update, RealTimePlaybackBuffer):
@@ -169,6 +171,10 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         elif isinstance(update, RealTimePlaybackAwaitingContinue):
             self._record_buffer_duration(update.duration_seconds)
             if not self.waiting_for_continue:
+                # The batch loop is over. Realtime's trailing info (the
+                # continue prompt) prints no dash rule of its own, so the
+                # closing divider is inserted here, ahead of it.
+                self._append_trailing_divider()
                 self._append_lines(
                     [
                         "",

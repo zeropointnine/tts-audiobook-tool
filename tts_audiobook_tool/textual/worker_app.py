@@ -284,6 +284,11 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
         self.find_search_start_index: int | None = None
         self.find_query_submitted = False
         self.find_match_index: int | None = None
+        # Whether this session has already placed its closing rule before the
+        # terminal summary block; the end-of-run signals set it as soon as the
+        # last batch is known to be done, and ``_show_terminal_summary`` is the
+        # safety net for the paths that never emit one.
+        self._trailing_divider_added = False
 
     # ----------------------------------------------------------------
     # composition and startup
@@ -414,6 +419,34 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
     # ----------------------------------------------------------------
     # log presentation
     # ----------------------------------------------------------------
+
+    def _expect_separator(self) -> None:
+        """Arm full-width rendering of the next printed console divider."""
+        self.query_one(WorkerLogContentArea).expect_separator()
+
+    def _append_trailing_divider(self) -> None:
+        """Insert the run's closing rule now.
+
+        Used by sessions whose end-of-run signal has no console dash line of
+        its own (realtime playback's await-continue boundary), and as the
+        safety net for terminal paths that never emit such a signal.
+        """
+        self._trailing_divider_added = True
+        if not self.is_mounted:
+            return
+        self.query_one(WorkerLogContentArea).append_separator()
+
+    def _arm_trailing_divider(self) -> None:
+        """Promote the next printed dash line to the run's closing rule.
+
+        The generation run-end boundary already prints a dash rule in the
+        console stream (the summary block's header line), so it is promoted
+        to a full-width rule rather than duplicated.
+        """
+        self._trailing_divider_added = True
+        if not self.is_mounted:
+            return
+        self._expect_separator()
 
     def _feed_console(self, completed: list[str], live: str) -> None:
         """Apply one console chunk to the log's current line."""
@@ -590,6 +623,12 @@ class WorkerTextualApp(App[ResultT], Generic[ResultT]):
             lines.append(result.message)
         lines.extend(self.terminal_summary_extra_lines(result))
         if not self._suppress_terminal_summary_ui():
+            # Every session ends with the same boundary: the run's closing
+            # rule separates the last batch's output from the summary block
+            # below. Sessions that already placed it at their end-of-run
+            # signal (generation, realtime) skip this.
+            if not self._trailing_divider_added:
+                self._append_trailing_divider()
             self._append_application_lines(lines)
             # An empty plain label leaves the current phase unchanged.
             phase_label = self.terminal_label(result)
