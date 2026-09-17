@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Callable, ClassVar
 
 from textual.app import ComposeResult
 
@@ -15,6 +15,7 @@ from tts_audiobook_tool import ask, text_util, util
 from tts_audiobook_tool import app_support
 from tts_audiobook_tool.app_support import make_worker_log_file_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.app_support.system_sleep import SystemSleepLock
 from tts_audiobook_tool.constants import (
     COL_DEFAULT,
     COL_DIM_ITALICS,
@@ -150,6 +151,7 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         batch_size: int,
         is_regen: bool,
         transcript: GenerationTranscript,
+        on_job_end: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(state)
         self.indices = set(indices)
@@ -158,6 +160,10 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
         self.transcript = transcript
         self.progress = GenerationProgress(0, len(indices), len(indices))
         self.stats: GenerationStats | None = None
+        # Called once the worker job reaches a terminal result, before the
+        # summary's ENTER wait. Releases the caller's system-sleep lock so an
+        # idle machine is not held awake while the user reads the summary.
+        self.on_job_end = on_job_end
 
     def compose_header(self) -> ComposeResult:
         # (bottom prompt row removed; its trigger points are retained in
@@ -336,6 +342,14 @@ class GenerationApp(WorkerTextualApp[GenerationModalResult]):
             and self.state.project.gen_auto_concat
         )
         return quick_return or regular_auto_concat
+
+    def _pre_terminal_summary(self, result: GenerationModalResult) -> None:
+        # The worker job is over. Release the system-sleep lock now, so the
+        # summary's ENTER wait (and the concatenation handoff that follows it)
+        # does not hold an idle machine awake.
+        if self.on_job_end is not None:
+            self.on_job_end()
+        super()._pre_terminal_summary(result)
 
     def _post_terminal_summary(self, result: GenerationModalResult) -> None:
         statuses_that_alert = {
@@ -580,6 +594,11 @@ def run_generation_app(
         make_generation_transcript_path(state.project.dir_path),
         enabled=state.prefs.save_gen_log,
     )
+    # The lock covers the worker job only. The textual session releases it as
+    # soon as the job reaches a terminal result (before the summary's ENTER
+    # wait); every console handoff below releases before it prompts. The
+    # finally is the safety net for the remaining paths.
+    sleep_lock = SystemSleepLock()
     try:
         start_error = ModelWorker.start()
         if start_error:
@@ -589,6 +608,7 @@ def run_generation_app(
                 transcript.path,
                 start_error,
             )
+            sleep_lock.release()
             _present_console_result(state, result, transcript, is_regen)
             return result
         if not can_textual():
@@ -599,11 +619,19 @@ def run_generation_app(
                 is_regen,
                 transcript,
             )
+            sleep_lock.release()
             _reconcile_generation_result(state, result)
             _present_console_result(state, result, transcript, is_regen)
             return result
 
-        app = GenerationApp(state, indices, batch_size, is_regen, transcript)
+        app = GenerationApp(
+            state,
+            indices,
+            batch_size,
+            is_regen,
+            transcript,
+            on_job_end=sleep_lock.release,
+        )
 
         def make_failure_result(
             message: str, reset_cause: HardResetCause | None
@@ -624,6 +652,7 @@ def run_generation_app(
                 make_failure_result,
                 f"{type(exception).__name__}: {exception}",
             )
+            sleep_lock.release()
             _reconcile_generation_result(state, result)
             _present_console_result(state, result, transcript, is_regen)
             return result
@@ -635,7 +664,9 @@ def run_generation_app(
             )
         _reconcile_generation_result(state, result)
         if result.status == GenerationTerminalStatus.FAILED and app.terminal_result is None:
+            sleep_lock.release()
             _present_console_result(state, result, transcript, is_regen)
         return result
     finally:
+        sleep_lock.release()
         transcript.close()

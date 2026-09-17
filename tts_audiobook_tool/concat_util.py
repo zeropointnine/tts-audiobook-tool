@@ -28,6 +28,7 @@ from tts_audiobook_tool.sound.silence_util import SilenceUtil
 from tts_audiobook_tool.sound.sound_pipeline import BreakEffectTracker, SoundPipeline
 from tts_audiobook_tool.project_support.sound_segment_util import SoundSegmentUtil, get_segment_stt_info_path
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.app_support.system_sleep import prevent_system_sleep
 from tts_audiobook_tool.app_types.app_metadata import (
     AppMetadata,
     AppMetadataSection,
@@ -198,6 +199,7 @@ class ConcatUtil:
             )
 
     @staticmethod
+    @prevent_system_sleep()
     def make_file(
         state: State,
         index_start: int,

@@ -169,6 +169,35 @@ def test_realtime_awaiting_continue_places_closing_divider_before_prompt(
     run(exercise())
 
 
+def test_realtime_awaiting_continue_releases_sleep_lock(monkeypatch) -> None:
+    """The lock ends when the batch loop does, not after the ENTER-to-finish
+    wait: the terminal result only arrives once the user presses ENTER."""
+    monkeypatch.setattr(
+        ModelWorker,
+        "submit_realtime_playback",
+        staticmethod(lambda **_: "job"),
+    )
+    monkeypatch.setattr(ModelWorker, "drain_events", staticmethod(lambda: []))
+    released: list[str] = []
+
+    async def exercise() -> None:
+        app = RealTimePlaybackApp(
+            make_state(), [], None, on_job_end=lambda: released.append("released")
+        )
+        async with app.run_test(size=(70, 20)) as pilot:
+            await pilot.pause()
+            assert app.terminal_result is None
+
+            app._handle_update(RealTimePlaybackAwaitingContinue(3.0, False))
+            await pilot.pause()
+
+            assert released == ["released"]
+            # Still no terminal result: ENTER has not been pressed yet.
+            assert app.terminal_result is None
+
+    run(exercise())
+
+
 def test_escape_does_not_interrupt_realtime_playback(monkeypatch) -> None:
     """Escape no longer cancels or hard-resets running realtime playback;
     CTRL-C is the sole interrupt key."""

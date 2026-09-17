@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +21,37 @@ def initialize_app_logger():
     """
     if getattr(L, "logger", None) is None:
         L.logger = logging.getLogger("tests")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def stub_system_sleep_inhibitor(monkeypatch):
+    """Keeps the suite off the host's power-management stack.
+
+    ``prevent_system_sleep`` otherwise opens a real session inhibit (D-Bus /
+    systemd / SetThreadExecutionState) every time a generation, concat, or
+    real-time playback entry point runs. Tests that assert the wiring replace
+    ``system_sleep._wakepy_keep`` with their own recording fake.
+    """
+
+    class FakeMode:
+        active = True
+        active_method = SimpleNamespace(name="tests")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc_info):
+            return False
+
+    class FakeKeep:
+        @staticmethod
+        def running(**_kwargs):
+            return FakeMode()
+
+    from tts_audiobook_tool.app_support import system_sleep
+
+    monkeypatch.setattr(system_sleep, "_wakepy_keep", FakeKeep())
     yield
 
 

@@ -268,7 +268,7 @@ class Start:
         new_packages = [
             "audiotsm", "psutil", "num2words", "chardet", "metaphone", "whisper_normalizer",
             "pydantic", "requests", "text_to_num", "ebooklib", "bs4", "httpx", "textual",
-            "prompt_toolkit", "LavaSR"
+            "prompt_toolkit", "LavaSR", "wakepy"
         ]
 
         # apple silicon vs not

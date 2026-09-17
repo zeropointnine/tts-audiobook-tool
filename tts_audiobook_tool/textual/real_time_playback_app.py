@@ -3,12 +3,13 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Callable, ClassVar
 
 from textual.app import ComposeResult
 
 from tts_audiobook_tool import ask, util
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.app_support.system_sleep import SystemSleepLock
 from tts_audiobook_tool.generation_events import GenerationPhase
 from tts_audiobook_tool.model_worker import ModelWorker
 from tts_audiobook_tool.model_worker_protocol import (
@@ -87,10 +88,16 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         state: State,
         phrase_groups: list[PhraseGroup],
         line_range: tuple[int, int] | None,
+        on_job_end: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(state)
         self.phrase_groups = phrase_groups
         self.line_range = line_range
+        # Called once the run's work ends — at the awaiting-continue prompt
+        # (which precedes the terminal result) or at a terminal result on the
+        # failure paths. Releases the caller's system-sleep lock so an idle
+        # machine is not held awake through the blocking ENTER wait.
+        self.on_job_end = on_job_end
         self.processed = 0
         self.total = 0
         self.buffer_seconds = 0.0
@@ -169,6 +176,10 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
         elif isinstance(update, RealTimePlaybackSegmentText):
             self._record_segment(update)
         elif isinstance(update, RealTimePlaybackAwaitingContinue):
+            # The batch loop is over: generation and streaming are done, and
+            # all that remains is the ENTER-to-finish wait. Release the
+            # caller's system-sleep lock before that blocking prompt.
+            self._release_sleep_lock()
             self._record_buffer_duration(update.duration_seconds)
             if not self.waiting_for_continue:
                 # The batch loop is over. Realtime's trailing info (the
@@ -260,7 +271,15 @@ class RealTimePlaybackApp(WorkerTextualApp[RealTimePlaybackModalResult]):
             f"Press {util.make_hotkey_string('ENTER')} to finish",
         ]
 
+    def _release_sleep_lock(self) -> None:
+        """Releases the caller's system-sleep lock. Safe to call repeatedly."""
+        if self.on_job_end is not None:
+            self.on_job_end()
+
     def _pre_terminal_summary(self, result: RealTimePlaybackModalResult) -> None:
+        # Safety net for the paths that reach a terminal result without an
+        # awaiting-continue update (failures, worker exit, resets).
+        self._release_sleep_lock()
         super()._pre_terminal_summary(result)
         self.waiting_for_continue = False
         self._record_buffer_duration(0.0)
@@ -431,6 +450,7 @@ def _run_realtime_playback_console(
     state: State,
     phrase_groups: list[PhraseGroup],
     line_range: tuple[int, int] | None,
+    on_job_end: Callable[[], None] | None = None,
 ) -> RealTimePlaybackModalResult:
     try:
         operation_id = ModelWorker.submit_realtime_playback(
@@ -476,6 +496,9 @@ def _run_realtime_playback_console(
                         hard_reset_cause=reset_request.cause,
                     )
                 if isinstance(event.update, RealTimePlaybackAwaitingContinue):
+                    # The batch loop is over; the ENTER wait below is not work.
+                    if on_job_end is not None:
+                        on_job_end()
                     interrupts.clear()
                     ask.ask_enter_to_continue()
                     ModelWorker.continue_realtime_playback(operation_id)
@@ -523,45 +546,66 @@ def run_real_time_playback_modal(
     phrase_groups: list[PhraseGroup],
     line_range: tuple[int, int] | None,
 ) -> RealTimePlaybackModalResult:
-    start_error = ModelWorker.start()
-    if start_error:
-        result = RealTimePlaybackModalResult(
-            RealTimePlaybackTerminalStatus.FAILED,
-            start_error,
-        )
-        _present_console_result(result)
-        if ask.can_hotkey:
-            ask.ask_enter_to_continue()
-        return result
-
-    if not can_textual():
-        result = _run_realtime_playback_console(state, phrase_groups, line_range)
-        _present_console_result(result)
-        return result
-
-    app = RealTimePlaybackApp(state, phrase_groups, line_range)
+    # The lock covers the run only. The textual session releases it as soon as
+    # the run reaches a terminal result (before the summary's ENTER wait); the
+    # console handoffs below release before they prompt.
+    sleep_lock = SystemSleepLock()
     try:
-        result = app.run(inline=False)
-    except Exception as exception:
-        # A session that recorded its own terminal result has already
-        # presented it; only a synthesized failure needs console output.
+        start_error = ModelWorker.start()
+        if start_error:
+            result = RealTimePlaybackModalResult(
+                RealTimePlaybackTerminalStatus.FAILED,
+                start_error,
+            )
+            sleep_lock.release()
+            _present_console_result(result)
+            if ask.can_hotkey:
+                ask.ask_enter_to_continue()
+            return result
+
+        if not can_textual():
+            result = _run_realtime_playback_console(
+                state,
+                phrase_groups,
+                line_range,
+                on_job_end=sleep_lock.release,
+            )
+            sleep_lock.release()
+            _present_console_result(result)
+            return result
+
+        app = RealTimePlaybackApp(
+            state,
+            phrase_groups,
+            line_range,
+            on_job_end=sleep_lock.release,
+        )
+        try:
+            result = app.run(inline=False)
+        except Exception as exception:
+            # A session that recorded its own terminal result has already
+            # presented it; only a synthesized failure needs console output.
+            reported = app.terminal_result is not None
+            result = session_failure_result(
+                app,
+                _make_realtime_failure,
+                f"{type(exception).__name__}: {exception}",
+            )
+            if not reported:
+                sleep_lock.release()
+                _present_console_result(result)
+            return result
+        if result is not None:
+            return result
         reported = app.terminal_result is not None
         result = session_failure_result(
             app,
             _make_realtime_failure,
-            f"{type(exception).__name__}: {exception}",
+            "Realtime playback interface closed without a result",
         )
         if not reported:
+            sleep_lock.release()
             _present_console_result(result)
         return result
-    if result is not None:
-        return result
-    reported = app.terminal_result is not None
-    result = session_failure_result(
-        app,
-        _make_realtime_failure,
-        "Realtime playback interface closed without a result",
-    )
-    if not reported:
-        _present_console_result(result)
-    return result
+    finally:
+        sleep_lock.release()
