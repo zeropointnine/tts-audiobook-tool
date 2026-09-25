@@ -109,7 +109,7 @@ class ProjectSoundSegments:
         best_sound_segment = None
         best_fails = 9999 + 1
         for item in sound_segments:
-            item_fails = item.num_errors if item.num_errors != -1 else 9999
+            item_fails = item.num_errors if item.num_errors != -1 else 0 # no tag: passed or not validated
             if item_fails < best_fails:
                 best_sound_segment = item
                 best_fails = item_fails
