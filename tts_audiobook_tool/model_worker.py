@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import codecs
+import faulthandler
+import logging
 import multiprocessing
 import os
 import queue
 import signal
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -45,6 +48,7 @@ from tts_audiobook_tool.model_worker_protocol import (
     RealTimePlaybackUpdate,
     ResetChatSessionCommand,
     ShutdownCommand,
+    STT_DIAGNOSTIC_THRESHOLD_SECONDS,
     SynthesizeChatCommand,
     TranscribeAudioCommand,
     TtsInspected,
@@ -60,6 +64,10 @@ from tts_audiobook_tool.model_worker_protocol import (
 
 WORKER_START_TIMEOUT_SECONDS = 20.0
 WORKER_SHUTDOWN_TIMEOUT_SECONDS = 5.0
+STT_TRANSCRIPTION_TIMEOUT_ERROR = "STT transcription timed out"
+STT_WORKER_STACK_LOG_PATH = os.path.join(
+    tempfile.gettempdir(), "tts-audiobook-tool-worker-stacks.log"
+)
 
 # Preview inferences completed in this worker process. Lives only in the worker
 # (the parent never runs _run_tts_preview_command) and exists so the first
@@ -771,6 +779,7 @@ def _model_worker_main(
         event_queue.put(WorkerCommandFailed("", f"Worker startup failed: {exception}"))
         return
 
+    last_transcription_started_at: float | None = None
     while True:
         try:
             command: ModelWorkerCommand = command_queue.get()
@@ -892,6 +901,17 @@ def _model_worker_main(
             tracker.set("")
             continue
         if isinstance(command, TranscribeAudioCommand):
+            transcription_started_at = time.monotonic()
+            since_previous = (
+                "first request" if last_transcription_started_at is None
+                else f"{transcription_started_at - last_transcription_started_at:.1f}s since previous request"
+            )
+            last_transcription_started_at = transcription_started_at
+            L.i(
+                f"[stt] {command.operation_id} received "
+                f"({since_previous}; audio samples={getattr(command.audio, 'size', 'unknown')}, "
+                f"word_timestamps={command.word_timestamps})"
+            )
             try:
                 from tts_audiobook_tool.app_types import (
                     ConcreteSegment,
@@ -907,21 +927,61 @@ def _model_worker_main(
                     raise ValueError("Unsupported STT configuration")
                 Stt.set_variant(variant)
                 Stt.set_config(config)
+                load_started_at = time.monotonic()
+                L.i(f"[stt] {command.operation_id} loading model ({variant.id}, {config.id})")
                 whisper = Stt.get_whisper()
+                L.i(
+                    f"[stt] {command.operation_id} model ready in "
+                    f"{time.monotonic() - load_started_at:.1f}s"
+                )
                 language_supported = (
                     command.language is None
                     or command.language in whisper.supported_languages
                 )
                 if not language_supported:
+                    L.w(f"[stt] {command.operation_id} unsupported language: {command.language}")
                     event_queue.put(AudioTranscribed(command.operation_id, (), False))
                 else:
-                    with Stt.inference_lock:
-                        raw_segments, _ = whisper.transcribe(
-                            command.audio,
-                            word_timestamps=command.word_timestamps,
-                            language=command.language,
-                        )
-                        raw_segments = list(raw_segments)
+                    inference_started_at = time.monotonic()
+                    L.i(f"[stt] {command.operation_id} starting inference")
+                    # Capture Python thread stacks before the parent's timeout
+                    # reaps a stalled native inference. The worker's regular
+                    # log identifies the exact stage; this file preserves the
+                    # call stack even when no Python exception is raised.
+                    try:
+                        stack_log = open(STT_WORKER_STACK_LOG_PATH, "a", encoding="utf-8")
+                    except OSError as exception:
+                        L.w(f"[stt] stack capture unavailable: {exception}")
+                        stack_log = None
+                    with stack_log if stack_log is not None else nullcontext():
+                        if stack_log is not None:
+                            stack_log.write(
+                                f"\n[stt] operation={command.operation_id} "
+                                f"inference start={time.strftime('%Y-%m-%d %H:%M:%S')} "
+                                f"(stack dump in {command.stack_dump_delay:.0f}s)\n"
+                            )
+                            stack_log.flush()
+                            faulthandler.dump_traceback_later(
+                                command.stack_dump_delay, repeat=False, file=stack_log
+                            )
+                        try:
+                            with Stt.inference_lock:
+                                L.i(f"[stt] {command.operation_id} inference lock acquired")
+                                raw_segments, _ = whisper.transcribe(
+                                    command.audio,
+                                    word_timestamps=command.word_timestamps,
+                                    language=command.language,
+                                )
+                                L.i(f"[stt] {command.operation_id} transcribe() returned; reading segments")
+                                raw_segments = list(raw_segments)
+                        finally:
+                            if stack_log is not None:
+                                faulthandler.cancel_dump_traceback_later()
+                    L.i(
+                        f"[stt] {command.operation_id} inference finished in "
+                        f"{time.monotonic() - inference_started_at:.1f}s "
+                        f"({len(raw_segments)} segments)"
+                    )
                     segments = tuple(
                         ConcreteSegment(
                             start=float(segment.start),
@@ -943,6 +1003,11 @@ def _model_worker_main(
                         AudioTranscribed(command.operation_id, segments, True)
                     )
             except Exception as exception:
+                L.e(
+                    f"[stt] {command.operation_id} failed after "
+                    f"{time.monotonic() - transcription_started_at:.1f}s: "
+                    f"{type(exception).__name__}: {exception}"
+                )
                 traceback.print_exc()
                 event_queue.put(
                     WorkerCommandFailed(
@@ -1635,7 +1700,11 @@ class ModelWorker:
         stt_variant_id: str | None = None,
         stt_config_id: str | None = None,
         console_handler: ConsoleEventHandler | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+        timeout_seconds: float | None = None,
     ) -> tuple[AudioTranscribed | None, str]:
+        if cancel_check is not None and cancel_check():
+            return None, "Model worker operation was cancelled"
         error = cls._start_with_console_handler(console_handler)
         if error:
             return None, error
@@ -1648,6 +1717,15 @@ class ModelWorker:
             if cls._command_queue is None:
                 cls._active_operation_id = None
                 return None, "Model worker is unavailable"
+            if cls._cancellation_event is not None:
+                cls._cancellation_event.clear()
+            # Keep the worker's stack dump inside the parent's wait window so a
+            # dump never fires after the parent has already timed out.
+            stack_dump_delay = (
+                min(STT_DIAGNOSTIC_THRESHOLD_SECONDS, timeout_seconds)
+                if timeout_seconds is not None
+                else STT_DIAGNOSTIC_THRESHOLD_SECONDS
+            )
             cls._command_queue.put(
                 TranscribeAudioCommand(
                     operation_id,
@@ -1656,11 +1734,18 @@ class ModelWorker:
                     stt_config_id or prefs.stt_config.id,
                     language,
                     word_timestamps,
+                    stack_dump_delay,
                 )
             )
-        result = cls._wait_for_blocking_result_with_handler(
-            operation_id, AudioTranscribed, console_handler
-        )
+        if cancel_check is not None or timeout_seconds is not None:
+            result = cls._wait_for_blocking_result(
+                operation_id, AudioTranscribed, console_handler,
+                cancel_check=cancel_check, timeout_seconds=timeout_seconds,
+            )
+        else:
+            result = cls._wait_for_blocking_result_with_handler(
+                operation_id, AudioTranscribed, console_handler
+            )
         if isinstance(result, AudioTranscribed):
             return result, ""
         return None, result if isinstance(
@@ -1823,6 +1908,9 @@ class ModelWorker:
         | type[LavaSrProbed]
         | type[AudioFileUpsampled],
         console_handler: ConsoleEventHandler | None = None,
+        *,
+        cancel_check: Callable[[], bool] | None = None,
+        timeout_seconds: float | None = None,
     ) -> (
         ModelsCleared
         | ChatSessionReset
@@ -1836,8 +1924,29 @@ class ModelWorker:
         with cls._lock:
             track_operation_identity = cls._active_operation_id == operation_id
         deferred: list[ModelWorkerEvent] = []
+        wait_started_at = time.monotonic()
+        next_stt_heartbeat_at = wait_started_at + 30.0
+        diagnostic_threshold_logged = False
         try:
             while True:
+                if (
+                    timeout_seconds is not None
+                    and not diagnostic_threshold_logged
+                    and time.monotonic() - wait_started_at >= STT_DIAGNOSTIC_THRESHOLD_SECONDS
+                ):
+                    logging.getLogger("tts-audiobook-tool").warning(
+                        "[stt watchdog] %.0fs diagnostic threshold reached: "
+                        "operation=%s; check %s for a worker stack snapshot",
+                        STT_DIAGNOSTIC_THRESHOLD_SECONDS,
+                        operation_id, STT_WORKER_STACK_LOG_PATH,
+                    )
+                    diagnostic_threshold_logged = True
+                if cancel_check is not None and time.monotonic() >= next_stt_heartbeat_at:
+                    logging.getLogger("tts-audiobook-tool").info(
+                        "[stt] still waiting for worker response: operation=%s, elapsed=%.1fs, worker_alive=%s",
+                        operation_id, time.monotonic() - wait_started_at, cls.is_alive(),
+                    )
+                    next_stt_heartbeat_at = time.monotonic() + 30.0
                 # A hard reset invalidates the in-flight operation before it
                 # starts the replacement worker. Check that identity before
                 # reading so this old blocking waiter cannot consume the new
@@ -1850,6 +1959,29 @@ class ModelWorker:
                         and cls._active_operation_id != operation_id
                     ):
                         return "Model worker operation was cancelled"
+                if cancel_check is not None and cancel_check():
+                    # Native model load/inference cannot be interrupted by an
+                    # event. Reap this worker so it cannot complete a stale
+                    # command after the caller has stopped waiting.
+                    cls.shutdown()
+                    return "Model worker operation was cancelled"
+                if (
+                    timeout_seconds is not None
+                    and time.monotonic() - wait_started_at >= timeout_seconds
+                ):
+                    logging.getLogger("tts-audiobook-tool").warning(
+                        "[stt watchdog] TIMEOUT: operation=%s, elapsed=%.1fs "
+                        "(limit=%.1fs); stopping worker",
+                        operation_id, time.monotonic() - wait_started_at,
+                        timeout_seconds,
+                    )
+                    cls.shutdown()
+                    logging.getLogger("tts-audiobook-tool").warning(
+                        "[stt watchdog] worker stopped after timeout: operation=%s; "
+                        "next attempt will start a fresh worker",
+                        operation_id,
+                    )
+                    return STT_TRANSCRIPTION_TIMEOUT_ERROR
                 event = cls.get_event(timeout=0.1)
                 if event is None:
                     continue

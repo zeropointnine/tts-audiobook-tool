@@ -85,9 +85,9 @@ Common examples are: publisher information, table of contents, etc"""
 HINT_STT_ENHANCE_CACHED = Hint(
     "stt_enhance_cached",
     "Transcription data is cached",
-"""If you feel the need to modify the source text to minimize \"discontinuities\",
-you can re-run the \"Enhance existing audiobook\" process, and it will run faster
-the second time through, as the audio transcription data has been cached."""
+"""The transcription is saved beside the selected audiobook. You can return to
+steps 2–4 to revise the source text or rebuild the ABR output without transcribing
+the audio again."""
 )
 
 HINT_LINUX_CUDNN_VERSION = Hint(
@@ -225,7 +225,7 @@ to use your saved settings again."""
 HINT_SGL_OMNI_URL = Hint(
     "sgl_omni_url",
     "Set the URL to your SGL Omni server",
-    """No SGL-Omni server URL is set in your preferences, so the app
+"""No SGL-Omni server URL is set in your preferences, so the app
 is assuming the server is running at the default address: http://localhost:8000
 It doesn't appear to be online there, so set the correct URL in
 "Options > SGL-Omni server URL" to point the app at your server."""
@@ -245,7 +245,14 @@ To generate dialog using a different voice from the narrator/default:
 HINT_LLM_API_KEY_REMOVED = Hint(
     "llm_api_key_removed",
     "LLM API key storage changed",
-    """The LLM api key stored in the app preferences has been removed.
+"""The LLM api key stored in the app preferences has been removed.
 You will need to specify an environment variable holding the value
 of your API key in: Options > LLM Settings"""
+)
+
+HINT_ENHANCE_ORPHANS = Hint(
+    "enhance_orphans",
+    "Regarding unmatched text lines...",
+"""Miscellaneous orphaned text lines are common, but make sure
+to review result for any uncommonly large gaps."""
 )

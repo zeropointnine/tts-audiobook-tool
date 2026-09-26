@@ -11,13 +11,15 @@ This module supports the "enhance existing audiobook" flow by:
 
 from dataclasses import dataclass
 from typing import Generator, List, NamedTuple
+import logging
+import time
 import ffmpeg
 import numpy as np
 import difflib
 from tts_audiobook_tool.app_types import ConcreteWord, SttVariant, Word
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
-from tts_audiobook_tool.model_worker import ModelWorker
+from tts_audiobook_tool.model_worker import ModelWorker, STT_TRANSCRIPTION_TIMEOUT_ERROR
 from tts_audiobook_tool.prefs import Prefs
 from tts_audiobook_tool.app_types.phrase import Phrase
 from tts_audiobook_tool.constants import *
@@ -30,6 +32,7 @@ from tts_audiobook_tool.transcriber import Transcriber
 class AlignmentState:
     cursor: int = 0
     max_skip_words: int = 45
+    orphan_count: int = 0
 
 
 def make_timed_phrases(
@@ -88,6 +91,7 @@ def align_phrases_with_state(
     state: AlignmentState | None=None,
     print_info: bool=True,
     line_offset: int=0,
+    total_lines: int=0,
 ) -> tuple[List[TimedPhrase], AlignmentState, bool]:
     """
     Aligns phrases against transcribed words while preserving a caller-owned transcript cursor.
@@ -98,12 +102,29 @@ def align_phrases_with_state(
 
     result: List[TimedPhrase] = []
     state = state or AlignmentState()
+    progress_total = total_lines or len(phrases)
+
+    def show_progress(segment_index: int) -> None:
+        if print_info and not PRINT_VERBOSE:
+            line_number = line_offset + segment_index + 1
+            print(
+                f"{Ansi.LINE_HOME}{COL_DIM_ITALICS}Aligning {line_number}/{progress_total} "
+                f"(orphans: {state.orphan_count}){Ansi.RESET}{Ansi.ERASE_REST_OF_LINE}",
+                end="",
+                flush=True,
+            )
+
+    def record(timed_phrase: TimedPhrase) -> None:
+        result.append(timed_phrase)
+        if timed_phrase.time_start == 0.0 and timed_phrase.time_end == 0.0:
+            state.orphan_count += 1
 
     if not phrases:
         return [], state, False
     if not transcribed_words:
-        for phrase in phrases:
-            result.append(TimedPhrase(phrase.text, 0.0, 0.0))
+        for segment_index, phrase in enumerate(phrases):
+            record(TimedPhrase(phrase.text, 0.0, 0.0))
+            show_progress(segment_index)
         return result, state, False
 
     current_skip_span = 0
@@ -113,11 +134,15 @@ def align_phrases_with_state(
         if Interrupts().did_interrupt:
             return [], state, True
 
+        show_progress(segment_index)
+        orphans_before_segment = state.orphan_count
+
         text_normed = normalize_text(segment.text)
         num_words = len(text_normed.split())
 
         if not text_normed:
-            result.append(TimedPhrase(segment.text, 0.0, 0.0))
+            record(TimedPhrase(segment.text, 0.0, 0.0))
+            show_progress(segment_index)
             continue
 
         best_match: MatchInfo | None = None
@@ -194,26 +219,27 @@ def align_phrases_with_state(
                 end_time = transcribed_words[best_match.trans_index_end].start
             else:
                 end_time = transcribed_words[best_match.trans_index_end - 1].end
-            result.append(
+            record(
                 TimedPhrase(
                     segment.text,
                     start_time,
                     end_time
             ))
 
-            if print_info:
+            if print_info and PRINT_VERBOSE:
                 print_result(True)
 
             state.cursor = best_match.trans_index_end
             state.max_skip_words = MAX_SKIP_WORDS_BASE
 
-            if DEBUG:
-                print(f"had to skip {current_skip_span} words")
+            if DEBUG and False:
+                if current_skip_span:
+                    print(f"had to skip {current_skip_span} words")
                 print(f"cursor is now: [{state.cursor+1}] {make_words_string(transcribed_words, state.cursor)}")
                 print()
 
         else:
-            result.append(
+            record(
                 TimedPhrase(segment.text, 0.0, 0.0)
             )
 
@@ -221,21 +247,26 @@ def align_phrases_with_state(
             state.max_skip_words += len( segment.text.split(" ") ) * 2
             state.max_skip_words = min(state.max_skip_words, MAX_SKIP_WORDS_LIMIT)
 
-            if print_info:
+            if print_info and PRINT_VERBOSE:
                 print_result(False)
 
-            if DEBUG:
+            if DEBUG and PRINT_VERBOSE:
                 print(f"scanned transcript in this range: {make_words_string(transcribed_words, state.cursor, was_max_skip)}")
                 print(f"cursor stays at: [{state.cursor+1}] ")
                 print(f"max_skip_words has increased to: {state.max_skip_words}")
                 print()
 
+        if state.orphan_count != orphans_before_segment:
+            show_progress(segment_index)
+
         if state.cursor >= len(transcribed_words) - 1:
             for remaining_segment_index in range(segment_index + 1, len(phrases)):
                 remaining_seg = phrases[remaining_segment_index]
-                result.append(TimedPhrase(
+                record(TimedPhrase(
                     remaining_seg.text, 0.0, 0.0
                 ))
+            if segment_index + 1 < len(phrases):
+                show_progress(len(phrases) - 1)
             break
 
     return result, state, False
@@ -259,6 +290,10 @@ def _transcribe_stream_with_overlap(
     CHUNK_DURATION = 30
     OVERLAP_DURATION = 5
 
+    stt_variant = getattr(prefs, "stt_variant", None) or SttVariant.LARGE_V3
+    if stt_variant == SttVariant.DISABLED:
+        raise ValueError("Speech-to-text is disabled in preferences; choose a Whisper model to transcribe.")
+
     list_of_lists: list[list[Word]] = []
     time_offset = 0.0
 
@@ -267,59 +302,116 @@ def _transcribe_stream_with_overlap(
     if value:
         duration_str = duration_string(value)
 
+    log = logging.getLogger("tts-audiobook-tool")
+    log.info(
+        "[stt] starting chunked transcription: %s (model=%s, chunk=%ss, overlap=%ss)",
+        path, stt_variant.id, CHUNK_DURATION, OVERLAP_DURATION,
+    )
+    previous_iteration_started_at: float | None = None
+    previous_iteration_finished_at: float | None = None
     did_interrupt = False
     Interrupts().set("transcribing")
-
-    for i, chunk in enumerate(
-        _stream_audio_with_overlap(
-            file_path=path,
-            chunk_duration=CHUNK_DURATION,
-            overlap_duration=OVERLAP_DURATION
-        )
-    ):
-        if Interrupts().did_interrupt:
-            did_interrupt = True
-            break
-
-        s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
-        if duration_str:
-            s += f" / {duration_str}"
-        s += f"{Ansi.ERASE_REST_OF_LINE}"
-        print(s, end="", flush=True)
-
-        transcription, error = ModelWorker.transcribe_audio_blocking(
-            prefs,
-            chunk,
-            word_timestamps=True,
-            stt_variant_id=SttVariant.LARGE_V3.id,
-        )
-        if error or transcription is None:
-            raise RuntimeError(error or "Worker transcription failed")
-        transcribed_words = Transcriber.get_words_from_segments(
-            transcription.segments  # type: ignore[arg-type]
-        )
-        updated_words = []
-        for word in transcribed_words:
-            updated_word = ConcreteWord(
-                start=word.start + time_offset,
-                end=word.end + time_offset,
-                word=word.word,
-                probability=word.probability
+    try:
+        for i, chunk in enumerate(
+            _stream_audio_with_overlap(
+                file_path=path,
+                chunk_duration=CHUNK_DURATION,
+                overlap_duration=OVERLAP_DURATION
             )
-            updated_words.append(updated_word)
-        list_of_lists.append(updated_words)
+        ):
+            iteration_started_at = time.monotonic()
+            since_start = (
+                "first chunk" if previous_iteration_started_at is None
+                else f"{iteration_started_at - previous_iteration_started_at:.1f}s"
+            )
+            since_finish = (
+                "first chunk" if previous_iteration_finished_at is None
+                else f"{iteration_started_at - previous_iteration_finished_at:.1f}s"
+            )
+            log.info(
+                "[stt] chunk %s starting at audio %.1fs; "
+                "elapsed since previous start=%s, since previous finish=%s",
+                i, time_offset, since_start, since_finish,
+            )
+            previous_iteration_started_at = iteration_started_at
+            if Interrupts().did_interrupt:
+                did_interrupt = True
+                break
 
-        time_offset += CHUNK_DURATION - OVERLAP_DURATION
+            s = f"{Ansi.LINE_HOME}{duration_string(time_offset)}"
+            if duration_str:
+                s += f" / {duration_str}"
+            s += f"{Ansi.ERASE_REST_OF_LINE}"
+            print(s, end="", flush=True)
 
-    Interrupts().clear()
+            # A warm model normally takes ~1s per chunk. Native CUDA inference
+            # can occasionally stop returning; hard-stop that worker and retry
+            # only this chunk, preserving the earlier completed chunks.
+            # The first chunk gets the full budget because it includes a model
+            # load; a retry after a timeout restarts a cold worker, so it must
+            # again cover the model load.
+            chunk_timeout_seconds = 300.0 if i == 0 else 90.0
+            transcription = None
+            error = ""
+            for attempt in range(2):
+                transcription, error = ModelWorker.transcribe_audio_blocking(
+                    prefs,
+                    chunk,
+                    word_timestamps=True,
+                    stt_variant_id=stt_variant.id,
+                    cancel_check=lambda: Interrupts().did_interrupt,
+                    timeout_seconds=(
+                        300.0 if attempt > 0 else chunk_timeout_seconds
+                    ),
+                )
+                if Interrupts().did_interrupt:
+                    did_interrupt = True
+                    break
+                if error != STT_TRANSCRIPTION_TIMEOUT_ERROR:
+                    break
+                log.warning(
+                    "[stt] chunk %s timed out at audio %.1fs (attempt %s/2); "
+                    "worker stopped%s",
+                    i, time_offset, attempt + 1,
+                    "; retrying chunk" if attempt == 0 else "",
+                )
+                if attempt == 0:
+                    print(f"\nTranscription stalled at {duration_string(time_offset)}; retrying chunk with a fresh worker...", flush=True)
+            if did_interrupt:
+                break
+            if error or transcription is None:
+                raise RuntimeError(
+                    f"Transcription failed at audio {duration_string(time_offset)}: "
+                    f"{error or 'Worker transcription failed'}"
+                )
+            transcribed_words = Transcriber.get_words_from_segments(
+                transcription.segments  # type: ignore[arg-type]
+            )
+            updated_words = []
+            for word in transcribed_words:
+                updated_word = ConcreteWord(
+                    start=word.start + time_offset,
+                    end=word.end + time_offset,
+                    word=word.word,
+                    probability=word.probability
+                )
+                updated_words.append(updated_word)
+            list_of_lists.append(updated_words)
+            previous_iteration_finished_at = time.monotonic()
+            log.info(
+                "[stt] chunk %s finished in %.1fs (%s words)",
+                i, previous_iteration_finished_at - iteration_started_at, len(updated_words),
+            )
 
-    print()
-    print()
+            time_offset += CHUNK_DURATION - OVERLAP_DURATION
+    finally:
+        Interrupts().clear()
+        print()
+        print()
 
     if did_interrupt:
         return None
-    else:
-        return list_of_lists
+    return list_of_lists
 
 
 def _stream_audio_with_overlap(
@@ -347,26 +439,31 @@ def _stream_audio_with_overlap(
     )
 
     buffer = b""
-    while True:
-        bytes_to_read = bytes_per_chunk - len(buffer)
-        raw_bytes_new = process.stdout.read(bytes_to_read)
+    completed = False
+    try:
+        while True:
+            bytes_to_read = bytes_per_chunk - len(buffer)
+            raw_bytes_new = process.stdout.read(bytes_to_read)
 
-        if not raw_bytes_new:
-            break
+            if not raw_bytes_new:
+                completed = True
+                break
 
-        raw_bytes = buffer + raw_bytes_new
+            raw_bytes = buffer + raw_bytes_new
 
-        audio = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            audio = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-        yield audio
+            yield audio
 
-        if overlap_duration > 0:
-            rewind_bytes = int(sample_rate * bytes_per_sample * overlap_duration)
-            buffer = raw_bytes[-rewind_bytes:]
-        else:
-            buffer = b""
-
-    process.wait()
+            if overlap_duration > 0:
+                rewind_bytes = int(sample_rate * bytes_per_sample * overlap_duration)
+                buffer = raw_bytes[-rewind_bytes:]
+            else:
+                buffer = b""
+    finally:
+        if not completed and process.poll() is None:
+            process.terminate()
+        process.wait()
 
 
 def _stitch_transcripts(
@@ -473,3 +570,6 @@ MAX_SKIP_WORDS_BASE = 45
 MAX_SKIP_WORDS_LIMIT = 250
 
 DEBUG = DEV and True
+
+# Feature flag: verbose per-line alignment output (source/transcribed/score)
+PRINT_VERBOSE = False

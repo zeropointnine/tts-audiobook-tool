@@ -82,9 +82,11 @@ All examples use the same source text and the same 15-second voice clone sample 
 
 ### Enhance existing audiobooks
 
-This feature extends the browser player to work with professionally produced audiobooks — not just ones generated with this tool. It uses speech-to-text to align the existing audio with the corresponding book text, then embeds the same timing metadata the app normally produces during generation.
+This experimental feature extends the browser player to professionally produced audiobooks, not just audio generated with this tool. Select `Tools` > `Enhance a pre-existing audiobook` to open a resumable submenu for selecting audio and source text, transcribing, aligning the source text with the transcription, creating the enhanced output, and reviewing alignment gaps.
 
-Select `Tools` > `Enhance existing audiobook`, and choose your source audiobook file (M4A or M4B) and the corresponding book text. This feature is experimental.
+Source audio may be MP3, FLAC, MP4, M4A, or M4B. Import either a plain `.txt` file or an EPUB containing the corresponding book text. The app stores resumable work files beside the selected audio using deterministic names: `<stem>.abr.json`, `<stem>.transcription.bin`, and `<stem>.timed_phrases.bin`. These files allow each step to be completed separately and resumed later.
+
+A plain-text source produces `<stem>.abr.m4a`; an EPUB produces `<stem>.abr.m4b` with section metadata. M4A/M4B source audio is copied without re-encoding, while MP3, FLAC, and MP4 source audio is transcoded to AAC. Clearing the submenu selection can optionally remove the three work files, but never deletes the source audio or completed enhanced output.
 
 ### tts-server-tool
 
@@ -684,6 +686,10 @@ Listed below are some anecdotal TTS inference speeds. The app adopts each respec
 
 
 # Update highlights
+
+**2026-09-27**
+
+- Expanded menu for the "enhance-an-audiobook" feature.
 
 **2026-09-16**
 

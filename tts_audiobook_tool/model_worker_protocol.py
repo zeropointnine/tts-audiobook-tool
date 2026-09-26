@@ -7,6 +7,11 @@ from tts_audiobook_tool.generation_events import GenerationEvent
 from tts_audiobook_tool.real_time_playback_events import RealTimePlaybackEvent
 
 
+# Elapsed wait time after which an STT operation is considered suspicious:
+# the parent logs a diagnostic pointer and the worker dumps its thread stacks.
+STT_DIAGNOSTIC_THRESHOLD_SECONDS = 45.0
+
+
 class GenerationTerminalStatus(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -115,6 +120,11 @@ class TranscribeAudioCommand:
     stt_config_id: str
     language: str | None = None
     word_timestamps: bool = False
+    # Delay before the worker dumps its thread stacks to the stack log, used
+    # when the parent suspects native inference has stalled. The parent passes
+    # a value derived from its own wait timeout so a dump never fires after it
+    # has already given up on the operation.
+    stack_dump_delay: float = STT_DIAGNOSTIC_THRESHOLD_SECONDS
 
 
 @dataclass(frozen=True)

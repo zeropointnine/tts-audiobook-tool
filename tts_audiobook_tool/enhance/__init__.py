@@ -1,11 +1,9 @@
-"""
-Enhance existing audiobook feature package.
+"""Resumable enhancement of pre-existing audiobooks.
 
-This submodule contains the user flow and alignment utilities used by the
-"Enhance existing audiobook" feature. The feature aligns source text to an
-existing audiobook's speech and writes ABR timing metadata.
-
-Primary modules:
-- enhance_flow: orchestration/user flow
-- enhance_alignment: STT + forced-alignment helpers
+Modules are separated by responsibility:
+- ``enhance_menu``: submenu presentation and derived status labels
+- ``enhance_flow``: prompts and independently callable business operations
+- ``enhance_artifacts``: deterministic sibling persistence and validation
+- ``enhance_text``: canonical Book import, flattening, and section adaptation
+- ``enhance_alignment``: STT streaming and forced alignment
 """

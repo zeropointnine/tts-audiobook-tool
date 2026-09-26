@@ -82,7 +82,7 @@ def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
     ):
         hints.show_hint_if_necessary(prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
-def show_player_hint(prefs: Prefs) -> None:
+def show_player_hint(prefs: Prefs, and_prompt: bool=False) -> None:
 
     from tts_audiobook_tool.util import get_package_dir
 
@@ -97,4 +97,4 @@ def show_player_hint(prefs: Prefs) -> None:
     s += text_util.make_terminal_hyperlink(PLAYER_URL)
 
     hint = Hint(key="player", heading="Reminder", text=s)
-    show_hint_if_necessary(prefs, hint)
+    show_hint_if_necessary(prefs, hint, and_prompt=and_prompt)

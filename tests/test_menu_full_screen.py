@@ -62,6 +62,39 @@ def test_menu_calls_on_shown_after_render(monkeypatch) -> None:
     assert shown == [True]
 
 
+def test_blank_line_before_item_is_rendered_without_changing_superlabel_spacing(monkeypatch) -> None:
+    state = make_state()
+    output: list[str] = []
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.os.system", lambda _: None)
+    monkeypatch.setattr(MenuStatus, "print_block", lambda _: None)
+    monkeypatch.setattr("tts_audiobook_tool.tts.Tts.update_tts_type", lambda: None)
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.ask.ask_hotkey", lambda: "q")
+    monkeypatch.setattr("tts_audiobook_tool.menus.menu_util.printt", lambda value="": output.append(value))
+
+    MenuUtil.menu(
+        state,
+        "Heading",
+        [
+            MenuItem("First", lambda *_: None, hotkey="1"),
+            MenuItem(
+                "Optional",
+                lambda *_: None,
+                hotkey="2",
+                superlabel="Tail",
+                superlabel_no_blank_line=True,
+                blank_line_before=True,
+            ),
+            MenuItem("Quit", lambda *_: True, hotkey="q"),
+        ],
+        is_submenu=False,
+    )
+
+    optional_index = next(index for index, value in enumerate(output) if "Optional" in value)
+    assert output[optional_index - 2] == ""
+    assert "Tail" in output[optional_index - 1]
+    assert output.count("") == 4  # status gap, heading gap, item separator, footer
+
+
 def test_dont_clear_suppresses_clear_and_status(monkeypatch) -> None:
     state = make_state()
     monkeypatch.setattr(

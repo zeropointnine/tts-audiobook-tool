@@ -37,6 +37,8 @@ class Prefs(Saveable):
             last_voice_dir: str = "",
             last_project_dir: str = "",
             last_text_dir: str = "",
+            last_enhanced_dir: str = "",
+            enhance_audio_path: str = "",
             chat_input_mode: ChatInputMode = PREFS_DEFAULT_CHAT_INPUT_MODE,
             chat_echo_override: bool = PREFS_DEFAULT_CHAT_ECHO_OVERRIDE,
             chat_save: bool = PROJECT_DEFAULT_CHAT_SAVE,
@@ -70,6 +72,8 @@ class Prefs(Saveable):
         self._last_voice_dir = last_voice_dir
         self._last_project_dir = last_project_dir
         self._last_text_dir = last_text_dir
+        self._last_enhanced_dir = last_enhanced_dir
+        self._enhance_audio_path = enhance_audio_path
         if not isinstance(chat_input_mode, ChatInputMode):
             parsed = ChatInputMode.from_id(chat_input_mode) if isinstance(chat_input_mode, str) else None
             chat_input_mode = parsed or PREFS_DEFAULT_CHAT_INPUT_MODE
@@ -339,6 +343,23 @@ class Prefs(Saveable):
             last_text_dir = ""
             dirty = True
 
+        # Last enhanced dir
+        last_enhanced_dir = prefs_dict.get("last_enhanced_dir", "")
+        if not isinstance(last_enhanced_dir, str):
+            last_enhanced_dir = ""
+            dirty = True
+        elif last_enhanced_dir and not os.path.exists(last_enhanced_dir):
+            last_enhanced_dir = ""
+            dirty = True
+
+        # Enhance audiobook selection. Unlike last-used directory preferences,
+        # stale paths are retained so the resumable enhance menu can display and
+        # explicitly clear a selection whose file was moved or removed.
+        enhance_audio_path = prefs_dict.get("enhance_audio_path", "")
+        if not isinstance(enhance_audio_path, str):
+            enhance_audio_path = ""
+            dirty = True
+
         # Chat input mode
         s = prefs_dict.get("chat_input_mode", PREFS_DEFAULT_CHAT_INPUT_MODE.id)
         chat_input_mode = ChatInputMode.from_id(s) if isinstance(s, str) else None
@@ -396,6 +417,8 @@ class Prefs(Saveable):
             last_voice_dir=last_voice_dir,
             last_project_dir=last_project_dir,
             last_text_dir=last_text_dir,
+            last_enhanced_dir=last_enhanced_dir,
+            enhance_audio_path=enhance_audio_path,
             chat_input_mode=chat_input_mode,
             chat_echo_override=chat_echo_override,
             chat_save=chat_save,
@@ -600,6 +623,22 @@ class Prefs(Saveable):
         self._last_text_dir = value
 
     @property
+    def last_enhanced_dir(self) -> str:
+        return self._last_enhanced_dir
+
+    @last_enhanced_dir.setter
+    def last_enhanced_dir(self, value: str) -> None:
+        self._last_enhanced_dir = value
+
+    @property
+    def enhance_audio_path(self) -> str:
+        return self._enhance_audio_path
+
+    @enhance_audio_path.setter
+    def enhance_audio_path(self, value: str) -> None:
+        self._enhance_audio_path = value
+
+    @property
     def chat_input_mode(self) -> ChatInputMode:
         return self._chat_input_mode
 
@@ -659,6 +698,8 @@ class Prefs(Saveable):
                 "last_voice_dir": self._last_voice_dir,
                 "last_project_dir": self._last_project_dir,
                 "last_text_dir": self._last_text_dir,
+                "last_enhanced_dir": self._last_enhanced_dir,
+                "enhance_audio_path": self._enhance_audio_path,
                 "chat_input_mode": self._chat_input_mode.id,
                 "chat_echo_override": self._chat_echo_override,
                 "chat_save": self._chat_save,

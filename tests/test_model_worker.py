@@ -125,6 +125,60 @@ def test_blocking_wait_stops_when_hard_reset_invalidates_operation(
     assert get_event_calls == 1
 
 
+def test_blocking_transcription_wait_hard_stops_on_cancel(monkeypatch) -> None:
+    stopped = []
+    monkeypatch.setattr(ModelWorker, "shutdown", lambda: stopped.append(True))
+    monkeypatch.setattr(
+        ModelWorker, "get_event", lambda **_kwargs: pytest.fail("polled after cancellation")
+    )
+    ModelWorker._active_operation_id = "transcribing"
+    try:
+        result = ModelWorker._wait_for_blocking_result(
+            "transcribing", TtsInspected, cancel_check=lambda: True
+        )
+        assert result == "Model worker operation was cancelled"
+        assert stopped == [True]
+    finally:
+        ModelWorker._active_operation_id = None
+
+
+def test_blocking_transcription_timeout_stops_worker(monkeypatch, caplog) -> None:
+    stopped = []
+    monkeypatch.setattr(ModelWorker, "shutdown", lambda: stopped.append(True))
+    monkeypatch.setattr(
+        ModelWorker, "get_event", lambda **_kwargs: pytest.fail("polled after timeout")
+    )
+    ModelWorker._active_operation_id = "transcribing"
+    try:
+        result = ModelWorker._wait_for_blocking_result(
+            "transcribing", TtsInspected, timeout_seconds=0.0
+        )
+        assert result == model_worker_module.STT_TRANSCRIPTION_TIMEOUT_ERROR
+        assert stopped == [True]
+        assert "[stt watchdog] TIMEOUT: operation=transcribing" in caplog.text
+        assert "[stt watchdog] worker stopped after timeout" in caplog.text
+    finally:
+        ModelWorker._active_operation_id = None
+
+
+def test_stt_diagnostic_threshold_logs_stack_location(monkeypatch, caplog) -> None:
+    with monkeypatch.context() as patch:
+        clock = iter((0.0, 46.0, 46.0))
+        patch.setattr(model_worker_module.time, "monotonic", lambda: next(clock))
+        patch.setattr(
+            ModelWorker, "get_event", lambda **_kwargs: TtsInspected("transcribing", "test")
+        )
+        ModelWorker._active_operation_id = "transcribing"
+        try:
+            ModelWorker._wait_for_blocking_result(
+                "transcribing", TtsInspected, timeout_seconds=90.0
+            )
+        finally:
+            ModelWorker._active_operation_id = None
+    assert "[stt watchdog] 45s diagnostic threshold reached" in caplog.text
+    assert model_worker_module.STT_WORKER_STACK_LOG_PATH in caplog.text
+
+
 def test_sigterm_exits_worker_gracefully() -> None:
     """SIGTERM must unwind the worker so its atexit finalizers run.
 

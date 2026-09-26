@@ -1,419 +1,517 @@
+from __future__ import annotations
+
+from tts_audiobook_tool.app_types import Hint
+
+"""Business operations for the resumable enhance-audiobook submenu."""
+
 import os
 from pathlib import Path
-import pickle
-import time
-from dataclasses import dataclass, field
-from typing import Any
-from tts_audiobook_tool.app_support import app_hashing, app_paths, hints, app_hint_util
-from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSection
-from tts_audiobook_tool.app_types import Word
-from tts_audiobook_tool import ask
-from tts_audiobook_tool.constants import *
-from tts_audiobook_tool.constants_hints import *
-from tts_audiobook_tool.state import State
-from tts_audiobook_tool.text_ops.phrase_grouper import PhraseGrouper
-from tts_audiobook_tool.prefs import Prefs
-from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
-from tts_audiobook_tool.enhance import enhance_alignment
-from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
-from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
-from tts_audiobook_tool.constants_config import *
-from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
+import tempfile
+
+from tts_audiobook_tool import ask, text_util
+from tts_audiobook_tool.app_support import app_hint_util, hints
+from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataTextSegment
+from tts_audiobook_tool.constants import ABR_VERSION, COL_ACCENT, COL_DEFAULT, COL_DIM_ITALICS
+from tts_audiobook_tool.constants_hints import HINT_ENHANCE_ORPHANS, HINT_STT_ENHANCE, HINT_STT_ENHANCE_CACHED
+from tts_audiobook_tool.enhance import enhance_alignment, enhance_text
+from tts_audiobook_tool.enhance.enhance_artifacts import (
+    EnhanceArtifacts,
+    count_misalignments,
+    delete_temporary_files,
+    load_output_timed_phrases,
+    load_timed_phrases,
+    load_transcription,
+    make_enhance_state,
+    save_book,
+    save_timed_phrases,
+    save_transcription,
+)
+from tts_audiobook_tool.enhance.unmatched_lines_app import UnmatchedLinesApp
 from tts_audiobook_tool.menus.menu_util import MenuUtil
-
-from tts_audiobook_tool.util import *
-
-
-@dataclass
-class EnhanceSourceText:
-    raw_text: str
-    phrases: list[Phrase]
-    source_kind: str = "text"
-    title: str = ""
-    section_ranges: list[tuple[int, int]] = field(default_factory=list)
-    section_titles: list[str] = field(default_factory=list)
+from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
+from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
+from tts_audiobook_tool.state import State
+from tts_audiobook_tool.textual.content_textual_app import ContentAppCompleted, run_content_textual_app
+from tts_audiobook_tool.util import make_error_string, print_feedback, printt
 
 
-def ask_and_make(state: State) -> None:
-
-    MenuUtil.print_screen_heading(state, "Enhance existing audiobook", breadcrumb="Enhance audiobook")
-
-    hints.show_hint_if_necessary(state.prefs, HINT_STT_ENHANCE)
-
-    # [1] Ask text/EPUB file
-    if DEV and False:
-        inp = r"exc.txt"
-    else:
-        inp = ask.ask_file_path(
-            "Step 1/2 - Enter text or EPUB file path: ",
-            "Step 1/2: Select text or EPUB file",
-            filetypes=[("Text and EPUB files", "*.txt *.epub"), ("Text files", "*.txt"), ("EPUB files", "*.epub"), ("All files", "*.*")],
-            initialdir=state.prefs.last_text_dir if state.prefs.last_text_dir and os.path.exists(state.prefs.last_text_dir) else "",
-        )
-    if not inp:
-        return
-    if not os.path.exists(inp):
-        ask.ask_enter_to_continue(f"File doesn't exist.")
-        return
-    source_text_path = Path(inp)
-    state.prefs.last_text_dir = str(source_text_path.parent)
-    state.prefs.save()
-
-    source_text = load_source_text_for_enhance(state, str(source_text_path))
-    if source_text is None:
-        return
-
-    time.sleep(1)
-
-    # [2] Ask audio file
-    if DEV and False:
-        inp = r"exc.flac"
-    else:
-        inp = ask.ask_file_path("Step 2/2 - Enter audiobook file path: ", "Step 2/2: Select audiobook file")
-
-    if not inp:
-        return
-    if not os.path.exists(inp):
-        printt(f"File doesn't exist.")
-        return
-    source_audio_path = inp
-
-    # Optional transcode step
-    if Path(source_audio_path).suffix == ".mp3":
-        hints.show_hint_if_necessary(state.prefs, HINT_MULTIPLE_MP3S)
-        b = ask.ask_confirm("MP3 file must first be transcoded to AAC. Do this now? ")
-        if not b:
-            return
-        path, err = SoundFileUtil.transcode_to_aac(source_audio_path)
-        if err:
-            ask.ask_error(err)
-            return
-        source_audio_path = path
-
-    # Make normalized, 'idempotent' path
-    source_audio_path = str(Path(source_audio_path).resolve().as_posix())
-
-    types = [".flac", ".mp4", ".m4a", ".m4b"]
-    if not Path(source_audio_path).suffix in types:
-        printt("File suffix must be one of the following: {types}")
-        return
-
-    # Check if already has meta
-    meta = AppMetadata.load_from_file(source_audio_path)
-    if meta is not None:
-        if DEV and False:
-            b = True
-        else:
-            b = ask.ask_confirm("Audio file already has tts-audiobook-tool metadata. Continue anyway? ")
-        if not b:
-            return
-
-    # [3] Calc hash
-    source_audio_hash, err = app_hashing.calc_hash_file(
-        source_audio_path,
-        print_progress_text="Calculating audio file hash:"
-    )
-    if err:
-        ask.ask_error(err)
-        return
-
-    # [4] Check if already has transcription pickle file
-    transcription_pickle_path = _make_transcription_pickle_file_path(source_audio_hash)
-    if not os.path.exists(transcription_pickle_path):
-        transcription_pickle_path = ""
-    else:
-        if DEV and False:
-            b = True
-        else:
-            b = ask.ask_confirm("You've previously transcribed this audio file. Use saved transcription data? ")
-        if not b:
-            transcription_pickle_path = ""
-
-    # TODO: new [5] Ask for language code hint
-
-    # [5] Start
-    make(
-        state.prefs,
-        source_text,
-        source_audio_path=source_audio_path,
-        source_audio_hash=source_audio_hash,
-        source_pickle_path=transcription_pickle_path
-    )
+SUPPORTED_AUDIO_SUFFIXES = {".mp3", ".flac", ".mp4", ".m4a", ".m4b"}
+COPY_AUDIO_SUFFIXES = {".m4a", ".m4b"}
 
 
-def make(
-        prefs: Prefs,
-        raw_text: str | EnhanceSourceText,
-        source_audio_path: str,
-        source_audio_hash: str,
-        source_pickle_path: str=""
-) -> bool:
+def _validate_audio(path: Path) -> str:
+    if not path.exists():
+        return f"Audio file does not exist: {path}"
+    if not path.is_file():
+        return f"Audio path is not a regular file: {path}"
+    if path.suffix.lower() not in SUPPORTED_AUDIO_SUFFIXES:
+        supported = ", ".join(sorted(SUPPORTED_AUDIO_SUFFIXES))
+        return f"Audio file suffix must be one of: {supported}"
+    try:
+        return SoundFileUtil.is_valid_sound_file(str(path))
+    except Exception as exception:
+        return f"Could not read audio file: {make_error_string(exception)}"
+
+
+def _selected_artifacts(state: State) -> tuple[EnhanceArtifacts | None, str]:
+    selected = state.prefs.enhance_audio_path
+    if not selected:
+        return None, "Enter an audiobook file path first."
+    artifacts = EnhanceArtifacts.from_audio_path(selected)
+    audio_error = _validate_audio(artifacts.audio_path)
+    if audio_error:
+        return None, audio_error
+    return artifacts, ""
+
+
+def _existing_output_path(artifacts: EnhanceArtifacts) -> Path | None:
     """
-    Optional source_pickle_path is the already-transcribed data from source_audio_path,
+    Return the parallel enhanced audiobook for this audio, if any.
 
-    Returns True for success
+    The expected suffix depends on the book's text_source_kind, which is not
+    knowable until source text is entered (the book artifact may be missing
+    entirely), so both candidate names are checked.
     """
+    for candidate in (artifacts.epub_output_path, artifacts.flat_output_path):
+        if candidate.is_file():
+            return candidate
+    return None
 
-    # [1] Make segmented source text
 
-    source_text = normalize_enhance_source_text(raw_text)
-    if not source_text.raw_text:
-        ask.ask_enter_to_continue("File has no content.")
-        return False
-    if not source_text.phrases:
-        ask.ask_enter_to_continue("Source text produced no segments.")
-        return False
-
-    # [2] Transcribe audio file (or load pickle file)
-
-    if source_pickle_path:
-
-        try:
-            with open(source_pickle_path, "rb") as file:
-                words = pickle.load(file)
-        except Exception as e:
-            ask.ask_error(make_error_string(e))
-            return False
-
+def select_audio(state: State) -> None:
+    current = state.prefs.enhance_audio_path
+    current_parent = Path(current).parent if current else None
+    if current_parent and current_parent.is_dir():
+        initial_dir = str(current_parent)
+    elif state.prefs.last_enhanced_dir and Path(state.prefs.last_enhanced_dir).is_dir():
+        initial_dir = state.prefs.last_enhanced_dir
     else:
-
-        MenuUtil.print_heading(None, f"Transcribing audio... {COL_DIM}(This may take some time)", dont_clear=True, non_menu=True)
-        printt()
-
-        words = enhance_alignment.transcribe_to_words(
-            str(source_audio_path), prefs
-        )
-        if words is None: # interrupted
-            printt("")
-            print_feedback("Interrupted")
-            return False
-
-        printt("\a")
-
-        # Save transcription data to pickle
-        pickle_path = _make_transcription_pickle_file_path(source_audio_hash)
-        try:
-            with open(pickle_path, "wb") as file:
-                pickle.dump(words, file)
-        except:
-            pass # eat
-
-    # [3] "Merge" source text and transcribed text data
-
-    MenuUtil.print_heading(None, "Merging data...", dont_clear=True, non_menu=True)
-
-    timed_phrases, did_interrupt = make_section_aware_timed_phrases(source_text, words)
-
-    if did_interrupt:
-        print_feedback("Interrupted")
-        return False
-
-    sections = make_app_metadata_sections(source_text, len(timed_phrases))
-
-    # [4] Save "abr" audio file
-
-    dest_name = Path(source_audio_path).stem + ".abr" + Path(source_audio_path).suffix # eg, "teh_hobbit.abr.m4b"
-    dest_path = str( Path(source_audio_path).with_name(dest_name) )
-    dest_path = make_unique_file_path(dest_path)
-    printt(f"\nSaving audio file with added custom metadata")
-    printt()
-
-    meta = AppMetadata(
-        timed_phrases=timed_phrases,
-        title=source_text.title or Path(source_audio_path).stem,
-        version=ABR_VERSION,
-        bookmark_indices=[],
-        raw_text=source_text.raw_text,
-        has_break_audio=False,
-        project_snapshot={},
-        sections=sections
+        initial_dir = ""
+    selected = ask.ask_file_path(
+        "Enter source audiobook file path: ",
+        "Select audiobook file",
+        filetypes=[
+            ("Supported audio", "*.mp3 *.flac *.mp4 *.m4a *.m4b"),
+            ("All files", "*.*"),
+        ],
+        initialdir=initial_dir,
     )
-    if dest_path.lower().endswith(".flac"):
-        save_error = AppMetadata.save_to_flac(meta, str(source_audio_path), str(dest_path))
-    else:
-        save_error = AppMetadata.save_to_mp4(meta, str(source_audio_path), str(dest_path))
-    if save_error:
-        ask.ask_error(f"Error: {save_error}")
-    else:
-        printt(f"{COL_ACCENT}Saved {dest_path}")
-        printt()
+    if not selected:
+        return
 
-    hints.show_hint_if_necessary(prefs, HINT_STT_ENHANCE_CACHED)
-
-    # [4b] Review "discontinuity info"
-    b = ask.ask_confirm("View discontinuity info summary? ")
-    if b:
-        print_discontinuity_info(timed_phrases)
-        ask.ask_enter_to_continue()
-
-    if not save_error:
-        app_hint_util.show_player_hint(prefs)
-
-    return bool(save_error)
-
-
-def load_source_text_for_enhance(state: State | Any, source_text_path: str) -> EnhanceSourceText | None:
-    suffix = Path(source_text_path).suffix.lower()
-    if suffix == ".epub":
-        epub_import_result = EpubMenuUtil.import_epub(
-            epub_path=source_text_path,
-            max_words=state.project.max_words,
-            segmentation_strategy=state.project.segmentation_strategy,
-            language_code=state.project.language_code,
-            dialog_segmentation=state.project.dialog_segmentation,
-        )
-        if epub_import_result is None:
-            return None
-        if not epub_import_result.raw_text.strip():
-            ask.ask_enter_to_continue("EPUB import produced no text.")
-            return None
-        if not epub_import_result.phrase_groups:
-            ask.ask_enter_to_continue("EPUB import produced no text segments.")
-            return None
-        EpubMenuUtil.print_import_info(epub_import_result)
-        phrases = PhraseGroup.flatten_groups(epub_import_result.phrase_groups)
-        section_ranges = make_section_ranges_from_group_starts(
-            epub_import_result.phrase_groups,
-            epub_import_result.section_start_indices,
-        )
-        return EnhanceSourceText(
-            raw_text=epub_import_result.raw_text,
-            phrases=phrases,
-            source_kind="epub",
-            title=epub_import_result.book_title,
-            section_ranges=section_ranges,
-            section_titles=[chapter.title for chapter in epub_import_result.chapters],
-        )
+    path = Path(selected).resolve()
+    error = _validate_audio(path)
+    if error:
+        ask.ask_error(error)
+        return
 
     try:
-        with open(source_text_path, "r", encoding="utf-8") as file:
-            raw_text = file.read()
-    except Exception as e:
-        ask.ask_error(f"Error: {e}")
-        return None
-
-    if not raw_text:
-        ask.ask_enter_to_continue("File has no content.")
-        return None
-
-    return normalize_enhance_source_text(raw_text)
-
-
-def normalize_enhance_source_text(raw_text: str | EnhanceSourceText) -> EnhanceSourceText:
-    if isinstance(raw_text, EnhanceSourceText):
-        return raw_text
-
-    printt("Segmenting source text...")
-    printt()
-    groups = PhraseGrouper.text_to_groups(raw_text, max_words=MAX_WORDS_PER_SEGMENT_STT)
-    phrases = PhraseGroup.flatten_groups(groups)
-    return EnhanceSourceText(raw_text=raw_text, phrases=phrases)
-
-
-def make_section_ranges_from_group_starts(
-        phrase_groups: list[PhraseGroup],
-        section_start_indices: list[int],
-) -> list[tuple[int, int]]:
-    starts = [0]
-    starts.extend(index for index in section_start_indices if 0 < index < len(phrase_groups))
-    starts = sorted(set(starts))
-
-    group_phrase_starts: list[int] = []
-    phrase_index = 0
-    for group in phrase_groups:
-        group_phrase_starts.append(phrase_index)
-        phrase_index += len(group.phrases)
-    group_phrase_starts.append(phrase_index)
-
-    ranges: list[tuple[int, int]] = []
-    for section_index, start_group_index in enumerate(starts):
-        end_group_index = starts[section_index + 1] if section_index + 1 < len(starts) else len(phrase_groups)
-        start_phrase_index = group_phrase_starts[start_group_index]
-        end_phrase_index = group_phrase_starts[end_group_index]
-        if end_phrase_index > start_phrase_index:
-            ranges.append((start_phrase_index, end_phrase_index))
-    return ranges
-
-
-def make_section_aware_timed_phrases(
-        source_text: EnhanceSourceText,
-        words: list[Word],
-) -> tuple[list[TimedPhrase], bool]:
-    if not source_text.section_ranges:
-        return enhance_alignment.make_timed_phrases(source_text.phrases, words)
-
-    timed_phrases: list[TimedPhrase] = []
-    alignment_state = enhance_alignment.AlignmentState()
-    line_offset = 0
-    for section_index, (start, end) in enumerate(source_text.section_ranges):
-        section_phrases = source_text.phrases[start:end]
-        if not section_phrases:
-            continue
-        if len(source_text.section_ranges) > 1:
-            title = source_text.section_titles[section_index] if section_index < len(source_text.section_titles) else ""
-            title_suffix = f": {title}" if title else ""
-            printt(f"{COL_ACCENT}Aligning EPUB section {section_index + 1}/{len(source_text.section_ranges)}{title_suffix}{COL_DEFAULT}")
-            printt()
-        section_timed_phrases, alignment_state, did_interrupt = enhance_alignment.align_phrases_with_state(
-            section_phrases,
-            words,
-            alignment_state,
-            line_offset=line_offset,
-        )
-        if did_interrupt:
-            return [], True
-        timed_phrases.extend(section_timed_phrases)
-        line_offset += len(section_phrases)
-
-    return timed_phrases, False
-
-
-def make_app_metadata_sections(source_text: EnhanceSourceText, text_segment_count: int) -> list[AppMetadataSection]:
-    sections: list[AppMetadataSection] = []
-    for section_index, (start, end) in enumerate(source_text.section_ranges):
-        if start >= text_segment_count:
-            continue
-        section_end = min(end, text_segment_count)
-        if section_end <= start:
-            continue
-        title = source_text.section_titles[section_index] if section_index < len(source_text.section_titles) else ""
-        sections.append(AppMetadataSection(
-            title=title,
-            start_index=start,
-            end_index=section_end,
-        ))
-    return sections
-
-
-def print_discontinuity_info(timed_text_segments: list[TimedPhrase]):
-
-    MenuUtil.print_heading(None, "Unmatched text segments:", dont_clear=True, non_menu=True)
-    printt()
-
-    discon_ranges = TimedPhrase.get_discontinuities(timed_text_segments)
-    if not discon_ranges:
-        printt("No items found")
-        printt()
+        metadata = AppMetadata.load_from_file(str(path))
+    except Exception as exception:
+        ask.ask_error(f"Could not inspect audiobook metadata: {make_error_string(exception)}")
+        return
+    if metadata is not None and not ask.ask_confirm(
+        "Audio file already has tts-audiobook-tool metadata. Continue anyway? "
+    ):
         return
 
-    for start, end in discon_ranges:
+    # Existing sibling work files belong to a resumable run; Clear is the
+    # explicit place to delete them, not selecting this audio.
+    old_last_enhanced_dir = state.prefs.last_enhanced_dir
+    state.prefs.enhance_audio_path = str(path)
+    state.prefs.last_enhanced_dir = str(path.parent)
+    save_error = state.prefs.save()
+    if save_error:
+        state.prefs.enhance_audio_path = current
+        state.prefs.last_enhanced_dir = old_last_enhanced_dir
+        ask.ask_error(f"Could not save audiobook selection: {save_error}")
+        return
 
-        num_consecutive = end - start + 1
+    existing = _existing_output_path(EnhanceArtifacts.from_audio_path(path))
+    if existing is not None:
+        existing = text_util.make_terminal_hyperlink(str(existing), is_file=True)
+        hints.show_hint(
+            Hint(
+                "",
+                f"An enhanced audiobook already exists at {existing}.\n",
+                "You can review it from the menu, or redo the intermediate steps to replace it."
+            ),
+            and_prompt=True
+        )
 
-        if num_consecutive == 1:
-            printt(f"Line {start}")
-            text = timed_text_segments[start].text.strip()
-            printt(f"    {COL_DIM}Line:{COL_DEFAULT} {ellipsize(text, 50)}")
-            printt()
+def select_text(state: State) -> None:
+    artifacts, error = _selected_artifacts(state)
+    if artifacts is None:
+        ask.ask_error(error)
+        return
+
+    hints.show_hint_if_necessary(state.prefs, HINT_STT_ENHANCE)
+    selected = ask.ask_file_path(
+        "Enter text or EPUB file path: ",
+        "Select text or EPUB file",
+        filetypes=[
+            ("Text and EPUB files", "*.txt *.epub"),
+            ("Text files", "*.txt"),
+            ("EPUB files", "*.epub"),
+        ],
+        initialdir=(
+            state.prefs.last_text_dir
+            if state.prefs.last_text_dir and Path(state.prefs.last_text_dir).is_dir()
+            else ""
+        ),
+    )
+    if not selected:
+        return
+    source_path = Path(selected)
+    if not source_path.is_file():
+        ask.ask_error(f"Source text file does not exist: {source_path}")
+        return
+    if source_path.suffix.lower() not in {".txt", ".epub"}:
+        ask.ask_error("Source text file must have a .txt or .epub suffix.")
+        return
+
+    old_last_text_dir = state.prefs.last_text_dir
+    state.prefs.last_text_dir = str(source_path.parent)
+    prefs_error = state.prefs.save()
+    if prefs_error:
+        state.prefs.last_text_dir = old_last_text_dir
+        ask.ask_error(f"Could not save the source-text directory: {prefs_error}")
+        return
+
+    if artifacts.book_path.exists() and not ask.ask_confirm(
+        "Replace the existing imported source text? "
+    ):
+        return
+
+    book = enhance_text.import_source_book(state, source_path)
+    if book is None:
+        return
+    if isinstance(book, str):
+        ask.ask_error(book)
+        return
+
+    save_error = save_book(artifacts, book)
+    if save_error:
+        ask.ask_error(save_error)
+        return
+
+    # Only the timed alignment depends on the source text; the audio-only
+    # transcription can be reused. A completed final output deliberately
+    # remains until Create is explicitly selected again.
+    try:
+        artifacts.timed_phrases_path.unlink(missing_ok=True)
+    except OSError as exception:
+        ask.ask_error(
+            "Source text was saved, but the old timed-phrases cache could not be removed: "
+            f"{make_error_string(exception)}"
+        )
+        return
+
+    if book.text_source_kind == "plain_text":
+        count = len(enhance_text.flatten_book(book).phrases)
+        noun = "line" if count == 1 else "lines"
+        print_feedback(f"Imported text ({count} {noun})")
+    else:
+        ask.ask_enter_to_continue()
+
+
+def transcribe(state: State) -> None:
+    artifacts, error = _selected_artifacts(state)
+    if artifacts is None:
+        ask.ask_error(error)
+        return
+    snapshot = make_enhance_state(state.prefs.enhance_audio_path)
+    if snapshot.transcription_valid and not ask.ask_confirm(
+        "Replace the existing transcription? "
+    ):
+        return
+    from tts_audiobook_tool.enhance import enhance_menu
+
+    # Transcription needs only the audio, so no book is required here. The
+    # chain question needs the book (for its output suffix), and alignment
+    # requires it anyway, so skip it when no source text has been entered yet.
+    align_when_finished = False
+    if snapshot.book is not None:
+        suffix = enhance_menu.output_suffix(snapshot)
+        align_when_finished = ask.ask_confirm(
+            f"When transcription is finished, perform force-alignment step and create the \"{suffix}\" file? "
+        )
+
+    transcribing_line = (
+        f"{COL_ACCENT}Transcribing audio "
+        f"{COL_DIM_ITALICS}(This may take some time...){COL_DEFAULT}"
+    )
+    divider = "-" * len(text_util.strip_ansi_codes(transcribing_line))
+    MenuUtil.print_heading(
+        None,
+        f"{COL_ACCENT}{divider}\n{transcribing_line}",
+        dont_clear=True,
+        non_menu=True,
+    )
+    try:
+        words = enhance_alignment.transcribe_to_words(str(artifacts.audio_path), state.prefs)
+    except Exception as exception:
+        ask.ask_error(f"Transcription failed: {make_error_string(exception)}")
+        return
+    if words is None:
+        printt()
+        print_feedback("Interrupted")
+        return
+
+    save_error = save_transcription(artifacts, words)
+    if save_error:
+        ask.ask_error(save_error)
+        return
+    try:
+        artifacts.timed_phrases_path.unlink(missing_ok=True)
+    except OSError as exception:
+        ask.ask_error(
+            "Transcription was saved, but the old timed-phrases cache could not be removed: "
+            f"{make_error_string(exception)}"
+        )
+        return
+
+    printt("\a")
+    print_feedback("Transcribing finished")
+    hints.show_hint_if_necessary(state.prefs, HINT_STT_ENHANCE_CACHED)
+    if align_when_finished:
+        align_source_text(state, create_when_finished=True)
+
+
+def align_source_text(state: State, *, create_when_finished: bool | None = None) -> None:
+    artifacts, error = _selected_artifacts(state)
+    if artifacts is None:
+        ask.ask_error(error)
+        return
+    snapshot = make_enhance_state(state.prefs.enhance_audio_path)
+    if snapshot.book is None:
+        ask.ask_error(snapshot.book_error or "Source text required.")
+        return
+    words, transcription_error = load_transcription(artifacts)
+    if words is None:
+        ask.ask_error(transcription_error or "Transcription required.")
+        return
+
+    flattened = enhance_text.flatten_book(snapshot.book)
+    if not flattened.phrases:
+        ask.ask_error("The imported source book has no text segments.")
+        return
+
+    if create_when_finished is None:
+        from tts_audiobook_tool.enhance import enhance_menu
+
+        suffix = enhance_menu.output_suffix(snapshot)
+        create_when_finished = ask.ask_confirm(
+            f"Create the \"{suffix}\" file when alignment is finished? "
+        )
+
+    merging_line = f"{COL_ACCENT}Merging data...{COL_DEFAULT}"
+    merging_divider = "-" * len(text_util.strip_ansi_codes(merging_line))
+    MenuUtil.print_heading(
+        None,
+        f"{COL_ACCENT}{merging_divider}\n{merging_line}",
+        dont_clear=True,
+        non_menu=True,
+    )
+    try:
+        timed_phrases, did_interrupt = enhance_text.align_book(snapshot.book, words)
+    except Exception as exception:
+        ask.ask_error(f"Alignment failed: {make_error_string(exception)}")
+        return
+    if did_interrupt:
+        print_feedback("Interrupted")
+        return
+    if not timed_phrases:
+        ask.ask_error("Alignment produced no timed text segments.")
+        return
+
+    timed_error = save_timed_phrases(artifacts, timed_phrases)
+    if timed_error:
+        ask.ask_error(timed_error)
+        return
+
+    if create_when_finished:
+        create_output(state, overwrite=True)
+
+    # The orphan review belongs to the alignment flow: it fires whether or not
+    # the user opted into creating the output file, and after that step if so.
+    orphan_count = count_misalignments(timed_phrases)
+    if orphan_count and ask.ask_confirm("Review orphaned lines now? "):
+        review_discontinuities(state)
+
+
+def _make_staging_path(destination: Path) -> Path:
+    descriptor, value = tempfile.mkstemp(
+        dir=destination.parent,
+        prefix=f".{destination.stem}.",
+        suffix=destination.suffix,
+    )
+    os.close(descriptor)
+    path = Path(value)
+    path.unlink()
+    return path
+
+
+def _write_staged_output(
+    state: State,
+    artifacts: EnhanceArtifacts,
+    destination: Path,
+    metadata: AppMetadata,
+) -> str:
+    staging: Path | None = None
+    try:
+        staging = _make_staging_path(destination)
+        source_suffix = artifacts.audio_path.suffix.lower()
+        if source_suffix in COPY_AUDIO_SUFFIXES:
+            error = AppMetadata.save_to_mp4(
+                metadata,
+                str(artifacts.audio_path),
+                str(staging),
+            )
         else:
-            printt(f"Lines {start} to {end} ({COL_ERROR}{num_consecutive} lines{COL_DEFAULT})")
-            first_text = timed_text_segments[start].text.strip()
-            last_text = timed_text_segments[end].text.strip()
-            printt(f"    {COL_DIM}First line:{COL_DEFAULT} {ellipsize(first_text, 50)}")
-            printt(f"    {COL_DIM}Last line:{COL_DEFAULT} {ellipsize(last_text, 50)}")
-            printt()
+            error = SoundFileUtil.transcode_to_aac_at(
+                str(artifacts.audio_path),
+                str(staging),
+                state.prefs.aac_bitrate,
+            )
+            if not error:
+                error = AppMetadata.save_to_mp4(metadata, str(staging))
+        if error:
+            return error
+        try:
+            readback = AppMetadata.load_from_file(str(staging))
+        except Exception as exception:
+            return f"Could not verify staged audiobook metadata: {make_error_string(exception)}"
+        if readback is None:
+            return "Could not verify staged audiobook metadata"
+        os.replace(staging, destination)
+        return ""
+    except Exception as exception:
+        return f"Could not create enhanced audiobook: {make_error_string(exception)}"
+    finally:
+        if staging is not None:
+            try:
+                staging.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
-def _make_transcription_pickle_file_path(hash: str) -> str:
-    file_name = f"transcription {hash}.pkl"
-    return os.path.join(app_paths.get_app_user_dir(), file_name)
+def create_output(state: State, overwrite: bool = False) -> None:
+    artifacts, error = _selected_artifacts(state)
+    if artifacts is None:
+        ask.ask_error(error)
+        return
+    snapshot = make_enhance_state(state.prefs.enhance_audio_path)
+    if snapshot.book is None:
+        if snapshot.timed_phrases_valid:
+            ask.ask_error(
+                snapshot.book_error
+                or (
+                    "Source text required. The alignment was built from a book that is no "
+                    "longer present; re-enter the source text (its alignment will be redone)."
+                )
+            )
+        else:
+            ask.ask_error(snapshot.book_error or "Source text required.")
+        return
+    timed_phrases, timed_error = load_timed_phrases(artifacts)
+    if timed_phrases is None:
+        ask.ask_error(timed_error or "Align source text with transcription before creating the output.")
+        return
+    if not timed_phrases:
+        ask.ask_error("Alignment has no timed text segments. Align source text with transcription first.")
+        return
+
+    try:
+        destination = artifacts.expected_output_path(snapshot.book)
+    except ValueError as exception:
+        ask.ask_error(str(exception))
+        return
+    if not overwrite and destination.exists() and not ask.ask_confirm(
+        f"Replace the existing enhanced audiobook at {destination}? "
+    ):
+        return
+
+    metadata_timed_phrases: list[AppMetadataTextSegment] = list(timed_phrases)
+    metadata = AppMetadata(
+        timed_phrases=metadata_timed_phrases,
+        title=snapshot.book.title or artifacts.audio_path.stem,
+        version=ABR_VERSION,
+        bookmark_indices=[],
+        raw_text="",
+        has_break_audio=False,
+        project_snapshot={},
+        sections=enhance_text.make_app_metadata_sections(
+            snapshot.book,
+            len(timed_phrases),
+        ),
+    )
+    saving_line = f"{COL_ACCENT}Creating audio file with added custom metadata{COL_DEFAULT}"
+    divider = "-" * len(text_util.strip_ansi_codes(saving_line))
+    printt(f"{COL_ACCENT}{divider}")
+    printt(saving_line)
+    printt()
+    output_error = _write_staged_output(state, artifacts, destination, metadata)
+    if output_error:
+        ask.ask_error(output_error)
+        return
+
+    # print_feedback adds the nominal pause so the menu redraw doesn't
+    # clear the "Saved" line before it can be read.
+    print_feedback(
+        f"\n{COL_ACCENT}Saved {COL_DEFAULT}{text_util.make_terminal_hyperlink(str(destination), is_file=True)}",
+        no_preformat=True,
+    )
+    # These hints are followed by the menu redraw, which clears the screen;
+    # the default 2-second hint animation is not long enough to read them.
+    app_hint_util.show_player_hint(state.prefs, and_prompt=True)
+    hints.show_hint_if_necessary(state.prefs, HINT_ENHANCE_ORPHANS, and_prompt=True)
+
+
+def review_discontinuities(state: State) -> None:
+    snapshot = make_enhance_state(state.prefs.enhance_audio_path)
+    if snapshot.artifacts is None or snapshot.expected_output_path is None:
+        ask.ask_error("Create an enhanced audiobook before reviewing discontinuities.")
+        return
+    if not snapshot.output_valid:
+        ask.ask_error(snapshot.output_error or "The enhanced audiobook metadata is unreadable.")
+        return
+
+    timed_phrases, error = load_output_timed_phrases(snapshot.expected_output_path)
+    if timed_phrases is None:
+        ask.ask_error(error)
+        return
+    output_path = snapshot.expected_output_path
+    audio_duration = AudioMetaUtil.get_audio_duration(str(output_path))
+    result = run_content_textual_app(
+        UnmatchedLinesApp(state.project, timed_phrases, output_path, audio_duration)
+    )
+    if not isinstance(result, ContentAppCompleted):
+        ask.ask_error(result.message)
+
+
+def clear_selection(state: State) -> None:
+    current = state.prefs.enhance_audio_path
+    if not current:
+        return
+    snapshot = make_enhance_state(current)
+    errors: list[str] = []
+
+    if (
+        snapshot.artifacts is not None
+        and any(path.exists() for path in snapshot.artifacts.temporary_paths)
+        and ask.ask_confirm("Also delete the intermediate files created by this workflow?")
+    ):
+        errors.extend(delete_temporary_files(snapshot.artifacts))
+
+    state.prefs.enhance_audio_path = ""
+    save_error = state.prefs.save()
+    if save_error:
+        state.prefs.enhance_audio_path = current
+        errors.append(f"Could not save the cleared audiobook selection: {save_error}")
+
+    if errors:
+        errors.append(
+            "Reselecting the source audiobook makes any retained sibling work files discoverable again."
+        )
+        ask.ask_error("\n".join(errors))

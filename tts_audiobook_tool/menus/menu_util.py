@@ -31,7 +31,8 @@ class MenuItem:
             sublabel: StringOrMaker | None = None,
             hotkey: str = "",
             superlabel: StringOrMaker = "",
-            superlabel_no_blank_line: bool = False
+            superlabel_no_blank_line: bool = False,
+            blank_line_before: bool = False,
     ):
         self.label = label
 
@@ -41,6 +42,7 @@ class MenuItem:
         # Optional label printed on its own line above the item
         self.superlabel = superlabel
         self.superlabel_no_blank_line = superlabel_no_blank_line
+        self.blank_line_before = blank_line_before
 
         # handler/callback passes the State object and `data`, if any
         self.handler = handler
@@ -156,6 +158,8 @@ class MenuUtil:
 
                 # Print items
                 for item in items_list:
+                    if item.blank_line_before:
+                        printt()
                     if item.superlabel:
                         superlabel_text = get_string_from(state, item.superlabel)
                         if superlabel_text:

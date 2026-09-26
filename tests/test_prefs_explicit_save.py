@@ -55,6 +55,49 @@ def test_compound_prefs_change_is_persisted_with_one_explicit_save(
     assert payload["system_prompt_preset"] == ""
 
 
+def test_enhance_audio_path_defaults_and_requires_explicit_save(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+    prefs = Prefs()
+
+    assert prefs.enhance_audio_path == ""
+    prefs.enhance_audio_path = "/missing/book.m4b"
+    assert not destination.exists()
+
+    assert prefs.save() == ""
+    assert json.loads(destination.read_text(encoding="utf-8"))["enhance_audio_path"] == "/missing/book.m4b"
+    assert Prefs.load().enhance_audio_path == "/missing/book.m4b"
+
+
+def test_enhance_audio_path_invalid_value_is_normalized_and_rewritten(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(json.dumps({"enhance_audio_path": 42}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    assert prefs.enhance_audio_path == ""
+    assert json.loads(destination.read_text(encoding="utf-8"))["enhance_audio_path"] == ""
+
+
+def test_enhance_audio_path_retains_nonexistent_string(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    destination = tmp_path / PREFS_FILE_NAME
+    missing = str(tmp_path / "gone" / "book.mp3")
+    destination.write_text(json.dumps({"enhance_audio_path": missing}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    assert Prefs.load().enhance_audio_path == missing
+
+
 def test_chat_echo_override_defaults_false_and_round_trips(
     tmp_path: Path,
     monkeypatch,

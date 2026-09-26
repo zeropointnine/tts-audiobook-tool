@@ -14,6 +14,7 @@ from tts_audiobook_tool.util import make_error_string
 class JsonArtifactType(Enum):
     PROJECT = "project settings"
     PROJECT_TEXT = "project text"
+    ENHANCE_BOOK = "enhance source book"
     PREFS = "preferences"
 
 

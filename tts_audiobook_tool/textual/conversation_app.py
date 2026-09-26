@@ -12,6 +12,7 @@ from textual.app import App, ComposeResult, RenderResult
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.css.errors import StylesheetError
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Rule, Static
 
@@ -632,7 +633,12 @@ class ConversationTextualApp(App[ConversationAppResult]):
             f" chars={len(message.result.text)}"
         )
         self._set_phase(ConversationPhase.AWAITING_INPUT, f"turn {message.turn_id} done")
-        self._show_input()
+        try:
+            self._show_input()
+        except NoMatches:
+            # A response can finish while the app is unmounting; its widgets
+            # are already gone, so there is nothing left to re-enable.
+            pass
 
     def _post_transcription(
         self, session_id: int, segments: list[Segment], audio: object | None
