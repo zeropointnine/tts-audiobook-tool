@@ -68,6 +68,23 @@ def test_generate_menu_replaces_legacy_generation_entries(monkeypatch):
     assert len(items) == 6
 
 
+def test_generate_menu_start_label_shows_queued_line_ranges(monkeypatch):
+    monkeypatch.setattr(
+        generate_menu_module.readiness,
+        "get_generate_blocker_text",
+        lambda state, verbose: "",
+    )
+    state, items = capture_generate_menu(monkeypatch)
+    state.project.phrase_groups = [object()] * 12
+    state.project.generate_range_string = "2-5, 7, 9, 11, 12"
+
+    first_label = items[0].label
+    assert callable(first_label)
+    assert strip_ansi_codes(first_label(state)) == (
+        "Start (8 lines queued - 2-5, 7, 9, ...)"
+    )
+
+
 def test_generate_menu_shows_blocker_but_delegates_launch_validation(monkeypatch):
     blocker_calls: list[bool] = []
     blocker = "Generation is unavailable"

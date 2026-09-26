@@ -3,7 +3,7 @@
 - [Description](#description)
 - [Installation](#installation)
 - [Usage notes](#usage-notes)
-- [Update highlights](#update-highlights)b
+- [Update highlights](#update-highlights)
 
 # Description
 
@@ -33,7 +33,7 @@ Audio generation is performed locally (via dedicated virtual environment install
 The app employs various techniques to make the nondeterministic output of generative text-to-speech models reliable enough for bulk long-form speech synthesis. For example:
 
 - Error detection using speech-to-text verification, with retry logic that keeps the most accurate take
-- Segmentation of long-form text at paragraph/sentence/phrase boundaries
+- Rational segmentation of long-form text at paragraph/sentence/phrase boundaries
 - Silence trimming and reduction of excessive pauses within generated audio, plus semantically-aware pause modulation at segment boundaries to improve prosody
 - EBU R128 loudness normalization plus optional 48 kHz [LavaSR v2](https://huggingface.co/YatharthS/LavaSR) generative upsampler
 

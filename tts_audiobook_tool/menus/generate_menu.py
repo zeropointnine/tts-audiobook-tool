@@ -61,6 +61,11 @@ class GenerateMenu:
             else:
                 noun = make_noun("line", "lines", queued_count)
                 queued_label = f"{queued_count} {noun} queued"
+                if queued_count:
+                    range_string = ProjectUtil.generate_range_string_display(
+                        state.project
+                    )
+                    queued_label += f" - {range_string}"
             label += f" {COL_DIM}({queued_label})"
 
             blocker = readiness.get_generate_blocker_text(state, verbose=False)
