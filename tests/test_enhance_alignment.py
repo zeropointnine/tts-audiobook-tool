@@ -90,7 +90,8 @@ def test_transcription_uses_selected_model_or_fallback(
     )
     prefs = SimpleNamespace(stt_variant=preferred_variant)
     assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", prefs) == [[]]  # type: ignore[arg-type]
-    assert selected == [expected_id]
+    # The first call is the silent warm-up, the second is the real chunk.
+    assert selected == [expected_id, expected_id]
 
 
 def test_disabled_stt_does_not_silently_select_large_v3(monkeypatch) -> None:
@@ -137,7 +138,9 @@ def test_stalled_chunk_retries_once_without_losing_prior_chunks(monkeypatch) -> 
 
     def transcribe(*_args, **kwargs):
         calls.append(kwargs["timeout_seconds"])
-        if len(calls) == 2:
+        # Call 1 is the best-effort silent warm-up; make the first real
+        # chunk (call 3) stall once so the retry path is exercised.
+        if len(calls) == 3:
             return None, enhance_alignment.STT_TRANSCRIPTION_TIMEOUT_ERROR
         return SimpleNamespace(segments=[]), ""
 
@@ -146,8 +149,9 @@ def test_stalled_chunk_retries_once_without_losing_prior_chunks(monkeypatch) -> 
     )
     result = enhance_alignment._transcribe_stream_with_overlap("book.mp3", object())  # type: ignore[arg-type]
     assert result == [[], []]
-    # The retry restarts a cold worker, so it again gets the full first-chunk budget.
-    assert calls == [300.0, 90.0, 300.0]
+    # Warm-up, then chunk 0, then the timed-out chunk 1 retry that again
+    # gets the full first-chunk budget, then chunk 1's regular budget retry.
+    assert calls == [300.0, 300.0, 90.0, 300.0]
 
 
 def test_stalled_chunk_fails_after_second_timeout(monkeypatch) -> None:
@@ -169,7 +173,8 @@ def test_stalled_chunk_fails_after_second_timeout(monkeypatch) -> None:
     )
     with pytest.raises(RuntimeError, match="at audio 0s: STT transcription timed out"):
         enhance_alignment._transcribe_stream_with_overlap("book.mp3", object())  # type: ignore[arg-type]
-    assert calls == [300.0, 300.0]
+    # Warm-up (best-effort timeout), then chunk 0's two timed-out attempts.
+    assert calls == [300.0, 300.0, 300.0]
 
 
 def test_worker_error_clears_transcription_interrupt_mode(monkeypatch) -> None:

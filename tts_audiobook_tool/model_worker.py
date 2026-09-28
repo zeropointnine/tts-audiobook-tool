@@ -929,6 +929,7 @@ def _model_worker_main(
                 Stt.set_config(config)
                 load_started_at = time.monotonic()
                 L.i(f"[stt] {command.operation_id} loading model ({variant.id}, {config.id})")
+                Stt.eager_warm_up_for_inference()
                 whisper = Stt.get_whisper()
                 L.i(
                     f"[stt] {command.operation_id} model ready in "

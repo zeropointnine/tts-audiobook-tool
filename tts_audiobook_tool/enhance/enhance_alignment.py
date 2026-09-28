@@ -312,6 +312,33 @@ def _transcribe_stream_with_overlap(
     did_interrupt = False
     Interrupts().set("transcribing")
     try:
+        # Eagerly load and warm the STT model in the worker before the chunk
+        # loop starts, so the model-load time is not billed to the first
+        # chunk and cannot be mistaken for a stalled first transcription.
+        # The worker's TranscribeAudioCommand handler runs the eager
+        # inference warm-up as part of its model load; a sliver of silence
+        # keeps this a pure warm-up with no transcription work.
+        silent_audio = np.zeros(1600, dtype=np.float32)
+        _, warm_up_error = ModelWorker.transcribe_audio_blocking(
+            prefs,
+            silent_audio,
+            stt_variant_id=stt_variant.id,
+            cancel_check=lambda: Interrupts().did_interrupt,
+            timeout_seconds=300.0,
+        )
+        if Interrupts().did_interrupt:
+            did_interrupt = True
+        elif warm_up_error:
+            # Best effort only: the chunk loop carries its own timeout and
+            # retry budgets, and a restarted cold worker re-covers the
+            # model load, so a warm-up hiccup must not abort the run.
+            log.warning(
+                "[stt] model warm-up did not complete: %s", warm_up_error
+            )
+
+        if did_interrupt:
+            return None
+
         for i, chunk in enumerate(
             _stream_audio_with_overlap(
                 file_path=path,

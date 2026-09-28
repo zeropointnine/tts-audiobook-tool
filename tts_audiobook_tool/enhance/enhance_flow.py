@@ -10,6 +10,7 @@ import tempfile
 
 from tts_audiobook_tool import ask, text_util
 from tts_audiobook_tool.app_support import app_hint_util, hints
+from tts_audiobook_tool.app_support.system_sleep import prevent_system_sleep
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataTextSegment
 from tts_audiobook_tool.constants import ABR_VERSION, COL_ACCENT, COL_DEFAULT, COL_DIM_ITALICS
 from tts_audiobook_tool.constants_hints import HINT_ENHANCE_ORPHANS, HINT_STT_ENHANCE, HINT_STT_ENHANCE_CACHED
@@ -248,8 +249,13 @@ def transcribe(state: State) -> None:
         dont_clear=True,
         non_menu=True,
     )
+
     try:
-        words = enhance_alignment.transcribe_to_words(str(artifacts.audio_path), state.prefs)
+        # Hold the sleep inhibitor only for the transcription work itself;
+        # it is released before the post-transcription prompts so an idle
+        # machine is not held awake while the user reads them.
+        with prevent_system_sleep():
+            words = enhance_alignment.transcribe_to_words(str(artifacts.audio_path), state.prefs)
     except Exception as exception:
         ask.ask_error(f"Transcription failed: {make_error_string(exception)}")
         return
