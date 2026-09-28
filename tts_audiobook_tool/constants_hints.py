@@ -77,9 +77,9 @@ HINT_INDEX_SAMPLE_LEN = Hint(
 HINT_STT_ENHANCE = Hint(
     "stt_enhance",
     "Text preparation...",
-"""It's recommended to first remove any large chunks
-from the source text that do not occur in the audio narration.
-Common examples are: publisher information, table of contents, etc"""
+"""When importing plain text files, first remove any large chunks from
+the source text that do not occur in the audio narration.
+Common examples include: publisher information, table of contents, etc."""
 )
 
 HINT_STT_ENHANCE_CACHED = Hint(

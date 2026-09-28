@@ -17,6 +17,11 @@ from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_support.interrupts import Interrupts
 from tts_audiobook_tool.constants import COL_DEFAULT
+from tts_audiobook_tool.constants_config import (
+    ENHANCE_DIALOG_SEGMENTATION,
+    ENHANCE_MAX_WORDS_PER_SEGMENT,
+    ENHANCE_SEGMENTATION_STRATEGY,
+)
 from tts_audiobook_tool.enhance import enhance_alignment
 from tts_audiobook_tool.menus.epub_menu_util import EpubMenuUtil
 from tts_audiobook_tool.project_support.project_book_util import ProjectBookUtil
@@ -38,11 +43,18 @@ class FlattenedEnhanceBook:
 
 
 def segmentation_settings_from_state(state: Any) -> BookSegmentationSettings:
+    """
+    Enhance-flow segmentation policy. Strategy, max words, and dialog
+    segmentation come from dedicated constants rather than the current
+    project's TTS-flow segmentation settings. Only the language code is
+    project-owned, since it drives language-aware sentence segmentation
+    (and transcription) and must stay consistent with the audio.
+    """
     return BookSegmentationSettings(
         language_code=state.project.language_code,
-        max_words_per_segment=state.project.max_words,
-        strategy=state.project.segmentation_strategy,
-        dialog_segmentation=state.project.dialog_segmentation,
+        max_words_per_segment=ENHANCE_MAX_WORDS_PER_SEGMENT,
+        strategy=ENHANCE_SEGMENTATION_STRATEGY,
+        dialog_segmentation=ENHANCE_DIALOG_SEGMENTATION,
     )
 
 
@@ -102,10 +114,10 @@ def import_source_book(state: Any, source_path: str | Path) -> Book | str | None
 
     result = EpubMenuUtil.import_epub(
         epub_path=str(path),
-        max_words=state.project.max_words,
-        segmentation_strategy=state.project.segmentation_strategy,
+        max_words=ENHANCE_MAX_WORDS_PER_SEGMENT,
+        segmentation_strategy=ENHANCE_SEGMENTATION_STRATEGY,
         language_code=state.project.language_code,
-        dialog_segmentation=state.project.dialog_segmentation,
+        dialog_segmentation=ENHANCE_DIALOG_SEGMENTATION,
     )
     if result is None:
         return None

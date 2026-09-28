@@ -13,6 +13,11 @@ from tts_audiobook_tool.app_types import (
 )
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.app_support.interrupts import Interrupts
+from tts_audiobook_tool.constants_config import (
+    ENHANCE_DIALOG_SEGMENTATION,
+    ENHANCE_MAX_WORDS_PER_SEGMENT,
+    ENHANCE_SEGMENTATION_STRATEGY,
+)
 from tts_audiobook_tool.enhance.enhance_text import (
     align_book,
     epub_result_to_book,
@@ -37,7 +42,9 @@ def phrase(text: str) -> Phrase:
     return Phrase(text, Reason.SENTENCE)
 
 
-def test_plain_text_uses_current_segmentation_settings() -> None:
+def test_plain_text_uses_dedicated_enhance_segmentation_settings() -> None:
+    # Project segmentation fields must be ignored in favor of the dedicated
+    # enhance constants; only language_code is project-owned.
     state = make_state()
     groups = [PhraseGroup([phrase("First."), phrase(" Second.")])]
     with patch(
@@ -49,14 +56,17 @@ def test_plain_text_uses_current_segmentation_settings() -> None:
     assert isinstance(book, Book)
     segment.assert_called_once_with(
         "First. Second.",
-        max_words=55,
-        strategy=SegmentationStrategy.SENTENCE_PLUS,
+        max_words=ENHANCE_MAX_WORDS_PER_SEGMENT,
+        strategy=ENHANCE_SEGMENTATION_STRATEGY,
         pysbd_lang="en",
-        dialog_segmentation=True,
+        dialog_segmentation=ENHANCE_DIALOG_SEGMENTATION,
     )
     assert book.text_source_kind == "plain_text"
     assert book.audio_source_kind == "pre_existing"
-    assert book.segmentation_settings.max_words_per_segment == 55
+    assert book.segmentation_settings.max_words_per_segment == ENHANCE_MAX_WORDS_PER_SEGMENT
+    assert book.segmentation_settings.strategy == ENHANCE_SEGMENTATION_STRATEGY
+    assert book.segmentation_settings.dialog_segmentation == ENHANCE_DIALOG_SEGMENTATION
+    assert book.segmentation_settings.language_code == "en"
     assert len(book.sections) == 1
 
 

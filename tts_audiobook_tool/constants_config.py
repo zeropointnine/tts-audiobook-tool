@@ -47,6 +47,14 @@ SGL_OMNI_GEN_TIMEOUT = 330
 # Max words per text chunk, applied to the source text in "STT flow"
 MAX_WORDS_PER_SEGMENT_STT = 40
 
+# Enhance-flow source-text segmentation policy. The enhance flow is the
+# "opposite" of the TTS flow: segments feed forced alignment, not TTS prompts,
+# so it uses its own settings instead of the current project's. Language code
+# remains project-owned (it drives language-aware sentence segmentation).
+ENHANCE_SEGMENTATION_STRATEGY = SegmentationStrategy.SENTENCE_PLUS
+ENHANCE_MAX_WORDS_PER_SEGMENT = 60
+ENHANCE_DIALOG_SEGMENTATION = False
+
 PROJECT_DEFAULT_LIMIT_SILENCE_GAPS_DURATION = 1.0
 SILENCE_GAP_DURATION_MIN = 0.0
 SILENCE_GAP_DURATION_MAX = 2.0
