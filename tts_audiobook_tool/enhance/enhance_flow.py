@@ -255,7 +255,9 @@ def transcribe(state: State) -> None:
         # it is released before the post-transcription prompts so an idle
         # machine is not held awake while the user reads them.
         with prevent_system_sleep():
-            words = enhance_alignment.transcribe_to_words(str(artifacts.audio_path), state.prefs)
+            words = enhance_alignment.transcribe_to_words(
+                str(artifacts.audio_path), state.prefs, state.project.language_code
+            )
     except Exception as exception:
         ask.ask_error(f"Transcription failed: {make_error_string(exception)}")
         return

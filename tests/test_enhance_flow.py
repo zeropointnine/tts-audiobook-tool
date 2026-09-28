@@ -231,16 +231,22 @@ def test_transcription_heading_has_exactly_one_blank_line_before_progress(
 
 def test_transcription_success_saves_sibling_and_invalidates_timing(tmp_path: Path, monkeypatch) -> None:
     state, artifacts = prepare(tmp_path)
+    state.project.language_code = "fr"
     assert save_timed_phrases(artifacts, [TimedPhrase("old", 0, 0)]) == ""
     words = [ConcreteWord(0.0, 0.5, "hello", 1.0)]
+    calls = []
     monkeypatch.setattr(enhance_flow, "_validate_audio", lambda _path: "")
-    monkeypatch.setattr(enhance_flow.enhance_alignment, "transcribe_to_words", lambda *_args: words)
+    monkeypatch.setattr(
+        enhance_flow.enhance_alignment, "transcribe_to_words",
+        lambda *args: calls.append(args) or words,
+    )
     monkeypatch.setattr(enhance_flow.ask, "ask_confirm", lambda *_args: False)
     monkeypatch.setattr(enhance_flow.hints, "show_hint_if_necessary", lambda *_args, **_kwargs: None)
     silence_ui(monkeypatch)
 
     enhance_flow.transcribe(state)
 
+    assert calls == [(str(artifacts.audio_path), state.prefs, "fr")]
     assert artifacts.transcription_path.exists()
     assert not artifacts.timed_phrases_path.exists()
 

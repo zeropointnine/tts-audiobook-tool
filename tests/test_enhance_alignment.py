@@ -61,6 +61,7 @@ def test_overlapping_transcript_chunks_are_stitched_without_duplicate_tail() -> 
     assert [item.word for item in result] == ["a", "b", "c", "d"]
 
 
+@pytest.mark.parametrize(("language_code", "expected_language"), [("es", "es"), ("", None)])
 @pytest.mark.parametrize(
     ("preferred_variant", "expected_id"),
     [
@@ -69,8 +70,8 @@ def test_overlapping_transcript_chunks_are_stitched_without_duplicate_tail() -> 
         (None, SttVariant.LARGE_V3.id),
     ],
 )
-def test_transcription_uses_selected_model_or_fallback(
-    monkeypatch, preferred_variant, expected_id
+def test_transcription_uses_selected_model_and_project_language(
+    monkeypatch, preferred_variant, expected_id, language_code, expected_language
 ) -> None:
     monkeypatch.setattr(
         enhance_alignment, "_stream_audio_with_overlap",
@@ -82,16 +83,16 @@ def test_transcription_uses_selected_model_or_fallback(
     selected = []
 
     def transcribe(*_args, **kwargs):
-        selected.append(kwargs["stt_variant_id"])
+        selected.append((kwargs["stt_variant_id"], kwargs["language"]))
         return SimpleNamespace(segments=[]), ""
 
     monkeypatch.setattr(
         enhance_alignment.ModelWorker, "transcribe_audio_blocking", transcribe
     )
     prefs = SimpleNamespace(stt_variant=preferred_variant)
-    assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", prefs) == [[]]  # type: ignore[arg-type]
+    assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", prefs, language_code) == [[]]  # type: ignore[arg-type]
     # The first call is the silent warm-up, the second is the real chunk.
-    assert selected == [expected_id, expected_id]
+    assert selected == [(expected_id, expected_language), (expected_id, expected_language)]
 
 
 def test_disabled_stt_does_not_silently_select_large_v3(monkeypatch) -> None:
@@ -101,7 +102,7 @@ def test_disabled_stt_does_not_silently_select_large_v3(monkeypatch) -> None:
     )
     with pytest.raises(ValueError, match="disabled in preferences"):
         enhance_alignment._transcribe_stream_with_overlap(
-            "book.mp3", SimpleNamespace(stt_variant=SttVariant.DISABLED)  # type: ignore[arg-type]
+            "book.mp3", SimpleNamespace(stt_variant=SttVariant.DISABLED), "en"  # type: ignore[arg-type]
         )
 
 
@@ -118,7 +119,7 @@ def test_chunk_log_includes_elapsed_between_iterations(monkeypatch, caplog) -> N
         lambda *_args, **_kwargs: (SimpleNamespace(segments=[]), ""),
     )
     with caplog.at_level(logging.INFO, logger="tts-audiobook-tool"):
-        enhance_alignment._transcribe_stream_with_overlap("book.mp3", object())  # type: ignore[arg-type]
+        enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en")  # type: ignore[arg-type]
 
     assert "chunk 0 finished in " in caplog.text
     assert "chunk 1 starting at audio 25.0s; elapsed since previous start=" in caplog.text
@@ -147,7 +148,7 @@ def test_stalled_chunk_retries_once_without_losing_prior_chunks(monkeypatch) -> 
     monkeypatch.setattr(
         enhance_alignment.ModelWorker, "transcribe_audio_blocking", transcribe
     )
-    result = enhance_alignment._transcribe_stream_with_overlap("book.mp3", object())  # type: ignore[arg-type]
+    result = enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en")  # type: ignore[arg-type]
     assert result == [[], []]
     # Warm-up, then chunk 0, then the timed-out chunk 1 retry that again
     # gets the full first-chunk budget, then chunk 1's regular budget retry.
@@ -172,7 +173,7 @@ def test_stalled_chunk_fails_after_second_timeout(monkeypatch) -> None:
         enhance_alignment.ModelWorker, "transcribe_audio_blocking", timed_out
     )
     with pytest.raises(RuntimeError, match="at audio 0s: STT transcription timed out"):
-        enhance_alignment._transcribe_stream_with_overlap("book.mp3", object())  # type: ignore[arg-type]
+        enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en")  # type: ignore[arg-type]
     # Warm-up (best-effort timeout), then chunk 0's two timed-out attempts.
     assert calls == [300.0, 300.0, 300.0]
 
@@ -195,7 +196,7 @@ def test_worker_error_clears_transcription_interrupt_mode(monkeypatch) -> None:
     )
 
     with pytest.raises(RuntimeError, match="worker failed"):
-        enhance_alignment._transcribe_stream_with_overlap("book.mp3", object())  # type: ignore[arg-type]
+        enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en")  # type: ignore[arg-type]
 
     assert Interrupts()._mode == ""
 
@@ -221,6 +222,6 @@ def test_interrupt_during_worker_transcription_returns_without_error(monkeypatch
     monkeypatch.setattr(
         enhance_alignment.ModelWorker, "transcribe_audio_blocking", cancel_transcription
     )
-    assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", object()) is None  # type: ignore[arg-type]
+    assert enhance_alignment._transcribe_stream_with_overlap("book.mp3", object(), "en") is None  # type: ignore[arg-type]
     assert Interrupts()._mode == ""
     assert not Interrupts().did_interrupt

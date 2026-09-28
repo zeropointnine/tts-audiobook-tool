@@ -272,12 +272,12 @@ def align_phrases_with_state(
     return result, state, False
 
 
-def transcribe_to_words(path: str, prefs: Prefs) -> list[Word] | None:
+def transcribe_to_words(path: str, prefs: Prefs, language_code: str) -> list[Word] | None:
     """
     Creates a list of Word instances by transcribing the audio at the given file path
     Returns None if interrupted
     """
-    list_of_lists = _transcribe_stream_with_overlap(path, prefs)
+    list_of_lists = _transcribe_stream_with_overlap(path, prefs, language_code)
     if list_of_lists is None:
         return None
     words_list = _stitch_transcripts(list_of_lists)
@@ -285,12 +285,13 @@ def transcribe_to_words(path: str, prefs: Prefs) -> list[Word] | None:
 
 
 def _transcribe_stream_with_overlap(
-    path: str, prefs: Prefs
+    path: str, prefs: Prefs, language_code: str
 ) -> list[list[Word]] | None:
     CHUNK_DURATION = 30
     OVERLAP_DURATION = 5
 
     stt_variant = getattr(prefs, "stt_variant", None) or SttVariant.LARGE_V3
+    language = language_code or None
     if stt_variant == SttVariant.DISABLED:
         raise ValueError("Speech-to-text is disabled in preferences; choose a Whisper model to transcribe.")
 
@@ -322,6 +323,7 @@ def _transcribe_stream_with_overlap(
         _, warm_up_error = ModelWorker.transcribe_audio_blocking(
             prefs,
             silent_audio,
+            language=language,
             stt_variant_id=stt_variant.id,
             cancel_check=lambda: Interrupts().did_interrupt,
             timeout_seconds=300.0,
@@ -384,6 +386,7 @@ def _transcribe_stream_with_overlap(
                 transcription, error = ModelWorker.transcribe_audio_blocking(
                     prefs,
                     chunk,
+                    language=language,
                     word_timestamps=True,
                     stt_variant_id=stt_variant.id,
                     cancel_check=lambda: Interrupts().did_interrupt,
