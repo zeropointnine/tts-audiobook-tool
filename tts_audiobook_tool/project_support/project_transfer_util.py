@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from pydantic.fields import FieldInfo
 
+from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.constants import (
     APP_META_FLAC_FIELD,
     APP_META_MP4_MEAN,
@@ -20,6 +21,17 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+
+
+class SourceFileMatch(NamedTuple):
+    """
+    A supporting project file located on disk.
+
+    `relative_path` is the canonical project-local form to write it under,
+    which is not necessarily the form it was stored or found in.
+    """
+    path: str
+    relative_path: str
 
 
 class ProjectTransferUtil:
@@ -38,6 +50,22 @@ class ProjectTransferUtil:
         # Serialized as word_substitutions_json_string for backwards compatibility.
         'word_substitutions',
     }
+
+    # Fields that hold a machine-local path the user typed, or that the app
+    # recorded on their behalf. The same field may equally hold a model
+    # repository id, so these are treated as opaque user strings: nothing here
+    # rewrites them and a failed existence check never clears them.
+    # `looks_foreign` only produces a warning that the value cannot name a file
+    # on this machine, instead of letting the value fail obscurely later.
+    MACHINE_LOCAL_PATH_TARGET_ATTRS = (
+        'dots_target',
+        'moss_target',
+        'omnivoice_target',
+        'pocket_model_code',
+        'qwen3_target',
+        'vibevoice_target',
+        'vibevoice_lora_target',
+    )
 
     @staticmethod
     def load_raw_abr_metadata_string(abr_path: str) -> str:
@@ -104,20 +132,75 @@ class ProjectTransferUtil:
         return result
 
     @staticmethod
-    def get_snapshot_source_dir(project_snapshot: dict) -> str:
-        source_dir = project_snapshot.get('dir_path', '')
-        if not isinstance(source_dir, str) or not source_dir:
-            return ''
-        return source_dir
+    def find_foreign_path_targets(project: Project) -> list[tuple[str, str]]:
+        """
+        Machine-local path settings that cannot name a file on this machine.
+
+        Returned for messaging only. The values are left untouched because the
+        same fields legitimately hold repository ids, and because a value that
+        is merely unresolvable right now may become resolvable later.
+        """
+        result: list[tuple[str, str]] = []
+        for attr in ProjectTransferUtil.MACHINE_LOCAL_PATH_TARGET_ATTRS:
+            value = getattr(project, attr, '')
+            if isinstance(value, str) and value and path_norm.looks_foreign(value):
+                result.append((attr, value))
+        return result
+
+    @staticmethod
+    def get_snapshot_source_dir_display(project_snapshot: dict) -> str:
+        """
+        The project directory the snapshot's settings came from.
+
+        Display-only. Version 5 snapshots store it under `source_dir_display`;
+        older snapshots stored it as `dir_path`, which the app used to treat as
+        resolvable.
+        """
+        for key in ('source_dir_display', 'dir_path'):
+            value = project_snapshot.get(key, '')
+            if isinstance(value, str) and value:
+                return value
+        return ''
+
+    @staticmethod
+    def get_snapshot_source_dir(project_snapshot: dict, abr_path: str = '') -> str:
+        """
+        Locate a usable project directory for an ABR file's settings snapshot.
+
+        The stored directory belongs to the creating machine's path grammar, so
+        it is only used when it actually resolves here — the common case being
+        an ABR file re-imported on the machine that produced it. Otherwise the
+        ABR file's own location is the best available evidence: generated ABR
+        files are written inside the project directory, so both the file's
+        directory and its parent are tried.
+        """
+        candidates: list[str] = []
+
+        stored_dir = ProjectTransferUtil.get_snapshot_source_dir_display(project_snapshot)
+        if stored_dir:
+            candidates.append(stored_dir)
+
+        if abr_path:
+            abr_dir = os.path.dirname(os.path.abspath(abr_path))
+            candidates.extend([abr_dir, os.path.dirname(abr_dir)])
+
+        for candidate in candidates:
+            if ProjectTransferUtil.is_supporting_project_source_dir(candidate):
+                return candidate
+
+        return ''
+
+    @staticmethod
+    def is_supporting_project_source_dir(dir_path: str) -> bool:
+        """Whether a directory looks like the project directory it came from."""
+        if not dir_path or not os.path.isdir(dir_path):
+            return False
+        if os.path.exists(os.path.join(dir_path, PROJECT_TEXT_FILE_NAME)):
+            return True
+        return os.path.isdir(os.path.join(dir_path, PROJECT_VOICE_SUBDIR))
 
     @staticmethod
     def make_supporting_project_file_names(project: Project) -> list[str]:
-        file_names: list[object] = [
-            PROJECT_TEXT_FILE_NAME,
-            PROJECT_TEXT_RAW_FILE_NAME,
-            PROJECT_TEXT_EPUB_FILE_NAME,
-        ]
-
         file_attrs = []
         for model_info in TtsModelType:
             voice_target_attr = model_info.value.voice_target_attr
@@ -127,18 +210,30 @@ class ProjectTransferUtil:
                 if attr and attr not in file_attrs:
                     file_attrs.append(attr)
 
+        raw_file_names: list[object] = [
+            PROJECT_TEXT_FILE_NAME,
+            PROJECT_TEXT_RAW_FILE_NAME,
+            PROJECT_TEXT_EPUB_FILE_NAME,
+        ]
+
         for attr in file_attrs:
             value = getattr(project, attr, "")
             if isinstance(value, list):
-                file_names.extend(value)
+                raw_file_names.extend(value)
             else:
-                file_names.append(value)
+                raw_file_names.append(value)
 
         filtered_file_names: list[str] = []
-        for file_name in file_names:
-            if not isinstance(file_name, str) or not file_name:
+        for raw_file_name in raw_file_names:
+            if not isinstance(raw_file_name, str) or not raw_file_name:
                 continue
-            if os.path.isabs(file_name):
+
+            # Values written by an older build, or by a project object that
+            # never passed through the load-time normalization funnel, may still
+            # be absolute in some other machine's grammar. Reduce them to the
+            # project-local form so they can be looked for here.
+            file_name, _ = path_norm.normalize_stored_relative_path(raw_file_name)
+            if not file_name:
                 continue
             if file_name in filtered_file_names:
                 continue
@@ -154,37 +249,69 @@ class ProjectTransferUtil:
         missing_paths: list[str] = []
 
         for file_name in file_names:
-            src_path = ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)
-            if not src_path:
-                missing_paths.append(os.path.join(source_dir, file_name) if source_dir else file_name)
+            match = ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)
+            if not match.path:
+                missing_paths.append(
+                    path_norm.join_project_relative(source_dir, file_name) if source_dir else file_name
+                )
                 continue
 
-            # Preserve the voice-subdir layout for files sourced from there
-            rel_path = file_name
-            if source_dir:
-                voice_src_dir = os.path.join(source_dir, PROJECT_VOICE_SUBDIR)
-                if os.path.commonpath([os.path.abspath(src_path), os.path.abspath(voice_src_dir)]) == os.path.abspath(voice_src_dir):
-                    rel_path = os.path.join(PROJECT_VOICE_SUBDIR, file_name)
-            dest_path = os.path.join(project.dir_path, rel_path)
+            dest_path = path_norm.join_project_relative(project.dir_path, match.relative_path)
             try:
-                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-                shutil.copy(src_path, dest_path)
+                dest_dir = os.path.dirname(dest_path)
+                if dest_dir:
+                    os.makedirs(dest_dir, exist_ok=True)
+                shutil.copy(match.path, dest_path)
             except Exception:
-                missing_paths.append(src_path)
+                missing_paths.append(match.path)
 
         return missing_paths
 
     @staticmethod
-    def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> str:
-        candidate_names = [file_name]
+    def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> SourceFileMatch:
+        """
+        Look for a project-local file under `source_dir`.
+
+        Searches the source root and its voice subdir, in the canonical
+        relative form and by bare file name, so a file laid out by either
+        operating system is found. The returned `relative_path` says where the
+        copy belongs in the destination project, which is what preserves the
+        voice-subdir layout — previously derived with `os.path.commonpath`,
+        which raises when the two paths belong to different path grammars.
+        """
+        name_parts = path_norm.split_relative(file_name)
+        if not name_parts:
+            return SourceFileMatch("", "")
+
+        base_name = name_parts[-1]
+
+        candidate_names = ["/".join(name_parts)]
+        if len(name_parts) > 1:
+            candidate_names.append(base_name)
         if file_name == PROJECT_TEXT_RAW_FILE_NAME:
             candidate_names.append("text_raw.txt")
 
-        candidate_dirs = [source_dir, os.path.join(source_dir, PROJECT_VOICE_SUBDIR) if source_dir else source_dir]
-        for candidate_dir in candidate_dirs:
-            for candidate_name in candidate_names:
-                candidate_path = os.path.join(candidate_dir, candidate_name) if candidate_dir else candidate_name
-                if os.path.exists(candidate_path):
-                    return candidate_path
+        candidate_dirs: list[tuple[str, str]] = []
+        if source_dir:
+            candidate_dirs.append((source_dir, ""))
+            candidate_dirs.append((os.path.join(source_dir, PROJECT_VOICE_SUBDIR), PROJECT_VOICE_SUBDIR))
+        else:
+            candidate_dirs.append(("", ""))
 
-        return ""
+        for candidate_dir, dir_prefix in candidate_dirs:
+            for candidate_name in candidate_names:
+                if not candidate_dir:
+                    candidate_path = candidate_name
+                else:
+                    candidate_path = path_norm.join_project_relative(candidate_dir, candidate_name)
+
+                if not os.path.exists(candidate_path):
+                    continue
+
+                if dir_prefix:
+                    relative_path = f"{dir_prefix}/{base_name}"
+                else:
+                    relative_path = candidate_name
+                return SourceFileMatch(candidate_path, relative_path)
+
+        return SourceFileMatch("", "")

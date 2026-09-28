@@ -11,6 +11,7 @@ import re
 import sys
 from typing import Callable
 from tts_audiobook_tool import text_util
+from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_types import Saveable
 from tts_audiobook_tool.ask_advanced import AskAdvanced
 from tts_audiobook_tool.constants import *
@@ -153,8 +154,11 @@ def _normalize_entered_path(path: str) -> str:
     Expands a leading `~` *before* making the path absolute.
     `abspath` first would leave `~` as a literal directory component
     under the cwd, which later `expanduser` calls cannot undo.
+
+    Shared with the rest of the app through `path_norm`, so a path accepted
+    here is stored in the same shape everywhere else.
     """
-    return os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+    return path_norm.normalize_native_path(path)
 
 def ask_file_path(
         console_message: str,

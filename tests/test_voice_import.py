@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
+import pytest
 import soundfile as sf
 
 from tts_audiobook_tool.app_types import Sound
@@ -17,6 +18,7 @@ from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project import Project
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.sound.sound_pipeline import SoundPipeline
+from tts_audiobook_tool.tts import Tts
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 
 L.init("test-voice-import")
@@ -141,3 +143,37 @@ def test_verify_voice_files_exist_accepts_legacy_root_placement(tmp_path, capsys
     warned = ProjectVoiceUtil.verify_voice_files_exist(project)
     assert not warned
     assert project.dots_voice_file_name == ["legacy_dots.flac"]
+
+
+def test_verify_voice_files_exist_keeps_a_reference_whose_file_is_missing(tmp_path, monkeypatch, capsys):
+    """
+    A missing file is reported but kept, in memory and on disk alike: the sample
+    may simply not have been copied over yet, and generation is blocked with a
+    clear message until it shows up.
+    """
+    monkeypatch.setattr(Tts, "_type", TtsModelType.DOTS)
+    project = make_project(tmp_path)
+    project.dots_voice_file_name = ["not_here_yet.flac"]
+
+    result = ProjectVoiceUtil.verify_voice_files_exist(project)
+
+    assert result
+    assert "not_here_yet.flac" in result.not_found["dots_voice_file_name"]
+    assert not result.corrupt
+    assert project.dots_voice_file_name == ["not_here_yet.flac"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="A Windows file name cannot contain a backslash")
+def test_resolve_voice_file_path_tries_a_literal_backslash_name(tmp_path):
+    """
+    The canonical portable form reads a backslash as a separator, so a POSIX
+    file whose name really does contain one is only found if the stored value is
+    also tried verbatim.
+    """
+    project = make_project(tmp_path)
+    voice_dir = tmp_path / PROJECT_VOICE_SUBDIR
+    voice_dir.mkdir()
+    (voice_dir / "take\\b.flac").write_bytes(b"placeholder")
+
+    path = ProjectVoiceUtil.resolve_voice_file_path(project, "take\\b.flac")
+    assert path == os.path.join(str(voice_dir), "take\\b.flac")

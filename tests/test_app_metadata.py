@@ -10,7 +10,10 @@ from tts_audiobook_tool.app_types.app_metadata import AppMetadata, AppMetadataSe
 from tts_audiobook_tool.app_types.timed_phrase import TimedPhrase
 from tts_audiobook_tool.app_types.phrase import Phrase, PhraseGroup, Reason
 from tts_audiobook_tool.concat_util import ConcatUtil, make_app_metadata_sections, save_abr_metadata_debug_json
+from tts_audiobook_tool.constants import ABR_VERSION
 from tts_audiobook_tool.project import Project
+from tts_audiobook_tool.project_support.project_serialization_util import ProjectSerializationUtil
+from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
 from tts_audiobook_tool.app_types import Book, BookSection
 from tts_audiobook_tool.app_types import ExportType, NormalizationType, SectionMarkerMode
 from tts_audiobook_tool.state import State
@@ -117,6 +120,51 @@ class TestAppMetadata(unittest.TestCase):
         self.assertEqual(result.sections, [])
         self.assertIsNone(result.type)
         self.assertNotIn("type", json.loads(result.to_json_string()))
+
+    def test_snapshot_written_by_another_os_still_loads_and_repoints_dir(self):
+        """
+        A version 4 snapshot embeds `dir_path`, an absolute path in the writing
+        machine's grammar. It must still parse, its saved voice references must
+        be reduced to the app's portable form, and the new project must point at
+        its own directory rather than the one recorded on the other machine.
+        """
+        snapshot = {
+            "version": 2,
+            "dir_path": "C:\\Users\\lee\\mybook",
+            "fish_s2_voice_file_name": [
+                "C:\\Users\\lee\\mybook\\voice\\narrator.flac",
+                "voice/other.flac",
+            ],
+            "none_voice_file_name": "C:\\Users\\lee\\mybook\\voice\\none.flac",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project = ProjectTransferUtil.make_project_from_snapshot(tmp, snapshot)
+
+            self.assertEqual(project.dir_path, tmp)
+            self.assertEqual(project.fish_s2_voice_file_name, ["narrator.flac", "voice/other.flac"])
+            self.assertEqual(project.none_voice_file_name, "none.flac")
+
+    def test_snapshot_dict_omits_machine_local_dir_path(self):
+        """
+        The snapshot embedded in an ABR file is the portable artifact, so it
+        must not carry a machine-local directory. The directory is kept only as
+        a display string, and `project.json` still records it for older builds.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Project(dir_path=tmp)
+            project.fish_s2_voice_file_name = ["voice/narrator.flac"]
+
+            snapshot = ProjectSerializationUtil.to_snapshot_dict(project)
+            project_json = ProjectSerializationUtil.to_project_json_dict(project)
+
+            self.assertNotIn("dir_path", snapshot)
+            self.assertEqual(snapshot["source_dir_display"], tmp)
+            self.assertEqual(project_json["dir_path"], tmp)
+
+            reloaded = ProjectTransferUtil.make_project_from_snapshot(tmp, snapshot)
+            self.assertEqual(reloaded.fish_s2_voice_file_name, ["voice/narrator.flac"])
+            self.assertEqual(reloaded.dir_path, tmp)
 
     def test_app_metadata_preserves_conversion_type_and_rejects_invalid_values(self):
         payload = {
@@ -284,7 +332,7 @@ class TestAppMetadata(unittest.TestCase):
                 metadata="meta",
             )
             save_to_mp4_mock.assert_called_once()
-            self.assertEqual(save_to_mp4_mock.call_args.args[0].version, 4)
+            self.assertEqual(save_to_mp4_mock.call_args.args[0].version, ABR_VERSION)
             self.assertEqual(save_to_mp4_mock.call_args.args[0].type, "generated")
             self.assertEqual(save_to_mp4_mock.call_args.args[1], stem_path + " [chaptermeta].m4b")
             self.assertEqual(save_to_mp4_mock.call_args.args[2], stem_path + ".abr.m4b")

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants_config import PROJECT_BATCH_SIZE_DEFAULT, PROJECT_BATCH_SIZE_MAX
 from tts_audiobook_tool.constants import PROJECT_VOICE_SUBDIR
-from tts_audiobook_tool.app_support import app_text
+from tts_audiobook_tool.app_support import app_text, path_norm
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.tts_models.tts_model_type import TtsModelSpec, TtsModelType
 from tts_audiobook_tool.util import *
@@ -15,6 +15,32 @@ from tts_audiobook_tool.util import *
 if TYPE_CHECKING:
     from tts_audiobook_tool.app_types import Sound
     from tts_audiobook_tool.project import Project
+
+
+class VoiceFileVerificationResult(NamedTuple):
+    """
+    Outcome of `ProjectVoiceUtil.verify_voice_files_exist`.
+
+    Saved references are split by why they were reported. A reference whose
+    file is merely missing is kept, in memory and on disk alike: the file may
+    be one that has not been copied over yet, as when a project's settings
+    arrive from another computer, and generation is blocked with a clear
+    message until it shows up. Only a reference to a file that exists but
+    cannot be decoded is dropped, and that drop is persisted.
+
+    Truthy when anything was reported, which keeps the older boolean usage
+    working.
+    """
+    not_found: dict[str, list[str]]
+    corrupt: dict[str, list[str]]
+    warnings: list[tuple[str, str, str]]
+
+    @property
+    def did_report_any(self) -> bool:
+        return bool(self.not_found or self.corrupt)
+
+    def __bool__(self) -> bool:
+        return self.did_report_any
 
 
 class ProjectVoiceUtil:
@@ -33,11 +59,44 @@ class ProjectVoiceUtil:
         Resolves a saved voice sample file name to its path, preferring the
         project's voice subdir and falling back to the legacy project-dir
         root location for older projects.
+
+        Joined component by component rather than with a bare `os.path.join`:
+        a stored value that still carries a leading separator — written by an
+        older build, or held by a project object that never passed through the
+        load-time normalization funnel — would otherwise discard the project
+        directory outright. The literal stored value is tried next, which is
+        what lets a POSIX file whose name really does contain a backslash still
+        resolve; the bare file name is the last resort, which is what lets a
+        path recorded in another machine's grammar still find a sample that has
+        been copied in.
         """
-        path = os.path.join(ProjectVoiceUtil.get_voice_dir_path(project), file_name)
-        if os.path.exists(path):
-            return path
-        return os.path.join(project.dir_path, file_name)
+        voice_dir = ProjectVoiceUtil.get_voice_dir_path(project)
+
+        name_parts = path_norm.split_relative(file_name)
+        if not name_parts:
+            return os.path.join(project.dir_path, file_name)
+
+        canonical_name = "/".join(name_parts)
+        # (name, is_literal): a literal name must be joined with `os.path.join`
+        # so its separators are not translated into project-local components.
+        candidates: list[tuple[str, bool]] = [(canonical_name, False)]
+        if (
+            file_name != canonical_name
+            and not path_norm.is_absolute_any_grammar(file_name)
+            and not path_norm.has_drive_or_unc(file_name)
+        ):
+            candidates.append((file_name, True))
+        if len(name_parts) > 1:
+            candidates.append((name_parts[-1], False))
+
+        for candidate_name, is_literal in candidates:
+            for base_dir in (voice_dir, project.dir_path):
+                joiner = os.path.join if is_literal else path_norm.join_project_relative
+                candidate_path = joiner(base_dir, candidate_name)
+                if os.path.exists(candidate_path):
+                    return candidate_path
+
+        return path_norm.join_project_relative(project.dir_path, canonical_name)
 
     @staticmethod
     def get_voice_values(project: Project, tts_model_type: TtsModelType) -> list[str]:
@@ -291,7 +350,7 @@ class ProjectVoiceUtil:
         return ",".join(strings)
 
     @staticmethod
-    def verify_voice_files_exist(project: Project) -> bool:
+    def verify_voice_files_exist(project: Project) -> VoiceFileVerificationResult:
         from tts_audiobook_tool.tts import Tts
         model_type = Tts.get_type()
         info = model_type.value
@@ -299,9 +358,11 @@ class ProjectVoiceUtil:
         voice_target_attr = info.voice_target_attr
         extra_file_attrs = ["indextts2_emo_voice_file_name"] if model_type == TtsModelType.INDEXTTS2 else []
         if not voice_target_attr and not extra_file_attrs:
-            return False
+            return VoiceFileVerificationResult({}, {}, [])
 
         warnings = []
+        not_found_by_attr: dict[str, list[str]] = {}
+        corrupt_by_attr: dict[str, list[str]] = {}
         if voice_target_attr.endswith("_voice_file_name"):
             file_names_by_attr = [(voice_target_attr, ProjectVoiceUtil.get_voice_values(project, model_type))]
         else:
@@ -309,32 +370,42 @@ class ProjectVoiceUtil:
         file_names_by_attr.extend((attr, [getattr(project, attr)] if getattr(project, attr, "") else []) for attr in extra_file_attrs)
 
         for attrib, file_names in file_names_by_attr:
-            valid_file_names = []
+            kept_file_names = []
             for file_name in file_names:
                 file_path = ProjectVoiceUtil.resolve_voice_file_path(project, file_name)
                 if not os.path.exists(file_path):
+                    # Deliberately kept as saved. The file may simply not have
+                    # been copied over yet, as when a project's settings arrive
+                    # from another computer; clearing it here would lose the
+                    # reference on the next save. Generation is blocked with a
+                    # clear message by `get_missing_voice_file_issue` until the
+                    # file shows up.
                     warnings.append((attrib, file_name, "file not found"))
+                    not_found_by_attr.setdefault(attrib, []).append(file_name)
+                    kept_file_names.append(file_name)
                     continue
 
                 err = SoundFileUtil.is_valid_sound_file(file_path)
                 if err:
                     warnings.append((attrib, file_name, err))
+                    corrupt_by_attr.setdefault(attrib, []).append(file_name)
                     continue
 
-                valid_file_names.append(file_name)
+                kept_file_names.append(file_name)
 
-            if len(valid_file_names) != len(file_names):
-                setattr(project, attrib, valid_file_names)
+            if len(kept_file_names) != len(file_names):
+                setattr(project, attrib, kept_file_names)
 
         if warnings:
             printt(f"{COL_ERROR}Warning/info: {COL_DEFAULT}Problem with saved voice clone file(s) for current model {COL_ACCENT}{info.ui['proper_name']}{COL_DEFAULT}")
             for attrib, file_name, reason in warnings:
                 printt(f"- {COL_ACCENT}{attrib}{COL_DEFAULT}: {file_name}")
                 printt(f"  {COL_DIM}{reason}{COL_DEFAULT}")
-            printt("Clearing saved reference(s) and continuing.")
+            printt("Saved reference(s) whose file could not be read are dropped.")
+            printt("Reference(s) whose file is simply missing are kept.")
             printt()
 
-        return bool(warnings)
+        return VoiceFileVerificationResult(not_found_by_attr, corrupt_by_attr, warnings)
 
     @staticmethod
     def get_batch_size(project: Project) -> int:

@@ -150,35 +150,6 @@ def truncate_pretty(text: str, width: int, middle:bool=True, content_color: str=
         a = text[:width]
         return f"{content_color}{a}{COL_DIM}..."
 
-def ellipsize_path_middle(path: str, length: int=60, truncate_file_suffix=False) -> str:
-    """ Puts ellipsis before path name if necessary """
-
-    if not path:
-        return path
-
-    p = Path(path)
-    if truncate_file_suffix:
-        p = p.with_suffix('')
-
-    if len(str(p)) <= length:
-        return str(p)
-
-    # Find the separator before path name and construct truncated path
-    parent_str = str(p.parent)
-    sep_pos = parent_str.rfind(os.sep)
-    if sep_pos >= 0:
-        # Include the separator and everything after it
-        suffix = parent_str[sep_pos:] + os.sep + p.name
-    else:
-        suffix = p.name
-    # Calculate how many chars we can take from suffix
-    prefix_len = 10  # first 10 chars
-    ellipsis_len = 3  # "..."
-    max_suffix_len = length - prefix_len - ellipsis_len
-    if len(suffix) > max_suffix_len:
-        suffix = suffix[-max_suffix_len:]
-    return path[:prefix_len] + "..." + suffix
-
 def ellipsize_path_for_menu(path: str) -> str:
     """
     App style for displaying filepath in a menu item

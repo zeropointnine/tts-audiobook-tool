@@ -154,9 +154,11 @@ class ProjectNewMenu:
             )
             ProjectTransferUtil.apply_project_settings(state.project, snapshot_project)
 
+            source_dir = ProjectTransferUtil.get_snapshot_source_dir(project_snapshot, abr_path)
+
             missing_paths = ProjectTransferUtil.copy_supporting_project_files(
                 state.project,
-                ProjectTransferUtil.get_snapshot_source_dir(project_snapshot),
+                source_dir,
                 ProjectTransferUtil.make_supporting_project_file_names(snapshot_project)
             )
 
@@ -168,7 +170,9 @@ class ProjectNewMenu:
 
             print_feedback("Project directory set:", state.project.dir_path)
 
-            if missing_paths:
+            if not source_dir:
+                ProjectNewMenu.print_snapshot_source_dir_hint(project_snapshot)
+            elif missing_paths:
                 ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
             ProjectNewMenu.show_abr_model_mismatch_hint(state)
@@ -198,6 +202,23 @@ class ProjectNewMenu:
             Hint.make_using(HINT_ABR_MODEL_MISMATCH, model_name),
             and_prompt=False
         )
+
+    @staticmethod
+    def print_snapshot_source_dir_hint(project_snapshot: dict) -> None:
+        """
+        Explains why supporting files could not be copied when the settings in
+        an ABR file came from a project directory that does not exist here —
+        typically because the file was made on another computer.
+        """
+        source_dir = ProjectTransferUtil.get_snapshot_source_dir_display(project_snapshot)
+        if not source_dir:
+            return
+
+        printt(f"{COL_DIM}The settings in this audio file came from a project at {source_dir},")
+        printt("which is not a project directory on this computer. The settings were")
+        printt("imported, but supporting files such as voice samples must be copied")
+        printt(f"into the new project directory by hand.{COL_DEFAULT}")
+        printt()
 
     @staticmethod
     def print_missing_supporting_files_warning(missing_paths: list[str]) -> None:

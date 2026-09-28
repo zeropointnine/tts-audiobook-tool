@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -488,3 +489,53 @@ def test_invalid_llm_api_key_env_var_is_normalized_to_default(
     assert prefs.llm_api_key_env_var == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
     normalized = json.loads(destination.read_text(encoding="utf-8"))
     assert normalized["llm_api_key_env_var"] == PREFS_DEFAULT_LLM_API_KEY_ENV_VAR
+
+
+def test_saved_directories_are_normalized_or_dropped_on_load(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """
+    "Last used" directories are machine-local. One saved on another operating
+    system cannot exist here, and leaving it in place would send the next file
+    dialog somewhere that has no meaning.
+    """
+    destination = tmp_path / PREFS_FILE_NAME
+    voice_dir = tmp_path / "voices"
+    voice_dir.mkdir()
+    destination.write_text(json.dumps({
+        "last_voice_dir": str(voice_dir) + os.sep,
+        "last_project_dir": "C:\\Users\\lee\\mybook",
+        "last_text_dir": str(tmp_path / "deleted-projects"),
+    }), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    assert prefs.last_voice_dir == str(voice_dir)
+    assert prefs.last_project_dir == ""
+    assert prefs.last_text_dir == ""
+
+    normalized = json.loads(destination.read_text(encoding="utf-8"))
+    assert normalized["last_voice_dir"] == str(voice_dir)
+    assert normalized["last_project_dir"] == ""
+    assert normalized["last_text_dir"] == ""
+
+
+def test_saved_project_dir_from_another_os_is_left_alone_so_it_can_be_reported(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """
+    Unlike the "last used" directories, `project_dir` names the directory the
+    app is being asked to open. Blanketing it to empty would hide the problem;
+    the app reporting that the directory doesn't exist is what the user needs.
+    """
+    saved_dir = "C:\\Users\\lee\\mybook"
+    destination = tmp_path / PREFS_FILE_NAME
+    destination.write_text(json.dumps({"project_dir": saved_dir}), encoding="utf-8")
+    monkeypatch.setattr(Prefs, "get_file_path", staticmethod(lambda: str(destination)))
+
+    prefs = Prefs.load()
+
+    assert prefs.project_dir == saved_dir

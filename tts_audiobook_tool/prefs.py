@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
+from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Hint, Saveable, SttConfig, SttVariant
 from tts_audiobook_tool.conversation.conversation_types import ChatInputMode
@@ -10,6 +12,31 @@ from tts_audiobook_tool.tts_models.tts_model_type import TtsModelType
 from tts_audiobook_tool.util import *
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
+
+def _load_saved_dir_pref(prefs_dict: dict, key: str) -> tuple[str, bool]:
+    """
+    Reads a saved directory preference, returning the value to use and whether
+    the stored value had to be replaced.
+
+    A directory recorded by another operating system cannot name a directory
+    here, and `os.path.exists` on such a string only asks whether something
+    with backslashes in its name exists, which is not the question being asked.
+    Values that cannot be used here are dropped. The drop is logged rather than
+    shown to the user: these preferences only decide where a file dialog opens.
+    """
+    value = prefs_dict.get(key, "")
+    if not isinstance(value, str):
+        return "", True
+    if not value:
+        return "", False
+
+    native_value = path_norm.normalize_native_path(value)
+    if path_norm.looks_foreign(native_value) or not os.path.exists(native_value):
+        L.w(f"Prefs: dropping saved directory for {key!r}, which is not a directory here: {value}")
+        return "", True
+
+    return native_value, native_value != value
+
 
 class Prefs(Saveable):
     """
@@ -201,6 +228,13 @@ class Prefs(Saveable):
         if not isinstance(project_dir, str):
             project_dir = ""
             dirty = True
+        elif project_dir and path_norm.looks_foreign(project_dir):
+            # Deliberately left as saved. The app reports the directory it
+            # cannot open, which tells the user what to replace; silently
+            # starting with no project at all would hide where the value came
+            # from. A path written in another operating system's grammar can
+            # only ever fail here, so the reason is logged.
+            L.w(f"Prefs: saved project_dir was written by another operating system and cannot be opened here: {project_dir}")
 
         # Hints
         hint_prefs = prefs_dict.get("hints", None) or {}
@@ -321,39 +355,23 @@ class Prefs(Saveable):
             dirty = True
 
         # Last voice dir
-        last_voice_dir = prefs_dict.get("last_voice_dir", "")
-        if not isinstance(last_voice_dir, str):
-            last_voice_dir = ""
-            dirty = True
-        elif last_voice_dir and not os.path.exists(last_voice_dir):
-            last_voice_dir = ""
+        last_voice_dir, last_voice_dir_changed = _load_saved_dir_pref(prefs_dict, "last_voice_dir")
+        if last_voice_dir_changed:
             dirty = True
 
         # Last project dir
-        last_project_dir = prefs_dict.get("last_project_dir", "")
-        if not isinstance(last_project_dir, str):
-            last_project_dir = ""
-            dirty = True
-        elif last_project_dir and not os.path.exists(last_project_dir):
-            last_project_dir = ""
+        last_project_dir, last_project_dir_changed = _load_saved_dir_pref(prefs_dict, "last_project_dir")
+        if last_project_dir_changed:
             dirty = True
 
         # Last text dir
-        last_text_dir = prefs_dict.get("last_text_dir", "")
-        if not isinstance(last_text_dir, str):
-            last_text_dir = ""
-            dirty = True
-        elif last_text_dir and not os.path.exists(last_text_dir):
-            last_text_dir = ""
+        last_text_dir, last_text_dir_changed = _load_saved_dir_pref(prefs_dict, "last_text_dir")
+        if last_text_dir_changed:
             dirty = True
 
         # Last enhanced dir
-        last_enhanced_dir = prefs_dict.get("last_enhanced_dir", "")
-        if not isinstance(last_enhanced_dir, str):
-            last_enhanced_dir = ""
-            dirty = True
-        elif last_enhanced_dir and not os.path.exists(last_enhanced_dir):
-            last_enhanced_dir = ""
+        last_enhanced_dir, last_enhanced_dir_changed = _load_saved_dir_pref(prefs_dict, "last_enhanced_dir")
+        if last_enhanced_dir_changed:
             dirty = True
 
         # Enhance audiobook selection. Unlike last-used directory preferences,

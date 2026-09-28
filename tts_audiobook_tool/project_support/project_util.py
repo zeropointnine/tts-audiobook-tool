@@ -10,6 +10,7 @@ from tts_audiobook_tool.util import *
 
 if TYPE_CHECKING:
     from tts_audiobook_tool.project import Project
+    from tts_audiobook_tool.project_support.project_transfer_util import SourceFileMatch
 
 __all__ = ["ProjectUtil", "Tts"]
 
@@ -60,9 +61,14 @@ class ProjectUtil:
         ProjectTransferUtil.apply_project_settings(dest_project, source_project)
 
     @staticmethod
-    def get_snapshot_source_dir(project_snapshot: dict) -> str:
+    def get_snapshot_source_dir(project_snapshot: dict, abr_path: str = '') -> str:
         from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
-        return ProjectTransferUtil.get_snapshot_source_dir(project_snapshot)
+        return ProjectTransferUtil.get_snapshot_source_dir(project_snapshot, abr_path)
+
+    @staticmethod
+    def get_snapshot_source_dir_display(project_snapshot: dict) -> str:
+        from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
+        return ProjectTransferUtil.get_snapshot_source_dir_display(project_snapshot)
 
     @staticmethod
     def make_supporting_project_file_names(project: Project) -> list[str]:
@@ -75,7 +81,7 @@ class ProjectUtil:
         return ProjectTransferUtil.copy_supporting_project_files(project, source_dir, file_names)
 
     @staticmethod
-    def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> str:
+    def find_supporting_project_file_source_path(source_dir: str, file_name: str) -> SourceFileMatch:
         from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
         return ProjectTransferUtil.find_supporting_project_file_source_path(source_dir, file_name)
 

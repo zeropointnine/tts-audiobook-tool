@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationInfo, model_validator
 
+from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_support.JsonSaveUtil import JsonArtifactType, JsonSaveUtil
 from tts_audiobook_tool.app_types import Book, BookSection, SectionMarkerMode, ExportType, HighShelfEq, NormalizationType, SegmentationStrategy, StreamEndCallback, Strictness, VoiceSelectMode
 from tts_audiobook_tool.constants import *
@@ -285,7 +286,10 @@ class Project(BaseModel):
     omnivoice_seed: int = -1
 
     def model_post_init(self, __context: Any) -> None:
-        if self.dir_path:
+        # A `dir_path` written by another operating system's path grammar is not
+        # a directory here. Creating it anyway would litter the working
+        # directory with a folder literally named `C:\Users\…`.
+        if self.dir_path and not path_norm.looks_foreign(self.dir_path):
             ss_path = os.path.join(self.dir_path, PROJECT_SOUND_SEGMENTS_SUBDIR)
             if not os.path.exists(ss_path):
                 try:

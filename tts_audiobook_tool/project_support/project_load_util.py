@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from tts_audiobook_tool.app_types import Book, BookSegmentationSettings, SegmentationStrategy
 from tts_audiobook_tool.app_types.book_serialization import BOOK_FORMAT, book_from_project_text_json_dict, get_project_text_format
 from tts_audiobook_tool.app_types.phrase import PhraseGroup
-from tts_audiobook_tool.constants import PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
+from tts_audiobook_tool.constants import COL_ACCENT, COL_DEFAULT, PROJECT_JSON_FILE_NAME, PROJECT_TEXT_FILE_NAME
 from tts_audiobook_tool.l import L
 from tts_audiobook_tool.project_support.project_voice_util import ProjectVoiceUtil
 from tts_audiobook_tool.project_support.project_text_io_util import ProjectTextIOUtil
@@ -110,10 +110,29 @@ class ProjectLoadUtil:
                 return err
             L.i(f"Removed legacy applied text fields from {PROJECT_JSON_FILE_NAME}: {dir_path}")
 
-        did_clear_invalid_voice_files = ProjectVoiceUtil.verify_voice_files_exist(project)
-
-        if pending_warnings or did_clear_invalid_voice_files:
+        # Persist path canonicalization and defaulted values. The voice check
+        # below drops only references whose file exists but cannot be decoded,
+        # so this save never costs anything a saved reference.
+        if pending_warnings:
             project.save()
+
+        voice_result = ProjectVoiceUtil.verify_voice_files_exist(project)
+
+        if voice_result.corrupt:
+            project.save()
+
+        from tts_audiobook_tool.project_support.project_transfer_util import ProjectTransferUtil
+        foreign_targets = ProjectTransferUtil.find_foreign_path_targets(project)
+        if foreign_targets:
+            s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Some saved settings are paths that cannot"
+            s += "name a file on this computer, so they were probably saved on a different one.\n"
+            s += "They have been left as saved, but the model that uses them will not find them.\n"
+            for attr_name, value in foreign_targets:
+                s += f"- {COL_ACCENT}{attr_name}{COL_DEFAULT}: {value}\n"
+            s += "Re-enter the path in this menu's model settings to fix it."
+            pending_warnings.append(s)
+
+        if pending_warnings or voice_result:
             for warning in pending_warnings:
                 printt(warning)
             if prompt_on_warnings:

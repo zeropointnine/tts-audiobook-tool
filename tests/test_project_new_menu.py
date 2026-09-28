@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.app_types import SttVariant
-from tts_audiobook_tool.constants import PROJECT_SOUND_SEGMENTS_SUBDIR
+from tts_audiobook_tool.constants import PROJECT_SOUND_SEGMENTS_SUBDIR, PROJECT_VOICE_SUBDIR
 from tts_audiobook_tool.menus.project_new_menu import ProjectNewMenu
 from tts_audiobook_tool.menus import project_new_menu as project_new_menu_module
 from tts_audiobook_tool.prefs import Prefs
@@ -192,7 +192,13 @@ def _collect_shown_hints(monkeypatch) -> list:
     return shown
 
 
-def _run_abr_import(monkeypatch, tmp_path, state, source_model_id: str) -> tuple[list, list[str]]:
+def _run_abr_import(
+    monkeypatch,
+    tmp_path,
+    state,
+    source_model_id: str,
+    source_dir: str | None = None,
+) -> tuple[list, list[str]]:
     dest_dir = tmp_path / "dest"
     dest_dir.mkdir()
     _stub_prompt(monkeypatch, str(dest_dir))
@@ -201,7 +207,7 @@ def _run_abr_import(monkeypatch, tmp_path, state, source_model_id: str) -> tuple
         project_new_menu_module.AppMetadata,
         "load_from_file",
         staticmethod(lambda _path: SimpleNamespace(project_snapshot={
-            "dir_path": str(tmp_path / "source_project"),
+            "dir_path": source_dir if source_dir is not None else str(tmp_path / "source_project"),
             "current_model_type": source_model_id,
         })),
     )
@@ -244,6 +250,35 @@ def test_abr_import_consumes_the_pending_mismatch_so_the_main_menu_stays_quiet(m
 
     assert state.pending_model_mismatch_name == ""
     assert state.take_model_mismatch_name() == ""
+
+
+# --- Supporting files for a project cloned from another computer ---
+
+def test_abr_import_explains_a_source_project_that_is_not_here(monkeypatch, tmp_path, capsys):
+    """
+    The settings travelled without the voice samples they refer to. Saying so is
+    the difference between a confusingly empty project and a user who knows what
+    still has to be copied over.
+    """
+    state = _make_state()
+
+    with _runtime_model(TtsModelType.MIRA):
+        _run_abr_import(monkeypatch, tmp_path, state, TtsModelType.MIRA.value.id)
+
+    assert "not a project directory on this computer" in capsys.readouterr().out
+
+
+def test_abr_import_stays_quiet_when_the_source_project_is_here(monkeypatch, tmp_path, capsys):
+    state = _make_state()
+    source_dir = tmp_path / "source_project"
+    (source_dir / PROJECT_VOICE_SUBDIR).mkdir(parents=True)
+
+    with _runtime_model(TtsModelType.MIRA):
+        _run_abr_import(
+            monkeypatch, tmp_path, state, TtsModelType.MIRA.value.id, str(source_dir)
+        )
+
+    assert "not a project directory on this computer" not in capsys.readouterr().out
 
 
 # --- Console-fallback path normalization ---

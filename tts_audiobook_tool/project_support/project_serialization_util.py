@@ -4,6 +4,7 @@ import json
 import math
 from typing import TYPE_CHECKING, Any
 
+from tts_audiobook_tool.app_support import path_norm
 from tts_audiobook_tool.app_types import (
     Book,
     BookSection,
@@ -87,6 +88,49 @@ class ProjectSerializationUtil:
         if len(items) == 1:
             return items[0]
         return items
+
+    # Project-local path fields that are not list-valued and therefore not in
+    # `VOICE_LIST_FIELD_ALIASES`.
+    SCALAR_PATH_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+        "none_voice_file_name": (),
+        "indextts2_emo_voice_file_name": (),
+    }
+
+    @classmethod
+    def get_project_local_path_field_names(cls) -> list[str]:
+        """
+        Field names whose stored values are project-local paths.
+
+        These are the only path values that have a portable canonical form.
+        Every other path-bearing field is either machine-local (`dir_path`) or
+        an opaque user string that may be a repository id (`*_target`).
+        """
+        names = [
+            name
+            for name in cls.VOICE_LIST_FIELD_ALIASES
+            if name.endswith("_voice_file_name")
+        ]
+        names.extend(cls.SCALAR_PATH_FIELD_ALIASES)
+        return names
+
+    @staticmethod
+    def normalize_stored_path_values(values: list[str]) -> tuple[list[str], bool]:
+        """
+        Canonicalize a list of stored project-local paths.
+
+        Rewrites legacy values — the other OS's separators, and absolute paths
+        that older builds stored in portable fields — into the canonical
+        `/`-separated project-local form. Values that canonicalize to nothing
+        are dropped. Returns the rewritten list and whether anything changed.
+        """
+        normalized: list[str] = []
+        changed = False
+        for value in values:
+            canonical, value_changed = path_norm.normalize_stored_relative_path(value)
+            changed = changed or value_changed
+            if canonical:
+                normalized.append(canonical)
+        return normalized, changed
 
     @staticmethod
     def normalize_loaded_project_dict(d: Any, *, warnings: list[str] | None = None) -> Any:
@@ -196,15 +240,41 @@ class ProjectSerializationUtil:
         if 'markers' not in d and 'chapter_indices' in d:
             d['markers'] = d['chapter_indices']
 
+        path_field_changes: list[str] = []
+
         for key, aliases in ProjectSerializationUtil.VOICE_LIST_FIELD_ALIASES.items():
             raw_value = d.get(key, None)
             for alias in aliases:
                 if raw_value is None and alias in d:
                     raw_value = d[alias]
-            d[key] = ProjectSerializationUtil.normalize_voice_list_value(raw_value)
+            values = ProjectSerializationUtil.normalize_voice_list_value(raw_value)
+            if key.endswith("_voice_file_name"):
+                values, path_changed = ProjectSerializationUtil.normalize_stored_path_values(values)
+                if path_changed:
+                    path_field_changes.append(key)
+            d[key] = values
             for alias in aliases:
                 if alias in d:
                     d[alias] = d[key]
+
+        for key, aliases in ProjectSerializationUtil.SCALAR_PATH_FIELD_ALIASES.items():
+            for field in (key, *aliases):
+                value = d.get(field, None)
+                if not isinstance(value, str) or not value:
+                    continue
+                canonical, path_changed = path_norm.normalize_stored_relative_path(value)
+                if path_changed:
+                    d[field] = canonical
+                    path_field_changes.append(field)
+
+        if path_field_changes and warnings is not None:
+            s = f"{COL_ACCENT}Warning/info: {COL_DEFAULT}Rewrote project-local path(s) in this project's "
+            s += "saved settings to the app's portable form.\n"
+            s += "Stored paths are written by one operating system and read by another, so a\n"
+            s += "path saved on a different OS cannot resolve here.\n"
+            s += f"Updated field(s): {', '.join(sorted(set(path_field_changes)))}"
+            s += "\n"
+            warnings.append(s)
 
         value = d.get('version', 1)
         if not isinstance(value, int) or value < 1:
@@ -721,8 +791,28 @@ class ProjectSerializationUtil:
         return d
 
     @staticmethod
+    def canonicalize_project_local_paths(d: dict) -> None:
+        """
+        Write project-local path fields in the portable canonical form.
+
+        Applied to the finished dict rather than at each emission site, so a
+        newly added voice field is covered automatically.
+        """
+        for key in ProjectSerializationUtil.get_project_local_path_field_names():
+            value = d.get(key, None)
+            if isinstance(value, list):
+                d[key], _ = ProjectSerializationUtil.normalize_stored_path_values(
+                    [item for item in value if isinstance(item, str)]
+                )
+            elif isinstance(value, str) and value:
+                d[key], _ = path_norm.normalize_stored_relative_path(value)
+
+    @staticmethod
     def to_project_json_dict(project: Project) -> dict:
-        return {
+        result: dict[str, Any] = {
+            # Machine-local record, kept for older builds and external tooling.
+            # Never trusted when read back: both load paths overwrite it with
+            # the directory actually being opened.
             "dir_path": project.dir_path,
             "version": project.version,
             "current_model_type": project.current_model_type.value.id,
@@ -898,6 +988,21 @@ class ProjectSerializationUtil:
             "omnivoice_seed": project.omnivoice_seed
         }
 
+        ProjectSerializationUtil.canonicalize_project_local_paths(result)
+        return result
+
     @staticmethod
     def to_snapshot_dict(project: Project) -> dict:
-        return ProjectSerializationUtil.to_project_json_dict(project)
+        """
+        The settings snapshot embedded in an ABR audio file's metadata.
+
+        `dir_path` is deliberately excluded: it is an absolute path in the
+        writing machine's grammar, and an ABR file is meant to be shared.
+        `source_dir_display` carries the same value for messaging only, so a
+        recipient can be told where the settings came from without the app
+        ever treating it as a resolvable location.
+        """
+        snapshot = ProjectSerializationUtil.to_project_json_dict(project)
+        snapshot.pop("dir_path", None)
+        snapshot["source_dir_display"] = project.dir_path
+        return snapshot
