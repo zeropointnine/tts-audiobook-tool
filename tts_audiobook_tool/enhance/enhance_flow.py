@@ -28,12 +28,11 @@ from tts_audiobook_tool.enhance.enhance_artifacts import (
     save_transcription,
 )
 from tts_audiobook_tool.enhance.unmatched_lines_app import UnmatchedLinesApp
-from tts_audiobook_tool.menus.menu_util import MenuUtil
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
 from tts_audiobook_tool.sound.sound_file_util import SoundFileUtil
 from tts_audiobook_tool.state import State
 from tts_audiobook_tool.textual.content_textual_app import ContentAppCompleted, run_content_textual_app
-from tts_audiobook_tool.util import make_error_string, print_feedback, printt
+from tts_audiobook_tool.util import make_error_string, print_accent_separator, print_feedback, printt
 
 
 SUPPORTED_AUDIO_SUFFIXES = {".mp3", ".flac", ".mp4", ".m4a", ".m4b"}
@@ -134,8 +133,12 @@ def select_audio(state: State) -> None:
         hints.show_hint(
             Hint(
                 "",
-                f"An enhanced audiobook already exists at {existing}.\n",
-                "You can review it from the menu, or redo the intermediate steps to replace it."
+                f"FYI",
+                (
+
+                    f"An enhanced audiobook already exists at {existing}.\n"
+                    "You can review it from the menu, or redo the intermediate steps to replace it."
+                )
             ),
             and_prompt=True
         )
@@ -239,16 +242,10 @@ def transcribe(state: State) -> None:
         )
 
     transcribing_line = (
-        f"{COL_ACCENT}Transcribing audio "
+        "Transcribing audio "
         f"{COL_DIM_ITALICS}(This may take some time...){COL_DEFAULT}"
     )
-    divider = "-" * len(text_util.strip_ansi_codes(transcribing_line))
-    MenuUtil.print_heading(
-        None,
-        f"{COL_ACCENT}{divider}\n{transcribing_line}",
-        dont_clear=True,
-        non_menu=True,
-    )
+    print_accent_separator(transcribing_line)
 
     try:
         # Hold the sleep inhibitor only for the transcription work itself;
@@ -313,14 +310,8 @@ def align_source_text(state: State, *, create_when_finished: bool | None = None)
             f"Create the \"{suffix}\" file when alignment is finished? "
         )
 
-    alignment_line = f"{COL_ACCENT}Performing forced alignment...{COL_DEFAULT}"
-    alignment_divider = "-" * len(text_util.strip_ansi_codes(alignment_line))
-    MenuUtil.print_heading(
-        None,
-        f"{COL_ACCENT}{alignment_divider}\n{alignment_line}",
-        dont_clear=True,
-        non_menu=True,
-    )
+    alignment_line = "Performing forced alignment..."
+    print_accent_separator(alignment_line)
     try:
         timed_phrases, did_interrupt = enhance_text.align_book(snapshot.book, words)
     except Exception as exception:
@@ -455,11 +446,8 @@ def create_output(state: State, overwrite: bool = False) -> None:
         ),
         type="conversion",
     )
-    saving_line = f"{COL_ACCENT}Creating audio file with added custom metadata{COL_DEFAULT}"
-    divider = "-" * len(text_util.strip_ansi_codes(saving_line))
-    printt(f"{COL_ACCENT}{divider}")
-    printt(saving_line)
-    printt()
+    saving_line = "Creating audio file with added custom metadata"
+    print_accent_separator(saving_line)
     output_error = _write_staged_output(state, artifacts, destination, metadata)
     if output_error:
         ask.ask_error(output_error)

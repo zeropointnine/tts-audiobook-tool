@@ -60,7 +60,7 @@ def prepare(tmp_path: Path, source_kind="plain_text"):
 
 def silence_ui(monkeypatch):
     monkeypatch.setattr(enhance_flow, "printt", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(enhance_flow.MenuUtil, "print_heading", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(enhance_flow, "print_accent_separator", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(enhance_flow, "print_feedback", lambda *_args, **_kwargs: None)
 
 

@@ -10,6 +10,7 @@ import platform
 import time
 from typing import Any, Callable
 
+from tts_audiobook_tool import text_util
 from tts_audiobook_tool.constants import *
 from tts_audiobook_tool.constants_config import *
 from tts_audiobook_tool.system_support.ansi import Ansi
@@ -63,6 +64,24 @@ def print_feedback(
 
 def make_noun(singular: str, plural: str, quantity: int) -> str:
     return singular if quantity == 1 else plural
+
+def print_accent_separator(message: str) -> None:
+    """
+    Prints a COL_ACCENT dash rule the width of `message`'s real content, then
+    prints `message` itself in COL_ACCENT, then a blank line.
+
+    Used for the heading style that appears in document-flow (non-full-screen)
+    output. The rule is printed as its own line, and contains nothing but
+    dashes, because full-screen Textual worker logs promote such a line to a
+    semantic full-width rule instead of rendering the dashes literally.
+
+    `message` may contain embedded ANSI codes; the rule width is measured with
+    them stripped.
+    """
+    width = len(text_util.strip_ansi_codes(message))
+    printt(f"{COL_ACCENT}{'-' * width}")
+    printt(f"{COL_ACCENT}{message}")
+    printt()
 
 def print_init(s: str) -> None:
     """ App style for initializing a thing which may take some time """

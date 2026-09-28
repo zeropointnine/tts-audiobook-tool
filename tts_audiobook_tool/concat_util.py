@@ -127,10 +127,7 @@ class ConcatUtil:
             if len(file_cut_indices) > 1:
                 message += f" {i+1} of {len(file_cut_indices)} - output file {file_cut_index+1}"
             message += "..."
-            dash_line = "-" * len(message)
-            printt(f"{COL_ACCENT}{dash_line}")
-            printt(f"{COL_ACCENT}{message}")
-            printt()
+            print_accent_separator(message)
 
             if state.project.chapter_mode == SectionMarkerMode.FILES:
                 ranges = make_file_line_ranges(state.project.markers, len(state.project.phrase_groups))

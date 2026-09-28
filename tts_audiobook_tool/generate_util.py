@@ -979,14 +979,15 @@ class GenerateUtil:
             index_strings = [str(item + 1) for item in indices[:3]]
             num_more = len(indices) - 3
             indices_string = f"{', '.join(index_strings)}, +{num_more} more"
-        processing_string = f"{COL_ACCENT}Processing {line_noun} {indices_string}"
+        processing_string = f"Processing {line_noun} {indices_string}"
         if voice_index is not None:
             processing_string += f" {COL_DIM}(voice {voice_index + 1}){COL_DEFAULT}"
 
         if show_divider:
-            printt(f"{COL_ACCENT}{'-' * (len(text_util.strip_ansi_codes(processing_string)))}")
-        printt(f"{processing_string}")
-        printt()
+            print_accent_separator(processing_string)
+        else:
+            printt(f"{COL_ACCENT}{processing_string}")
+            printt()
 
     @staticmethod
     def save_debug_sound(project: Project, index: int, label: str, sound: Sound, is_realtime: bool):
