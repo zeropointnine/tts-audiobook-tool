@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from tts_audiobook_tool.app_types import *
 from tts_audiobook_tool.sound.audio_meta_util import AudioMetaUtil
@@ -137,6 +137,9 @@ class AppMetadata(NamedTuple):
     # Structural overlay over text_segments for reader/player section navigation
     sections: list[AppMetadataSection]
 
+    # Audio provenance; absent in older ABR files, where it remains unknown
+    type: Literal["generated", "conversion"] | None = None
+
     def to_json_string(self) -> str:
         dic = {
             "title": self.title,
@@ -147,6 +150,8 @@ class AppMetadata(NamedTuple):
             "project_snapshot": self.project_snapshot,
             "sections": AppMetadataSection.list_to_dicts(self.sections),
         }
+        if self.type is not None:
+            dic["type"] = self.type
         string = json.dumps(dic)
         return string
 
@@ -173,6 +178,10 @@ class AppMetadata(NamedTuple):
         version = o.get("version", 1)
         if not isinstance(version, int) or version < 1:
             return f"Bad type/value for 'version': {version}"
+
+        metadata_type = o.get("type")
+        if "type" in o and metadata_type not in ("generated", "conversion"):
+            return f"Bad value for 'type': {metadata_type!r}"
 
         raw_text = ""
 
@@ -216,6 +225,7 @@ class AppMetadata(NamedTuple):
             has_break_audio=has_break_audio,
             project_snapshot=project_snapshot,
             sections=sections_result,
+            type=metadata_type,
         )
 
     @staticmethod

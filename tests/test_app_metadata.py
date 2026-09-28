@@ -30,6 +30,7 @@ class TestAppMetadata(unittest.TestCase):
             has_break_audio=False,
             project_snapshot={},
             sections=[AppMetadataSection(title="Chapter 1", start_index=0, end_index=1)],
+            type="generated",
         )
 
         json_string = meta.to_json_string()
@@ -38,10 +39,12 @@ class TestAppMetadata(unittest.TestCase):
         self.assertIsInstance(result, AppMetadata)
         assert isinstance(result, AppMetadata)
         self.assertEqual(result.title, "Example Book")
+        self.assertEqual(result.type, "generated")
         self.assertEqual(result.sections, [AppMetadataSection(title="Chapter 1", start_index=0, end_index=1)])
 
         payload = json.loads(json_string)
         self.assertEqual(payload["title"], "Example Book")
+        self.assertEqual(payload["type"], "generated")
         self.assertNotIn("raw_text", payload)
         self.assertEqual(payload["sections"][0]["title"], "Chapter 1")
 
@@ -112,6 +115,27 @@ class TestAppMetadata(unittest.TestCase):
         self.assertEqual(result.title, "")
         self.assertEqual(result.raw_text, "")
         self.assertEqual(result.sections, [])
+        self.assertIsNone(result.type)
+        self.assertNotIn("type", json.loads(result.to_json_string()))
+
+    def test_app_metadata_preserves_conversion_type_and_rejects_invalid_values(self):
+        payload = {
+            "version": 4,
+            "text_segments": [{"text": "Hello.", "time_start": 0.0, "time_end": 1.0}],
+            "type": "conversion",
+        }
+        result = AppMetadata.get_from_json_string(json.dumps(payload))
+        self.assertIsInstance(result, AppMetadata)
+        assert isinstance(result, AppMetadata)
+        self.assertEqual(result.type, "conversion")
+        self.assertEqual(json.loads(result.to_json_string())["type"], "conversion")
+
+        for invalid_type in (None, "other", 3, True):
+            with self.subTest(invalid_type=invalid_type):
+                payload["type"] = invalid_type
+                error = AppMetadata.get_from_json_string(json.dumps(payload))
+                self.assertIsInstance(error, str)
+                self.assertIn("type", error)
 
     def test_app_metadata_rejects_bad_sections_type(self):
         payload = {
@@ -261,6 +285,7 @@ class TestAppMetadata(unittest.TestCase):
             )
             save_to_mp4_mock.assert_called_once()
             self.assertEqual(save_to_mp4_mock.call_args.args[0].version, 4)
+            self.assertEqual(save_to_mp4_mock.call_args.args[0].type, "generated")
             self.assertEqual(save_to_mp4_mock.call_args.args[1], stem_path + " [chaptermeta].m4b")
             self.assertEqual(save_to_mp4_mock.call_args.args[2], stem_path + ".abr.m4b")
 

@@ -453,6 +453,7 @@ def create_output(state: State, overwrite: bool = False) -> None:
             snapshot.book,
             len(timed_phrases),
         ),
+        type="conversion",
     )
     saving_line = f"{COL_ACCENT}Creating audio file with added custom metadata{COL_DEFAULT}"
     divider = "-" * len(text_util.strip_ansi_codes(saving_line))

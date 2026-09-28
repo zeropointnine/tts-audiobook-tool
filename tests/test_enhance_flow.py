@@ -591,6 +591,7 @@ def test_create_uses_saved_alignment_and_section_metadata_without_realigning(tmp
     assert artifacts.timed_phrases_path.exists()
     assert captured[0][0] == artifacts.flat_output_path
     assert captured[0][1].raw_text == ""
+    assert captured[0][1].type == "conversion"
     assert [(item.start_index, item.end_index) for item in captured[0][1].sections] == [(0, 1)]
 
 

@@ -382,6 +382,7 @@ class ConcatUtil:
             has_break_audio=state.project.use_break_sound_effect,
             project_snapshot=ProjectSerializationUtil.to_snapshot_dict(state.project),
             sections=sections,
+            type="generated",
         )
         if DEV or state.prefs.save_debug_files:
             debug_json_path = stem_path + ".abr.metadata.json"
