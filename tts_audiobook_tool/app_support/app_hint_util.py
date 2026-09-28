@@ -82,8 +82,7 @@ def show_shared_startup_hints(prefs: Prefs, is_server: bool) -> None:
     ):
         hints.show_hint_if_necessary(prefs, HINT_SGL_OMNI_DORMANT, and_prompt=True)
 
-def show_player_hint(prefs: Prefs, and_prompt: bool=False) -> None:
-
+def make_player_hint() -> Hint:
     from tts_audiobook_tool.util import get_package_dir
 
     s = "You can open audio files with the interactive player/reader here:\n"
@@ -96,5 +95,8 @@ def show_player_hint(prefs: Prefs, and_prompt: bool=False) -> None:
     s += "or on the web:" + "\n"
     s += text_util.make_terminal_hyperlink(PLAYER_URL)
 
-    hint = Hint(key="player", heading="Reminder", text=s)
+    return Hint(key="player", heading="Reminder", text=s)
+
+def show_player_hint(prefs: Prefs, and_prompt: bool=False) -> None:
+    hint = make_player_hint()
     show_hint_if_necessary(prefs, hint, and_prompt=and_prompt)

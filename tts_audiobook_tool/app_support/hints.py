@@ -23,6 +23,24 @@ def show_hint_if_necessary(prefs: Prefs, hint: Hint, and_confirm: bool=False, an
     return should_continue
 
 
+def show_hints_if_necessary(prefs: Prefs, hint_list: list[Hint], and_prompt: bool=False) -> None:
+    """
+    Shows any not-yet-shown hints from hint_list, then prompts for enter
+    only once after the last of them (rather than once per hint).
+    """
+    pending = [hint for hint in hint_list if not prefs.get_hint(hint.key)]
+    if not pending:
+        return
+    for hint in pending:
+        print_hint(hint)
+    if and_prompt:
+        from tts_audiobook_tool import ask
+        ask.ask_enter_to_continue()
+    for hint in pending:
+        prefs.set_hint_true(hint.key)
+    prefs.save()
+
+
 def show_hint(hint: Hint, and_confirm: bool=False, and_prompt: bool=False) -> bool:
     """
     Shows hint.

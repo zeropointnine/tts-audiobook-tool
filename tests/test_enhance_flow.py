@@ -262,7 +262,7 @@ def test_transcription_prompt_chains_alignment_and_output_only_if_accepted(tmp_p
     monkeypatch.setattr(enhance_flow.enhance_text, "align_book", lambda *_args: (timed, False))
     monkeypatch.setattr(enhance_flow, "_write_staged_output", lambda _state, _artifacts, path, _meta: outputs.append(path) or "")
     monkeypatch.setattr(enhance_flow.ask, "ask_confirm", lambda message: prompts.append(message) or True)
-    monkeypatch.setattr(enhance_flow.app_hint_util, "show_player_hint", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(enhance_flow.hints, "show_hints_if_necessary", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(enhance_flow.hints, "show_hint_if_necessary", lambda *_args, **_kwargs: None)
     silence_ui(monkeypatch)
 
@@ -560,7 +560,7 @@ def test_manual_alignment_yes_creates_epub_output(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(enhance_flow.ask, "ask_confirm", lambda message: prompts.append(message) or True)
     monkeypatch.setattr(enhance_flow.enhance_text, "align_book", lambda *_args: ([TimedPhrase("Hello.", 0, 0.5)], False))
     monkeypatch.setattr(enhance_flow, "_write_staged_output", lambda _state, _artifacts, path, _meta: outputs.append(path) or "")
-    monkeypatch.setattr(enhance_flow.app_hint_util, "show_player_hint", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(enhance_flow.hints, "show_hints_if_necessary", lambda *_args, **_kwargs: None)
     silence_ui(monkeypatch)
 
     enhance_flow.align_source_text(state)
@@ -583,7 +583,7 @@ def test_create_uses_saved_alignment_and_section_metadata_without_realigning(tmp
         "_write_staged_output",
         lambda _state, _artifacts, path, meta: captured.append((path, meta)) or "",
     )
-    monkeypatch.setattr(enhance_flow.app_hint_util, "show_player_hint", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(enhance_flow.hints, "show_hints_if_necessary", lambda *_args, **_kwargs: None)
     silence_ui(monkeypatch)
 
     enhance_flow.create_output(state)

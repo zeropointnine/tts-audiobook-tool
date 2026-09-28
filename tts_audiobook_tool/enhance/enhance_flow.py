@@ -313,7 +313,7 @@ def align_source_text(state: State, *, create_when_finished: bool | None = None)
             f"Create the \"{suffix}\" file when alignment is finished? "
         )
 
-    merging_line = f"{COL_ACCENT}Merging data...{COL_DEFAULT}"
+    merging_line = f"{COL_ACCENT}Performing forced alignment...{COL_DEFAULT}"
     merging_divider = "-" * len(text_util.strip_ansi_codes(merging_line))
     MenuUtil.print_heading(
         None,
@@ -473,8 +473,12 @@ def create_output(state: State, overwrite: bool = False) -> None:
     )
     # These hints are followed by the menu redraw, which clears the screen;
     # the default 2-second hint animation is not long enough to read them.
-    app_hint_util.show_player_hint(state.prefs, and_prompt=True)
-    hints.show_hint_if_necessary(state.prefs, HINT_ENHANCE_ORPHANS, and_prompt=True)
+    # Shown together so the user only has to press enter once.
+    hints.show_hints_if_necessary(
+        state.prefs,
+        [app_hint_util.make_player_hint(), HINT_ENHANCE_ORPHANS],
+        and_prompt=True,
+    )
 
 
 def review_discontinuities(state: State) -> None:
