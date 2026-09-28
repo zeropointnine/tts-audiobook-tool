@@ -25,7 +25,7 @@ from tts_audiobook_tool.enhance.enhance_artifacts import (
     save_timed_phrases,
     save_transcription,
 )
-from tts_audiobook_tool.prefs import Prefs
+from tts_audiobook_tool.prefs import PREFS_FILE_NAME, Prefs
 
 
 def make_book(source_kind: str = "plain_text") -> Book:
@@ -593,6 +593,29 @@ def test_create_uses_saved_alignment_and_section_metadata_without_realigning(tmp
     assert captured[0][1].raw_text == ""
     assert captured[0][1].type == "conversion"
     assert [(item.start_index, item.end_index) for item in captured[0][1].sections] == [(0, 1)]
+
+
+def test_create_output_batches_player_and_orphan_hints_behind_one_prompt(tmp_path: Path, monkeypatch) -> None:
+    # Neither hint has been shown yet, so both should print but the user
+    # should only have to press enter once before the menu redraw.
+    state, artifacts = prepare(tmp_path, "plain_text")
+    assert save_timed_phrases(artifacts, [TimedPhrase("Hello.", 0.0, 0.5)]) == ""
+    monkeypatch.setattr(
+        Prefs, "get_file_path", staticmethod(lambda: str(tmp_path / PREFS_FILE_NAME))
+    )
+    monkeypatch.setattr(enhance_flow, "_validate_audio", lambda _path: "")
+    monkeypatch.setattr(enhance_flow, "_write_staged_output", lambda *_args: "")
+    prompts: list[bool] = []
+    monkeypatch.setattr(
+        enhance_flow.ask, "ask_enter_to_continue", lambda *_args, **_kwargs: prompts.append(True)
+    )
+    silence_ui(monkeypatch)
+
+    enhance_flow.create_output(state)
+
+    assert prompts == [True]
+    assert state.prefs.get_hint("player")
+    assert state.prefs.get_hint("enhance_orphans")
 
 
 def test_align_interruption_preserves_prior_cache_and_does_not_create_output(tmp_path: Path, monkeypatch) -> None:

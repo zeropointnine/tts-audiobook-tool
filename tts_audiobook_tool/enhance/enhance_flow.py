@@ -313,11 +313,11 @@ def align_source_text(state: State, *, create_when_finished: bool | None = None)
             f"Create the \"{suffix}\" file when alignment is finished? "
         )
 
-    merging_line = f"{COL_ACCENT}Performing forced alignment...{COL_DEFAULT}"
-    merging_divider = "-" * len(text_util.strip_ansi_codes(merging_line))
+    alignment_line = f"{COL_ACCENT}Performing forced alignment...{COL_DEFAULT}"
+    alignment_divider = "-" * len(text_util.strip_ansi_codes(alignment_line))
     MenuUtil.print_heading(
         None,
-        f"{COL_ACCENT}{merging_divider}\n{merging_line}",
+        f"{COL_ACCENT}{alignment_divider}\n{alignment_line}",
         dont_clear=True,
         non_menu=True,
     )

@@ -47,7 +47,11 @@ class Prefs(Saveable):
             save_gen_log: bool = False,
     ) -> None:
         self._project_dir = project_dir
-        self._hints = hints
+        # Copied: the signature default is a shared mutable object, so
+        # storing it by reference would let one Prefs instance's
+        # set_hint_true() leak into every other instance built without an
+        # explicit dict.
+        self._hints = dict(hints)
         self._stt_variant = stt_variant
         self._stt_config = stt_config if stt_config else SttConfig.get_default()
         self._tts_force_cpu = tts_force_cpu

@@ -27,7 +27,12 @@ def show_hints_if_necessary(prefs: Prefs, hint_list: list[Hint], and_prompt: boo
     """
     Shows any not-yet-shown hints from hint_list, then prompts for enter
     only once after the last of them (rather than once per hint).
+
+    Informational only: unlike show_hint_if_necessary there is no
+    and_confirm variant and no "should continue" return value, so hints
+    that gate a flow should keep using show_hint_if_necessary.
     """
+    assert(isinstance(prefs, Prefs))
     pending = [hint for hint in hint_list if not prefs.get_hint(hint.key)]
     if not pending:
         return
