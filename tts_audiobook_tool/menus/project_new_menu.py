@@ -2,6 +2,7 @@ import os
 
 from tts_audiobook_tool.app_support import hints
 from tts_audiobook_tool.constants_hints import *
+from tts_audiobook_tool.app_types import Hint
 from tts_audiobook_tool.app_types.app_metadata import AppMetadata
 from tts_audiobook_tool import ask
 from tts_audiobook_tool.constants import *
@@ -26,7 +27,7 @@ class ProjectNewMenu:
         items = [
             MenuItem("Make new project", on_make_new_project, False),
             MenuItem("Make new project using current project's settings", on_make_new_project, True),
-            MenuItem("Make new project using settings from existing tts-audiobook \"abr\" audiofile", on_make_new_project_using_abr),
+            MenuItem("Make new project using settings from an existing tts-audiobook \"abr\" audiofile", on_make_new_project_using_abr),
         ]
 
         MenuUtil.menu(
@@ -91,20 +92,23 @@ class ProjectNewMenu:
         """
         Creates a new project using settings embedded in an existing ABR audio file.
         Returns True on success.
-        Always ends with ask_util.ask_enter_to_continue().
+        Always ends with ask_util.ask_enter_to_continue(), except when the user
+        cancels a path prompt, which ends with print_feedback("Cancelled") instead.
         """
+        did_cancel = False
         try:
             dest_dir = ask.ask_dir_path(
                 console_message=(
                     "This will create a new project directory using settings from an\n"
                     "existing tts-audiobook-tool ABR audio file.\n\n"
-                    "Enter the path to an empty directory:"
+                    "First, enter the path to an empty directory:"
                 ),
                 dialog_title="Select empty directory",
                 initialdir=state.project.dir_path,
                 mustexist=False
             )
             if not dest_dir:
+                did_cancel = True
                 return False
 
             abr_path = ask.ask_file_path(
@@ -114,6 +118,7 @@ class ProjectNewMenu:
                 initialdir=state.project.dir_path,
             )
             if not abr_path:
+                did_cancel = True
                 return False
 
             if os.path.splitext(abr_path)[1].lower() not in {'.flac', '.m4a', '.m4b'}:
@@ -155,7 +160,10 @@ class ProjectNewMenu:
                 ProjectTransferUtil.make_supporting_project_file_names(snapshot_project)
             )
 
-            state.project.save()
+            # Keeps the model that produced the ABR file as the project's
+            # "last used" model, so State.project's setter registers the
+            # model mismatch on the reload below.
+            state.project.save(stamp_runtime_model=False)
             state.set_existing_project(state.project.dir_path)
 
             print_feedback("Project directory set:", state.project.dir_path)
@@ -163,13 +171,33 @@ class ProjectNewMenu:
             if missing_paths:
                 ProjectNewMenu.print_missing_supporting_files_warning(missing_paths)
 
+            ProjectNewMenu.show_abr_model_mismatch_hint(state)
+
             hints.show_hint_if_necessary(state.prefs, HINT_PROJECT_SUBDIRS)
             return True
         except Exception as e:
             ask.ask_error(make_error_string(e))
             return False
         finally:
-            ask.ask_enter_to_continue()
+            if did_cancel:
+                print_feedback("\nCancelled")
+            else:
+                ask.ask_enter_to_continue()
+
+    @staticmethod
+    def show_abr_model_mismatch_hint(state: State) -> None:
+        """
+        Shows the model-mismatch FYI for a project whose settings came from an
+        ABR file, using wording specific to that flow.
+        Consumes the pending mismatch so the main menu does not show it again.
+        """
+        model_name = state.take_model_mismatch_name()
+        if not model_name:
+            return
+        hints.show_hint(
+            Hint.make_using(HINT_ABR_MODEL_MISMATCH, model_name),
+            and_prompt=False
+        )
 
     @staticmethod
     def print_missing_supporting_files_warning(missing_paths: list[str]) -> None:

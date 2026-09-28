@@ -149,6 +149,9 @@ class State:
         if not project_dir_path.is_absolute():
             return "Please use an absolute path"
 
+        if project_dir_path.exists() and not project_dir_path.is_dir():
+            return f"Not a directory: {project_dir_path}"
+
         if project_dir_path.exists() and os.listdir(project_dir_path):
             return "Directory is not empty"
 

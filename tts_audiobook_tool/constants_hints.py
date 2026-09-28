@@ -256,3 +256,10 @@ HINT_ENHANCE_ORPHANS = Hint(
 """Miscellaneous orphaned text lines are common, but make sure
 to review result for any uncommonly large gaps."""
 )
+
+HINT_ABR_MODEL_MISMATCH = Hint(
+    "",
+    "FYI",
+"""This project's settings were copied from an ABR file last used with the %1 model,
+which differs from the model currently in use."""
+)

@@ -10,7 +10,6 @@ build/
 package-lock.json
 
 plans/
-AGENTS.md
 .agents/
 
 config_oute_dev.py

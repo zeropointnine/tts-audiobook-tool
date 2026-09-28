@@ -148,6 +148,14 @@ def ask_error(error_message: str) -> None:
 
 # ---
 
+def _normalize_entered_path(path: str) -> str:
+    """
+    Expands a leading `~` *before* making the path absolute.
+    `abspath` first would leave `~` as a literal directory component
+    under the cwd, which later `expanduser` calls cannot undo.
+    """
+    return os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+
 def ask_file_path(
         console_message: str,
         dialog_title: str,
@@ -171,7 +179,7 @@ def ask_file_path(
 
     if not path:
         return ""
-    path = os.path.normpath(os.path.abspath(path))
+    path = _normalize_entered_path(path)
 
     if did_tk:
         printt(path)
@@ -200,7 +208,7 @@ def ask_dir_path(
 
     if not path:
         return ""
-    path = os.path.normpath(os.path.abspath(path))
+    path = _normalize_entered_path(path)
 
     if did_tk:
         printt(path)
